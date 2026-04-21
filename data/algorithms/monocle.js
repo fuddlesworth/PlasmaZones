@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Monocle",
-    builtinId: "monocle",
+    id: "monocle",
     description: "One window fullscreen at a time, cycle through others",
     producesOverlappingZones: true,
     supportsMasterCount: false,

@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Dwindle (Memory)",
-    builtinId: "dwindle-memory",
+    id: "dwindle-memory",
     description: "Remembers split positions — resize one split without affecting others",
     producesOverlappingZones: false,
     supportsMasterCount: false,

@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Floating Center",
-    builtinId: "floating-center",
+    id: "floating-center",
     description: "Centered main window with peripheral panels on all sides",
     producesOverlappingZones: false,
     supportsMasterCount: false,

@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Master + Stack",
-    builtinId: "master-stack",
+    id: "master-stack",
     description: "Large master area with stacked secondary windows",
     producesOverlappingZones: false,
     supportsMasterCount: true,

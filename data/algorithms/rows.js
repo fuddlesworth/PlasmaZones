@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Rows",
-    builtinId: "rows",
+    id: "rows",
     description: "Equal-height horizontal rows",
     producesOverlappingZones: false,
     supportsMasterCount: false,

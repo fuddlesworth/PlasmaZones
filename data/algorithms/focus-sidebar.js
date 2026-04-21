@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Focus + Sidebar",
-    builtinId: "focus-sidebar",
+    id: "focus-sidebar",
     description: "Main window with vertically stacked sidebar; ratio controls main window width",
     producesOverlappingZones: false,
     supportsMasterCount: false,

@@ -133,12 +133,12 @@ public:
     QString scriptId() const;
 
     /**
-     * @brief Optional built-in algorithm ID from @builtinId metadata
+     * @brief Optional algorithm ID from metadata
      *
      * When non-empty, the loader uses this ID instead of "script:filename"
      * for algorithm registration.
      */
-    QString builtinId() const;
+    QString id() const;
 
     /**
      * @brief Mark whether this script was loaded from a user directory

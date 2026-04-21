@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Zen",
-    builtinId: "zen",
+    id: "zen",
     description: "Centered column with margins — focused, distraction-free layout",
     producesOverlappingZones: false,
     supportsMasterCount: false,

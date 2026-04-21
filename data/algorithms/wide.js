@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Wide",
-    builtinId: "wide",
+    id: "wide",
     description: "Master area on top, remaining windows stacked below",
     producesOverlappingZones: false,
     supportsMasterCount: true,

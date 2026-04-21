@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Three Column",
-    builtinId: "three-column",
+    id: "three-column",
     description: "Master window centered with columns on each side",
     producesOverlappingZones: false,
     supportsMasterCount: false,

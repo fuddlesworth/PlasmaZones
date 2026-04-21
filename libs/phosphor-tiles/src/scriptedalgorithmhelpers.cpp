@@ -204,16 +204,16 @@ ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& fi
         }
     }
 
-    const QString bid = readString("builtinId", 64);
+    const QString bid = readString("id", 64);
     if (!bid.isEmpty()) {
-        static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
+        static const QRegularExpression idRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
         if (bid.startsWith(QLatin1String("script:"))) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: builtinId must not start with 'script:'"
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: id must not start with 'script:'"
                                                  << "value=" << bid << "in" << filePath;
-        } else if (!builtinIdRe.match(bid).hasMatch()) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: invalid builtinId" << bid << "in" << filePath;
+        } else if (!idRe.match(bid).hasMatch()) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: invalid id" << bid << "in" << filePath;
         } else {
-            meta.builtinId = bid;
+            meta.id = bid;
         }
     }
 

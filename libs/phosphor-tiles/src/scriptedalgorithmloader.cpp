@@ -256,9 +256,8 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
-        // Use @builtinId metadata if present, otherwise default to "script:filename"
-        const QString scriptId =
-            algo->builtinId().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->builtinId();
+        // Use id metadata if present, otherwise default to "script:filename"
+        const QString scriptId = algo->id().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->id();
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.

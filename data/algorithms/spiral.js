@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Spiral",
-    builtinId: "spiral",
+    id: "spiral",
     description: "Windows spiral inward from the edges",
     producesOverlappingZones: false,
     supportsMasterCount: false,

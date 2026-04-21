@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Quadrant Priority",
-    builtinId: "quadrant-priority",
+    id: "quadrant-priority",
     description: "First window gets a large corner; rest fill the L-shaped remainder",
     producesOverlappingZones: false,
     supportsMasterCount: false,

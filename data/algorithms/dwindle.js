@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Dwindle",
-    builtinId: "dwindle",
+    id: "dwindle",
     description: "Each new window gets a smaller split, alternating direction",
     producesOverlappingZones: false,
     supportsMasterCount: false,

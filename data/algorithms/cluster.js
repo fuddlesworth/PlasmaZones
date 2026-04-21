@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Cluster",
-    builtinId: "cluster",
+    id: "cluster",
     description: "Groups windows by application — same app windows are placed adjacent",
     producesOverlappingZones: false,
     supportsMasterCount: false,

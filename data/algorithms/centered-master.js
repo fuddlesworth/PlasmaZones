@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Centered Master",
-    builtinId: "centered-master",
+    id: "centered-master",
     description: "Master windows centered with stacks on both sides",
     producesOverlappingZones: false,
     supportsMasterCount: true,

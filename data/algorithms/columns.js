@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Columns",
-    builtinId: "columns",
+    id: "columns",
     description: "Equal-width vertical columns",
     producesOverlappingZones: false,
     supportsMasterCount: false,

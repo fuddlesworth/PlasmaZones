@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Tatami",
-    builtinId: "tatami",
+    id: "tatami",
     description: "Japanese tatami mat pattern where no four corners ever meet at the same point",
     producesOverlappingZones: false,
     supportsMasterCount: false,

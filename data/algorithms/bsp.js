@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Binary Split",
-    builtinId: "bsp",
+    id: "bsp",
     description: "Balanced recursive splitting into equal regions",
     producesOverlappingZones: false,
     supportsMasterCount: false,

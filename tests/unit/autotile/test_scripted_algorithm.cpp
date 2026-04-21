@@ -931,75 +931,72 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // @builtinId validation edge cases
+    // id validation edge cases
     // =========================================================================
 
-    void testBuiltinId_scriptPrefixRejected()
+    void testId_scriptPrefixRejected()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "var metadata = { name: \"Script Prefix Test\", description: \"builtinId with script: prefix should be "
-            "rejected\", builtinId: \"script:bad\" };\n"
+            "var metadata = { name: \"Script Prefix Test\", description: \"id with script: prefix should be "
+            "rejected\", id: \"script:bad\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("script-prefix.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        // script: prefix is rejected — builtinId should remain empty
-        QVERIFY2(
-            algo.builtinId().isEmpty(),
-            qPrintable(QStringLiteral("Expected empty builtinId for 'script:bad', got '%1'").arg(algo.builtinId())));
+        // script: prefix is rejected — id should remain empty
+        QVERIFY2(algo.id().isEmpty(),
+                 qPrintable(QStringLiteral("Expected empty id for 'script:bad', got '%1'").arg(algo.id())));
     }
 
-    void testBuiltinId_uppercaseRejected()
+    void testId_uppercaseRejected()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "var metadata = { name: \"Uppercase Test\", description: \"builtinId with uppercase should be rejected\", "
-            "builtinId: \"UPPERCASE\" };\n"
+            "var metadata = { name: \"Uppercase Test\", description: \"id with uppercase should be rejected\", "
+            "id: \"UPPERCASE\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("uppercase-id.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
         // Regex ^[a-z][a-z0-9-]*$ rejects uppercase
-        QVERIFY2(
-            algo.builtinId().isEmpty(),
-            qPrintable(QStringLiteral("Expected empty builtinId for 'UPPERCASE', got '%1'").arg(algo.builtinId())));
+        QVERIFY2(algo.id().isEmpty(),
+                 qPrintable(QStringLiteral("Expected empty id for 'UPPERCASE', got '%1'").arg(algo.id())));
     }
 
-    void testBuiltinId_startsWithDigitRejected()
+    void testId_startsWithDigitRejected()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "var metadata = { name: \"Digit Start Test\", description: \"builtinId starting with digit should be "
-            "rejected\", builtinId: \"123startnum\" };\n"
+            "var metadata = { name: \"Digit Start Test\", description: \"id starting with digit should be "
+            "rejected\", id: \"123startnum\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("digit-start.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
         // Regex ^[a-z][a-z0-9-]*$ requires first char to be lowercase letter
-        QVERIFY2(
-            algo.builtinId().isEmpty(),
-            qPrintable(QStringLiteral("Expected empty builtinId for '123startnum', got '%1'").arg(algo.builtinId())));
+        QVERIFY2(algo.id().isEmpty(),
+                 qPrintable(QStringLiteral("Expected empty id for '123startnum', got '%1'").arg(algo.id())));
     }
 
-    void testBuiltinId_longValueTruncatedTo64()
+    void testId_longValueTruncatedTo64()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        // Create a valid builtinId that is 65+ characters long
+        // Create a valid id that is 65+ characters long
         // Pattern: a-followed-by-64-more lowercase chars = 65 total
         QString longId = QStringLiteral("a") + QString(64, QLatin1Char('b')); // 65 chars
         QCOMPARE(longId.size(), 65);
 
         QString script = QStringLiteral(
-                             "var metadata = { name: \"Long ID Test\", description: \"builtinId longer than 64 chars "
-                             "should be truncated\", builtinId: \"")
+                             "var metadata = { name: \"Long ID Test\", description: \"id longer than 64 chars "
+                             "should be truncated\", id: \"")
             + longId
             + QStringLiteral("\" };\n"
                              "function calculateZones(params) { return []; }\n");
@@ -1007,25 +1004,25 @@ private Q_SLOTS:
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        // .left(64) truncation — builtinId should be exactly 64 chars
-        QVERIFY2(!algo.builtinId().isEmpty(), "Expected non-empty builtinId for a valid but long ID");
-        QCOMPARE(algo.builtinId().size(), 64);
-        QCOMPARE(algo.builtinId(), longId.left(64));
+        // .left(64) truncation — id should be exactly 64 chars
+        QVERIFY2(!algo.id().isEmpty(), "Expected non-empty id for a valid but long ID");
+        QCOMPARE(algo.id().size(), 64);
+        QCOMPARE(algo.id(), longId.left(64));
     }
 
-    void testBuiltinId_validValueAccepted()
+    void testId_validValueAccepted()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "var metadata = { name: \"Valid ID Test\", description: \"Valid builtinId should be accepted\", builtinId: "
+            "var metadata = { name: \"Valid ID Test\", description: \"Valid id should be accepted\", id: "
             "\"my-custom-algo\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("valid-id.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        QCOMPARE(algo.builtinId(), QStringLiteral("my-custom-algo"));
+        QCOMPARE(algo.id(), QStringLiteral("my-custom-algo"));
     }
 
     // =========================================================================

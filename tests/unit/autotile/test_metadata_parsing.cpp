@@ -181,35 +181,35 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // parseMetadataFromJs — builtinId validation
+    // parseMetadataFromJs — id validation
     // =========================================================================
 
-    void testParseMetadata_builtinIdValid()
+    void testParseMetadata_idValid()
     {
-        auto js = makeMetadata(QStringLiteral(R"({ builtinId: "my-custom-algo" })"));
+        auto js = makeMetadata(QStringLiteral(R"({ id: "my-custom-algo" })"));
         auto meta = parseMetadataFromJs(js, QStringLiteral("test.js"));
-        QCOMPARE(meta.builtinId, QStringLiteral("my-custom-algo"));
+        QCOMPARE(meta.id, QStringLiteral("my-custom-algo"));
     }
 
-    void testParseMetadata_builtinIdScriptPrefix()
+    void testParseMetadata_idScriptPrefix()
     {
-        auto js = makeMetadata(QStringLiteral(R"({ builtinId: "script:bad" })"));
+        auto js = makeMetadata(QStringLiteral(R"({ id: "script:bad" })"));
         auto meta = parseMetadataFromJs(js, QStringLiteral("test.js"));
-        QVERIFY(meta.builtinId.isEmpty());
+        QVERIFY(meta.id.isEmpty());
     }
 
-    void testParseMetadata_builtinIdUppercase()
+    void testParseMetadata_idUppercase()
     {
-        auto js = makeMetadata(QStringLiteral(R"({ builtinId: "UPPERCASE" })"));
+        auto js = makeMetadata(QStringLiteral(R"({ id: "UPPERCASE" })"));
         auto meta = parseMetadataFromJs(js, QStringLiteral("test.js"));
-        QVERIFY(meta.builtinId.isEmpty());
+        QVERIFY(meta.id.isEmpty());
     }
 
-    void testParseMetadata_builtinIdStartsWithDigit()
+    void testParseMetadata_idStartsWithDigit()
     {
-        auto js = makeMetadata(QStringLiteral(R"({ builtinId: "9lives" })"));
+        auto js = makeMetadata(QStringLiteral(R"({ id: "9lives" })"));
         auto meta = parseMetadataFromJs(js, QStringLiteral("test.js"));
-        QVERIFY(meta.builtinId.isEmpty());
+        QVERIFY(meta.id.isEmpty());
     }
 
     // =========================================================================

@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Deck",
-    builtinId: "deck",
+    id: "deck",
     description: "Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width",
     producesOverlappingZones: true,
     supportsMasterCount: false,

@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Spread",
-    builtinId: "spread",
+    id: "spread",
     description: "Windows spread evenly across the screen",
     producesOverlappingZones: true,
     supportsMasterCount: false,

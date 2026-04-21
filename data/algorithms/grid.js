@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Grid",
-    builtinId: "grid",
+    id: "grid",
     description: "Equal-sized grid layout",
     producesOverlappingZones: false,
     supportsMasterCount: false,

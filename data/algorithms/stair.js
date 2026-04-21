@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Stair",
-    builtinId: "stair",
+    id: "stair",
     description: "Stepped staircase arrangement",
     producesOverlappingZones: true,
     supportsMasterCount: false,

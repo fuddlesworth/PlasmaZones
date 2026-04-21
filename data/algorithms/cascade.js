@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Cascade",
-    builtinId: "cascade",
+    id: "cascade",
     description: "Overlapping windows in a diagonal cascade",
     producesOverlappingZones: true,
     supportsMasterCount: false,

@@ -3,7 +3,7 @@
 
 var metadata = {
     name: "Paper",
-    builtinId: "paper",
+    id: "paper",
     description: "Equal-width overlapping pages like a document viewer; splitRatio controls page width",
     producesOverlappingZones: true,
     supportsMasterCount: false,
