@@ -90,9 +90,15 @@ QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, 
             continue;
         }
         CustomParamDef def;
-        def.name = entry.property(QStringLiteral("name")).toString().left(64);
-        def.type = entry.property(QStringLiteral("type")).toString();
-        def.description = entry.property(QStringLiteral("description")).toString().left(200);
+        const QJSValue nameVal = entry.property(QStringLiteral("name"));
+        const QJSValue typeVal = entry.property(QStringLiteral("type"));
+        if (!nameVal.isString() || !typeVal.isString()) {
+            continue;
+        }
+        def.name = nameVal.toString().left(64);
+        def.type = typeVal.toString();
+        const QJSValue descVal = entry.property(QStringLiteral("description"));
+        def.description = descVal.isString() ? descVal.toString().left(200) : QString();
         if (def.name.isEmpty() || def.type.isEmpty()) {
             continue;
         }
