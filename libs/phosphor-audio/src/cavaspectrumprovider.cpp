@@ -1,46 +1,59 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "cavaservice.h"
+#include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorAudio/AudioDefaults.h>
 
 #include <QDir>
-#include <QStandardPaths>
 #include <QFileInfo>
+#include <QStandardPaths>
 
-#include "../core/constants.h"
-#include "../core/logging.h"
+namespace PhosphorAudio {
 
-namespace PlasmaZones {
+static constexpr int kAsciiMaxRange = 1000;
+static_assert(Defaults::MinBars % 2 == 0, "MinBars must be even for CAVA stereo");
+static_assert(Defaults::MaxBars % 2 == 0, "MaxBars must be even for CAVA stereo");
 
-static constexpr int kAsciiMaxRange = 1000; // CAVA ascii_max_range
-static_assert(Audio::MinBars % 2 == 0, "Audio::MinBars must be even for CAVA stereo");
-static_assert(Audio::MaxBars % 2 == 0, "Audio::MaxBars must be even for CAVA stereo");
-
-CavaService::CavaService(QObject* parent)
-    : QObject(parent)
+CavaSpectrumProvider::CavaSpectrumProvider(QObject* parent)
+    : IAudioSpectrumProvider(parent)
 {
 }
 
-CavaService::~CavaService()
+CavaSpectrumProvider::~CavaSpectrumProvider()
 {
     stop();
 }
 
-bool CavaService::isAvailable()
+bool CavaSpectrumProvider::isCavaInstalled()
 {
     return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
 }
 
-void CavaService::start()
+bool CavaSpectrumProvider::isAvailable() const
+{
+    return isCavaInstalled();
+}
+
+QString CavaSpectrumProvider::detectAudioMethod()
+{
+    const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (!runtimeDir.isEmpty() && QFileInfo::exists(runtimeDir + QStringLiteral("/pipewire-0"))) {
+        return QStringLiteral("pipewire");
+    }
+    if (!QStandardPaths::findExecutable(QStringLiteral("pw-cli")).isEmpty()) {
+        return QStringLiteral("pipewire");
+    }
+    return QStringLiteral("pulse");
+}
+
+void CavaSpectrumProvider::start()
 {
     if (m_process && m_process->state() != QProcess::NotRunning) {
         return;
     }
 
-    // Find cava binary
     const QString cavaPath = QStandardPaths::findExecutable(QStringLiteral("cava"));
     if (cavaPath.isEmpty()) {
-        qCWarning(lcOverlay) << "CAVA not found in PATH. Install cava for audio visualization.";
         Q_EMIT errorOccurred(QStringLiteral("CAVA not found. Install cava for audio visualization."));
         return;
     }
@@ -49,33 +62,27 @@ void CavaService::start()
 
     if (!m_process) {
         m_process = new QProcess(this);
-        connect(m_process, &QProcess::readyReadStandardOutput, this, &CavaService::onReadyReadStandardOutput);
-        connect(m_process, &QProcess::stateChanged, this, &CavaService::onProcessStateChanged);
-        connect(m_process, &QProcess::finished, this, &CavaService::onProcessFinished);
-        connect(m_process, &QProcess::errorOccurred, this, &CavaService::onProcessError);
+        connect(m_process, &QProcess::readyReadStandardOutput, this, &CavaSpectrumProvider::onReadyReadStandardOutput);
+        connect(m_process, &QProcess::stateChanged, this, &CavaSpectrumProvider::onProcessStateChanged);
+        connect(m_process, &QProcess::finished, this, &CavaSpectrumProvider::onProcessFinished);
+        connect(m_process, &QProcess::errorOccurred, this, &CavaSpectrumProvider::onProcessError);
     }
 
     m_stdoutBuffer.clear();
     m_spectrum.clear();
     m_smoothedSpectrum.clear();
 
-    // Kurve-style: pass config via stdin, read raw output from stdout.
-    // Use SeparateChannels so we can capture stderr for error diagnostics.
     m_process->setProcessChannelMode(QProcess::SeparateChannels);
     m_process->start(
         QStringLiteral("sh"),
         QStringList{QStringLiteral("-c"),
                     QStringLiteral("exec %1 -p /dev/stdin <<'CAVAEOF'\n%2\nCAVAEOF").arg(cavaPath, m_config)});
-
-    // Async start: errors reported via QProcess::errorOccurred signal (already connected).
-    // No blocking waitForStarted() to avoid freezing the GUI thread.
 }
 
-void CavaService::stop()
+void CavaSpectrumProvider::stop()
 {
     if (m_process && m_process->state() != QProcess::NotRunning) {
         m_stopping = true;
-        // Graceful: SIGTERM first, then SIGKILL if unresponsive
         m_process->terminate();
         if (!m_process->waitForFinished(500)) {
             m_process->kill();
@@ -87,17 +94,20 @@ void CavaService::stop()
     m_smoothedSpectrum.clear();
 }
 
-bool CavaService::isRunning() const
+bool CavaSpectrumProvider::isRunning() const
 {
     return m_process && m_process->state() == QProcess::Running;
 }
 
-void CavaService::setBarCount(int count)
+int CavaSpectrumProvider::barCount() const
 {
-    // CAVA requires even bar count for stereo output (bars split between L/R channels).
-    // Round to even first, then clamp — ensures we never exceed MaxBars after rounding.
+    return m_barCount;
+}
+
+void CavaSpectrumProvider::setBarCount(int count)
+{
     int even = (count % 2 != 0) ? count + 1 : count;
-    const int clamped = qBound(Audio::MinBars, even, Audio::MaxBars);
+    const int clamped = qBound(Defaults::MinBars, even, Defaults::MaxBars);
     if (m_barCount != clamped) {
         m_barCount = clamped;
         if (isRunning()) {
@@ -106,9 +116,14 @@ void CavaService::setBarCount(int count)
     }
 }
 
-void CavaService::setFramerate(int fps)
+int CavaSpectrumProvider::framerate() const
 {
-    const int clamped = qBound(30, fps, 144);
+    return m_framerate;
+}
+
+void CavaSpectrumProvider::setFramerate(int fps)
+{
+    const int clamped = qBound(Defaults::MinFramerate, fps, Defaults::MaxFramerate);
     if (m_framerate != clamped) {
         m_framerate = clamped;
         if (isRunning()) {
@@ -117,28 +132,14 @@ void CavaService::setFramerate(int fps)
     }
 }
 
-QVector<float> CavaService::spectrum() const
+QVector<float> CavaSpectrumProvider::spectrum() const
 {
     return m_spectrum;
 }
 
-QString CavaService::detectAudioMethod()
-{
-    // Prefer PipeWire (Plasma 6 standard), fall back to PulseAudio
-    const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    if (!runtimeDir.isEmpty() && QFileInfo::exists(runtimeDir + QStringLiteral("/pipewire-0"))) {
-        return QStringLiteral("pipewire");
-    }
-    if (!QStandardPaths::findExecutable(QStringLiteral("pw-cli")).isEmpty()) {
-        return QStringLiteral("pipewire");
-    }
-    return QStringLiteral("pulse");
-}
-
-void CavaService::buildConfig()
+void CavaSpectrumProvider::buildConfig()
 {
     const QString audioMethod = detectAudioMethod();
-    // CAVA config: raw output, ascii format, auto-detected input
     m_config = QStringLiteral(
                    "[general]\n"
                    "framerate=%1\n"
@@ -166,17 +167,14 @@ void CavaService::buildConfig()
                    .arg(audioMethod);
 }
 
-void CavaService::onReadyReadStandardOutput()
+void CavaSpectrumProvider::onReadyReadStandardOutput()
 {
     if (!m_process) {
         return;
     }
     m_stdoutBuffer += m_process->readAllStandardOutput();
 
-    // Guard against unbounded buffer growth from malformed data (no newlines)
     if (m_stdoutBuffer.size() > kMaxStdoutBufferSize) {
-        qCWarning(lcOverlay) << "CAVA stdout buffer exceeded" << kMaxStdoutBufferSize
-                             << "bytes, discarding oldest data";
         m_stdoutBuffer = m_stdoutBuffer.mid(m_stdoutBuffer.size() - kMaxStdoutBufferSize / 2);
     }
 
@@ -187,7 +185,6 @@ void CavaService::onReadyReadStandardOutput()
         if (line.isEmpty()) {
             continue;
         }
-        // Remove trailing semicolon if present
         if (line.endsWith(';')) {
             line.chop(1);
         }
@@ -202,8 +199,6 @@ void CavaService::onReadyReadStandardOutput()
             }
         }
         if (!spectrum.isEmpty()) {
-            // Apply exponential moving average for temporal smoothing.
-            // Alpha=0.5 at 60fps gives ~33ms time constant — snappy but jitter-free.
             static constexpr float kSmoothingAlpha = 0.5f;
             if (m_smoothedSpectrum.size() == spectrum.size()) {
                 for (int i = 0; i < spectrum.size(); ++i) {
@@ -219,7 +214,7 @@ void CavaService::onReadyReadStandardOutput()
     }
 }
 
-void CavaService::onProcessStateChanged(QProcess::ProcessState state)
+void CavaSpectrumProvider::onProcessStateChanged(QProcess::ProcessState state)
 {
     const bool running = (state == QProcess::Running);
     Q_EMIT runningChanged(running);
@@ -228,50 +223,39 @@ void CavaService::onProcessStateChanged(QProcess::ProcessState state)
     }
 }
 
-void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+void CavaSpectrumProvider::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     if (m_stopping || m_pendingRestart) {
         return;
     }
-    // CrashExit means "terminated by signal". The exit code is the signal number.
-    // SIGTERM (15): expected during daemon shutdown — systemd sends SIGTERM to the
-    // entire process group, so CAVA dies before CavaService::stop() sets m_stopping.
-    // SIGKILL (9): also expected from our own kill() fallback in stop().
     if (exitStatus == QProcess::CrashExit && (exitCode == 15 || exitCode == 9)) {
         return;
     }
     if (exitCode != 0) {
         const QByteArray stderrOutput = m_process ? m_process->readAllStandardError().left(500) : QByteArray();
-        qCWarning(lcOverlay) << "CAVA exited with code=" << exitCode << "stderr=" << stderrOutput;
+        Q_UNUSED(stderrOutput)
     }
 }
 
-void CavaService::onProcessError(QProcess::ProcessError error)
+void CavaSpectrumProvider::onProcessError(QProcess::ProcessError error)
 {
     if (m_stopping || m_pendingRestart) {
         return;
     }
-    // QProcess::Crashed means "terminated by signal" — redundant with onProcessFinished
-    // which has the actual signal number. Suppress here; real crashes (SIGSEGV etc.)
-    // are still reported via onProcessFinished with the non-SIGTERM exit code.
-    // This also covers the daemon shutdown case where systemd SIGTERM hits the process
-    // group before CavaService::stop() has a chance to set m_stopping.
     if (error == QProcess::Crashed) {
         return;
     }
     const QString msg = m_process ? m_process->errorString() : QStringLiteral("Unknown error");
-    qCWarning(lcOverlay) << "CAVA process error=" << error << msg;
     Q_EMIT errorOccurred(msg);
 }
 
-void CavaService::restartAsync()
+void CavaSpectrumProvider::restartAsync()
 {
     if (!m_process || m_process->state() == QProcess::NotRunning) {
         start();
         return;
     }
     m_pendingRestart = true;
-    // One-shot: restart after the current process exits
     connect(
         m_process, &QProcess::finished, this,
         [this]() {
@@ -282,4 +266,4 @@ void CavaService::restartAsync()
     m_process->terminate();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorAudio

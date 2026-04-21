@@ -203,14 +203,6 @@ inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
 }
 
 /**
- * @brief Audio visualization constants (CAVA)
- */
-namespace Audio {
-constexpr int MinBars = 16;
-constexpr int MaxBars = 256;
-}
-
-/**
  * @brief Synthetic zone ID prefix used by the zone selector overlay
  *
  * PhosphorZones::Zone IDs starting with this prefix are transient selector entries,

@@ -12,7 +12,7 @@
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../daemon/rendering/zonelabeltexturebuilder.h"
-#include "../../daemon/cavaservice.h"
+#include <PhosphorAudio/CavaSpectrumProvider.h>
 
 #include "pz_i18n.h"
 #include <QColor>
@@ -493,35 +493,33 @@ QVariant EditorController::audioSpectrumVariant() const
 
 void EditorController::startAudioCapture()
 {
-    // Already running — nothing to do (settings were validated on initial start)
-    if (m_cavaService && m_cavaService->isRunning()) {
+    if (m_audioProvider && m_audioProvider->isRunning()) {
         return;
     }
-    // Respect the KCM setting — don't start CAVA if audio visualizer is disabled
     if (!SettingsDbusQueries::queryBoolSetting(QStringLiteral("enableAudioVisualizer"), false)) {
         return;
     }
-    if (!CavaService::isAvailable()) {
+    if (!PhosphorAudio::CavaSpectrumProvider::isCavaInstalled()) {
         qCDebug(lcEditor) << "Audio spectrum: CAVA not available, disabled";
         return;
     }
-    if (!m_cavaService) {
-        m_cavaService = new CavaService(this);
-        connect(m_cavaService, &CavaService::spectrumUpdated, this, [this](const QVector<float>& spectrum) {
-            m_audioSpectrum = spectrum;
-            Q_EMIT audioSpectrumChanged();
-        });
+    if (!m_audioProvider) {
+        m_audioProvider = new PhosphorAudio::CavaSpectrumProvider(this);
+        connect(m_audioProvider, &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
+                [this](const QVector<float>& spectrum) {
+                    m_audioSpectrum = spectrum;
+                    Q_EMIT audioSpectrumChanged();
+                });
     }
-    // Sync bar count from KCM settings (default 64)
     const int barCount = SettingsDbusQueries::queryIntSetting(QStringLiteral("audioSpectrumBarCount"), 64);
-    m_cavaService->setBarCount(barCount);
-    m_cavaService->start();
+    m_audioProvider->setBarCount(barCount);
+    m_audioProvider->start();
 }
 
 void EditorController::stopAudioCapture()
 {
-    if (m_cavaService && m_cavaService->isRunning()) {
-        m_cavaService->stop();
+    if (m_audioProvider && m_audioProvider->isRunning()) {
+        m_audioProvider->stop();
     }
     if (!m_audioSpectrum.isEmpty()) {
         m_audioSpectrum.clear();

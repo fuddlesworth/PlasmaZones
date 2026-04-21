@@ -43,8 +43,11 @@ namespace PhosphorTiles {
 class ITileAlgorithmRegistry;
 }
 
+namespace PhosphorAudio {
+class IAudioSpectrumProvider;
+}
+
 namespace PlasmaZones {
-class CavaService;
 class WindowThumbnailService;
 class ShaderRegistry;
 }
@@ -618,8 +621,8 @@ private:
     // destroy/recreate cycles on Vulkan.
     uint64_t m_scopeGeneration = 0;
 
-    // CAVA audio visualization
-    std::unique_ptr<CavaService> m_cavaService;
+    // Audio spectrum provider (CAVA backend via phosphor-audio)
+    std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
 
     // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
