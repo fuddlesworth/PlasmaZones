@@ -505,7 +505,7 @@ IDs flow into `LayoutPreview::id` (`"autotile:<id>"`), JSON keys, D-Bus
 method arguments, and QML model roles. `registerAlgorithm` rejects any id
 that isn't `[A-Za-z0-9._:-]+` before the id can reach a downstream parser
 that expects ASCII. The `:` separator enables namespacing — scripted
-algorithms register as `"script:<basename>"` unless their `@builtinId`
+algorithms register as `"script:<basename>"` unless their `id`
 metadata provides an explicit id.
 
 #### Registration ordering
@@ -566,7 +566,7 @@ public:
     bool     isValid()    const;   // script loaded + exports calculateZones
     QString  filePath()   const;
     QString  scriptId()   const;   // "script:<basename>"
-    QString  builtinId()  const;   // from @builtinId metadata, if present
+    QString  id()  const;          // from metadata id, if present
     void     setUserScript(bool isUser);
 
     // TilingAlgorithm overrides
@@ -600,11 +600,11 @@ Optional lifecycle hooks (v2):
 - `onWindowAdded(state, index)`, `onWindowRemoved(state, index)`
 
 Metadata lives in leading `// @key value` comments. The parser recognises
-`@name`, `@description`, `@supportsMasterCount`, `@supportsSplitRatio`,
-`@producesOverlappingZones`, `@centerLayout`, `@zoneNumberDisplay`,
-`@defaultSplitRatio`, `@defaultMaxWindows`, `@minimumWindows`,
-`@masterZoneIndex`, `@supportsMemory`, `@supportsMinSizes`, `@builtinId`,
-and `@param` declarations.
+`name`, `description`, `supportsMasterCount`, `supportsSplitRatio`,
+`producesOverlappingZones`, `centerLayout`, `zoneNumberDisplay`,
+`defaultSplitRatio`, `defaultMaxWindows`, `minimumWindows`,
+`masterZoneIndex`, `supportsMemory`, `supportsMinSizes`, `id`,
+and `customParams` declarations.
 
 `@param` declares a custom algorithm parameter that flows through as
 `params.custom.<name>` in the JS, and shows up in the settings UI via
@@ -1294,7 +1294,7 @@ designed for QML consumption.
   tunables via leading comment lines; the settings UI discovers them
   via `customParamDefList()` and renders number sliders / booleans /
   enum dropdowns automatically.
-- **`@builtinId` override** — a scripted algorithm can claim a
+- **`id` override** — a scripted algorithm can claim a
   well-known id (e.g. `"master-stack"`) rather than `"script:<basename>"`,
   which is how PlasmaZones ships most "built-in" algorithms as JS
   files internally while preserving stable ids in user config.
@@ -1436,8 +1436,8 @@ Deferred to implementation follow-ups:
   the library through the daemon's shim headers; a library-local test
   target keeps test binaries small and proves the "standalone
   distribution" claim by building without any `src/` includes.
-- Whether `@builtinId` should be renamed to `@canonicalId` or similar —
-  "builtin" is the C++ distinction (self-registering vs loader-registered),
+- ~~Whether `@builtinId` should be renamed~~ — done: renamed to `id` in the
+  JS metadata API. The C++ struct field and accessor are also `id` now.
   not the user-facing one. Low priority; the existing name is load-bearing
   for the current shipped scripts.
 - Whether to bump the public header count by splitting `SplitTree` into a
