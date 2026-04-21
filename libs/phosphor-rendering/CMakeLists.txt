@@ -27,8 +27,12 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick)
-find_package(Qt6GuiPrivate CONFIG REQUIRED)
-find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
+if(NOT TARGET Qt6::GuiPrivate)
+    find_package(Qt6GuiPrivate CONFIG REQUIRED)
+endif()
+if(NOT TARGET Qt6::ShaderToolsPrivate)
+    find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorRendering Library

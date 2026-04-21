@@ -110,9 +110,9 @@ private Q_SLOTS:
         PlasmaPanelSource src;
         src.start();
         src.stop();
-        // ready() intentionally latches — the contract is "panels have
-        // been queried at least once", not "currently running".
-        QVERIFY(src.ready());
+        // stop() resets the ready flag so a subsequent start() triggers
+        // a fresh first-ready signal when panels are re-observed.
+        QVERIFY(!src.ready());
         // Second stop() must be idempotent.
         src.stop();
     }

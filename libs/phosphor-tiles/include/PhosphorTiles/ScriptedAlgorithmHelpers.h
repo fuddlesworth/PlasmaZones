@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <phosphortiles_export.h>
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 
 #include <QJSValue>
@@ -82,12 +83,12 @@ struct ScriptMetadata
 /**
  * @brief Parse custom parameter definitions from a JS-exported customParams array
  */
-QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, const QString& filePath);
+PHOSPHORTILES_EXPORT QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, const QString& filePath);
 
 /**
  * @brief Parse full algorithm metadata from a JS-exported metadata object
  */
-ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& filePath);
+PHOSPHORTILES_EXPORT ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& filePath);
 
 /**
  * @brief Convert a JS array of {x, y, width, height} objects to QRects

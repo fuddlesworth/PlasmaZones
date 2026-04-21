@@ -111,6 +111,7 @@ target_compile_definitions(test_algorithm_registry_custom PRIVATE "PZ_SOURCE_DIR
 pz_add_test(test_scripted_algorithm autotile/test_scripted_algorithm.cpp)
 target_compile_definitions(test_scripted_algorithm PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_metadata_parsing autotile/test_metadata_parsing.cpp)
+target_link_libraries(test_metadata_parsing PRIVATE Qt6::Qml)
 pz_add_test(test_split_tree autotile/test_split_tree.cpp)
 target_compile_definitions(test_split_tree PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)

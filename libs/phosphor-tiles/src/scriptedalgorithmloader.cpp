@@ -214,13 +214,13 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
         const QString& path = m_scriptIdToPath.value(id);
         QFileInfo info(path);
         hasher.addData(id.toUtf8());
-        hasher.addData("|", 1);
+        hasher.addData(QByteArrayView("|"));
         hasher.addData(path.toUtf8());
-        hasher.addData("|", 1);
+        hasher.addData(QByteArrayView("|"));
         hasher.addData(QByteArray::number(info.size()));
-        hasher.addData("|", 1);
+        hasher.addData(QByteArrayView("|"));
         hasher.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
-        hasher.addData("\n", 1);
+        hasher.addData(QByteArrayView("\n"));
     }
     const QByteArray signature = hasher.result();
     if (signature != m_lastScriptSignature) {
