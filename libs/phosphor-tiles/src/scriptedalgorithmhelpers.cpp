@@ -191,6 +191,12 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 meta.builtinId = value.left(64);
             }
         } else if (key == QLatin1String("param")) {
+            // Skip JSDoc-style @param annotations (e.g. @param {Object} params)
+            // that live in /** */ blocks above the function. These are documentation,
+            // not PZ custom parameter declarations.
+            if (value.startsWith(QLatin1Char('{'))) {
+                continue;
+            }
             // Format: // @param name type [typeArgs...] "description"
             // number: // @param name number default min max "description"
             // bool:   // @param name bool default "description"
@@ -259,7 +265,7 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 qCWarning(PhosphorTiles::lcTilesLib)
                     << "ScriptedAlgorithm::parseMetadata: malformed @param" << value << "in" << filePath;
             }
-        } else if (key != QLatin1String("icon")) {
+        } else if (key != QLatin1String("icon") && key != QLatin1String("returns") && key != QLatin1String("return")) {
             qCDebug(PhosphorTiles::lcTilesLib)
                 << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;
         }
