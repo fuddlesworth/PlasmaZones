@@ -14,9 +14,9 @@ var metadata = {
     supportsMemory: false,
     supportsMinSizes: false,
     customParams: [
-    { name: "focusBoost", type: "number", default: 0.2, min: 0.0, max: 0.5, description: "Extra width given to the focused cluster" },
-    { name: "minClusterRatio", type: "number", default: 0.1, min: 0.05, max: 0.5, description: "Minimum width ratio per cluster" }
-]
+        { name: "focusBoost", type: "number", default: 0.2, min: 0.0, max: 0.5, description: "Extra width given to the focused cluster" },
+        { name: "minClusterRatio", type: "number", default: 0.1, min: 0.05, max: 0.5, description: "Minimum width ratio per cluster" }
+    ]
 };
 
 /**

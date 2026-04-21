@@ -113,7 +113,8 @@ QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, 
         } else if (def.type == QLatin1String("enum")) {
             const QJSValue opts = entry.property(QStringLiteral("options"));
             if (opts.isArray()) {
-                const int optLen = opts.property(QStringLiteral("length")).toInt();
+                constexpr int MaxEnumOptions = 256;
+                const int optLen = std::min(opts.property(QStringLiteral("length")).toInt(), MaxEnumOptions);
                 for (int j = 0; j < optLen; ++j) {
                     const QString opt = opts.property(static_cast<quint32>(j)).toString().left(64);
                     if (!opt.isEmpty()) {
@@ -123,7 +124,7 @@ QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, 
             }
             if (def.enumOptions.isEmpty()) {
                 qCDebug(PhosphorTiles::lcTilesLib)
-                    << "parseCustomParamsFromJs: enum param" << def.name << "has no valid options, skipping"
+                    << "ScriptedAlgorithm: enum param" << def.name << "has no valid options, skipping"
                     << "file=" << filePath;
                 continue;
             }
@@ -131,7 +132,7 @@ QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, 
             def.defaultValue = def.enumOptions.contains(defStr) ? defStr : def.enumOptions.first();
         } else {
             qCDebug(PhosphorTiles::lcTilesLib)
-                << "parseCustomParamsFromJs: unknown param type" << def.type << "for" << def.name << "in" << filePath;
+                << "ScriptedAlgorithm: unknown param type" << def.type << "for" << def.name << "in" << filePath;
             continue;
         }
         result.append(def);
@@ -153,7 +154,11 @@ ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& fi
     };
     auto readBool = [&](const char* key, bool fallback) -> bool {
         const QJSValue v = jsMetadata.property(QString::fromLatin1(key));
-        return v.isBool() ? v.toBool() : fallback;
+        if (v.isBool())
+            return v.toBool();
+        if (v.isNumber())
+            return v.toInt() != 0;
+        return fallback;
     };
     auto readNumber = [&](const char* key) -> std::optional<qreal> {
         const QJSValue v = jsMetadata.property(QString::fromLatin1(key));
@@ -203,10 +208,10 @@ ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& fi
     if (!bid.isEmpty()) {
         static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
         if (bid.startsWith(QLatin1String("script:"))) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "parseMetadataFromJs: builtinId must not start with 'script:'"
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: builtinId must not start with 'script:'"
                                                  << "value=" << bid << "in" << filePath;
         } else if (!builtinIdRe.match(bid).hasMatch()) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "parseMetadataFromJs: invalid builtinId" << bid << "in" << filePath;
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: invalid builtinId" << bid << "in" << filePath;
         } else {
             meta.builtinId = bid;
         }

@@ -443,7 +443,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // Parse metadata from JS-exported object.
     const QJSValue jsMetadata = m_engine->globalObject().property(QStringLiteral("metadata"));
     if (!jsMetadata.isObject()) {
-        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: no metadata object exported, file=" << filePath;
+        qCInfo(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: no metadata object exported, file=" << filePath;
     } else {
         m_metadata = ScriptedHelpers::parseMetadataFromJs(jsMetadata, filePath);
     }
