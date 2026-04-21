@@ -599,20 +599,22 @@ Optional lifecycle hooks (v2):
 
 - `onWindowAdded(state, index)`, `onWindowRemoved(state, index)`
 
-Metadata lives in leading `// @key value` comments. The parser recognises
-`name`, `description`, `supportsMasterCount`, `supportsSplitRatio`,
-`producesOverlappingZones`, `centerLayout`, `zoneNumberDisplay`,
-`defaultSplitRatio`, `defaultMaxWindows`, `minimumWindows`,
-`masterZoneIndex`, `supportsMemory`, `supportsMinSizes`, `id`,
-and `customParams` declarations.
+Metadata lives in a JS-exported `var metadata = { ... }` object. The
+parser recognises `name`, `description`, `supportsMasterCount`,
+`supportsSplitRatio`, `producesOverlappingZones`, `centerLayout`,
+`zoneNumberDisplay`, `defaultSplitRatio`, `defaultMaxWindows`,
+`minimumWindows`, `masterZoneIndex`, `supportsMemory`, `supportsMinSizes`,
+`id`, and `customParams` declarations.
 
-`@param` declares a custom algorithm parameter that flows through as
-`params.custom.<name>` in the JS, and shows up in the settings UI via
+`customParams` declares custom algorithm parameters that flow through as
+`params.custom.<name>` in the JS, and show up in the settings UI via
 `customParamDefList()`:
 
-```
-// @param speed number 0.1 "Animation speed" 0.01 0.5
-// @param mode enum "balanced" ["compact","balanced","wide"] "Layout mode"
+```js
+var customParams = [
+    { name: "speed", type: "number", default: 0.1, min: 0.01, max: 0.5, description: "Animation speed" },
+    { name: "mode", type: "enum", default: "balanced", options: ["compact", "balanced", "wide"], description: "Layout mode" }
+];
 ```
 
 #### Sandbox hardening

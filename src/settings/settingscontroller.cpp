@@ -2864,16 +2864,19 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
     newName.replace(QLatin1Char('"'), QLatin1Char('\''));
     // Replace the first name: and id: values inside the var metadata object.
-    static const QRegularExpression nameRe(QStringLiteral(R"(name:\s*"[^"]*")"));
-    static const QRegularExpression idRe(QStringLiteral(R"(id:\s*"[^"]*")"));
+    // Anchored to line start to avoid matching inside algorithm body strings.
+    // Capture leading whitespace so the replacement preserves indentation.
+    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name:\s*"[^"]*")"),
+                                           QRegularExpression::MultilineOption);
+    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id:\s*"[^"]*")"), QRegularExpression::MultilineOption);
     QRegularExpressionMatch nameMatch = nameRe.match(content);
     if (nameMatch.hasMatch())
         content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
-                        QStringLiteral("name: \"") + newName + QStringLiteral("\""));
+                        nameMatch.captured(1) + QStringLiteral("name: \"") + newName + QStringLiteral("\""));
     QRegularExpressionMatch idMatch = idRe.match(content);
     if (idMatch.hasMatch())
         content.replace(idMatch.capturedStart(), idMatch.capturedLength(),
-                        QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
+                        idMatch.captured(1) + QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
 
     QFile destFile(destPath);
     if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -3020,13 +3023,15 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                 file.close();
 
                 // Skip the metadata header: SPDX lines, `// @annotation` lines,
-                // `/* ... */` block comments before the first code line, and
-                // surrounding blank lines. Stop as soon as we hit a non-metadata line
-                // (including doc-comments like `/** ... */` or `// Helper:`) so the
+                // `var metadata = { ... };` blocks, `/* ... */` block comments
+                // before the first code line, and surrounding blank lines.
+                // Stop as soon as we hit a non-metadata line (including
+                // doc-comments like `/** ... */` or `// Helper:`) so the
                 // template body's own documentation is preserved.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
                 int bodyStart = 0;
                 bool inBlockComment = false;
+                bool inMetadataObject = false;
                 for (int i = 0; i < lines.size(); ++i) {
                     const QString trimmed = lines[i].trimmed();
                     // Track /* ... */ block comments in the header region
@@ -3034,6 +3039,13 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                         bodyStart = i + 1;
                         if (trimmed.contains(QLatin1String("*/")))
                             inBlockComment = false;
+                        continue;
+                    }
+                    // Track var metadata = { ... }; block
+                    if (inMetadataObject) {
+                        bodyStart = i + 1;
+                        if (trimmed.startsWith(QLatin1String("};")))
+                            inMetadataObject = false;
                         continue;
                     }
                     // SPDX headers
@@ -3044,6 +3056,13 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                     // Old-style metadata annotations (// @name, etc.) — skip if present
                     if (trimmed.startsWith(QLatin1String("// @"))) {
                         bodyStart = i + 1;
+                        continue;
+                    }
+                    // JS metadata object: var metadata = { ... };
+                    if (trimmed.startsWith(QLatin1String("var metadata"))) {
+                        bodyStart = i + 1;
+                        if (!trimmed.contains(QLatin1String("};")))
+                            inMetadataObject = true;
                         continue;
                     }
                     // Block comment opening in the header — only skip if we haven't
