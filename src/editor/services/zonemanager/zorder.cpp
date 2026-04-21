@@ -4,6 +4,7 @@
 #include "../ZoneManager.h"
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
+#include <PhosphorZones/Zone.h>
 
 #include <QtMath>
 

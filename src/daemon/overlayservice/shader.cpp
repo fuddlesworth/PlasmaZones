@@ -3,7 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../cavaservice.h"
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -175,8 +175,8 @@ void OverlayService::startShaderAnimation()
 
     // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
     // Just sync config in case frame rate changed since CAVA was started.
-    if (m_cavaService && m_cavaService->isRunning() && m_settings) {
-        m_cavaService->setFramerate(frameRate);
+    if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
+        m_audioProvider->setFramerate(frameRate);
     }
 
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";

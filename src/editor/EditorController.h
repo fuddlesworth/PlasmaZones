@@ -23,6 +23,10 @@
 
 #include <memory>
 
+namespace PhosphorAudio {
+class IAudioSpectrumProvider;
+}
+
 namespace PhosphorTiles {
 class AlgorithmRegistry;
 class ScriptedAlgorithmLoader;
@@ -38,7 +42,6 @@ class ILayoutService;
 class ZoneManager;
 class SnappingService;
 class TemplateService;
-class CavaService;
 
 /**
  * @brief Controller for the layout editor
@@ -1002,8 +1005,8 @@ private:
     QString m_currentShaderId; // Empty = no shader effect
     QVariantMap m_currentShaderParams;
 
-    // Audio spectrum (CAVA) for shader preview
-    CavaService* m_cavaService = nullptr;
+    // Audio spectrum (phosphor-audio) for shader preview
+    PhosphorAudio::IAudioSpectrumProvider* m_audioProvider = nullptr;
     QVector<float> m_audioSpectrum;
 
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)

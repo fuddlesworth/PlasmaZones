@@ -1,6 +1,6 @@
 # Library Extraction Survey
 
-**Date:** 2026-04-18 (original); revised 2026-04-20 to fold in PR #343 + #345 outcomes.
+**Date:** 2026-04-18 (original); revised 2026-04-20 to fold in PR #343 + #345 outcomes; revised 2026-04-21 to add `phosphor-audio` extraction.
 **Scope:** Candidate inventory for further `phosphor-*` library extractions, in service of the long-term compositor / WM / shell goal.
 **Status:** Strategic survey — not a migration plan. Each candidate is backed by a focused investigation (see "Investigation provenance" at the end).
 
@@ -8,7 +8,7 @@
 
 ## Context
 
-Significant decoupling work has already landed: `phosphor-animation`, `phosphor-config`, `phosphor-identity`, `phosphor-layer`, `phosphor-layout-api`, `phosphor-rendering`, `phosphor-screens`, `phosphor-shell`, `phosphor-shortcuts`, `phosphor-tiles`, `phosphor-zones`. This document maps what remains in `src/` (and `kwin-effect/`) to potential additional libraries, ranks them by value × feasibility, and calls out what should **not** be extracted.
+Significant decoupling work has already landed: `phosphor-animation`, `phosphor-audio`, `phosphor-config`, `phosphor-identity`, `phosphor-layer`, `phosphor-layout-api`, `phosphor-rendering`, `phosphor-screens`, `phosphor-shell`, `phosphor-shortcuts`, `phosphor-tiles`, `phosphor-zones`. This document maps what remains in `src/` (and `kwin-effect/`) to potential additional libraries, ranks them by value × feasibility, and calls out what should **not** be extracted.
 
 The core strategic insight: the daemon has **zero** `KWin::` references in `src/`. Compositor-portability is an *extraction problem*, not an architecture problem.
 
@@ -21,6 +21,7 @@ The core strategic insight: the daemon has **zero** `KWin::` references in `src/
 - **`phosphor-animation`** — `easingcurve`, `animation_math`, `stagger_timer` moved in from `compositor-common/`; `Profile` / `ProfileTree` / `CurveRegistry` / `Spring` added. Motion-runtime scope realized.
 - **`phosphor-screens`** — `screenmanager`, `virtualscreen`, `virtualscreenswapper`, `plasmapanelsource` moved in. Daemon keeps `ScreenModeRouter` (correctly out of scope per original survey). Sensor-authoritative + D-Bus-ratio availability reconciliation landed in `manager.cpp::calculateAvailableGeometry` (PR #345).
 - **`phosphor-zones`** grew the concrete **`LayoutRegistry`** (previously `LayoutManager` in `src/core/`) plus `AssignmentEntry` (PR #345 commit `d6f74fc7`). Reverses the original Tier 4 "don't extract LayoutManager" verdict — see the note below that entry for what changed.
+- **`phosphor-audio`** — `CavaService` extracted from `src/daemon/` into `libs/phosphor-audio/` as `CavaSpectrumProvider` behind a new `IAudioSpectrumProvider` abstract interface. Motivated by the compositor/WM/shell endgame: audio spectrum data is a system-level service that panel widgets, desktop effects, lock screen animations, and third-party plugins should all be able to consume. LGPL-licensed for third-party linkability. `Audio::MinBars` / `Audio::MaxBars` constants moved from `src/core/constants.h` to `PhosphorAudio::Defaults`. Both daemon (`OverlayService`) and editor (`EditorController`) now link `PhosphorAudio::PhosphorAudio` instead of compiling `cavaservice.cpp` directly. Resolves overlay extraction obstacle #5 ("CavaService hardwired"): overlay can now take `IAudioSpectrumProvider*` via constructor injection. See `docs/phosphor-audio-api-design.md` for the full interface design.
 
 ### Process-global singletons eliminated (PR #343 + #345)
 
@@ -221,7 +222,7 @@ namespace PhosphorWindows {
 2. **Per-instance QQmlEngine.** OverlayService owns `unique_ptr<QQmlEngine>` with shared context properties. Refactor-intensive to share across instances.
 3. **Vulkan keep-alive surface.** Persistent 1×1 background window prevents Qt from tearing down Vulkan globals. Must outlive all user overlays; complicates library lifecycle contract.
 4. ~~**Interface-cast violation.**~~ ✅ Resolved in PR #345 (`d6f74fc7`). `ILayoutManager` et al. were deleted; `phosphor-zones` exports `IZoneLayoutRegistry` + concrete `LayoutRegistry` directly, and OverlayService now borrows the concrete type — no downcast needed.
-5. **CavaService hardwired.** Audio visualization initialized in constructor; no feature-gate. Extract to optional plugin via constructor injection.
+5. ~~**CavaService hardwired.**~~ ✅ Resolved. `CavaService` extracted to `phosphor-audio` as `CavaSpectrumProvider` behind `IAudioSpectrumProvider`. Overlay can now take the interface via constructor injection.
 6. ~~**ShaderRegistry singleton.**~~ ✅ Resolved in PR #345 (`dd126553`). Per-daemon `unique_ptr` threaded through `OverlayService` / `SettingsAdaptor` / `ShaderAdaptor` constructors; `detach()` wired in `Daemon::stop()` for clean teardown of the three raw-Qt-parented adaptors that borrow it.
 
 **QML coupling:** `src/ui/*.qml` loaded via `resources.qrc`; all run in shared `QQmlEngine` with `ZoneShaderItem` from `src/daemon/rendering/`.
@@ -282,7 +283,7 @@ Every clean library is named after its **domain**: `phosphor-config`, `phosphor-
 
 `compositor-common` is named after a **relationship** ("code shared between daemon and effect"). If a candidate can't be named after its domain, it probably isn't a library — it's a shim zone waiting to be decomposed.
 
-Applied to new candidates: `phosphor-animation`, `phosphor-overlay`, `phosphor-screens`, `phosphor-windows` — all domain names. ✓
+Applied to new candidates: `phosphor-animation`, `phosphor-audio`, `phosphor-overlay`, `phosphor-screens`, `phosphor-windows` — all domain names. ✓
 
 ---
 
@@ -299,13 +300,13 @@ Applied to new candidates: `phosphor-animation`, `phosphor-overlay`, `phosphor-s
 - ~~Move `layoutsourcefactory.{h,cpp}` to `phosphor-layout-api`.~~ ✅ Done (`LayoutSourceBundle` + `ILayoutSourceFactory` live in `phosphor-layout-api`).
 - ~~Fix `overlayservice/settings.cpp:122` `LayoutManager*` cast by extending `ILayoutManager`.~~ ✅ Resolved in PR #345 (`ILayoutManager` deleted; OverlayService uses concrete `PhosphorZones::LayoutRegistry` directly).
 
-**Overlay** sits outside this sequence. Its extraction depends on whether PhosphorLayer-as-public-API is acceptable for a `phosphor-overlay` library. Two of its six obstacles (interface-cast violation, ShaderRegistry singleton) are now resolved — remaining four still apply.
+**Overlay** sits outside this sequence. Its extraction depends on whether PhosphorLayer-as-public-API is acceptable for a `phosphor-overlay` library. Three of its six obstacles (interface-cast violation, ShaderRegistry singleton, CavaService hardwired) are now resolved — remaining three still apply.
 
 ---
 
 ## Investigation provenance
 
-This survey is synthesized from 8 parallel codebase investigations run 2026-04-18:
+This survey is synthesized from 8 parallel codebase investigations run 2026-04-18, plus post-hoc extraction work:
 
 1. `phosphor-animation` inventory (file/LOC inventory, KWin-coupling split, QML surface count, config flow, ISurfaceAnimator integration).
 2. `compositor-common` file-by-file audit (per-file verdicts, logging / D-Bus / metatype couplings).
@@ -315,3 +316,4 @@ This survey is synthesized from 8 parallel codebase investigations run 2026-04-1
 6. `phosphor-screens` extraction (scope, ScreenModeRouter carve-out, KF6-freeness, virtual-screen ownership).
 7. Shared QML components reusability audit.
 8. Layout-library consolidation audit (overlap matrix across phosphor-layout-api / phosphor-tiles / phosphor-zones).
+9. `phosphor-audio` extraction (2026-04-21): `CavaService` → `IAudioSpectrumProvider` + `CavaSpectrumProvider`. Motivated by shell-ecosystem reuse — audio spectrum is a system service, not an app feature.

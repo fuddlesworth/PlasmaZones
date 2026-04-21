@@ -4,6 +4,7 @@
 #include "ZoneManager.h"
 #include "ZoneAutoFiller.h"
 #include "../../core/constants.h"
+#include <PhosphorZones/Zone.h>
 
 #include <QUuid>
 #include <QtMath>

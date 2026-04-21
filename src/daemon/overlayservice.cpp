@@ -3,8 +3,9 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
-#include "cavaservice.h"
 #include "windowthumbnailservice.h"
+
+#include <PhosphorAudio/CavaSpectrumProvider.h>
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -255,8 +256,9 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // Reset shader error state on construction (fresh start after reboot)
     m_pendingShaderError.clear();
 
-    m_cavaService = std::make_unique<CavaService>(this);
-    connect(m_cavaService.get(), &CavaService::spectrumUpdated, this, &OverlayService::onAudioSpectrumUpdated);
+    m_audioProvider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
+    connect(m_audioProvider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
+            &OverlayService::onAudioSpectrumUpdated);
 
     // Create a persistent 1x1 keep-alive window to prevent Qt from tearing down
     // global Wayland/Vulkan protocol objects (zwp_linux_dmabuf_v1, wp_presentation,
