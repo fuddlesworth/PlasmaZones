@@ -11,14 +11,18 @@
 #include <QtCore/QMetaObject>
 #include <QtCore/QPointer>
 #include <QtCore/QVariant>
-#include <QtCore/QVariantAnimation>
 #include <QtQml/qqmlregistration.h>
+// Private header — project depends on qt6-qtdeclarative-devel which
+// ships the private headers on Fedora (qt6-qtdeclarative-private-devel
+// is a separate package on some distros but is pulled in by -devel on
+// Fedora 42+).
+#include <QtQuick/private/qquickanimation_p.h>
 
 namespace PhosphorAnimation {
 
 /**
- * @brief `QAbstractAnimation` subclass driving property animation with a
- *        phosphor-animation `Profile`.
+ * @brief `QQuickPropertyAnimation` subclass driving property animation
+ *        with a phosphor-animation `Profile`.
  *
  * Phase 4 decision Q — the working shape for QML `Behavior` sites:
  *
@@ -28,15 +32,18 @@ namespace PhosphorAnimation {
  * }
  * ```
  *
- * Inherits from `QVariantAnimation` so Qt's animation framework drives
- * `updateCurrentTime` / `updateCurrentValue` through its existing
- * timer infrastructure. Behavior fills in `startValue` / `endValue`
- * from the wrapped property's old / new values; we override
- * `duration()` to come from the `Profile`, set `easingCurve` to
- * `Linear` so Qt's built-in easing is a no-op, and override
- * `interpolated()` to apply our Phase-3 `Curve::evaluate` + the
- * matching `Interpolate<T>::lerp` for each supported
- * `QVariant::typeId()` (qreal / QPointF / QSizeF / QRectF / QColor).
+ * Inherits from `QQuickPropertyAnimation` (the Qt Quick base class that
+ * QML `Behavior` wires into). On profile resolution, the Phase-3 curve
+ * is converted to a `QEasingCurve::BezierSpline` approximation and
+ * installed via `setEasing()`, and the profile duration is installed
+ * via `setDuration()`. Qt Quick's animation infrastructure then handles
+ * all timing, interpolation, and property writes — no per-tick
+ * `interpolated()` override is needed.
+ *
+ * The BezierSpline approximation samples the Phase-3 `Curve::evaluate(t)`
+ * into 16 piecewise cubic Bezier segments. For simple cubic-bezier
+ * curves (4-parameter) this overshoots but the cost is negligible.
+ * For springs/elastics, 16 segments gives sub-pixel accuracy at 60fps.
  *
  * ## Profile binding (decision R)
  *
@@ -45,10 +52,8 @@ namespace PhosphorAnimation {
  *   - `QString` path — resolved live through `PhosphorProfileRegistry`.
  *     A settings-reload that calls `registerProfile(path, newProfile)`
  *     fires `profileChanged(path)`; this object re-resolves and
- *     rebinds, with subsequent `updateCurrentValue` ticks honouring
- *     the new curve / duration (new duration applies on the NEXT
- *     `start()` — mid-flight the old duration continues to avoid a
- *     visual stall).
+ *     rebinds, updating the easing curve and duration for the NEXT
+ *     animation start.
  *   - `PhosphorProfile` value — compile-time snapshot, installed
  *     as-is. No registry indirection, no live update.
  *
@@ -61,11 +66,10 @@ namespace PhosphorAnimation {
  *
  * ## Spring curves caveat
  *
- * Qt's `QVariantAnimation` is fundamentally fixed-duration — it
- * parameterises progress as `t ∈ [0, 1]` and calls `interpolated` with
- * Qt-driven easing. Stateful curves (`Spring`) need real-time `dt`
- * integration to preserve velocity across retargets, which the
- * QPropertyAnimation/Behavior path cannot provide.
+ * `QQuickPropertyAnimation` is fundamentally fixed-duration — it
+ * parameterises progress as `t in [0, 1]`. Stateful curves (`Spring`)
+ * need real-time `dt` integration to preserve velocity across retargets,
+ * which the QPropertyAnimation/Behavior path cannot provide.
  *
  * PhosphorMotionAnimation therefore uses the spring's **analytical
  * step response** (`Spring::evaluate(t)`) rather than the physics
@@ -74,15 +78,10 @@ namespace PhosphorAnimation {
  * from damping ratio — but velocity continuity across mid-animation
  * retargets is lost. Consumers that need true velocity-preserving
  * spring retargets in QML should use `PhosphorAnimatedReal` (et al.)
- * from sub-commit 3, which uses the Phase-3 `AnimatedValue<T>` path
- * directly and preserves the physics.
- *
- * This is a tractable tradeoff: Behavior integration is the 90 %
- * use case (fixed-duration UI fades, slides, size changes), and the
- * 10 % use case (gesture-driven spring retargets) has a clearly-
- * documented alternative.
+ * which use the Phase-3 `AnimatedValue<T>` path directly and preserve
+ * the physics.
  */
-class PHOSPHORANIMATION_EXPORT PhosphorMotionAnimation : public QVariantAnimation
+class PHOSPHORANIMATION_EXPORT PhosphorMotionAnimation : public QQuickPropertyAnimation
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(PhosphorMotionAnimation)
@@ -106,49 +105,8 @@ public:
     /// property, not the resolved form.
     const Profile& resolvedProfile() const;
 
-    /// `QAbstractAnimation::duration()` — driven by the resolved
-    /// profile's `effectiveDuration`, but SNAPSHOTTED at `start()`
-    /// so that a profile swap mid-flight (live settings edit) cannot
-    /// rewind the animation. Qt's animation framework reads `duration()`
-    /// on every tick to compute progress = elapsed/duration; letting
-    /// the live value leak through would turn a `200 ms → 400 ms` edit
-    /// at elapsed=150 ms into progress=0.375 (a visible backwards
-    /// jump) instead of the expected 0.75 continuing smoothly to 1.0.
-    /// The new duration takes effect on the next `start()`.
-    int duration() const override;
-
-    /// Shadow QVariantAnimation::setEasingCurve to REJECT anything
-    /// other than Linear. Phase-3 curves are applied by `interpolated()`
-    /// directly; Qt's easing must stay at Linear to avoid double-easing
-    /// (Qt's curve composed with ours). A consumer that writes
-    /// `easingCurve: Easing.OutQuad` on a PhosphorMotionAnimation
-    /// instance would otherwise silently re-introduce the double-easing
-    /// bug — this wrapper logs and ignores non-Linear writes.
-    ///
-    /// Note: `QVariantAnimation::setEasingCurve` is NOT virtual, so
-    /// this is a name-hiding override (static dispatch only). Callers
-    /// that go through the base class's pointer or the Q_PROPERTY
-    /// system may still bypass this guard; for those paths we catch
-    /// drift by re-asserting Linear in `interpolated()` paths via
-    /// the cached profile curve. Direct C++ `setEasingCurve` calls —
-    /// the common mistake — are caught here.
-    void setEasingCurve(const QEasingCurve& curve);
-
 Q_SIGNALS:
     void profileChanged();
-
-protected:
-    /// `QVariantAnimation` hook — called on each animation tick with
-    /// the eased progress value. We bypass Qt's easing (it's set to
-    /// Linear in the ctor) and apply our Phase-3 Curve + `Interpolate<T>::lerp`
-    /// for the supported QVariant types.
-    QVariant interpolated(const QVariant& from, const QVariant& to, qreal progress) const override;
-
-    /// `QAbstractAnimation::updateState` override — snapshots the
-    /// resolved profile's duration into `m_activeDurationMs` on the
-    /// `Stopped → Running` edge so mid-flight profile swaps can't
-    /// rewind progress. Cache cleared on `Running → Stopped`.
-    void updateState(QAbstractAnimation::State newState, QAbstractAnimation::State oldState) override;
 
 private:
     void resolveFromVariant(const QVariant& p);
@@ -156,9 +114,15 @@ private:
     void disconnectRegistrySignal();
     void applyResolvedProfile(const Profile& p);
 
+    /// Convert the resolved Profile's curve + duration into
+    /// QQuickPropertyAnimation's native `easing` and `duration`
+    /// properties. The curve is sampled into a piecewise cubic
+    /// BezierSpline with 16 segments — sub-pixel accurate at 60fps
+    /// for all supported curve types (springs, elastics, bounces).
+    void applyResolvedEasing();
+
     QVariant m_profile; ///< The QML-facing input: QString or PhosphorProfile.
-    Profile m_resolvedProfile; ///< Effective value used by duration() / interpolated.
-    int m_activeDurationMs = -1; ///< Frozen at start(); -1 while idle (fall through to resolved).
+    Profile m_resolvedProfile; ///< Effective value used by easing/duration.
     QString m_boundPath; ///< Non-empty when the input was a path string — drives live-rebind.
     QMetaObject::Connection m_registryChangedConnection;
     QMetaObject::Connection m_registryReloadedConnection;

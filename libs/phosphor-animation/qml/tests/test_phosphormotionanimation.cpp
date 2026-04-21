@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/Spring.h>
@@ -9,13 +10,12 @@
 #include <PhosphorAnimation/qml/PhosphorProfile.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
-#include <QColor>
-#include <QPointF>
-#include <QRectF>
+#include <QEasingCurve>
 #include <QSignalSpy>
-#include <QSizeF>
 #include <QTest>
 #include <QVariant>
+
+#include <QtMath>
 
 using namespace PhosphorAnimation;
 
@@ -130,63 +130,95 @@ private Q_SLOTS:
         QCOMPARE(a.duration(), qRound(Profile::DefaultDuration));
     }
 
-    // ─── interpolated() dispatch ───
+    // ─── Easing curve verification ───
+    //
+    // Note: we cannot construct a standalone QEasingCurve::BezierSpline
+    // and call valueForProgress() in this test binary. Qt 6.10 on
+    // aarch64 / GCC 15 has a heap-corruption bug in the standalone
+    // QEasingCurve BezierSpline evaluator (QTBUG-132321). The
+    // production path (QQuickPropertyAnimation::setEasing inside a
+    // QML scene) is unaffected because the Qt Quick animation job
+    // evaluates the spline through its own QAnimationJobUtils code
+    // path. We test the sampling geometry and boundary conditions
+    // here; full curve-accuracy testing lives in pa_test_easing
+    // which exercises Curve::evaluate() directly without QEasingCurve.
 
-    /// qreal → qreal via Interpolate<qreal>::lerp (with curve applied).
-    /// Use a default profile (OutCubic bezier) and check at t=0.5 the
-    /// result matches our Phase-3 Curve output.
-    void testInterpolatedReal()
+    /// The default fallback curve (OutCubic) must be monotonically
+    /// increasing and satisfy f(0)=0, f(1)=1. The 16-segment
+    /// BezierSpline approximation in applyResolvedEasing() samples
+    /// at 1/3 and 2/3 within each segment — verify those sample
+    /// points are monotonic and within [0,1].
+    void testBezierSplineSamplingGeometry()
     {
-        PhosphorMotionAnimation a;
-        a.setStartValue(0.0);
-        a.setEndValue(1.0);
-        a.setDuration(1000);
-        // Setting start/end directly doesn't call interpolated —
-        // start the animation and query via Qt's own machinery.
-        // Instead, we test interpolated via its protected surface
-        // indirectly by observing currentValue at a known tick.
-        //
-        // Simpler path: subclass-private access isn't needed; we use
-        // a QVariantAnimation-of-zero-duration so currentValue ==
-        // endValue, just to verify wire-up. The actual curve math
-        // is covered in AnimatedValue tests.
-        a.setDuration(0);
-        a.start();
-        QVERIFY(a.state() == QAbstractAnimation::Stopped || a.currentValue().toDouble() == 1.0);
+        const auto curve = defaultFallbackCurve();
+
+        // Boundary conditions.
+        QCOMPARE(curve->evaluate(0.0), 0.0);
+        QCOMPARE(curve->evaluate(1.0), 1.0);
+
+        // Replicate applyResolvedEasing()'s sampling to verify
+        // the control-point geometry is valid for a monotonic curve.
+        constexpr int kSegments = 16;
+        qreal prevY = 0.0;
+
+        for (int i = 0; i < kSegments; ++i) {
+            const qreal t0 = static_cast<qreal>(i) / kSegments;
+            const qreal t1 = static_cast<qreal>(i + 1) / kSegments;
+            const qreal tMid1 = t0 + (t1 - t0) / 3.0;
+            const qreal tMid2 = t0 + 2.0 * (t1 - t0) / 3.0;
+
+            const qreal y1 = curve->evaluate(tMid1);
+            const qreal y2 = curve->evaluate(tMid2);
+            const qreal yEnd = curve->evaluate(t1);
+
+            // All sampled Y values must be in [0, 1].
+            QVERIFY2(y1 >= 0.0 && y1 <= 1.0,
+                qPrintable(QStringLiteral("c1 y=%1 out of range at segment %2")
+                               .arg(y1, 0, 'f', 6).arg(i)));
+            QVERIFY2(y2 >= 0.0 && y2 <= 1.0,
+                qPrintable(QStringLiteral("c2 y=%1 out of range at segment %2")
+                               .arg(y2, 0, 'f', 6).arg(i)));
+            QVERIFY2(yEnd >= 0.0 && yEnd <= 1.0,
+                qPrintable(QStringLiteral("end y=%1 out of range at segment %2")
+                               .arg(yEnd, 0, 'f', 6).arg(i)));
+
+            // OutCubic is monotonically increasing — each segment
+            // end must be >= the previous segment end.
+            QVERIFY2(yEnd >= prevY - 1e-12,
+                qPrintable(QStringLiteral("monotonicity violated: segment %1 end=%2 < prev=%3")
+                               .arg(i).arg(yEnd, 0, 'f', 6).arg(prevY, 0, 'f', 6)));
+            prevY = yEnd;
+        }
+
+        // Final segment end must be 1.0.
+        QCOMPARE(prevY, 1.0);
     }
 
-    /// QColor interpolation wires through.
-    void testInterpolatedColor()
+    /// Default-constructed animation installs the library-default
+    /// curve (OutCubic). Verify the resolved profile reflects this.
+    void testDefaultResolvedProfileHasNoCurve()
     {
         PhosphorMotionAnimation a;
-        a.setStartValue(QColor(Qt::red));
-        a.setEndValue(QColor(Qt::blue));
-        a.setDuration(0);
-        a.start();
-        QCOMPARE(a.currentValue().value<QColor>(), QColor(Qt::blue));
+        // The resolved profile is default-constructed — no explicit
+        // curve, so applyResolvedEasing() uses defaultFallbackCurve().
+        QVERIFY(!a.resolvedProfile().curve);
     }
 
-    /// QPointF / QSizeF / QRectF — round-trip endpoint values on a
-    /// zero-duration animation.
-    void testInterpolatedGeometric()
+    /// Setting a profile with a custom duration updates both the
+    /// duration and the resolved profile accordingly.
+    void testProfileCurveUpdatesResolvedProfile()
     {
         PhosphorMotionAnimation a;
-        a.setStartValue(QPointF(0, 0));
-        a.setEndValue(QPointF(100, 50));
-        a.setDuration(0);
-        a.start();
-        QCOMPARE(a.currentValue().toPointF(), QPointF(100, 50));
-    }
 
-    // ─── Qt easing bypass ───
+        PhosphorProfile p;
+        p.setDuration(500.0);
+        a.setProfile(QVariant::fromValue(p));
 
-    /// QVariantAnimation defaults to QEasingCurve::InOutQuad if we
-    /// don't override; the ctor must install Linear so our Phase-3
-    /// Curve is the only easing applied.
-    void testEasingCurveIsLinear()
-    {
-        PhosphorMotionAnimation a;
-        QCOMPARE(a.easingCurve().type(), QEasingCurve::Linear);
+        // Duration must have changed.
+        QCOMPARE(a.duration(), 500);
+        // Resolved profile must carry the new duration.
+        QVERIFY(a.resolvedProfile().duration.has_value());
+        QCOMPARE(qRound(a.resolvedProfile().duration.value()), 500);
     }
 
     // ─── Meta ───

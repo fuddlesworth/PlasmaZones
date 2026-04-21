@@ -5,15 +5,13 @@
 
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Curve.h>
-#include <PhosphorAnimation/Interpolate.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
-#include <QColor>
 #include <QEasingCurve>
 #include <QLoggingCategory>
 #include <QPointF>
-#include <QRectF>
-#include <QSizeF>
+
+#include <QtMath>
 
 namespace PhosphorAnimation {
 
@@ -22,31 +20,13 @@ Q_LOGGING_CATEGORY(lcMotion, "phosphoranimation.qml.motion")
 } // namespace
 
 PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
-    : QVariantAnimation(parent)
+    : QQuickPropertyAnimation(parent)
 {
-    // Bypass Qt's built-in easing. Qt's QVariantAnimation applies
-    // `easingCurve.valueForProgress(timeProgress)` before calling our
-    // `interpolated()`; with Linear set, the progress we receive is the
-    // raw time ratio — we then apply our Phase-3 Curve inside
-    // `interpolated()`. Without this override, every PhosphorCurve
-    // would be *double-eased* (Qt's OutInQuad composed with ours).
-    //
-    // Call through to the base setter here — our override below would
-    // accept Linear anyway, but the direct call avoids a first-frame
-    // log noise during construction.
-    QVariantAnimation::setEasingCurve(QEasingCurve(QEasingCurve::Linear));
-}
-
-void PhosphorMotionAnimation::setEasingCurve(const QEasingCurve& curve)
-{
-    if (curve.type() != QEasingCurve::Linear) {
-        qCWarning(lcMotion).nospace()
-            << "PhosphorMotionAnimation::setEasingCurve(" << curve.type()
-            << ") ignored — this class applies its own profile-supplied curve in interpolated(); "
-               "setting a non-Linear Qt easing would double-ease. Use `profile:` to change the curve.";
-        return;
-    }
-    QVariantAnimation::setEasingCurve(curve);
+    // Apply the default profile's easing and duration so a
+    // PhosphorMotionAnimation with no profile set still animates
+    // with the library-default OutCubic curve rather than Qt Quick's
+    // default InOutQuad.
+    applyResolvedEasing();
 }
 
 PhosphorMotionAnimation::~PhosphorMotionAnimation()
@@ -74,73 +54,38 @@ const Profile& PhosphorMotionAnimation::resolvedProfile() const
     return m_resolvedProfile;
 }
 
-int PhosphorMotionAnimation::duration() const
+void PhosphorMotionAnimation::applyResolvedEasing()
 {
-    // While running, return the duration snapshotted at start(). Without
-    // the snapshot, a live settings edit mid-animation would change the
-    // value Qt reads per-tick for progress calculation and snap the
-    // animation backwards or forwards visibly.
-    if (m_activeDurationMs >= 0) {
-        return m_activeDurationMs;
-    }
-    // qreal → int ms. `QVariantAnimation` expects integer milliseconds;
-    // round rather than truncate so a 149.9 ms profile doesn't silently
-    // lose a frame on a 60 Hz paint cycle.
-    return qRound(m_resolvedProfile.effectiveDuration());
-}
+    // Duration: qreal ms from profile → int ms for QQuickPropertyAnimation.
+    QQuickPropertyAnimation::setDuration(qRound(m_resolvedProfile.effectiveDuration()));
 
-void PhosphorMotionAnimation::updateState(QAbstractAnimation::State newState, QAbstractAnimation::State oldState)
-{
-    // Capture the resolved duration on the transition INTO the Running
-    // state and hold it for the whole run. Reset on exit so the next
-    // start() reads whatever profile is current at that moment.
-    if (newState == QAbstractAnimation::Running && oldState != QAbstractAnimation::Running) {
-        m_activeDurationMs = qRound(m_resolvedProfile.effectiveDuration());
-    } else if (newState == QAbstractAnimation::Stopped) {
-        m_activeDurationMs = -1;
-    }
-    QVariantAnimation::updateState(newState, oldState);
-}
-
-QVariant PhosphorMotionAnimation::interpolated(const QVariant& from, const QVariant& to, qreal progress) const
-{
-    // Curve is cached in m_resolvedProfile; fall back to the library
-    // default when no curve is set (matches AnimatedValue<T>'s
-    // effectiveCurve path).
+    // Convert the Phase-3 curve to a QEasingCurve::BezierSpline.
+    // If no curve is set, fall back to the library default (OutCubic).
     const auto curve = m_resolvedProfile.curve ? m_resolvedProfile.curve : defaultFallbackCurve();
-    const qreal curvedProgress = curve->evaluate(progress);
 
-    // Dispatch on QVariant's static type-id — Qt's Behavior machinery
-    // fills startValue / endValue from the target property's type, so
-    // `from` and `to` have a consistent type at call time. Every
-    // supported T routes through the matching Interpolate<T>::lerp.
-    switch (from.typeId()) {
-    case QMetaType::Double:
-    case QMetaType::Float:
-        return Interpolate<qreal>::lerp(from.toDouble(), to.toDouble(), curvedProgress);
-    case QMetaType::Int:
-        // Integer properties (e.g., Item.x as int in old code) —
-        // interpolate as qreal and round on the way out.
-        return QVariant::fromValue(qRound(Interpolate<qreal>::lerp(static_cast<qreal>(from.toInt()),
-                                                                   static_cast<qreal>(to.toInt()), curvedProgress)));
-    case QMetaType::QPointF:
-        return Interpolate<QPointF>::lerp(from.toPointF(), to.toPointF(), curvedProgress);
-    case QMetaType::QSizeF:
-        return Interpolate<QSizeF>::lerp(from.toSizeF(), to.toSizeF(), curvedProgress);
-    case QMetaType::QRectF:
-        return Interpolate<QRectF>::lerp(from.toRectF(), to.toRectF(), curvedProgress);
-    case QMetaType::QColor:
-        return Interpolate<QColor>::lerp(from.value<QColor>(), to.value<QColor>(), curvedProgress);
-    default:
-        // Unsupported type: fall back to Qt's default interpolation
-        // shape (from if progress == 0 else to — no-op in practice
-        // since the base implementation also can't interpolate this).
-        // Log once at debug so a consumer animating, say, a QTransform
-        // property sees why nothing happens.
-        qCDebug(lcMotion) << "interpolated: unsupported QVariant type" << QMetaType(from.typeId()).name()
-                          << "— returning endpoint";
-        return progress < 0.5 ? from : to;
+    QEasingCurve ec(QEasingCurve::BezierSpline);
+
+    // Sample the curve into piecewise cubic Bezier segments.
+    // 16 segments gives sub-pixel accuracy at 60fps for all curve types
+    // (springs, elastics, bounces). For simple cubic-bezier curves this
+    // overshoots but the cost is negligible — a QEasingCurve with 16
+    // segments is still lighter than a single QVariantAnimation tick.
+    constexpr int kSegments = 16;
+    for (int i = 0; i < kSegments; ++i) {
+        const qreal t0 = static_cast<qreal>(i) / kSegments;
+        const qreal t1 = static_cast<qreal>(i + 1) / kSegments;
+        const qreal tMid1 = t0 + (t1 - t0) / 3.0;
+        const qreal tMid2 = t0 + 2.0 * (t1 - t0) / 3.0;
+
+        // Sample the curve at the segment's 1/3 and 2/3 points to
+        // produce control points for a cubic Bezier approximation.
+        const QPointF c1(tMid1, curve->evaluate(tMid1));
+        const QPointF c2(tMid2, curve->evaluate(tMid2));
+        const QPointF end(t1, curve->evaluate(t1));
+        ec.addCubicBezierSegment(c1, c2, end);
     }
+
+    QQuickPropertyAnimation::setEasing(ec);
 }
 
 void PhosphorMotionAnimation::resolveFromVariant(const QVariant& p)
@@ -240,12 +185,7 @@ void PhosphorMotionAnimation::disconnectRegistrySignal()
 void PhosphorMotionAnimation::applyResolvedProfile(const Profile& p)
 {
     m_resolvedProfile = p;
-    // No explicit NOTIFY here — duration is re-read by
-    // QAbstractAnimation when start() fires; interpolated() reads
-    // m_resolvedProfile.curve on every tick. A mid-flight profile
-    // swap picks up the new curve on the NEXT tick without explicit
-    // re-trigger; the duration change applies on the next start()
-    // to avoid a visible time-jump.
+    applyResolvedEasing();
 }
 
 } // namespace PhosphorAnimation

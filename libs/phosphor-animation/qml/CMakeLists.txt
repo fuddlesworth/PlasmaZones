@@ -13,6 +13,14 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml QuickTest Test)
 
+# PhosphorMotionAnimation inherits QQuickPropertyAnimation which lives
+# in a private Qt Quick header (<QtQuick/private/qquickanimation_p.h>).
+# The Qt6::QuickPrivate target provides the include path for these
+# headers — mirrors the Qt6WaylandClientPrivate pattern in src/.
+if(NOT TARGET Qt6::QuickPrivate)
+    find_package(Qt6QuickPrivate REQUIRED)
+endif()
+
 # Position-independent code is required for Qt's QML type-registration
 # sub-targets — mirrors the org.plasmazones.common module's convention
 # in src/shared/CMakeLists.txt. Must be set BEFORE the qt_add_qml_module
@@ -80,6 +88,7 @@ target_link_libraries(PhosphorAnimationQml
         Qt6::Core
         Qt6::Gui
         Qt6::Quick
+        Qt6::QuickPrivate
         Qt6::Qml
 )
 
