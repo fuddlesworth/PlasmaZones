@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Spiral
-// @builtinId spiral
-// @description Windows spiral inward from the edges
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.5
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Spiral",
+    builtinId: "spiral",
+    description: "Windows spiral inward from the edges",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.5,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * Spiral layout: recursively subdivides space by rotating through

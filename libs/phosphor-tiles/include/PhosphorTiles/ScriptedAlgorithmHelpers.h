@@ -55,7 +55,7 @@ struct CustomParamDef
 };
 
 /**
- * @brief Parsed script metadata from // @key value comment lines
+ * @brief Parsed script metadata from a JS-exported metadata object
  */
 struct ScriptMetadata
 {
@@ -77,12 +77,14 @@ struct ScriptMetadata
 };
 
 /**
- * @brief Parse // @key value metadata comments from script source
- * @param source Script source code
- * @param filePath File path for diagnostic messages
- * @return Parsed metadata struct
+ * @brief Parse custom parameter definitions from a JS-exported customParams array
  */
-ScriptMetadata parseMetadata(const QString& source, const QString& filePath);
+QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, const QString& filePath);
+
+/**
+ * @brief Parse full algorithm metadata from a JS-exported metadata object
+ */
+ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& filePath);
 
 /**
  * @brief Convert a JS array of {x, y, width, height} objects to QRects

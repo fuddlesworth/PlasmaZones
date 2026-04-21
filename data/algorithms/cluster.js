@@ -1,22 +1,23 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Cluster
-// @builtinId cluster
-// @description Groups windows by application — same app windows are placed adjacent
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio false
-// @defaultMaxWindows 8
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
-// @supportsMinSizes false
-
-var customParams = [
+var metadata = {
+    name: "Cluster",
+    builtinId: "cluster",
+    description: "Groups windows by application — same app windows are placed adjacent",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: false,
+    defaultMaxWindows: 8,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false,
+    supportsMinSizes: false,
+    customParams: [
     { name: "focusBoost", type: "number", default: 0.2, min: 0.0, max: 0.5, description: "Extra width given to the focused cluster" },
     { name: "minClusterRatio", type: "number", default: 0.1, min: 0.05, max: 0.5, description: "Minimum width ratio per cluster" }
-];
+]
+};
 
 /**
  * Cluster layout: groups windows by application identity.

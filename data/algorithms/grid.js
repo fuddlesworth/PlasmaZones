@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Grid
-// @builtinId grid
-// @description Equal-sized grid layout
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio false
-// @defaultMaxWindows 9
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Grid",
+    builtinId: "grid",
+    description: "Equal-sized grid layout",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: false,
+    defaultMaxWindows: 9,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * Grid layout: equal-sized NxM grid where rows and columns are

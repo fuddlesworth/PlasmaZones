@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Binary Split
-// @builtinId bsp
-// @description Balanced recursive splitting into equal regions
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.5
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Binary Split",
+    builtinId: "bsp",
+    description: "Balanced recursive splitting into equal regions",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.5,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * BSP (Binary Space Partitioning) tiling algorithm.

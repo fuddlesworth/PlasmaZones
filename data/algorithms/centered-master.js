@@ -1,19 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Centered Master
-// @builtinId centered-master
-// @description Master windows centered with stacks on both sides
-// @producesOverlappingZones false
-// @supportsMasterCount true
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.5
-// @defaultMaxWindows 7
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @centerLayout true
-// @masterZoneIndex 0
-// @supportsMemory false
+var metadata = {
+    name: "Centered Master",
+    builtinId: "centered-master",
+    description: "Master windows centered with stacks on both sides",
+    producesOverlappingZones: false,
+    supportsMasterCount: true,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.5,
+    defaultMaxWindows: 7,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    centerLayout: true,
+    masterZoneIndex: 0,
+    supportsMemory: false
+};
 
 /**
  * Centered Master layout.

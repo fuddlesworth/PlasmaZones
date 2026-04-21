@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Dwindle (Memory)
-// @builtinId dwindle-memory
-// @description Remembers split positions — resize one split without affecting others
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.5
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory true
+var metadata = {
+    name: "Dwindle (Memory)",
+    builtinId: "dwindle-memory",
+    description: "Remembers split positions — resize one split without affecting others",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.5,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: true
+};
 
 /**
  * Dwindle layout with persistent split memory.

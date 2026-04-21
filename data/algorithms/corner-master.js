@@ -1,18 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Corner Master
-// @builtinId corner-master
-// @description Master window in a corner; rest fill the L-shaped remainder
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.55
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @masterZoneIndex 0
-// @supportsMemory false
+var metadata = {
+    name: "Corner Master",
+    builtinId: "corner-master",
+    description: "Master window in a corner; rest fill the L-shaped remainder",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.55,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    masterZoneIndex: 0,
+    supportsMemory: false
+};
 
 /**
  * Corner Master layout (see also quadrant-priority.js for a similar L-shape

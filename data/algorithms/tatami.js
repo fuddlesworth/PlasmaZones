@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Tatami
-// @builtinId tatami
-// @description Japanese tatami mat pattern where no four corners ever meet at the same point
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio false
-// @defaultMaxWindows 6
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
-// @supportsMinSizes false
+var metadata = {
+    name: "Tatami",
+    builtinId: "tatami",
+    description: "Japanese tatami mat pattern where no four corners ever meet at the same point",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: false,
+    defaultMaxWindows: 6,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false,
+    supportsMinSizes: false
+};
 
 /**
  * Tatami layout: alternating horizontal and vertical rectangles

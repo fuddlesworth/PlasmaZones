@@ -1,18 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Focus + Sidebar
-// @builtinId focus-sidebar
-// @description Main window with vertically stacked sidebar; ratio controls main window width
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.7
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @masterZoneIndex 0
-// @supportsMemory false
+var metadata = {
+    name: "Focus + Sidebar",
+    builtinId: "focus-sidebar",
+    description: "Main window with vertically stacked sidebar; ratio controls main window width",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.7,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    masterZoneIndex: 0,
+    supportsMemory: false
+};
 
 /**
  * Focus + Sidebar layout: one large main window on the left with a narrow

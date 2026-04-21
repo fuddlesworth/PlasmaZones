@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Spread
-// @builtinId spread
-// @description Windows spread evenly across the screen
-// @producesOverlappingZones true
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.8
-// @defaultMaxWindows 4
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Spread",
+    builtinId: "spread",
+    description: "Windows spread evenly across the screen",
+    producesOverlappingZones: true,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.8,
+    defaultMaxWindows: 4,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * Spread layout: windows distributed evenly across the screen,
