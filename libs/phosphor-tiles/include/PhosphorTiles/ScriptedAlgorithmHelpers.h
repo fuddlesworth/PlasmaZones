@@ -17,11 +17,14 @@ namespace PhosphorTiles {
 namespace ScriptedHelpers {
 
 /**
- * @brief Definition of a custom algorithm parameter declared via // @param
+ * @brief Definition of a custom algorithm parameter
  *
- * Format: // @param name type default "description"
- * Supported types: number, bool, enum
- * Enum format: // @param name enum "default" ["opt1","opt2"] "description"
+ * Declared by scripts via a JS-exported `customParams` array:
+ *   var customParams = [
+ *       { name: "gap", type: "number", default: 8, min: 0, max: 50, description: "Gap size" },
+ *       { name: "wrap", type: "bool", default: true, description: "Wrap around" },
+ *       { name: "mode", type: "enum", default: "auto", options: ["auto","manual"], description: "..." }
+ *   ];
  */
 struct CustomParamDef
 {

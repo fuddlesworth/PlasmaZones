@@ -443,9 +443,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_jsOnWindowRemoved = m_engine->globalObject().property(QStringLiteral("onWindowRemoved"));
     m_hasLifecycleHooks = m_jsOnWindowAdded.isCallable() || m_jsOnWindowRemoved.isCallable();
 
-    // Read JS-exported customParams array. Supplements (and takes priority over)
-    // the comment-parsed @param metadata — scripts can declare custom parameters
-    // as a plain JS array instead of fragile regex-parsed comments.
+    // Read JS-exported customParams array.
     const QJSValue jsCustomParams = m_engine->globalObject().property(QStringLiteral("customParams"));
     if (jsCustomParams.isArray()) {
         QVector<ScriptedHelpers::CustomParamDef> jsParams;
