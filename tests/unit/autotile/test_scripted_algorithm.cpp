@@ -65,15 +65,17 @@ private:
     static QString fullMetadataScript()
     {
         return QStringLiteral(
-            "// @name Test Layout\n"
-            "// @description A test tiling layout\n"
-            "// @supportsMasterCount true\n"
-            "// @supportsSplitRatio true\n"
-            "// @defaultSplitRatio 0.65\n"
-            "// @defaultMaxWindows 8\n"
-            "// @minimumWindows 2\n"
-            "// @masterZoneIndex 0\n"
-            "// @producesOverlappingZones true\n"
+            "var metadata = {\n"
+            "    name: \"Test Layout\",\n"
+            "    description: \"A test tiling layout\",\n"
+            "    supportsMasterCount: true,\n"
+            "    supportsSplitRatio: true,\n"
+            "    defaultSplitRatio: 0.65,\n"
+            "    defaultMaxWindows: 8,\n"
+            "    minimumWindows: 2,\n"
+            "    masterZoneIndex: 0,\n"
+            "    producesOverlappingZones: true\n"
+            "};\n"
             "function calculateZones(params) {\n"
             "    var zones = [];\n"
             "    var area = params.area;\n"
@@ -91,8 +93,10 @@ private:
     static QString minimalScript()
     {
         return QStringLiteral(
-            "// @name Minimal\n"
-            "// @description A minimal layout\n"
+            "var metadata = {\n"
+            "    name: \"Minimal\",\n"
+            "    description: \"A minimal layout\"\n"
+            "};\n"
             "function calculateZones(params) {\n"
             "    if (params.windowCount <= 0) return [];\n"
             "    var area = params.area;\n"
@@ -111,8 +115,10 @@ private:
     static QString simpleColumnsScript()
     {
         return QStringLiteral(
-            "// @name Simple Columns\n"
-            "// @description Equal width columns\n"
+            "var metadata = {\n"
+            "    name: \"Simple Columns\",\n"
+            "    description: \"Equal width columns\"\n"
+            "};\n"
             "function calculateZones(params) {\n"
             "    var count = params.windowCount;\n"
             "    if (count <= 0) return [];\n"
@@ -163,7 +169,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @description No name layout\n"
+            "var metadata = { description: \"No name layout\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("no-name.js"), script);
 
@@ -178,7 +184,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name No Description\n"
+            "var metadata = { name: \"No Description\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("no-desc.js"), script);
 
@@ -224,8 +230,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Missing Func\n"
-            "// @description No calculateZones function\n"
+            "var metadata = { name: \"Missing Func\", description: \"No calculateZones function\" };\n"
             "var x = 42;\n");
         QString path = writeTempScript(dir, QStringLiteral("no-func.js"), script);
 
@@ -238,8 +243,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Broken\n"
-            "// @description Has syntax error\n"
+            "var metadata = { name: \"Broken\", description: \"Has syntax error\" };\n"
             "function calculateZones(params) {{{\n"
             "    return [;\n"
             "}\n");
@@ -329,8 +333,7 @@ private Q_SLOTS:
 
         // Script that encodes params into zone dimensions for verification
         QString script = QStringLiteral(
-            "// @name Param Echo\n"
-            "// @description Echoes params as zone dimensions\n"
+            "var metadata = { name: \"Param Echo\", description: \"Echoes params as zone dimensions\" };\n"
             "function calculateZones(params) {\n"
             "    return [{\n"
             "        x: params.windowCount,\n"
@@ -364,8 +367,7 @@ private Q_SLOTS:
 
         // Script that returns a string instead of an array
         QString script = QStringLiteral(
-            "// @name Bad Return\n"
-            "// @description Returns wrong type\n"
+            "var metadata = { name: \"Bad Return\", description: \"Returns wrong type\" };\n"
             "function calculateZones(params) {\n"
             "    return 'not an array';\n"
             "}\n");
@@ -387,8 +389,7 @@ private Q_SLOTS:
 
         // Script that returns the area dimensions as a zone
         QString script = QStringLiteral(
-            "// @name Area Echo\n"
-            "// @description Echoes area as zone\n"
+            "var metadata = { name: \"Area Echo\", description: \"Echoes area as zone\" };\n"
             "function calculateZones(params) {\n"
             "    return [params.area];\n"
             "}\n");
@@ -562,11 +563,10 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QString path =
-            writeTempScript(dir, QStringLiteral("infinite-loop.js"),
-                            QStringLiteral("// @name InfiniteLoop\n"
-                                           "// @description Tests watchdog\n"
-                                           "function calculateZones(params) { while(true) {} return []; }\n"));
+        QString path = writeTempScript(
+            dir, QStringLiteral("infinite-loop.js"),
+            QStringLiteral("var metadata = { name: \"InfiniteLoop\", description: \"Tests watchdog\" };\n"
+                           "function calculateZones(params) { while(true) {} return []; }\n"));
 
         // Watchdog is per-instance now and shared_ptr so the algo can
         // outlive the test-local handle if needed (the registry's
@@ -595,8 +595,7 @@ private Q_SLOTS:
         QVERIFY(dir.isValid());
         QString path =
             writeTempScript(dir, QStringLiteral("thrower.js"),
-                            QStringLiteral("// @name Thrower\n"
-                                           "// @description Throws at runtime\n"
+                            QStringLiteral("var metadata = { name: \"Thrower\", description: \"Throws at runtime\" };\n"
                                            "function calculateZones(params) { throw new Error('boom'); }\n"));
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
@@ -612,12 +611,12 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QString path = writeTempScript(dir, QStringLiteral("neg-coords.js"),
-                                       QStringLiteral("// @name NegCoords\n"
-                                                      "// @description Returns negative coordinates\n"
-                                                      "function calculateZones(params) {\n"
-                                                      "    return [{x: -50, y: -100, width: -10, height: 0}];\n"
-                                                      "}\n"));
+        QString path = writeTempScript(
+            dir, QStringLiteral("neg-coords.js"),
+            QStringLiteral("var metadata = { name: \"NegCoords\", description: \"Returns negative coordinates\" };\n"
+                           "function calculateZones(params) {\n"
+                           "    return [{x: -50, y: -100, width: -10, height: 0}];\n"
+                           "}\n"));
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
@@ -636,16 +635,16 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QString path = writeTempScript(dir, QStringLiteral("too-many.js"),
-                                       QStringLiteral("// @name TooMany\n"
-                                                      "// @description Returns more than 256 zones\n"
-                                                      "function calculateZones(params) {\n"
-                                                      "    var zones = [];\n"
-                                                      "    for (var i = 0; i < 300; i++) {\n"
-                                                      "        zones.push({x: 0, y: 0, width: 100, height: 100});\n"
-                                                      "    }\n"
-                                                      "    return zones;\n"
-                                                      "}\n"));
+        QString path = writeTempScript(
+            dir, QStringLiteral("too-many.js"),
+            QStringLiteral("var metadata = { name: \"TooMany\", description: \"Returns more than 256 zones\" };\n"
+                           "function calculateZones(params) {\n"
+                           "    var zones = [];\n"
+                           "    for (var i = 0; i < 300; i++) {\n"
+                           "        zones.push({x: 0, y: 0, width: 100, height: 100});\n"
+                           "    }\n"
+                           "    return zones;\n"
+                           "}\n"));
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
@@ -667,8 +666,7 @@ private Q_SLOTS:
 
         // Create script > 1MB
         QString bigScript = QStringLiteral(
-            "// @name Big\n"
-            "// @description Oversized script\n"
+            "var metadata = { name: \"Big\", description: \"Oversized script\" };\n"
             "function calculateZones(params) { return []; }\n");
         bigScript += QStringLiteral("// ") + QString(1024 * 1024, QLatin1Char('x')) + QStringLiteral("\n");
 
@@ -682,12 +680,12 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QString path = writeTempScript(dir, QStringLiteral("nan-values.js"),
-                                       QStringLiteral("// @name NaNValues\n"
-                                                      "// @description Returns NaN zone values\n"
-                                                      "function calculateZones(params) {\n"
-                                                      "    return [{x: 0/0, y: 0, width: 100, height: 100}];\n"
-                                                      "}\n"));
+        QString path = writeTempScript(
+            dir, QStringLiteral("nan-values.js"),
+            QStringLiteral("var metadata = { name: \"NaNValues\", description: \"Returns NaN zone values\" };\n"
+                           "function calculateZones(params) {\n"
+                           "    return [{x: 0/0, y: 0, width: 100, height: 100}];\n"
+                           "}\n"));
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
@@ -706,12 +704,12 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QString path = writeTempScript(dir, QStringLiteral("inf-values.js"),
-                                       QStringLiteral("// @name InfValues\n"
-                                                      "// @description Returns Infinity zone values\n"
-                                                      "function calculateZones(params) {\n"
-                                                      "    return [{x: 0, y: 0, width: 1/0, height: 100}];\n"
-                                                      "}\n"));
+        QString path = writeTempScript(
+            dir, QStringLiteral("inf-values.js"),
+            QStringLiteral("var metadata = { name: \"InfValues\", description: \"Returns Infinity zone values\" };\n"
+                           "function calculateZones(params) {\n"
+                           "    return [{x: 0, y: 0, width: 1/0, height: 100}];\n"
+                           "}\n"));
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
@@ -732,9 +730,7 @@ private Q_SLOTS:
 
         // Test negative split ratio — should be clamped to MinSplitRatio (0.1)
         QString negScript = QStringLiteral(
-            "// @name NegRatio\n"
-            "// @description Negative split ratio\n"
-            "// @defaultSplitRatio -1.0\n"
+            "var metadata = { name: \"NegRatio\", description: \"Negative split ratio\", defaultSplitRatio: -1.0 };\n"
             "function calculateZones(params) { return []; }\n");
         QString negPath = writeTempScript(dir, QStringLiteral("neg-ratio.js"), negScript);
 
@@ -745,9 +741,7 @@ private Q_SLOTS:
 
         // Test over-max split ratio — should be clamped to MaxSplitRatio (0.9)
         QString highScript = QStringLiteral(
-            "// @name HighRatio\n"
-            "// @description Over-max split ratio\n"
-            "// @defaultSplitRatio 2.0\n"
+            "var metadata = { name: \"HighRatio\", description: \"Over-max split ratio\", defaultSplitRatio: 2.0 };\n"
             "function calculateZones(params) { return []; }\n");
         QString highPath = writeTempScript(dir, QStringLiteral("high-ratio.js"), highScript);
 
@@ -776,8 +770,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Prototype Pollution\n"
-            "// @description Test\n"
+            "var metadata = { name: \"Prototype Pollution\", description: \"Test\" };\n"
             "function calculateZones(params) {\n"
             "    Object.prototype.polluted = true;\n"
             "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
@@ -795,8 +788,7 @@ private Q_SLOTS:
         if (!zones.isEmpty()) {
             // If zones were returned, verify a subsequent script is not polluted
             QString cleanScript = QStringLiteral(
-                "// @name Clean Check\n"
-                "// @description Verify no pollution\n"
+                "var metadata = { name: \"Clean Check\", description: \"Verify no pollution\" };\n"
                 "function calculateZones(params) {\n"
                 "    var obj = {};\n"
                 "    if (obj.polluted) return [];\n"
@@ -825,8 +817,7 @@ private Q_SLOTS:
         // This test documents the limitation: zones may or may not be empty depending
         // on the Qt version's V4 engine behavior.
         QString script = QStringLiteral(
-            "// @name Eval Test\n"
-            "// @description Test\n"
+            "var metadata = { name: \"Eval Test\", description: \"Test\" };\n"
             "function calculateZones(params) {\n"
             "    try { eval(\"var x = 1\"); } catch(e) { return []; }\n"
             "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
@@ -855,8 +846,7 @@ private Q_SLOTS:
         // This is the real security guarantee: no script can hang the process.
         // windowCount must be >= 2 to avoid the C++ single-window fast path.
         QString script = QStringLiteral(
-            "// @name Eval Infinite Loop Test\n"
-            "// @description Test\n"
+            "var metadata = { name: \"Eval Infinite Loop Test\", description: \"Test\" };\n"
             "function calculateZones(params) {\n"
             "    eval(\"while(true){}\");\n"
             "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
@@ -890,8 +880,7 @@ private Q_SLOTS:
         // The sandbox disables Function globally and via IIFE wrapper, but V4 may
         // still resolve the built-in. Watchdog is primary defense.
         QString script = QStringLiteral(
-            "// @name Function Constructor Test\n"
-            "// @description Test\n"
+            "var metadata = { name: \"Function Constructor Test\", description: \"Test\" };\n"
             "function calculateZones(params) {\n"
             "    try { var f = Function('return 1'); f(); } catch(e) { return []; }\n"
             "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
@@ -919,8 +908,7 @@ private Q_SLOTS:
         // The sandbox locks down Function.prototype.constructor and freezes
         // Function.prototype. V4 may still allow this via internal mechanisms.
         QString script = QStringLiteral(
-            "// @name Constructor Chain Test\n"
-            "// @description Test\n"
+            "var metadata = { name: \"Constructor Chain Test\", description: \"Test\" };\n"
             "function calculateZones(params) {\n"
             "    try {\n"
             "        var global = (function(){}).constructor.constructor('return this')();\n"
@@ -943,106 +931,98 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // @builtinId validation edge cases
+    // id validation edge cases
     // =========================================================================
 
-    void testBuiltinId_scriptPrefixRejected()
+    void testId_scriptPrefixRejected()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Script Prefix Test\n"
-            "// @description builtinId with script: prefix should be rejected\n"
-            "// @builtinId script:bad\n"
+            "var metadata = { name: \"Script Prefix Test\", description: \"id with script: prefix should be "
+            "rejected\", id: \"script:bad\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("script-prefix.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        // script: prefix is rejected — builtinId should remain empty
-        QVERIFY2(
-            algo.builtinId().isEmpty(),
-            qPrintable(QStringLiteral("Expected empty builtinId for 'script:bad', got '%1'").arg(algo.builtinId())));
+        // script: prefix is rejected — id should remain empty
+        QVERIFY2(algo.id().isEmpty(),
+                 qPrintable(QStringLiteral("Expected empty id for 'script:bad', got '%1'").arg(algo.id())));
     }
 
-    void testBuiltinId_uppercaseRejected()
+    void testId_uppercaseRejected()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Uppercase Test\n"
-            "// @description builtinId with uppercase should be rejected\n"
-            "// @builtinId UPPERCASE\n"
+            "var metadata = { name: \"Uppercase Test\", description: \"id with uppercase should be rejected\", "
+            "id: \"UPPERCASE\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("uppercase-id.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
         // Regex ^[a-z][a-z0-9-]*$ rejects uppercase
-        QVERIFY2(
-            algo.builtinId().isEmpty(),
-            qPrintable(QStringLiteral("Expected empty builtinId for 'UPPERCASE', got '%1'").arg(algo.builtinId())));
+        QVERIFY2(algo.id().isEmpty(),
+                 qPrintable(QStringLiteral("Expected empty id for 'UPPERCASE', got '%1'").arg(algo.id())));
     }
 
-    void testBuiltinId_startsWithDigitRejected()
+    void testId_startsWithDigitRejected()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Digit Start Test\n"
-            "// @description builtinId starting with digit should be rejected\n"
-            "// @builtinId 123startnum\n"
+            "var metadata = { name: \"Digit Start Test\", description: \"id starting with digit should be "
+            "rejected\", id: \"123startnum\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("digit-start.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
         // Regex ^[a-z][a-z0-9-]*$ requires first char to be lowercase letter
-        QVERIFY2(
-            algo.builtinId().isEmpty(),
-            qPrintable(QStringLiteral("Expected empty builtinId for '123startnum', got '%1'").arg(algo.builtinId())));
+        QVERIFY2(algo.id().isEmpty(),
+                 qPrintable(QStringLiteral("Expected empty id for '123startnum', got '%1'").arg(algo.id())));
     }
 
-    void testBuiltinId_longValueTruncatedTo64()
+    void testId_longValueTruncatedTo64()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        // Create a valid builtinId that is 65+ characters long
+        // Create a valid id that is 65+ characters long
         // Pattern: a-followed-by-64-more lowercase chars = 65 total
         QString longId = QStringLiteral("a") + QString(64, QLatin1Char('b')); // 65 chars
         QCOMPARE(longId.size(), 65);
 
         QString script = QStringLiteral(
-                             "// @name Long ID Test\n"
-                             "// @description builtinId longer than 64 chars should be truncated\n"
-                             "// @builtinId ")
+                             "var metadata = { name: \"Long ID Test\", description: \"id longer than 64 chars "
+                             "should be truncated\", id: \"")
             + longId
-            + QStringLiteral("\n"
+            + QStringLiteral("\" };\n"
                              "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("long-id.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        // .left(64) truncation — builtinId should be exactly 64 chars
-        QVERIFY2(!algo.builtinId().isEmpty(), "Expected non-empty builtinId for a valid but long ID");
-        QCOMPARE(algo.builtinId().size(), 64);
-        QCOMPARE(algo.builtinId(), longId.left(64));
+        // .left(64) truncation — id should be exactly 64 chars
+        QVERIFY2(!algo.id().isEmpty(), "Expected non-empty id for a valid but long ID");
+        QCOMPARE(algo.id().size(), 64);
+        QCOMPARE(algo.id(), longId.left(64));
     }
 
-    void testBuiltinId_validValueAccepted()
+    void testId_validValueAccepted()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         QString script = QStringLiteral(
-            "// @name Valid ID Test\n"
-            "// @description Valid builtinId should be accepted\n"
-            "// @builtinId my-custom-algo\n"
+            "var metadata = { name: \"Valid ID Test\", description: \"Valid id should be accepted\", id: "
+            "\"my-custom-algo\" };\n"
             "function calculateZones(params) { return []; }\n");
         QString path = writeTempScript(dir, QStringLiteral("valid-id.js"), script);
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        QCOMPARE(algo.builtinId(), QStringLiteral("my-custom-algo"));
+        QCOMPARE(algo.id(), QStringLiteral("my-custom-algo"));
     }
 
     // =========================================================================
@@ -1063,8 +1043,8 @@ private Q_SLOTS:
         // delegates to equalColumnsLayout — if the overwrite succeeded,
         // equalColumnsLayout would return [] and produce zero zones.
         QString script = QStringLiteral(
-            "// @name Frozen Globals Test\n"
-            "// @description Verify frozen builtins survive overwrite attempts\n"
+            "var metadata = { name: \"Frozen Globals Test\", description: \"Verify frozen builtins survive overwrite "
+            "attempts\" };\n"
             "function calculateZones(params) {\n"
             "    // Attempt to overwrite frozen builtins\n"
             "    try { fillArea = function() { return []; }; } catch(e) {}\n"

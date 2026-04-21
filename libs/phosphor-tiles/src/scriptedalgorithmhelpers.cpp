@@ -6,9 +6,10 @@
 #include "tileslogging.h"
 #include <QJSValue>
 #include <QRegularExpression>
-#include <QStringView>
 #include <QVariantMap>
 #include <algorithm>
+#include <cmath>
+#include <optional>
 
 namespace PhosphorTiles {
 namespace ScriptedHelpers {
@@ -75,195 +76,163 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
     return clamped;
 }
 
-namespace {
-
-// Parse a permissive boolean: {true,1,yes,on} → true, {false,0,no,off} → false
-// (case-insensitive). Unknown values log a warning and fall back to @p fallback.
-bool parseMetadataBool(QStringView key, QStringView value, const QString& filePath, bool fallback)
+QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, const QString& filePath)
 {
-    const QString lowered = value.toString().toLower();
-    if (lowered == QLatin1String("true") || lowered == QLatin1String("1") || lowered == QLatin1String("yes")
-        || lowered == QLatin1String("on"))
-        return true;
-    if (lowered == QLatin1String("false") || lowered == QLatin1String("0") || lowered == QLatin1String("no")
-        || lowered == QLatin1String("off"))
-        return false;
-    qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm::parseMetadata: unrecognised boolean for @" << key << "="
-                                         << value << "(accepted: true/1/yes/on or false/0/no/off) in" << filePath;
-    return fallback;
-}
-
-} // namespace
-
-ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
-{
-    using namespace AutotileDefaults;
-    // Accept three leading comment styles:
-    //   // @key value           (line comment)
-    //   /* @key value ...       (block-comment opener)
-    //    * @key value           (block-comment continuation)
-    // The outer loop already limits parsing to the leading comment block (it
-    // breaks on the first non-comment line), so broadening the regex here
-    // just lets multi-line /* ... */ headers expose metadata too. The value
-    // capture strips any trailing `*/` so "/** @name Foo */" yields "Foo".
-    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*(?://|/\*+|\*+)\s*@(\w+)\s+(.+?)(?:\s*\*+/)?\s*$)"));
-    static constexpr int MaxMetadataLines = 50;
-
-    ScriptMetadata meta;
-    int lineCount = 0;
-    const auto lines = QStringView(source).split(QLatin1Char('\n'));
-
-    for (const auto& lineView : lines) {
-        if (lineCount >= MaxMetadataLines)
-            break;
-        ++lineCount;
-        const QString line = lineView.toString();
-
-        const QString trimmed = line.trimmed();
-        if (!trimmed.isEmpty() && !trimmed.startsWith(QLatin1String("//")) && !trimmed.startsWith(QLatin1String("/*"))
-            && !trimmed.startsWith(QLatin1String("*"))) {
-            break;
-        }
-
-        const QRegularExpressionMatch match = metaRe.match(line);
-        if (!match.hasMatch()) {
+    QVector<CustomParamDef> result;
+    if (!jsCustomParams.isArray()) {
+        return result;
+    }
+    constexpr int MaxCustomParams = 64;
+    const int len = std::min(jsCustomParams.property(QStringLiteral("length")).toInt(), MaxCustomParams);
+    for (int i = 0; i < len; ++i) {
+        const QJSValue entry = jsCustomParams.property(static_cast<quint32>(i));
+        if (!entry.isObject()) {
             continue;
         }
-
-        const QString key = match.captured(1);
-        const QString value = match.captured(2).trimmed();
-
-        if (key == QLatin1String("name")) {
-            // Store plain text; any caller that renders the string into rich
-            // text must escape at render time (single source of escape policy).
-            meta.name = value.left(100);
-        } else if (key == QLatin1String("description")) {
-            meta.description = value.left(500);
-        } else if (key == QLatin1String("supportsMasterCount")) {
-            meta.supportsMasterCount = parseMetadataBool(key, value, filePath, meta.supportsMasterCount);
-        } else if (key == QLatin1String("supportsSplitRatio")) {
-            meta.supportsSplitRatio = parseMetadataBool(key, value, filePath, meta.supportsSplitRatio);
-        } else if (key == QLatin1String("producesOverlappingZones")) {
-            meta.producesOverlappingZones = parseMetadataBool(key, value, filePath, meta.producesOverlappingZones);
-        } else if (key == QLatin1String("supportsMemory")) {
-            meta.supportsMemory = parseMetadataBool(key, value, filePath, meta.supportsMemory);
-        } else if (key == QLatin1String("centerLayout")) {
-            meta.centerLayout = parseMetadataBool(key, value, filePath, meta.centerLayout);
-        } else if (key == QLatin1String("supportsMinSizes")) {
-            meta.supportsMinSizes = parseMetadataBool(key, value, filePath, meta.supportsMinSizes);
-        } else if (key == QLatin1String("defaultSplitRatio")) {
-            bool ok = false;
-            const qreal v = value.toDouble(&ok);
-            if (ok)
-                meta.defaultSplitRatio = std::clamp(v, MinSplitRatio, MaxSplitRatio);
-        } else if (key == QLatin1String("defaultMaxWindows")) {
-            bool ok = false;
-            const int v = value.toInt(&ok);
-            if (ok)
-                meta.defaultMaxWindows = std::clamp(v, MinMetadataWindows, MaxMetadataWindows);
-        } else if (key == QLatin1String("minimumWindows")) {
-            bool ok = false;
-            const int v = value.toInt(&ok);
-            if (ok)
-                meta.minimumWindows = std::clamp(v, MinMetadataWindows, MaxMetadataWindows);
-        } else if (key == QLatin1String("masterZoneIndex")) {
-            bool ok = false;
-            const int v = value.toInt(&ok);
-            if (ok)
-                meta.masterZoneIndex = std::clamp(v, -1, MaxZones - 1);
-        } else if (key == QLatin1String("zoneNumberDisplay")) {
-            // Forgiving decode: unknown / "first" / empty all fall back to
-            // RendererDecides (the TilingAlgorithm default kicks in).
-            const auto decoded = PhosphorLayout::zoneNumberDisplayFromString(value);
-            if (decoded != PhosphorLayout::ZoneNumberDisplay::RendererDecides) {
-                meta.zoneNumberDisplay = decoded;
+        CustomParamDef def;
+        const QJSValue nameVal = entry.property(QStringLiteral("name"));
+        const QJSValue typeVal = entry.property(QStringLiteral("type"));
+        if (!nameVal.isString() || !typeVal.isString()) {
+            continue;
+        }
+        def.name = nameVal.toString().left(64);
+        def.type = typeVal.toString();
+        const QJSValue descVal = entry.property(QStringLiteral("description"));
+        def.description = descVal.isString() ? descVal.toString().left(200) : QString();
+        if (def.name.isEmpty() || def.type.isEmpty()) {
+            continue;
+        }
+        if (def.type == QLatin1String("number")) {
+            const QJSValue defVal = entry.property(QStringLiteral("default"));
+            const QJSValue minVal = entry.property(QStringLiteral("min"));
+            const QJSValue maxVal = entry.property(QStringLiteral("max"));
+            def.minValue = (minVal.isNumber() && std::isfinite(minVal.toNumber())) ? minVal.toNumber() : 0.0;
+            def.maxValue = (maxVal.isNumber() && std::isfinite(maxVal.toNumber())) ? maxVal.toNumber() : 1.0;
+            if (def.minValue > def.maxValue) {
+                std::swap(def.minValue, def.maxValue);
             }
-        } else if (key == QLatin1String("builtinId")) {
-            static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
-            if (value.startsWith(QLatin1String("script:"))) {
-                qCWarning(PhosphorTiles::lcTilesLib)
-                    << "ScriptedAlgorithm::parseMetadata: @builtinId must not start with 'script:'"
-                    << "value=" << value << "in" << filePath;
-            } else if (!builtinIdRe.match(value).hasMatch()) {
-                qCWarning(PhosphorTiles::lcTilesLib)
-                    << "ScriptedAlgorithm::parseMetadata: invalid @builtinId" << value << "in" << filePath;
-            } else {
-                meta.builtinId = value.left(64);
-            }
-        } else if (key == QLatin1String("param")) {
-            // Format: // @param name type [typeArgs...] "description"
-            // number: // @param name number default min max "description"
-            // bool:   // @param name bool default "description"
-            // enum:   // @param name enum "default" ["opt1","opt2"] "description"
-            static const QRegularExpression paramNumberRe(QStringLiteral(
-                R"RX(^(\w+)\s+number\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+"([^"]*)")RX"));
-            static const QRegularExpression paramBoolRe(
-                QStringLiteral(R"RX(^(\w+)\s+bool\s+(true|false)\s+"([^"]*)")RX"));
-            static const QRegularExpression paramEnumRe(
-                QStringLiteral(R"RX(^(\w+)\s+enum\s+"([^"]*)"\s+\[([^\]]*)\]\s+"([^"]*)")RX"));
-
-            CustomParamDef param;
-            QRegularExpressionMatch pm = paramNumberRe.match(value);
-            if (pm.hasMatch()) {
-                param.name = pm.captured(1).left(64);
-                param.type = QStringLiteral("number");
-                param.defaultValue = pm.captured(2).toDouble();
-                param.minValue = pm.captured(3).toDouble();
-                param.maxValue = pm.captured(4).toDouble();
-                param.description = pm.captured(5).left(200);
-                if (param.minValue > param.maxValue) {
-                    qCWarning(PhosphorTiles::lcTilesLib)
-                        << "ScriptedAlgorithm::parseMetadata: @param number min" << param.minValue << "> max"
-                        << param.maxValue << "for" << param.name << "in" << filePath;
-                    std::swap(param.minValue, param.maxValue);
-                }
-                meta.customParams.append(param);
-            } else if ((pm = paramBoolRe.match(value)).hasMatch()) {
-                param.name = pm.captured(1).left(64);
-                param.type = QStringLiteral("bool");
-                param.defaultValue = (pm.captured(2) == QLatin1String("true"));
-                param.description = pm.captured(3).left(200);
-                meta.customParams.append(param);
-            } else if ((pm = paramEnumRe.match(value)).hasMatch()) {
-                param.name = pm.captured(1).left(64);
-                param.type = QStringLiteral("enum");
-                param.defaultValue = pm.captured(2);
-                // Parse ["opt1","opt2"] — split on comma, strip quotes
-                const QString optionsStr = pm.captured(3);
-                const auto optParts = QStringView(optionsStr).split(QLatin1Char(','));
-                for (const auto& opt : optParts) {
-                    QString trimmed = opt.trimmed().toString();
-                    if (trimmed.startsWith(QLatin1Char('"')) && trimmed.endsWith(QLatin1Char('"'))) {
-                        trimmed = trimmed.mid(1, trimmed.size() - 2);
-                    }
-                    if (!trimmed.isEmpty()) {
-                        param.enumOptions.append(trimmed.left(64));
+            const qreal raw =
+                (defVal.isNumber() && std::isfinite(defVal.toNumber())) ? defVal.toNumber() : def.minValue;
+            def.defaultValue = std::clamp(raw, def.minValue, def.maxValue);
+        } else if (def.type == QLatin1String("bool")) {
+            def.defaultValue = entry.property(QStringLiteral("default")).toBool();
+        } else if (def.type == QLatin1String("enum")) {
+            const QJSValue opts = entry.property(QStringLiteral("options"));
+            if (opts.isArray()) {
+                constexpr int MaxEnumOptions = 256;
+                const int optLen = std::min(opts.property(QStringLiteral("length")).toInt(), MaxEnumOptions);
+                for (int j = 0; j < optLen; ++j) {
+                    const QString opt = opts.property(static_cast<quint32>(j)).toString().left(64);
+                    if (!opt.isEmpty()) {
+                        def.enumOptions.append(opt);
                     }
                 }
-                param.description = pm.captured(4).left(200);
-                if (param.enumOptions.isEmpty()) {
-                    qCWarning(PhosphorTiles::lcTilesLib)
-                        << "ScriptedAlgorithm::parseMetadata: @param enum has no valid options for" << param.name
-                        << "in" << filePath;
-                } else {
-                    if (!param.enumOptions.contains(param.defaultValue.toString())) {
-                        qCWarning(PhosphorTiles::lcTilesLib)
-                            << "ScriptedAlgorithm::parseMetadata: @param enum default" << param.defaultValue.toString()
-                            << "not in options list for" << param.name << "in" << filePath
-                            << "— falling back to first option";
-                        param.defaultValue = param.enumOptions.first();
-                    }
-                    meta.customParams.append(param);
-                }
-            } else {
-                qCWarning(PhosphorTiles::lcTilesLib)
-                    << "ScriptedAlgorithm::parseMetadata: malformed @param" << value << "in" << filePath;
             }
-        } else if (key != QLatin1String("icon")) {
+            if (def.enumOptions.isEmpty()) {
+                qCDebug(PhosphorTiles::lcTilesLib)
+                    << "ScriptedAlgorithm: enum param" << def.name << "has no valid options, skipping"
+                    << "file=" << filePath;
+                continue;
+            }
+            const QString defStr = entry.property(QStringLiteral("default")).toString();
+            def.defaultValue = def.enumOptions.contains(defStr) ? defStr : def.enumOptions.first();
+        } else {
             qCDebug(PhosphorTiles::lcTilesLib)
-                << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;
+                << "ScriptedAlgorithm: unknown param type" << def.type << "for" << def.name << "in" << filePath;
+            continue;
+        }
+        result.append(def);
+    }
+    return result;
+}
+
+ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& filePath)
+{
+    using namespace AutotileDefaults;
+    ScriptMetadata meta;
+    if (!jsMetadata.isObject()) {
+        return meta;
+    }
+
+    auto readString = [&](const char* key, int maxLen) -> QString {
+        const QJSValue v = jsMetadata.property(QString::fromLatin1(key));
+        return v.isString() ? v.toString().left(maxLen) : QString();
+    };
+    auto readBool = [&](const char* key, bool fallback) -> bool {
+        const QJSValue v = jsMetadata.property(QString::fromLatin1(key));
+        if (v.isBool())
+            return v.toBool();
+        if (v.isNumber())
+            return v.toInt() != 0;
+        return fallback;
+    };
+    auto readNumber = [&](const char* key) -> std::optional<qreal> {
+        const QJSValue v = jsMetadata.property(QString::fromLatin1(key));
+        if (v.isNumber() && std::isfinite(v.toNumber()))
+            return v.toNumber();
+        return std::nullopt;
+    };
+    auto readInt = [&](const char* key) -> std::optional<int> {
+        const QJSValue v = jsMetadata.property(QString::fromLatin1(key));
+        if (v.isNumber() && std::isfinite(v.toNumber()))
+            return v.toInt();
+        return std::nullopt;
+    };
+
+    const QString name = readString("name", 100);
+    if (!name.isEmpty())
+        meta.name = name;
+    const QString desc = readString("description", 500);
+    if (!desc.isEmpty())
+        meta.description = desc;
+
+    meta.supportsMasterCount = readBool("supportsMasterCount", meta.supportsMasterCount);
+    meta.supportsSplitRatio = readBool("supportsSplitRatio", meta.supportsSplitRatio);
+    meta.producesOverlappingZones = readBool("producesOverlappingZones", meta.producesOverlappingZones);
+    meta.supportsMemory = readBool("supportsMemory", meta.supportsMemory);
+    meta.centerLayout = readBool("centerLayout", meta.centerLayout);
+    meta.supportsMinSizes = readBool("supportsMinSizes", meta.supportsMinSizes);
+
+    if (auto v = readNumber("defaultSplitRatio"))
+        meta.defaultSplitRatio = std::clamp(*v, MinSplitRatio, MaxSplitRatio);
+    if (auto v = readInt("defaultMaxWindows"))
+        meta.defaultMaxWindows = std::clamp(*v, MinMetadataWindows, MaxMetadataWindows);
+    if (auto v = readInt("minimumWindows"))
+        meta.minimumWindows = std::clamp(*v, MinMetadataWindows, MaxMetadataWindows);
+    if (meta.minimumWindows > 0 && meta.defaultMaxWindows > 0 && meta.minimumWindows > meta.defaultMaxWindows)
+        meta.minimumWindows = meta.defaultMaxWindows;
+    if (auto v = readInt("masterZoneIndex"))
+        meta.masterZoneIndex = std::clamp(*v, -1, MaxZones - 1);
+
+    const QString zndStr = readString("zoneNumberDisplay", 64);
+    if (!zndStr.isEmpty()) {
+        const auto decoded = PhosphorLayout::zoneNumberDisplayFromString(zndStr);
+        if (decoded != PhosphorLayout::ZoneNumberDisplay::RendererDecides) {
+            meta.zoneNumberDisplay = decoded;
         }
     }
+
+    const QString bid = readString("id", 64);
+    if (!bid.isEmpty()) {
+        static const QRegularExpression idRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
+        if (bid.startsWith(QLatin1String("script:"))) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: id must not start with 'script:'"
+                                                 << "value=" << bid << "in" << filePath;
+        } else if (!idRe.match(bid).hasMatch()) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: invalid id" << bid << "in" << filePath;
+        } else {
+            meta.id = bid;
+        }
+    }
+
+    const QJSValue jsCustomParams = jsMetadata.property(QStringLiteral("customParams"));
+    if (jsCustomParams.isArray()) {
+        const auto params = parseCustomParamsFromJs(jsCustomParams, filePath);
+        if (!params.isEmpty()) {
+            meta.customParams = params;
+        }
+    }
+
     return meta;
 }
 

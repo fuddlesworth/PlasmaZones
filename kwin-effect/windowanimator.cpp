@@ -119,14 +119,6 @@ void WindowAnimator::onAnimationStarted(KWin::EffectWindow* window,
 void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window,
                                          const PhosphorAnimation::AnimatedValue<QRectF>& anim)
 {
-    // The controller fires onRepaintNeeded(bounds) immediately after
-    // this hook returns, and those bounds already cover the full
-    // animation path (start ∪ target + any overshoot, widened by
-    // expandedPadding). A redundant addRepaintFull() here would be
-    // strictly subsumed by the targeted bounds repaint, so this is
-    // just a log anchor. Kept as a hook override so future adapters
-    // can splice in completion-time work without touching the
-    // controller.
     qCDebug(lcEffect) << "Window snap animation complete:" << static_cast<const void*>(window)
                       << "target:" << anim.to();
 }

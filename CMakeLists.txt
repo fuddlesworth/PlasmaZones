@@ -95,9 +95,15 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     ShaderTools
     Svg
 )
-# GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay
-find_package(Qt6GuiPrivate CONFIG REQUIRED)
-find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
+# GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
+# Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
+# standalone config files, so only call find_package if the target doesn't already exist.
+if(NOT TARGET Qt6::GuiPrivate)
+    find_package(Qt6GuiPrivate CONFIG REQUIRED)
+endif()
+if(NOT TARGET Qt6::ShaderToolsPrivate)
+    find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
+endif()
 
 # Optional: Qt6::ShaderTools for shader effects support
 # RenderNode shaders use raw GLSL - no Qt6::ShaderTools compilation needed
@@ -150,7 +156,9 @@ endif()
 # X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
 find_package(Wayland REQUIRED COMPONENTS Client)
 find_package(Qt6 REQUIRED COMPONENTS WaylandClient)
-find_package(Qt6WaylandClientPrivate REQUIRED)
+if(NOT TARGET Qt6::WaylandClientPrivate)
+    find_package(Qt6WaylandClientPrivate REQUIRED)
+endif()
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 # Systemd user unit directory (fallback if not provided by ECM)

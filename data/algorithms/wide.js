@@ -1,18 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Wide
-// @builtinId wide
-// @description Master area on top, remaining windows stacked below
-// @producesOverlappingZones false
-// @supportsMasterCount true
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.5
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @masterZoneIndex 0
-// @supportsMemory false
+var metadata = {
+    name: "Wide",
+    id: "wide",
+    description: "Master area on top, remaining windows stacked below",
+    producesOverlappingZones: false,
+    supportsMasterCount: true,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.5,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    masterZoneIndex: 0,
+    supportsMemory: false
+};
 
 /**
  * Wide layout: master row on top, stack row on bottom.

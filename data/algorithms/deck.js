@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Deck
-// @builtinId deck
-// @description Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width
-// @producesOverlappingZones true
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.75
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay firstAndLast
-// @supportsMemory false
+var metadata = {
+    name: "Deck",
+    id: "deck",
+    description: "Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width",
+    producesOverlappingZones: true,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.75,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "firstAndLast",
+    supportsMemory: false
+};
 
 /**
  * Deck layout: one focused window with background windows peeking

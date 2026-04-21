@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Columns
-// @builtinId columns
-// @description Equal-width vertical columns
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio false
-// @defaultMaxWindows 4
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Columns",
+    id: "columns",
+    description: "Equal-width vertical columns",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: false,
+    defaultMaxWindows: 4,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * Columns layout: equal-width vertical columns with innerGap spacing.

@@ -214,13 +214,13 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
         const QString& path = m_scriptIdToPath.value(id);
         QFileInfo info(path);
         hasher.addData(id.toUtf8());
-        hasher.addData("|", 1);
+        hasher.addData(QByteArrayView("|"));
         hasher.addData(path.toUtf8());
-        hasher.addData("|", 1);
+        hasher.addData(QByteArrayView("|"));
         hasher.addData(QByteArray::number(info.size()));
-        hasher.addData("|", 1);
+        hasher.addData(QByteArrayView("|"));
         hasher.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
-        hasher.addData("\n", 1);
+        hasher.addData(QByteArrayView("\n"));
     }
     const QByteArray signature = hasher.result();
     if (signature != m_lastScriptSignature) {
@@ -256,9 +256,8 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
-        // Use @builtinId metadata if present, otherwise default to "script:filename"
-        const QString scriptId =
-            algo->builtinId().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->builtinId();
+        // Use id metadata if present, otherwise default to "script:filename"
+        const QString scriptId = algo->id().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->id();
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.

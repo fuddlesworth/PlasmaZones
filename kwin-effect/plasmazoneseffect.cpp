@@ -3305,10 +3305,18 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
     }
 
-    // Skip no-op: if window is already at the target geometry, calling
-    // moveResize() is redundant and can have subtle stacking side effects
-    // on some KWin versions (e.g. during daemon restart double-processing).
-    if (QRectF(geo) == window->frameGeometry()) {
+    // Skip no-op: if window is already at the target geometry AND there is
+    // no in-flight animation, calling moveResize() is redundant and can have
+    // subtle stacking side effects on some KWin versions (e.g. during daemon
+    // restart double-processing).
+    //
+    // When an animation IS in flight, frameGeometry() already reflects the
+    // committed target from the previous applySnapGeometry's moveResize —
+    // but the visual position is still mid-transition. A rapid reversal
+    // (float → unfloat, rotate → rotate back) legitimately targets the same
+    // committed geometry and must NOT be skipped, because the animation needs
+    // to play from the current visual position to that target.
+    if (QRectF(geo) == window->frameGeometry() && !m_windowAnimator->hasAnimation(window)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
         return;
     }
@@ -3355,12 +3363,30 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             if (m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
                 return; // Already animating to this target
             }
-            // Mid-flight redirect: retarget with PreserveVelocity
-            // carries the world-space rate of change across the
-            // segment boundary on stateful curves (Spring) and falls
-            // back to position-continuous on stateless curves
-            // (Easing). Either way the visual value does not jump.
-            m_windowAnimator->retarget(window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+            // Capture the displaced animation's endpoints before retarget
+            // modifies or deletes the entry. On a rapid reversal where
+            // advance() hasn't ticked, m_current still equals m_from
+            // (the animation's start point), so retarget(newTarget) sees
+            // current ≈ newTarget when the reversal goes back to the
+            // original zone — degenerate. Use the displaced animation's
+            // TARGET as the visual origin for the replacement: that's
+            // where the window was visually heading (and where moveResize
+            // just committed to), so animating from there to the new
+            // target matches the user's expectation.
+            const QRectF displacedTarget = m_windowAnimator->animationFor(window)->to();
+            const QRectF visualPos = m_windowAnimator->currentValue(window, QRectF(oldFrame));
+            const auto result = m_windowAnimator->retargetWithResult(
+                window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+            if (result == PhosphorAnimation::RetargetResult::DegenerateReap) {
+                // Retarget collapsed (current visual ≈ new target).
+                // Start a fresh animation from the displaced target
+                // (where the window was heading) to the new target.
+                // If that's also degenerate (same point), startAnimation
+                // returns false and no animation plays — correct, since
+                // there's no visual distance to cover.
+                const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
+                m_windowAnimator->startAnimation(window, animFrom, targetFrame);
+            }
         } else {
             m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
         }

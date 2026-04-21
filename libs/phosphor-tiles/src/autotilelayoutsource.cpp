@@ -283,11 +283,12 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
         if (!algorithm) {
             continue;
         }
-        const QString key = cacheKey(id, PhosphorLayout::DefaultPreviewWindowCount);
+        const int windowCount = algorithm->defaultMaxWindows();
+        const QString key = cacheKey(id, windowCount);
         auto it = m_cache.constFind(key);
         if (it == m_cache.constEnd()) {
             PhosphorLayout::LayoutPreview preview =
-                previewFromAlgorithm(id, algorithm, PhosphorLayout::DefaultPreviewWindowCount, m_registry);
+                previewFromAlgorithm(id, algorithm, windowCount, m_registry);
             insertCacheEntry(key, preview);
             result.append(preview);
         } else {

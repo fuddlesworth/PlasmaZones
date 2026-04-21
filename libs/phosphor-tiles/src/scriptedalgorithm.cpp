@@ -210,9 +210,6 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
-    // Parse metadata via helper — single struct assignment
-    m_metadata = ScriptedHelpers::parseMetadata(source, filePath);
-
     // Apply sandbox hardening BEFORE helper injection so that the sandbox
     // restrictions (frozen prototypes, disabled eval/Function) are in place before
     // any user-visible globals are defined. hardenSandbox() also freezes the helper
@@ -401,6 +398,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         "if (typeof producesOverlappingZones === 'function') this.producesOverlappingZones = "
         "producesOverlappingZones;"
         "if (typeof centerLayout === 'function') this.centerLayout = centerLayout;"
+        "if (typeof metadata !== 'undefined') this.metadata = metadata;"
         "}).call(this, void 0, void 0, void 0, void 0, void 0);\n");
     const QString wrappedSource = wrapPrefix + source + wrapSuffix;
     const QJSValue result = guardedCall([this, &wrappedSource, &filePath]() {
@@ -441,6 +439,14 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_jsOnWindowAdded = m_engine->globalObject().property(QStringLiteral("onWindowAdded"));
     m_jsOnWindowRemoved = m_engine->globalObject().property(QStringLiteral("onWindowRemoved"));
     m_hasLifecycleHooks = m_jsOnWindowAdded.isCallable() || m_jsOnWindowRemoved.isCallable();
+
+    // Parse metadata from JS-exported object.
+    const QJSValue jsMetadata = m_engine->globalObject().property(QStringLiteral("metadata"));
+    if (!jsMetadata.isObject()) {
+        qCInfo(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: no metadata object exported, file=" << filePath;
+    } else {
+        m_metadata = ScriptedHelpers::parseMetadataFromJs(jsMetadata, filePath);
+    }
 
     m_valid = true;
     // Cache JS override values through guardedCall so that a malicious function

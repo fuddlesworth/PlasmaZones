@@ -29,12 +29,23 @@ Flickable {
     property bool hideZeroBadge: false
     property bool _rebuilding: false
     property bool _movingLocally: false
+    property var _zoneCache: ({})
 
     function rebuildModel() {
         _rebuilding = true;
         orderModel.clear();
         let items = resolveOrder();
-        for (let i = 0; i < items.length; i++) orderModel.append(items[i])
+        let cache = {};
+        for (let i = 0; i < items.length; i++) {
+            let item = items[i];
+            let key = root.previewZonesKey;
+            if (item[key]) {
+                cache[item.id] = item[key];
+                delete item[key];
+            }
+            orderModel.append(item);
+        }
+        root._zoneCache = cache;
         _rebuilding = false;
     }
 
@@ -250,7 +261,7 @@ Flickable {
                                         QFZCommon.ZonePreview {
                                             anchors.fill: parent
                                             anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
-                                            zones: delegateRoot.model[root.previewZonesKey] || []
+                                            zones: root._zoneCache[delegateRoot.model.id] || []
                                             isHovered: delegateHover.hovered
                                             showZoneNumbers: false
                                             minZoneSize: 2

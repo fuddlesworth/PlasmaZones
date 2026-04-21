@@ -26,8 +26,7 @@ using namespace PlasmaZones::TestHelpers;
 static QString validScript(const QString& name)
 {
     return QStringLiteral(
-               "// @name %1\n"
-               "// @description Test algorithm\n"
+               "var metadata = { name: \"%1\", description: \"Test algorithm\" };\n"
                "function calculateZones(params) {\n"
                "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
                "}\n")

@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Rows
-// @builtinId rows
-// @description Equal-height horizontal rows
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio false
-// @defaultMaxWindows 4
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @supportsMemory false
+var metadata = {
+    name: "Rows",
+    id: "rows",
+    description: "Equal-height horizontal rows",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: false,
+    defaultMaxWindows: 4,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    supportsMemory: false
+};
 
 /**
  * Rows layout: equal-height horizontal rows with innerGap spacing.
