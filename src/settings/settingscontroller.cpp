@@ -2862,6 +2862,7 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     // Sanitize to prevent metadata injection
     newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
     newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    newName.replace(QLatin1Char('\\'), QLatin1Char('/'));
     newName.replace(QLatin1Char('"'), QLatin1Char('\''));
     // Replace the first name: and id: values inside the var metadata object.
     // Anchored to line start to avoid matching inside algorithm body strings.
@@ -2956,6 +2957,8 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     filename.replace(multiHyphen, QStringLiteral("-"));
     static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
     filename.replace(leadTrailHyphen, QString());
+    static const QRegularExpression leadDigits(QStringLiteral("^[0-9]+"));
+    filename.replace(leadDigits, QString());
     if (filename.isEmpty())
         filename = QStringLiteral("untitled-algorithm");
 
@@ -2990,6 +2993,7 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     QString sanitizedDisplayName = name.trimmed();
     sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
     sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    sanitizedDisplayName.replace(QLatin1Char('\\'), QLatin1Char('/'));
     sanitizedDisplayName.replace(QLatin1Char('"'), QLatin1Char('\''));
     content += QStringLiteral("var metadata = {\n");
     content += QStringLiteral("    name: \"") + sanitizedDisplayName + QStringLiteral("\",\n");

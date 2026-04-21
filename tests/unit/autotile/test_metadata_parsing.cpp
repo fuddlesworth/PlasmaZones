@@ -147,6 +147,14 @@ private Q_SLOTS:
         QCOMPARE(meta.minimumWindows, AutotileDefaults::MinMetadataWindows);
     }
 
+    void testParseMetadata_minimumWindowsClampedToMax()
+    {
+        auto js = makeMetadata(QStringLiteral(R"({ defaultMaxWindows: 2, minimumWindows: 5 })"));
+        auto meta = parseMetadataFromJs(js, QStringLiteral("test.js"));
+        QVERIFY(meta.minimumWindows <= meta.defaultMaxWindows);
+        QCOMPARE(meta.minimumWindows, 2);
+    }
+
     void testParseMetadata_masterZoneIndexClamped()
     {
         auto js = makeMetadata(QStringLiteral(R"({ masterZoneIndex: 999 })"));

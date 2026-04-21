@@ -19,12 +19,15 @@ namespace ScriptedHelpers {
 /**
  * @brief Definition of a custom algorithm parameter
  *
- * Declared by scripts via a JS-exported `customParams` array:
- *   var customParams = [
- *       { name: "gap", type: "number", default: 8, min: 0, max: 50, description: "Gap size" },
- *       { name: "wrap", type: "bool", default: true, description: "Wrap around" },
- *       { name: "mode", type: "enum", default: "auto", options: ["auto","manual"], description: "..." }
- *   ];
+ * Declared by scripts inside the `var metadata` object:
+ *   var metadata = {
+ *       name: "My Algorithm",
+ *       customParams: [
+ *           { name: "gap", type: "number", default: 8, min: 0, max: 50, description: "Gap size" },
+ *           { name: "wrap", type: "bool", default: true, description: "Wrap around" },
+ *           { name: "mode", type: "enum", default: "auto", options: ["auto","manual"], description: "..." }
+ *       ]
+ *   };
  */
 struct CustomParamDef
 {

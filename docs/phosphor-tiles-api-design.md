@@ -611,10 +611,14 @@ parser recognises `name`, `description`, `supportsMasterCount`,
 `customParamDefList()`:
 
 ```js
-var customParams = [
-    { name: "speed", type: "number", default: 0.1, min: 0.01, max: 0.5, description: "Animation speed" },
-    { name: "mode", type: "enum", default: "balanced", options: ["compact", "balanced", "wide"], description: "Layout mode" }
-];
+var metadata = {
+    name: "My Algorithm",
+    // ... other metadata fields ...
+    customParams: [
+        { name: "speed", type: "number", default: 0.1, min: 0.01, max: 0.5, description: "Animation speed" },
+        { name: "mode", type: "enum", default: "balanced", options: ["compact", "balanced", "wide"], description: "Layout mode" }
+    ]
+};
 ```
 
 #### Sandbox hardening

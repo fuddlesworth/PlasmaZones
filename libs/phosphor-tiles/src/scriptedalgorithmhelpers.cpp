@@ -193,6 +193,8 @@ ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& fi
         meta.defaultMaxWindows = std::clamp(*v, MinMetadataWindows, MaxMetadataWindows);
     if (auto v = readInt("minimumWindows"))
         meta.minimumWindows = std::clamp(*v, MinMetadataWindows, MaxMetadataWindows);
+    if (meta.minimumWindows > 0 && meta.defaultMaxWindows > 0 && meta.minimumWindows > meta.defaultMaxWindows)
+        meta.minimumWindows = meta.defaultMaxWindows;
     if (auto v = readInt("masterZoneIndex"))
         meta.masterZoneIndex = std::clamp(*v, -1, MaxZones - 1);
 
