@@ -25,7 +25,7 @@ OrderingPage {
     hideZeroBadge: true
     resolveOrder: function() {
         let items = settingsController.resolvedTilingOrder();
-        for (let i = 0; i < items.length; i++) items[i].previewZones = settingsController.generateAlgorithmPreview(items[i].id, items[i].defaultMaxWindows, 0.6, 1)
+        for (let i = 0; i < items.length; i++) items[i].previewZones = settingsController.generateAlgorithmPreview(items[i].id, items[i].defaultMaxWindows, items[i].effectiveSplitRatio, items[i].effectiveMasterCount)
         return items;
     }
     moveItem: function(from, to) {

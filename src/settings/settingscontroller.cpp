@@ -2420,6 +2420,7 @@ QVariantList SettingsController::availableAlgorithms() const
 {
     QVariantList algorithms;
     auto* registry = m_localAlgorithmRegistry.get();
+    const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     for (const QString& id : registry->availableAlgorithms()) {
         PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
         if (algo) {
@@ -2438,6 +2439,15 @@ QVariantList SettingsController::availableAlgorithms() const
             // Expose whether this algorithm declares custom parameters.
             // The full definitions are retrieved via customParamsForAlgorithm().
             algoMap[QLatin1String("supportsCustomParams")] = algo->supportsCustomParams();
+
+            // Effective preview values: saved per-algorithm settings, falling
+            // back to the algorithm's own defaults.
+            const QVariantMap saved = perAlgo.value(id).toMap();
+            const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
+            const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
+            algoMap[QLatin1String("effectiveSplitRatio")] = savedRatio > 0.0 ? savedRatio : algo->defaultSplitRatio();
+            algoMap[QLatin1String("effectiveMasterCount")] =
+                savedMaster > 0 ? savedMaster : PhosphorTiles::AutotileDefaults::DefaultMasterCount;
 
             algorithms.append(algoMap);
         }
