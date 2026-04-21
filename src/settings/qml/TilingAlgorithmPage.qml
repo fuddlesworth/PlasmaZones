@@ -74,7 +74,7 @@ Flickable {
         if (entry && entry["splitRatio"] !== undefined)
             return entry["splitRatio"];
 
-        return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6;
+        return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : appSettings.autotileSplitRatio;
     }
     // Live master count — same pattern as above.
     readonly property int currentMasterCount: {
@@ -86,7 +86,7 @@ Flickable {
         if (entry && entry["masterCount"] !== undefined)
             return entry["masterCount"];
 
-        return 1;
+        return appSettings.autotileMasterCount;
     }
 
     function settingValue(key, globalValue) {
@@ -231,15 +231,9 @@ Flickable {
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                windowCount: previewWindowSlider.slider.value
-                                splitRatio: {
-                                    // When user is dragging the slider, use live value
-                                    if (splitRatioSlider.slider.pressed)
-                                        return splitRatioSlider.slider.value;
-
-                                    return root.currentSplitRatio;
-                                }
-                                masterCount: root.currentMasterCount
+                                windowCount: root.algoCapabilities ? root.algoCapabilities.defaultMaxWindows : 4
+                                splitRatio: root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6
+                                masterCount: (root.algoCapabilities && root.algoCapabilities.supportsMasterCount) ? 1 : 0
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
                             }
 

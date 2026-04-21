@@ -679,6 +679,7 @@ public:
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
                                                       int masterCount) const;
+    Q_INVOKABLE QVariantList generateAlgorithmDefaultPreview(const QString& algorithmId) const;
     Q_INVOKABLE void openAlgorithmsFolder();
     Q_INVOKABLE bool importAlgorithm(const QString& filePath);
     Q_INVOKABLE static QString algorithmIdFromLayoutId(const QString& layoutId);
