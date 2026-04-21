@@ -424,6 +424,7 @@ target_link_libraries(plasmazonesd
         PhosphorLayer::PhosphorLayer  # wlr-layer-shell surface lifecycle
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
+        PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
         Qt6::Widgets
         Qt6::Quick
         Qt6::QuickControls2

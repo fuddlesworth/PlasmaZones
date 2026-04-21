@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -324,7 +325,7 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
     const auto role = PzRoles::SnapAssist.withScopePrefix(
-        QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")), screen, role,
                                        "snap assist", QVariantMap(), anchorsOverride, marginsOverride);
@@ -557,7 +558,7 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
     const auto role = PzRoles::LayoutPicker.withScopePrefix(
-        QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, role,
                                        "layout picker", QVariantMap(), anchorsOverride, marginsOverride);

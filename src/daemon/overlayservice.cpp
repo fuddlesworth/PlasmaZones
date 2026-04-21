@@ -7,6 +7,8 @@
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 
+#include <PhosphorSurfaces/SurfaceManager.h>
+#include <PhosphorSurfaces/SurfaceManagerConfig.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
@@ -119,22 +121,23 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                QObject* parent)
     : IOverlayService(parent)
-    , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
     , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
 {
     m_screenManager = screenManager;
     m_shaderRegistry = shaderRegistry;
-    // Set up i18n for QML (makes i18n() available in QML)
-    auto* localizedContext = new PzLocalizedContext(m_engine.get());
-    m_engine->rootContext()->setContextObject(localizedContext);
 
-    // PhosphorLayer factory. engineProvider is left null so Surfaces get their
-    // own QQmlEngine by default — except when we pass cfg.sharedEngine pointing
-    // at m_engine (which createLayerSurface does below) so all overlays share
-    // the OverlayService's engine + context properties + i18n setup.
     m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(PhosphorLayer::SurfaceFactory::Deps{
         m_transport.get(), m_screenProvider.get(), nullptr, QStringLiteral("plasmazones.overlay")});
+
+    m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
+        .surfaceFactory = m_surfaceFactory.get(),
+        .engineConfigurator =
+            [](QQmlEngine& engine) {
+                auto* localizedContext = new PzLocalizedContext(&engine);
+                engine.rootContext()->setContextObject(localizedContext);
+            },
+    });
 
     // Connect to screen changes (with safety check for early initialization)
     if (qGuiApp) {
@@ -260,52 +263,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     connect(m_audioProvider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
             &OverlayService::onAudioSpectrumUpdated);
 
-    // Create a persistent 1x1 keep-alive window to prevent Qt from tearing down
-    // global Wayland/Vulkan protocol objects (zwp_linux_dmabuf_v1, wp_presentation,
-    // etc.) when the last visible QQuickWindow is destroyed. Without this, after
-    // overlay destroy-on-hide, Qt cleans up the Vulkan rendering infrastructure
-    // and no new windows can render buffers.
-    QTimer::singleShot(0, this, [this]() {
-        QScreen* screen = Utils::primaryScreen();
-        if (!screen) {
-            qCWarning(lcOverlay) << "Keep-alive surface: no primary screen at startup — "
-                                    "Wayland/Vulkan globals may churn across overlay destroy cycles";
-            return;
-        }
-        // Keep-alive goes through PhosphorLayer like every other overlay now —
-        // a tiny 1×1 background-layer surface with no anchors, no input, no
-        // content beyond a bare QQuickItem. Its only job is keeping Qt's
-        // Vulkan globals resident across overlay destroy-cycles.
-        PhosphorLayer::SurfaceConfig cfg;
-        cfg.role = PhosphorLayer::Roles::Background.withScopePrefix(QStringLiteral("plasmazones-keepalive"));
-        cfg.contentItem = std::make_unique<QQuickItem>();
-        cfg.screen = screen;
-        cfg.anchorsOverride = PhosphorLayer::AnchorNone;
-        cfg.exclusiveZoneOverride = 0;
-        cfg.debugName = QStringLiteral("keepalive");
-        auto* keepAlive = m_surfaceFactory->create(std::move(cfg), this);
-        if (!keepAlive) {
-            return;
-        }
-        keepAlive->warmUp();
-        if (keepAlive->state() == PhosphorLayer::Surface::State::Failed) {
-            keepAlive->deleteLater();
-            return;
-        }
-        m_keepAliveSurface = keepAlive;
-        m_keepAliveWindow = keepAlive->window();
-        if (m_keepAliveWindow) {
-#if QT_CONFIG(vulkan)
-            auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-            if (vulkanInstance) {
-                m_keepAliveWindow->setVulkanInstance(vulkanInstance);
-            }
-#endif
-            m_keepAliveWindow->setWidth(1);
-            m_keepAliveWindow->setHeight(1);
-        }
-        keepAlive->show();
-    });
+    // Keep-alive is managed by m_surfaceManager (created in its constructor).
 }
 
 bool OverlayService::isVisible() const
@@ -358,10 +316,10 @@ OverlayService::~OverlayService()
     // QObject children of `this`, so the QObject parent-child system would
     // destroy them AFTER our own destructor body runs — i.e. after the
     // deferred-delete drain below, and potentially after member destructors
-    // (m_engine, m_transport, m_surfaceFactory, m_screenProvider) have run.
+    // (m_surfaceManager, m_transport, m_surfaceFactory, m_screenProvider) have run.
     // Schedule their deletion now so the drain loop picks them up in the
-    // right order and they don't touch dead engine/factory pointers during
-    // their own teardown.
+    // right order and they don't touch dead factory pointers during their
+    // own teardown.
     if (m_snapAssistSurface) {
         m_snapAssistSurface->deleteLater();
         m_snapAssistSurface = nullptr;
@@ -375,26 +333,7 @@ OverlayService::~OverlayService()
         m_shaderPreviewSurface = nullptr;
     }
 
-    // Keep-alive surface is released last (after all other overlays), so its
-    // Vulkan instance outlives their teardown and prevents the global
-    // wl_display / VkInstance churn the keep-alive is designed to suppress.
-    if (m_keepAliveSurface) {
-        m_keepAliveSurface->deleteLater();
-        m_keepAliveSurface = nullptr;
-    }
-    m_keepAliveWindow = nullptr;
-
-    // Drain deferred-delete events. One pass is not enough: ~Surface posts
-    // window deleteLater, the window's destruction posts further deleteLater
-    // for QML-owned children, and those children's dtors may post yet more.
-    // Alternate sendPostedEvents(DeferredDelete) + processEvents until a full
-    // pass processes nothing — that's the point where the cascade has
-    // settled. kDrainCap only bounds pathological chains; in practice the
-    // loop exits after ~4–8 passes. 8 was the empirically-observed depth
-    // during shader-overlay teardown with nested QML components; we cap
-    // well above that so future QML-tree changes don't silently leak
-    // deferred-deletes into engine teardown. Hitting the cap logs a warning
-    // so the regression is loud.
+    // Drain deferred-delete events before m_surfaceManager destroys its engine.
     constexpr int kDrainCap = 64;
     QEventLoop drainLoop;
     int passes = 0;
@@ -409,8 +348,7 @@ OverlayService::~OverlayService()
                              << "— a QML teardown chain is deeper than expected";
     }
 
-    // Now m_engine (unique_ptr) will be destroyed safely
-    // since all QML objects have been properly cleaned up
+    // m_surfaceManager destructor destroys keep-alive + engine
 }
 
 PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,
@@ -432,7 +370,7 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
     cfg.role = role;
     cfg.contentUrl = qmlUrl;
     cfg.screen = screen;
-    cfg.sharedEngine = m_engine.get(); // keep i18n + context properties unified
+    cfg.sharedEngine = m_surfaceManager->engine();
     cfg.windowProperties = windowProperties;
     cfg.anchorsOverride = anchorsOverride;
     cfg.marginsOverride = marginsOverride;

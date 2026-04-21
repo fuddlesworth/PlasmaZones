@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -371,7 +372,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     bool usingShader = useShaderForScreen(screenId);
 
     // Expose overlayService to QML context for error reporting
-    m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
+    m_surfaceManager->engine()->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
     // Compute virtual-screen overrides up-front (wlr-layer-shell locks
     // output+anchors at attach).
@@ -385,7 +386,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     }
 
     const auto role = PzRoles::Overlay.withScopePrefix(
-        QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
     // Try shader overlay first, fall back to standard overlay if it fails.
     QVariantMap initProps;

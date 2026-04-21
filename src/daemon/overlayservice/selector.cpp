@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -359,7 +360,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     }
 
     const auto role = PzRoles::ZoneSelector.withScopePrefix(
-        QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), physScreen, role,
                                        "zone selector", QVariantMap(), anchorsOverride, marginsOverride);
