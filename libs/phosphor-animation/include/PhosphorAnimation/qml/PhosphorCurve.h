@@ -16,6 +16,8 @@
 
 namespace PhosphorAnimation {
 
+class CurveRegistry;
+
 /**
  * @brief Opaque QML value-type wrapper around `shared_ptr<const Curve>`.
  *
@@ -52,8 +54,7 @@ class PHOSPHORANIMATION_EXPORT PhosphorCurve
 
 public:
     PhosphorCurve() = default;
-    /// Implicit-conversion ctor from the core-library pointer.
-    PhosphorCurve(std::shared_ptr<const Curve> curve)
+    explicit PhosphorCurve(std::shared_ptr<const Curve> curve)
         : m_curve(std::move(curve))
     {
     }
@@ -82,6 +83,15 @@ public:
     {
         return !m_curve;
     }
+
+    // ─── Registry wiring ───
+
+    /// Set the process-wide default CurveRegistry used by `fromString`.
+    /// Must be called by the composition root (daemon / editor) before
+    /// any QML code invokes `fromString`. The pointer must outlive all
+    /// QML usage (typically a member of the daemon). When null,
+    /// `fromString` returns a null-handle PhosphorCurve.
+    static void setDefaultRegistry(CurveRegistry* registry);
 
     // ─── Factory helpers ───
 
@@ -119,6 +129,7 @@ public:
     }
 
 private:
+    static CurveRegistry* s_registry;
     std::shared_ptr<const Curve> m_curve;
 };
 

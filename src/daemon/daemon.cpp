@@ -18,6 +18,9 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/qml/PhosphorCurve.h>
+
+#include <array>
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include "overlayservice.h"
@@ -173,6 +176,12 @@ Daemon::Daemon(QObject* parent)
     // (one literal typo away from silently breaking preview-cache reuse).
     m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 
+    // Wire the daemon-owned CurveRegistry into Settings and the QML
+    // static helper so every callsite that needs to resolve curve
+    // wire-format strings uses the same per-process registry.
+    m_settings->setCurveRegistry(&m_curveRegistry);
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
+
     // Wire Settings::animationProfile into PhosphorProfileRegistry so
     // QML `PhosphorMotionAnimation { profile: … }` resolves to the
     // user's active animation settings and live-updates on edit.
@@ -191,7 +200,7 @@ Daemon::Daemon(QObject* parent)
 // Keeping this list in a file-scope array lets us add another
 // settings-backed path (e.g., a second slider for snap-specific
 // feel) without touching the publish loop.
-const QString* kSettingsDrivenProfilePaths[] = {
+static constexpr auto kSettingsDrivenProfilePaths = std::array{
     &PhosphorAnimation::ProfilePaths::Global,
 };
 
@@ -241,7 +250,7 @@ void Daemon::setupAnimationProfiles()
     // Registry reference is captured at loader construction — this
     // prevents any later async rescan from landing on a different
     // registry than the one the daemon initialized against.
-    m_curveLoader = std::make_unique<CurveLoader>(CurveRegistry::instance(), nullptr);
+    m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
     m_curveLoader->loadLibraryBuiltins();
     m_curveLoader->loadFromDirectories(curveDirs, LiveReload::On);
 
@@ -252,7 +261,7 @@ void Daemon::setupAnimationProfiles()
     // the daemon's settings-fanned profiles registered below via
     // `publishActiveAnimationProfile` are owned by the empty/direct
     // tag and survive untouched.
-    m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(),
+    m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(), m_curveRegistry,
                                                       QStringLiteral("plasmazones-user-profiles"), nullptr);
     m_profileLoader->loadLibraryBuiltins();
     m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
@@ -322,7 +331,7 @@ void Daemon::publishActiveAnimationProfile()
     // here — the daemon is the wiring, not the policy). `registerProfile`
     // has an equality guard so re-publishing identical values on every
     // settingsChanged signal is a cheap no-op on the hot path.
-    const QHash<QString, Profile> pathDefaults = ConfigDefaults::animationProfilesByPath();
+    const QHash<QString, Profile> pathDefaults = ConfigDefaults::animationProfilesByPath(m_curveRegistry);
     for (auto it = pathDefaults.constBegin(); it != pathDefaults.constEnd(); ++it) {
         if (userClaimedPaths.contains(it.key())) {
             continue;

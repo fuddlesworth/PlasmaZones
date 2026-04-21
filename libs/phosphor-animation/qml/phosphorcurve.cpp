@@ -11,6 +11,13 @@
 
 namespace PhosphorAnimation {
 
+CurveRegistry* PhosphorCurve::s_registry = nullptr;
+
+void PhosphorCurve::setDefaultRegistry(CurveRegistry* registry)
+{
+    s_registry = registry;
+}
+
 PhosphorCurve PhosphorCurve::fromString(const QString& str)
 {
     // Route through CurveRegistry so every curve type the registry
@@ -18,7 +25,10 @@ PhosphorCurve PhosphorCurve::fromString(const QString& str)
     // CurveLoader (Phase 4 decision U). Returning a null handle on
     // parse failure (rather than a default-constructed Easing) gives
     // QML callers an `isNull()` signal they can check.
-    auto curve = CurveRegistry::instance().create(str);
+    if (!s_registry) {
+        return PhosphorCurve();
+    }
+    auto curve = s_registry->tryCreate(str);
     return PhosphorCurve(std::move(curve));
 }
 

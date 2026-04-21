@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
@@ -19,6 +20,7 @@ class TestProfileLoader : public QObject
     Q_OBJECT
 
 private:
+    CurveRegistry m_curveRegistry;
     void writeFile(const QString& path, const QString& contents) const
     {
         QFile f(path);
@@ -36,7 +38,7 @@ private Q_SLOTS:
     /// Missing directory is a no-op.
     void testMissingDirectoryIsNoOp()
     {
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         const int n = loader.loadFromDirectory(QStringLiteral("/no/such/dir"));
         QCOMPARE(n, 0);
         QCOMPARE(PhosphorProfileRegistry::instance().profileCount(), 0);
@@ -55,7 +57,7 @@ private Q_SLOTS:
             "minDistance": 0
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 1);
 
         auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("overlay.fade"));
@@ -72,7 +74,7 @@ private Q_SLOTS:
             "duration": 250
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
@@ -82,7 +84,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         writeFile(dir.filePath(QStringLiteral("broken.json")), QStringLiteral("{\"name\": \"x\", broken"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
@@ -103,7 +105,7 @@ private Q_SLOTS:
             "duration": 500
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectories({systemDir.path(), userDir.path()});
 
         auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("x"));
@@ -127,7 +129,7 @@ private Q_SLOTS:
             "duration": 150
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
         auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("overlay.fade"));
         QVERIFY(resolved.has_value());
@@ -148,7 +150,7 @@ private Q_SLOTS:
             "duration": 123,
             "minDistance": 7
         })"));
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), QStringLiteral("test"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
 
         auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("a"));
@@ -180,7 +182,7 @@ private Q_SLOTS:
         QTemporaryDir userDir;
         writeFile(userDir.filePath(QStringLiteral("zone.json")),
                   QStringLiteral(R"({"name": "Zone", "duration": 200})"));
-        ProfileLoader loader(reg, QStringLiteral("test-user-profiles"));
+        ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-user-profiles"));
         loader.loadFromDirectory(userDir.path());
 
         // Loader's rescan must NOT have touched the direct "Global" entry.
@@ -206,7 +208,7 @@ private Q_SLOTS:
                   QStringLiteral(R"({"name": "shared", "duration": 100})"));
         writeFile(userDir.filePath(QStringLiteral("p.json")), QStringLiteral(R"({"name": "shared", "duration": 500})"));
 
-        ProfileLoader loader(reg, QStringLiteral("test-restore"));
+        ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-restore"));
         loader.loadFromDirectories({systemDir.path(), userDir.path()});
 
         // User wins initially.

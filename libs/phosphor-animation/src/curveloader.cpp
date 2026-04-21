@@ -104,7 +104,7 @@ public:
             return std::nullopt;
         }
 
-        auto curve = CurveRegistry::instance().tryCreate(wireFormat);
+        auto curve = registry->tryCreate(wireFormat);
         if (!curve) {
             qCWarning(lcCurveLoader) << "Skipping" << filePath << ": CurveRegistry could not build" << wireFormat;
             return std::nullopt;

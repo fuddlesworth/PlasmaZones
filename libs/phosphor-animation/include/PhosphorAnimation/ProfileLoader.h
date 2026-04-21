@@ -19,6 +19,7 @@
 
 namespace PhosphorAnimation {
 
+class CurveRegistry;
 class PhosphorProfileRegistry;
 
 /**
@@ -53,7 +54,7 @@ class PhosphorProfileRegistry;
  *
  * ## Commit semantics
  *
- * Each rescan produces a single `PhosphorProfileRegistry::reloadAll`
+ * Each rescan produces a single `PhosphorProfileRegistry::reloadFromOwner`
  * call (decision W: coalesce). Bound consumers see one
  * `profilesReloaded` signal per scan instead of N per-path signals,
  * avoiding N² re-resolution cost when several files change at once.
@@ -80,7 +81,8 @@ public:
     /// built from the same consumer don't accidentally share a tag.
     /// Callers that want a stable human-readable tag (e.g. for tests
     /// or cross-process debugging) pass an explicit value.
-    explicit ProfileLoader(PhosphorProfileRegistry& registry, const QString& ownerTag = {}, QObject* parent = nullptr);
+    explicit ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& curveRegistry,
+                           const QString& ownerTag = {}, QObject* parent = nullptr);
     ~ProfileLoader() override;
 
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);

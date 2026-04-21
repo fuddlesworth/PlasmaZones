@@ -18,6 +18,7 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorTiles/AutotileConstants.h>
 
@@ -920,7 +921,7 @@ public:
     /// is not constexpr and the ConfigDefaults convention for
     /// composite defaults (e.g., `autotileDragInsertTriggers`) is a
     /// function returning the composite value.
-    static QString animationProfile();
+    static QString animationProfile(const PhosphorAnimation::CurveRegistry& registry);
 
     /// Per-path animation Profile defaults.
     ///
@@ -943,7 +944,8 @@ public:
     /// The `Global` path is intentionally NOT in this map — that
     /// path follows `animationProfile()` (the settings-backed slider)
     /// rather than a fixed library default.
-    PLASMAZONES_EXPORT static QHash<QString, PhosphorAnimation::Profile> animationProfilesByPath();
+    PLASMAZONES_EXPORT static QHash<QString, PhosphorAnimation::Profile>
+    animationProfilesByPath(const PhosphorAnimation::CurveRegistry& registry);
     static bool autotileFocusFollowsMouse()
     {
         return false;

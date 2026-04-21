@@ -8,6 +8,7 @@
 #include "../autotile/AutotileConfig.h"
 #include "../core/enums.h"
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -260,9 +261,14 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
+    // Schema construction runs at Settings init time — before the daemon
+    // wires its per-process CurveRegistry. Use a local static fallback
+    // that auto-registers builtins (spring, cubic-bezier, elastic, bounce)
+    // so the default Profile JSON resolves correctly.
+    static PhosphorAnimation::CurveRegistry sSchemaRegistry;
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
-        {CD::animationProfileKey(), CD::animationProfile(), QMetaType::QString},
+        {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QString},
     };
 }
 

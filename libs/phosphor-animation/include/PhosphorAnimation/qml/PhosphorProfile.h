@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 #include <PhosphorAnimation/qml/PhosphorCurve.h>
@@ -150,9 +151,11 @@ public:
 
     /// Parse from a JSON object. Missing keys become unset fields
     /// (read back as library defaults via `effective*`).
+    /// Uses a function-local static CurveRegistry for builtins.
     Q_INVOKABLE static PhosphorProfile fromJson(const QJsonObject& obj)
     {
-        return PhosphorProfile(Profile::fromJson(obj));
+        static CurveRegistry sFallback;
+        return PhosphorProfile(Profile::fromJson(obj, sFallback));
     }
 
     // ─── Equality ───

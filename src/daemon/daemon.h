@@ -24,6 +24,7 @@ class PlasmaPanelSource;
 }
 
 #include <PhosphorAnimation/CurveLoader.h>
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorConfig/IBackend.h>
 
@@ -522,6 +523,13 @@ private:
     std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
+
+    /// Per-daemon curve registry. Replaces the prior per-process
+    /// CurveRegistry::instance() singleton — composition roots own
+    /// their own. Declared BEFORE m_curveLoader and m_profileLoader
+    /// so reverse-order member destruction tears the loaders down
+    /// before the registry they borrow.
+    PhosphorAnimation::CurveRegistry m_curveRegistry;
 
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
     /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG

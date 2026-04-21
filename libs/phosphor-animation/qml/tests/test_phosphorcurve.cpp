@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/qml/PhosphorCurve.h>
 #include <PhosphorAnimation/qml/PhosphorEasing.h>
 #include <PhosphorAnimation/qml/PhosphorSpring.h>
@@ -15,7 +16,18 @@ class TestPhosphorCurve : public QObject
 {
     Q_OBJECT
 
+private:
+    CurveRegistry m_registry;
+
 private Q_SLOTS:
+    void initTestCase()
+    {
+        PhosphorCurve::setDefaultRegistry(&m_registry);
+    }
+    void cleanupTestCase()
+    {
+        PhosphorCurve::setDefaultRegistry(nullptr);
+    }
     void testMetaTypeRegistered()
     {
         PhosphorCurve c;

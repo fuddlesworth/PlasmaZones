@@ -5,6 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
@@ -719,6 +720,10 @@ public:
     /// returns a C++-only PhosphorAnimation::Profile value.
     PhosphorAnimation::Profile animationProfile() const;
     void setAnimationProfile(const PhosphorAnimation::Profile& profile);
+    /// Set the CurveRegistry used by animation profile parsing.
+    /// Must be called before any animation profile method is used.
+    /// The pointer must outlive this Settings instance.
+    void setCurveRegistry(PhosphorAnimation::CurveRegistry* reg);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
     QString animationEasingCurve() const override;
@@ -1078,6 +1083,11 @@ private:
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     // Animations are stored in m_store; no cached members here.
+
+    // Non-owned CurveRegistry for animation profile parsing. Wired by
+    // the daemon via setCurveRegistry(); null before that call (standalone
+    // Settings without a daemon fall back to a local static registry).
+    PhosphorAnimation::CurveRegistry* m_curveRegistry = nullptr;
 
     // Additional Autotiling Settings
     // Autotiling (continued) stored in m_store.

@@ -623,6 +623,11 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
 PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
+void Settings::setCurveRegistry(PhosphorAnimation::CurveRegistry* reg)
+{
+    m_curveRegistry = reg;
+}
+
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
     // Parse the stored JSON string through Profile::fromJson. Malformed
@@ -636,7 +641,11 @@ PhosphorAnimation::Profile Settings::animationProfile() const
     if (!doc.isObject()) {
         return PhosphorAnimation::Profile{};
     }
-    return PhosphorAnimation::Profile::fromJson(doc.object());
+    if (m_curveRegistry) {
+        return PhosphorAnimation::Profile::fromJson(doc.object(), *m_curveRegistry);
+    }
+    static PhosphorAnimation::CurveRegistry sFallback;
+    return PhosphorAnimation::Profile::fromJson(doc.object(), sFallback);
 }
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
@@ -660,8 +669,16 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // re-evaluation. The project rule "only emit when value actually
     // changed" applies at the per-field granularity here.
     const QJsonDocument beforeDoc = QJsonDocument::fromJson(before.toUtf8());
-    const PhosphorAnimation::Profile prev =
-        beforeDoc.isObject() ? PhosphorAnimation::Profile::fromJson(beforeDoc.object()) : PhosphorAnimation::Profile{};
+    const auto& reg = [this]() -> const PhosphorAnimation::CurveRegistry& {
+        if (m_curveRegistry) {
+            return *m_curveRegistry;
+        }
+        static PhosphorAnimation::CurveRegistry sFallback;
+        return sFallback;
+    }();
+    const PhosphorAnimation::Profile prev = beforeDoc.isObject()
+        ? PhosphorAnimation::Profile::fromJson(beforeDoc.object(), reg)
+        : PhosphorAnimation::Profile{};
     const int prevDuration = qRound(prev.effectiveDuration());
     const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
     const int prevMinDistance = prev.effectiveMinDistance();
@@ -736,7 +753,12 @@ void Settings::setAnimationEasingCurve(const QString& curve)
     if (currentWire == curve) {
         return;
     }
-    p.curve = PhosphorAnimation::CurveRegistry::instance().create(curve);
+    if (m_curveRegistry) {
+        p.curve = m_curveRegistry->create(curve);
+    } else {
+        static PhosphorAnimation::CurveRegistry sFallback;
+        p.curve = sFallback.create(curve);
+    }
     setAnimationProfile(p);
 }
 

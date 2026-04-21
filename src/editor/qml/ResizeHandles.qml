@@ -193,12 +193,6 @@ Item {
             }
 
             MouseArea {
-                // Initial zone height in canvas coordinates
-                // newX stays at startZoneX
-                // newY stays at startZoneY
-                // Idle
-                // South handles move bottom edge
-
                 id: handleMouse
 
                 // Store initial state for resize calculations
@@ -312,6 +306,7 @@ Item {
                     }
                 }
                 onPositionChanged: function(mouse) {
+                    // South handles move bottom edge
                     // State 2 = Resizing
                     if (!pressed || resizeHandles.root.operationState !== 2)
                         return ;
@@ -441,8 +436,6 @@ Item {
                     var modifierHeld = (mouse.modifiers & overrideModifier) !== 0;
                     var shouldSnap = hasValidDimensions && (modifierHeld ? !baseSnappingEnabled : baseSnappingEnabled);
                     if (shouldSnap) {
-                        // threshold
-
                         // Convert to relative coordinates for snapping
                         // Guard against division by zero or NaN
                         var relX = (newX >= 0 && isFinite(newX)) ? newX / actualW : 0;
@@ -475,6 +468,7 @@ Item {
                         // This prevents jumping because we only snap the edge being dragged
                         var snapped = resizeHandles.root.controller.snapGeometrySelective(relX, relY, relW, relH, resizeHandles.root.zoneId, snapLeft, snapRight, snapTop, snapBottom);
                         // Convert back to canvas coordinates
+                        // threshold
                         if (snapped && isFinite(snapped.x) && !isNaN(snapped.x) && isFinite(snapped.y) && !isNaN(snapped.y) && isFinite(snapped.width) && !isNaN(snapped.width) && snapped.width > 0 && isFinite(snapped.height) && !isNaN(snapped.height) && snapped.height > 0) {
                             var snappedX = snapped.x * actualW;
                             var snappedY = snapped.y * actualH;

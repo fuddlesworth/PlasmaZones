@@ -3,6 +3,7 @@
 
 #include <PhosphorAnimation/ProfileLoader.h>
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
 #include <PhosphorJsonLoader/DirectoryLoader.h>
@@ -24,13 +25,15 @@ Q_LOGGING_CATEGORY(lcProfileLoader, "phosphoranimation.profileloader")
 class ProfileLoader::Sink : public PhosphorJsonLoader::IDirectoryLoaderSink
 {
 public:
-    Sink(PhosphorProfileRegistry& reg, QString owner)
+    Sink(PhosphorProfileRegistry& reg, CurveRegistry& curveReg, QString owner)
         : registry(&reg)
+        , curveRegistry(&curveReg)
         , ownerTag(std::move(owner))
     {
     }
 
     PhosphorProfileRegistry* registry; ///< pinned at ctor
+    CurveRegistry* curveRegistry; ///< pinned at ctor — used by parseFile
     QString ownerTag; ///< stable per-instance tag for partitioned reload
     QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
 
@@ -64,7 +67,7 @@ public:
         // concepts are distinct (registry path vs. user-assigned preset
         // label).
         obj.remove(QLatin1String("name"));
-        const Profile profile = Profile::fromJson(obj);
+        const Profile profile = Profile::fromJson(obj, *curveRegistry);
 
         PhosphorJsonLoader::ParsedEntry parsed;
         parsed.key = path;
@@ -130,9 +133,10 @@ QString defaultOwnerTag(const void* self)
 }
 } // namespace
 
-ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, const QString& ownerTag, QObject* parent)
+ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& curveRegistry, const QString& ownerTag,
+                             QObject* parent)
     : QObject(parent)
-    , m_sink(std::make_unique<Sink>(registry, ownerTag.isEmpty() ? defaultOwnerTag(this) : ownerTag))
+    , m_sink(std::make_unique<Sink>(registry, curveRegistry, ownerTag.isEmpty() ? defaultOwnerTag(this) : ownerTag))
     , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(m_sink.get()))
 {
     connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this,
