@@ -68,6 +68,7 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
 target_include_directories(PhosphorAudio

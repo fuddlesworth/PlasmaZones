@@ -6,9 +6,12 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QStandardPaths>
 
 namespace PhosphorAudio {
+
+Q_LOGGING_CATEGORY(lcPhosphorAudio, "phosphor.audio")
 
 static constexpr int kAsciiMaxRange = 1000;
 static_assert(Defaults::MinBars % 2 == 0, "MinBars must be even for CAVA stereo");
@@ -175,6 +178,8 @@ void CavaSpectrumProvider::onReadyReadStandardOutput()
     m_stdoutBuffer += m_process->readAllStandardOutput();
 
     if (m_stdoutBuffer.size() > kMaxStdoutBufferSize) {
+        qCWarning(lcPhosphorAudio) << "CAVA stdout buffer exceeded" << kMaxStdoutBufferSize
+                                   << "bytes, discarding oldest data";
         m_stdoutBuffer = m_stdoutBuffer.mid(m_stdoutBuffer.size() - kMaxStdoutBufferSize / 2);
     }
 
@@ -216,6 +221,9 @@ void CavaSpectrumProvider::onReadyReadStandardOutput()
 
 void CavaSpectrumProvider::onProcessStateChanged(QProcess::ProcessState state)
 {
+    if (state == QProcess::Starting) {
+        return;
+    }
     const bool running = (state == QProcess::Running);
     Q_EMIT runningChanged(running);
     if (!running) {
@@ -233,7 +241,9 @@ void CavaSpectrumProvider::onProcessFinished(int exitCode, QProcess::ExitStatus 
     }
     if (exitCode != 0) {
         const QByteArray stderrOutput = m_process ? m_process->readAllStandardError().left(500) : QByteArray();
-        Q_UNUSED(stderrOutput)
+        const QString msg = QStringLiteral("CAVA exited with code %1").arg(exitCode);
+        qCWarning(lcPhosphorAudio) << msg << "stderr:" << stderrOutput;
+        Q_EMIT errorOccurred(msg);
     }
 }
 
@@ -246,6 +256,7 @@ void CavaSpectrumProvider::onProcessError(QProcess::ProcessError error)
         return;
     }
     const QString msg = m_process ? m_process->errorString() : QStringLiteral("Unknown error");
+    qCWarning(lcPhosphorAudio) << "CAVA process error:" << error << msg;
     Q_EMIT errorOccurred(msg);
 }
 

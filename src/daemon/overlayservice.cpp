@@ -256,7 +256,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // Reset shader error state on construction (fresh start after reboot)
     m_pendingShaderError.clear();
 
-    m_audioProvider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>(this);
+    m_audioProvider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
     connect(m_audioProvider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
             &OverlayService::onAudioSpectrumUpdated);
 
