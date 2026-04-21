@@ -1,19 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Floating Center
-// @builtinId floating-center
-// @description Centered main window with peripheral panels on all sides
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.65
-// @defaultMaxWindows 6
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @masterZoneIndex 0
-// @supportsMemory false
-// @supportsMinSizes false
+var metadata = {
+    name: "Floating Center",
+    id: "floating-center",
+    description: "Centered main window with peripheral panels on all sides",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.65,
+    defaultMaxWindows: 6,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    masterZoneIndex: 0,
+    supportsMemory: false,
+    supportsMinSizes: false
+};
 
 /**
  * Floating Center layout: one centered main window with remaining windows

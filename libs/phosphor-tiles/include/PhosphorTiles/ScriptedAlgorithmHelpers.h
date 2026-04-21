@@ -17,11 +17,17 @@ namespace PhosphorTiles {
 namespace ScriptedHelpers {
 
 /**
- * @brief Definition of a custom algorithm parameter declared via // @param
+ * @brief Definition of a custom algorithm parameter
  *
- * Format: // @param name type default "description"
- * Supported types: number, bool, enum
- * Enum format: // @param name enum "default" ["opt1","opt2"] "description"
+ * Declared by scripts inside the `var metadata` object:
+ *   var metadata = {
+ *       name: "My Algorithm",
+ *       customParams: [
+ *           { name: "gap", type: "number", default: 8, min: 0, max: 50, description: "Gap size" },
+ *           { name: "wrap", type: "bool", default: true, description: "Wrap around" },
+ *           { name: "mode", type: "enum", default: "auto", options: ["auto","manual"], description: "..." }
+ *       ]
+ *   };
  */
 struct CustomParamDef
 {
@@ -52,7 +58,7 @@ struct CustomParamDef
 };
 
 /**
- * @brief Parsed script metadata from // @key value comment lines
+ * @brief Parsed script metadata from a JS-exported metadata object
  */
 struct ScriptMetadata
 {
@@ -69,17 +75,19 @@ struct ScriptMetadata
     bool producesOverlappingZones = false;
     bool centerLayout = false;
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
-    QString builtinId; ///< Optional: register as built-in algorithm ID instead of "script:filename"
+    QString id; ///< Optional: register as built-in algorithm ID instead of "script:filename"
     QVector<CustomParamDef> customParams; ///< Algorithm-declared custom parameters
 };
 
 /**
- * @brief Parse // @key value metadata comments from script source
- * @param source Script source code
- * @param filePath File path for diagnostic messages
- * @return Parsed metadata struct
+ * @brief Parse custom parameter definitions from a JS-exported customParams array
  */
-ScriptMetadata parseMetadata(const QString& source, const QString& filePath);
+QVector<CustomParamDef> parseCustomParamsFromJs(const QJSValue& jsCustomParams, const QString& filePath);
+
+/**
+ * @brief Parse full algorithm metadata from a JS-exported metadata object
+ */
+ScriptMetadata parseMetadataFromJs(const QJSValue& jsMetadata, const QString& filePath);
 
 /**
  * @brief Convert a JS array of {x, y, width, height} objects to QRects

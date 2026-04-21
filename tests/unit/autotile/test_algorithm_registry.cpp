@@ -211,10 +211,10 @@ private Q_SLOTS:
     // Backwards compatibility & sandbox tests
     // =========================================================================
 
-    void testBuiltIn_builtinIdBackwardsCompatibility()
+    void testBuiltIn_idBackwardsCompatibility()
     {
         auto* registry = m_scriptSetup.registry();
-        const QStringList builtinIds = {
+        const QStringList expectedIds = {
             // 15 original C++-to-JS converted algorithms
             QLatin1String("bsp"),
             QLatin1String("cascade"),
@@ -242,7 +242,7 @@ private Q_SLOTS:
             QLatin1String("paper"),
             QLatin1String("tatami"),
         };
-        for (const auto& id : builtinIds) {
+        for (const auto& id : expectedIds) {
             QVERIFY2(registry->hasAlgorithm(id), qPrintable(QStringLiteral("Missing algorithm: ") + id));
         }
     }

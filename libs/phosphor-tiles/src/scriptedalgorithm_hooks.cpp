@@ -138,9 +138,9 @@ bool ScriptedAlgorithm::isUserScript() const noexcept
     return m_isUserScript;
 }
 
-QString ScriptedAlgorithm::builtinId() const
+QString ScriptedAlgorithm::id() const
 {
-    return m_metadata.builtinId;
+    return m_metadata.id;
 }
 
 void ScriptedAlgorithm::prepareTilingState(TilingState* state) const

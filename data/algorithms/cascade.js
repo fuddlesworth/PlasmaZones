@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Cascade
-// @builtinId cascade
-// @description Overlapping windows in a diagonal cascade
-// @producesOverlappingZones true
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.15
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay last
-// @supportsMemory false
+var metadata = {
+    name: "Cascade",
+    id: "cascade",
+    description: "Overlapping windows in a diagonal cascade",
+    producesOverlappingZones: true,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.15,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "last",
+    supportsMemory: false
+};
 
 /**
  * Cascade layout: overlapping diagonal cascade where each window is offset

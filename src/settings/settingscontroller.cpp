@@ -2420,6 +2420,7 @@ QVariantList SettingsController::availableAlgorithms() const
 {
     QVariantList algorithms;
     auto* registry = m_localAlgorithmRegistry.get();
+    const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     for (const QString& id : registry->availableAlgorithms()) {
         PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
         if (algo) {
@@ -2438,6 +2439,15 @@ QVariantList SettingsController::availableAlgorithms() const
             // Expose whether this algorithm declares custom parameters.
             // The full definitions are retrieved via customParamsForAlgorithm().
             algoMap[QLatin1String("supportsCustomParams")] = algo->supportsCustomParams();
+
+            // Effective preview values: saved per-algorithm settings, falling
+            // back to the algorithm's own defaults.
+            const QVariantMap saved = perAlgo.value(id).toMap();
+            const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
+            const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
+            algoMap[QLatin1String("effectiveSplitRatio")] = savedRatio > 0.0 ? savedRatio : algo->defaultSplitRatio();
+            algoMap[QLatin1String("effectiveMasterCount")] =
+                savedMaster > 0 ? savedMaster : PhosphorTiles::AutotileDefaults::DefaultMasterCount;
 
             algorithms.append(algoMap);
         }
@@ -2853,26 +2863,31 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     QString content = QString::fromUtf8(sourceFile.readAll());
     sourceFile.close();
 
-    // Update @name and @builtinId in the copy — strip all existing " (Copy)" suffixes to avoid accumulation
+    // Update name and id in the copy's metadata object — strip all existing " (Copy)" suffixes to avoid accumulation
     const QString newFilename = QFileInfo(destPath).completeBaseName();
     QString baseCopyName = algo->name();
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
     QString newName = baseCopyName + QStringLiteral(" (Copy)");
-    // Sanitize newlines to prevent annotation injection (parity with createNewAlgorithm)
+    // Sanitize to prevent metadata injection
     newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
     newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    // Replace only the FIRST @name and @builtinId annotations — using replace(QRegularExpression)
-    // would replace ALL matches, corrupting any matching patterns in the algorithm body.
-    static const QRegularExpression nameRe(QStringLiteral("^// @name .+"), QRegularExpression::MultilineOption);
-    static const QRegularExpression idRe(QStringLiteral("^// @builtinId .+"), QRegularExpression::MultilineOption);
+    newName.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    newName.replace(QLatin1Char('"'), QLatin1Char('\''));
+    // Replace the first name: and id: values inside the var metadata object.
+    // Anchored to line start to avoid matching inside algorithm body strings.
+    // Capture leading whitespace so the replacement preserves indentation.
+    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name:\s*"[^"]*")"),
+                                           QRegularExpression::MultilineOption);
+    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id:\s*"[^"]*")"), QRegularExpression::MultilineOption);
     QRegularExpressionMatch nameMatch = nameRe.match(content);
     if (nameMatch.hasMatch())
-        content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(), QStringLiteral("// @name ") + newName);
+        content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
+                        nameMatch.captured(1) + QStringLiteral("name: \"") + newName + QStringLiteral("\""));
     QRegularExpressionMatch idMatch = idRe.match(content);
     if (idMatch.hasMatch())
         content.replace(idMatch.capturedStart(), idMatch.capturedLength(),
-                        QStringLiteral("// @builtinId ") + newFilename);
+                        idMatch.captured(1) + QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
 
     QFile destFile(destPath);
     if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -2952,6 +2967,8 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     filename.replace(multiHyphen, QStringLiteral("-"));
     static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
     filename.replace(leadTrailHyphen, QString());
+    static const QRegularExpression leadDigits(QStringLiteral("^[0-9]+"));
+    filename.replace(leadDigits, QString());
     if (filename.isEmpty())
         filename = QStringLiteral("untitled-algorithm");
 
@@ -2982,25 +2999,29 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
         QStringLiteral("// SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>\n");
     content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
 
-    // Metadata annotations — strip newlines to prevent annotation injection
+    // Metadata object — strip newlines/quotes to prevent injection
     QString sanitizedDisplayName = name.trimmed();
     sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
     sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    content += QStringLiteral("// @name ") + sanitizedDisplayName + QStringLiteral("\n");
-    content += QStringLiteral("// @builtinId ") + filename + QStringLiteral("\n");
-    content += QStringLiteral("// @description Custom tiling algorithm\n");
-    content += QStringLiteral("// @producesOverlappingZones ")
-        + (producesOverlappingZones ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("// @supportsMasterCount ")
-        + (supportsMasterCount ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("// @supportsSplitRatio ")
-        + (supportsSplitRatio ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("// @defaultSplitRatio 0.5\n");
-    content += QStringLiteral("// @defaultMaxWindows 6\n");
-    content += QStringLiteral("// @minimumWindows 1\n");
-    content += QStringLiteral("// @zoneNumberDisplay all\n");
-    content += QStringLiteral("// @supportsMemory ")
-        + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n\n");
+    sanitizedDisplayName.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    sanitizedDisplayName.replace(QLatin1Char('"'), QLatin1Char('\''));
+    content += QStringLiteral("var metadata = {\n");
+    content += QStringLiteral("    name: \"") + sanitizedDisplayName + QStringLiteral("\",\n");
+    content += QStringLiteral("    id: \"") + filename + QStringLiteral("\",\n");
+    content += QStringLiteral("    description: \"Custom tiling algorithm\",\n");
+    content += QStringLiteral("    producesOverlappingZones: ")
+        + (producesOverlappingZones ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
+    content += QStringLiteral("    supportsMasterCount: ")
+        + (supportsMasterCount ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
+    content += QStringLiteral("    supportsSplitRatio: ")
+        + (supportsSplitRatio ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
+    content += QStringLiteral("    defaultSplitRatio: 0.5,\n");
+    content += QStringLiteral("    defaultMaxWindows: 6,\n");
+    content += QStringLiteral("    minimumWindows: 1,\n");
+    content += QStringLiteral("    zoneNumberDisplay: \"all\",\n");
+    content += QStringLiteral("    supportsMemory: ")
+        + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
+    content += QStringLiteral("};\n\n");
 
     // Try to read base template body from system algorithm dirs
     bool foundTemplate = false;
@@ -3016,13 +3037,15 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                 file.close();
 
                 // Skip the metadata header: SPDX lines, `// @annotation` lines,
-                // `/* ... */` block comments before the first code line, and
-                // surrounding blank lines. Stop as soon as we hit a non-metadata line
-                // (including doc-comments like `/** ... */` or `// Helper:`) so the
+                // `var metadata = { ... };` blocks, `/* ... */` block comments
+                // before the first code line, and surrounding blank lines.
+                // Stop as soon as we hit a non-metadata line (including
+                // doc-comments like `/** ... */` or `// Helper:`) so the
                 // template body's own documentation is preserved.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
                 int bodyStart = 0;
                 bool inBlockComment = false;
+                bool inMetadataObject = false;
                 for (int i = 0; i < lines.size(); ++i) {
                     const QString trimmed = lines[i].trimmed();
                     // Track /* ... */ block comments in the header region
@@ -3032,14 +3055,28 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                             inBlockComment = false;
                         continue;
                     }
+                    // Track var metadata = { ... }; block
+                    if (inMetadataObject) {
+                        bodyStart = i + 1;
+                        if (trimmed.startsWith(QLatin1String("};")))
+                            inMetadataObject = false;
+                        continue;
+                    }
                     // SPDX headers
                     if (trimmed.startsWith(QLatin1String("// SPDX-"))) {
                         bodyStart = i + 1;
                         continue;
                     }
-                    // Metadata annotations (// @name, // @builtinId, etc.)
+                    // Old-style metadata annotations (// @name, etc.) — skip if present
                     if (trimmed.startsWith(QLatin1String("// @"))) {
                         bodyStart = i + 1;
+                        continue;
+                    }
+                    // JS metadata object: var metadata = { ... };
+                    if (trimmed.startsWith(QLatin1String("var metadata"))) {
+                        bodyStart = i + 1;
+                        if (!trimmed.contains(QLatin1String("};")))
+                            inMetadataObject = true;
                         continue;
                     }
                     // Block comment opening in the header — only skip if we haven't
