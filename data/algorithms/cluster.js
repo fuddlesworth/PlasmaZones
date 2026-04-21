@@ -12,8 +12,11 @@
 // @zoneNumberDisplay all
 // @supportsMemory false
 // @supportsMinSizes false
-// @param focusBoost number 0.2 0.0 0.5 "Extra width given to the focused cluster"
-// @param minClusterRatio number 0.1 0.05 0.5 "Minimum width ratio per cluster"
+
+var customParams = [
+    { name: "focusBoost", type: "number", default: 0.2, min: 0.0, max: 0.5, description: "Extra width given to the focused cluster" },
+    { name: "minClusterRatio", type: "number", default: 0.1, min: 0.05, max: 0.5, description: "Minimum width ratio per cluster" }
+];
 
 /**
  * Cluster layout: groups windows by application identity.

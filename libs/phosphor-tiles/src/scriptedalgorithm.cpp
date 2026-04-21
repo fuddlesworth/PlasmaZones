@@ -401,6 +401,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         "if (typeof producesOverlappingZones === 'function') this.producesOverlappingZones = "
         "producesOverlappingZones;"
         "if (typeof centerLayout === 'function') this.centerLayout = centerLayout;"
+        "if (typeof customParams !== 'undefined') this.customParams = customParams;"
         "}).call(this, void 0, void 0, void 0, void 0, void 0);\n");
     const QString wrappedSource = wrapPrefix + source + wrapSuffix;
     const QJSValue result = guardedCall([this, &wrappedSource, &filePath]() {
@@ -441,6 +442,59 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_jsOnWindowAdded = m_engine->globalObject().property(QStringLiteral("onWindowAdded"));
     m_jsOnWindowRemoved = m_engine->globalObject().property(QStringLiteral("onWindowRemoved"));
     m_hasLifecycleHooks = m_jsOnWindowAdded.isCallable() || m_jsOnWindowRemoved.isCallable();
+
+    // Read JS-exported customParams array. Supplements (and takes priority over)
+    // the comment-parsed @param metadata — scripts can declare custom parameters
+    // as a plain JS array instead of fragile regex-parsed comments.
+    const QJSValue jsCustomParams = m_engine->globalObject().property(QStringLiteral("customParams"));
+    if (jsCustomParams.isArray()) {
+        QVector<ScriptedHelpers::CustomParamDef> jsParams;
+        const int len = jsCustomParams.property(QStringLiteral("length")).toInt();
+        for (int i = 0; i < len; ++i) {
+            const QJSValue entry = jsCustomParams.property(static_cast<quint32>(i));
+            if (!entry.isObject()) {
+                continue;
+            }
+            ScriptedHelpers::CustomParamDef def;
+            def.name = entry.property(QStringLiteral("name")).toString().left(64);
+            def.type = entry.property(QStringLiteral("type")).toString();
+            def.description = entry.property(QStringLiteral("description")).toString().left(200);
+            if (def.name.isEmpty() || def.type.isEmpty()) {
+                continue;
+            }
+            if (def.type == QLatin1String("number")) {
+                const QJSValue defVal = entry.property(QStringLiteral("default"));
+                def.defaultValue = defVal.isNumber() ? defVal.toNumber() : 0.0;
+                const QJSValue minVal = entry.property(QStringLiteral("min"));
+                def.minValue = minVal.isNumber() ? minVal.toNumber() : 0.0;
+                const QJSValue maxVal = entry.property(QStringLiteral("max"));
+                def.maxValue = maxVal.isNumber() ? maxVal.toNumber() : 1.0;
+                if (def.minValue > def.maxValue) {
+                    std::swap(def.minValue, def.maxValue);
+                }
+            } else if (def.type == QLatin1String("bool")) {
+                def.defaultValue = entry.property(QStringLiteral("default")).toBool();
+            } else if (def.type == QLatin1String("enum")) {
+                def.defaultValue = entry.property(QStringLiteral("default")).toString();
+                const QJSValue opts = entry.property(QStringLiteral("options"));
+                if (opts.isArray()) {
+                    const int optLen = opts.property(QStringLiteral("length")).toInt();
+                    for (int j = 0; j < optLen; ++j) {
+                        const QString opt = opts.property(static_cast<quint32>(j)).toString().left(64);
+                        if (!opt.isEmpty()) {
+                            def.enumOptions.append(opt);
+                        }
+                    }
+                }
+            } else {
+                continue;
+            }
+            jsParams.append(def);
+        }
+        if (!jsParams.isEmpty()) {
+            m_metadata.customParams = jsParams;
+        }
+    }
 
     m_valid = true;
     // Cache JS override values through guardedCall so that a malicious function
