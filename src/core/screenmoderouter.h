@@ -14,27 +14,6 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
-/**
- * @brief Single source of truth for "which engine owns screen X".
- *
- * Every window-lifecycle and cleanup entry point in the daemon and its
- * D-Bus adaptors should route through this class instead of calling
- * `m_autotileEngine->isAutotileScreen()` / `modeForScreen()` ad hoc at
- * each site. Engines trust that their callers routed correctly — no
- * defensive mode checks inside SnapEngine or AutotileEngine.
- *
- * Why: the daemon acquired ~20 copies of the same "if autotile, call
- * autotile; else call snap" branch across adaptor methods, resnap
- * paths, navigation handlers, and session restore. Every time one of
- * them was missed (e.g. `resolveWindowRestore` called SnapEngine
- * directly), a stale snap assignment could bleed into an autotile
- * screen and fight the engine that actually owned placement. Single
- * router + pure engines eliminates the whole class of bug.
- *
- * The router is a thin façade over existing lookups — it does not
- * hold any state of its own. Construction is cheap, it should be
- * held by the daemon and passed by reference/pointer to consumers.
- */
 namespace PlasmaZones {
 
 /**

@@ -3402,17 +3402,21 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& /*ctx*/)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IPlacementEngine — state access (placeholder)
+// IPlacementEngine — state access
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& /*screenId*/)
+PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId)
 {
-    return nullptr;
+    return tilingStateForScreen(screenId);
 }
 
-const PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& /*screenId*/) const
+const PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& screenId) const
 {
-    return nullptr;
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    const TilingStateKey key = currentKeyForScreen(screenId);
+    return m_screenStates.value(key, nullptr);
 }
 
 } // namespace PlasmaZones

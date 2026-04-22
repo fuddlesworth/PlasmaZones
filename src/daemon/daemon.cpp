@@ -867,6 +867,10 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
+    // Reset router before engines — it holds raw IPlacementEngine* that
+    // would dangle after the engines are destroyed.
+    m_screenModeRouter.reset();
+
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
     m_autotileEngine.reset();

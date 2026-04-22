@@ -191,7 +191,10 @@ void SnapState::setFloating(const QString& windowId, bool floating)
 {
     bool changed = false;
     if (floating) {
-        changed = m_floatingWindows.insert(windowId) != m_floatingWindows.end();
+        if (!m_floatingWindows.contains(windowId)) {
+            m_floatingWindows.insert(windowId);
+            changed = true;
+        }
     } else {
         changed = m_floatingWindows.remove(windowId);
     }
@@ -263,11 +266,14 @@ void SnapState::clearPreTileGeometry(const QString& windowId)
 
 void SnapState::windowClosed(const QString& windowId)
 {
-    m_windowZoneAssignments.remove(windowId);
-    m_floatingWindows.remove(windowId);
-    m_preTileGeometries.remove(windowId);
-    m_preFloatZoneAssignments.remove(windowId);
-    Q_EMIT stateChanged();
+    bool removed = false;
+    removed |= m_windowZoneAssignments.remove(windowId);
+    removed |= m_floatingWindows.remove(windowId);
+    removed |= m_preTileGeometries.remove(windowId);
+    removed |= m_preFloatZoneAssignments.remove(windowId);
+    if (removed) {
+        Q_EMIT stateChanged();
+    }
 }
 
 void SnapState::clear()

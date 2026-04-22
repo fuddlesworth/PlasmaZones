@@ -355,8 +355,6 @@ public:
      */
     PhosphorTiles::TilingState* tilingStateForScreen(const QString& screenId);
 
-    // IPlacementEngine — state access (placeholder, returns nullptr until
-    // TilingState implements IPlacementState)
     PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;
     const PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) const override;
 

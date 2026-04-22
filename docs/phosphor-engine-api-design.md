@@ -117,8 +117,6 @@ public:
     // Snap: returns zone UUID. Autotile: returns tiling-order position string.
     // Opaque to the daemon — engines interpret it.
 
-    virtual QRect geometryForWindow(const QString& windowId) const = 0;
-
     // ── Serialization ──
     virtual QJsonObject toJson() const = 0;
 };
