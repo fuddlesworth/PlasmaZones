@@ -330,6 +330,7 @@ add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves,
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
+add_subdirectory(libs/phosphor-engine-api)  # unified placement engine contracts (INTERFACE)
 
 # Source directories
 add_subdirectory(src)
