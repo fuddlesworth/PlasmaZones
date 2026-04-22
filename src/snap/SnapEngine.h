@@ -7,6 +7,7 @@
 #include "core/types.h"
 #include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorZones/SnapState.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -176,6 +177,22 @@ public:
      */
     void setAutotileEngine(AutotileEngine* engine);
 
+    /**
+     * @brief Set the SnapState instance for pure state reads/writes.
+     *
+     * SnapEngine delegates zone-assignment queries, floating state,
+     * pre-tile geometry, and auto-snap bookkeeping to this state object.
+     * Orchestration methods (commitSnap, calculate*, applyBatchAssignments)
+     * remain on WindowTrackingService.
+     *
+     * Must be set after construction and before any lifecycle or navigation
+     * method is called. Not owned; must outlive SnapEngine.
+     */
+    void setSnapState(PhosphorZones::SnapState* state)
+    {
+        m_snapState = state;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone detection adaptor (for daemon-driven navigation)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -275,8 +292,10 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //
-    // Returns nullptr unconditionally until PR 2 wires per-screen SnapState
-    // ownership. Do not rely on non-null return for snap-mode screens yet.
+    // Returns the single SnapState wired by Daemon::init(). Currently a
+    // global state (not per-screen); a future PR will introduce per-screen
+    // ownership. Returns nullptr in headless unit tests that don't wire a
+    // SnapState.
     // ═══════════════════════════════════════════════════════════════════════════
 
     PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;
@@ -359,6 +378,7 @@ Q_SIGNALS:
 private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     ISettings* m_settings = nullptr;
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;

@@ -187,23 +187,22 @@ void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
 // ═══════════════════════════════════════════════════════════════════════════════
 // IPlacementEngine — state access
 //
-// SnapEngine does not yet own per-screen SnapState instances — that migration
-// happens in PR 2. Until then, stateForScreen returns nullptr even for managed
-// screens. Callers that need snap state must still go through WTS directly.
+// Returns the single SnapState instance wired by Daemon::init(). Currently a
+// global state (not per-screen); a future PR will introduce per-screen
+// ownership. Callers should null-check — headless unit tests may not wire a
+// SnapState.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
 {
     Q_UNUSED(screenId)
-    // TODO(PR-2): return per-screen SnapState once SnapEngine owns them.
-    return nullptr;
+    return m_snapState;
 }
 
 const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
 {
     Q_UNUSED(screenId)
-    // TODO(PR-2): return per-screen SnapState once SnapEngine owns them.
-    return nullptr;
+    return m_snapState;
 }
 
 } // namespace PlasmaZones

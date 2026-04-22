@@ -7,6 +7,7 @@
 #include "snap/SnapEngine.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 
@@ -83,6 +84,7 @@ private:
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     WindowTrackingService* m_wts = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
 
 private Q_SLOTS:
 
@@ -93,10 +95,12 @@ private Q_SLOTS:
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
     }
 
     void cleanup()
     {
+        delete m_snapState;
         delete m_wts;
         delete m_zoneDetector;
         delete m_settings;
@@ -110,6 +114,7 @@ private Q_SLOTS:
     void testIsActiveOnScreen_noAutotileEngine_returnsTrue()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
 
         // No autotile engine set — SnapEngine owns all screens
         QVERIFY(engine.isActiveOnScreen(QStringLiteral("DP-1")));
@@ -124,6 +129,7 @@ private Q_SLOTS:
     void testWindowFocused_updatesLastActiveScreen()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
 
         QCOMPARE(engine.lastActiveScreenId(), QString());
 
@@ -139,6 +145,7 @@ private Q_SLOTS:
     void testWindowClosed_doesNotCrash()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
 
         engine.windowClosed(QStringLiteral("app|uuid1"));
         engine.windowClosed(QString());
@@ -179,12 +186,14 @@ private Q_SLOTS:
     void testToggleWindowFloat_snappedWindow_emitsFloatingTrue()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-snap");
         const QString screenName = QStringLiteral("DP-1");
 
+        m_snapState->assignWindowToZone(windowId, QStringLiteral("zone-1"), screenName, 0);
         m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), screenName, 0);
-        QVERIFY(m_wts->isWindowSnapped(windowId));
-        QVERIFY(!m_wts->isWindowFloating(windowId));
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+        QVERIFY(!m_snapState->isFloating(windowId));
 
         QSignalSpy floatSpy(&engine, &SnapEngine::windowFloatingChanged);
         QSignalSpy feedbackSpy(&engine, &SnapEngine::navigationFeedback);
@@ -204,6 +213,7 @@ private Q_SLOTS:
     void testToggleWindowFloat_notSnappedNotFloating_noSignal()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-untracked");
         const QString screenName = QStringLiteral("DP-1");
 
@@ -219,6 +229,7 @@ private Q_SLOTS:
     void testSetWindowFloat_true_emitsFloatingChanged()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-setfloat");
 
         m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), QStringLiteral("DP-1"), 0);
@@ -234,6 +245,7 @@ private Q_SLOTS:
     void testSetWindowFloat_false_noPreFloatZone_keepsFloating()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-unfloat-fail");
 
         m_wts->setWindowFloating(windowId, true);
@@ -253,6 +265,7 @@ private Q_SLOTS:
     void testSaveState_callsDelegateWhenSet()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         bool saveCalled = false;
         bool loadCalled = false;
         engine.setPersistenceDelegate(
@@ -271,6 +284,7 @@ private Q_SLOTS:
     void testLoadState_callsDelegateWhenSet()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         bool saveCalled = false;
         bool loadCalled = false;
         engine.setPersistenceDelegate(
@@ -289,6 +303,7 @@ private Q_SLOTS:
     void testSaveState_noopWithoutDelegate()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         engine.saveState();
         engine.loadState();
     }
@@ -296,6 +311,7 @@ private Q_SLOTS:
     void testSaveLoadState_bothDelegatesCalled()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         int saveCount = 0;
         int loadCount = 0;
         engine.setPersistenceDelegate(

@@ -35,7 +35,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     // same window — e.g., effect calls windowOpened then D-Bus resolveWindowRestore).
     // Also consume the appId-based pending entry so other instances of the same app
     // (with different UUIDs) don't incorrectly steal this window's zone.
-    if (m_windowTracker->isWindowSnapped(windowId)) {
+    if (m_snapState->isWindowSnapped(windowId)) {
         m_windowTracker->consumePendingAssignment(windowId);
         qCDebug(lcCore) << "SnapEngine::windowOpened: window" << windowId << "already snapped, skipping";
         return;
@@ -54,7 +54,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     // resolveWindowRestore already consumed its entry (see
     // calculateRestoreFromSession + the explicit consume on line 147
     // above). Last-used-zone update is skipped by AutoRestored intent.
-    m_windowTracker->markAsAutoSnapped(windowId);
+    m_snapState->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
         m_windowTracker->commitMultiZoneSnap(windowId, zoneIds, result.screenId,
@@ -102,7 +102,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
     // Consume the appId-based pending entry to prevent other instances of the same
     // app from incorrectly stealing this window's zone assignment.
-    if (m_windowTracker->isWindowSnapped(windowId)) {
+    if (m_snapState->isWindowSnapped(windowId)) {
         m_windowTracker->consumePendingAssignment(windowId);
         qCDebug(lcCore) << "resolveWindowRestore:" << windowId << "already has assignment, skipping";
         return SnapResult::noSnap();
@@ -134,7 +134,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     }
 
     // 0. Floating windows should not be auto-snapped — emit OSD feedback
-    if (m_windowTracker->isWindowFloating(windowId)) {
+    if (m_snapState->isFloating(windowId)) {
         qCInfo(lcCore) << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
                                   screenId);

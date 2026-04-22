@@ -254,7 +254,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
                                   result.screenName, false);
 
     if (!result.windowId2.isEmpty()) {
-        QString screen2 = m_windowTracker->screenAssignments().value(result.windowId2);
+        QString screen2 = m_snapState->screenAssignments().value(result.windowId2);
         if (screen2.isEmpty()) {
             screen2 = result.screenName;
         }
@@ -369,7 +369,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     m_windowTracker->uncommitSnap(windowId);
-    m_windowTracker->clearPreTileGeometry(windowId);
+    m_snapState->clearPreTileGeometry(windowId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }
@@ -402,10 +402,10 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // The frame-geometry shadow is the one compositor-layer piece of state
     // still living on WTA. Reading it here is the last remaining behavior
     // coupling to the adaptor in this file.
-    if (m_wta && m_windowTracker->isWindowFloating(windowId)) {
+    if (m_wta && m_snapState->isFloating(windowId)) {
         const QRect geo = m_wta->frameGeometry(windowId);
         if (geo.isValid()) {
-            m_windowTracker->storePreTileGeometry(windowId, geo, screenId, /*overwrite=*/true);
+            m_snapState->storePreTileGeometry(windowId, geo, screenId, /*overwrite=*/true);
         }
     }
 

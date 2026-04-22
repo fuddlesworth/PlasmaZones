@@ -14,8 +14,8 @@ namespace PlasmaZones {
 
 void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& screenId)
 {
-    const bool currentlyFloating = m_windowTracker->isWindowFloating(windowId);
-    const bool currentlySnapped = m_windowTracker->isWindowSnapped(windowId);
+    const bool currentlyFloating = m_snapState->isFloating(windowId);
+    const bool currentlySnapped = m_snapState->isWindowSnapped(windowId);
 
     if (!currentlyFloating && !currentlySnapped) {
         return;
@@ -30,8 +30,8 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("unfloated"), QString(), QString(),
                                   screenId);
     } else {
-        m_windowTracker->unsnapForFloat(windowId);
-        m_windowTracker->setWindowFloating(windowId, true);
+        m_snapState->unsnapForFloat(windowId);
+        m_snapState->setFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         applyGeometryForFloat(windowId, screenId);
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
@@ -45,7 +45,7 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     // 1. Try the window's tracked screen from WTS (most accurate)
     // 2. Fall back to m_lastActiveScreenId (from last windowFocused)
     // 3. Fall back to empty (unfloatToZone/applyGeometryForFloat handle gracefully)
-    QString screenId = m_windowTracker->screenAssignments().value(windowId);
+    QString screenId = m_snapState->screenAssignments().value(windowId);
     if (screenId.isEmpty()) {
         screenId = m_lastActiveScreenId;
     }
@@ -54,8 +54,8 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     }
 
     if (shouldFloat) {
-        m_windowTracker->unsnapForFloat(windowId);
-        m_windowTracker->setWindowFloating(windowId, true);
+        m_snapState->unsnapForFloat(windowId);
+        m_snapState->setFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         applyGeometryForFloat(windowId, screenId);
     } else {
