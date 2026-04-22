@@ -4,6 +4,7 @@
 #pragma once
 
 #include "AutotileConstants.h"
+#include <PhosphorEngineApi/IPlacementState.h>
 #include <phosphortiles_export.h>
 #include <QObject>
 #include <QJsonObject>
@@ -35,7 +36,7 @@ struct SplitNode;
  *
  * Note: Window IDs are KWin's internal resource names (QString).
  */
-class PHOSPHORTILES_EXPORT TilingState : public QObject
+class PHOSPHORTILES_EXPORT TilingState : public QObject, public PhosphorEngineApi::IPlacementState
 {
     Q_OBJECT
 
@@ -61,7 +62,7 @@ public:
     /**
      * @brief Get the screen ID this state belongs to
      */
-    QString screenId() const;
+    QString screenId() const override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Window Order Management
@@ -70,7 +71,7 @@ public:
     /**
      * @brief Get total number of tracked windows (including floating)
      */
-    int windowCount() const;
+    int windowCount() const override;
 
     /**
      * @brief Get number of tiled windows (excluding floating)
@@ -137,7 +138,7 @@ public:
     /**
      * @brief Check if a window is tracked
      */
-    bool containsWindow(const QString& windowId) const;
+    bool containsWindow(const QString& windowId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Master Management
@@ -266,7 +267,7 @@ public:
     /**
      * @brief Check if a window is floating (excluded from tiling)
      */
-    bool isFloating(const QString& windowId) const;
+    bool isFloating(const QString& windowId) const override;
 
     /**
      * @brief Set a window's floating state
@@ -285,7 +286,14 @@ public:
     /**
      * @brief Get list of floating windows
      */
-    QStringList floatingWindows() const;
+    QStringList floatingWindows() const override;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // IPlacementState
+    // ═══════════════════════════════════════════════════════════════════════
+
+    QStringList managedWindows() const override;
+    QString placementIdForWindow(const QString& windowId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Focus Tracking
@@ -315,7 +323,7 @@ public:
     /**
      * @brief Serialize state to JSON
      */
-    QJsonObject toJson() const;
+    QJsonObject toJson() const override;
 
     /**
      * @brief Deserialize state from JSON
