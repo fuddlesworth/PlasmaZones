@@ -398,9 +398,13 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
             continue;
         }
         const QJsonObject geo = it->toObject();
+        const int w = geo.value(QLatin1String("w")).toInt();
+        const int h = geo.value(QLatin1String("h")).toInt();
+        if (w <= 0 || h <= 0) {
+            continue;
+        }
         PreTileGeometry ptg;
-        ptg.geometry = QRect(geo.value(QLatin1String("x")).toInt(), geo.value(QLatin1String("y")).toInt(),
-                             geo.value(QLatin1String("w")).toInt(), geo.value(QLatin1String("h")).toInt());
+        ptg.geometry = QRect(geo.value(QLatin1String("x")).toInt(), geo.value(QLatin1String("y")).toInt(), w, h);
         ptg.connectorName = geo.value(QLatin1String("connector")).toString();
         state->m_preTileGeometries[it.key()] = ptg;
     }

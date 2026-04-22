@@ -135,18 +135,22 @@ public:
     void setZoneAssignments(const QHash<QString, QStringList>& zones)
     {
         m_windowZoneAssignments = zones;
+        Q_EMIT stateChanged();
     }
     void setPreTileGeometries(const QHash<QString, PreTileGeometry>& geos)
     {
         m_preTileGeometries = geos;
+        Q_EMIT stateChanged();
     }
     void setFloatingWindows(const QSet<QString>& windows)
     {
         m_floatingWindows = windows;
+        Q_EMIT stateChanged();
     }
     void setPreFloatZoneAssignments(const QHash<QString, QStringList>& a)
     {
         m_preFloatZoneAssignments = a;
+        Q_EMIT stateChanged();
     }
 
 Q_SIGNALS:

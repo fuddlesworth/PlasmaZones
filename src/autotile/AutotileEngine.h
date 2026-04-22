@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "core/constants.h"
+#include "core/types.h"
 #include <PhosphorEngineApi/IPlacementEngine.h>
 #include <QHash>
 #include <QJsonArray>
