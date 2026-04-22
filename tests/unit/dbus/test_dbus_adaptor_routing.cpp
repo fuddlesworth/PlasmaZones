@@ -8,14 +8,14 @@
  * Regression guard for the 2026-04-10 resnap crash. Root cause: slots written
  * as `void slot(const WindowOpenedList&)` inside `namespace PlasmaZones` were
  * recorded by moc with the unqualified type name "WindowOpenedList", but the
- * metatype was registered via `Q_DECLARE_METATYPE(PlasmaZones::WindowOpenedList)`
- * under the qualified name "PlasmaZones::WindowOpenedList". QDBusAbstractAdaptor
+ * metatype was registered via `Q_DECLARE_METATYPE(PhosphorProtocol::WindowOpenedList)`
+ * under the qualified name "PhosphorProtocol::WindowOpenedList". QDBusAbstractAdaptor
  * dispatch couldn't resolve the type → "Could not find slot ..." at runtime →
  * kwin_wayland downstream crash with "demarshalling function for type 'QString'
  * failed".
  *
  * The structural fix is that every typed-struct slot parameter in the adaptor
- * headers is now fully-qualified (e.g. `const PlasmaZones::WindowOpenedList&`).
+ * headers is now fully-qualified (e.g. `const PhosphorProtocol::WindowOpenedList&`).
  * This test registers an adaptor on a private QDBusConnection and verifies
  * that a method call with a typed-struct payload is actually dispatched to
  * the slot. If a future adaptor regresses by using an unqualified slot
@@ -37,9 +37,9 @@
 #include <QUuid>
 #include <QVariant>
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 
-using namespace PlasmaZones;
+using namespace PhosphorProtocol;
 
 // =========================================================================
 // Minimal owner object that hosts an adaptor on a private connection.
@@ -62,7 +62,7 @@ public:
     // are expected to declare them. If someone later writes these without
     // the `PlasmaZones::` prefix, the test will start failing.
 public Q_SLOTS:
-    void takeWindowOpenedList(const PlasmaZones::WindowOpenedList& entries)
+    void takeWindowOpenedList(const PhosphorProtocol::WindowOpenedList& entries)
     {
         m_lastReceivedCount = entries.size();
         if (!entries.isEmpty()) {
@@ -72,9 +72,9 @@ public Q_SLOTS:
         Q_EMIT received();
     }
 
-    PlasmaZones::MoveTargetResult produceMoveTarget()
+    PhosphorProtocol::MoveTargetResult produceMoveTarget()
     {
-        PlasmaZones::MoveTargetResult r;
+        PhosphorProtocol::MoveTargetResult r;
         r.success = true;
         r.reason = QStringLiteral("ok");
         r.zoneId = QStringLiteral("{zone-uuid}");
@@ -108,7 +108,7 @@ private Q_SLOTS:
     void initTestCase()
     {
         // Must be called before any adaptors are constructed.
-        PlasmaZones::registerDBusTypes();
+        PhosphorProtocol::registerWireTypes();
 
         // Each test run gets its own bus name on the session bus so tests
         // can run in parallel without stepping on each other. We use a UUID
@@ -154,9 +154,9 @@ private Q_SLOTS:
     {
         QVERIFY(m_bus.isConnected());
 
-        PlasmaZones::WindowOpenedList entries;
-        PlasmaZones::WindowOpenedEntry e1{QStringLiteral("firefox|abc"), QStringLiteral("screen-0"), 640, 480};
-        PlasmaZones::WindowOpenedEntry e2{QStringLiteral("konsole|def"), QStringLiteral("screen-0"), 320, 200};
+        PhosphorProtocol::WindowOpenedList entries;
+        PhosphorProtocol::WindowOpenedEntry e1{QStringLiteral("firefox|abc"), QStringLiteral("screen-0"), 640, 480};
+        PhosphorProtocol::WindowOpenedEntry e2{QStringLiteral("konsole|def"), QStringLiteral("screen-0"), 320, 200};
         entries << e1 << e2;
 
         QDBusMessage msg = QDBusMessage::createMethodCall(m_serviceName, m_objectPath,
@@ -204,10 +204,10 @@ private Q_SLOTS:
         QVERIFY2(watcher.isFinished(), "D-Bus call did not complete within 2s");
         QVERIFY2(!watcher.isError(), qPrintable(watcher.error().message()));
 
-        QDBusPendingReply<PlasmaZones::MoveTargetResult> reply(pending);
+        QDBusPendingReply<PhosphorProtocol::MoveTargetResult> reply(pending);
         QVERIFY2(reply.isValid(), qPrintable(reply.error().message()));
 
-        const PlasmaZones::MoveTargetResult r = reply.value();
+        const PhosphorProtocol::MoveTargetResult r = reply.value();
         QCOMPARE(r.success, true);
         QCOMPARE(r.reason, QStringLiteral("ok"));
         QCOMPARE(r.zoneId, QStringLiteral("{zone-uuid}"));
@@ -228,15 +228,15 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void metatypesAreRegisteredUnderBothNames()
     {
-        QVERIFY(QMetaType::fromName("PlasmaZones::WindowOpenedList").isValid());
+        QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").isValid());
         QVERIFY(QMetaType::fromName("WindowOpenedList").isValid());
-        QCOMPARE(QMetaType::fromName("PlasmaZones::WindowOpenedList").id(),
+        QCOMPARE(QMetaType::fromName("PhosphorProtocol::WindowOpenedList").id(),
                  QMetaType::fromName("WindowOpenedList").id());
 
-        QVERIFY(QMetaType::fromName("PlasmaZones::MoveTargetResult").isValid());
+        QVERIFY(QMetaType::fromName("PhosphorProtocol::MoveTargetResult").isValid());
         QVERIFY(QMetaType::fromName("MoveTargetResult").isValid());
 
-        QVERIFY(QMetaType::fromName("PlasmaZones::WindowStateEntry").isValid());
+        QVERIFY(QMetaType::fromName("PhosphorProtocol::WindowStateEntry").isValid());
         QVERIFY(QMetaType::fromName("WindowStateEntry").isValid());
     }
 

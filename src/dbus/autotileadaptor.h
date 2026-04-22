@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QRect>
@@ -22,6 +22,12 @@ class ITileAlgorithmRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::AlgorithmInfoEntry;
+using PhosphorProtocol::TileRequestEntry;
+using PhosphorProtocol::TileRequestList;
+using PhosphorProtocol::WindowOpenedEntry;
+using PhosphorProtocol::WindowOpenedList;
 
 class AutotileEngine;
 

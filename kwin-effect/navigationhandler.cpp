@@ -4,8 +4,8 @@
 #include "navigationhandler.h"
 #include "plasmazoneseffect.h"
 
-#include <dbus_constants.h>
-#include <dbus_helpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
 
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
@@ -32,8 +32,8 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
         return;
     }
 
-    QDBusPendingCall pendingCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
@@ -66,8 +66,8 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
         return;
     }
 
-    QDBusPendingCall pendingCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("queryWindowFloating"), {windowId});
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("queryWindowFloating"), {windowId});
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {

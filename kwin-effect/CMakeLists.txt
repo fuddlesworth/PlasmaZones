@@ -76,6 +76,7 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Gui
     Qt6::DBus
     plasmazones_compositor_common
+    PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly
     # include `<PhosphorAnimation/...>`. The dependency is reachable
     # transitively via `plasmazones_compositor_common`, but depending

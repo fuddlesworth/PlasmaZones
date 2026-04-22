@@ -36,9 +36,10 @@
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include "compositor-common/dbus_types.h"
+#include <PhosphorProtocol/WireTypes.h>
 
 using namespace PlasmaZones;
+using namespace PhosphorProtocol;
 
 namespace {
 

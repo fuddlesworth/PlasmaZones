@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <QObject>
 #include <QSet>
@@ -34,7 +34,8 @@ public:
     void showContinuationIfNeeded(const QString& screenId);
 
     /// Full async snap assist: get snapped windows, build candidates, show overlay
-    void asyncShow(const QString& excludeWindowId, const QString& screenId, const EmptyZoneList& emptyZones);
+    void asyncShow(const QString& excludeWindowId, const QString& screenId,
+                   const PhosphorProtocol::EmptyZoneList& emptyZones);
 
     /// Update the enabled flag (from loadCachedSettings)
     void setEnabled(bool enabled)
@@ -47,8 +48,8 @@ public:
     }
 
 private:
-    SnapAssistCandidateList buildCandidates(const QString& excludeWindowId, const QString& screenId,
-                                            const QSet<QString>& snappedWindowIds) const;
+    PhosphorProtocol::SnapAssistCandidateList buildCandidates(const QString& excludeWindowId, const QString& screenId,
+                                                              const QSet<QString>& snappedWindowIds) const;
 
     PlasmaZonesEffect* m_effect;
     bool m_snapAssistEnabled = false;

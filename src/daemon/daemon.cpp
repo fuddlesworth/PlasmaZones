@@ -31,6 +31,7 @@
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
@@ -714,7 +715,7 @@ bool Daemon::init()
     constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
     bool serviceRegistered = false;
     for (int attempt = 0; attempt < maxRetries; ++attempt) {
-        if (bus.registerService(QString(DBus::ServiceName))) {
+        if (bus.registerService(QString(PhosphorProtocol::Service::Name))) {
             serviceRegistered = true;
             break;
         }
@@ -732,8 +733,8 @@ bool Daemon::init()
         }
 
         // Non-retryable error or max retries reached
-        qCCritical(lcDaemon) << "Failed to register D-Bus service=" << DBus::ServiceName << "error=" << error.message()
-                             << "type=" << error.type();
+        qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
+                             << "error=" << error.message() << "type=" << error.type();
         return false;
     }
 
@@ -743,15 +744,17 @@ bool Daemon::init()
     }
 
     // Register D-Bus object (no retry needed - service is already registered)
-    if (!bus.registerObject(QString(DBus::ObjectPath), this)) {
+    if (!bus.registerObject(QString(PhosphorProtocol::Service::ObjectPath), this)) {
         QDBusError error = bus.lastError();
-        qCCritical(lcDaemon) << "Failed to register D-Bus object=" << DBus::ObjectPath << "error=" << error.message();
+        qCCritical(lcDaemon) << "Failed to register D-Bus object=" << PhosphorProtocol::Service::ObjectPath
+                             << "error=" << error.message();
         // Cleanup: unregister service if object registration fails
-        bus.unregisterService(QString(DBus::ServiceName));
+        bus.unregisterService(QString(PhosphorProtocol::Service::Name));
         return false;
     }
 
-    qCInfo(lcDaemon) << "D-Bus service registered service=" << DBus::ServiceName << "path=" << DBus::ObjectPath;
+    qCInfo(lcDaemon) << "D-Bus service registered service=" << PhosphorProtocol::Service::Name
+                     << "path=" << PhosphorProtocol::Service::ObjectPath;
 
     // Connect overlay adaptor signals to daemon overlay control
     connect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, [this](bool visible) {
@@ -894,8 +897,8 @@ void Daemon::stop()
 
     // Unregister D-Bus object path and service to prevent late calls during shutdown
     QDBusConnection bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(QString(DBus::ObjectPath));
-    bus.unregisterService(QString(DBus::ServiceName));
+    bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));
+    bus.unregisterService(QString(PhosphorProtocol::Service::Name));
 
     // Sever the remaining raw-pointer adaptors from the unique_ptr members
     // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr

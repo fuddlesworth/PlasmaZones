@@ -6,9 +6,9 @@
 #include "windowanimator.h"
 #include "navigationhandler.h"
 
-#include <dbus_constants.h>
-#include <dbus_helpers.h>
-#include <dbus_types.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -259,11 +259,11 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         // the screenId parameter may already be correct from callers that use
         // getWindowScreenId(), but re-resolve to be safe.
         QString resolvedScreenId = m_effect->getWindowScreenId(m_effect->findWindowById(windowId));
-        DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-                                   {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                                    static_cast<int>(frame.width()), static_cast<int>(frame.height()),
-                                    resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, true},
-                                   QStringLiteral("storePreTileGeometry"));
+        PhosphorProtocol::ClientHelpers::fireAndForget(
+            m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+            {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()), static_cast<int>(frame.width()),
+             static_cast<int>(frame.height()), resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, true},
+            QStringLiteral("storePreTileGeometry"));
     }
     return true;
 }
@@ -376,8 +376,9 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
             }
         }
 
-        QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
-                                                          DBus::Interface::Autotile, QStringLiteral("windowOpened"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+            PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowOpened"));
         msg << windowId;
         msg << screenId;
         msg << minWidth;
@@ -403,7 +404,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
 {
     // Collect eligible windows using the same filtering as notifyWindowAdded,
     // then send one batch D-Bus call instead of per-window round-trips.
-    WindowOpenedList batchEntries;
+    PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
@@ -450,7 +451,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
             }
         }
 
-        WindowOpenedEntry entry;
+        PhosphorProtocol::WindowOpenedEntry entry;
         entry.windowId = windowId;
         entry.screenId = screenId;
         entry.minWidth = minWidth;
@@ -463,8 +464,9 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         return;
     }
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                                                      QStringLiteral("windowsOpenedBatch"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsOpenedBatch"));
     msg << QVariant::fromValue(batchEntries);
 
     QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
@@ -578,9 +580,9 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         const int fallbackW = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.width())) : 0;
         const int fallbackH = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.height())) : 0;
 
-        QDBusMessage msg =
-            QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
-                                           QStringLiteral("getValidatedPreTileGeometry"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getValidatedPreTileGeometry"));
         msg << windowId;
         auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), m_effect);
         connect(watcher, &QDBusPendingCallWatcher::finished, m_effect,
@@ -731,8 +733,9 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
 
     // Notify autotile daemon
     if (m_autotileScreens.contains(screenId)) {
-        DBusHelpers::fireAndForget(m_effect, DBus::Interface::Autotile, QStringLiteral("windowClosed"), {windowId},
-                                   QStringLiteral("windowClosed"));
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Autotile,
+                                                       QStringLiteral("windowClosed"), {windowId},
+                                                       QStringLiteral("windowClosed"));
         qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenId;
     }
 }
@@ -909,33 +912,41 @@ void AutotileHandler::connectSignals()
     // rules. Qt's QDBusConnection::connect can register the same handler
     // twice if called twice with identical args, which would cause each
     // signal to invoke the slot N times after N daemon restarts.
-    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                   QStringLiteral("windowsTileRequested"), this,
-                   SLOT(slotWindowsTileRequested(PlasmaZones::TileRequestList)));
-    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                   QStringLiteral("focusWindowRequested"), this, SLOT(slotFocusWindowRequested(QString)));
-    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("enabledChanged"),
-                   this, SLOT(slotEnabledChanged(bool)));
-    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                   QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList, bool)));
-    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                   QStringLiteral("windowFloatingChanged"), this,
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsTileRequested"), this,
+                   SLOT(slotWindowsTileRequested(PhosphorProtocol::TileRequestList)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("focusWindowRequested"), this,
+                   SLOT(slotFocusWindowRequested(QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("enabledChanged"), this,
+                   SLOT(slotEnabledChanged(bool)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("autotileScreensChanged"), this,
+                   SLOT(slotScreensChanged(QStringList, bool)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
                    SLOT(slotWindowFloatingChanged(QString, bool, QString)));
 
-    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowsTileRequested"),
-                this, SLOT(slotWindowsTileRequested(PlasmaZones::TileRequestList)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsTileRequested"), this,
+                SLOT(slotWindowsTileRequested(PhosphorProtocol::TileRequestList)));
 
-    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("focusWindowRequested"),
-                this, SLOT(slotFocusWindowRequested(QString)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("focusWindowRequested"), this,
+                SLOT(slotFocusWindowRequested(QString)));
 
-    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("enabledChanged"), this,
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("enabledChanged"), this,
                 SLOT(slotEnabledChanged(bool)));
 
-    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList, bool)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("autotileScreensChanged"), this,
+                SLOT(slotScreensChanged(QStringList, bool)));
 
-    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowFloatingChanged"),
-                this, SLOT(slotWindowFloatingChanged(QString, bool, QString)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
+                SLOT(slotWindowFloatingChanged(QString, bool, QString)));
 
     qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
 }
@@ -943,9 +954,10 @@ void AutotileHandler::connectSignals()
 void AutotileHandler::loadSettings()
 {
     // Query initial autotile screen set from daemon asynchronously.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName, DBus::ObjectPath, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << DBus::Interface::Autotile << QStringLiteral("autotileScreens");
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
     auto* watcher = new QDBusPendingCallWatcher(call, this);

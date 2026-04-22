@@ -20,6 +20,7 @@
 #include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -131,9 +132,9 @@ EditorController::EditorController(QObject* parent)
     connect(&m_layoutReloadTimer, &QTimer::timeout, this, &EditorController::reloadLocalLayouts);
 
     auto bus = QDBusConnection::sessionBus();
-    const QString svc = QString::fromLatin1(DBus::ServiceName);
-    const QString path = QString::fromLatin1(DBus::ObjectPath);
-    const QString iface = QString::fromLatin1(DBus::Interface::LayoutRegistry);
+    const QString svc = QString::fromLatin1(PhosphorProtocol::Service::Name);
+    const QString path = QString::fromLatin1(PhosphorProtocol::Service::ObjectPath);
+    const QString iface = QString::fromLatin1(PhosphorProtocol::Service::Interface::LayoutRegistry);
     for (const auto& sig :
          {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {

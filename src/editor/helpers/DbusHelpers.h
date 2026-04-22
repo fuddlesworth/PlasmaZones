@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../../compositor-common/dbus_constants.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QDBusConnection>
 #include <QDBusInterface>
@@ -21,7 +21,7 @@ namespace DbusHelpers {
  * prvalue return into the caller's storage correctly.
  *
  * ⚠ CRITICAL: every caller MUST invoke
- *     iface.setTimeout(DBus::SyncCallTimeoutMs);
+ *     iface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
  * before dispatching a synchronous .call(). Omitting it reintroduces the
  * editor-startup-freeze failure mode this PR was written to fix (Qt's
  * default is 25 seconds). The timeout cannot be baked into this helper
@@ -34,8 +34,8 @@ namespace DbusHelpers {
  */
 inline QDBusInterface createSettingsInterface()
 {
-    return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                          QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
+    return QDBusInterface(QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                          QString(PhosphorProtocol::Service::Interface::Settings), QDBusConnection::sessionBus());
 }
 
 } // namespace DbusHelpers

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <autotile_state.h>
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <QHash>
 #include <QObject>
@@ -237,7 +237,7 @@ public:
 
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
-    void slotWindowsTileRequested(const TileRequestList& tileRequests);
+    void slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);

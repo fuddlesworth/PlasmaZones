@@ -25,7 +25,7 @@ bool queryShadersEnabled()
         return false;
     }
 
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
     QDBusReply<bool> reply = settingsIface.call(QStringLiteral("shadersEnabled"));
     return reply.isValid() && reply.value();
 }
@@ -39,7 +39,7 @@ QVariantList queryAvailableShaders()
         return QVariantList();
     }
 
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
     QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
     if (!reply.isValid()) {
         qCWarning(lcDbus) << "D-Bus availableShaders call failed:" << reply.error().message();
@@ -81,7 +81,7 @@ QVariantMap queryShaderInfo(const QString& shaderId)
         return QVariantMap();
     }
 
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("shaderInfo"), shaderId);
     if (reply.isValid()) {
         // D-Bus may return nested structures as QDBusArgument - convert recursively
@@ -115,7 +115,7 @@ QVariantMap queryTranslateShaderParams(const QString& shaderId, const QVariantMa
         }
     }
 
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("translateShaderParams"), shaderId, safeParams);
     if (reply.isValid()) {
         QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));

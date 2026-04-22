@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Compositor-agnostic shared library for PlasmaZones compositor plugins.
-# Contains D-Bus helpers, JSON parsing, trigger marshalling, and other
-# portable code shared by the KWin effect, Wayfire plugin, and future
-# compositor integrations.
+# Contains JSON parsing, trigger marshalling, and other portable code
+# shared by the KWin effect, Wayfire plugin, and future compositor
+# integrations.  D-Bus wire types and service constants moved to
+# PhosphorProtocol.
 #
 # Animation primitives (EasingCurve, WindowAnimation, AnimationConfig,
 # AnimationMath, applyStaggeredOrImmediate) moved to PhosphorAnimation.
@@ -14,8 +15,6 @@
 # NOTE: If this ever becomes a shared (SHARED) library, all public API types
 # (BorderState, WindowInfo, etc.) will need PLASMAZONES_EXPORT macros.
 add_library(plasmazones_compositor_common STATIC
-    logging.cpp
-    logging.h
     snap_assist_filter.cpp
     snap_assist_filter.h
     trigger_parser.cpp
@@ -29,13 +28,13 @@ add_library(plasmazones_compositor_common STATIC
     # Animation primitives moved to libs/phosphor-animation. Consumers
     # include <PhosphorAnimation/{Easing,WindowMotion,AnimationMath,
     # StaggerTimer}.h> directly — no forwarding shim.
+    #
+    # D-Bus wire types (dbus_types), constants (dbus_constants), helpers
+    # (dbus_helpers), and logging moved to libs/phosphor-protocol.
+    # Consumers include <PhosphorProtocol/…> headers directly.
     autotile_state.h
     compositor_bridge.h
-    dbus_types.cpp
-    dbus_constants.h
     debounced_action.h
-    dbus_helpers.h
-    dbus_types.h
     floating_cache.h
     geometry_helpers.h
 )
@@ -47,7 +46,7 @@ target_include_directories(plasmazones_compositor_common PUBLIC
 target_link_libraries(plasmazones_compositor_common PUBLIC
     Qt6::Core
     Qt6::Gui
-    Qt6::DBus
+    PhosphorProtocol::PhosphorProtocol
     PhosphorIdentity::PhosphorIdentity
     PhosphorAnimation::PhosphorAnimation
 )

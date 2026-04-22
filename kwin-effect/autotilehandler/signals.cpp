@@ -7,8 +7,8 @@
 #include "../autotilehandler.h"
 #include "../plasmazoneseffect.h"
 #include "../navigationhandler.h"
-#include <dbus_constants.h>
-#include <dbus_helpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
@@ -386,8 +386,9 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     // frame at the tiled position. If a correct pre-tile entry already
                     // exists, preserve it. If no entry exists, the floating window's
                     // current geometry is the best available fallback.
-                    DBusHelpers::fireAndForget(
-                        m_effect, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                    PhosphorProtocol::ClientHelpers::fireAndForget(
+                        m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                        QStringLiteral("storePreTileGeometry"),
                         {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
                          static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId, false},
                         QStringLiteral("storePreTileGeometry"));
@@ -406,9 +407,9 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // Non-blocking: the old synchronous QDBus::Block call (500ms timeout) froze the
             // compositor thread, causing jerky first-retile animations since QElapsedTimer
             // kept advancing while no frames were rendered.
-            QDBusMessage fetchMsg =
-                QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
-                                               QStringLiteral("getPreTileGeometries"));
+            QDBusMessage fetchMsg = QDBusMessage::createMethodCall(
+                PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getPreTileGeometries"));
             auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(fetchMsg), this);
             // Capture expected screen set for staleness detection — if the user
             // rapidly toggles autotile, a stale reply must not overwrite fresh data.
@@ -416,7 +417,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             connect(watcher, &QDBusPendingCallWatcher::finished, this,
                     [this, added, expectedScreens](QDBusPendingCallWatcher* w) {
                         w->deleteLater();
-                        QDBusPendingReply<PlasmaZones::PreTileGeometryList> reply = *w;
+                        QDBusPendingReply<PhosphorProtocol::PreTileGeometryList> reply = *w;
                         if (!reply.isValid()) {
                             return;
                         }
@@ -425,7 +426,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
                             return;
                         }
-                        const PlasmaZones::PreTileGeometryList entries = reply.value();
+                        const PhosphorProtocol::PreTileGeometryList entries = reply.value();
                         const auto allWindows = KWin::effects->stackingOrder();
                         for (const auto& entry : entries) {
                             const QString stableId = entry.appId;
@@ -607,9 +608,10 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                              << screenId;
 
             if (m_effect->m_daemonServiceRegistered) {
-                DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking,
-                                           QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
-                                           QStringLiteral("setWindowFloatingForScreen"));
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                    QStringLiteral("setWindowFloatingForScreen"));
             }
         });
         m_pendingMinimizeFloat.insert(windowId, timer);
@@ -640,9 +642,10 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     qCInfo(lcEffect) << "Autotile: window unminimized, unfloating:" << windowId << "on" << screenId;
 
     if (m_effect->m_daemonServiceRegistered) {
-        DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking,
-                                   QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
-                                   QStringLiteral("setWindowFloatingForScreen"));
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, screenId, false},
+                                                       QStringLiteral("setWindowFloatingForScreen"));
     }
 
     notifyWindowAdded(w);
@@ -666,9 +669,10 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
     qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "- floating";
 
     if (m_effect->m_daemonServiceRegistered) {
-        DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking,
-                                   QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
-                                   QStringLiteral("setWindowFloatingForScreen"));
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, screenId, true},
+                                                       QStringLiteral("setWindowFloatingForScreen"));
     }
 }
 

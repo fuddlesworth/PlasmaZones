@@ -20,9 +20,9 @@
 #include <QObject>
 #include <QTest>
 
-#include "compositor-common/dbus_types.h"
+#include <PhosphorProtocol/WireTypes.h>
 
-using namespace PlasmaZones;
+using namespace PhosphorProtocol;
 
 class TestDbusValidation : public QObject
 {

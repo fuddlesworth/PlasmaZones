@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "../compositor-common/dbus_types.h"
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -19,6 +19,10 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::NamedZoneGeometry;
+using PhosphorProtocol::NamedZoneGeometryList;
+using PhosphorProtocol::ZoneGeometryRect;
 
 class ISettings;
 

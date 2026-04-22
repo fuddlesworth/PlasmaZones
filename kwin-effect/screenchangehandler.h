@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -52,7 +52,7 @@ public Q_SLOTS:
 private:
     void applyScreenGeometryChange();
     void fetchAndApplyWindowGeometries();
-    void applyWindowGeometries(const WindowGeometryList& geometries);
+    void applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries);
 
     PlasmaZonesEffect* m_effect;
     QTimer m_screenChangeDebounce;

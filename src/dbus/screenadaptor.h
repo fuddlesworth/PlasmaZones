@@ -26,7 +26,7 @@ namespace PlasmaZones {
  * Wiring: both the ScreenManager and the IConfigStore are passed through
  * the constructor — no setters, no service-locator intermediary. Interface
  * name must match `dbus/org.plasmazones.Screen.xml` and
- * `DBus::Interface::Screen` for KCM signal connections.
+ * `PhosphorProtocol::Service::Interface::Screen` for KCM signal connections.
  */
 class PLASMAZONES_EXPORT ScreenAdaptor : public Phosphor::Screens::DBusScreenAdaptor
 {

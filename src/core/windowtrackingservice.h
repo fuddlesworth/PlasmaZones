@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "types.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -34,6 +34,12 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::WindowGeometryEntry;
+using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
+
 class VirtualDesktopManager;
 class WindowRegistry;
 
