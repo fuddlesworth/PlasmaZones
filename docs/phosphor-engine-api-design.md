@@ -313,40 +313,40 @@ phosphor-zones           phosphor-tiles
 
 ## Migration sequence
 
-### Phase 1: phosphor-engine-api (non-breaking)
-1. Create `libs/phosphor-engine-api/` with `IPlacementEngine`, `IPlacementState`, `NavigationContext`
-2. Move `NavigationContext` from `src/core/inavigationactions.h` to the new lib
-3. Make `TilingState` implement `IPlacementState` (3 new override methods)
-4. All tests pass — no behavioral change
+### PR 1: Interface layer + symmetric state (THIS PR) — DONE
 
-### Phase 2: SnapState extraction (biggest phase)
-1. Create `SnapState` in phosphor-zones implementing `IPlacementState`
-2. Move state maps from WTS → SnapState (one map at a time, test between each)
-3. Move `commitSnap`/`uncommitSnap`/`commitMultiZoneSnap` to SnapState
-4. Move `calculateResnap*`, `calculateSnapAll`, `calculateRotation` to phosphor-zones as free functions or SnapState methods
-5. Move auto-snap chain (`calculateSnapToAppRule`, `...EmptyZone`, `...LastZone`)
-6. WTS becomes a thin coordinator that owns per-screen `SnapState` instances and delegates
+1. Created `libs/phosphor-engine-api/` with `IPlacementEngine`, `IPlacementState`, `NavigationContext`
+2. `TilingState` implements `IPlacementState` (2 new methods + 6 overrides)
+3. Created `SnapState` in phosphor-zones implementing `IPlacementState`
+4. Both engines implement `IPlacementEngine` directly
+5. Deleted `IEngineLifecycle`, `INavigationActions`, `SnapNavigationAdapter`, `AutotileNavigationAdapter` (6 files, -614 net lines)
+6. `ScreenModeRouter` holds two `IPlacementEngine*`, daemon never branches on mode
 
-### Phase 3: Unify engine interface (daemon-side)
-1. Make `SnapEngine` implement `IPlacementEngine` directly (absorb `SnapNavigationAdapter`)
-2. Make `AutotileEngine` implement `IPlacementEngine` directly (absorb `AutotileNavigationAdapter`)
-3. Delete `IEngineLifecycle`, `INavigationActions`, `SnapNavigationAdapter`, `AutotileNavigationAdapter`
-4. Simplify `ScreenModeRouter` to hold two `IPlacementEngine*`
-5. Delete mode branches in daemon adaptor layer
+### PR 2: SnapEngine owns SnapState (state migration)
 
-### Phase 4: Cleanup
-1. Delete now-empty WTS state members
-2. Update library-extraction-survey.md
-3. WTS is either deleted or becomes a thin "window shadow" store for D-Bus frame geometry / cursor / activation state
+Move state ownership from WTS to SnapState — SnapEngine creates per-screen
+SnapState instances and uses them for zone assignment CRUD, floating state,
+pre-tile geometry, and pre-float memory. The orchestration methods
+(`commitSnap`, `calculate*`, `applyBatchAssignments`) stay on WTS initially
+but are refactored to accept `SnapState&` parameters instead of reading
+internal maps.
 
----
+1. SnapEngine creates/holds `QHash<QString, SnapState*>` keyed by screen ID
+2. Redirect pure state reads (isWindowSnapped, zoneForWindow, etc.) to SnapState
+3. Redirect pure state writes (assignWindowToZone, setFloating, etc.) to SnapState
+4. Refactor `commitSnap` / `uncommitSnap` to operate on SnapState& instead of WTS internal maps
+5. Remove duplicated state maps from WTS
+6. `stateForScreen()` returns the live SnapState instance
 
-## Risk assessment
+### PR 3: Move orchestration to SnapEngine / phosphor-zones
 
-| Risk | Mitigation |
-|---|---|
-| Large refactor (~1,700 LOC moves) | Phase 2 is incremental — one state map per commit, test between each |
-| SnapState serialization format change | Keep the same JSON keys — SnapState reads/writes the same format WTS did |
-| D-Bus signal wiring breaks | Adaptor continues to exist — it just reads from SnapState instead of WTS |
-| phosphor-zones gains new deps | Only phosphor-engine-api (INTERFACE, header-only) — no new binary deps |
-| Wayfire consumer doesn't exist yet | True, but the SDK formalization is the next planned extraction and this unblocks it |
+The `calculate*` methods (calculateRotation, calculateSnapAllWindows,
+calculateResnap*, calculateSnapToAppRule/EmptyZone/LastZone) are pure
+functions over SnapState + LayoutRegistry + ZoneDetector. They can move
+to either SnapEngine or phosphor-zones as free functions, making phosphor-zones
+self-contained for snap orchestration (symmetric with phosphor-tiles).
+
+1. Move calculate methods out of WTS
+2. Move commitSnap/uncommitSnap to SnapEngine
+3. WTS shrinks to: D-Bus shadow state + persistence dirty masks + pending restore queues
+4. Update library-extraction-survey.md
