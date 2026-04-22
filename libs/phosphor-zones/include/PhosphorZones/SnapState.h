@@ -81,11 +81,17 @@ public:
     }
     void setScreenAssignments(const QHash<QString, QString>& s)
     {
+        if (m_windowScreenAssignments == s) {
+            return;
+        }
         m_windowScreenAssignments = s;
         Q_EMIT stateChanged();
     }
     void setDesktopAssignments(const QHash<QString, int>& d)
     {
+        if (m_windowDesktopAssignments == d) {
+            return;
+        }
         m_windowDesktopAssignments = d;
         Q_EMIT stateChanged();
     }
@@ -113,6 +119,9 @@ public:
     }
     void setPreFloatScreenAssignments(const QHash<QString, QString>& a)
     {
+        if (m_preFloatScreenAssignments == a) {
+            return;
+        }
         m_preFloatScreenAssignments = a;
         Q_EMIT stateChanged();
     }
@@ -125,6 +134,11 @@ public:
     {
         QRect geometry;
         QString connectorName;
+
+        bool operator==(const PreTileGeometry& other) const
+        {
+            return geometry == other.geometry && connectorName == other.connectorName;
+        }
     };
 
     void storePreTileGeometry(const QString& windowId, const QRect& geometry, const QString& connectorName = {},
@@ -191,6 +205,9 @@ public:
     }
     void setUserSnappedClasses(const QSet<QString>& classes)
     {
+        if (m_userSnappedClasses == classes) {
+            return;
+        }
         m_userSnappedClasses = classes;
         Q_EMIT stateChanged();
     }
@@ -229,21 +246,33 @@ public:
 
     void setZoneAssignments(const QHash<QString, QStringList>& zones)
     {
+        if (m_windowZoneAssignments == zones) {
+            return;
+        }
         m_windowZoneAssignments = zones;
         Q_EMIT stateChanged();
     }
     void setPreTileGeometries(const QHash<QString, PreTileGeometry>& geos)
     {
+        if (m_preTileGeometries == geos) {
+            return;
+        }
         m_preTileGeometries = geos;
         Q_EMIT stateChanged();
     }
     void setFloatingWindows(const QSet<QString>& windows)
     {
+        if (m_floatingWindows == windows) {
+            return;
+        }
         m_floatingWindows = windows;
         Q_EMIT stateChanged();
     }
     void setPreFloatZoneAssignments(const QHash<QString, QStringList>& a)
     {
+        if (m_preFloatZoneAssignments == a) {
+            return;
+        }
         m_preFloatZoneAssignments = a;
         Q_EMIT stateChanged();
     }

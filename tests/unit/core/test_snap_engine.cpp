@@ -96,6 +96,7 @@ private Q_SLOTS:
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
         m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_wts->setSnapState(m_snapState);
     }
 
     void cleanup()
@@ -190,9 +191,6 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("app|uuid-snap");
         const QString screenName = QStringLiteral("DP-1");
 
-        // Both stores must be populated until WTS orchestration methods
-        // (commitSnap, resolveUnfloatGeometry) are migrated to SnapState.
-        m_snapState->assignWindowToZone(windowId, QStringLiteral("zone-1"), screenName, 0);
         m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), screenName, 0);
         QVERIFY(m_snapState->isWindowSnapped(windowId));
         QVERIFY(!m_snapState->isFloating(windowId));

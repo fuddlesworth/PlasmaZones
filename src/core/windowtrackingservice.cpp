@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
@@ -117,17 +118,16 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     m_windowScreenAssignments[windowId] = screenId;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
+    if (m_snapState) {
+        m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
+    }
+
     // Clear stale autotile-floated flag when a window is zone-assigned in snap mode.
     // A window that crossed from an autotile VS to a snap VS via drag keeps its
     // autotileFloated marker (only windowsReleasedFromTiling clears it). Without
     // this, a subsequent mode change on the autotile VS incorrectly processes the
     // window (already snapped on the snap VS) as if it were still autotile-managed.
     m_autotileFloatedWindows.remove(windowId);
-
-    // NOTE: Do NOT store to m_pendingRestoreQueues here!
-    // Pending assignments are for session persistence and should only be populated
-    // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
-    // windows to auto-restore on open, even when they shouldn't.
 
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
@@ -147,6 +147,10 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
 
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
+
+    if (m_snapState) {
+        m_snapState->unassignWindow(windowId);
+    }
 
     // Clear last-used zone if we're unsnapping from it. Track whether this
     // branch ran so the dirty mask accurately reflects what changed.
@@ -312,6 +316,10 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
         m_preTileGeometries[appId] = entry;
     }
 
+    if (m_snapState) {
+        m_snapState->storePreTileGeometry(windowId, geometry, connectorName, overwrite);
+    }
+
     // Memory cleanup: limit cache to prevent unbounded growth.
     // Each window stores up to 2 keys (windowId + appId), so evict until we're
     // back at the cap. Skip just-inserted keys.
@@ -382,6 +390,9 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
     if (removed) {
         qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
         markDirty(DirtyPreTileGeometries);
+    }
+    if (m_snapState) {
+        m_snapState->clearPreTileGeometry(windowId);
     }
 }
 
@@ -497,6 +508,11 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         // No appId removal — autotile-floated is per-instance, never shared.
         m_autotileFloatedWindows.remove(windowId);
     }
+
+    if (m_snapState) {
+        m_snapState->setFloating(windowId, floating);
+    }
+
     scheduleSaveState();
 }
 

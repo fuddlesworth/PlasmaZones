@@ -19,11 +19,9 @@
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
-class Zone;
-}
-
-namespace PhosphorZones {
 class LayoutRegistry;
+class SnapState;
+class Zone;
 }
 
 namespace PlasmaZones {
@@ -89,6 +87,11 @@ public:
     void setWindowRegistry(WindowRegistry* registry)
     {
         m_windowRegistry = registry;
+    }
+
+    void setSnapState(PhosphorZones::SnapState* state)
+    {
+        m_snapState = state;
     }
 
     /**
@@ -1225,6 +1228,7 @@ private:
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.

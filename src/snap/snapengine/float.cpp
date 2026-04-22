@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
+#include <PhosphorZones/SnapState.h>
 #include "core/logging.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"

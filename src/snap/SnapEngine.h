@@ -7,7 +7,6 @@
 #include "core/types.h"
 #include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorProtocol/WireTypes.h>
-#include <PhosphorZones/SnapState.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -19,6 +18,7 @@
 namespace PhosphorZones {
 class IZoneDetector;
 class LayoutRegistry;
+class SnapState;
 }
 
 namespace PlasmaZones {
@@ -188,11 +188,7 @@ public:
      * Must be set after construction and before any lifecycle or navigation
      * method is called. Not owned; must outlive SnapEngine.
      */
-    void setSnapState(PhosphorZones::SnapState* state)
-    {
-        Q_ASSERT(state);
-        m_snapState = state;
-    }
+    void setSnapState(PhosphorZones::SnapState* state);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone detection adaptor (for daemon-driven navigation)

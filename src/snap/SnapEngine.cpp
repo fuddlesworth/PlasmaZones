@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "SnapEngine.h"
+#include <PhosphorZones/SnapState.h>
 #include "autotile/AutotileEngine.h"
 #include "dbus/snapnavigationtargets.h"
 #include "dbus/windowtrackingadaptor.h"
@@ -32,6 +33,12 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrack
 // pimpl-style owned resolver without its full type being visible in the
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
+
+void SnapEngine::setSnapState(PhosphorZones::SnapState* state)
+{
+    Q_ASSERT(state);
+    m_snapState = state;
+}
 
 void SnapEngine::setAutotileEngine(AutotileEngine* engine)
 {

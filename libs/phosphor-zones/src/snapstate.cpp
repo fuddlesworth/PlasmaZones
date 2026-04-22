@@ -154,6 +154,10 @@ QJsonObject SnapState::toJson() const
 void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
                                    int virtualDesktop)
 {
+    if (zoneId.isEmpty()) {
+        unassignWindow(windowId);
+        return;
+    }
     assignWindowToZones(windowId, {zoneId}, screenId, virtualDesktop);
 }
 
@@ -452,6 +456,10 @@ QStringList SnapState::rotateAssignments(bool clockwise)
 void SnapState::updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
                                    int virtualDesktop)
 {
+    if (m_lastUsedZoneId == zoneId && m_lastUsedScreenId == screenId && m_lastUsedZoneClass == windowClass
+        && m_lastUsedDesktop == virtualDesktop) {
+        return;
+    }
     m_lastUsedZoneId = zoneId;
     m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = windowClass;
@@ -480,7 +488,11 @@ void SnapState::recordSnapIntent(const QString& windowClass, bool wasUserInitiat
 
 void SnapState::markAsAutoSnapped(const QString& windowId)
 {
+    if (m_autoSnappedWindows.contains(windowId)) {
+        return;
+    }
     m_autoSnappedWindows.insert(windowId);
+    Q_EMIT stateChanged();
 }
 
 bool SnapState::isAutoSnapped(const QString& windowId) const
@@ -531,6 +543,11 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
         m_windowZoneAssignments.remove(windowId);
         m_windowScreenAssignments.remove(windowId);
         m_windowDesktopAssignments.remove(windowId);
+        m_floatingWindows.remove(windowId);
+        m_preTileGeometries.remove(windowId);
+        m_preFloatZoneAssignments.remove(windowId);
+        m_preFloatScreenAssignments.remove(windowId);
+        m_autoSnappedWindows.remove(windowId);
         ++pruned;
     }
     if (pruned > 0) {
@@ -544,10 +561,6 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
 SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
 {
     const QString screenId = json.value(QLatin1String("screenId")).toString();
-    if (screenId.isEmpty()) {
-        return nullptr;
-    }
-
     auto* state = new SnapState(screenId, parent);
 
     const QJsonObject zones = json.value(QLatin1String("zoneAssignments")).toObject();
