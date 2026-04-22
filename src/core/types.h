@@ -4,11 +4,14 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorEngineApi/NavigationContext.h>
 #include <QString>
 #include <QStringList>
 #include <QRect>
 
 namespace PlasmaZones {
+
+using NavigationContext = PhosphorEngineApi::NavigationContext;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared Types - Parameter Objects for Complex Method Signatures

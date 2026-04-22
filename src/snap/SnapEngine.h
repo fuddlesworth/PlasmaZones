@@ -22,7 +22,6 @@ class LayoutRegistry;
 
 namespace PlasmaZones {
 
-using NavigationContext = PhosphorEngineApi::NavigationContext;
 using PhosphorProtocol::CycleTargetResult;
 using PhosphorProtocol::FocusTargetResult;
 using PhosphorProtocol::MoveTargetResult;

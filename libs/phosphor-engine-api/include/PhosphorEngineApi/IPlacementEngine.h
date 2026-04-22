@@ -121,8 +121,11 @@ public:
     // State access
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Per-screen state object for the given screen. Returns nullptr if
-    /// this engine does not manage the screen.
+    /// Per-screen state object for the given screen. May return nullptr
+    /// if the engine does not manage the screen OR if per-screen state
+    /// ownership has not yet been wired (e.g., SnapEngine before PR 2).
+    /// Callers must not use a non-null return as a proxy for "engine
+    /// manages this screen" — use isActiveOnScreen() for that check.
     virtual IPlacementState* stateForScreen(const QString& screenId) = 0;
     virtual const IPlacementState* stateForScreen(const QString& screenId) const = 0;
 };

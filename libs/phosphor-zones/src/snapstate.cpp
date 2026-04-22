@@ -116,6 +116,10 @@ QJsonObject SnapState::toJson() const
 
 void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneId)
 {
+    if (zoneId.isEmpty()) {
+        unassignWindow(windowId);
+        return;
+    }
     m_floatingWindows.remove(windowId);
     m_windowZoneAssignments[windowId] = {zoneId};
     Q_EMIT windowAssigned(windowId, zoneId);
@@ -326,7 +330,10 @@ QStringList SnapState::rotateAssignments(bool clockwise)
         if (originalZones.size() == 1) {
             m_windowZoneAssignments[windowId] = {sortedPrimaryZones[i]};
         } else {
-            // Multi-zone: shift by the same offset as the primary zone moved
+            // Multi-zone: shift by the same offset as the primary zone moved.
+            // Zones not in sortedPrimaryZones (i.e., spanned zones that no other
+            // window uses as a primary) pass through unchanged — partial rotation
+            // is acceptable since such zones have no rotation target.
             int srcIdx = sortedPrimaryZones.indexOf(originalZones.first());
             int delta = i - srcIdx;
             QStringList rotated;
@@ -387,6 +394,9 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
 
     const QJsonObject preTile = json.value(QLatin1String("preTileGeometries")).toObject();
     for (auto it = preTile.constBegin(); it != preTile.constEnd(); ++it) {
+        if (it.key().isEmpty()) {
+            continue;
+        }
         const QJsonObject geo = it->toObject();
         PreTileGeometry ptg;
         ptg.geometry = QRect(geo.value(QLatin1String("x")).toInt(), geo.value(QLatin1String("y")).toInt(),
