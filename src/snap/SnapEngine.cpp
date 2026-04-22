@@ -99,7 +99,7 @@ void SnapEngine::setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IEngineLifecycle implementation
+// IPlacementEngine — lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
@@ -158,6 +158,44 @@ void SnapEngine::loadState()
     if (m_loadFn) {
         m_loadFn();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — navigation overrides (thin delegates)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
+{
+    rotateWindowsInLayout(clockwise, ctx.screenId);
+}
+
+void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
+{
+    resnapToNewLayout();
+}
+
+void SnapEngine::snapAllWindows(const NavigationContext& ctx)
+{
+    snapAllWindows(ctx.screenId);
+}
+
+void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
+{
+    pushFocusedToEmptyZone(ctx);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — state access (placeholder)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/)
+{
+    return nullptr;
+}
+
+const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/) const
+{
+    return nullptr;
 }
 
 } // namespace PlasmaZones

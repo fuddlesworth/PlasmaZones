@@ -110,8 +110,8 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        PhosphorTiles::TilingState* state1 = engine.stateForScreen(QStringLiteral("eDP-1"));
-        PhosphorTiles::TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(QStringLiteral("HDMI-1"));
         state1->addWindow(QStringLiteral("win1"));
         state2->addWindow(QStringLiteral("win2"));
 
@@ -136,8 +136,8 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.8;
         engine.applyPerScreenConfig(screen2, overrides);
 
-        PhosphorTiles::TilingState* state1 = engine.stateForScreen(screen1);
-        PhosphorTiles::TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
 
         QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.8));
 
@@ -168,7 +168,7 @@ private Q_SLOTS:
         }
         QCoreApplication::processEvents();
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
 
         auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));

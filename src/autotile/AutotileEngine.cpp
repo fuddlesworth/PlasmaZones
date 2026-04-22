@@ -402,7 +402,7 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                     auto oldIt = m_screenStates.find(oldKey);
                     if (oldIt != m_screenStates.end()) {
                         // If a state already exists at the target key (e.g., created
-                        // by stateForScreen() during a transient lookup), delete it —
+                        // by tilingStateForScreen() during a transient lookup), delete it —
                         // the pinned state has the actual windows.
                         auto existingIt = m_screenStates.find(newKey);
                         if (existingIt != m_screenStates.end()) {
@@ -468,10 +468,10 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     m_autotileScreens = screens;
 
     // R1 fix: Retile newly-added screens without requiring pre-existing state.
-    // stateForScreen() creates the PhosphorTiles::TilingState lazily, so windows that arrive
+    // tilingStateForScreen() creates the PhosphorTiles::TilingState lazily, so windows that arrive
     // shortly after (via KWin effect re-notification) have a state ready.
     for (const QString& screenId : added) {
-        stateForScreen(screenId);
+        tilingStateForScreen(screenId);
         // Skip retile if windows are expected to arrive shortly (pending initial
         // order from seedAutotileOrderForScreen). The KWin effect sends windowOpened
         // D-Bus calls after receiving autotileScreensChanged, and each insertWindow
@@ -496,7 +496,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             // mode toggle the windows are already open — they never arrive via D-Bus.
             const QStringList order = m_pendingInitialOrders.take(screenId);
             m_pendingOrderGeneration.remove(screenId);
-            PhosphorTiles::TilingState* ts = stateForScreen(screenId);
+            PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey key = currentKeyForScreen(screenId);
                 auto savedIt = m_savedFloatingWindows.find(key);
@@ -767,11 +767,11 @@ PhosphorTiles::TilingAlgorithm* AutotileEngine::currentAlgorithm() const
 // Tiling state access
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorTiles::TilingState* AutotileEngine::stateForScreen(const QString& screenId)
+PhosphorTiles::TilingState* AutotileEngine::tilingStateForScreen(const QString& screenId)
 {
     // Validate screenId - don't create state for empty name
     if (screenId.isEmpty()) {
-        qCWarning(lcAutotile) << "AutotileEngine::stateForScreen: empty screen name";
+        qCWarning(lcAutotile) << "AutotileEngine::tilingStateForScreen: empty screen name";
         return nullptr;
     }
 
@@ -788,7 +788,7 @@ PhosphorTiles::TilingState* AutotileEngine::stateForScreen(const QString& screen
     // Reject unknown screens to prevent unbounded state creation from bogus
     // D-Bus callers. Session bus only (same user), but still good hygiene.
     if (!isKnownScreen(screenId)) {
-        qCWarning(lcAutotile) << "AutotileEngine::stateForScreen: unknown screen" << screenId;
+        qCWarning(lcAutotile) << "AutotileEngine::tilingStateForScreen: unknown screen" << screenId;
         return nullptr;
     }
 
@@ -814,7 +814,7 @@ PhosphorTiles::TilingState* AutotileEngine::stateForKey(const TilingStateKey& ke
         return it.value();
     }
 
-    // Reject unknown screens (same validation as stateForScreen)
+    // Reject unknown screens (same validation as tilingStateForScreen)
     if (!isKnownScreen(key.screenId)) {
         qCWarning(lcAutotile) << "AutotileEngine::stateForKey: unknown screen" << key.screenId;
         return nullptr;
@@ -940,7 +940,7 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
     // Only take effect when the screen's PhosphorTiles::TilingState is empty (no prior windows —
     // including floating — from session restore). Uses windowCount() instead of
     // tiledWindows() to also detect floating-only states.
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (state && state->windowCount() > 0) {
         qCDebug(lcAutotile) << "setInitialWindowOrder: screen" << screenId << "already has" << state->windowCount()
                             << "windows, ignoring pre-seeded order";
@@ -1272,7 +1272,7 @@ void AutotileEngine::swapWindows(const QString& rawId1, const QString& rawId2)
         return;
     }
 
-    // Use the stored key — not stateForScreen(currentContext) — to avoid
+    // Use the stored key — not tilingStateForScreen(currentContext) — to avoid
     // wrong-desktop lookups from stale D-Bus calls after a context switch.
     PhosphorTiles::TilingState* state = m_screenStates.value(key1);
     if (!state) {
@@ -1496,7 +1496,7 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
     PhosphorTiles::TilingState* state = nullptr;
 
     if (isAutotileScreen(screenId)) {
-        state = stateForScreen(screenId);
+        state = tilingStateForScreen(screenId);
         if (state && !state->containsWindow(windowId)) {
             state = nullptr; // Window not on this screen
         }
@@ -1526,7 +1526,7 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
         // float on snap screen → move to autotile screen → toggle float to tile.
         // The windowFloating flag is checked via the callback to avoid coupling to WTS.
         if (isAutotileScreen(screenId) && m_isWindowFloatingFn && m_isWindowFloatingFn(windowId)) {
-            state = stateForScreen(screenId);
+            state = tilingStateForScreen(screenId);
             if (state && !state->containsWindow(windowId)) {
                 state->addWindow(windowId);
                 state->setFloating(windowId, true);
@@ -1570,7 +1570,7 @@ void AutotileEngine::adoptWindowAsFloating(const QString& windowId, const QStrin
     if (m_windowToStateKey.contains(windowId)) {
         return;
     }
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state || state->containsWindow(windowId)) {
         return;
     }
@@ -1868,7 +1868,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         return;
     }
 
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     const int maxWin = effectiveMaxWindows(screenId);
     if (state && state->tiledWindowCount() >= maxWin) {
         qCDebug(lcAutotile) << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
@@ -1931,7 +1931,7 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
     qCInfo(lcAutotile) << "onWindowRemoved:" << windowId << "screen=" << screenId;
 
     // Notify algorithm via lifecycle hook before removal
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
     if (algo && algo->supportsLifecycleHooks() && state) {
         const int idx = state->tiledWindows().indexOf(windowId);
@@ -2002,7 +2002,7 @@ void AutotileEngine::onLayoutChanged(PhosphorZones::Layout* layout)
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
 {
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state) {
         qCWarning(lcAutotile) << "AutotileEngine::insertWindow: failed to get state for screen" << screenId;
         return false;
@@ -2241,7 +2241,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         return false;
     }
 
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state) {
         return false;
     }
@@ -2423,7 +2423,7 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
         // A preview is already active — cancel it first so we don't leak state.
         cancelDragInsertPreview();
     }
-    PhosphorTiles::TilingState* targetState = stateForScreen(screenId);
+    PhosphorTiles::TilingState* targetState = tilingStateForScreen(screenId);
     if (!targetState) {
         return false;
     }
@@ -2550,7 +2550,7 @@ void AutotileEngine::updateDragInsertPreview(int insertIndex)
     if (!m_dragInsertPreview) {
         return;
     }
-    PhosphorTiles::TilingState* state = stateForScreen(m_dragInsertPreview->targetScreenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(m_dragInsertPreview->targetScreenId);
     if (!state) {
         return;
     }
@@ -2613,7 +2613,7 @@ void AutotileEngine::cancelDragInsertPreview()
     const DragInsertPreview p = *m_dragInsertPreview;
     m_dragInsertPreview.reset();
 
-    PhosphorTiles::TilingState* targetState = stateForScreen(p.targetScreenId);
+    PhosphorTiles::TilingState* targetState = tilingStateForScreen(p.targetScreenId);
 
     // Restore eviction first: setFloating(false) returns the victim to its
     // original raw-order slot, making the subsequent restoration logic see
@@ -2673,7 +2673,7 @@ void AutotileEngine::cancelDragInsertPreview()
 
 int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
 {
-    // Const-correct lookup: avoid stateForScreen() which may create state.
+    // Const-correct lookup: avoid tilingStateForScreen() which may create state.
     auto it = m_screenStates.constFind(currentKeyForScreen(screenId));
     if (it == m_screenStates.constEnd() || !it.value()) {
         return -1;
@@ -2715,7 +2715,7 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
 
 void AutotileEngine::applyTiling(const QString& screenId)
 {
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state) {
         return;
     }
@@ -2962,7 +2962,7 @@ void AutotileEngine::backfillWindows()
         // the deferred retile fires, creating a feedback loop where the KWin
         // effect processes float state changes mid-transition.
 
-        PhosphorTiles::TilingState* state = stateForScreen(screenId);
+        PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
         if (!state) {
             continue;
         }
@@ -2991,7 +2991,7 @@ void AutotileEngine::backfillWindows()
 
 void AutotileEngine::retileScreen(const QString& screenId)
 {
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state) {
         return;
     }
@@ -3217,7 +3217,7 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
         return false;
     }
 
-    PhosphorTiles::TilingState* state = stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state) {
         return false;
     }
@@ -3326,6 +3326,93 @@ void AutotileEngine::setFocusNewWindows(bool enabled)
     if (m_config) {
         m_config->focusNewWindows = enabled;
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — navigation overrides
+//
+// Each method absorbs what AutotileNavigationAdapter did: translate
+// the user-intent-shaped IPlacementEngine call into the existing
+// concrete AutotileEngine method with the right parameters.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+{
+    focusInDirection(direction, QStringLiteral("focus"));
+}
+
+void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+{
+    // In autotile, "move in direction" is implemented as swap-with-neighbour
+    // in the tiling order — the only way to move is to trade places with
+    // the neighbour. OSD label "move" keeps the user-facing wording.
+    swapFocusedInDirection(direction, QStringLiteral("move"));
+}
+
+void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+{
+    swapFocusedInDirection(direction, QStringLiteral("swap"));
+}
+
+void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& /*ctx*/)
+{
+    moveFocusedToPosition(position);
+}
+
+void AutotileEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
+{
+    rotateWindows(clockwise, ctx.screenId);
+}
+
+void AutotileEngine::reapplyLayout(const NavigationContext& ctx)
+{
+    retile(ctx.screenId);
+}
+
+void AutotileEngine::snapAllWindows(const NavigationContext& ctx)
+{
+    // Autotile has no distinct "snap all" — retile picks up every window
+    // the engine is tracking and inserts any new ones into the layout.
+    retile(ctx.screenId);
+}
+
+void AutotileEngine::toggleFocusedFloat(const NavigationContext& /*ctx*/)
+{
+    toggleFocusedWindowFloat();
+}
+
+void AutotileEngine::cycleFocus(bool forward, const NavigationContext& /*ctx*/)
+{
+    const QString dir = forward ? QStringLiteral("right") : QStringLiteral("left");
+    focusInDirection(dir, QStringLiteral("cycle"));
+}
+
+void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
+{
+    // Autotile has no concept of empty zones — every tracked window is
+    // placed by the layout algorithm. Deliberate no-op so the shortcut
+    // becomes a harmless press in autotile mode.
+}
+
+void AutotileEngine::restoreFocusedWindow(const NavigationContext& /*ctx*/)
+{
+    // "Restore" in autotile means pulling the focused window out of the
+    // tiling layout — toggling its float state achieves exactly that.
+    toggleFocusedWindowFloat();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — state access (placeholder)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& /*screenId*/)
+{
+    return nullptr;
+}
+
+const PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const QString& /*screenId*/) const
+{
+    return nullptr;
 }
 
 } // namespace PlasmaZones

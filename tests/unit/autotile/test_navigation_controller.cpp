@@ -145,7 +145,7 @@ private Q_SLOTS:
         QVERIFY(foundRotateFeedback);
 
         // Verify the window order actually rotated: [win1,win2,win3] -> [win3,win1,win2]
-        PhosphorTiles::TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         QStringList expected = {QStringLiteral("win3"), QStringLiteral("win1"), QStringLiteral("win2")};
         QCOMPARE(state->windowOrder(), expected);
     }
@@ -164,7 +164,7 @@ private Q_SLOTS:
         // win1 is at index 0. Swapping "left" (backward) should wrap to win3.
         engine->swapFocusedInDirection(QStringLiteral("left"), QStringLiteral("move"));
 
-        PhosphorTiles::TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         // After swap: win1 and win3 exchange positions
         // [win1, win2, win3] -> swap(0, 2) -> [win3, win2, win1]
         QCOMPARE(state->windowIndex(QStringLiteral("win1")), 2);
@@ -185,7 +185,7 @@ private Q_SLOTS:
         // Position 1 should map to index 0 (one-based to zero-based)
         engine->moveFocusedToPosition(1);
 
-        PhosphorTiles::TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         // win3 was at index 2, should now be at tiled position 0
         QCOMPARE(state->tiledWindowIndex(QStringLiteral("win3")), 0);
 
@@ -217,8 +217,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
         QCoreApplication::processEvents();
 
-        PhosphorTiles::TilingState* state1 = engine.stateForScreen(screen1);
-        PhosphorTiles::TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
 
         // Set a known initial ratio
         state1->setSplitRatio(0.5);
@@ -247,7 +247,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         // No focused window set, no m_activeScreen set
@@ -270,7 +270,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         state->setFocusedWindow(QStringLiteral("win1"));

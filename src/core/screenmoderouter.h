@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "plasmazones_export.h"
 
@@ -12,13 +13,6 @@
 namespace PhosphorZones {
 class LayoutRegistry;
 }
-
-namespace PlasmaZones {
-
-class AutotileEngine;
-class IEngineLifecycle;
-class INavigationActions;
-class SnapEngine;
 
 /**
  * @brief Single source of truth for "which engine owns screen X".
@@ -41,22 +35,29 @@ class SnapEngine;
  * hold any state of its own. Construction is cheap, it should be
  * held by the daemon and passed by reference/pointer to consumers.
  */
+namespace PlasmaZones {
+
+/**
+ * @brief Single source of truth for "which engine owns screen X".
+ *
+ * Every window-lifecycle and cleanup entry point in the daemon and its
+ * D-Bus adaptors should route through this class instead of calling
+ * `m_autotileEngine->isAutotileScreen()` / `modeForScreen()` ad hoc at
+ * each site. Engines trust that their callers routed correctly — no
+ * defensive mode checks inside SnapEngine or AutotileEngine.
+ *
+ * The router is a thin facade over existing lookups — it does not
+ * hold any state of its own. Construction is cheap, it should be
+ * held by the daemon and passed by reference/pointer to consumers.
+ */
 class PLASMAZONES_EXPORT ScreenModeRouter
 {
 public:
-    /// Construct with references to the engines and layout manager. None of
-    /// the pointers are owned; they must outlive the router. All three are
-    /// required at construction time — the daemon's init order guarantees
-    /// the engines exist before the router. There is no late-wiring path:
-    /// passing nullptr for any dependency is a programming error.
-    ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, SnapEngine* snapEngine,
-                     AutotileEngine* autotileEngine);
-
-    /// Wire navigation action adapters. Must be called once at daemon startup
-    /// after the adapters are constructed (which requires the engines and
-    /// WindowTrackingAdaptor to exist). Calling navigatorFor() before this
-    /// returns nullptr for all screens. Adapters are not owned.
-    void setNavigationAdapters(INavigationActions* snapNavigator, INavigationActions* autotileNavigator);
+    /// Construct with references to the engines (as IPlacementEngine*)
+    /// and layout manager. None of the pointers are owned; they must
+    /// outlive the router.
+    ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngineApi::IPlacementEngine* snapEngine,
+                     PhosphorEngineApi::IPlacementEngine* autotileEngine);
 
     /// Current mode for @p screenId. Consults the autotile engine's
     /// live set first (mode is derived from assignment + context) and
@@ -70,20 +71,7 @@ public:
     /// the returned pointer as the only legitimate route into per-window
     /// behaviour for that screen — they must not reach into a specific
     /// engine directly.
-    IEngineLifecycle* engineFor(const QString& screenId) const;
-
-    /// Navigation action dispatcher for @p screenId. Returns the adapter
-    /// for whichever engine owns placement on that screen, or nullptr if
-    /// setNavigationAdapters() hasn't been called yet (early daemon
-    /// startup). Callers should use this as the single dispatch point for
-    /// user-facing navigation shortcuts instead of branching on
-    /// isAutotileMode / isSnapMode and calling engine methods ad hoc.
-    ///
-    /// Replaces the ~20 ad-hoc
-    ///   `if (isAutotileScreen(screenId)) { autotile->foo(...) }
-    ///    else { windowTrackingAdaptor->bar(...) }`
-    /// branches that previously lived in daemon/navigation.cpp.
-    INavigationActions* navigatorFor(const QString& screenId) const;
+    PhosphorEngineApi::IPlacementEngine* engineFor(const QString& screenId) const;
 
     /// Convenience predicates. @see modeFor for the fallback semantics.
     bool isSnapMode(const QString& screenId) const;
@@ -102,10 +90,8 @@ public:
 
 private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
-    SnapEngine* m_snapEngine;
-    AutotileEngine* m_autotileEngine;
-    INavigationActions* m_snapNavigator = nullptr;
-    INavigationActions* m_autotileNavigator = nullptr;
+    PhosphorEngineApi::IPlacementEngine* m_snapEngine;
+    PhosphorEngineApi::IPlacementEngine* m_autotileEngine;
 };
 
 } // namespace PlasmaZones

@@ -184,7 +184,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.75;
         engine.applyPerScreenConfig(screen, overrides);
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(qFuzzyCompare(state->splitRatio(), 0.75));
 
@@ -199,7 +199,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         // Add windows so master count can be verified
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         state->addWindow(QStringLiteral("win3"));
@@ -218,7 +218,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->setSplitRatio(0.75);
 
         // Override with a new algorithm but NO explicit SplitRatio override.
@@ -246,7 +246,7 @@ private Q_SLOTS:
         engine.config()->splitRatio = 0.6;
         engine.config()->masterCount = 1;
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
 

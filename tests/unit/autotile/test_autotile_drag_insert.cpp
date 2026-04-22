@@ -50,7 +50,7 @@ private:
     /// window is intentionally untracked by the engine.
     void addWindowsToState(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screenId);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenId);
         Q_ASSERT(state);
         for (const QString& id : windowIds) {
             state->addWindow(id);
@@ -121,7 +121,7 @@ private Q_SLOTS:
         // Move A from index 0 to index 2
         engine.updateDragInsertPreview(2);
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         const QStringList tiled = state->tiledWindows();
         QCOMPARE(tiled.size(), 3);
@@ -142,7 +142,7 @@ private Q_SLOTS:
 
         QVERIFY(!engine.hasDragInsertPreview());
         // Order should persist after commit
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QCOMPARE(state->tiledWindows()[2], QStringLiteral("A"));
     }
 
@@ -157,14 +157,14 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
 
-        const QStringList originalOrder = engine.stateForScreen(screen)->tiledWindows();
+        const QStringList originalOrder = engine.tilingStateForScreen(screen)->tiledWindows();
 
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
         engine.updateDragInsertPreview(2);
         engine.cancelDragInsertPreview();
 
         QVERIFY(!engine.hasDragInsertPreview());
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindows(), originalOrder);
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows(), originalOrder);
     }
 
     // =========================================================================
@@ -185,8 +185,8 @@ private Q_SLOTS:
         QVERIFY(engine.hasDragInsertPreview());
 
         // A should be gone from screen1 and present on screen2
-        QVERIFY(!engine.stateForScreen(s1)->tiledWindows().contains(QStringLiteral("A")));
-        QVERIFY(engine.stateForScreen(s2)->tiledWindows().contains(QStringLiteral("A")));
+        QVERIFY(!engine.tilingStateForScreen(s1)->tiledWindows().contains(QStringLiteral("A")));
+        QVERIFY(engine.tilingStateForScreen(s2)->tiledWindows().contains(QStringLiteral("A")));
     }
 
     void testCrossScreen_cancelRestoresOriginalScreen()
@@ -198,16 +198,16 @@ private Q_SLOTS:
         openWindows(engine, s1, {QStringLiteral("A"), QStringLiteral("B")});
         openWindows(engine, s2, {QStringLiteral("X"), QStringLiteral("Y")});
 
-        const QStringList s1Original = engine.stateForScreen(s1)->tiledWindows();
-        const QStringList s2Original = engine.stateForScreen(s2)->tiledWindows();
+        const QStringList s1Original = engine.tilingStateForScreen(s1)->tiledWindows();
+        const QStringList s2Original = engine.tilingStateForScreen(s2)->tiledWindows();
 
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), s2));
         engine.cancelDragInsertPreview();
 
         QVERIFY(!engine.hasDragInsertPreview());
         // A should be back on screen1, screen2 unchanged
-        QCOMPARE(engine.stateForScreen(s1)->tiledWindows(), s1Original);
-        QCOMPARE(engine.stateForScreen(s2)->tiledWindows(), s2Original);
+        QCOMPARE(engine.tilingStateForScreen(s1)->tiledWindows(), s1Original);
+        QCOMPARE(engine.tilingStateForScreen(s2)->tiledWindows(), s2Original);
     }
 
     // =========================================================================
@@ -223,7 +223,7 @@ private Q_SLOTS:
 
         // "newcomer" is not tracked by the engine at all
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
-        QVERIFY(engine.stateForScreen(screen)->tiledWindows().contains(QStringLiteral("newcomer")));
+        QVERIFY(engine.tilingStateForScreen(screen)->tiledWindows().contains(QStringLiteral("newcomer")));
     }
 
     void testFreshAdoption_cancelRemovesWindow()
@@ -233,13 +233,13 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
         addWindowsToState(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
 
-        const QStringList originalOrder = engine.stateForScreen(screen)->tiledWindows();
+        const QStringList originalOrder = engine.tilingStateForScreen(screen)->tiledWindows();
 
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
         engine.cancelDragInsertPreview();
 
         QVERIFY(!engine.hasDragInsertPreview());
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindows(), originalOrder);
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows(), originalOrder);
     }
 
     // =========================================================================
@@ -305,9 +305,9 @@ private Q_SLOTS:
 
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
         // A starts at index 0, updating to 0 should be a no-op
-        const QStringList before = engine.stateForScreen(screen)->tiledWindows();
+        const QStringList before = engine.tilingStateForScreen(screen)->tiledWindows();
         engine.updateDragInsertPreview(0);
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindows(), before);
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows(), before);
     }
 
     // =========================================================================
@@ -324,7 +324,7 @@ private Q_SLOTS:
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("C"), screen));
         // Negative should clamp to 0
         engine.updateDragInsertPreview(-5);
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindows()[0], QStringLiteral("C"));
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows()[0], QStringLiteral("C"));
     }
 
     void testUpdate_clampsOverflowIndex()
@@ -337,7 +337,7 @@ private Q_SLOTS:
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
         // Index 100 should clamp to last (2)
         engine.updateDragInsertPreview(100);
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindows()[2], QStringLiteral("A"));
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows()[2], QStringLiteral("A"));
     }
 
     // =========================================================================
@@ -390,18 +390,18 @@ private Q_SLOTS:
         engine.config()->maxWindows = 3;
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
 
-        const QStringList originalTiled = engine.stateForScreen(screen)->tiledWindows();
+        const QStringList originalTiled = engine.tilingStateForScreen(screen)->tiledWindows();
         QCOMPARE(originalTiled.size(), 3);
 
         // Fresh adoption pushes count to 4 > maxWindows=3 → last neighbour is floated.
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
         QVERIFY(engine.hasDragInsertPreview());
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindowCount(), 3);
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindowCount(), 3);
 
         // Cancel must unfloat the evicted neighbour and remove the newcomer.
         engine.cancelDragInsertPreview();
         QVERIFY(!engine.hasDragInsertPreview());
-        QCOMPARE(engine.stateForScreen(screen)->tiledWindows(), originalTiled);
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows(), originalTiled);
     }
 
     void testEviction_commitEmitsBatchFloated()

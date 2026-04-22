@@ -409,7 +409,7 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
         }
     }
 
-    // Dispatch to the IEngineLifecycle toggle path (SnapEngine::toggleWindowFloat
+    // Dispatch to the IPlacementEngine toggle path (SnapEngine::toggleWindowFloat
     // lives in snapengine/float.cpp). No need to route through WTA —
     // the router already ensured this screen is snap-mode.
     toggleWindowFloat(windowId, screenId);

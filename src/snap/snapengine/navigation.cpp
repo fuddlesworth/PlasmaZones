@@ -21,10 +21,8 @@ namespace PlasmaZones {
 // side: it computes zone geometry via the target helpers in
 // src/dbus/windowtrackingadaptor/targets.cpp and emits applyGeometryRequested.
 //
-// The IEngineLifecycle interface (iwindowengine.h) is deliberately narrowed
-// to lifecycle events only — lifecycle is the only set of operations where
-// both engines have meaningful implementations. Navigation is autotile-
-// specific and the daemon dispatches it on the concrete AutotileEngine
+// The IPlacementEngine interface unifies lifecycle + navigation so both
+// engines are dispatched through a single polymorphic call. Navigation
 // pointer, not polymorphically.
 //
 // What remains here is snap-mode batch operations (layout switch resnap,
