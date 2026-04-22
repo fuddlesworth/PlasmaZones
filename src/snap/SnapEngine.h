@@ -190,6 +190,7 @@ public:
      */
     void setSnapState(PhosphorZones::SnapState* state)
     {
+        Q_ASSERT(state);
         m_snapState = state;
     }
 

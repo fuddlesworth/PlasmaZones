@@ -82,10 +82,12 @@ public:
     void setScreenAssignments(const QHash<QString, QString>& s)
     {
         m_windowScreenAssignments = s;
+        Q_EMIT stateChanged();
     }
     void setDesktopAssignments(const QHash<QString, int>& d)
     {
         m_windowDesktopAssignments = d;
+        Q_EMIT stateChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -100,7 +102,6 @@ public:
     QStringList preFloatZones(const QString& windowId) const;
     QString preFloatScreen(const QString& windowId) const;
     void clearPreFloatZone(const QString& windowId);
-    void clearPreFloatZoneForWindow(const QString& windowId);
 
     const QHash<QString, QStringList>& preFloatZoneAssignments() const
     {
@@ -113,6 +114,7 @@ public:
     void setPreFloatScreenAssignments(const QHash<QString, QString>& a)
     {
         m_preFloatScreenAssignments = a;
+        Q_EMIT stateChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -150,8 +152,13 @@ public:
     // Last-Used Zone Tracking
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Update last-used zone and emit stateChanged.
     void updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
                             int virtualDesktop);
+
+    /// Restore last-used zone fields from persistence without emitting stateChanged.
+    void restoreLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass, int desktop);
+
     QString lastUsedZoneId() const
     {
         return m_lastUsedZoneId;
@@ -172,7 +179,6 @@ public:
     {
         m_lastUsedZoneClass = newClass;
     }
-    void setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass, int desktop);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Auto-Snap Bookkeeping
@@ -186,6 +192,7 @@ public:
     void setUserSnappedClasses(const QSet<QString>& classes)
     {
         m_userSnappedClasses = classes;
+        Q_EMIT stateChanged();
     }
 
     void markAsAutoSnapped(const QString& windowId);
