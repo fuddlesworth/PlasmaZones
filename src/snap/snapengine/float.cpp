@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
+#include <PhosphorZones/SnapState.h>
 #include "core/logging.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
@@ -14,8 +15,8 @@ namespace PlasmaZones {
 
 void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& screenId)
 {
-    const bool currentlyFloating = m_windowTracker->isWindowFloating(windowId);
-    const bool currentlySnapped = m_windowTracker->isWindowSnapped(windowId);
+    const bool currentlyFloating = m_snapState->isFloating(windowId);
+    const bool currentlySnapped = m_snapState->isWindowSnapped(windowId);
 
     if (!currentlyFloating && !currentlySnapped) {
         return;
@@ -45,7 +46,7 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     // 1. Try the window's tracked screen from WTS (most accurate)
     // 2. Fall back to m_lastActiveScreenId (from last windowFocused)
     // 3. Fall back to empty (unfloatToZone/applyGeometryForFloat handle gracefully)
-    QString screenId = m_windowTracker->screenAssignments().value(windowId);
+    QString screenId = m_snapState->screenAssignments().value(windowId);
     if (screenId.isEmpty()) {
         screenId = m_lastActiveScreenId;
     }

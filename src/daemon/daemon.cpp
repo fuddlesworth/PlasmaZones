@@ -58,6 +58,7 @@
 #include "../autotile/AutotileEngine.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
@@ -519,6 +520,14 @@ bool Daemon::init()
     m_snapEngine =
         std::make_unique<SnapEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_zoneDetector.get(),
                                      m_settings.get(), m_virtualDesktopManager.get(), this);
+
+    // Wire SnapState — shared between SnapEngine (reads) and WTS (write
+    // propagation). SnapEngine delegates pure state reads/writes; WTS
+    // propagates mutations from commitSnap/commitMultiZoneSnap so the two
+    // stores stay in sync during the transitional dual-store period.
+    auto* snapState = new PhosphorZones::SnapState(QString(), m_snapEngine.get());
+    m_snapEngine->setSnapState(snapState);
+    m_windowTrackingAdaptor->service()->setSnapState(snapState);
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.

@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
@@ -117,17 +118,16 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     m_windowScreenAssignments[windowId] = screenId;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
+    if (m_snapState) {
+        m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
+    }
+
     // Clear stale autotile-floated flag when a window is zone-assigned in snap mode.
     // A window that crossed from an autotile VS to a snap VS via drag keeps its
     // autotileFloated marker (only windowsReleasedFromTiling clears it). Without
     // this, a subsequent mode change on the autotile VS incorrectly processes the
     // window (already snapped on the snap VS) as if it were still autotile-managed.
     m_autotileFloatedWindows.remove(windowId);
-
-    // NOTE: Do NOT store to m_pendingRestoreQueues here!
-    // Pending assignments are for session persistence and should only be populated
-    // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
-    // windows to auto-restore on open, even when they shouldn't.
 
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
@@ -148,6 +148,10 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
 
+    if (m_snapState) {
+        m_snapState->unassignWindow(windowId);
+    }
+
     // Clear last-used zone if we're unsnapping from it. Track whether this
     // branch ran so the dirty mask accurately reflects what changed.
     bool lastUsedCleared = false;
@@ -156,6 +160,9 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
         m_lastUsedScreenId.clear();
         m_lastUsedZoneClass.clear();
         m_lastUsedDesktop = 0;
+        if (m_snapState) {
+            m_snapState->updateLastUsedZone({}, {}, {}, 0);
+        }
         lastUsedCleared = true;
     }
 
@@ -312,6 +319,10 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
         m_preTileGeometries[appId] = entry;
     }
 
+    if (m_snapState) {
+        m_snapState->storePreTileGeometry(windowId, geometry, connectorName, overwrite);
+    }
+
     // Memory cleanup: limit cache to prevent unbounded growth.
     // Each window stores up to 2 keys (windowId + appId), so evict until we're
     // back at the cap. Skip just-inserted keys.
@@ -382,6 +393,9 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
     if (removed) {
         qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
         markDirty(DirtyPreTileGeometries);
+    }
+    if (m_snapState) {
+        m_snapState->clearPreTileGeometry(windowId);
     }
 }
 
@@ -497,6 +511,11 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         // No appId removal — autotile-floated is per-instance, never shared.
         m_autotileFloatedWindows.remove(windowId);
     }
+
+    if (m_snapState) {
+        m_snapState->setFloating(windowId, floating);
+    }
+
     scheduleSaveState();
 }
 
@@ -563,7 +582,29 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         // the two calls cannot silently lose pre-float restore state.
         markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
 
-        unassignWindow(windowId);
+        if (m_snapState) {
+            m_snapState->unsnapForFloat(windowId);
+        }
+
+        // Inline WTS-side unassign without re-propagating to SnapState (already
+        // handled above — SnapState::unsnapForFloat internally unassigns).
+        QStringList previousZoneIds = m_windowZoneAssignments.take(windowId);
+        m_windowScreenAssignments.remove(windowId);
+        m_windowDesktopAssignments.remove(windowId);
+        m_autoSnappedWindows.remove(windowId);
+        if (!previousZoneIds.isEmpty()) {
+            if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
+                m_lastUsedZoneId.clear();
+                m_lastUsedScreenId.clear();
+                m_lastUsedZoneClass.clear();
+                m_lastUsedDesktop = 0;
+                if (m_snapState) {
+                    m_snapState->updateLastUsedZone({}, {}, {}, 0);
+                }
+            }
+            Q_EMIT windowZoneChanged(windowId, QString());
+            markDirty(DirtyZoneAssignments);
+        }
 
         // Pop one pending-restore entry (FIFO) so this window doesn't get
         // re-snapped to the old zone when closed and reopened. The queue is
@@ -628,6 +669,9 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     if (appId != windowId) {
         m_preFloatZoneAssignments.remove(appId);
         m_preFloatScreenAssignments.remove(appId);
+    }
+    if (m_snapState) {
+        m_snapState->clearPreFloatZone(windowId);
     }
 }
 

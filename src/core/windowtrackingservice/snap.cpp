@@ -7,6 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../interfaces.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../virtualdesktopmanager.h"
@@ -457,6 +458,9 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
             m_userSnappedClasses.insert(windowClass);
+            if (m_snapState) {
+                m_snapState->recordSnapIntent(windowClass, true);
+            }
             markDirty(DirtyUserSnapped);
         }
     }
@@ -469,6 +473,9 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
     m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = windowClass;
     m_lastUsedDesktop = virtualDesktop;
+    if (m_snapState) {
+        m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
+    }
     markDirty(DirtyLastUsedZone);
 }
 
@@ -681,6 +688,9 @@ void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
         m_autoSnappedWindows.insert(windowId);
+        if (m_snapState) {
+            m_snapState->markAsAutoSnapped(windowId);
+        }
     }
 }
 
@@ -691,6 +701,9 @@ bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 
 bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 {
+    if (m_snapState) {
+        m_snapState->clearAutoSnapped(windowId);
+    }
     return m_autoSnappedWindows.remove(windowId);
 }
 

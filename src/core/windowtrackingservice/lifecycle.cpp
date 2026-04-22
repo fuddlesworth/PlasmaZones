@@ -7,6 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../constants.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
@@ -498,6 +499,10 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     m_windowStickyStates.remove(windowId);
     m_autoSnappedWindows.remove(windowId);
     m_effectReportedWindows.remove(windowId);
+
+    if (m_snapState) {
+        m_snapState->windowClosed(windowId);
+    }
 
     scheduleSaveState();
 }
