@@ -74,7 +74,7 @@ private Q_SLOTS:
         engine.windowOpened(firstSeen, screen);
         QCoreApplication::processEvents();
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(firstSeen));
 
@@ -126,7 +126,7 @@ private Q_SLOTS:
         // First class opens the window and locks the canonical key.
         engine.windowOpened(makeComposite(classes[0], instanceId), screen);
         QCoreApplication::processEvents();
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
 
         // Every subsequent rebroadcast must resolve to the same canonical entry.
@@ -170,7 +170,7 @@ private Q_SLOTS:
         engine.windowOpened(reuse, screen);
         QCoreApplication::processEvents();
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(reuse));
         QVERIFY(!state->containsWindow(firstOpen));
@@ -205,7 +205,7 @@ private Q_SLOTS:
         engine.windowOpened(instanceId, screen);
         QCoreApplication::processEvents();
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(instanceId));
 

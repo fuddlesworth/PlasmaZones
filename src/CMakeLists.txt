@@ -34,8 +34,6 @@ set(plasmazones_core_SRCS
     # directly.
     core/ioverlayservice.h
     core/isettings.h
-    core/inavigationactions.h
-    core/iwindowengine.h
     core/settings_interfaces.h
     core/types.h
     core/utils.h
@@ -166,8 +164,6 @@ set(plasmazones_core_SRCS
     autotile/AutotileConfig.h
     autotile/AutotileEngine.cpp
     autotile/AutotileEngine.h
-    autotile/autotilenavigationadapter.cpp
-    autotile/autotilenavigationadapter.h
     autotile/PerScreenConfigResolver.cpp
     autotile/PerScreenConfigResolver.h
     autotile/NavigationController.cpp
@@ -179,8 +175,6 @@ set(plasmazones_core_SRCS
     # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
     snap/SnapEngine.cpp
     snap/SnapEngine.h
-    snap/snapnavigationadapter.cpp
-    snap/snapnavigationadapter.h
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
@@ -223,6 +217,7 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         plasmazones_compositor_common
         PhosphorConfig::PhosphorConfig
+        PhosphorEngineApi::PhosphorEngineApi
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol

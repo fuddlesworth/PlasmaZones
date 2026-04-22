@@ -7,7 +7,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../../config/settings.h"
-#include "../../core/inavigationactions.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
@@ -18,7 +18,6 @@
 #include "../../autotile/AutotileEngine.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../../snap/SnapEngine.h"
-#include "../../core/iwindowengine.h"
 #include "../modetracker.h"
 #include <QScreen>
 
@@ -28,7 +27,7 @@ namespace PlasmaZones {
 // Engine routing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-IEngineLifecycle* Daemon::engineForScreen(const QString& screenId) const
+PhosphorEngineApi::IPlacementEngine* Daemon::engineForScreen(const QString& screenId) const
 {
     // Single source of truth. Delegates to the central router so daemon
     // navigation handlers, adaptor D-Bus entry points, and resnap paths
@@ -61,20 +60,21 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation, dispatched through
-// ScreenModeRouter::navigatorFor() so there's no mode-branching in the daemon
+// ScreenModeRouter::engineFor() so there's no mode-branching in the daemon
 // itself. Each handler resolves the target screen, looks up the engine's
-// INavigationActions adapter, and forwards the user-intent call. Autotile
-// vs. snap-specific behaviour lives inside each adapter.
+// IPlacementEngine, and forwards the user-intent call. Autotile
+// vs. snap-specific behaviour lives inside each engine's override.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Local helper: build the navigation context for a shortcut handler.
 // Resolves the active screen and active window from WTA's compositor-layer
-// shadow, then fetches the navigation adapter for that screen from the
+// shadow, then fetches the IPlacementEngine for that screen from the
 // router. Returns nullptr if either step fails. Centralises the "no screen
 // info" early return and the context population so individual handlers
 // stay short and all shortcut dispatches use the same resolution logic.
-static INavigationActions* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
-                                                NavigationContext& outCtx, const char* shortcutName)
+static PhosphorEngineApi::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
+                                                                 PhosphorEngineApi::NavigationContext& outCtx,
+                                                                 const char* shortcutName)
 {
     outCtx.screenId = resolveShortcutScreenId(wta && wta->service() ? wta->service()->screenManager() : nullptr, wta);
     if (outCtx.screenId.isEmpty()) {
@@ -87,7 +87,7 @@ static INavigationActions* navigatorForShortcut(ScreenModeRouter* router, Window
     if (!router) {
         return nullptr;
     }
-    return router->navigatorFor(outCtx.screenId);
+    return router->engineFor(outCtx.screenId);
 }
 
 void Daemon::handleRotate(bool clockwise)

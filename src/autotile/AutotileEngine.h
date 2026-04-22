@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "core/constants.h"
-#include "core/iwindowengine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <QHash>
 #include <QJsonArray>
 #include <QObject>
@@ -31,6 +31,8 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using NavigationContext = PhosphorEngineApi::NavigationContext;
 
 /**
  * @brief Composite key for per-desktop/activity PhosphorTiles::TilingState lookup
@@ -113,7 +115,7 @@ namespace PlasmaZones {
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
  */
-class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IEngineLifecycle
+class PLASMAZONES_EXPORT AutotileEngine : public QObject, public PhosphorEngineApi::IPlacementEngine
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -212,7 +214,7 @@ public:
      */
     bool isWindowTiled(const QString& windowId) const;
 
-    // IEngineLifecycle
+    // IPlacementEngine
     bool isActiveOnScreen(const QString& screenId) const override;
 
     /**
@@ -351,7 +353,10 @@ public:
      * @param screenId Screen identifier
      * @return Pointer to PhosphorTiles::TilingState (owned by engine)
      */
-    PhosphorTiles::TilingState* stateForScreen(const QString& screenId);
+    PhosphorTiles::TilingState* tilingStateForScreen(const QString& screenId);
+
+    PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;
+    const PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) const override;
 
     /**
      * @brief Get the autotile configuration
@@ -364,20 +369,20 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Save tiling state via persistence delegate (IEngineLifecycle contract)
+     * @brief Save tiling state via persistence delegate (IPlacementEngine contract)
      *
      * Delegates to the save function set by setPersistenceDelegate().
      * Wired by the daemon to WTA's saveState(), which triggers a full WTA save
      * including both snap and autotile state. Autotile window orders are embedded
      * in WTA's save cycle via setTilingStateDelegates — this method exists to
-     * satisfy the IEngineLifecycle interface. For autotile-only persistence,
+     * satisfy the IPlacementEngine interface. For autotile-only persistence,
      * the tilingChanged signal → WTA::scheduleSaveState() connection is the
      * primary path.
      */
     void saveState() override;
 
     /**
-     * @brief Load tiling state via persistence delegate (IEngineLifecycle contract)
+     * @brief Load tiling state via persistence delegate (IPlacementEngine contract)
      *
      * Delegates to the load function set by setPersistenceDelegate().
      * Wired by the daemon to WTA's loadState(), which triggers a full WTA load
@@ -389,7 +394,7 @@ public:
      * @brief Set persistence callbacks for save/load
      *
      * KConfig persistence is owned by WindowTrackingAdaptor (engine is KConfig-free).
-     * These callbacks allow AutotileEngine to fulfill the IEngineLifecycle persistence
+     * These callbacks allow AutotileEngine to fulfill the IPlacementEngine persistence
      * contract without introducing KConfig as a dependency.
      *
      * @param saveFn Called by saveState() to persist tiling state
@@ -721,11 +726,28 @@ public:
      */
     Q_INVOKABLE void moveFocusedToPosition(int position);
 
-    // Autotile-specific navigation. These are NOT part of IEngineLifecycle —
-    // they're callable directly on the concrete AutotileEngine pointer when
-    // the dispatcher (ScreenModeRouter) has already confirmed the target
-    // screen is autotile-mode. Snap-mode navigation is daemon-driven via
-    // WindowTrackingAdaptor's target helpers, not through this class.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IPlacementEngine — navigation overrides
+    //
+    // Each override absorbs what AutotileNavigationAdapter did: translate
+    // the user-intent-shaped IPlacementEngine call into the existing
+    // concrete AutotileEngine method with the right parameters.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void focusInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void moveFocusedToPosition(int position, const NavigationContext& ctx) override;
+    void rotateWindows(bool clockwise, const NavigationContext& ctx) override;
+    void reapplyLayout(const NavigationContext& ctx) override;
+    void snapAllWindows(const NavigationContext& ctx) override;
+    void toggleFocusedFloat(const NavigationContext& ctx) override;
+    void cycleFocus(bool forward, const NavigationContext& ctx) override;
+    void pushToEmptyZone(const NavigationContext& ctx) override;
+    void restoreFocusedWindow(const NavigationContext& ctx) override;
+
+    // Autotile-specific navigation. Callable directly on the concrete
+    // AutotileEngine pointer from internal callers.
     void swapInDirection(const QString& direction, const QString& action);
     void rotateWindows(bool clockwise, const QString& screenId);
     void moveToPosition(const QString& windowId, int position, const QString& screenId);
@@ -815,7 +837,7 @@ public:
      * @param minWidth Window minimum width in pixels (0 if unconstrained)
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    using IEngineLifecycle::windowOpened; // Expose 2-arg convenience overload
+    using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
 
     /**
@@ -1336,7 +1358,7 @@ private:
     // form so every map/PhosphorTiles::TilingState key in the engine stays consistent.
     QHash<QString, QString> m_canonicalByInstance;
 
-    // Current desktop/activity context — used by stateForScreen() to construct
+    // Current desktop/activity context — used by tilingStateForScreen() to construct
     // TilingStateKey. Updated by setCurrentDesktop()/setCurrentActivity() BEFORE
     // updateAutotileScreens() runs on desktop/activity switch.
     int m_currentDesktop = 1;

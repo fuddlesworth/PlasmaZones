@@ -76,7 +76,7 @@ inline AutotileEngine* createEngineWithWindows(const QString& screen, int count,
     QCoreApplication::processEvents();
 
     if (!focusedWindow.isEmpty()) {
-        PhosphorTiles::TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
         state->setFocusedWindow(focusedWindow);
         engine->windowFocused(focusedWindow, screen);
     }

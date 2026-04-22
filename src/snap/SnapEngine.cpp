@@ -99,7 +99,7 @@ void SnapEngine::setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IEngineLifecycle implementation
+// IPlacementEngine — lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
@@ -158,6 +158,52 @@ void SnapEngine::loadState()
     if (m_loadFn) {
         m_loadFn();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — navigation overrides (thin delegates)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
+{
+    rotateWindowsInLayout(clockwise, ctx.screenId);
+}
+
+void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
+{
+    resnapToNewLayout();
+}
+
+void SnapEngine::snapAllWindows(const NavigationContext& ctx)
+{
+    snapAllWindows(ctx.screenId);
+}
+
+void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
+{
+    pushFocusedToEmptyZone(ctx);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — state access
+//
+// SnapEngine does not yet own per-screen SnapState instances — that migration
+// happens in PR 2. Until then, stateForScreen returns nullptr even for managed
+// screens. Callers that need snap state must still go through WTS directly.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
+{
+    Q_UNUSED(screenId)
+    // TODO(PR-2): return per-screen SnapState once SnapEngine owns them.
+    return nullptr;
+}
+
+const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
+{
+    Q_UNUSED(screenId)
+    // TODO(PR-2): return per-screen SnapState once SnapEngine owns them.
+    return nullptr;
 }
 
 } // namespace PlasmaZones

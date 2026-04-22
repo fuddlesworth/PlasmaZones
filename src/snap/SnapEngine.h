@@ -4,9 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "core/inavigationactions.h"
-#include "core/iwindowengine.h"
 #include "core/types.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QPointer>
@@ -44,7 +43,7 @@ class ZoneDetectionAdaptor;
 /**
  * @brief Engine for manual zone-based window snapping
  *
- * Implements IEngineLifecycle for screens using manual zone layouts (non-autotile).
+ * Implements IPlacementEngine for screens using manual zone layouts (non-autotile).
  * Handles auto-snap on window open, zone-based navigation, floating state,
  * rotation, and resnap operations.
  *
@@ -53,9 +52,9 @@ class ZoneDetectionAdaptor;
  * on top: auto-snap fallback chains, directional navigation via zone
  * adjacency, and layout-change resnapping.
  *
- * @see IEngineLifecycle, AutotileEngine, WindowTrackingService
+ * @see PhosphorEngineApi::IPlacementEngine, AutotileEngine, WindowTrackingService
  */
-class PLASMAZONES_EXPORT SnapEngine : public QObject, public IEngineLifecycle
+class PLASMAZONES_EXPORT SnapEngine : public QObject, public PhosphorEngineApi::IPlacementEngine
 {
     Q_OBJECT
 
@@ -66,11 +65,11 @@ public:
     ~SnapEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // IEngineLifecycle implementation
+    // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool isActiveOnScreen(const QString& screenId) const override;
-    using IEngineLifecycle::windowOpened; // Expose 2-arg convenience overload
+    using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
@@ -78,13 +77,6 @@ public:
     void setWindowFloat(const QString& windowId, bool shouldFloat) override;
     void saveState() override;
     void loadState() override;
-
-    // Navigation is daemon-driven for snap mode — handled by
-    // WindowTrackingAdaptor's moveWindowToAdjacentZone / focusAdjacentZone
-    // / swapWindowWithAdjacentZone / rotateWindowsInLayout / snapToZoneByNumber
-    // pipeline. SnapEngine does NOT implement IEngineLifecycle navigation
-    // methods because IEngineLifecycle no longer has any — see
-    // src/core/iwindowengine.h for the rationale.
 
     /**
      * @brief Resnap windows from previous layout to current layout after layout switch
@@ -233,45 +225,74 @@ public:
     // provides a resolved target.
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IPlacementEngine — navigation overrides
+    // ═══════════════════════════════════════════════════════════════════════════
+
     /// Walk to the adjacent window in @p direction and transfer keyboard focus.
     /// Empty direction is a no-op with feedback.
-    void focusInDirection(const QString& direction, const NavigationContext& ctx);
+    void focusInDirection(const QString& direction, const NavigationContext& ctx) override;
 
     /// Move the focused window into the adjacent zone in @p direction
     /// (displacing or filling the target). Empty direction is a no-op.
-    void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx);
+    void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
 
     /// Swap the focused window with whatever's in the adjacent zone in
     /// @p direction. Empty direction is a no-op.
-    void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx);
+    void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
 
     /// Move the focused window to the layout zone with @p zoneNumber
     /// (1-based) on ctx.screenId. PhosphorZones::Zone numbers outside [1,9] are rejected.
-    void moveFocusedToPosition(int zoneNumber, const NavigationContext& ctx);
+    void moveFocusedToPosition(int zoneNumber, const NavigationContext& ctx) override;
+
+    /// Rotate snapped windows through the layout's zone order, dispatched
+    /// via IPlacementEngine. Forwards to rotateWindowsInLayout().
+    void rotateWindows(bool clockwise, const NavigationContext& ctx) override;
+
+    /// Re-apply the current layout to all managed windows. Forwards to
+    /// resnapToNewLayout().
+    void reapplyLayout(const NavigationContext& ctx) override;
+
+    /// Snap every unmanaged window on the screen. The IPlacementEngine
+    /// override takes NavigationContext; coexists with the existing
+    /// snapAllWindows(const QString&) method which it delegates to.
+    void snapAllWindows(const NavigationContext& ctx) override;
 
     /// Move the focused window to the first empty zone on ctx.screenId.
-    void pushFocusedToEmptyZone(const NavigationContext& ctx);
+    void pushToEmptyZone(const NavigationContext& ctx) override;
 
     /// Restore the focused window to its captured pre-snap size and unsnap.
-    void restoreFocusedWindow(const NavigationContext& ctx);
+    void restoreFocusedWindow(const NavigationContext& ctx) override;
 
     /// Toggle the focused window between snapped and floating.
-    void toggleFocusedFloat(const NavigationContext& ctx);
+    void toggleFocusedFloat(const NavigationContext& ctx) override;
 
     /// Cycle keyboard focus forward/backward through managed windows in
     /// the active zone (or the layout cycle order if single-window per
     /// zone).
-    void cycleFocus(bool forward, const NavigationContext& ctx);
+    void cycleFocus(bool forward, const NavigationContext& ctx) override;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IPlacementEngine — state access
+    //
+    // Returns nullptr unconditionally until PR 2 wires per-screen SnapState
+    // ownership. Do not rely on non-null return for snap-mode screens yet.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;
+    const PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) const override;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Internal navigation helpers (concrete SnapEngine methods that the
+    // IPlacementEngine overrides delegate to)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Move the focused window to the first empty zone on ctx.screenId.
+    /// The IPlacementEngine override pushToEmptyZone() delegates here.
+    void pushFocusedToEmptyZone(const NavigationContext& ctx);
 
     /// Rotate snapped windows through the layout's zone order on @p screenId.
     void rotateWindowsInLayout(bool clockwise, const QString& screenId);
-
-    // Note: resnapToNewLayout() and resnapCurrentAssignments(const QString&)
-    // already exist above — they live in snapengine/navigation.cpp and go
-    // through the emitBatchedResnap → resnapToNewLayoutRequested signal
-    // relay, which WTA's handleBatchedResnap consumes. The navigation-from-
-    // shortcuts entry points in daemon/navigation.cpp forward to those
-    // existing methods via SnapNavigationAdapter::reapplyLayout().
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Persistence delegate
@@ -281,7 +302,7 @@ public:
      * @brief Set persistence callbacks for save/load
      *
      * KConfig persistence is owned by WindowTrackingAdaptor (WTS is KConfig-free).
-     * These callbacks allow SnapEngine to fulfill the IEngineLifecycle persistence
+     * These callbacks allow SnapEngine to fulfill the IPlacementEngine persistence
      * contract without introducing KConfig as a dependency.
      *
      * @param saveFn Called by saveState() to persist WTS state

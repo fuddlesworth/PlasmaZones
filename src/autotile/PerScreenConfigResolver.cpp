@@ -38,7 +38,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // can resolve per-screen values and skip screens with overrides.
     m_perScreenOverrides[screenId] = overrides;
 
-    PhosphorTiles::TilingState* state = m_engine->stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = m_engine->tilingStateForScreen(screenId);
     if (!state) {
         return;
     }
@@ -92,7 +92,7 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
         return;
     }
     // Restore global defaults on PhosphorTiles::TilingState
-    PhosphorTiles::TilingState* state = m_engine->stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = m_engine->tilingStateForScreen(screenId);
     if (state) {
         state->setSplitRatio(m_engine->config()->splitRatio);
         state->setMasterCount(m_engine->config()->masterCount);

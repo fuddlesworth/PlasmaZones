@@ -239,7 +239,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                PhosphorTiles::TilingState* state = m_autotileEngine->stateForScreen(screenId);
+                PhosphorTiles::TilingState* state = m_autotileEngine->tilingStateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                     masterCount = state->masterCount();

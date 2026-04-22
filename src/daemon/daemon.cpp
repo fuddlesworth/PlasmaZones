@@ -56,10 +56,8 @@
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../autotile/AutotileEngine.h"
-#include "../autotile/autotilenavigationadapter.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
-#include "../snap/snapnavigationadapter.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
@@ -555,16 +553,6 @@ bool Daemon::init()
         std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
-    // Navigation-intent dispatch: thin INavigationActions adapters wired
-    // through the router so daemon/navigation.cpp shortcut handlers dispatch
-    // via router->navigatorFor(screenId)->foo() instead of branching on mode.
-    // Both adapters forward to their respective engine — SnapEngine now
-    // owns the snap-mode navigation methods that used to live on
-    // WindowTrackingAdaptor (see src/snap/snapengine/navigation_actions.cpp).
-    m_autotileNavigationAdapter = std::make_unique<AutotileNavigationAdapter>(m_autotileEngine.get());
-    m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_snapEngine.get());
-    m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
-
     // m_virtualScreenStore is constructed in the initializer list (it's a
     // Config arg for m_screenManager). The swapper is constructed here
     // because navigation handlers don't run before init() returns anyway.
@@ -575,7 +563,7 @@ bool Daemon::init()
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
     // state, not just autotile). This is heavier than a targeted save but ensures consistency
     // — the autotile window orders are embedded in WTA's save cycle via the serialization
-    // delegates below. The engine-level delegates exist to satisfy the IEngineLifecycle interface.
+    // delegates below. The engine-level delegates exist to satisfy the IPlacementEngine interface.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     m_autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
@@ -879,17 +867,10 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
-    // Clear navigation adapters from the router and tear them down BEFORE
-    // destroying the engines they point at. The adapters hold QPointers to
-    // the engines (so a stray call would no-op rather than crash), but we
-    // still prefer to sever the reference chain explicitly to match the
-    // SnapAdaptor/AutotileAdaptor teardown pattern and keep the router from
-    // handing out about-to-be-invalid navigators during the shutdown window.
-    if (m_screenModeRouter) {
-        m_screenModeRouter->setNavigationAdapters(nullptr, nullptr);
-    }
-    m_snapNavigationAdapter.reset();
-    m_autotileNavigationAdapter.reset();
+    // Null out the router's reference before destroying it — straggler calls
+    // to engineForScreen() during the shutdown window get nullptr instead of
+    // a dangling pointer. Then destroy the router.
+    m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();

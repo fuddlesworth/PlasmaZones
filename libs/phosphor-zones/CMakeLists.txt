@@ -77,6 +77,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZonesLayoutSourceFactory.h
     include/PhosphorZones/AssignmentEntry.h
     include/PhosphorZones/LayoutRegistry.h
+    include/PhosphorZones/SnapState.h
 )
 
 set(phosphorzones_SRCS
@@ -95,6 +96,7 @@ set(phosphorzones_SRCS
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp
     src/layoutregistry_persistence.cpp
+    src/snapstate.cpp
 )
 
 add_library(PhosphorZones SHARED
@@ -128,6 +130,7 @@ target_link_libraries(PhosphorZones
         Qt6::Core
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
+        PhosphorEngineApi::PhosphorEngineApi
         # LayoutRegistry's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
         # — type must be visible to callers that include LayoutRegistry.h.
         PhosphorConfig::PhosphorConfig
