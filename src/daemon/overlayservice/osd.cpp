@@ -4,6 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorScreens/Manager.h>
@@ -360,7 +361,7 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
     }
 
     const auto role = PzRoles::LayoutOsd.withScopePrefix(
-        QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, role, "layout OSD");
     if (!surface) {
@@ -560,7 +561,7 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
     }
 
     const auto role = PzRoles::NavigationOsd.withScopePrefix(
-        QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface =
         createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, role, "navigation OSD");

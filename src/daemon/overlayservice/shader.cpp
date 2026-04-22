@@ -4,6 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -17,7 +18,6 @@
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
-#include <QQmlContext>
 #include <QMutexLocker>
 #include <QTimer>
 #include <QImage>
@@ -449,8 +449,6 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
         return;
     }
 
-    m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
-
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
     QVariantMap initProps;
@@ -461,7 +459,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     // editor rapidly opens/closes the Shader Settings dialog.
     const QString scopeId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
     const auto role = PzRoles::ShaderPreview.withScopePrefix(
-        QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, role,
                                        "shader preview overlay", initProps);

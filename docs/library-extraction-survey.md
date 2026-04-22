@@ -1,6 +1,6 @@
 # Library Extraction Survey
 
-**Date:** 2026-04-18 (original); revised 2026-04-20 to fold in PR #343 + #345 outcomes; revised 2026-04-21 to add `phosphor-audio` extraction.
+**Date:** 2026-04-18 (original); revised 2026-04-20 to fold in PR #343 + #345 outcomes; revised 2026-04-21 to add `phosphor-audio` + `phosphor-surfaces` extractions.
 **Scope:** Candidate inventory for further `phosphor-*` library extractions, in service of the long-term compositor / WM / shell goal.
 **Status:** Strategic survey — not a migration plan. Each candidate is backed by a focused investigation (see "Investigation provenance" at the end).
 
@@ -8,7 +8,7 @@
 
 ## Context
 
-Significant decoupling work has already landed: `phosphor-animation`, `phosphor-audio`, `phosphor-config`, `phosphor-identity`, `phosphor-layer`, `phosphor-layout-api`, `phosphor-rendering`, `phosphor-screens`, `phosphor-shell`, `phosphor-shortcuts`, `phosphor-tiles`, `phosphor-zones`. This document maps what remains in `src/` (and `kwin-effect/`) to potential additional libraries, ranks them by value × feasibility, and calls out what should **not** be extracted.
+Significant decoupling work has already landed: `phosphor-animation`, `phosphor-audio`, `phosphor-config`, `phosphor-identity`, `phosphor-layer`, `phosphor-layout-api`, `phosphor-rendering`, `phosphor-screens`, `phosphor-shell`, `phosphor-shortcuts`, `phosphor-surfaces`, `phosphor-tiles`, `phosphor-zones`. This document maps what remains in `src/` (and `kwin-effect/`) to potential additional libraries, ranks them by value × feasibility, and calls out what should **not** be extracted.
 
 The core strategic insight: the daemon has **zero** `KWin::` references in `src/`. Compositor-portability is an *extraction problem*, not an architecture problem.
 
@@ -204,28 +204,30 @@ namespace PhosphorWindows {
 
 ## Tier 2 — Feasible with known tradeoffs
 
-### `phosphor-overlay`
+### `phosphor-surfaces` (was `phosphor-overlay`) — ✅ EXTRACTED (infrastructure layer)
 
-**Status:** Coherent library; coupling score 3/5; extraction is non-trivial.
+**Status:** Landed. The original "phosphor-overlay" extraction was rescoped during design review: the library manages **surface lifecycle** (any layer-shell surface), not overlay content. Renamed to `phosphor-surfaces` to follow the domain-naming convention.
 
-**Scope:** 7 surface types owned by `OverlayService` — zone overlay, zone selector, layout OSD, navigation OSD, snap assist, layout picker, shader preview — plus the Vulkan keep-alive surface.
+**What was extracted (`libs/phosphor-surfaces/`):**
+- `SurfaceManager` — shared `QQmlEngine` with caller-supplied configurator callback, Vulkan keep-alive surface, scope generation counter.
+- Builds on `PhosphorLayer::SurfaceFactory::create()` — no reinvention of the lower layer.
+- Content-agnostic: callers bring their own QML URLs and C++ types via the engine configurator.
 
-**Adjacent but separate:** `WindowThumbnailService` is a pure async D-Bus screenshot client (KWin `ScreenShot2`). Not a surface manager. Belongs in the same package, not the same class.
+**What stays in PlasmaZones:**
+- `ZoneShaderItem` + `ZoneShaderNodeRhi` + `ZoneUniformExtension` — zone-specific `PhosphorRendering::ShaderEffect` subclass with UBO layout matching `common.glsl`. Leaf-node specialization, not a reusable primitive.
+- All 11 QML overlay files (`src/ui/`) — app content, not library API. 10 of 11 have zero C++ deps but all reference zone-specific data shapes.
+- `OverlayService` orchestration policy — decides _when_ and _what_ to show. The library provides the _how_.
 
-**Clean domain separation:**
-- **Zero** references to `ZoneManager`, `SnapEngine`, `AutotileEngine` in `overlayservice/`.
-- Receives `PhosphorZones::Layout*` / `Zone*` as read-only data.
+**Original obstacles — all resolved:**
 
-**Obstacles:**
+1. ~~**PhosphorLayer becomes a transitive public dep.**~~ Accepted: `phosphor-surfaces` depends on `PhosphorLayer::PhosphorLayer` publicly. This is the natural layering — protocol below, managed lifecycle above.
+2. ~~**Per-instance QQmlEngine.**~~ ✅ Resolved via engine configurator callback (`std::function<void(QQmlEngine&)>`). Library creates the engine; caller installs types, i18n, and context properties in the callback. Audit found only 1 context property (`overlayService`) used by 1 QML file, guarded with `typeof` check.
+3. ~~**Vulkan keep-alive surface.**~~ ✅ Resolved. `SurfaceManager` creates and manages the 1×1 background-layer keep-alive internally. Destruction order guaranteed: all caller surfaces first, deferred-delete drain, keep-alive last.
+4. ~~**Interface-cast violation.**~~ ✅ Resolved in PR #345.
+5. ~~**CavaService hardwired.**~~ ✅ Resolved in PR #348.
+6. ~~**ShaderRegistry singleton.**~~ ✅ Resolved in PR #345.
 
-1. **PhosphorLayer becomes a transitive public dep.** All 7 surfaces use `PhosphorLayer::Surface` / `SurfaceFactory` / `Role` / `Anchors` / `ITransportHandle` directly. No insulation layer. Acceptable for a shell-adjacent library; document as public.
-2. **Per-instance QQmlEngine.** OverlayService owns `unique_ptr<QQmlEngine>` with shared context properties. Refactor-intensive to share across instances.
-3. **Vulkan keep-alive surface.** Persistent 1×1 background window prevents Qt from tearing down Vulkan globals. Must outlive all user overlays; complicates library lifecycle contract.
-4. ~~**Interface-cast violation.**~~ ✅ Resolved in PR #345 (`d6f74fc7`). `ILayoutManager` et al. were deleted; `phosphor-zones` exports `IZoneLayoutRegistry` + concrete `LayoutRegistry` directly, and OverlayService now borrows the concrete type — no downcast needed.
-5. ~~**CavaService hardwired.**~~ ✅ Resolved. `CavaService` extracted to `phosphor-audio` as `CavaSpectrumProvider` behind `IAudioSpectrumProvider`. Overlay can now take the interface via constructor injection.
-6. ~~**ShaderRegistry singleton.**~~ ✅ Resolved in PR #345 (`dd126553`). Per-daemon `unique_ptr` threaded through `OverlayService` / `SettingsAdaptor` / `ShaderAdaptor` constructors; `detach()` wired in `Daemon::stop()` for clean teardown of the three raw-Qt-parented adaptors that borrow it.
-
-**QML coupling:** `src/ui/*.qml` loaded via `resources.qrc`; all run in shared `QQmlEngine` with `ZoneShaderItem` from `src/daemon/rendering/`.
+See `docs/phosphor-surfaces-api-design.md` for the full interface design.
 
 ---
 
@@ -283,7 +285,7 @@ Every clean library is named after its **domain**: `phosphor-config`, `phosphor-
 
 `compositor-common` is named after a **relationship** ("code shared between daemon and effect"). If a candidate can't be named after its domain, it probably isn't a library — it's a shim zone waiting to be decomposed.
 
-Applied to new candidates: `phosphor-animation`, `phosphor-audio`, `phosphor-overlay`, `phosphor-screens`, `phosphor-windows` — all domain names. ✓
+Applied to new candidates: `phosphor-animation`, `phosphor-audio`, `phosphor-screens`, `phosphor-surfaces`, `phosphor-windows` — all domain names. ✓ (Original candidate `phosphor-overlay` renamed to `phosphor-surfaces` during design review — "overlay" implies a specific visual pattern; the library manages any layer-shell surface.)
 
 ---
 
@@ -300,7 +302,7 @@ Applied to new candidates: `phosphor-animation`, `phosphor-audio`, `phosphor-ove
 - ~~Move `layoutsourcefactory.{h,cpp}` to `phosphor-layout-api`.~~ ✅ Done (`LayoutSourceBundle` + `ILayoutSourceFactory` live in `phosphor-layout-api`).
 - ~~Fix `overlayservice/settings.cpp:122` `LayoutManager*` cast by extending `ILayoutManager`.~~ ✅ Resolved in PR #345 (`ILayoutManager` deleted; OverlayService uses concrete `PhosphorZones::LayoutRegistry` directly).
 
-**Overlay** sits outside this sequence. Its extraction depends on whether PhosphorLayer-as-public-API is acceptable for a `phosphor-overlay` library. Three of its six obstacles (interface-cast violation, ShaderRegistry singleton, CavaService hardwired) are now resolved — remaining three still apply.
+~~**Overlay**~~ ✅ Extracted as **`phosphor-surfaces`** — rescoped from "overlay content extraction" to "managed surface lifecycle infrastructure." All six original obstacles resolved. OverlayService migration to use `SurfaceManager` is future work.
 
 ---
 
@@ -317,3 +319,4 @@ This survey is synthesized from 8 parallel codebase investigations run 2026-04-1
 7. Shared QML components reusability audit.
 8. Layout-library consolidation audit (overlap matrix across phosphor-layout-api / phosphor-tiles / phosphor-zones).
 9. `phosphor-audio` extraction (2026-04-21): `CavaService` → `IAudioSpectrumProvider` + `CavaSpectrumProvider`. Motivated by shell-ecosystem reuse — audio spectrum is a system service, not an app feature.
+10. `phosphor-surfaces` extraction (2026-04-21): OverlayService surface lifecycle → `SurfaceManager` with engine configurator, Vulkan keep-alive, and scope generation. Rescoped from "phosphor-overlay" (content extraction) to managed surface lifecycle infrastructure after QML dependency audit found 10/11 overlay QML files have zero C++ coupling and all reference zone-specific data shapes — app content, not library API.
