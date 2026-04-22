@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -19,6 +19,10 @@ class IZoneDetector;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneEntry;
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::SnapAssistCandidateList;
 
 class IOverlayService;
 class ISettings;

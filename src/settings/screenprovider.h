@@ -9,6 +9,7 @@
 #include <QVariantList>
 #include <functional>
 #include "../../src/core/constants.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones {
 
@@ -72,12 +73,14 @@ void setMonitorDisabledFor(Settings* settings, const QString& screenName, bool d
  */
 inline void connectScreenChangeSignals(QObject* receiver)
 {
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::Screen), QStringLiteral("screenAdded"), receiver,
-                                          SLOT(refreshScreens()));
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::Screen), QStringLiteral("screenRemoved"), receiver,
-                                          SLOT(refreshScreens()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::Screen),
+                                          QStringLiteral("screenAdded"), receiver, SLOT(refreshScreens()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::Screen),
+                                          QStringLiteral("screenRemoved"), receiver, SLOT(refreshScreens()));
 }
 
 } // namespace PlasmaZones

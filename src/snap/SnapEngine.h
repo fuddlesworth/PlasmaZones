@@ -7,7 +7,7 @@
 #include "core/inavigationactions.h"
 #include "core/iwindowengine.h"
 #include "core/types.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -22,6 +22,15 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::CycleTargetResult;
+using PhosphorProtocol::FocusTargetResult;
+using PhosphorProtocol::MoveTargetResult;
+using PhosphorProtocol::RestoreTargetResult;
+using PhosphorProtocol::SnapAllResultEntry;
+using PhosphorProtocol::SnapAllResultList;
+using PhosphorProtocol::SwapTargetResult;
+using PhosphorProtocol::WindowGeometryList;
 
 class AutotileEngine;
 class ISettings;

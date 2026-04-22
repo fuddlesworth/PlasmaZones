@@ -6,7 +6,7 @@
 #include "plasmazones_export.h"
 #include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -30,6 +30,18 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::PreTileGeometryEntry;
+using PhosphorProtocol::PreTileGeometryList;
+using PhosphorProtocol::SnapAllResultList;
+using PhosphorProtocol::SnapConfirmationList;
+using PhosphorProtocol::UnfloatRestoreResult;
+using PhosphorProtocol::WindowGeometryEntry;
+using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
+using PhosphorProtocol::WindowStateList;
+using PhosphorProtocol::ZoneGeometryRect;
 
 class AutotileEngine;
 class ScreenModeRouter;

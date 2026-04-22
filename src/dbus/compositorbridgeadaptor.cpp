@@ -5,18 +5,19 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QUuid>
 
 namespace PlasmaZones {
 
 // Protocol version constants are the single source of truth in
-// compositor-common/dbus_constants.h, re-exported into the DBus namespace
-// via core/constants.h. The effect links compositor-common directly;
-// the daemon pulls the same symbols through core/constants.h.
+// PhosphorProtocol::Service (libs/phosphor-protocol). The effect links
+// compositor-common for its own constants; the daemon includes
+// PhosphorProtocol/ServiceConstants.h directly.
 namespace {
-constexpr int DaemonApiVersion = DBus::ApiVersion;
-constexpr int DaemonMinPeerApiVersion = DBus::MinPeerApiVersion;
+constexpr int DaemonApiVersion = PhosphorProtocol::Service::ApiVersion;
+constexpr int DaemonMinPeerApiVersion = PhosphorProtocol::Service::MinPeerApiVersion;
 } // namespace
 
 CompositorBridgeAdaptor::CompositorBridgeAdaptor(QObject* parent)

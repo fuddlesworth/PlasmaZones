@@ -12,6 +12,7 @@
 #include "../../config/configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "../../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
@@ -476,12 +477,12 @@ void EditorController::refreshUsableAreaInsets()
     // Query the daemon for both full and available geometry via D-Bus.
     // The daemon's Phosphor::Screens::ScreenManager handles VS IDs natively.
     QDBusMessage geoMsg = QDBusMessage::createMethodCall(
-        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getScreenGeometry"));
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));
     geoMsg << screenId;
     QDBusMessage availMsg = QDBusMessage::createMethodCall(
-        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getAvailableGeometry"));
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getAvailableGeometry"));
     availMsg << screenId;
 
     auto* geoWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(geoMsg), this);

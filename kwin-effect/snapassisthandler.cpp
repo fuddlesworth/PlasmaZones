@@ -6,9 +6,9 @@
 #include "autotilehandler.h"
 #include "kwin_compositor_bridge.h"
 
-#include <dbus_constants.h>
-#include <dbus_helpers.h>
-#include <dbus_types.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <snap_assist_filter.h>
 
 #include <effect/effecthandler.h>
@@ -44,12 +44,12 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
         return;
     }
     qCInfo(lcSnapAssist) << "Snap assist continuation: querying empty zones for screen" << screenId;
-    QDBusPendingCall emptyCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("getEmptyZones"), {screenId});
+    QDBusPendingCall emptyCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getEmptyZones"), {screenId});
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
-        QDBusPendingReply<EmptyZoneList> reply = *w;
+        QDBusPendingReply<PhosphorProtocol::EmptyZoneList> reply = *w;
         if (!reply.isValid() || reply.value().isEmpty()) {
             qCInfo(lcSnapAssist) << "Snap assist continuation: no empty zones"
                                  << (reply.isValid() ? QStringLiteral("(empty list)")
@@ -61,13 +61,13 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
 }
 
 void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString& screenId,
-                                  const EmptyZoneList& emptyZones)
+                                  const PhosphorProtocol::EmptyZoneList& emptyZones)
 {
     if (!m_effect->isDaemonReady("snap assist snapped windows")) {
         return;
     }
-    QDBusPendingCall snapCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+    QDBusPendingCall snapCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
     connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
             [this, excludeWindowId, screenId, emptyZones](QDBusPendingCallWatcher* w) {
@@ -79,7 +79,8 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                         snappedWindowIds.insert(id);
                     }
                 }
-                SnapAssistCandidateList candidates = buildCandidates(excludeWindowId, screenId, snappedWindowIds);
+                PhosphorProtocol::SnapAssistCandidateList candidates =
+                    buildCandidates(excludeWindowId, screenId, snappedWindowIds);
                 if (candidates.isEmpty()) {
                     qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
                     return;
@@ -88,7 +89,8 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                     return;
                 }
                 QDBusMessage msg = QDBusMessage::createMethodCall(
-                    DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Overlay, QStringLiteral("showSnapAssist"));
+                    PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                    PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"));
                 msg << screenId << QVariant::fromValue(emptyZones) << QVariant::fromValue(candidates);
                 auto* callWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), m_effect);
                 connect(callWatcher, &QDBusPendingCallWatcher::finished, m_effect, [](QDBusPendingCallWatcher* cw) {
@@ -101,10 +103,11 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
             });
 }
 
-SnapAssistCandidateList SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
-                                                           const QSet<QString>& snappedWindowIds) const
+PhosphorProtocol::SnapAssistCandidateList
+SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
+                                   const QSet<QString>& snappedWindowIds) const
 {
-    SnapAssistCandidateList candidates =
+    PhosphorProtocol::SnapAssistCandidateList candidates =
         SnapAssistFilter::buildCandidates(m_effect->compositorBridge(), excludeWindowId, screenId, snappedWindowIds);
 
     // KWin-specific: fill compositorHandle (internal UUID) for overlay window identification.

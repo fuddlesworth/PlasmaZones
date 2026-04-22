@@ -225,6 +225,7 @@ target_link_libraries(plasmazones_core
         PhosphorConfig::PhosphorConfig
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
+        PhosphorProtocol::PhosphorProtocol
         PhosphorScreens::PhosphorScreens
         PhosphorShell::PhosphorShell
         PhosphorTiles::PhosphorTiles

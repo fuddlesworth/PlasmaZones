@@ -37,7 +37,7 @@ QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
     if (!iface.isValid()) {
         return result;
     }
-    iface.setTimeout(DBus::SyncCallTimeoutMs);
+    iface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
     for (const QString& key : keys) {
         if (key.isEmpty()) {
             continue;
@@ -73,7 +73,7 @@ QVariantMap querySettingsBatch(const QStringList& keys)
     if (!settingsIface.isValid()) {
         return QVariantMap();
     }
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
 
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("getSettings"), keys);
     if (reply.isValid()) {
@@ -112,7 +112,7 @@ int queryIntSetting(const QString& settingKey, int defaultValue)
     if (!settingsIface.isValid()) {
         return defaultValue;
     }
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
 
     QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
     if (!reply.isValid()) {
@@ -134,7 +134,7 @@ bool queryBoolSetting(const QString& settingKey, bool defaultValue)
     if (!settingsIface.isValid()) {
         return defaultValue;
     }
-    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
+    settingsIface.setTimeout(PhosphorProtocol::Service::SyncCallTimeoutMs);
 
     QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
     if (!reply.isValid()) {

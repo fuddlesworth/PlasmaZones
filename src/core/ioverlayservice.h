@@ -12,7 +12,7 @@
 
 #include "plasmazones_export.h"
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <QObject>
 #include <QRect>
@@ -28,6 +28,9 @@ class Zone;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::SnapAssistCandidateList;
 
 class ISettings;
 

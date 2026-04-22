@@ -8,9 +8,9 @@
 #include "../dragtracker.h"
 #include "../plasmazoneseffect.h"
 #include "../windowanimator.h"
-#include <dbus_constants.h>
-#include <dbus_helpers.h>
-#include <dbus_types.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
@@ -24,7 +24,7 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileRequests)
+void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests)
 {
     if (tileRequests.isEmpty()) {
         return;
@@ -34,7 +34,7 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
     // dropped from the batch; the remaining requests still apply. This avoids
     // one corrupt payload (e.g. zero-size tiled request from a protocol glitch)
     // from either resizing a window to 0×0 or poisoning the whole retile pass.
-    TileRequestList validatedRequests;
+    PhosphorProtocol::TileRequestList validatedRequests;
     validatedRequests.reserve(tileRequests.size());
     for (const auto& req : tileRequests) {
         if (const QString err = req.validationError(); !err.isEmpty()) {
@@ -543,8 +543,9 @@ void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWi
     qCInfo(lcEffect) << "Discovered min size for" << windowId << ":" << minWidth << "x" << minHeight
                      << "- reporting to daemon for future retiles";
 
-    DBusHelpers::fireAndForget(m_effect, DBus::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
-                               {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        m_effect, PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
+        {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
 }
 
 } // namespace PlasmaZones

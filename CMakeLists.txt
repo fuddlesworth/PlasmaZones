@@ -329,6 +329,7 @@ add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-
 add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
+add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 
 # Source directories
 add_subdirectory(src)

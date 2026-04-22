@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QString>
@@ -32,6 +32,11 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::DragBypassReason;
+using PhosphorProtocol::DragOutcome;
+using PhosphorProtocol::DragPolicy;
+using PhosphorProtocol::EmptyZoneList;
 
 class IOverlayService;
 

@@ -12,7 +12,7 @@
 #include <QTest>
 
 #include "compositor-common/autotile_state.h"
-#include "compositor-common/dbus_types.h"
+#include <PhosphorProtocol/WireTypes.h>
 #include "compositor-common/floating_cache.h"
 #include "compositor-common/trigger_parser.h"
 #include <PhosphorIdentity/WindowId.h>
@@ -66,15 +66,15 @@ private Q_SLOTS:
 
     void testWindowGeometryEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::WindowGeometryEntry entry{QStringLiteral("firefox|42"), 100, 200, 800, 600};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::WindowGeometryEntry entry{QStringLiteral("firefox|42"), 100, 200, 800, 600};
 
         // Verify D-Bus signature: (siiii) = struct of string + 4 ints
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiii)"));
 
         // Verify metatype is registered (needed for QVariant D-Bus transport)
-        const int typeId = qMetaTypeId<PlasmaZones::WindowGeometryEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::WindowGeometryEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         // Verify aggregate construction preserves all fields
@@ -85,7 +85,7 @@ private Q_SLOTS:
         QCOMPARE(entry.height, 600);
 
         // Verify default construction
-        PlasmaZones::WindowGeometryEntry defaultEntry;
+        PhosphorProtocol::WindowGeometryEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.x, 0);
         QCOMPARE(defaultEntry.y, 0);
@@ -99,8 +99,8 @@ private Q_SLOTS:
 
     void testTileRequestEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::TileRequestEntry entry{
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::TileRequestEntry entry{
             QStringLiteral("konsole|7"), 50,   100,  640, 480, QStringLiteral("{zone-uuid}"),
             QStringLiteral("screen-0"),  true, false};
 
@@ -109,7 +109,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(siiiissbb)"));
 
         // Verify metatype registration
-        const int typeId = qMetaTypeId<PlasmaZones::TileRequestEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         // Verify aggregate construction preserves all fields
@@ -124,7 +124,7 @@ private Q_SLOTS:
         QCOMPARE(entry.floating, false);
 
         // Verify default construction
-        PlasmaZones::TileRequestEntry defaultEntry;
+        PhosphorProtocol::TileRequestEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
@@ -136,21 +136,21 @@ private Q_SLOTS:
 
     void testSnapAllResultEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::SnapAllResultEntry entry{QStringLiteral("dolphin|3"),
-                                              QStringLiteral("{target-zone}"),
-                                              QStringLiteral("{source-zone}"),
-                                              10,
-                                              20,
-                                              500,
-                                              400};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::SnapAllResultEntry entry{QStringLiteral("dolphin|3"),
+                                                   QStringLiteral("{target-zone}"),
+                                                   QStringLiteral("{source-zone}"),
+                                                   10,
+                                                   20,
+                                                   500,
+                                                   400};
 
         // Verify D-Bus signature: (sssiiii) = 3 strings + 4 ints
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sssiiii)"));
 
         // Verify metatype registration
-        const int typeId = qMetaTypeId<PlasmaZones::SnapAllResultEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::SnapAllResultEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         // Verify aggregate construction preserves all fields
@@ -163,7 +163,7 @@ private Q_SLOTS:
         QCOMPARE(entry.height, 400);
 
         // Verify default construction
-        PlasmaZones::SnapAllResultEntry defaultEntry;
+        PhosphorProtocol::SnapAllResultEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QVERIFY(defaultEntry.targetZoneId.isEmpty());
         QVERIFY(defaultEntry.sourceZoneId.isEmpty());
@@ -175,7 +175,7 @@ private Q_SLOTS:
 
     void testWindowGeometryToRect()
     {
-        PlasmaZones::WindowGeometryEntry entry{QStringLiteral("win|1"), 10, 20, 300, 400};
+        PhosphorProtocol::WindowGeometryEntry entry{QStringLiteral("win|1"), 10, 20, 300, 400};
         QRect rect = entry.toRect();
         QCOMPARE(rect, QRect(10, 20, 300, 400));
     }
@@ -183,7 +183,7 @@ private Q_SLOTS:
     void testWindowGeometryFromRect()
     {
         QRect rect(50, 60, 700, 500);
-        auto entry = PlasmaZones::WindowGeometryEntry::fromRect(QStringLiteral("app|2"), rect);
+        auto entry = PhosphorProtocol::WindowGeometryEntry::fromRect(QStringLiteral("app|2"), rect);
         QCOMPARE(entry.windowId, QStringLiteral("app|2"));
         QCOMPARE(entry.toRect(), rect);
     }
@@ -194,8 +194,8 @@ private Q_SLOTS:
 
     void testTileRequestToRect()
     {
-        PlasmaZones::TileRequestEntry entry{QStringLiteral("app|5"), 15,    25,   640, 480, QStringLiteral("{z}"),
-                                            QStringLiteral("s0"),    false, false};
+        PhosphorProtocol::TileRequestEntry entry{QStringLiteral("app|5"), 15,    25,   640, 480, QStringLiteral("{z}"),
+                                                 QStringLiteral("s0"),    false, false};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 
@@ -205,10 +205,10 @@ private Q_SLOTS:
 
     void testSnapAllResultToGeometryEntry()
     {
-        PlasmaZones::SnapAllResultEntry snap{
+        PhosphorProtocol::SnapAllResultEntry snap{
             QStringLiteral("kate|9"), QStringLiteral("{target}"), QStringLiteral("{source}"), 30, 40, 1024, 768};
 
-        PlasmaZones::WindowGeometryEntry geo = snap.toGeometryEntry();
+        PhosphorProtocol::WindowGeometryEntry geo = snap.toGeometryEntry();
         QCOMPARE(geo.windowId, QStringLiteral("kate|9"));
         QCOMPARE(geo.x, 30);
         QCOMPARE(geo.y, 40);
@@ -218,7 +218,7 @@ private Q_SLOTS:
 
     void testSnapAllResultToRect()
     {
-        PlasmaZones::SnapAllResultEntry snap{
+        PhosphorProtocol::SnapAllResultEntry snap{
             QStringLiteral("app|1"), QStringLiteral("{t}"), QStringLiteral("{s}"), 5, 10, 200, 150};
         QCOMPARE(snap.toRect(), QRect(5, 10, 200, 150));
     }
@@ -229,8 +229,8 @@ private Q_SLOTS:
 
     void testWindowStateEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::WindowStateEntry entry;
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::WindowStateEntry entry;
         entry.windowId = QStringLiteral("firefox|42");
         entry.zoneId = QStringLiteral("{zone-1}");
         entry.screenId = QStringLiteral("screen-0");
@@ -242,7 +242,7 @@ private Q_SLOTS:
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sssbsasb)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::WindowStateEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::WindowStateEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
@@ -253,7 +253,7 @@ private Q_SLOTS:
         QCOMPARE(entry.isSticky, true);
         QCOMPARE(entry.changeType, QStringLiteral("snapped"));
 
-        PlasmaZones::WindowStateEntry defaultEntry;
+        PhosphorProtocol::WindowStateEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.isFloating, false);
         QVERIFY(defaultEntry.changeType.isEmpty());
@@ -265,14 +265,14 @@ private Q_SLOTS:
 
     void testUnfloatRestoreResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::UnfloatRestoreResult entry{
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::UnfloatRestoreResult entry{
             true, {QStringLiteral("{z1}"), QStringLiteral("{z2}")}, QStringLiteral("screen-0"), 10, 20, 800, 600};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bassiiii)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::UnfloatRestoreResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::UnfloatRestoreResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.found, true);
@@ -282,7 +282,7 @@ private Q_SLOTS:
         QCOMPARE(entry.screenName, QStringLiteral("screen-0"));
         QCOMPARE(entry.toRect(), QRect(10, 20, 800, 600));
 
-        PlasmaZones::UnfloatRestoreResult defaultEntry;
+        PhosphorProtocol::UnfloatRestoreResult defaultEntry;
         QCOMPARE(defaultEntry.found, false);
         QVERIFY(defaultEntry.zoneIds.isEmpty());
     }
@@ -293,13 +293,13 @@ private Q_SLOTS:
 
     void testZoneGeometryRectRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::ZoneGeometryRect entry{50, 100, 1920, 1080};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::ZoneGeometryRect entry{50, 100, 1920, 1080};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(iiii)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::ZoneGeometryRect>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::ZoneGeometryRect>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.x, 50);
@@ -309,7 +309,7 @@ private Q_SLOTS:
         QCOMPARE(entry.toRect(), QRect(50, 100, 1920, 1080));
 
         QRect rect(200, 300, 640, 480);
-        auto fromRect = PlasmaZones::ZoneGeometryRect::fromRect(rect);
+        auto fromRect = PhosphorProtocol::ZoneGeometryRect::fromRect(rect);
         QCOMPARE(fromRect.toRect(), rect);
     }
 
@@ -319,8 +319,8 @@ private Q_SLOTS:
 
     void testEmptyZoneEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::EmptyZoneEntry entry;
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::EmptyZoneEntry entry;
         entry.zoneId = QStringLiteral("{zone-abc}");
         entry.x = 10;
         entry.y = 20;
@@ -338,7 +338,7 @@ private Q_SLOTS:
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiiiiibsssdd)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::EmptyZoneEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::EmptyZoneEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-abc}"));
@@ -350,7 +350,7 @@ private Q_SLOTS:
         QCOMPARE(entry.activeOpacity, 0.7);
         QCOMPARE(entry.inactiveOpacity, 0.2);
 
-        PlasmaZones::EmptyZoneEntry defaultEntry;
+        PhosphorProtocol::EmptyZoneEntry defaultEntry;
         QCOMPARE(defaultEntry.borderWidth, 0);
         QCOMPARE(defaultEntry.borderRadius, 0);
         QCOMPARE(defaultEntry.useCustomColors, false);
@@ -364,15 +364,15 @@ private Q_SLOTS:
 
     void testSnapAssistCandidateRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::SnapAssistCandidate entry{QStringLiteral("konsole|7"), QStringLiteral("kwin-handle-42"),
-                                               QStringLiteral("utilities-terminal"),
-                                               QStringLiteral("Konsole - Terminal")};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::SnapAssistCandidate entry{QStringLiteral("konsole|7"), QStringLiteral("kwin-handle-42"),
+                                                    QStringLiteral("utilities-terminal"),
+                                                    QStringLiteral("Konsole - Terminal")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(ssss)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::SnapAssistCandidate>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::SnapAssistCandidate>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.windowId, QStringLiteral("konsole|7"));
@@ -387,13 +387,13 @@ private Q_SLOTS:
 
     void testNamedZoneGeometryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::NamedZoneGeometry entry{QStringLiteral("{zone-left}"), 0, 0, 960, 1080};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::NamedZoneGeometry entry{QStringLiteral("{zone-left}"), 0, 0, 960, 1080};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiii)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::NamedZoneGeometry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::NamedZoneGeometry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-left}"));
@@ -406,25 +406,25 @@ private Q_SLOTS:
 
     void testAlgorithmInfoEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::AlgorithmInfoEntry entry{QStringLiteral("master-stack"),
-                                              QStringLiteral("Master-Stack"),
-                                              QStringLiteral("A tiling algorithm"),
-                                              true,
-                                              true,
-                                              false,
-                                              false,
-                                              0.65,
-                                              8,
-                                              false,
-                                              QStringLiteral("sequential"),
-                                              false,
-                                              true};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::AlgorithmInfoEntry entry{QStringLiteral("master-stack"),
+                                                   QStringLiteral("Master-Stack"),
+                                                   QStringLiteral("A tiling algorithm"),
+                                                   true,
+                                                   true,
+                                                   false,
+                                                   false,
+                                                   0.65,
+                                                   8,
+                                                   false,
+                                                   QStringLiteral("sequential"),
+                                                   false,
+                                                   true};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbb)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::AlgorithmInfoEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::AlgorithmInfoEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.id, QStringLiteral("master-stack"));
@@ -448,14 +448,14 @@ private Q_SLOTS:
 
     void testBridgeRegistrationResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::BridgeRegistrationResult entry{QStringLiteral("1"), QStringLiteral("kwin"),
-                                                    QStringLiteral("abc-123")};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::BridgeRegistrationResult entry{QStringLiteral("1"), QStringLiteral("kwin"),
+                                                         QStringLiteral("abc-123")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sss)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::BridgeRegistrationResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::BridgeRegistrationResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.apiVersion, QStringLiteral("1"));
@@ -469,21 +469,21 @@ private Q_SLOTS:
 
     void testMoveTargetResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::MoveTargetResult entry{true,
-                                            QString(),
-                                            QStringLiteral("{zone-right}"),
-                                            100,
-                                            200,
-                                            960,
-                                            1080,
-                                            QStringLiteral("{zone-left}"),
-                                            QStringLiteral("screen-0")};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::MoveTargetResult entry{true,
+                                                 QString(),
+                                                 QStringLiteral("{zone-right}"),
+                                                 100,
+                                                 200,
+                                                 960,
+                                                 1080,
+                                                 QStringLiteral("{zone-left}"),
+                                                 QStringLiteral("screen-0")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bssiiiiss)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::MoveTargetResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::MoveTargetResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.success, true);
@@ -500,18 +500,18 @@ private Q_SLOTS:
 
     void testFocusTargetResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::FocusTargetResult entry{true,
-                                             QString(),
-                                             QStringLiteral("dolphin|3"),
-                                             QStringLiteral("{zone-left}"),
-                                             QStringLiteral("{zone-right}"),
-                                             QStringLiteral("screen-0")};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::FocusTargetResult entry{true,
+                                                  QString(),
+                                                  QStringLiteral("dolphin|3"),
+                                                  QStringLiteral("{zone-left}"),
+                                                  QStringLiteral("{zone-right}"),
+                                                  QStringLiteral("screen-0")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bsssss)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::FocusTargetResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::FocusTargetResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.success, true);
@@ -527,14 +527,14 @@ private Q_SLOTS:
 
     void testCycleTargetResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::CycleTargetResult entry{true, QString(), QStringLiteral("kate|5"), QStringLiteral("{zone-center}"),
-                                             QStringLiteral("screen-1")};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::CycleTargetResult entry{true, QString(), QStringLiteral("kate|5"),
+                                                  QStringLiteral("{zone-center}"), QStringLiteral("screen-1")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bssss)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::CycleTargetResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::CycleTargetResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.success, true);
@@ -549,29 +549,29 @@ private Q_SLOTS:
 
     void testSwapTargetResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::SwapTargetResult entry{true,
-                                            QString(),
-                                            QStringLiteral("firefox|1"),
-                                            0,
-                                            0,
-                                            960,
-                                            1080,
-                                            QStringLiteral("{zone-left}"),
-                                            QStringLiteral("konsole|2"),
-                                            960,
-                                            0,
-                                            960,
-                                            1080,
-                                            QStringLiteral("{zone-right}"),
-                                            QStringLiteral("screen-0"),
-                                            QStringLiteral("{zone-left}"),
-                                            QStringLiteral("{zone-right}")};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::SwapTargetResult entry{true,
+                                                 QString(),
+                                                 QStringLiteral("firefox|1"),
+                                                 0,
+                                                 0,
+                                                 960,
+                                                 1080,
+                                                 QStringLiteral("{zone-left}"),
+                                                 QStringLiteral("konsole|2"),
+                                                 960,
+                                                 0,
+                                                 960,
+                                                 1080,
+                                                 QStringLiteral("{zone-right}"),
+                                                 QStringLiteral("screen-0"),
+                                                 QStringLiteral("{zone-left}"),
+                                                 QStringLiteral("{zone-right}")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bssiiiissiiiissss)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::SwapTargetResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::SwapTargetResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.success, true);
@@ -598,20 +598,20 @@ private Q_SLOTS:
 
     void testRestoreTargetResultRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::RestoreTargetResult entry{true, true, 50, 75, 1024, 768};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::RestoreTargetResult entry{true, true, 50, 75, 1024, 768};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bbiiii)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::RestoreTargetResult>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::RestoreTargetResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.found, true);
         QCOMPARE(entry.toRect(), QRect(50, 75, 1024, 768));
 
-        PlasmaZones::RestoreTargetResult defaultEntry;
+        PhosphorProtocol::RestoreTargetResult defaultEntry;
         QCOMPARE(defaultEntry.success, false);
         QCOMPARE(defaultEntry.found, false);
         QCOMPARE(defaultEntry.toRect(), QRect(0, 0, 0, 0));
@@ -865,15 +865,15 @@ private Q_SLOTS:
 
     void testWindowOpenedEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::WindowOpenedEntry entry{QStringLiteral("firefox|42"), QStringLiteral("screen-0"), 320, 240};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::WindowOpenedEntry entry{QStringLiteral("firefox|42"), QStringLiteral("screen-0"), 320, 240};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(ssii)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::WindowOpenedEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::WindowOpenedEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
-        const int listTypeId = qMetaTypeId<PlasmaZones::WindowOpenedList>();
+        const int listTypeId = qMetaTypeId<PhosphorProtocol::WindowOpenedList>();
         QVERIFY(listTypeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
@@ -881,7 +881,7 @@ private Q_SLOTS:
         QCOMPARE(entry.minWidth, 320);
         QCOMPARE(entry.minHeight, 240);
 
-        PlasmaZones::WindowOpenedEntry defaultEntry;
+        PhosphorProtocol::WindowOpenedEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QVERIFY(defaultEntry.screenId.isEmpty());
         QCOMPARE(defaultEntry.minWidth, 0);
@@ -894,16 +894,16 @@ private Q_SLOTS:
 
     void testSnapConfirmationEntryRoundtrip()
     {
-        PlasmaZones::registerDBusTypes();
-        PlasmaZones::SnapConfirmationEntry entry{QStringLiteral("kate|7"), QStringLiteral("{zone-1}"),
-                                                 QStringLiteral("screen-0"), true};
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::SnapConfirmationEntry entry{QStringLiteral("kate|7"), QStringLiteral("{zone-1}"),
+                                                      QStringLiteral("screen-0"), true};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sssb)"));
 
-        const int typeId = qMetaTypeId<PlasmaZones::SnapConfirmationEntry>();
+        const int typeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
-        const int listTypeId = qMetaTypeId<PlasmaZones::SnapConfirmationList>();
+        const int listTypeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationList>();
         QVERIFY(listTypeId != QMetaType::UnknownType);
 
         QCOMPARE(entry.windowId, QStringLiteral("kate|7"));
@@ -911,7 +911,7 @@ private Q_SLOTS:
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
         QCOMPARE(entry.isRestore, true);
 
-        PlasmaZones::SnapConfirmationEntry defaultEntry;
+        PhosphorProtocol::SnapConfirmationEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.isRestore, false);
     }
