@@ -186,7 +186,7 @@ public:
      * remain on WindowTrackingService.
      *
      * Must be set after construction and before any lifecycle or navigation
-     * method is called. Not owned; must outlive SnapEngine.
+     * method is called. Typically parented to SnapEngine via QObject ownership.
      */
     void setSnapState(PhosphorZones::SnapState* state);
 

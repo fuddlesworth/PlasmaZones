@@ -160,6 +160,9 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
         m_lastUsedScreenId.clear();
         m_lastUsedZoneClass.clear();
         m_lastUsedDesktop = 0;
+        if (m_snapState) {
+            m_snapState->updateLastUsedZone({}, {}, {}, 0);
+        }
         lastUsedCleared = true;
     }
 
@@ -594,6 +597,9 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
                 m_lastUsedScreenId.clear();
                 m_lastUsedZoneClass.clear();
                 m_lastUsedDesktop = 0;
+                if (m_snapState) {
+                    m_snapState->updateLastUsedZone({}, {}, {}, 0);
+                }
             }
             Q_EMIT windowZoneChanged(windowId, QString());
             markDirty(DirtyZoneAssignments);

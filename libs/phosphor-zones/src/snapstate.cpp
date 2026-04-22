@@ -134,14 +134,18 @@ QJsonObject SnapState::toJson() const
     lastUsed[QLatin1String("desktop")] = m_lastUsedDesktop;
     obj[QLatin1String("lastUsedZone")] = lastUsed;
 
+    QStringList sortedUserSnapped(m_userSnappedClasses.begin(), m_userSnappedClasses.end());
+    sortedUserSnapped.sort();
     QJsonArray userSnapped;
-    for (const QString& c : m_userSnappedClasses) {
+    for (const QString& c : sortedUserSnapped) {
         userSnapped.append(c);
     }
     obj[QLatin1String("userSnappedClasses")] = userSnapped;
 
+    QStringList sortedAutoSnapped(m_autoSnappedWindows.begin(), m_autoSnappedWindows.end());
+    sortedAutoSnapped.sort();
     QJsonArray autoSnapped;
-    for (const QString& w : m_autoSnappedWindows) {
+    for (const QString& w : sortedAutoSnapped) {
         autoSnapped.append(w);
     }
     obj[QLatin1String("autoSnappedWindows")] = autoSnapped;
@@ -552,6 +556,9 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
     }
     allTracked.unite(m_floatingWindows);
     for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
         allTracked.insert(it.key());
     }
 

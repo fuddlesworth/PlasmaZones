@@ -101,6 +101,7 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_wts->setSnapState(nullptr);
         delete m_snapState;
         delete m_wts;
         delete m_zoneDetector;
@@ -362,6 +363,60 @@ private Q_SLOTS:
 
         m_wts->clearAutoSnapped(windowId);
         QVERIFY(!m_snapState->isAutoSnapped(windowId));
+    }
+
+    void testDualStoreSync_unassignClearsLastUsedZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-lastused-unassign");
+        const QString zoneId = QStringLiteral("zone-7");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, zoneId, screen, 1);
+        m_wts->updateLastUsedZone(zoneId, screen, QStringLiteral("dolphin"), 1);
+        QCOMPARE(m_snapState->lastUsedZoneId(), zoneId);
+
+        m_wts->unassignWindow(windowId);
+        QCOMPARE(m_snapState->lastUsedZoneId(), QString());
+        QCOMPARE(m_snapState->lastUsedScreenId(), QString());
+        QCOMPARE(m_snapState->lastUsedDesktop(), 0);
+    }
+
+    void testDualStoreSync_unsnapForFloatClearsLastUsedZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-lastused-float");
+        const QString zoneId = QStringLiteral("zone-8");
+        const QString screen = QStringLiteral("DP-2");
+
+        m_wts->assignWindowToZone(windowId, zoneId, screen, 2);
+        m_wts->updateLastUsedZone(zoneId, screen, QStringLiteral("konsole"), 2);
+        QCOMPARE(m_snapState->lastUsedZoneId(), zoneId);
+
+        m_wts->unsnapForFloat(windowId);
+        QCOMPARE(m_snapState->lastUsedZoneId(), QString());
+        QCOMPARE(m_snapState->lastUsedDesktop(), 0);
+    }
+
+    void testDualStoreSync_recordSnapIntent()
+    {
+        const QString windowId = QStringLiteral("dolphin|uuid-intent");
+
+        m_wts->recordSnapIntent(windowId, true);
+        QVERIFY(m_snapState->userSnappedClasses().contains(QStringLiteral("dolphin")));
+    }
+
+    void testPruneStaleAssignments_coversPreFloatMaps()
+    {
+        const QString windowId = QStringLiteral("app|uuid-prefloat-prune");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_snapState->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 0);
+        m_snapState->unsnapForFloat(windowId);
+        QVERIFY(!m_snapState->preFloatZone(windowId).isEmpty());
+
+        QSet<QString> alive;
+        int pruned = m_snapState->pruneStaleAssignments(alive);
+        QVERIFY(pruned > 0);
+        QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
     }
 
     // =========================================================================

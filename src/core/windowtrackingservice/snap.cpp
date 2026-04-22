@@ -458,6 +458,9 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
             m_userSnappedClasses.insert(windowClass);
+            if (m_snapState) {
+                m_snapState->recordSnapIntent(windowClass, true);
+            }
             markDirty(DirtyUserSnapped);
         }
     }
