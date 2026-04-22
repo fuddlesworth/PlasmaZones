@@ -132,9 +132,9 @@ EditorController::EditorController(QObject* parent)
     connect(&m_layoutReloadTimer, &QTimer::timeout, this, &EditorController::reloadLocalLayouts);
 
     auto bus = QDBusConnection::sessionBus();
-    const QString svc = QString::fromLatin1(PhosphorProtocol::Service::Name);
-    const QString path = QString::fromLatin1(PhosphorProtocol::Service::ObjectPath);
-    const QString iface = QString::fromLatin1(PhosphorProtocol::Service::Interface::LayoutRegistry);
+    const QString svc = QString(PhosphorProtocol::Service::Name);
+    const QString path = QString(PhosphorProtocol::Service::ObjectPath);
+    const QString iface = QString(PhosphorProtocol::Service::Interface::LayoutRegistry);
     for (const auto& sig :
          {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {

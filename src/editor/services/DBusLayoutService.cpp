@@ -15,9 +15,9 @@ using namespace PlasmaZones;
 
 DBusLayoutService::DBusLayoutService(QObject* parent)
     : ILayoutService(parent)
-    , m_serviceName(QString::fromLatin1(PhosphorProtocol::Service::Name))
-    , m_objectPath(QString::fromLatin1(PhosphorProtocol::Service::ObjectPath))
-    , m_interfaceName(QString::fromLatin1(PhosphorProtocol::Service::Interface::LayoutRegistry))
+    , m_serviceName(QString(PhosphorProtocol::Service::Name))
+    , m_objectPath(QString(PhosphorProtocol::Service::ObjectPath))
+    , m_interfaceName(QString(PhosphorProtocol::Service::Interface::LayoutRegistry))
     , m_interface(nullptr)
 {
 }

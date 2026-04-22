@@ -402,7 +402,7 @@ struct PHOSPHORPROTOCOL_EXPORT DragPolicy
 /// Drag outcome — daemon-authoritative decision about what to apply at drag
 /// end. Returned from WindowDragAdaptor::endDrag. The compositor plugin
 /// executes exactly the action specified; no further decisions on the effect
-/// side. Wire: (issiiiisb)  —  int action + 2 strings + 4 ints + string + bool
+/// side. Wire: (issiiiisbba(...))  —  int + 2 strings + 4 ints + string + 2 bools + EmptyZoneList
 struct PHOSPHORPROTOCOL_EXPORT DragOutcome
 {
     enum Action : int {

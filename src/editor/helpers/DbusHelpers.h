@@ -30,7 +30,7 @@ namespace DbusHelpers {
  *
  * Shared by SettingsDbusQueries.cpp and ShaderDbusQueries.cpp because
  * both target the exact same service/object/interface, and duplicating
- * the three fromLatin1() conversions at every call site invites drift.
+ * the three QLatin1String→QString conversions at every call site invites drift.
  */
 inline QDBusInterface createSettingsInterface()
 {

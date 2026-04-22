@@ -44,10 +44,9 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenName)) {
         return;
     }
-    QDBusMessage msg = QDBusMessage::createMethodCall(QString::fromLatin1(PhosphorProtocol::Service::Name),
-                                                      QString::fromLatin1(PhosphorProtocol::Service::ObjectPath),
-                                                      QString::fromLatin1(PhosphorProtocol::Service::Interface::Screen),
-                                                      QStringLiteral("getScreenGeometry"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));
     msg << screenName;
     QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
     if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
@@ -94,9 +93,8 @@ QVariantList EditorController::screenModel() const
             if (vsIndex >= 0) {
                 if (!vsConfigCache.contains(physId)) {
                     QDBusMessage msg = QDBusMessage::createMethodCall(
-                        QString::fromLatin1(PhosphorProtocol::Service::Name),
-                        QString::fromLatin1(PhosphorProtocol::Service::ObjectPath),
-                        QString::fromLatin1(PhosphorProtocol::Service::Interface::Screen),
+                        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                        QString(PhosphorProtocol::Service::Interface::Screen),
                         QStringLiteral("getVirtualScreenConfig"));
                     msg << physId;
                     QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
@@ -871,10 +869,9 @@ void EditorController::importLayout(const QString& filePath)
         return;
     }
 
-    QDBusInterface layoutManager(QString::fromLatin1(PhosphorProtocol::Service::Name),
-                                 QString::fromLatin1(PhosphorProtocol::Service::ObjectPath),
-                                 QString::fromLatin1(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                 QDBusConnection::sessionBus());
+    QDBusInterface layoutManager(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
         QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
@@ -922,10 +919,9 @@ void EditorController::exportLayout(const QString& filePath)
         return;
     }
 
-    QDBusInterface layoutManager(QString::fromLatin1(PhosphorProtocol::Service::Name),
-                                 QString::fromLatin1(PhosphorProtocol::Service::ObjectPath),
-                                 QString::fromLatin1(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                 QDBusConnection::sessionBus());
+    QDBusInterface layoutManager(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
         QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
