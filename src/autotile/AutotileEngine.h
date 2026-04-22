@@ -837,11 +837,7 @@ public:
      * @param minWidth Window minimum width in pixels (0 if unconstrained)
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    /// Convenience overload — equivalent to windowOpened(id, screen, 0, 0).
-    void windowOpened(const QString& windowId, const QString& screenId)
-    {
-        windowOpened(windowId, screenId, 0, 0);
-    }
+    using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
 
     /**

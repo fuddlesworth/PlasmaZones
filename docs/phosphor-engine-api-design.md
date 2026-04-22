@@ -165,25 +165,23 @@ public:
     bool isFloating(const QString& windowId) const override;
     QStringList floatingWindows() const override;
     QString placementIdForWindow(const QString& windowId) const override; // zone UUID
-    QRect geometryForWindow(const QString& windowId) const override;
     QJsonObject toJson() const override;
 
     // ── Snap-specific ──
-    void assignWindowToZone(const QString& windowId, const QString& zoneId,
-                            const QString& screenId);
-    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
-                             const QString& screenId);
+    void assignWindowToZone(const QString& windowId, const QString& zoneId);
+    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds);
     void unassignWindow(const QString& windowId);
     QString zoneForWindow(const QString& windowId) const;
     QStringList zonesForWindow(const QString& windowId) const;
     QStringList windowsInZone(const QString& zoneId) const;
 
     void setFloating(const QString& windowId, bool floating);
-    void storePreTileGeometry(const QString& windowId, const QRect& geo,
-                              const QString& screenId);
+    void storePreTileGeometry(const QString& windowId, const QRect& geometry,
+                              const QString& connectorName = {},
+                              bool overwrite = false);
     std::optional<QRect> preTileGeometry(const QString& windowId) const;
 
-    bool rotateWindows(bool clockwise);
+    QStringList rotateAssignments(bool clockwise);
 
     static SnapState* fromJson(const QJsonObject& json, QObject* parent = nullptr);
 
@@ -205,10 +203,10 @@ class PHOSPHORTILES_EXPORT TilingState : public QObject,
 {
     // Existing API unchanged.
     // New overrides:
+    QStringList managedWindows() const override;
+    // Returns windowOrder().
     QString placementIdForWindow(const QString& windowId) const override;
     // Returns tiling-order position as string.
-    QRect geometryForWindow(const QString& windowId) const override;
-    // Returns calculated zone rect for the window's position.
 };
 ```
 
@@ -306,6 +304,8 @@ phosphor-zones           phosphor-tiles
 - Daemon sees only `IPlacementEngine*` — never branches on mode
 - Wayfire plugin links phosphor-zones + phosphor-engine-api and gets full snap functionality
 - `IPlacementState` lets persistence and D-Bus adaptor serialize uniformly
+
+**Interface width note:** `IPlacementEngine` has 22 pure virtual methods (lifecycle + navigation + persistence + state access). With only two implementors this is a pragmatic trade-off: the merged interface eliminates the adapter indirection that was the old `IEngineLifecycle` + `INavigationActions` split. If a third engine type is added (e.g., floating-only mode), consider splitting the navigation methods into a separate mixin.
 
 ---
 

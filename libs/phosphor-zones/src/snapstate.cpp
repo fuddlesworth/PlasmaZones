@@ -132,8 +132,12 @@ void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneI
 
 void SnapState::assignWindowToZones(const QString& windowId, const QStringList& zoneIds)
 {
+    if (zoneIds.isEmpty()) {
+        unassignWindow(windowId);
+        return;
+    }
     m_windowZoneAssignments[windowId] = zoneIds;
-    Q_EMIT windowAssigned(windowId, zoneIds.isEmpty() ? QString() : zoneIds.first());
+    Q_EMIT windowAssigned(windowId, zoneIds.first());
     Q_EMIT stateChanged();
 }
 
@@ -278,6 +282,10 @@ void SnapState::windowClosed(const QString& windowId)
 
 void SnapState::clear()
 {
+    if (m_windowZoneAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preTileGeometries.isEmpty()
+        && m_preFloatZoneAssignments.isEmpty()) {
+        return;
+    }
     m_windowZoneAssignments.clear();
     m_floatingWindows.clear();
     m_preTileGeometries.clear();
@@ -293,35 +301,58 @@ QStringList SnapState::rotateAssignments(bool clockwise)
         return {};
     }
 
-    QMap<QString, QString> zoneToWindow;
+    // Collect the full zone list for each window, keyed by primary (first) zone
+    // for sort order. Multi-zone assignments are preserved through rotation.
+    QMap<QString, QPair<QString, QStringList>> zoneToWindowAndZones;
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         if (!it->isEmpty()) {
-            zoneToWindow[it->first()] = it.key();
+            zoneToWindowAndZones[it->first()] = {it.key(), it.value()};
         }
     }
 
-    if (zoneToWindow.size() < 2) {
+    if (zoneToWindowAndZones.size() < 2) {
         return {};
     }
 
-    QList<QString> sortedZones = zoneToWindow.keys();
-    QList<QString> windowOrder;
-    for (const auto& z : sortedZones) {
-        windowOrder.append(zoneToWindow[z]);
+    QList<QString> sortedPrimaryZones = zoneToWindowAndZones.keys();
+    QList<QPair<QString, QStringList>> windowsWithZones;
+    for (const auto& z : sortedPrimaryZones) {
+        windowsWithZones.append(zoneToWindowAndZones[z]);
     }
 
     if (clockwise) {
-        windowOrder.prepend(windowOrder.takeLast());
+        windowsWithZones.prepend(windowsWithZones.takeLast());
     } else {
-        windowOrder.append(windowOrder.takeFirst());
+        windowsWithZones.append(windowsWithZones.takeFirst());
     }
 
-    for (int i = 0; i < sortedZones.size(); ++i) {
-        m_windowZoneAssignments[windowOrder[i]] = {sortedZones[i]};
+    QStringList affected;
+    for (int i = 0; i < sortedPrimaryZones.size(); ++i) {
+        const QString& windowId = windowsWithZones[i].first;
+        const QStringList& originalZones = windowsWithZones[i].second;
+        if (originalZones.size() == 1) {
+            m_windowZoneAssignments[windowId] = {sortedPrimaryZones[i]};
+        } else {
+            // Multi-zone: shift by the same offset as the primary zone moved
+            int srcIdx = sortedPrimaryZones.indexOf(originalZones.first());
+            int delta = i - srcIdx;
+            QStringList rotated;
+            for (const QString& z : originalZones) {
+                int zIdx = sortedPrimaryZones.indexOf(z);
+                if (zIdx >= 0) {
+                    int newIdx = (zIdx + delta + sortedPrimaryZones.size()) % sortedPrimaryZones.size();
+                    rotated.append(sortedPrimaryZones[newIdx]);
+                } else {
+                    rotated.append(z);
+                }
+            }
+            m_windowZoneAssignments[windowId] = rotated;
+        }
+        affected.append(windowId);
     }
 
     Q_EMIT stateChanged();
-    return windowOrder;
+    return affected;
 }
 
 // ── Deserialization ─────────────────────────────────────────────────────────
@@ -340,14 +371,22 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
         QStringList ids;
         const QJsonArray arr = it->toArray();
         for (const auto& v : arr) {
-            ids.append(v.toString());
+            const QString zoneId = v.toString();
+            if (!zoneId.isEmpty()) {
+                ids.append(zoneId);
+            }
         }
-        state->m_windowZoneAssignments[it.key()] = ids;
+        if (!ids.isEmpty()) {
+            state->m_windowZoneAssignments[it.key()] = ids;
+        }
     }
 
     const QJsonArray floating = json.value(QLatin1String("floatingWindows")).toArray();
     for (const auto& v : floating) {
-        state->m_floatingWindows.insert(v.toString());
+        const QString wId = v.toString();
+        if (!wId.isEmpty()) {
+            state->m_floatingWindows.insert(wId);
+        }
     }
 
     const QJsonObject preTile = json.value(QLatin1String("preTileGeometries")).toObject();

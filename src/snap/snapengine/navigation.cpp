@@ -22,8 +22,7 @@ namespace PlasmaZones {
 // src/dbus/windowtrackingadaptor/targets.cpp and emits applyGeometryRequested.
 //
 // The IPlacementEngine interface unifies lifecycle + navigation so both
-// engines are dispatched through a single polymorphic call. Navigation
-// pointer, not polymorphically.
+// engines are dispatched through a single polymorphic call.
 //
 // What remains here is snap-mode batch operations (layout switch resnap,
 // current-assignment resnap, autotile → snap transition resnap) that don't

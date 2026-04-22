@@ -23,7 +23,6 @@ class LayoutRegistry;
 namespace PlasmaZones {
 
 using NavigationContext = PhosphorEngineApi::NavigationContext;
-
 using PhosphorProtocol::CycleTargetResult;
 using PhosphorProtocol::FocusTargetResult;
 using PhosphorProtocol::MoveTargetResult;
@@ -71,11 +70,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool isActiveOnScreen(const QString& screenId) const override;
-    /// Convenience overload — equivalent to windowOpened(id, screen, 0, 0).
-    void windowOpened(const QString& windowId, const QString& screenId)
-    {
-        windowOpened(windowId, screenId, 0, 0);
-    }
+    using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
@@ -279,7 +274,10 @@ public:
     void cycleFocus(bool forward, const NavigationContext& ctx) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // IPlacementEngine — state access (placeholder)
+    // IPlacementEngine — state access
+    //
+    // Returns nullptr unconditionally until PR 2 wires per-screen SnapState
+    // ownership. Do not rely on non-null return for snap-mode screens yet.
     // ═══════════════════════════════════════════════════════════════════════════
 
     PhosphorEngineApi::IPlacementState* stateForScreen(const QString& screenId) override;

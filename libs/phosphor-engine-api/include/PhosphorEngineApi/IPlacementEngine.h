@@ -46,6 +46,12 @@ public:
     virtual void windowOpened(const QString& windowId, const QString& screenId, int minWidth = 0,
                               int minHeight = 0) = 0;
 
+    /// Convenience overload — equivalent to windowOpened(id, screen, 0, 0).
+    void windowOpened(const QString& windowId, const QString& screenId)
+    {
+        windowOpened(windowId, screenId, 0, 0);
+    }
+
     /// A window was closed.
     virtual void windowClosed(const QString& windowId) = 0;
 

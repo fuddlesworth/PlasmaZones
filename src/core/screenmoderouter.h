@@ -28,6 +28,9 @@ namespace PlasmaZones {
  * The router is a thin facade over existing lookups — it does not
  * hold any state of its own. Construction is cheap, it should be
  * held by the daemon and passed by reference/pointer to consumers.
+ *
+ * Lifetime: the router holds raw IPlacementEngine pointers. The daemon
+ * must reset the router BEFORE destroying the engines (see Daemon::stop).
  */
 class PLASMAZONES_EXPORT ScreenModeRouter
 {

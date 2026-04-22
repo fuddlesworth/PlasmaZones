@@ -185,7 +185,11 @@ void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IPlacementEngine — state access (placeholder)
+// IPlacementEngine — state access
+//
+// SnapEngine does not yet own per-screen SnapState instances — that migration
+// happens in PR 2. Until then, stateForScreen returns nullptr even for managed
+// screens. Callers that need snap state must still go through WTS directly.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/)
