@@ -142,14 +142,6 @@ QJsonObject SnapState::toJson() const
     }
     obj[QLatin1String("userSnappedClasses")] = userSnapped;
 
-    QStringList sortedAutoSnapped(m_autoSnappedWindows.begin(), m_autoSnappedWindows.end());
-    sortedAutoSnapped.sort();
-    QJsonArray autoSnapped;
-    for (const QString& w : sortedAutoSnapped) {
-        autoSnapped.append(w);
-    }
-    obj[QLatin1String("autoSnappedWindows")] = autoSnapped;
-
     return obj;
 }
 
@@ -168,7 +160,11 @@ void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneI
 void SnapState::assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                     int virtualDesktop)
 {
-    if (windowId.isEmpty() || zoneIds.isEmpty()) {
+    if (windowId.isEmpty()) {
+        return;
+    }
+    if (zoneIds.isEmpty()) {
+        unassignWindow(windowId);
         return;
     }
     QStringList validZoneIds;
@@ -554,6 +550,12 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         allTracked.insert(it.key());
     }
+    for (auto it = m_windowScreenAssignments.constBegin(); it != m_windowScreenAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
     allTracked.unite(m_floatingWindows);
     for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
         allTracked.insert(it.key());
@@ -561,6 +563,10 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
     for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
         allTracked.insert(it.key());
     }
+    for (auto it = m_preFloatScreenAssignments.constBegin(); it != m_preFloatScreenAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    allTracked.unite(m_autoSnappedWindows);
 
     int pruned = 0;
     for (const QString& windowId : allTracked) {
@@ -675,14 +681,6 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
         const QString c = v.toString();
         if (!c.isEmpty()) {
             state->m_userSnappedClasses.insert(c);
-        }
-    }
-
-    const QJsonArray autoSnapped = json.value(QLatin1String("autoSnappedWindows")).toArray();
-    for (const auto& v : autoSnapped) {
-        const QString w = v.toString();
-        if (!w.isEmpty()) {
-            state->m_autoSnappedWindows.insert(w);
         }
     }
 

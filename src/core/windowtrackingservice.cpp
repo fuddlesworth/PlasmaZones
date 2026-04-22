@@ -591,6 +591,7 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         QStringList previousZoneIds = m_windowZoneAssignments.take(windowId);
         m_windowScreenAssignments.remove(windowId);
         m_windowDesktopAssignments.remove(windowId);
+        m_autoSnappedWindows.remove(windowId);
         if (!previousZoneIds.isEmpty()) {
             if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
                 m_lastUsedZoneId.clear();

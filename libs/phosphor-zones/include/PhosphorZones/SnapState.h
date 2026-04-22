@@ -297,11 +297,16 @@ private:
     QSet<QString> allManagedWindowIds() const
     {
         QSet<QString> all;
-        all.reserve(m_windowZoneAssignments.size() + m_floatingWindows.size());
+        all.reserve(m_windowZoneAssignments.size() + m_floatingWindows.size() + m_preTileGeometries.size()
+                    + m_autoSnappedWindows.size());
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             all.insert(it.key());
         }
         all.unite(m_floatingWindows);
+        for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
+            all.insert(it.key());
+        }
+        all.unite(m_autoSnappedWindows);
         return all;
     }
 
