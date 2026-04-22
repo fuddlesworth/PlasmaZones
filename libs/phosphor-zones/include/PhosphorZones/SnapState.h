@@ -192,7 +192,11 @@ public:
     }
     void retagLastUsedZoneClass(const QString& newClass)
     {
+        if (m_lastUsedZoneClass == newClass) {
+            return;
+        }
         m_lastUsedZoneClass = newClass;
+        Q_EMIT stateChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

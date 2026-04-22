@@ -259,10 +259,6 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // saveState / loadState persistence delegation tests
-    // =========================================================================
-
-    // =========================================================================
     // Dual-store sync tests — verify WTS and SnapState agree after mutations
     // =========================================================================
 
@@ -330,6 +326,42 @@ private Q_SLOTS:
 
         m_wts->clearPreTileGeometry(windowId);
         QVERIFY(!m_snapState->hasPreTileGeometry(windowId));
+    }
+
+    void testDualStoreSync_windowClosed()
+    {
+        const QString windowId = QStringLiteral("app|uuid-closed-sync");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 1);
+        m_wts->storePreTileGeometry(windowId, QRect(0, 0, 400, 300), screen);
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->hasPreTileGeometry(windowId));
+
+        m_wts->windowClosed(windowId);
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+        QVERIFY(!m_snapState->isFloating(windowId));
+        QCOMPARE(m_snapState->screenForWindow(windowId), QString());
+    }
+
+    void testDualStoreSync_updateLastUsedZone()
+    {
+        m_wts->updateLastUsedZone(QStringLiteral("zone-5"), QStringLiteral("DP-2"), QStringLiteral("konsole"), 2);
+        QCOMPARE(m_snapState->lastUsedZoneId(), QStringLiteral("zone-5"));
+        QCOMPARE(m_snapState->lastUsedScreenId(), QStringLiteral("DP-2"));
+        QCOMPARE(m_snapState->lastUsedZoneClass(), QStringLiteral("konsole"));
+        QCOMPARE(m_snapState->lastUsedDesktop(), 2);
+    }
+
+    void testDualStoreSync_markAndClearAutoSnapped()
+    {
+        const QString windowId = QStringLiteral("app|uuid-auto-sync");
+
+        m_wts->markAsAutoSnapped(windowId);
+        QVERIFY(m_snapState->isAutoSnapped(windowId));
+
+        m_wts->clearAutoSnapped(windowId);
+        QVERIFY(!m_snapState->isAutoSnapped(windowId));
     }
 
     // =========================================================================

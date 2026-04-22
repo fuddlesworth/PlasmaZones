@@ -546,16 +546,21 @@ QSet<QString> SnapState::buildOccupiedZoneSet(const QString& screenFilter, int d
 
 int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
 {
-    int pruned = 0;
-    QList<QString> toRemove;
+    QSet<QString> allTracked;
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        if (!aliveWindowIds.contains(it.key())) {
-            toRemove.append(it.key());
-        }
+        allTracked.insert(it.key());
     }
-    for (const QString& windowId : toRemove) {
-        removeWindowData(windowId);
-        ++pruned;
+    allTracked.unite(m_floatingWindows);
+    for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+
+    int pruned = 0;
+    for (const QString& windowId : allTracked) {
+        if (!aliveWindowIds.contains(windowId)) {
+            removeWindowData(windowId);
+            ++pruned;
+        }
     }
     if (pruned > 0) {
         Q_EMIT stateChanged();
@@ -568,9 +573,6 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
 SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
 {
     const QString screenId = json.value(QLatin1String("screenId")).toString();
-    if (screenId.isEmpty()) {
-        return nullptr;
-    }
     auto* state = new SnapState(screenId, parent);
 
     const QJsonObject zones = json.value(QLatin1String("zoneAssignments")).toObject();

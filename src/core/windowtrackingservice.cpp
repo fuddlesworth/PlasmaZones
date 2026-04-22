@@ -583,7 +583,21 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
             m_snapState->unsnapForFloat(windowId);
         }
 
-        unassignWindow(windowId);
+        // Inline WTS-side unassign without re-propagating to SnapState (already
+        // handled above — SnapState::unsnapForFloat internally unassigns).
+        QStringList previousZoneIds = m_windowZoneAssignments.take(windowId);
+        m_windowScreenAssignments.remove(windowId);
+        m_windowDesktopAssignments.remove(windowId);
+        if (!previousZoneIds.isEmpty()) {
+            if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
+                m_lastUsedZoneId.clear();
+                m_lastUsedScreenId.clear();
+                m_lastUsedZoneClass.clear();
+                m_lastUsedDesktop = 0;
+            }
+            Q_EMIT windowZoneChanged(windowId, QString());
+            markDirty(DirtyZoneAssignments);
+        }
 
         // Pop one pending-restore entry (FIFO) so this window doesn't get
         // re-snapped to the old zone when closed and reopened. The queue is
