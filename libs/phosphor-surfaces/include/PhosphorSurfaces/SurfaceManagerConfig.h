@@ -6,6 +6,7 @@
 #include <PhosphorSurfaces/phosphorsurfaces_export.h>
 
 #include <QString>
+#include <QVersionNumber>
 
 #include <functional>
 
@@ -33,6 +34,10 @@ struct PHOSPHORSURFACES_EXPORT SurfaceManagerConfig
     // When null and the active Qt graphics API is Vulkan, SurfaceManager
     // creates and owns a fallback instance internally.
     QVulkanInstance* vulkanInstance = nullptr;
+
+    // Vulkan API version for the fallback instance (only used when
+    // vulkanInstance is null and the graphics API is Vulkan).
+    QVersionNumber vulkanApiVersion = QVersionNumber(1, 1);
 };
 
 } // namespace PhosphorSurfaces

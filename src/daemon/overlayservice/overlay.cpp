@@ -17,7 +17,6 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlComponent>
-#include <QQmlContext>
 #include <QMutexLocker>
 #include <QPointer>
 
@@ -370,9 +369,6 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
 
     // Choose overlay type based on shader settings for THIS screen's layout
     bool usingShader = useShaderForScreen(screenId);
-
-    // Expose overlayService to QML context for error reporting
-    m_surfaceManager->engine()->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
     // Compute virtual-screen overrides up-front (wlr-layer-shell locks
     // output+anchors at attach).

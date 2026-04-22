@@ -49,6 +49,12 @@ public:
 
     bool keepAliveActive() const;
 
+    // Drain deferred-delete events posted by deleteLater() calls on surfaces.
+    // Call this from your destructor body BEFORE member destructors run, if
+    // surfaces are parented to your object rather than to this SurfaceManager.
+    // Without this, surface destructors may touch your already-destroyed members.
+    void drainDeferredDeletes();
+
 Q_SIGNALS:
     void keepAliveLost();
 

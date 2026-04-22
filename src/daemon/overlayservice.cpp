@@ -140,12 +140,14 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
-            [](QQmlEngine& engine) {
+            [this](QQmlEngine& engine) {
                 auto* localizedContext = new PzLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
+                engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
+        .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
     });
 
     // Connect to screen changes (with safety check for early initialization)
@@ -326,10 +328,11 @@ OverlayService::~OverlayService()
         m_shaderPreviewSurface = nullptr;
     }
 
-    // ~m_surfaceManager runs next (member destruction order) and handles:
-    //   1. keep-alive surface teardown
-    //   2. deferred-delete drain loop
-    //   3. engine destruction
+    // Drain deferred-delete events NOW, while all OverlayService members are
+    // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,
+    // etc. — if we let ~m_surfaceManager's drain run instead, those members could
+    // already be destroyed (C++ member destruction order is reverse declaration).
+    m_surfaceManager->drainDeferredDeletes();
 }
 
 PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,

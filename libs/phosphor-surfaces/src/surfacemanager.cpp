@@ -46,6 +46,7 @@ public:
 #endif
 
     bool pipelineCacheDirCreated = false;
+    bool creatingKeepAlive = false;
 
     void configureEngine()
     {
@@ -68,7 +69,7 @@ public:
             return ownedVulkanInstance.get();
         }
         ownedVulkanInstance = std::make_unique<QVulkanInstance>();
-        ownedVulkanInstance->setApiVersion(QVersionNumber(1, 1));
+        ownedVulkanInstance->setApiVersion(config.vulkanApiVersion);
         if (ownedVulkanInstance->create()) {
             qCDebug(lcSurfaces) << "Created fallback QVulkanInstance";
             return ownedVulkanInstance.get();
@@ -101,6 +102,12 @@ SurfaceManager::~SurfaceManager()
     }
     m_impl->keepAliveWindow = nullptr;
 
+    drainDeferredDeletes();
+    m_impl->engine.reset();
+}
+
+void SurfaceManager::drainDeferredDeletes()
+{
     constexpr int kDrainCap = 64;
     QEventLoop drainLoop;
     int passes = 0;
@@ -113,8 +120,6 @@ SurfaceManager::~SurfaceManager()
     if (passes == kDrainCap) {
         qCWarning(lcSurfaces) << "deferred-delete drain hit safety cap" << kDrainCap;
     }
-
-    m_impl->engine.reset();
 }
 
 QQmlEngine* SurfaceManager::engine() const
@@ -195,16 +200,18 @@ void SurfaceManager::configureWindow(PhosphorLayer::Surface* surface)
 
 void SurfaceManager::createKeepAlive()
 {
-    if (m_impl->keepAliveSurface) {
+    if (m_impl->keepAliveSurface || m_impl->creatingKeepAlive) {
         return;
     }
     if (!m_impl->config.surfaceFactory) {
         return;
     }
+    m_impl->creatingKeepAlive = true;
 
     QScreen* screen = QGuiApplication::primaryScreen();
     if (!screen) {
         qCWarning(lcSurfaces) << "Keep-alive: no screen available — will retry on screenAdded";
+        m_impl->creatingKeepAlive = false;
         if (qGuiApp && !m_impl->screenAddedConnection) {
             m_impl->screenAddedConnection = connect(qGuiApp, &QGuiApplication::screenAdded, this, [this]() {
                 if (!m_impl->keepAliveSurface) {
@@ -227,6 +234,7 @@ void SurfaceManager::createKeepAlive()
     auto* surface = m_impl->config.surfaceFactory->create(std::move(cfg), this);
     if (!surface) {
         qCWarning(lcSurfaces) << "Failed to create keep-alive surface";
+        m_impl->creatingKeepAlive = false;
         return;
     }
 
@@ -237,6 +245,7 @@ void SurfaceManager::createKeepAlive()
         || keepAliveState == PhosphorLayer::Surface::State::Warming) {
         qCWarning(lcSurfaces) << "Keep-alive surface warm-up failed (state:" << static_cast<int>(keepAliveState) << ")";
         surface->deleteLater();
+        m_impl->creatingKeepAlive = false;
         return;
     }
 
@@ -249,6 +258,7 @@ void SurfaceManager::createKeepAlive()
     surface->show();
     m_impl->keepAliveSurface = surface;
     m_impl->keepAliveWindow = surface->window();
+    m_impl->creatingKeepAlive = false;
 
     connect(surface, &PhosphorLayer::Surface::failed, this, [this, surface](const QString& reason) {
         qCWarning(lcSurfaces) << "Keep-alive surface failed:" << reason;

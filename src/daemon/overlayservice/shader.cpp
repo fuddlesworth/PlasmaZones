@@ -18,7 +18,6 @@
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
-#include <QQmlContext>
 #include <QMutexLocker>
 #include <QTimer>
 #include <QImage>
@@ -449,8 +448,6 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     if (m_shaderPreviewSurface) {
         return;
     }
-
-    m_surfaceManager->engine()->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
