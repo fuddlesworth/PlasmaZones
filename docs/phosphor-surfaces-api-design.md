@@ -89,7 +89,17 @@ lifecycle methods. The library handles Wayland/Vulkan concerns internally.
    The library handles the bookkeeping; the caller receives callbacks to
    push content into newly created surfaces.
 
-7. **LGPL boundary maintained at runtime.** The engine configurator
+7. **Vulkan as a first-class concern.** The library manages
+   `QVulkanInstance` lifecycle transparently. Callers can provide their
+   own instance via `SurfaceManagerConfig::vulkanInstance`, or let the
+   library create and own a fallback when the active Qt graphics API is
+   Vulkan. Every window gets the Vulkan instance assigned automatically.
+   Combined with the keep-alive surface, this makes Vulkan rendering
+   survive show/hide/destroy cycles without caller intervention -- the
+   exact pain point that makes naive Wayland+Vulkan surface management
+   unreliable.
+
+8. **LGPL boundary maintained at runtime.** The engine configurator
    lets GPL callers register GPL-licensed types (e.g. `ZoneShaderItem`)
    into the library-owned `QQmlEngine`. The library never references
    those types -- they enter via a caller-supplied callback and live
@@ -98,30 +108,48 @@ lifecycle methods. The library handles Wayland/Vulkan concerns internally.
 
 ---
 
-## Public API
+## Shipped API (Phase 1)
 
 ### `SurfaceManagerConfig`
 
 ```cpp
 namespace PhosphorSurfaces {
 
-struct SurfaceManagerConfig
+struct PHOSPHORSURFACES_EXPORT SurfaceManagerConfig
 {
-    PhosphorLayer::SurfaceFactory* surfaceFactory;
+    PhosphorLayer::SurfaceFactory* surfaceFactory = nullptr;
 
     // Called once during construction. Caller registers QML types,
     // installs i18n context, and sets context properties here.
     std::function<void(QQmlEngine&)> engineConfigurator;
 
-    // Optional: pipeline cache path for persisting shader compilation.
-    // Empty string disables caching.
+    // Optional: full path for persisting graphics pipeline compilation.
+    // Applied via QQuickGraphicsConfiguration::setPipelineCacheSaveFile()
+    // on every window. Empty string disables caching.
     QString pipelineCachePath;
+
+    // Caller-owned Vulkan instance. When non-null, every window created
+    // by SurfaceManager will have setVulkanInstance() called with this
+    // pointer. When null and the active Qt graphics API is Vulkan,
+    // SurfaceManager creates and owns a fallback instance internally.
+    // This makes Vulkan lifecycle management automatic — callers don't
+    // need to know about VkInstance/VkSwapchainKHR teardown ordering.
+    QVulkanInstance* vulkanInstance = nullptr;
 };
 
 }
 ```
 
-### `SurfaceHandle`
+---
+
+## Planned API (Not Yet Implemented)
+
+> The types below are the **target design** for Phase 2+. They are not
+> shipped in v0.1.0. Current callers use
+> `SurfaceManager::createSurface(PhosphorLayer::SurfaceConfig)` and
+> manage returned `PhosphorLayer::Surface*` pointers directly.
+
+### `SurfaceHandle` [PLANNED]
 
 ```cpp
 namespace PhosphorSurfaces {
@@ -147,7 +175,7 @@ public:
 }
 ```
 
-### `SurfaceSpec`
+### `SurfaceSpec` [PLANNED]
 
 ```cpp
 namespace PhosphorSurfaces {
@@ -173,7 +201,7 @@ struct SurfaceSpec
 }
 ```
 
-### `ScreenMapping`
+### `ScreenMapping` [PLANNED]
 
 ```cpp
 namespace PhosphorSurfaces {
@@ -191,7 +219,11 @@ struct ScreenTarget
 }
 ```
 
-### `SurfaceManager`
+### `SurfaceManager` (shipped + planned)
+
+The shipped Phase 1 methods are marked **[SHIPPED]**. Methods marked
+**[PLANNED]** use the `SurfaceHandle`/`SurfaceSpec`/`ScreenTarget` types
+defined above and are not yet implemented.
 
 ```cpp
 namespace PhosphorSurfaces {
@@ -201,70 +233,50 @@ class PHOSPHORSURFACES_EXPORT SurfaceManager : public QObject
     Q_OBJECT
 
 public:
-    explicit SurfaceManager(const SurfaceManagerConfig& config,
-                            QObject* parent = nullptr);
-    ~SurfaceManager() override;
+    explicit SurfaceManager(SurfaceManagerConfig config,
+                            QObject* parent = nullptr);         // [SHIPPED]
+    ~SurfaceManager() override;                                 // [SHIPPED]
 
     // ── Engine access ───────────────────────────────────────────
-    // Read-only access for callers that need to set additional
-    // context properties after construction (e.g., per-show updates).
-    QQmlEngine* engine() const;
+    QQmlEngine* engine() const;                                 // [SHIPPED]
 
-    // ── Surface lifecycle ───────────────────────────────────────
+    // ── Surface lifecycle (Phase 1) ─────────────────────────────
+    // Phase 1: callers pass a PhosphorLayer::SurfaceConfig directly.
+    // Ownership: surfaceParent (if non-null) or this SurfaceManager.
+    // Vulkan instance + pipeline cache applied automatically.
+    PhosphorLayer::Surface* createSurface(
+        PhosphorLayer::SurfaceConfig cfg,
+        QObject* surfaceParent = nullptr);                      // [SHIPPED]
 
-    // Create a surface on the given screen. Returns a handle for
-    // subsequent operations. The surface is warmed up (QML loaded)
-    // before returning. Returns nullptr on failure.
+    // ── Surface lifecycle (Phase 2 — not yet implemented) ───────
     SurfaceHandle* createSurface(const SurfaceSpec& spec,
-                                 const ScreenTarget& screen);
-
-    // Destroy a surface immediately. Cleans up Wayland resources.
-    // The handle is invalid after this call.
-    void destroySurface(SurfaceHandle* handle);
-
-    // Destroy all surfaces bound to the given effective screen ID.
-    void destroySurfacesForScreen(const QString& effectiveScreenId);
+                                 const ScreenTarget& screen);   // [PLANNED]
+    void destroySurface(SurfaceHandle* handle);                 // [PLANNED]
+    void destroySurfacesForScreen(
+        const QString& effectiveScreenId);                      // [PLANNED]
 
     // ── Show / hide ─────────────────────────────────────────────
-
-    void showSurface(SurfaceHandle* handle);
-    void hideSurface(SurfaceHandle* handle);
+    void showSurface(SurfaceHandle* handle);                    // [PLANNED]
+    void hideSurface(SurfaceHandle* handle);                    // [PLANNED]
 
     // ── Warm-up (pre-create without showing) ────────────────────
-
-    // Create and warm up a surface but don't show it. Useful for
-    // OSD-style surfaces where first-show latency matters.
     SurfaceHandle* warmUpSurface(const SurfaceSpec& spec,
-                                 const ScreenTarget& screen);
+                                 const ScreenTarget& screen);   // [PLANNED]
 
     // ── Screen hotplug ──────────────────────────────────────────
-
-    // Notify the manager that screens have changed. The manager
-    // destroys surfaces for removed screens and emits
-    // screenAdded() so the caller can create surfaces for new ones.
-    void updateScreens(const QList<ScreenTarget>& currentScreens);
+    void updateScreens(
+        const QList<ScreenTarget>& currentScreens);             // [PLANNED]
 
     // ── Scope generation ────────────────────────────────────────
-
-    // Returns a unique scope suffix for layer-shell surface scopes.
-    // Prevents compositor rate-limiting on rapid destroy/recreate.
-    quint64 nextScopeGeneration();
+    quint64 nextScopeGeneration();                              // [SHIPPED]
 
     // ── Keep-alive ──────────────────────────────────────────────
-
-    // The keep-alive surface is created automatically during
-    // construction and destroyed during destruction. No caller
-    // action required. Exposed only for diagnostics.
-    bool keepAliveActive() const;
+    bool keepAliveActive() const;                               // [SHIPPED]
 
 Q_SIGNALS:
-    // Emitted when a new physical screen is detected during
-    // updateScreens(). The caller should create surfaces for it.
-    void screenAdded(QScreen* screen);
-
-    // Emitted when a screen is removed. All surfaces for this
-    // screen have already been destroyed by the time this fires.
-    void screenRemoved(const QString& effectiveScreenId);
+    void keepAliveLost();                                       // [SHIPPED]
+    void screenAdded(QScreen* screen);                          // [PLANNED]
+    void screenRemoved(const QString& effectiveScreenId);       // [PLANNED]
 };
 
 }  // namespace PhosphorSurfaces

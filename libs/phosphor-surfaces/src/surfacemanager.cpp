@@ -9,15 +9,23 @@
 #include <PhosphorLayer/SurfaceFactory.h>
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QEventLoop>
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QQuickGraphicsConfiguration>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
+#include <QSGRendererInterface>
+#include <QStandardPaths>
 #include <QTimer>
+
+#if QT_CONFIG(vulkan)
+#include <QVulkanInstance>
+#endif
 
 namespace PhosphorSurfaces {
 
@@ -31,6 +39,13 @@ public:
     PhosphorLayer::Surface* keepAliveSurface = nullptr;
     QPointer<QQuickWindow> keepAliveWindow;
     quint64 scopeGeneration = 0;
+    QMetaObject::Connection screenAddedConnection;
+
+#if QT_CONFIG(vulkan)
+    std::unique_ptr<QVulkanInstance> ownedVulkanInstance;
+#endif
+
+    bool pipelineCacheDirCreated = false;
 
     void configureEngine()
     {
@@ -38,6 +53,30 @@ public:
         if (config.engineConfigurator) {
             config.engineConfigurator(*engine);
         }
+    }
+
+    QVulkanInstance* resolveVulkanInstance()
+    {
+#if QT_CONFIG(vulkan)
+        if (config.vulkanInstance) {
+            return config.vulkanInstance;
+        }
+        if (QQuickWindow::graphicsApi() != QSGRendererInterface::Vulkan) {
+            return nullptr;
+        }
+        if (ownedVulkanInstance) {
+            return ownedVulkanInstance.get();
+        }
+        ownedVulkanInstance = std::make_unique<QVulkanInstance>();
+        ownedVulkanInstance->setApiVersion(QVersionNumber(1, 1));
+        if (ownedVulkanInstance->create()) {
+            qCDebug(lcSurfaces) << "Created fallback QVulkanInstance";
+            return ownedVulkanInstance.get();
+        }
+        qCWarning(lcSurfaces) << "Failed to create fallback QVulkanInstance";
+        ownedVulkanInstance.reset();
+#endif
+        return nullptr;
     }
 };
 
@@ -52,13 +91,17 @@ SurfaceManager::SurfaceManager(SurfaceManagerConfig config, QObject* parent)
 
 SurfaceManager::~SurfaceManager()
 {
+    if (m_impl->screenAddedConnection) {
+        QObject::disconnect(m_impl->screenAddedConnection);
+    }
+
     if (m_impl->keepAliveSurface) {
         m_impl->keepAliveSurface->deleteLater();
         m_impl->keepAliveSurface = nullptr;
     }
     m_impl->keepAliveWindow = nullptr;
 
-    constexpr int kDrainCap = 32;
+    constexpr int kDrainCap = 64;
     QEventLoop drainLoop;
     int passes = 0;
     for (; passes < kDrainCap; ++passes) {
@@ -79,7 +122,7 @@ QQmlEngine* SurfaceManager::engine() const
     return m_impl->engine.get();
 }
 
-PhosphorLayer::Surface* SurfaceManager::createSurface(PhosphorLayer::SurfaceConfig cfg)
+PhosphorLayer::Surface* SurfaceManager::createSurface(PhosphorLayer::SurfaceConfig cfg, QObject* surfaceParent)
 {
     if (!m_impl->config.surfaceFactory) {
         qCWarning(lcSurfaces) << "No SurfaceFactory configured";
@@ -88,7 +131,7 @@ PhosphorLayer::Surface* SurfaceManager::createSurface(PhosphorLayer::SurfaceConf
 
     cfg.sharedEngine = m_impl->engine.get();
 
-    auto* surface = m_impl->config.surfaceFactory->create(std::move(cfg), this);
+    auto* surface = m_impl->config.surfaceFactory->create(std::move(cfg), surfaceParent ? surfaceParent : this);
     if (!surface) {
         qCWarning(lcSurfaces) << "SurfaceFactory::create() returned nullptr";
         return nullptr;
@@ -96,20 +139,21 @@ PhosphorLayer::Surface* SurfaceManager::createSurface(PhosphorLayer::SurfaceConf
 
     surface->warmUp();
 
-    if (surface->state() == PhosphorLayer::Surface::State::Failed) {
+    const auto state = surface->state();
+    if (state == PhosphorLayer::Surface::State::Failed) {
         qCWarning(lcSurfaces) << "Surface warm-up failed:" << surface->config().effectiveDebugName();
-        delete surface;
+        surface->deleteLater();
+        return nullptr;
+    }
+    if (state == PhosphorLayer::Surface::State::Warming) {
+        qCWarning(lcSurfaces) << "Surface still warming after warmUp() —"
+                              << "async QML load paths are not supported by callers that"
+                              << "dereference window() synchronously:" << surface->config().effectiveDebugName();
+        surface->deleteLater();
         return nullptr;
     }
 
-    if (!m_impl->config.pipelineCachePath.isEmpty() && surface->window()) {
-        surface->window()->setProperty("_pipelineCachePath", m_impl->config.pipelineCachePath);
-    }
-
-    if (m_impl->config.windowConfigurator && surface->window()) {
-        m_impl->config.windowConfigurator(*surface->window());
-    }
-
+    configureWindow(surface);
     return surface;
 }
 
@@ -123,15 +167,51 @@ bool SurfaceManager::keepAliveActive() const
     return m_impl->keepAliveWindow && m_impl->keepAliveSurface;
 }
 
+void SurfaceManager::configureWindow(PhosphorLayer::Surface* surface)
+{
+    auto* w = surface->window();
+    if (!w) {
+        return;
+    }
+
+    if (!m_impl->config.pipelineCachePath.isEmpty()) {
+        if (!m_impl->pipelineCacheDirCreated) {
+            const QFileInfo fi(m_impl->config.pipelineCachePath);
+            QDir().mkpath(fi.path());
+            m_impl->pipelineCacheDirCreated = true;
+        }
+        QQuickGraphicsConfiguration gfxCfg = w->graphicsConfiguration();
+        gfxCfg.setPipelineCacheSaveFile(m_impl->config.pipelineCachePath);
+        w->setGraphicsConfiguration(gfxCfg);
+    }
+
+#if QT_CONFIG(vulkan)
+    auto* vi = m_impl->resolveVulkanInstance();
+    if (vi) {
+        w->setVulkanInstance(vi);
+    }
+#endif
+}
+
 void SurfaceManager::createKeepAlive()
 {
+    if (m_impl->keepAliveSurface) {
+        return;
+    }
     if (!m_impl->config.surfaceFactory) {
         return;
     }
 
     QScreen* screen = QGuiApplication::primaryScreen();
     if (!screen) {
-        qCWarning(lcSurfaces) << "Keep-alive: no screen available at creation time";
+        qCWarning(lcSurfaces) << "Keep-alive: no screen available — will retry on screenAdded";
+        if (qGuiApp && !m_impl->screenAddedConnection) {
+            m_impl->screenAddedConnection = connect(qGuiApp, &QGuiApplication::screenAdded, this, [this]() {
+                if (!m_impl->keepAliveSurface) {
+                    createKeepAlive();
+                }
+            });
+        }
         return;
     }
 
@@ -152,19 +232,19 @@ void SurfaceManager::createKeepAlive()
 
     surface->warmUp();
 
-    if (surface->state() == PhosphorLayer::Surface::State::Failed) {
-        qCWarning(lcSurfaces) << "Keep-alive surface warm-up failed";
-        delete surface;
+    const auto keepAliveState = surface->state();
+    if (keepAliveState == PhosphorLayer::Surface::State::Failed
+        || keepAliveState == PhosphorLayer::Surface::State::Warming) {
+        qCWarning(lcSurfaces) << "Keep-alive surface warm-up failed (state:" << static_cast<int>(keepAliveState) << ")";
+        surface->deleteLater();
         return;
     }
 
     if (surface->window()) {
         surface->window()->setWidth(1);
         surface->window()->setHeight(1);
-        if (m_impl->config.windowConfigurator) {
-            m_impl->config.windowConfigurator(*surface->window());
-        }
     }
+    configureWindow(surface);
 
     surface->show();
     m_impl->keepAliveSurface = surface;
@@ -176,6 +256,7 @@ void SurfaceManager::createKeepAlive()
         m_impl->keepAliveWindow = nullptr;
         surface->deleteLater();
         Q_EMIT keepAliveLost();
+        QTimer::singleShot(0, this, &SurfaceManager::createKeepAlive);
     });
 
     qCDebug(lcSurfaces) << "Keep-alive surface created";

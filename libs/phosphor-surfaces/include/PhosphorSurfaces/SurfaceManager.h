@@ -32,11 +32,18 @@ public:
 
     QQmlEngine* engine() const;
 
-    // The returned Surface* is parented to this SurfaceManager (QObject
-    // ownership). The caller drives show/hide/destroy; if the caller
-    // does not destroy the surface, ~SurfaceManager will — but only
-    // after the engine is gone, so callers must destroy surfaces first.
-    PhosphorLayer::Surface* createSurface(PhosphorLayer::SurfaceConfig cfg);
+    // Create a layer-shell surface from the given config. The surface is
+    // warmed up (QML loaded, window created) before return. Returns nullptr
+    // on failure (logged internally). Rejects async QML load paths — callers
+    // must use qrc:/ or file:/ URLs that resolve synchronously.
+    //
+    // Ownership: the returned Surface* is parented to `surfaceParent` if
+    // non-null, otherwise to this SurfaceManager. The caller drives
+    // show/hide/destroy. If the caller does not destroy the surface
+    // explicitly, the QObject parent will — but engine teardown runs in
+    // ~SurfaceManager, so surfaces parented elsewhere must be destroyed
+    // before this SurfaceManager is destroyed.
+    PhosphorLayer::Surface* createSurface(PhosphorLayer::SurfaceConfig cfg, QObject* surfaceParent = nullptr);
 
     quint64 nextScopeGeneration();
 
@@ -47,6 +54,7 @@ Q_SIGNALS:
 
 private:
     void createKeepAlive();
+    void configureWindow(PhosphorLayer::Surface* surface);
 
     class Impl;
     std::unique_ptr<Impl> m_impl;

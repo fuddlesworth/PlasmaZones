@@ -19,9 +19,6 @@
 
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "vulkan_support.h"
-
-class QQmlEngine;
 
 namespace PhosphorLayer {
 class ILayerShellTransport;
@@ -628,11 +625,6 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
-
-    // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
-#if QT_CONFIG(vulkan)
-    std::unique_ptr<QVulkanInstance> m_fallbackVulkanInstance;
-#endif
 };
 
 } // namespace PlasmaZones

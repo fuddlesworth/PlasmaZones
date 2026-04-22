@@ -11,7 +11,7 @@
 
 QT_BEGIN_NAMESPACE
 class QQmlEngine;
-class QQuickWindow;
+class QVulkanInstance;
 QT_END_NAMESPACE
 
 namespace PhosphorLayer {
@@ -28,7 +28,11 @@ struct PHOSPHORSURFACES_EXPORT SurfaceManagerConfig
 
     QString pipelineCachePath;
 
-    std::function<void(QQuickWindow&)> windowConfigurator;
+    // Caller-owned Vulkan instance. When non-null, every window created by
+    // SurfaceManager will have setVulkanInstance() called with this pointer.
+    // When null and the active Qt graphics API is Vulkan, SurfaceManager
+    // creates and owns a fallback instance internally.
+    QVulkanInstance* vulkanInstance = nullptr;
 };
 
 } // namespace PhosphorSurfaces

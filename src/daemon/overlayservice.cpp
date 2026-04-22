@@ -22,12 +22,10 @@
 
 #include <QCoreApplication>
 #include <QCursor>
-#include <QDir>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlContext>
-#include <QQuickGraphicsConfiguration>
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTimer>
@@ -130,6 +128,15 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(PhosphorLayer::SurfaceFactory::Deps{
         m_transport.get(), m_screenProvider.get(), nullptr, QStringLiteral("plasmazones.overlay")});
 
+    const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    const QString pipelineCachePath =
+        cacheDir.isEmpty() ? QString() : (cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
+
+    QVulkanInstance* externalVulkanInstance = nullptr;
+#if QT_CONFIG(vulkan)
+    externalVulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+#endif
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
@@ -137,17 +144,8 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 auto* localizedContext = new PzLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
             },
-        .windowConfigurator =
-            [](QQuickWindow& window) {
-#if QT_CONFIG(vulkan)
-                auto* vi = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-                if (vi) {
-                    window.setVulkanInstance(vi);
-                }
-#else
-                Q_UNUSED(window)
-#endif
-            },
+        .pipelineCachePath = pipelineCachePath,
+        .vulkanInstance = externalVulkanInstance,
     });
 
     // Connect to screen changes (with safety check for early initialization)
@@ -289,25 +287,12 @@ bool OverlayService::isZoneSelectorVisible() const
 
 OverlayService::~OverlayService()
 {
-    // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
-    // Only needed for the fallback instance we own — when main.cpp provided the instance,
-    // it outlives OverlayService (declared before QGuiApplication), so no cleanup needed.
-#if QT_CONFIG(vulkan)
-    if (m_fallbackVulkanInstance && qGuiApp) {
-        qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());
-    }
-#endif
-
     // Disconnect from QGuiApplication first so we don't get screen-related callbacks
     // while we're destroying windows.
     if (qGuiApp) {
         disconnect(qGuiApp, nullptr, this, nullptr);
     }
 
-    // Mirror the D-Bus PrepareForSleep connect from the constructor. Not
-    // strictly required — QDBusConnection checks receiver-alive before
-    // dispatch — but leaving a dead entry in the system bus's slot table
-    // for the rest of the session is sloppy.
     if (m_prepareForSleepConnected) {
         QDBusConnection::systemBus().disconnect(QStringLiteral("org.freedesktop.login1"),
                                                 QStringLiteral("/org/freedesktop/login1"),
@@ -326,11 +311,8 @@ OverlayService::~OverlayService()
     // Singleton surfaces (snap assist, layout picker, shader preview) are
     // QObject children of `this`, so the QObject parent-child system would
     // destroy them AFTER our own destructor body runs — i.e. after the
-    // deferred-delete drain below, and potentially after member destructors
-    // (m_surfaceManager, m_transport, m_surfaceFactory, m_screenProvider) have run.
-    // Schedule their deletion now so the drain loop picks them up in the
-    // right order and they don't touch dead factory pointers during their
-    // own teardown.
+    // member destructors. Schedule their deletion now so SurfaceManager's
+    // drain loop picks them up before the engine is destroyed.
     if (m_snapAssistSurface) {
         m_snapAssistSurface->deleteLater();
         m_snapAssistSurface = nullptr;
@@ -344,22 +326,10 @@ OverlayService::~OverlayService()
         m_shaderPreviewSurface = nullptr;
     }
 
-    // Drain deferred-delete events before m_surfaceManager destroys its engine.
-    constexpr int kDrainCap = 64;
-    QEventLoop drainLoop;
-    int passes = 0;
-    for (; passes < kDrainCap; ++passes) {
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        if (!drainLoop.processEvents(QEventLoop::ExcludeUserInputEvents)) {
-            break;
-        }
-    }
-    if (passes == kDrainCap) {
-        qCWarning(lcOverlay) << "deferred-delete drain hit safety cap" << kDrainCap
-                             << "— a QML teardown chain is deeper than expected";
-    }
-
-    // m_surfaceManager destructor destroys keep-alive + engine
+    // ~m_surfaceManager runs next (member destruction order) and handles:
+    //   1. keep-alive surface teardown
+    //   2. deferred-delete drain loop
+    //   3. engine destruction
 }
 
 PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,
@@ -372,90 +342,17 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
         qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << windowType;
         return nullptr;
     }
-    if (!m_surfaceFactory) {
-        qCWarning(lcOverlay) << "createLayerSurface: SurfaceFactory not initialised";
-        return nullptr;
-    }
 
     PhosphorLayer::SurfaceConfig cfg;
     cfg.role = role;
     cfg.contentUrl = qmlUrl;
     cfg.screen = screen;
-    cfg.sharedEngine = m_surfaceManager->engine();
     cfg.windowProperties = windowProperties;
     cfg.anchorsOverride = anchorsOverride;
     cfg.marginsOverride = marginsOverride;
     cfg.debugName = QString::fromUtf8(windowType);
 
-    auto* surface = m_surfaceFactory->create(std::move(cfg), this);
-    if (!surface) {
-        qCWarning(lcOverlay) << "createLayerSurface: factory returned nullptr for" << windowType;
-        return nullptr;
-    }
-    // Warm immediately so the QQuickWindow exists before the caller starts
-    // setting properties on it. Mirrors the old createQmlWindow+configureLayerSurface
-    // sequence where the window was live before return.
-    surface->warmUp();
-    const auto st = surface->state();
-    if (st == PhosphorLayer::Surface::State::Failed) {
-        qCWarning(lcOverlay) << "createLayerSurface: warmUp failed for" << windowType;
-        surface->deleteLater();
-        return nullptr;
-    }
-    if (st == PhosphorLayer::Surface::State::Warming) {
-        // QML is still loading asynchronously. Every consumer in this file
-        // uses qrc:/ URLs which load synchronously, so Warming-on-return
-        // means someone introduced an async source path (remote URL, QML
-        // bytecode fetched from file with background imports, etc.) without
-        // updating the caller to listen for Surface::stateChanged. The
-        // callers below assume a live QQuickWindow and deref surface->window()
-        // synchronously — that would segfault. Refuse up-front so the bug
-        // manifests as a clean refusal instead of a crash.
-        qCWarning(lcOverlay)
-            << "createLayerSurface: surface still Warming on return for" << windowType
-            << "— async QML load path is not supported by the current callers. Switch to qrc:/ or refactor"
-            << "the caller to wait on Surface::stateChanged before touching surface->window().";
-        surface->deleteLater();
-        return nullptr;
-    }
-
-    // Pipeline cache: mirror createQmlWindow's behaviour so shader compilation
-    // persists across daemon restarts.
-    if (auto* w = surface->window()) {
-        const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-        if (!cacheDir.isEmpty()) {
-            static bool s_cacheDirCreated = false;
-            if (!s_cacheDirCreated) {
-                QDir().mkpath(cacheDir);
-                s_cacheDirCreated = true;
-            }
-            QQuickGraphicsConfiguration config = w->graphicsConfiguration();
-            config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
-            w->setGraphicsConfiguration(config);
-        }
-#if QT_CONFIG(vulkan)
-        auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-        if (!vulkanInstance && QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
-            if (!m_fallbackVulkanInstance) {
-                m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
-                m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
-                if (m_fallbackVulkanInstance->create()) {
-                    qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
-                                      QVariant::fromValue(m_fallbackVulkanInstance.get()));
-                    vulkanInstance = m_fallbackVulkanInstance.get();
-                } else {
-                    qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance for" << windowType;
-                    m_fallbackVulkanInstance.reset();
-                }
-            }
-        }
-        if (vulkanInstance) {
-            w->setVulkanInstance(vulkanInstance);
-        }
-#endif
-    }
-
-    return surface;
+    return m_surfaceManager->createSurface(std::move(cfg), this);
 }
 
 void OverlayService::show()
