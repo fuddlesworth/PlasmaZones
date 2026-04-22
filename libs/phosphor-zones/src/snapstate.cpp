@@ -345,7 +345,7 @@ void SnapState::clearPreTileGeometry(const QString& windowId)
 
 // ── Window Lifecycle ────────────────────────────────────────────────────────
 
-void SnapState::windowClosed(const QString& windowId)
+bool SnapState::removeWindowData(const QString& windowId)
 {
     bool removed = false;
     removed |= m_windowZoneAssignments.remove(windowId);
@@ -356,18 +356,28 @@ void SnapState::windowClosed(const QString& windowId)
     removed |= m_preFloatZoneAssignments.remove(windowId);
     removed |= m_preFloatScreenAssignments.remove(windowId);
     removed |= m_autoSnappedWindows.remove(windowId);
-    if (removed) {
+    return removed;
+}
+
+void SnapState::windowClosed(const QString& windowId)
+{
+    if (removeWindowData(windowId)) {
         Q_EMIT stateChanged();
     }
 }
 
+bool SnapState::isEmpty() const
+{
+    return m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty()
+        && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preTileGeometries.isEmpty()
+        && m_preFloatZoneAssignments.isEmpty() && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty()
+        && m_lastUsedScreenId.isEmpty() && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0
+        && m_userSnappedClasses.isEmpty() && m_autoSnappedWindows.isEmpty();
+}
+
 void SnapState::clear()
 {
-    if (m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty() && m_windowDesktopAssignments.isEmpty()
-        && m_floatingWindows.isEmpty() && m_preTileGeometries.isEmpty() && m_preFloatZoneAssignments.isEmpty()
-        && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty() && m_lastUsedScreenId.isEmpty()
-        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0 && m_userSnappedClasses.isEmpty()
-        && m_autoSnappedWindows.isEmpty()) {
+    if (isEmpty()) {
         return;
     }
     m_windowZoneAssignments.clear();
@@ -480,7 +490,7 @@ void SnapState::restoreLastUsedZone(const QString& zoneId, const QString& screen
 
 void SnapState::recordSnapIntent(const QString& windowClass, bool wasUserInitiated)
 {
-    if (wasUserInitiated && !windowClass.isEmpty()) {
+    if (wasUserInitiated && !windowClass.isEmpty() && !m_userSnappedClasses.contains(windowClass)) {
         m_userSnappedClasses.insert(windowClass);
         Q_EMIT stateChanged();
     }
@@ -502,7 +512,11 @@ bool SnapState::isAutoSnapped(const QString& windowId) const
 
 bool SnapState::clearAutoSnapped(const QString& windowId)
 {
-    return m_autoSnappedWindows.remove(windowId);
+    if (m_autoSnappedWindows.remove(windowId)) {
+        Q_EMIT stateChanged();
+        return true;
+    }
+    return false;
 }
 
 // ── Occupied Zone Queries ──────────────────────────────────────────────────
@@ -540,14 +554,7 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
         }
     }
     for (const QString& windowId : toRemove) {
-        m_windowZoneAssignments.remove(windowId);
-        m_windowScreenAssignments.remove(windowId);
-        m_windowDesktopAssignments.remove(windowId);
-        m_floatingWindows.remove(windowId);
-        m_preTileGeometries.remove(windowId);
-        m_preFloatZoneAssignments.remove(windowId);
-        m_preFloatScreenAssignments.remove(windowId);
-        m_autoSnappedWindows.remove(windowId);
+        removeWindowData(windowId);
         ++pruned;
     }
     if (pruned > 0) {
@@ -561,6 +568,9 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
 SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
 {
     const QString screenId = json.value(QLatin1String("screenId")).toString();
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
     auto* state = new SnapState(screenId, parent);
 
     const QJsonObject zones = json.value(QLatin1String("zoneAssignments")).toObject();

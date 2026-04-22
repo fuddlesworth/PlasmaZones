@@ -262,6 +262,80 @@ private Q_SLOTS:
     // saveState / loadState persistence delegation tests
     // =========================================================================
 
+    // =========================================================================
+    // Dual-store sync tests — verify WTS and SnapState agree after mutations
+    // =========================================================================
+
+    void testDualStoreSync_assignWindowToZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-sync");
+        const QString zoneId = QStringLiteral("zone-1");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, zoneId, screen, 1);
+        QVERIFY(m_wts->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+        QCOMPARE(m_snapState->zoneForWindow(windowId), zoneId);
+        QCOMPARE(m_snapState->screenForWindow(windowId), screen);
+        QCOMPARE(m_snapState->desktopForWindow(windowId), 1);
+    }
+
+    void testDualStoreSync_floatViaWts()
+    {
+        const QString windowId = QStringLiteral("app|uuid-float-sync");
+
+        m_wts->setWindowFloating(windowId, true);
+        QVERIFY(m_wts->isWindowFloating(windowId));
+        QVERIFY(m_snapState->isFloating(windowId));
+
+        m_wts->setWindowFloating(windowId, false);
+        QVERIFY(!m_wts->isWindowFloating(windowId));
+        QVERIFY(!m_snapState->isFloating(windowId));
+    }
+
+    void testDualStoreSync_unsnapForFloat()
+    {
+        const QString windowId = QStringLiteral("app|uuid-unsnap-sync");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, QStringLiteral("zone-2"), screen, 0);
+        QVERIFY(m_wts->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+
+        m_wts->unsnapForFloat(windowId);
+        QVERIFY(!m_wts->isWindowSnapped(windowId));
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+        QCOMPARE(m_snapState->preFloatZone(windowId), QStringLiteral("zone-2"));
+    }
+
+    void testDualStoreSync_clearPreFloatZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-prefloat-sync");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, QStringLiteral("zone-3"), screen, 0);
+        m_wts->unsnapForFloat(windowId);
+        QVERIFY(!m_snapState->preFloatZone(windowId).isEmpty());
+
+        m_wts->clearPreFloatZone(windowId);
+        QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
+    }
+
+    void testDualStoreSync_preTileGeometry()
+    {
+        const QString windowId = QStringLiteral("app|uuid-pretile-sync");
+
+        m_wts->storePreTileGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        QVERIFY(m_snapState->hasPreTileGeometry(windowId));
+
+        m_wts->clearPreTileGeometry(windowId);
+        QVERIFY(!m_snapState->hasPreTileGeometry(windowId));
+    }
+
+    // =========================================================================
+    // saveState / loadState persistence delegation tests
+    // =========================================================================
+
     void testSaveState_callsDelegateWhenSet()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);

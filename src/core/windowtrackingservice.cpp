@@ -579,6 +579,10 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         // the two calls cannot silently lose pre-float restore state.
         markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
 
+        if (m_snapState) {
+            m_snapState->unsnapForFloat(windowId);
+        }
+
         unassignWindow(windowId);
 
         // Pop one pending-restore entry (FIFO) so this window doesn't get
@@ -644,6 +648,9 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     if (appId != windowId) {
         m_preFloatZoneAssignments.remove(appId);
         m_preFloatScreenAssignments.remove(appId);
+    }
+    if (m_snapState) {
+        m_snapState->clearPreFloatZone(windowId);
     }
 }
 

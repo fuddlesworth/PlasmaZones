@@ -152,6 +152,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     void windowClosed(const QString& windowId);
+    bool isEmpty() const;
     void clear();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -220,6 +221,9 @@ public:
     // Occupied Zone Queries
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Build the set of zone IDs currently occupied by snapped windows.
+    /// Desktop 0 means "on all desktops" per KWin convention — windows with
+    /// desktop 0 pass the filter and appear occupied on every desktop.
     QSet<QString> buildOccupiedZoneSet(const QString& screenFilter = {}, int desktopFilter = 0) const;
 
     /// Remove zone/screen/desktop assignments for windows not in the alive set.
@@ -284,6 +288,8 @@ Q_SIGNALS:
     void stateChanged();
 
 private:
+    bool removeWindowData(const QString& windowId);
+
     QSet<QString> allManagedWindowIds() const
     {
         QSet<QString> all;
