@@ -3,8 +3,8 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>

@@ -3,8 +3,8 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>

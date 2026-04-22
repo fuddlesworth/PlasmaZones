@@ -11,6 +11,7 @@
 
 QT_BEGIN_NAMESPACE
 class QQmlEngine;
+class QQuickWindow;
 QT_END_NAMESPACE
 
 namespace PhosphorLayer {
@@ -26,6 +27,8 @@ struct PHOSPHORSURFACES_EXPORT SurfaceManagerConfig
     std::function<void(QQmlEngine&)> engineConfigurator;
 
     QString pipelineCachePath;
+
+    std::function<void(QQuickWindow&)> windowConfigurator;
 };
 
 } // namespace PhosphorSurfaces

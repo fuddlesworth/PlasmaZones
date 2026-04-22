@@ -4,6 +4,7 @@
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorSurfaces/SurfaceManagerConfig.h>
 
+#include <QSignalSpy>
 #include <QTest>
 
 class TestPhosphorSurfaces : public QObject
@@ -34,6 +35,21 @@ private Q_SLOTS:
         QVERIFY(manager.engine() != nullptr);
     }
 
+    void testWindowConfiguratorStored()
+    {
+        bool called = false;
+        PhosphorSurfaces::SurfaceManagerConfig config;
+        config.windowConfigurator = [&called](QQuickWindow&) {
+            called = true;
+        };
+
+        PhosphorSurfaces::SurfaceManager manager(std::move(config));
+
+        // windowConfigurator is not called during construction (no windows yet),
+        // only when createSurface / createKeepAlive produce a window.
+        QVERIFY(!called);
+    }
+
     void testScopeGenerationMonotonic()
     {
         PhosphorSurfaces::SurfaceManagerConfig config;
@@ -61,6 +77,15 @@ private Q_SLOTS:
 
         auto* surface = manager.createSurface(std::move(surfCfg));
         QVERIFY(surface == nullptr);
+    }
+
+    void testKeepAliveLostSignalExists()
+    {
+        PhosphorSurfaces::SurfaceManagerConfig config;
+        PhosphorSurfaces::SurfaceManager manager(std::move(config));
+
+        QSignalSpy spy(&manager, &PhosphorSurfaces::SurfaceManager::keepAliveLost);
+        QVERIFY(spy.isValid());
     }
 };
 

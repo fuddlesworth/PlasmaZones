@@ -8,11 +8,16 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QScreen>
+#include <QTimer>
 
 namespace PhosphorSurfaces {
 
@@ -42,15 +47,30 @@ SurfaceManager::SurfaceManager(SurfaceManagerConfig config, QObject* parent)
 {
     m_impl->config = std::move(config);
     m_impl->configureEngine();
-    createKeepAlive();
+    QTimer::singleShot(0, this, &SurfaceManager::createKeepAlive);
 }
 
 SurfaceManager::~SurfaceManager()
 {
     if (m_impl->keepAliveSurface) {
-        delete m_impl->keepAliveSurface;
+        m_impl->keepAliveSurface->deleteLater();
         m_impl->keepAliveSurface = nullptr;
     }
+    m_impl->keepAliveWindow = nullptr;
+
+    constexpr int kDrainCap = 32;
+    QEventLoop drainLoop;
+    int passes = 0;
+    for (; passes < kDrainCap; ++passes) {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (!drainLoop.processEvents(QEventLoop::ExcludeUserInputEvents)) {
+            break;
+        }
+    }
+    if (passes == kDrainCap) {
+        qCWarning(lcSurfaces) << "deferred-delete drain hit safety cap" << kDrainCap;
+    }
+
     m_impl->engine.reset();
 }
 
@@ -86,12 +106,11 @@ PhosphorLayer::Surface* SurfaceManager::createSurface(PhosphorLayer::SurfaceConf
         surface->window()->setProperty("_pipelineCachePath", m_impl->config.pipelineCachePath);
     }
 
-    return surface;
-}
+    if (m_impl->config.windowConfigurator && surface->window()) {
+        m_impl->config.windowConfigurator(*surface->window());
+    }
 
-PhosphorLayer::Surface* SurfaceManager::warmUpSurface(PhosphorLayer::SurfaceConfig cfg)
-{
-    return createSurface(std::move(cfg));
+    return surface;
 }
 
 quint64 SurfaceManager::nextScopeGeneration()
@@ -110,11 +129,18 @@ void SurfaceManager::createKeepAlive()
         return;
     }
 
+    QScreen* screen = QGuiApplication::primaryScreen();
+    if (!screen) {
+        qCWarning(lcSurfaces) << "Keep-alive: no screen available at creation time";
+        return;
+    }
+
     PhosphorLayer::SurfaceConfig cfg;
     cfg.role = PhosphorLayer::Roles::Background.withScopePrefix(QStringLiteral("phosphor-surfaces-keepalive"));
     cfg.contentItem = std::make_unique<QQuickItem>();
     cfg.sharedEngine = m_impl->engine.get();
     cfg.debugName = QStringLiteral("keepalive");
+    cfg.screen = screen;
     cfg.anchorsOverride = PhosphorLayer::AnchorNone;
     cfg.exclusiveZoneOverride = 0;
 
@@ -135,15 +161,20 @@ void SurfaceManager::createKeepAlive()
     if (surface->window()) {
         surface->window()->setWidth(1);
         surface->window()->setHeight(1);
+        if (m_impl->config.windowConfigurator) {
+            m_impl->config.windowConfigurator(*surface->window());
+        }
     }
 
     surface->show();
     m_impl->keepAliveSurface = surface;
     m_impl->keepAliveWindow = surface->window();
 
-    connect(surface, &PhosphorLayer::Surface::failed, this, [this](const QString& reason) {
+    connect(surface, &PhosphorLayer::Surface::failed, this, [this, surface](const QString& reason) {
         qCWarning(lcSurfaces) << "Keep-alive surface failed:" << reason;
         m_impl->keepAliveSurface = nullptr;
+        m_impl->keepAliveWindow = nullptr;
+        surface->deleteLater();
         Q_EMIT keepAliveLost();
     });
 

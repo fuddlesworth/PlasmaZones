@@ -14,7 +14,6 @@
 
 QT_BEGIN_NAMESPACE
 class QQmlEngine;
-class QScreen;
 QT_END_NAMESPACE
 
 namespace PhosphorLayer {
@@ -33,9 +32,11 @@ public:
 
     QQmlEngine* engine() const;
 
+    // The returned Surface* is parented to this SurfaceManager (QObject
+    // ownership). The caller drives show/hide/destroy; if the caller
+    // does not destroy the surface, ~SurfaceManager will — but only
+    // after the engine is gone, so callers must destroy surfaces first.
     PhosphorLayer::Surface* createSurface(PhosphorLayer::SurfaceConfig cfg);
-
-    PhosphorLayer::Surface* warmUpSurface(PhosphorLayer::SurfaceConfig cfg);
 
     quint64 nextScopeGeneration();
 

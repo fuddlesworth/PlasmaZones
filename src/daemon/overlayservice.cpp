@@ -137,6 +137,17 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 auto* localizedContext = new PzLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
             },
+        .windowConfigurator =
+            [](QQuickWindow& window) {
+#if QT_CONFIG(vulkan)
+                auto* vi = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+                if (vi) {
+                    window.setVulkanInstance(vi);
+                }
+#else
+                Q_UNUSED(window)
+#endif
+            },
     });
 
     // Connect to screen changes (with safety check for early initialization)

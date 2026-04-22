@@ -25,6 +25,13 @@ engine configurator callback and per-surface QML URLs.
 **Depends on:** Qt6::Core, Qt6::Quick, PhosphorLayer::PhosphorLayer
 **Build artefact:** `libPhosphorSurfaces.so` (SHARED)
 
+> **Implementation Status (Phase 1):** The shipped `v0.1.0` implements
+> engine management, Vulkan keep-alive, and scope generation. The full
+> `SurfaceHandle`/`SurfaceSpec`/`ScreenTarget` API described below is
+> the **target design** -- not yet implemented. Current callers use
+> `SurfaceManager::createSurface(PhosphorLayer::SurfaceConfig)` and
+> manage returned `PhosphorLayer::Surface*` pointers directly.
+
 ---
 
 ## Dependency Graph
@@ -81,6 +88,13 @@ lifecycle methods. The library handles Wayland/Vulkan concerns internally.
    triggers automatic surface creation/destruction for affected screens.
    The library handles the bookkeeping; the caller receives callbacks to
    push content into newly created surfaces.
+
+7. **LGPL boundary maintained at runtime.** The engine configurator
+   lets GPL callers register GPL-licensed types (e.g. `ZoneShaderItem`)
+   into the library-owned `QQmlEngine`. The library never references
+   those types -- they enter via a caller-supplied callback and live
+   only in the engine's type registry. The LGPL/GPL boundary is
+   preserved: the library is dynamically linked and type-agnostic.
 
 ---
 
