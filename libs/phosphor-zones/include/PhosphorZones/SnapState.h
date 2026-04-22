@@ -56,8 +56,10 @@ public:
     // Zone Assignment CRUD
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void assignWindowToZone(const QString& windowId, const QString& zoneId);
-    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds);
+    void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
+                            int virtualDesktop);
+    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                             int virtualDesktop);
     void unassignWindow(const QString& windowId);
 
     QString zoneForWindow(const QString& windowId) const;
@@ -65,6 +67,26 @@ public:
     QStringList windowsInZone(const QString& zoneId) const;
     QStringList snappedWindows() const;
     bool isWindowSnapped(const QString& windowId) const;
+
+    QString screenForWindow(const QString& windowId) const;
+    int desktopForWindow(const QString& windowId) const;
+
+    const QHash<QString, QString>& screenAssignments() const
+    {
+        return m_windowScreenAssignments;
+    }
+    const QHash<QString, int>& desktopAssignments() const
+    {
+        return m_windowDesktopAssignments;
+    }
+    void setScreenAssignments(const QHash<QString, QString>& s)
+    {
+        m_windowScreenAssignments = s;
+    }
+    void setDesktopAssignments(const QHash<QString, int>& d)
+    {
+        m_windowDesktopAssignments = d;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating State
@@ -76,7 +98,22 @@ public:
     void unsnapForFloat(const QString& windowId);
     QString preFloatZone(const QString& windowId) const;
     QStringList preFloatZones(const QString& windowId) const;
+    QString preFloatScreen(const QString& windowId) const;
     void clearPreFloatZone(const QString& windowId);
+    void clearPreFloatZoneForWindow(const QString& windowId);
+
+    const QHash<QString, QStringList>& preFloatZoneAssignments() const
+    {
+        return m_preFloatZoneAssignments;
+    }
+    const QHash<QString, QString>& preFloatScreenAssignments() const
+    {
+        return m_preFloatScreenAssignments;
+    }
+    void setPreFloatScreenAssignments(const QHash<QString, QString>& a)
+    {
+        m_preFloatScreenAssignments = a;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Pre-Tile Geometry
@@ -110,6 +147,61 @@ public:
     QStringList rotateAssignments(bool clockwise);
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Last-Used Zone Tracking
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
+                            int virtualDesktop);
+    QString lastUsedZoneId() const
+    {
+        return m_lastUsedZoneId;
+    }
+    QString lastUsedScreenId() const
+    {
+        return m_lastUsedScreenId;
+    }
+    QString lastUsedZoneClass() const
+    {
+        return m_lastUsedZoneClass;
+    }
+    int lastUsedDesktop() const
+    {
+        return m_lastUsedDesktop;
+    }
+    void retagLastUsedZoneClass(const QString& newClass)
+    {
+        m_lastUsedZoneClass = newClass;
+    }
+    void setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass, int desktop);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Auto-Snap Bookkeeping
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void recordSnapIntent(const QString& windowClass, bool wasUserInitiated);
+    const QSet<QString>& userSnappedClasses() const
+    {
+        return m_userSnappedClasses;
+    }
+    void setUserSnappedClasses(const QSet<QString>& classes)
+    {
+        m_userSnappedClasses = classes;
+    }
+
+    void markAsAutoSnapped(const QString& windowId);
+    bool isAutoSnapped(const QString& windowId) const;
+    bool clearAutoSnapped(const QString& windowId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Occupied Zone Queries
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    QSet<QString> buildOccupiedZoneSet(const QString& screenFilter = {}, int desktopFilter = 0) const;
+
+    /// Remove zone/screen/desktop assignments for windows not in the alive set.
+    int pruneStaleAssignments(const QSet<QString>& aliveWindowIds);
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Deserialization
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -126,10 +218,6 @@ public:
     const QHash<QString, PreTileGeometry>& preTileGeometries() const
     {
         return m_preTileGeometries;
-    }
-    const QHash<QString, QStringList>& preFloatZoneAssignments() const
-    {
-        return m_preFloatZoneAssignments;
     }
 
     void setZoneAssignments(const QHash<QString, QStringList>& zones)
@@ -174,9 +262,20 @@ private:
     QString m_screenId;
 
     QHash<QString, QStringList> m_windowZoneAssignments;
+    QHash<QString, QString> m_windowScreenAssignments;
+    QHash<QString, int> m_windowDesktopAssignments;
     QSet<QString> m_floatingWindows;
     QHash<QString, PreTileGeometry> m_preTileGeometries;
     QHash<QString, QStringList> m_preFloatZoneAssignments;
+    QHash<QString, QString> m_preFloatScreenAssignments;
+
+    QString m_lastUsedZoneId;
+    QString m_lastUsedScreenId;
+    QString m_lastUsedZoneClass;
+    int m_lastUsedDesktop = 0;
+
+    QSet<QString> m_userSnappedClasses;
+    QSet<QString> m_autoSnappedWindows;
 };
 
 } // namespace PhosphorZones
