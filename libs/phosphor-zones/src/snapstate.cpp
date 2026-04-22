@@ -24,21 +24,12 @@ QString SnapState::screenId() const
 
 int SnapState::windowCount() const
 {
-    QSet<QString> all;
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        all.insert(it.key());
-    }
-    all.unite(m_floatingWindows);
-    return all.size();
+    return allManagedWindowIds().size();
 }
 
 QStringList SnapState::managedWindows() const
 {
-    QSet<QString> all;
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        all.insert(it.key());
-    }
-    all.unite(m_floatingWindows);
+    QSet<QString> all = allManagedWindowIds();
     QStringList list(all.begin(), all.end());
     list.sort();
     return list;
@@ -125,6 +116,7 @@ QJsonObject SnapState::toJson() const
 
 void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneId)
 {
+    m_floatingWindows.remove(windowId);
     m_windowZoneAssignments[windowId] = {zoneId};
     Q_EMIT windowAssigned(windowId, zoneId);
     Q_EMIT stateChanged();
@@ -136,6 +128,7 @@ void SnapState::assignWindowToZones(const QString& windowId, const QStringList& 
         unassignWindow(windowId);
         return;
     }
+    m_floatingWindows.remove(windowId);
     m_windowZoneAssignments[windowId] = zoneIds;
     Q_EMIT windowAssigned(windowId, zoneIds.first());
     Q_EMIT stateChanged();
@@ -368,6 +361,9 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
 
     const QJsonObject zones = json.value(QLatin1String("zoneAssignments")).toObject();
     for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
+        if (it.key().isEmpty()) {
+            continue;
+        }
         QStringList ids;
         const QJsonArray arr = it->toArray();
         for (const auto& v : arr) {
@@ -401,12 +397,20 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
 
     const QJsonObject preFloat = json.value(QLatin1String("preFloatZones")).toObject();
     for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
+        if (it.key().isEmpty()) {
+            continue;
+        }
         QStringList ids;
         const QJsonArray arr = it->toArray();
         for (const auto& v : arr) {
-            ids.append(v.toString());
+            const QString zoneId = v.toString();
+            if (!zoneId.isEmpty()) {
+                ids.append(zoneId);
+            }
         }
-        state->m_preFloatZoneAssignments[it.key()] = ids;
+        if (!ids.isEmpty()) {
+            state->m_preFloatZoneAssignments[it.key()] = ids;
+        }
     }
 
     return state;

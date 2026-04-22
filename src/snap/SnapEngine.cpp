@@ -192,13 +192,17 @@ void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
 // screens. Callers that need snap state must still go through WTS directly.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/)
+PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
 {
+    Q_UNUSED(screenId)
+    // TODO(PR-2): return per-screen SnapState once SnapEngine owns them.
     return nullptr;
 }
 
-const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/) const
+const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
 {
+    Q_UNUSED(screenId)
+    // TODO(PR-2): return per-screen SnapState once SnapEngine owns them.
     return nullptr;
 }
 

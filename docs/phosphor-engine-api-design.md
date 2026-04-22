@@ -1,7 +1,7 @@
 # Phosphor Engine API — Unified Placement Engine Design
 
 **Date:** 2026-04-22
-**Status:** Design proposal
+**Status:** Implemented (PR 1 — interface layer + symmetric state)
 **Motivation:** phosphor-tiles is a self-contained tiling engine; phosphor-zones is half a library. The daemon branches on mode at 20+ sites. A Wayfire plugin linking phosphor-zones today would need to reimplement all snap orchestration from scratch.
 
 ---

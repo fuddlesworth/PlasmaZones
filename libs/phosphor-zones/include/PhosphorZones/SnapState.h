@@ -156,6 +156,17 @@ Q_SIGNALS:
     void stateChanged();
 
 private:
+    QSet<QString> allManagedWindowIds() const
+    {
+        QSet<QString> all;
+        all.reserve(m_windowZoneAssignments.size() + m_floatingWindows.size());
+        for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+            all.insert(it.key());
+        }
+        all.unite(m_floatingWindows);
+        return all;
+    }
+
     QString m_screenId;
 
     QHash<QString, QStringList> m_windowZoneAssignments;

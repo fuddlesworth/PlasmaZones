@@ -59,7 +59,12 @@ public:
     virtual void windowFocused(const QString& windowId, const QString& screenId) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Float management
+    // Float management (explicit window ID)
+    //
+    // These take a concrete window ID — used by the D-Bus adaptor and
+    // engine-internal paths that already know which window to act on.
+    // toggleFocusedFloat() in the Navigation section is the user-intent
+    // entry point that resolves the focused window from NavigationContext.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Toggle between managed and floating.
