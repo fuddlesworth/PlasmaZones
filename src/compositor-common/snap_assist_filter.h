@@ -4,13 +4,16 @@
 #pragma once
 
 #include "compositor_bridge.h"
-#include "dbus_types.h"
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <QSet>
 #include <QString>
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::SnapAssistCandidate;
+using PhosphorProtocol::SnapAssistCandidateList;
 
 /**
  * @brief Compositor-agnostic snap assist candidate builder

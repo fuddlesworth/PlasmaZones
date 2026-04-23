@@ -19,9 +19,6 @@
 
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "vulkan_support.h"
-
-class QQmlEngine;
 
 namespace PhosphorLayer {
 class ILayerShellTransport;
@@ -43,8 +40,15 @@ namespace PhosphorTiles {
 class ITileAlgorithmRegistry;
 }
 
+namespace PhosphorAudio {
+class IAudioSpectrumProvider;
+}
+
+namespace PhosphorSurfaces {
+class SurfaceManager;
+}
+
 namespace PlasmaZones {
-class CavaService;
 class WindowThumbnailService;
 class ShaderRegistry;
 }
@@ -399,8 +403,6 @@ private:
     PhosphorZones::Layout* resolveScreenLayout(QScreen* screen) const;
     PhosphorZones::Layout* resolveScreenLayout(const QString& screenId) const;
 
-    std::unique_ptr<QQmlEngine> m_engine;
-
     // PhosphorLayer infrastructure — owns the wlr-layer-shell binding, screen
     // enumeration, and Surface factory for all overlay-style windows. Members
     // ordered so factory is destroyed before provider/transport (factory keeps
@@ -408,6 +410,9 @@ private:
     std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
     std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
+
+    // Managed surface lifecycle: shared QQmlEngine, Vulkan keep-alive, scope generation.
+    std::unique_ptr<PhosphorSurfaces::SurfaceManager> m_surfaceManager;
 
     QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<PhosphorZones::Layout> m_layout;
@@ -475,13 +480,7 @@ private:
     bool m_layoutOsdWarmed = false;
     bool m_navigationOsdWarmed = false;
 
-    // Persistent 1x1 keep-alive window that prevents Qt from tearing down
-    // global Wayland/Vulkan protocol objects when all other windows are destroyed.
-    // The Surface owns the QQuickWindow; the cached pointer is a convenience for
-    // property writes only — never destroy the window directly, deleteLater the
-    // Surface and let ~Surface tear the window down.
-    PhosphorLayer::Surface* m_keepAliveSurface = nullptr;
-    QPointer<QQuickWindow> m_keepAliveWindow;
+    // Keep-alive is managed by m_surfaceManager (PhosphorSurfaces::SurfaceManager).
 
     // Remembered so ~OverlayService can disconnect the D-Bus PrepareForSleep
     // subscription explicitly rather than relying on QDBusConnection's
@@ -612,14 +611,10 @@ private:
     bool m_zoneDataDirty = true;
     QString m_pendingShaderError;
 
-    // Monotonic counter for unique layer-shell scope strings.
-    // Appended to each configureLayerSurface() scope so KWin sees every
-    // new surface as unique, avoiding configure rate-limiting after rapid
-    // destroy/recreate cycles on Vulkan.
-    uint64_t m_scopeGeneration = 0;
+    // Scope generation delegated to m_surfaceManager->nextScopeGeneration().
 
-    // CAVA audio visualization
-    std::unique_ptr<CavaService> m_cavaService;
+    // Audio spectrum provider (CAVA backend via phosphor-audio)
+    std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
 
     // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
@@ -630,11 +625,6 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
-
-    // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
-#if QT_CONFIG(vulkan)
-    std::unique_ptr<QVulkanInstance> m_fallbackVulkanInstance;
-#endif
 };
 
 } // namespace PlasmaZones

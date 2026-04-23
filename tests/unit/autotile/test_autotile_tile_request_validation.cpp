@@ -36,9 +36,10 @@
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include "compositor-common/dbus_types.h"
+#include <PhosphorProtocol/WireTypes.h>
 
 using namespace PlasmaZones;
+using namespace PhosphorProtocol;
 
 namespace {
 
@@ -106,7 +107,7 @@ private Q_SLOTS:
         // geometry so recalculateLayout() would bail with "invalid screen
         // geometry". The zones themselves aren't under test; the JSON
         // shape around them is.
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
 
@@ -143,7 +144,7 @@ private Q_SLOTS:
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         const QRect fullArea(0, 0, 1920, 1080);
         state->setCalculatedZones({fullArea, fullArea});
@@ -183,7 +184,7 @@ private Q_SLOTS:
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state);
         state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
         engine.retile(screenName);

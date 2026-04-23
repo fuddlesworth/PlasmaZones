@@ -7,6 +7,7 @@
 #include "snap/SnapEngine.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 
@@ -83,6 +84,7 @@ private:
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     WindowTrackingService* m_wts = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
 
 private Q_SLOTS:
 
@@ -93,10 +95,14 @@ private Q_SLOTS:
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_wts->setSnapState(m_snapState);
     }
 
     void cleanup()
     {
+        m_wts->setSnapState(nullptr);
+        delete m_snapState;
         delete m_wts;
         delete m_zoneDetector;
         delete m_settings;
@@ -110,6 +116,7 @@ private Q_SLOTS:
     void testIsActiveOnScreen_noAutotileEngine_returnsTrue()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
 
         // No autotile engine set — SnapEngine owns all screens
         QVERIFY(engine.isActiveOnScreen(QStringLiteral("DP-1")));
@@ -124,6 +131,7 @@ private Q_SLOTS:
     void testWindowFocused_updatesLastActiveScreen()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
 
         QCOMPARE(engine.lastActiveScreenId(), QString());
 
@@ -139,6 +147,7 @@ private Q_SLOTS:
     void testWindowClosed_doesNotCrash()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
 
         engine.windowClosed(QStringLiteral("app|uuid1"));
         engine.windowClosed(QString());
@@ -179,12 +188,13 @@ private Q_SLOTS:
     void testToggleWindowFloat_snappedWindow_emitsFloatingTrue()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-snap");
         const QString screenName = QStringLiteral("DP-1");
 
         m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), screenName, 0);
-        QVERIFY(m_wts->isWindowSnapped(windowId));
-        QVERIFY(!m_wts->isWindowFloating(windowId));
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+        QVERIFY(!m_snapState->isFloating(windowId));
 
         QSignalSpy floatSpy(&engine, &SnapEngine::windowFloatingChanged);
         QSignalSpy feedbackSpy(&engine, &SnapEngine::navigationFeedback);
@@ -204,6 +214,7 @@ private Q_SLOTS:
     void testToggleWindowFloat_notSnappedNotFloating_noSignal()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-untracked");
         const QString screenName = QStringLiteral("DP-1");
 
@@ -219,6 +230,7 @@ private Q_SLOTS:
     void testSetWindowFloat_true_emitsFloatingChanged()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-setfloat");
 
         m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), QStringLiteral("DP-1"), 0);
@@ -234,6 +246,7 @@ private Q_SLOTS:
     void testSetWindowFloat_false_noPreFloatZone_keepsFloating()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         const QString windowId = QStringLiteral("app|uuid-unfloat-fail");
 
         m_wts->setWindowFloating(windowId, true);
@@ -247,12 +260,173 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Dual-store sync tests — verify WTS and SnapState agree after mutations
+    // =========================================================================
+
+    void testDualStoreSync_assignWindowToZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-sync");
+        const QString zoneId = QStringLiteral("zone-1");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, zoneId, screen, 1);
+        QVERIFY(m_wts->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+        QCOMPARE(m_snapState->zoneForWindow(windowId), zoneId);
+        QCOMPARE(m_snapState->screenForWindow(windowId), screen);
+        QCOMPARE(m_snapState->desktopForWindow(windowId), 1);
+    }
+
+    void testDualStoreSync_floatViaWts()
+    {
+        const QString windowId = QStringLiteral("app|uuid-float-sync");
+
+        m_wts->setWindowFloating(windowId, true);
+        QVERIFY(m_wts->isWindowFloating(windowId));
+        QVERIFY(m_snapState->isFloating(windowId));
+
+        m_wts->setWindowFloating(windowId, false);
+        QVERIFY(!m_wts->isWindowFloating(windowId));
+        QVERIFY(!m_snapState->isFloating(windowId));
+    }
+
+    void testDualStoreSync_unsnapForFloat()
+    {
+        const QString windowId = QStringLiteral("app|uuid-unsnap-sync");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, QStringLiteral("zone-2"), screen, 0);
+        QVERIFY(m_wts->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+
+        m_wts->unsnapForFloat(windowId);
+        QVERIFY(!m_wts->isWindowSnapped(windowId));
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+        QCOMPARE(m_snapState->preFloatZone(windowId), QStringLiteral("zone-2"));
+    }
+
+    void testDualStoreSync_clearPreFloatZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-prefloat-sync");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, QStringLiteral("zone-3"), screen, 0);
+        m_wts->unsnapForFloat(windowId);
+        QVERIFY(!m_snapState->preFloatZone(windowId).isEmpty());
+
+        m_wts->clearPreFloatZone(windowId);
+        QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
+    }
+
+    void testDualStoreSync_preTileGeometry()
+    {
+        const QString windowId = QStringLiteral("app|uuid-pretile-sync");
+
+        m_wts->storePreTileGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        QVERIFY(m_snapState->hasPreTileGeometry(windowId));
+
+        m_wts->clearPreTileGeometry(windowId);
+        QVERIFY(!m_snapState->hasPreTileGeometry(windowId));
+    }
+
+    void testDualStoreSync_windowClosed()
+    {
+        const QString windowId = QStringLiteral("app|uuid-closed-sync");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 1);
+        m_wts->storePreTileGeometry(windowId, QRect(0, 0, 400, 300), screen);
+        QVERIFY(m_snapState->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->hasPreTileGeometry(windowId));
+
+        m_wts->windowClosed(windowId);
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+        QVERIFY(!m_snapState->isFloating(windowId));
+        QCOMPARE(m_snapState->screenForWindow(windowId), QString());
+    }
+
+    void testDualStoreSync_updateLastUsedZone()
+    {
+        m_wts->updateLastUsedZone(QStringLiteral("zone-5"), QStringLiteral("DP-2"), QStringLiteral("konsole"), 2);
+        QCOMPARE(m_snapState->lastUsedZoneId(), QStringLiteral("zone-5"));
+        QCOMPARE(m_snapState->lastUsedScreenId(), QStringLiteral("DP-2"));
+        QCOMPARE(m_snapState->lastUsedZoneClass(), QStringLiteral("konsole"));
+        QCOMPARE(m_snapState->lastUsedDesktop(), 2);
+    }
+
+    void testDualStoreSync_markAndClearAutoSnapped()
+    {
+        const QString windowId = QStringLiteral("app|uuid-auto-sync");
+
+        m_wts->markAsAutoSnapped(windowId);
+        QVERIFY(m_snapState->isAutoSnapped(windowId));
+
+        m_wts->clearAutoSnapped(windowId);
+        QVERIFY(!m_snapState->isAutoSnapped(windowId));
+    }
+
+    void testDualStoreSync_unassignClearsLastUsedZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-lastused-unassign");
+        const QString zoneId = QStringLiteral("zone-7");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_wts->assignWindowToZone(windowId, zoneId, screen, 1);
+        m_wts->updateLastUsedZone(zoneId, screen, QStringLiteral("dolphin"), 1);
+        QCOMPARE(m_snapState->lastUsedZoneId(), zoneId);
+
+        m_wts->unassignWindow(windowId);
+        QCOMPARE(m_snapState->lastUsedZoneId(), QString());
+        QCOMPARE(m_snapState->lastUsedScreenId(), QString());
+        QCOMPARE(m_snapState->lastUsedDesktop(), 0);
+    }
+
+    void testDualStoreSync_unsnapForFloatClearsLastUsedZone()
+    {
+        const QString windowId = QStringLiteral("app|uuid-lastused-float");
+        const QString zoneId = QStringLiteral("zone-8");
+        const QString screen = QStringLiteral("DP-2");
+
+        m_wts->assignWindowToZone(windowId, zoneId, screen, 2);
+        m_wts->updateLastUsedZone(zoneId, screen, QStringLiteral("konsole"), 2);
+        QCOMPARE(m_snapState->lastUsedZoneId(), zoneId);
+
+        m_wts->unsnapForFloat(windowId);
+        QCOMPARE(m_snapState->lastUsedZoneId(), QString());
+        QCOMPARE(m_snapState->lastUsedDesktop(), 0);
+    }
+
+    void testDualStoreSync_recordSnapIntent()
+    {
+        const QString windowId = QStringLiteral("dolphin|uuid-intent");
+
+        m_wts->recordSnapIntent(windowId, true);
+        QVERIFY(m_snapState->userSnappedClasses().contains(QStringLiteral("dolphin")));
+    }
+
+    void testPruneStaleAssignments_coversPreFloatMaps()
+    {
+        const QString windowId = QStringLiteral("app|uuid-prefloat-prune");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_snapState->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 0);
+        m_snapState->unsnapForFloat(windowId);
+        QVERIFY(!m_snapState->preFloatZone(windowId).isEmpty());
+
+        QSet<QString> alive;
+        int pruned = m_snapState->pruneStaleAssignments(alive);
+        QVERIFY(pruned > 0);
+        QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
+    }
+
+    // =========================================================================
     // saveState / loadState persistence delegation tests
     // =========================================================================
 
     void testSaveState_callsDelegateWhenSet()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         bool saveCalled = false;
         bool loadCalled = false;
         engine.setPersistenceDelegate(
@@ -271,6 +445,7 @@ private Q_SLOTS:
     void testLoadState_callsDelegateWhenSet()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         bool saveCalled = false;
         bool loadCalled = false;
         engine.setPersistenceDelegate(
@@ -289,6 +464,7 @@ private Q_SLOTS:
     void testSaveState_noopWithoutDelegate()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         engine.saveState();
         engine.loadState();
     }
@@ -296,6 +472,7 @@ private Q_SLOTS:
     void testSaveLoadState_bothDelegatesCalled()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setSnapState(m_snapState);
         int saveCount = 0;
         int loadCount = 0;
         engine.setPersistenceDelegate(

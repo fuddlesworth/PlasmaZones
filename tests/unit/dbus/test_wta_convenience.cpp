@@ -17,12 +17,14 @@
 
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "dbus/windowtrackingadaptor.h"
+#include "snap/SnapEngine.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -129,6 +131,12 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
 
+        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_snapEngine);
+        m_snapEngine->setSnapState(m_snapState);
+        m_wta->service()->setSnapState(m_snapState);
+        m_wta->setEngines(m_snapEngine, nullptr);
+
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
         m_layoutManager->setActiveLayout(m_testLayout);
@@ -144,6 +152,10 @@ private Q_SLOTS:
     void cleanup()
     {
         // WTA is owned by m_parent (QDBusAbstractAdaptor parent)
+        m_wta->service()->setSnapState(nullptr);
+        delete m_snapEngine;
+        m_snapEngine = nullptr;
+        m_snapState = nullptr;
         delete m_parent;
         m_parent = nullptr;
         m_wta = nullptr;
@@ -388,6 +400,8 @@ private:
     StubZoneDetectorConvenience* m_zoneDetector = nullptr;
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
+    SnapEngine* m_snapEngine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QString m_screenId;

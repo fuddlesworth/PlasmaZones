@@ -16,7 +16,7 @@
 #include <QScopeGuard>
 #include <QSignalSpy>
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include "autotile/AutotileEngine.h"
 #include "../helpers/AutotileTestHelpers.h"

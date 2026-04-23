@@ -6,7 +6,7 @@
 #include <cstdint>
 
 #include <compositor_bridge.h>
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <trigger_parser.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -127,10 +127,10 @@ private Q_SLOTS:
     // crossed a virtual-screen boundary that changes autotile↔snap mode).
     // Effect applies the transition: entering/exiting autotile bypass,
     // canceling snap overlay, etc.
-    void slotDragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
+    void slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
 
     // Daemon-driven batch operations (rotate, resnap)
-    void slotApplyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
+    void slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
     // Snap-all (effect collects candidates, daemon computes assignments)
@@ -140,7 +140,7 @@ private Q_SLOTS:
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                             const PlasmaZones::EmptyZoneList& emptyZones);
+                             const PhosphorProtocol::EmptyZoneList& emptyZones);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
                                                int height);
 
@@ -440,7 +440,7 @@ private:
     // drag starts; until then, conservative defaults apply (snap-path
     // with streaming) so the worst-case UX is a brief zone-overlay flash
     // rather than a dead drag. Cleared at drag end.
-    DragPolicy m_currentDragPolicy;
+    PhosphorProtocol::DragPolicy m_currentDragPolicy;
 
     // Frame-geometry shadow push state. Effect debounces windowFrameGeometryChanged
     // signals per-window to ~50ms and pushes the latest geometry to the daemon via
@@ -493,7 +493,7 @@ private:
 
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
-    // the compositor thread. See DBusHelpers::asyncCall() and DBusHelpers::fireAndForget().
+    // the compositor thread. See ClientHelpers::asyncCall() and ClientHelpers::fireAndForget().
 
     // Screen change debouncing and reapply handled by ScreenChangeHandler
 

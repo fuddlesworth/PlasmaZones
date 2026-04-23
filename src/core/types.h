@@ -4,11 +4,15 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorEngineApi/NavigationContext.h>
+#include <QList>
 #include <QString>
 #include <QStringList>
 #include <QRect>
 
 namespace PlasmaZones {
+
+using NavigationContext = PhosphorEngineApi::NavigationContext;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared Types - Parameter Objects for Complex Method Signatures
@@ -16,6 +20,41 @@ namespace PlasmaZones {
 // These types reduce the number of output parameters in D-Bus methods and
 // provide clear semantic grouping of related data.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Whether a snap was user-initiated or auto-restored.
+ *
+ * commitSnap's side effects depend on WHY the snap is happening:
+ *
+ *   UserInitiated (default):
+ *     - Clears any stale auto-snapped flag (so a subsequent
+ *       windowActivated's last-used-zone gate sees "user-initiated")
+ *     - Consumes one pending-restore entry (so the session entry can't
+ *       drag the window back on next close/reopen)
+ *     - Updates last-used-zone tracking
+ *
+ *   AutoRestored:
+ *     - Does NOT touch the auto-snapped flag — the caller sets it
+ *       BEFORE commit and the flag persists until windowClosed/pruneStale
+ *     - Does NOT consume pending-restore — the resolve path already did
+ *     - Does NOT update last-used-zone
+ *
+ * Floating-state clear (+ windowFloatingClearedForSnap emit) and the
+ * windowSnapStateChanged emit fire for both intents.
+ */
+enum class SnapIntent {
+    UserInitiated, ///< Explicit user action (shortcut, D-Bus call, float-toggle)
+    AutoRestored, ///< Auto-snap on open, session restore, app-rule match
+};
+
+struct PLASMAZONES_EXPORT ResnapEntry
+{
+    QString windowId;
+    int zonePosition; ///< Primary zone: 1-based position in sorted-by-zoneNumber order
+    QList<int> allZonePositions; ///< All zones (for multi-zone windows); empty = single-zone
+    QString screenId; ///< Stable EDID-based screen identifier (or connector name fallback)
+    int virtualDesktop = 0;
+};
 
 /**
  * @brief Result of a snap calculation

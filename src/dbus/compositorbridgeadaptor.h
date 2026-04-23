@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -12,6 +12,9 @@
 #include <QVariantMap>
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::BridgeRegistrationResult;
+using PhosphorProtocol::WindowGeometryList;
 
 /**
  * @brief D-Bus adaptor for the compositor bridge protocol

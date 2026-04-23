@@ -5,9 +5,9 @@
 #include "autotilehandler.h"
 #include "plasmazoneseffect.h"
 
-#include <dbus_constants.h>
-#include <dbus_helpers.h>
-#include <dbus_types.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
@@ -125,8 +125,8 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         return;
     }
     m_reapplyInProgress = true;
-    QDBusPendingCall pendingCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {
@@ -135,7 +135,7 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
             return;
         }
         self->m_reapplyInProgress = false;
-        QDBusPendingReply<WindowGeometryList> reply = *w;
+        QDBusPendingReply<PhosphorProtocol::WindowGeometryList> reply = *w;
         if (!reply.isValid()) {
             qCDebug(lcScreenChange) << "No window geometries to update";
         } else {
@@ -152,7 +152,7 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
     });
 }
 
-void ScreenChangeHandler::applyWindowGeometries(const WindowGeometryList& geometries)
+void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries)
 {
     if (geometries.isEmpty()) {
         qCDebug(lcScreenChange) << "Empty geometries list from daemon";

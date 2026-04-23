@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "SnapEngine.h"
+#include <PhosphorZones/SnapState.h>
 #include "autotile/AutotileEngine.h"
 #include "dbus/snapnavigationtargets.h"
 #include "dbus/windowtrackingadaptor.h"
@@ -32,6 +33,12 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrack
 // pimpl-style owned resolver without its full type being visible in the
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
+
+void SnapEngine::setSnapState(PhosphorZones::SnapState* state)
+{
+    Q_ASSERT(state);
+    m_snapState = state;
+}
 
 void SnapEngine::setAutotileEngine(AutotileEngine* engine)
 {
@@ -99,7 +106,7 @@ void SnapEngine::setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IEngineLifecycle implementation
+// IPlacementEngine — lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
@@ -158,6 +165,51 @@ void SnapEngine::loadState()
     if (m_loadFn) {
         m_loadFn();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — navigation overrides (thin delegates)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
+{
+    rotateWindowsInLayout(clockwise, ctx.screenId);
+}
+
+void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
+{
+    resnapToNewLayout();
+}
+
+void SnapEngine::snapAllWindows(const NavigationContext& ctx)
+{
+    snapAllWindows(ctx.screenId);
+}
+
+void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
+{
+    pushFocusedToEmptyZone(ctx);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IPlacementEngine — state access
+//
+// Returns the single SnapState instance wired by Daemon::init(). Currently a
+// global state (not per-screen); a future PR will introduce per-screen
+// ownership. Callers should null-check — headless unit tests may not wire a
+// SnapState.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
+{
+    Q_UNUSED(screenId)
+    return m_snapState;
+}
+
+const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
+{
+    Q_UNUSED(screenId)
+    return m_snapState;
 }
 
 } // namespace PlasmaZones

@@ -88,7 +88,7 @@ void Daemon::updateAutotileScreens()
     // Apply per-screen overrides BEFORE setAutotileScreens so that newly added
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
-    // stateForScreen(), which setAutotileScreens reuses for added screens.
+    // tilingStateForScreen(), which setAutotileScreens reuses for added screens.
     if (m_settings) {
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))

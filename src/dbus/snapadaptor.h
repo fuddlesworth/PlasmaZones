@@ -22,8 +22,8 @@ class WindowTrackingAdaptor;
  * Navigation operations (move, focus, swap, rotate, cycle, snap-by-number) are now
  * daemon-driven: the Daemon routes through WTA methods directly, which compute
  * geometry internally and emit applyGeometryRequested / activateWindowRequested.
- * The SnapEngine's IEngineLifecycle interface is narrowed to lifecycle-only
- * methods — navigation is not part of the interface (see iwindowengine.h).
+ * The SnapEngine implements IPlacementEngine which unifies lifecycle and
+ * navigation methods into a single interface.
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */

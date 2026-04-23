@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "dbus_constants.h"
-#include "logging.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/phosphorprotocol_export.h>
+
+#include <QLoggingCategory>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -15,7 +17,11 @@
 #include <QVariant>
 #include <functional>
 
-namespace PlasmaZones {
+namespace PhosphorProtocol {
+PHOSPHORPROTOCOL_EXPORT const QLoggingCategory& lcPhosphorProtocol();
+}
+
+namespace PhosphorProtocol::ClientHelpers {
 
 /**
  * @brief Compositor-agnostic D-Bus helper utilities
@@ -25,7 +31,6 @@ namespace PlasmaZones {
  * (not QDBusInterface) to avoid synchronous D-Bus introspection that blocks the
  * compositor thread.
  */
-namespace DBusHelpers {
 
 /**
  * @brief Fire-and-forget async D-Bus call with error logging.
@@ -40,11 +45,11 @@ inline void fireAndForget(QObject* parent, const QString& interface, const QStri
                           const QString& logContext = {})
 {
     if (!parent) {
-        qCWarning(lcCompositorCommon) << (logContext.isEmpty() ? method : logContext)
+        qCWarning(lcPhosphorProtocol) << (logContext.isEmpty() ? method : logContext)
                                       << "fireAndForget called with null parent, ignoring";
         return;
     }
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, interface, method);
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, interface, method);
     for (const QVariant& arg : args) {
         msg << arg;
     }
@@ -53,7 +58,7 @@ inline void fireAndForget(QObject* parent, const QString& interface, const QStri
     const QString ctx = logContext.isEmpty() ? method : logContext;
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, parent, [ctx](QDBusPendingCallWatcher* w) {
         if (w->isError()) {
-            qCWarning(lcCompositorCommon) << ctx << "D-Bus call failed:" << w->error().message();
+            qCWarning(lcPhosphorProtocol) << ctx << "D-Bus call failed:" << w->error().message();
         }
         w->deleteLater();
     });
@@ -69,7 +74,7 @@ inline void fireAndForget(QObject* parent, const QString& interface, const QStri
  */
 inline QDBusPendingCall asyncCall(const QString& interface, const QString& method, const QVariantList& args = {})
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, interface, method);
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, interface, method);
     for (const QVariant& arg : args) {
         msg << arg;
     }
@@ -90,7 +95,7 @@ inline QDBusPendingCall asyncCall(const QString& interface, const QString& metho
 template<typename Fn>
 void loadSettingAsync(QObject* parent, const QString& name, Fn&& onValue)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+    QDBusMessage msg = QDBusMessage::createMethodCall(Service::Name, Service::ObjectPath, Service::Interface::Settings,
                                                       QStringLiteral("getSetting"));
     msg << name;
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), parent);
@@ -104,13 +109,12 @@ void loadSettingAsync(QObject* parent, const QString& name, Fn&& onValue)
                                  value = value.value<QDBusVariant>().variant();
                              }
                              onValue(value);
-                             qCDebug(lcCompositorCommon) << "Loaded" << name;
+                             qCDebug(lcPhosphorProtocol) << "Loaded" << name;
                          } else {
-                             qCWarning(lcCompositorCommon)
+                             qCWarning(lcPhosphorProtocol)
                                  << "loadSettingAsync: failed to load" << name << ":" << reply.error().message();
                          }
                      });
 }
 
-} // namespace DBusHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorProtocol::ClientHelpers

@@ -6,7 +6,7 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>
@@ -26,6 +26,9 @@ class ScreenManager;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneEntry;
+using PhosphorProtocol::EmptyZoneList;
 
 class ISettings;
 

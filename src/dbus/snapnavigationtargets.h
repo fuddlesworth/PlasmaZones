@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <QString>
 
@@ -15,6 +15,12 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::CycleTargetResult;
+using PhosphorProtocol::FocusTargetResult;
+using PhosphorProtocol::MoveTargetResult;
+using PhosphorProtocol::RestoreTargetResult;
+using PhosphorProtocol::SwapTargetResult;
 
 class ISettings;
 
@@ -45,7 +51,7 @@ class ZoneDetectionAdaptor;
  * This class is deliberately not a QObject — it needs no signals of
  * its own, and the absence of QObject machinery makes it trivially
  * constructable for unit tests. The single dependency on Qt is the
- * shared result-struct types (MoveTargetResult etc. from dbus_types.h).
+ * shared result-struct types (MoveTargetResult etc. from PhosphorProtocol/WireTypes.h).
  *
  * All methods are intended to be called only for screens that the
  * router (ScreenModeRouter) has confirmed are in Snapping mode. The

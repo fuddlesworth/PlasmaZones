@@ -57,11 +57,8 @@ class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
-class IEngineLifecycle;
-class AutotileNavigationAdapter;
 class ScreenModeRouter;
 class SettingsConfigStore;
-class SnapNavigationAdapter;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
@@ -205,8 +202,8 @@ private:
     // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /** @brief Return the active IEngineLifecycle for a screen (autotile or snap) */
-    IEngineLifecycle* engineForScreen(const QString& screenId) const;
+    /** @brief Return the active IPlacementEngine for a screen (autotile or snap) */
+    PhosphorEngineApi::IPlacementEngine* engineForScreen(const QString& screenId) const;
 
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.
@@ -508,16 +505,7 @@ private:
     /// dispatch paths. Owns no state of its own — just delegates to the
     /// layout manager and engine pointers it was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
-    /// Thin INavigationActions adapters presented via
-    /// ScreenModeRouter::navigatorFor() so daemon/navigation.cpp shortcut
-    /// handlers dispatch user intents through a common interface instead
-    /// of branching on mode and calling engine methods ad hoc. Both
-    /// adapters forward to their respective engine — SnapEngine owns the
-    /// snap-mode navigation methods (see src/snap/snapengine/navigation_actions.cpp)
-    /// and AutotileEngine owns the autotile ones.
-    std::unique_ptr<AutotileNavigationAdapter> m_autotileNavigationAdapter;
-    std::unique_ptr<SnapNavigationAdapter> m_snapNavigationAdapter;
-    /// Stateless façade over m_virtualScreenStore for VS swap/rotate.
+    /// Stateless facade over m_virtualScreenStore for VS swap/rotate.
     /// Held as a member rather than reconstructed per-call so navigation
     /// handlers don't need to know about its dependencies.
     std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;

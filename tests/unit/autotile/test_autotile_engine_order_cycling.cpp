@@ -35,7 +35,7 @@ private:
     /// Add windows to a screen's PhosphorTiles::TilingState (simulates KWin windowAdded events)
     void addWindowsToScreen(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screenId);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenId);
         QVERIFY(state);
         for (const QString& id : windowIds) {
             state->addWindow(id);

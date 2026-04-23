@@ -23,6 +23,7 @@
 
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -56,6 +57,8 @@ private Q_SLOTS:
         m_settings = new StubSettingsMigration(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_service->setSnapState(m_snapState);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -69,6 +72,9 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_snapState;
+        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -390,6 +396,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsMigration* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     WindowTrackingService* m_service = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

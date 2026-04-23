@@ -41,6 +41,7 @@
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
@@ -65,10 +66,9 @@
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../autotile/AutotileEngine.h"
-#include "../autotile/autotilenavigationadapter.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
-#include "../snap/snapnavigationadapter.h"
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
@@ -694,6 +694,14 @@ bool Daemon::init()
         std::make_unique<SnapEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_zoneDetector.get(),
                                      m_settings.get(), m_virtualDesktopManager.get(), this);
 
+    // Wire SnapState — shared between SnapEngine (reads) and WTS (write
+    // propagation). SnapEngine delegates pure state reads/writes; WTS
+    // propagates mutations from commitSnap/commitMultiZoneSnap so the two
+    // stores stay in sync during the transitional dual-store period.
+    auto* snapState = new PhosphorZones::SnapState(QString(), m_snapEngine.get());
+    m_snapEngine->setSnapState(snapState);
+    m_windowTrackingAdaptor->service()->setSnapState(snapState);
+
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     m_snapEngine->setPersistenceDelegate(
@@ -727,16 +735,6 @@ bool Daemon::init()
         std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
-    // Navigation-intent dispatch: thin INavigationActions adapters wired
-    // through the router so daemon/navigation.cpp shortcut handlers dispatch
-    // via router->navigatorFor(screenId)->foo() instead of branching on mode.
-    // Both adapters forward to their respective engine — SnapEngine now
-    // owns the snap-mode navigation methods that used to live on
-    // WindowTrackingAdaptor (see src/snap/snapengine/navigation_actions.cpp).
-    m_autotileNavigationAdapter = std::make_unique<AutotileNavigationAdapter>(m_autotileEngine.get());
-    m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_snapEngine.get());
-    m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
-
     // m_virtualScreenStore is constructed in the initializer list (it's a
     // Config arg for m_screenManager). The swapper is constructed here
     // because navigation handlers don't run before init() returns anyway.
@@ -747,7 +745,7 @@ bool Daemon::init()
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
     // state, not just autotile). This is heavier than a targeted save but ensures consistency
     // — the autotile window orders are embedded in WTA's save cycle via the serialization
-    // delegates below. The engine-level delegates exist to satisfy the IEngineLifecycle interface.
+    // delegates below. The engine-level delegates exist to satisfy the IPlacementEngine interface.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     m_autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
@@ -887,7 +885,7 @@ bool Daemon::init()
     constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
     bool serviceRegistered = false;
     for (int attempt = 0; attempt < maxRetries; ++attempt) {
-        if (bus.registerService(QString(DBus::ServiceName))) {
+        if (bus.registerService(QString(PhosphorProtocol::Service::Name))) {
             serviceRegistered = true;
             break;
         }
@@ -905,8 +903,8 @@ bool Daemon::init()
         }
 
         // Non-retryable error or max retries reached
-        qCCritical(lcDaemon) << "Failed to register D-Bus service=" << DBus::ServiceName << "error=" << error.message()
-                             << "type=" << error.type();
+        qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
+                             << "error=" << error.message() << "type=" << error.type();
         return false;
     }
 
@@ -916,15 +914,17 @@ bool Daemon::init()
     }
 
     // Register D-Bus object (no retry needed - service is already registered)
-    if (!bus.registerObject(QString(DBus::ObjectPath), this)) {
+    if (!bus.registerObject(QString(PhosphorProtocol::Service::ObjectPath), this)) {
         QDBusError error = bus.lastError();
-        qCCritical(lcDaemon) << "Failed to register D-Bus object=" << DBus::ObjectPath << "error=" << error.message();
+        qCCritical(lcDaemon) << "Failed to register D-Bus object=" << PhosphorProtocol::Service::ObjectPath
+                             << "error=" << error.message();
         // Cleanup: unregister service if object registration fails
-        bus.unregisterService(QString(DBus::ServiceName));
+        bus.unregisterService(QString(PhosphorProtocol::Service::Name));
         return false;
     }
 
-    qCInfo(lcDaemon) << "D-Bus service registered service=" << DBus::ServiceName << "path=" << DBus::ObjectPath;
+    qCInfo(lcDaemon) << "D-Bus service registered service=" << PhosphorProtocol::Service::Name
+                     << "path=" << PhosphorProtocol::Service::ObjectPath;
 
     // Connect overlay adaptor signals to daemon overlay control
     connect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, [this](bool visible) {
@@ -1049,17 +1049,10 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
-    // Clear navigation adapters from the router and tear them down BEFORE
-    // destroying the engines they point at. The adapters hold QPointers to
-    // the engines (so a stray call would no-op rather than crash), but we
-    // still prefer to sever the reference chain explicitly to match the
-    // SnapAdaptor/AutotileAdaptor teardown pattern and keep the router from
-    // handing out about-to-be-invalid navigators during the shutdown window.
-    if (m_screenModeRouter) {
-        m_screenModeRouter->setNavigationAdapters(nullptr, nullptr);
-    }
-    m_snapNavigationAdapter.reset();
-    m_autotileNavigationAdapter.reset();
+    // Null out the router's reference before destroying it — straggler calls
+    // to engineForScreen() during the shutdown window get nullptr instead of
+    // a dangling pointer. Then destroy the router.
+    m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
@@ -1067,8 +1060,8 @@ void Daemon::stop()
 
     // Unregister D-Bus object path and service to prevent late calls during shutdown
     QDBusConnection bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(QString(DBus::ObjectPath));
-    bus.unregisterService(QString(DBus::ServiceName));
+    bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));
+    bus.unregisterService(QString(PhosphorProtocol::Service::Name));
 
     // Sever the remaining raw-pointer adaptors from the unique_ptr members
     // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr

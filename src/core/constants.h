@@ -9,12 +9,6 @@
 #include <QString>
 #include <limits>
 
-// Pull in the canonical effect↔daemon protocol-version constants
-// (PlasmaZones::DBus::ApiVersion / MinPeerApiVersion). Defined in
-// compositor-common so the KWin effect, which does not link
-// plasmazones_core, shares exactly one definition with the daemon.
-#include <dbus_constants.h>
-
 // Shared shapes (per-side gap struct + aspect-ratio classification) live in
 // libs/phosphor-layout-api so every layout/tile provider can consume them
 // without forcing them to depend on PlasmaZones internals.  Re-aliased into
@@ -203,14 +197,6 @@ inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
 }
 
 /**
- * @brief Audio visualization constants (CAVA)
- */
-namespace Audio {
-constexpr int MinBars = 16;
-constexpr int MaxBars = 256;
-}
-
-/**
  * @brief Synthetic zone ID prefix used by the zone selector overlay
  *
  * PhosphorZones::Zone IDs starting with this prefix are transient selector entries,
@@ -229,13 +215,15 @@ inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
 inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
 /**
- * @brief D-Bus service constants
+ * @brief D-Bus identity constants for PlasmaZones sub-applications
  *
- * ServiceName, ObjectPath, ApiVersion / MinPeerApiVersion, and the
- * per-interface name table all live in compositor-common/dbus_constants.h
- * (included at the top of this file) — that's the single source of truth
- * shared with the KWin effect, which doesn't link plasmazones_core.
- * This re-opens `namespace DBus` only to add daemon-only constants.
+ * The daemon protocol constants (service name, object path, interfaces,
+ * API version, timeout) live in PhosphorProtocol::Service
+ * (libs/phosphor-protocol). Consumers reference them qualified directly.
+ *
+ * This namespace holds only the app-specific D-Bus identities for the
+ * settings and editor processes (single-instance management, not
+ * daemon protocol).
  */
 namespace DBus {
 

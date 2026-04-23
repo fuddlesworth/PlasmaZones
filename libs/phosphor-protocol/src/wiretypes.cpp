@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "dbus_types.h"
+#include <PhosphorProtocol/WireTypes.h>
 
 #include <QDebug>
 #include <QLatin1String>
 
-namespace PlasmaZones {
+namespace PhosphorProtocol {
 
 namespace {
 // Wire-format strings for DragBypassReason. Kept as a single source of truth
@@ -534,7 +534,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o)
     return arg;
 }
 
-void registerDBusTypes()
+void registerWireTypes()
 {
     // IMPORTANT: register each type under BOTH its qualified and unqualified
     // names. Q_DECLARE_METATYPE must be at global scope, so it registers under
@@ -589,4 +589,4 @@ void registerDBusTypes()
 #undef PZ_REGISTER_DBUS_TYPE
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorProtocol

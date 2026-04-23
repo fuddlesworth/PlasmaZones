@@ -482,6 +482,25 @@ QStringList TilingState::floatingWindows() const
     return list;
 }
 
+// ── IPlacementState ─────────────────────────────────────────────────────────
+
+QStringList TilingState::managedWindows() const
+{
+    return m_windowOrder;
+}
+
+QString TilingState::placementIdForWindow(const QString& windowId) const
+{
+    if (m_floatingWindows.contains(windowId)) {
+        return {};
+    }
+    int idx = tiledWindowIndex(windowId);
+    if (idx < 0) {
+        return {};
+    }
+    return QString::number(idx);
+}
+
 // ── Focus Tracking ───────────────────────────────────────────────────────────
 
 QString TilingState::focusedWindow() const

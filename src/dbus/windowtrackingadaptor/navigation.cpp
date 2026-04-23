@@ -3,7 +3,7 @@
 
 #include "../windowtrackingadaptor.h"
 #include "../../config/settings.h"
-#include "../../core/inavigationactions.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
@@ -79,10 +79,10 @@ void WindowTrackingAdaptor::restoreWindowSize()
 // That logic now lives in SnapEngine::toggleFocusedFloat (in
 // snapengine/navigation_actions.cpp). The shortcut handler in
 // daemon/navigation.cpp::handleFloat dispatches through
-// ScreenModeRouter::navigatorFor(screenId) → INavigationActions →
+// ScreenModeRouter::engineFor(screenId) → IPlacementEngine →
 // toggleFocusedFloat(), which routes to either the autotile engine's
-// toggleFocusedWindowFloat() or SnapEngine's toggleFocusedFloat() via
-// the adapters. No circular bounce through WTA any more.
+// toggleFocusedWindowFloat() or SnapEngine's toggleFocusedFloat()
+// directly. No circular bounce through WTA any more.
 
 void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 {
@@ -130,13 +130,13 @@ void WindowTrackingAdaptor::resnapToNewLayout()
 static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<ZoneAssignmentEntry>& entries,
                                 const QString& action)
 {
-    WindowTrackingService* service = adaptor ? adaptor->service() : nullptr;
-    if (!service) {
+    SnapEngine* engine = adaptor ? adaptor->snapEngine() : nullptr;
+    if (!engine) {
         return false;
     }
 
-    WindowGeometryList geometries = service->applyBatchAssignments(
-        entries, WindowTrackingService::SnapIntent::UserInitiated, [adaptor]() -> QString {
+    WindowGeometryList geometries =
+        engine->applyBatchAssignments(entries, SnapIntent::UserInitiated, [adaptor]() -> QString {
             const QString cursor = adaptor->lastCursorScreenName();
             return cursor.isEmpty() ? adaptor->lastActiveScreenName() : cursor;
         });
@@ -190,7 +190,7 @@ void WindowTrackingAdaptor::resnapForVirtualScreenReconfigure(const QString& phy
     const QStringList snapScreens = resolveSnapModeScreensForResnap(physicalScreenId);
     QVector<ZoneAssignmentEntry> entries;
     for (const QString& sid : snapScreens) {
-        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+        entries.append(m_snapEngine->calculateResnapFromCurrentAssignments(sid));
     }
 
     if (entries.isEmpty()) {

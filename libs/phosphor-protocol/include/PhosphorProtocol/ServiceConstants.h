@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
 #include <QLatin1String>
 
-namespace PlasmaZones {
+namespace PhosphorProtocol::Service {
 
 /**
  * @brief D-Bus service constants shared by all compositor plugins
@@ -13,8 +13,7 @@ namespace PlasmaZones {
  * Centralized D-Bus interface names to avoid magic strings.
  * Used by KWin effect, Wayfire plugin, and any future compositor integration.
  */
-namespace DBus {
-inline constexpr QLatin1String ServiceName("org.plasmazones");
+inline constexpr QLatin1String Name("org.plasmazones");
 inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 
 namespace Interface {
@@ -48,6 +47,5 @@ inline constexpr int MinPeerApiVersion = 2;
 // in the healthy case), so 500 ms is generous while still degrading
 // gracefully to caller-side defaults when the daemon is unresponsive.
 inline constexpr int SyncCallTimeoutMs = 500;
-}
 
-} // namespace PlasmaZones
+} // namespace PhosphorProtocol::Service

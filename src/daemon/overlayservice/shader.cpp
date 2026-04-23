@@ -3,7 +3,8 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../cavaservice.h"
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -17,7 +18,6 @@
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
-#include <QQmlContext>
 #include <QMutexLocker>
 #include <QTimer>
 #include <QImage>
@@ -175,8 +175,8 @@ void OverlayService::startShaderAnimation()
 
     // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
     // Just sync config in case frame rate changed since CAVA was started.
-    if (m_cavaService && m_cavaService->isRunning() && m_settings) {
-        m_cavaService->setFramerate(frameRate);
+    if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
+        m_audioProvider->setFramerate(frameRate);
     }
 
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
@@ -449,8 +449,6 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
         return;
     }
 
-    m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
-
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
     QVariantMap initProps;
@@ -461,7 +459,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     // editor rapidly opens/closes the Shader Settings dialog.
     const QString scopeId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
     const auto role = PzRoles::ShaderPreview.withScopePrefix(
-        QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+        QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, role,
                                        "shader preview overlay", initProps);

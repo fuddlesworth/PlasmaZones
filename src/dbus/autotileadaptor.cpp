@@ -11,7 +11,7 @@
 #include "core/logging.h"
 #include <PhosphorScreens/Manager.h>
 
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>

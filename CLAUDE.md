@@ -119,6 +119,21 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 
 ## Build & Test
 
+On macOS, use Docker (KDE/Qt6 deps are Linux-only):
+
+```bash
+# First build the image (once)
+docker build -t plasmazones-build .
+
+# Build + test (default runs ctest)
+docker run --rm -v "$PWD":/src plasmazones-build
+
+# Build + test with verbose output
+docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure
+```
+
+On Linux (native):
+
 ```bash
 # Build
 cmake --build build --parallel $(nproc)

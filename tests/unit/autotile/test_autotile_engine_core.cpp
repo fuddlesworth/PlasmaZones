@@ -160,7 +160,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("TestScreen"));
 
         QVERIFY(state != nullptr);
         QCOMPARE(state->screenId(), QStringLiteral("TestScreen"));
@@ -170,8 +170,8 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
-        PhosphorTiles::TilingState* state1 = engine.stateForScreen(QStringLiteral("TestScreen"));
-        PhosphorTiles::TilingState* state2 = engine.stateForScreen(QStringLiteral("TestScreen"));
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(QStringLiteral("TestScreen"));
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(QStringLiteral("TestScreen"));
 
         QCOMPARE(state1, state2);
     }
@@ -180,8 +180,8 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
-        PhosphorTiles::TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
-        PhosphorTiles::TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(QStringLiteral("Screen1"));
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(QStringLiteral("Screen2"));
 
         QVERIFY(state1 != state2);
         QCOMPARE(state1->screenId(), QStringLiteral("Screen1"));
@@ -195,7 +195,7 @@ private Q_SLOTS:
         config->masterCount = 2;
         config->splitRatio = 0.7;
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("TestScreen"));
 
         QCOMPARE(state->splitRatio(), 0.7);
 
@@ -309,7 +309,7 @@ private Q_SLOTS:
         QVERIFY(engine.isWindowTiled(windowId));
 
         // Flip to floating via the tiling state — the helper must now return false.
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         state->setFloating(windowId, true);
         QVERIFY(!engine.isWindowTiled(windowId));
@@ -353,7 +353,7 @@ private Q_SLOTS:
 
         QCoreApplication::processEvents();
 
-        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state != nullptr);
         QVERIFY(state->containsWindow(windowId));
         QCOMPARE(state->windowCount(), 1);

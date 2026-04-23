@@ -3,7 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../cavaservice.h"
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -254,18 +254,18 @@ void OverlayService::refreshVisibleWindows()
 
 void OverlayService::syncCavaState()
 {
-    if (!m_cavaService || !m_settings) {
+    if (!m_audioProvider || !m_settings) {
         return;
     }
     if (m_settings->enableAudioVisualizer()) {
-        m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-        m_cavaService->setFramerate(m_settings->shaderFrameRate());
-        if (!m_cavaService->isRunning()) {
-            m_cavaService->start();
+        m_audioProvider->setBarCount(m_settings->audioSpectrumBarCount());
+        m_audioProvider->setFramerate(m_settings->shaderFrameRate());
+        if (!m_audioProvider->isRunning()) {
+            m_audioProvider->start();
         }
     } else {
-        if (m_cavaService->isRunning()) {
-            m_cavaService->stop();
+        if (m_audioProvider->isRunning()) {
+            m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                 auto* window = it_.value().overlayWindow;
                 if (window) {

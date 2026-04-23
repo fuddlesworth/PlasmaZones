@@ -6,7 +6,7 @@
 #include "plasmazones_export.h"
 #include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -30,6 +30,18 @@ class LayoutRegistry;
 }
 
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::PreTileGeometryEntry;
+using PhosphorProtocol::PreTileGeometryList;
+using PhosphorProtocol::SnapAllResultList;
+using PhosphorProtocol::SnapConfirmationList;
+using PhosphorProtocol::UnfloatRestoreResult;
+using PhosphorProtocol::WindowGeometryEntry;
+using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
+using PhosphorProtocol::WindowStateList;
+using PhosphorProtocol::ZoneGeometryRect;
 
 class AutotileEngine;
 class ScreenModeRouter;
@@ -115,7 +127,7 @@ public:
     /**
      * @brief Set engine references for routing operations per-screen
      *
-     * The adaptor routes IEngineLifecycle operations to the correct engine:
+     * The adaptor routes IPlacementEngine operations to the correct engine:
      * AutotileEngine for autotile screens, SnapEngine for manual-zone screens.
      * Both must be set before navigation/float D-Bus calls work.
      *
@@ -125,6 +137,8 @@ public:
      * @param autotileEngine AutotileEngine instance (not owned, must outlive adaptor)
      */
     void setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine);
+
+    SnapEngine* snapEngine() const;
 
     /**
      * @brief Wire the daemon's central ScreenModeRouter.

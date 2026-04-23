@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "types.h"
-#include <dbus_types.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -14,16 +14,15 @@
 #include <QRect>
 #include <functional>
 #include <optional>
+#include <utility>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
-class Zone;
-}
-
-namespace PhosphorZones {
 class LayoutRegistry;
+class SnapState;
+class Zone;
 }
 
 namespace PlasmaZones {
@@ -34,6 +33,12 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 namespace PlasmaZones {
+
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::WindowGeometryEntry;
+using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
+
 class VirtualDesktopManager;
 class WindowRegistry;
 
@@ -83,6 +88,11 @@ public:
     void setWindowRegistry(WindowRegistry* registry)
     {
         m_windowRegistry = registry;
+    }
+
+    void setSnapState(PhosphorZones::SnapState* state)
+    {
+        m_snapState = state;
     }
 
     /**
@@ -349,19 +359,6 @@ public:
      */
     bool clearFloatingForSnap(const QString& windowId);
 
-    /**
-     * @brief Resolve unfloat geometry for a floating window
-     *
-     * Shared logic: get pre-float zones → validate saved screen →
-     * compute single/multi-zone geometry → return result.
-     * Used by both SnapEngine::unfloatToZone() and WTA::calculateUnfloatRestore().
-     *
-     * @param windowId Full window ID
-     * @param fallbackScreen Screen to use if saved screen no longer exists
-     * @return UnfloatResult with geometry and zone info, or {found=false}
-     */
-    UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Sticky Window Handling
     // ═══════════════════════════════════════════════════════════════════════════
@@ -381,46 +378,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Calculate snap result based on app-to-zone rules
-     * @param windowId Full window ID
-     * @param windowScreenName Screen where window currently is
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info, or noSnap if no rule matches
-     */
-    SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
-
-    /**
-     * @brief Calculate snap result for new window to last used zone
-     * @param windowId Full window ID
-     * @param windowScreenId Screen where window currently is
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info
-     */
-    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId, bool isSticky) const;
-
-    /**
-     * @brief Calculate snap result for new window to first empty zone (auto-assign)
-     * @param windowId Full window ID
-     * @param windowScreenId Screen where window currently is
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info
-     */
-    SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId, bool isSticky) const;
-
-    /**
-     * @brief Calculate snap result to restore from persisted session
-     * @param windowId Full window ID
-     * @param screenId Screen for geometry calculation
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info
-     *
-     * @note This method peeks at the pending queue but does NOT consume the entry.
-     * Callers MUST call consumePendingAssignment() after acting on a successful result
-     * to prevent duplicate restoration for the next window of the same app class.
-     */
-    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky) const;
-
-    /**
      * @brief Record that a window class was user-snapped
      * @param windowId Full window ID to extract class from
      * @param wasUserInitiated true if user-initiated snap
@@ -430,10 +387,7 @@ public:
     /**
      * @brief Get last used zone ID
      */
-    QString lastUsedZoneId() const
-    {
-        return m_lastUsedZoneId;
-    }
+    QString lastUsedZoneId() const;
 
     /**
      * @brief App class string stamped on the last-used-zone tracking.
@@ -441,10 +395,7 @@ public:
      * Used by the reactive metadata handler to detect stale class tags after
      * a mid-session rename.
      */
-    QString lastUsedZoneClass() const
-    {
-        return m_lastUsedZoneClass;
-    }
+    QString lastUsedZoneClass() const;
 
     /**
      * @brief Update the last-used-zone class tag without touching zone/screen.
@@ -454,151 +405,13 @@ public:
      * class string is refreshed so the next auto-snap-by-class lookup matches
      * against the live name.
      */
-    void retagLastUsedZoneClass(const QString& newClass)
-    {
-        m_lastUsedZoneClass = newClass;
-    }
+    void retagLastUsedZoneClass(const QString& newClass);
 
     /**
      * @brief Update last used zone tracking
      */
     void updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
                             int virtualDesktop);
-
-    /**
-     * @brief Snap-commit intent — distinguishes user-initiated from auto-restored snaps.
-     *
-     * commitSnap's side effects depend on WHY the snap is happening. The
-     * two intents select different branches inside the orchestration:
-     *
-     *   UserInitiated (default):
-     *     - Captures and clears any stale auto-snapped flag (so a subsequent
-     *       windowActivated's last-used-zone gate sees "user-initiated")
-     *     - Consumes one pending-restore entry (so the session entry can't
-     *       drag the window back on next close/reopen)
-     *     - Updates last-used-zone tracking
-     *   AutoRestored:
-     *     - Does NOT touch the auto-snapped flag. The caller (lifecycle
-     *       auto-snap path) sets it BEFORE commit, and the flag is
-     *       expected to persist until windowClosed or pruneStale so
-     *       the initial windowActivated can read it and skip the
-     *       last-used-zone update.
-     *     - Does NOT consume pending-restore. The resolve path that
-     *       produced this snap already consumed its entry.
-     *     - Does NOT update last-used-zone. Auto-restores shouldn't
-     *       drag the last-used marker around.
-     *
-     * Floating-state clear (+ windowFloatingClearedForSnap emit) and the
-     * windowSnapStateChanged emit fire for both intents.
-     *
-     * See callers for which intent they pass:
-     *   - SnapEngine navigation methods: UserInitiated (default)
-     *   - WindowTrackingAdaptor::windowSnapped D-Bus slot: UserInitiated
-     *   - SnapEngine::windowOpened auto-snap path: AutoRestored
-     *   - SnapEngine::unfloatToZone: UserInitiated (user toggled float)
-     */
-    enum class SnapIntent {
-        UserInitiated, ///< Explicit user action (shortcut, D-Bus call, float-toggle)
-        AutoRestored, ///< Auto-snap on open, session restore, app-rule match
-    };
-
-    /**
-     * @brief Commit a snap: full orchestration of "window is now in this zone".
-     *
-     * Encapsulates the sequence that used to live in
-     * WindowTrackingAdaptor::windowSnapped (pre-Phase-5C):
-     *
-     *   1. Clear any pre-existing floating state (emits floating-cleared signal)
-     *   2. If UserInitiated: clear auto-snapped flag; capture wasAutoSnapped
-     *   3. If UserInitiated && !wasAutoSnapped: consume pending-restore entry
-     *   4. Assign the window to @p zoneId on @p screenId at the current desktop
-     *   5. If UserInitiated && !wasAutoSnapped && zoneId isn't a zone-selector
-     *      sentinel: update last-used-zone tracking
-     *   6. Emit windowSnapStateChanged(windowId, WindowStateEntry{...})
-     *
-     * Callers pass the resolved screen — WTS does no screen resolution of
-     * its own since cursor/active-window shadows are compositor-layer
-     * state held by WTA.
-     *
-     * @param windowId  Full window id
-     * @param zoneId    Target zone UUID (or "zoneselector-*" sentinel)
-     * @param screenId  Already-resolved effective screen id
-     * @param intent    Whether this snap was user-initiated or auto-restored
-     */
-    void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
-                    SnapIntent intent = SnapIntent::UserInitiated);
-
-    /**
-     * @brief Multi-zone variant of commitSnap for zone-spanning windows.
-     *
-     * Same orchestration as commitSnap, but calls assignWindowToZones for
-     * the whole list and updates last-used-zone tracking based on the
-     * primary (first) zone id.
-     *
-     * @param windowId  Full window id
-     * @param zoneIds   Target zone UUIDs — must be non-empty; first is primary
-     * @param screenId  Already-resolved effective screen id
-     * @param intent    Whether this snap was user-initiated or auto-restored
-     */
-    void commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                             SnapIntent intent = SnapIntent::UserInitiated);
-
-    /**
-     * @brief Apply a batch of zone-assignment changes.
-     *
-     * Used by rotate / resnap / vs_reconfigure / snap-all pipelines to
-     * process a pre-computed vector of ZoneAssignmentEntry items in one
-     * pass. Replaces two nearly-identical `processBatchEntries` copies
-     * that used to live in WindowTrackingAdaptor/navigation.cpp and
-     * snapengine/navigation_actions.cpp — the bookkeeping loop belongs
-     * on WTS, and each caller now emits its own applyGeometriesBatch
-     * signal on the returned geometry list.
-     *
-     * Per-entry semantics:
-     *   - targetZoneId == "__restore__": uncommitSnap + clearPreTileGeometry
-     *   - multi-zone (targetZoneIds.size() > 1): commitMultiZoneSnap(intent)
-     *   - single-zone: commitSnap(intent)
-     *
-     * Screen resolution per entry (first non-empty wins):
-     *   1. entry.targetScreenId — caller stamped an authoritative target
-     *   2. Phosphor::Screens::ScreenManager::effectiveScreenAt(geometry.center()) — VS-aware
-     *      point lookup
-     *   3. QGuiApplication::screens() linear walk — physical fallback for
-     *      early startup when Phosphor::Screens::ScreenManager isn't initialised yet
-     *   4. fallbackScreenResolver() — caller-supplied last-resort, typically
-     *      a compositor-layer cursor/active shadow read from
-     *      WindowTrackingAdaptor
-     *
-     * @param entries                 Pre-computed assignments (may be empty)
-     * @param intent                  SnapIntent for commit methods. Defaults
-     *                                to UserInitiated to preserve historical
-     *                                rotate/resnap semantics (each window's
-     *                                snap updates last-used-zone).
-     * @param fallbackScreenResolver  Optional callable for the last-resort
-     *                                screen. Invoked at most once per entry,
-     *                                only when all built-in strategies return
-     *                                empty. May itself return empty — commit
-     *                                proceeds with an empty screen in that
-     *                                case, preserving legacy behaviour.
-     * @return WindowGeometryList sized to @p entries (one rect per entry in
-     *         input order). Empty if @p entries is empty.
-     */
-    WindowGeometryList applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries,
-                                             SnapIntent intent = SnapIntent::UserInitiated,
-                                             std::function<QString()> fallbackScreenResolver = {});
-
-    /**
-     * @brief Uncommit a snap: unsnap the window and clean up pending state.
-     *
-     *   1. Bail if the window isn't currently snapped (no-op)
-     *   2. Consume one pending-restore entry so a stale session entry
-     *      can't drag the window back on next close/reopen
-     *   3. Unassign from its zone
-     *   4. Emit windowSnapStateChanged with an "unsnapped" WindowStateEntry
-     *
-     * Replaces WindowTrackingAdaptor::windowUnsnapped's body.
-     */
-    void uncommitSnap(const QString& windowId);
 
     /**
      * @brief Mark a window as reported by the effect (confirmed live)
@@ -700,37 +513,6 @@ public:
     QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId = QString()) const;
 
     /**
-     * @brief Calculate rotation data for windows on a specific screen
-     * @param clockwise true for clockwise rotation
-     * @param screenFilter When non-empty, only rotate windows on this screen
-     * @return List of zone assignment entries
-     */
-    QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
-
-    /**
-     * @brief Calculate snap assignments for all unsnapped windows
-     * @param windowIds List of unsnapped window IDs (from KWin effect)
-     * @param screenId Screen for layout/geometry resolution
-     * @return List of ZoneAssignmentEntry with target zone assignments
-     *
-     * Assigns windows to zones in zone-number order, skipping already-occupied
-     * zones. If more windows than zones, extra windows are left unassigned.
-     */
-    QVector<ZoneAssignmentEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId) const;
-
-    /**
-     * @brief Calculate resnap data for windows from previous layout to current layout
-     *
-     * When layout changes, windows that were in the previous layout are buffered.
-     * This method maps them to the current layout by zone number (1->1, 2->2, etc.)
-     * with cycling when the new layout has fewer zones (e.g. zone 4->1, 5->2 when
-     * going from 5 zones to 3).
-     *
-     * @return List of zone assignment entries for KWin to apply
-     */
-    QVector<ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
-
-    /**
      * @brief Populate the resnap buffer for all screens independently.
      *
      * For each window, looks up its current zone assignment and determines
@@ -758,34 +540,6 @@ public:
     {
         m_resnapBuffer.clear();
     }
-
-    /**
-     * @brief Calculate resnap data from current zone assignments
-     *
-     * Used when restoring windows after autotile toggle-off: the autotile engine
-     * repositioned windows, but m_windowZoneAssignments still holds the pre-autotile
-     * zone assignments. This method computes zone geometries for those assignments
-     * so windows can be moved back to their zone positions.
-     *
-     * @param screenFilter When non-empty, only include windows on this screen
-     * @return List of zone assignment entries for KWin to apply
-     */
-    QVector<ZoneAssignmentEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
-
-    /**
-     * @brief Calculate resnap data from an explicit autotile window order
-     *
-     * Maps autotile position to manual zone number: windowOrder[0] → zone 1,
-     * [1] → zone 2, etc. If there are more windows than zones, excess windows
-     * are not resnapped (they stay where they are) — no cycling.
-     * Uses the current (manual) layout's zones for geometry calculation.
-     *
-     * @param autotileWindowOrder Ordered list of window IDs from autotile (master first)
-     * @param screenId Screen for layout/geometry resolution
-     * @return List of zone assignment entries for KWin to apply
-     */
-    QVector<ZoneAssignmentEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                  const QString& screenId) const;
 
     /**
      * @brief Build a zone-ordered window list for a screen from current zone assignments
@@ -899,26 +653,17 @@ public:
      * @brief Get all zone assignments for persistence
      * @return Map of windowId -> zoneIds (list of zone UUIDs)
      */
-    const QHash<QString, QStringList>& zoneAssignments() const
-    {
-        return m_windowZoneAssignments;
-    }
+    const QHash<QString, QStringList>& zoneAssignments() const;
 
     /**
      * @brief Get all screen assignments for persistence
      */
-    const QHash<QString, QString>& screenAssignments() const
-    {
-        return m_windowScreenAssignments;
-    }
+    const QHash<QString, QString>& screenAssignments() const;
 
     /**
      * @brief Get all desktop assignments for persistence
      */
-    const QHash<QString, int>& desktopAssignments() const
-    {
-        return m_windowDesktopAssignments;
-    }
+    const QHash<QString, int>& desktopAssignments() const;
 
     /**
      * @brief Get all pre-tile geometries for persistence
@@ -943,6 +688,8 @@ public:
         QList<int> zoneNumbers;
     };
 
+    using ResnapEntry = PlasmaZones::ResnapEntry;
+
     /**
      * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)
      */
@@ -951,13 +698,19 @@ public:
         return m_pendingRestoreQueues;
     }
 
+    const QSet<QString>& effectReportedWindows() const
+    {
+        return m_effectReportedWindows;
+    }
+    QVector<ResnapEntry> takeResnapBuffer()
+    {
+        return std::exchange(m_resnapBuffer, {});
+    }
+
     /**
      * @brief Get user-snapped classes
      */
-    const QSet<QString>& userSnappedClasses() const
-    {
-        return m_userSnappedClasses;
-    }
+    const QSet<QString>& userSnappedClasses() const;
 
     /**
      * @brief Set active zone/screen/desktop assignments (loaded from KConfig by adaptor)
@@ -967,12 +720,7 @@ public:
      * restore for multi-instance apps (e.g. 2 Ghostty windows, only 1 was snapped).
      */
     void setActiveAssignments(const QHash<QString, QStringList>& zones, const QHash<QString, QString>& screens,
-                              const QHash<QString, int>& desktops)
-    {
-        m_windowZoneAssignments = zones;
-        m_windowScreenAssignments = screens;
-        m_windowDesktopAssignments = desktops;
-    }
+                              const QHash<QString, int>& desktops);
 
     /**
      * @brief Set pending restore queues (loaded from KConfig by adaptor)
@@ -993,10 +741,7 @@ public:
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
      */
-    void setUserSnappedClasses(const QSet<QString>& classes)
-    {
-        m_userSnappedClasses = classes;
-    }
+    void setUserSnappedClasses(const QSet<QString>& classes);
 
     /**
      * @brief Set last used zone info (loaded from KConfig by adaptor)
@@ -1104,29 +849,6 @@ Q_SIGNALS:
      */
     void stateChanged();
 
-    /**
-     * @brief Emitted by commitSnap / commitMultiZoneSnap / uncommitSnap.
-     *
-     * Carries a WindowStateEntry describing the new snap state. WTA
-     * subscribes to this signal in its constructor and re-emits as its
-     * own windowStateChanged D-Bus signal so external consumers (the
-     * KWin effect) see exactly what they did before the bookkeeping
-     * orchestration moved from WTA into WTS.
-     *
-     * The changeType field is "snapped" for commit methods and
-     * "unsnapped" for uncommit.
-     */
-    void windowSnapStateChanged(const QString& windowId, const WindowStateEntry& entry);
-
-    /**
-     * @brief Emitted by commitSnap when it had to clear a pre-existing
-     * floating state before committing.
-     *
-     * WTA relays this to windowFloatingChanged(windowId, false, screenId)
-     * so the effect drops the floating flag on its side too.
-     */
-    void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
-
 private:
     // Minimum visible area for geometry validation
     static constexpr int MinVisibleWidth = 100;
@@ -1150,18 +872,9 @@ private:
     /// When exactOnly is true, does not fall back to the appId-keyed entry.
     std::optional<QRect> validatePreTileEntry(const QString& windowId, const QString& currentScreenName,
                                               bool exactOnly) const;
-    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId, int desktopFilter = 0) const;
-
-    /// Resolve a screen ID to an effective screen ID, falling back to the physical
-    /// screen ID if a virtual screen no longer exists in the current configuration.
-    QString resolveEffectiveScreenId(const QString& screenId) const;
 
     /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
     void validateLastUsedZone(const QString& targetScreen);
-
-    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
-    /// when multiple zones share the same number.
-    static void sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones);
 
     /// Find the nearest virtual screen by index proximity.
     /// Used when a stored virtual screen ID no longer exists in the current configuration.
@@ -1176,14 +889,24 @@ private:
     };
     ZoneLookupResult findZoneInAllLayouts(const QUuid& zoneUuid) const;
 
-    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
-    static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
+public:
+    /// Resolve a screen ID to an effective screen ID, falling back to the physical
+    /// screen ID if a virtual screen no longer exists in the current configuration.
+    QString resolveEffectiveScreenId(const QString& screenId) const;
 
     /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
     /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
     QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
 
-public:
+    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId, int desktopFilter = 0) const;
+
+    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
+    /// when multiple zones share the same number.
+    static void sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones);
+
+    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
+    static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
+
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     ///
     /// Uses Phosphor::Screens::ScreenIdentity::screensMatch() for format-agnostic screen comparison.
@@ -1196,7 +919,6 @@ public:
     ///   "occupied" and "candidate" definitions symmetric.
     QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
 
-public:
     /**
      * @brief Current app class for a windowId, preferring the live registry.
      *
@@ -1219,19 +941,13 @@ private:
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
-
-    // PhosphorZones::Zone assignments: windowId -> zoneIds (supports multi-zone snap)
-    QHash<QString, QStringList> m_windowZoneAssignments;
-    // Screen tracking: windowId -> screenId
-    QHash<QString, QString> m_windowScreenAssignments;
-    // Desktop tracking: windowId -> virtual desktop
-    QHash<QString, int> m_windowDesktopAssignments;
 
     // Pre-tile geometries (unified snap + autotile): full windowId + appId at runtime,
     // appId only for session-restored entries. Converted on window close for persistence.
@@ -1245,12 +961,6 @@ private:
     // via session save/load, drives session-restore geometry resolution, and
     // is the only copy keyed by appId for windows that haven't reopened yet.
     QHash<QString, PreTileGeometry> m_preTileGeometries;
-
-    // Last used zone tracking
-    QString m_lastUsedZoneId;
-    QString m_lastUsedScreenId;
-    QString m_lastUsedZoneClass;
-    int m_lastUsedDesktop = 0;
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence
@@ -1276,30 +986,14 @@ private:
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
 
-    // User-snapped classes (for auto-snap eligibility)
-    QSet<QString> m_userSnappedClasses;
-
     // Sticky window states
     QHash<QString, bool> m_windowStickyStates;
-
-    // Auto-snapped windows (to avoid updating last-used zone)
-    QSet<QString> m_autoSnappedWindows;
 
     // Windows confirmed as live by the effect (runtime only, not persisted).
     // Used by the sibling check in calculateRestoreFromSession to distinguish
     // live siblings (daemon-only restart) from stale config entries (KWin restart).
     QSet<QString> m_effectReportedWindows;
 
-    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
-    // for windows that were in the previous layout, so resnapToNewLayout can map them
-    struct ResnapEntry
-    {
-        QString windowId;
-        int zonePosition; // Primary zone: 1-based position in sorted-by-zoneNumber order
-        QList<int> allZonePositions; // All zones (for multi-zone windows); empty = single-zone
-        QString screenId; // Stable EDID-based screen identifier (or connector name fallback)
-        int virtualDesktop = 0;
-    };
     QVector<ResnapEntry> m_resnapBuffer;
 
     // Delta-persistence dirty mask. Initial value DirtyAll forces the first

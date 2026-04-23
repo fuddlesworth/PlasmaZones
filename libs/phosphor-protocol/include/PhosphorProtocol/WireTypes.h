@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
+
+#include <PhosphorProtocol/phosphorprotocol_export.h>
 
 #include <QDBusArgument>
 #include <QDBusMetaType>
@@ -12,7 +14,7 @@
 
 class QDebug;
 
-namespace PlasmaZones {
+namespace PhosphorProtocol {
 
 /// Why a drag was bypassed from the canonical snap pipeline.
 ///
@@ -34,13 +36,13 @@ enum class DragBypassReason : int {
 };
 
 /// Convert to the legacy wire-format string. Returns an empty QString for None.
-QString toWireString(DragBypassReason r);
+PHOSPHORPROTOCOL_EXPORT QString toWireString(DragBypassReason r);
 
 /// Parse from the legacy wire-format string. Unknown values map to None.
-DragBypassReason bypassReasonFromWireString(const QString& s);
+PHOSPHORPROTOCOL_EXPORT DragBypassReason bypassReasonFromWireString(const QString& s);
 
 /// QDebug streaming for logging. Prints the enum name (e.g. "AutotileScreen").
-QDebug operator<<(QDebug debug, DragBypassReason r);
+PHOSPHORPROTOCOL_EXPORT QDebug operator<<(QDebug debug, DragBypassReason r);
 
 /**
  * @brief Compile-time check that a type has QDBusArgument streaming operators.
@@ -88,7 +90,7 @@ struct WindowGeometryEntry
 using WindowGeometryList = QList<WindowGeometryEntry>;
 
 /// D-Bus struct for autotile tile requests: (siiiissbb)
-struct TileRequestEntry
+struct PHOSPHORPROTOCOL_EXPORT TileRequestEntry
 {
     QString windowId;
     int x = 0;
@@ -287,7 +289,7 @@ struct AlgorithmInfoEntry
 using AlgorithmInfoList = QList<AlgorithmInfoEntry>;
 
 /// D-Bus struct for bridge registration result: (sss)
-struct BridgeRegistrationResult
+struct PHOSPHORPROTOCOL_EXPORT BridgeRegistrationResult
 {
     QString apiVersion;
     QString bridgeName;
@@ -374,7 +376,7 @@ struct SwapTargetResult
 /// Single source of truth replaces the effect-side
 /// m_dragBypassedForAutotile / m_cachedZoneSelectorEnabled cache that went
 /// stale after every settings reload.
-struct DragPolicy
+struct PHOSPHORPROTOCOL_EXPORT DragPolicy
 {
     bool streamDragMoved = false; ///< effect should send dragMoved D-Bus ticks
     bool showOverlay = false; ///< daemon will show zone overlay during this drag
@@ -400,8 +402,8 @@ struct DragPolicy
 /// Drag outcome — daemon-authoritative decision about what to apply at drag
 /// end. Returned from WindowDragAdaptor::endDrag. The compositor plugin
 /// executes exactly the action specified; no further decisions on the effect
-/// side. Wire: (issiiiisb)  —  int action + 2 strings + 4 ints + string + bool
-struct DragOutcome
+/// side. Wire: (issiiiisbba(...))  —  int + 2 strings + 4 ints + string + 2 bools + EmptyZoneList
+struct PHOSPHORPROTOCOL_EXPORT DragOutcome
 {
     enum Action : int {
         NoOp = 0, ///< drag produced no state change (e.g. cancelled with no prior snap)
@@ -472,49 +474,49 @@ struct PreTileGeometryEntry
 
 using PreTileGeometryList = QList<PreTileGeometryEntry>;
 
-// QDBusArgument streaming operators (implemented in dbus_types.cpp)
-QDBusArgument& operator<<(QDBusArgument& arg, const WindowGeometryEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, WindowGeometryEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const TileRequestEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, TileRequestEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const SnapAllResultEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, SnapAllResultEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const SnapConfirmationEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, SnapConfirmationEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const WindowOpenedEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, WindowOpenedEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const WindowStateEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, WindowStateEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const UnfloatRestoreResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, UnfloatRestoreResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const ZoneGeometryRect& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, ZoneGeometryRect& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const EmptyZoneEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, EmptyZoneEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const SnapAssistCandidate& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, SnapAssistCandidate& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const NamedZoneGeometry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, NamedZoneGeometry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const AlgorithmInfoEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, AlgorithmInfoEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const BridgeRegistrationResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, BridgeRegistrationResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const MoveTargetResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, MoveTargetResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const FocusTargetResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, FocusTargetResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const CycleTargetResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, CycleTargetResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const SwapTargetResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, SwapTargetResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const RestoreTargetResult& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e);
-const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e);
-QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p);
-const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p);
-QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o);
-const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o);
+// QDBusArgument streaming operators (implemented in wiretypes.cpp)
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const WindowGeometryEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, WindowGeometryEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const TileRequestEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, TileRequestEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const SnapAllResultEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, SnapAllResultEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const SnapConfirmationEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, SnapConfirmationEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const WindowOpenedEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, WindowOpenedEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const WindowStateEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, WindowStateEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const UnfloatRestoreResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, UnfloatRestoreResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const ZoneGeometryRect& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, ZoneGeometryRect& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const EmptyZoneEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, EmptyZoneEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const SnapAssistCandidate& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, SnapAssistCandidate& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const NamedZoneGeometry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, NamedZoneGeometry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const AlgorithmInfoEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, AlgorithmInfoEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const BridgeRegistrationResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, BridgeRegistrationResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const MoveTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, MoveTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const FocusTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, FocusTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const CycleTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, CycleTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const SwapTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, SwapTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const RestoreTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o);
 
 // Compile-time verification that all D-Bus struct types have streaming operators.
 // If you add a new struct above and forget the operator<</>> declarations, the
@@ -543,41 +545,41 @@ static_assert(HasDBusStreaming<DragPolicy>::value, "DragPolicy missing QDBusArgu
 static_assert(HasDBusStreaming<DragOutcome>::value, "DragOutcome missing QDBusArgument operators");
 
 /// Call once at startup (daemon and plugin) to register types with Qt D-Bus
-void registerDBusTypes();
+PHOSPHORPROTOCOL_EXPORT void registerWireTypes();
 
-} // namespace PlasmaZones
+} // namespace PhosphorProtocol
 
 // Must be outside namespace for Qt meta-type system
-Q_DECLARE_METATYPE(PlasmaZones::WindowGeometryEntry)
-Q_DECLARE_METATYPE(PlasmaZones::WindowGeometryList)
-Q_DECLARE_METATYPE(PlasmaZones::TileRequestEntry)
-Q_DECLARE_METATYPE(PlasmaZones::TileRequestList)
-Q_DECLARE_METATYPE(PlasmaZones::SnapAllResultEntry)
-Q_DECLARE_METATYPE(PlasmaZones::SnapAllResultList)
-Q_DECLARE_METATYPE(PlasmaZones::SnapConfirmationEntry)
-Q_DECLARE_METATYPE(PlasmaZones::SnapConfirmationList)
-Q_DECLARE_METATYPE(PlasmaZones::WindowOpenedEntry)
-Q_DECLARE_METATYPE(PlasmaZones::WindowOpenedList)
-Q_DECLARE_METATYPE(PlasmaZones::WindowStateEntry)
-Q_DECLARE_METATYPE(PlasmaZones::WindowStateList)
-Q_DECLARE_METATYPE(PlasmaZones::UnfloatRestoreResult)
-Q_DECLARE_METATYPE(PlasmaZones::ZoneGeometryRect)
-Q_DECLARE_METATYPE(PlasmaZones::ZoneGeometryList)
-Q_DECLARE_METATYPE(PlasmaZones::EmptyZoneEntry)
-Q_DECLARE_METATYPE(PlasmaZones::EmptyZoneList)
-Q_DECLARE_METATYPE(PlasmaZones::SnapAssistCandidate)
-Q_DECLARE_METATYPE(PlasmaZones::SnapAssistCandidateList)
-Q_DECLARE_METATYPE(PlasmaZones::NamedZoneGeometry)
-Q_DECLARE_METATYPE(PlasmaZones::NamedZoneGeometryList)
-Q_DECLARE_METATYPE(PlasmaZones::AlgorithmInfoEntry)
-Q_DECLARE_METATYPE(PlasmaZones::AlgorithmInfoList)
-Q_DECLARE_METATYPE(PlasmaZones::BridgeRegistrationResult)
-Q_DECLARE_METATYPE(PlasmaZones::MoveTargetResult)
-Q_DECLARE_METATYPE(PlasmaZones::FocusTargetResult)
-Q_DECLARE_METATYPE(PlasmaZones::CycleTargetResult)
-Q_DECLARE_METATYPE(PlasmaZones::SwapTargetResult)
-Q_DECLARE_METATYPE(PlasmaZones::RestoreTargetResult)
-Q_DECLARE_METATYPE(PlasmaZones::PreTileGeometryEntry)
-Q_DECLARE_METATYPE(PlasmaZones::PreTileGeometryList)
-Q_DECLARE_METATYPE(PlasmaZones::DragPolicy)
-Q_DECLARE_METATYPE(PlasmaZones::DragOutcome)
+Q_DECLARE_METATYPE(PhosphorProtocol::WindowGeometryEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::WindowGeometryList)
+Q_DECLARE_METATYPE(PhosphorProtocol::TileRequestEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::TileRequestList)
+Q_DECLARE_METATYPE(PhosphorProtocol::SnapAllResultEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::SnapAllResultList)
+Q_DECLARE_METATYPE(PhosphorProtocol::SnapConfirmationEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::SnapConfirmationList)
+Q_DECLARE_METATYPE(PhosphorProtocol::WindowOpenedEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::WindowOpenedList)
+Q_DECLARE_METATYPE(PhosphorProtocol::WindowStateEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::WindowStateList)
+Q_DECLARE_METATYPE(PhosphorProtocol::UnfloatRestoreResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::ZoneGeometryRect)
+Q_DECLARE_METATYPE(PhosphorProtocol::ZoneGeometryList)
+Q_DECLARE_METATYPE(PhosphorProtocol::EmptyZoneEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::EmptyZoneList)
+Q_DECLARE_METATYPE(PhosphorProtocol::SnapAssistCandidate)
+Q_DECLARE_METATYPE(PhosphorProtocol::SnapAssistCandidateList)
+Q_DECLARE_METATYPE(PhosphorProtocol::NamedZoneGeometry)
+Q_DECLARE_METATYPE(PhosphorProtocol::NamedZoneGeometryList)
+Q_DECLARE_METATYPE(PhosphorProtocol::AlgorithmInfoEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::AlgorithmInfoList)
+Q_DECLARE_METATYPE(PhosphorProtocol::BridgeRegistrationResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::MoveTargetResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::FocusTargetResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::CycleTargetResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::SwapTargetResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::RestoreTargetResult)
+Q_DECLARE_METATYPE(PhosphorProtocol::PreTileGeometryEntry)
+Q_DECLARE_METATYPE(PhosphorProtocol::PreTileGeometryList)
+Q_DECLARE_METATYPE(PhosphorProtocol::DragPolicy)
+Q_DECLARE_METATYPE(PhosphorProtocol::DragOutcome)

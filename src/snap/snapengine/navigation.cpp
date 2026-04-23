@@ -21,11 +21,8 @@ namespace PlasmaZones {
 // side: it computes zone geometry via the target helpers in
 // src/dbus/windowtrackingadaptor/targets.cpp and emits applyGeometryRequested.
 //
-// The IEngineLifecycle interface (iwindowengine.h) is deliberately narrowed
-// to lifecycle events only — lifecycle is the only set of operations where
-// both engines have meaningful implementations. Navigation is autotile-
-// specific and the daemon dispatches it on the concrete AutotileEngine
-// pointer, not polymorphically.
+// The IPlacementEngine interface unifies lifecycle + navigation so both
+// engines are dispatched through a single polymorphic call.
 //
 // What remains here is snap-mode batch operations (layout switch resnap,
 // current-assignment resnap, autotile → snap transition resnap) that don't
@@ -37,7 +34,7 @@ namespace PlasmaZones {
 void SnapEngine::resnapToNewLayout()
 {
     qCDebug(lcCore) << "resnapToNewLayout: calculating entries from previous layout buffer";
-    QVector<ZoneAssignmentEntry> resnapEntries = m_windowTracker->calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> resnapEntries = calculateResnapFromPreviousLayout();
 
     if (resnapEntries.isEmpty()) {
         PhosphorZones::Layout* layout = m_layoutManager->activeLayout();
@@ -61,7 +58,7 @@ void SnapEngine::resnapToNewLayout()
 
 void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
 {
-    QVector<ZoneAssignmentEntry> entries = m_windowTracker->calculateResnapFromCurrentAssignments(screenFilter);
+    QVector<ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenFilter);
 
     if (entries.isEmpty()) {
         qCDebug(lcCore) << "No windows to resnap from current assignments";
@@ -91,13 +88,12 @@ void SnapEngine::resnapFromAutotileOrder(const QStringList& autotileWindowOrder,
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
                                                                                  const QString& screenId)
 {
-    QVector<ZoneAssignmentEntry> entries =
-        m_windowTracker->calculateResnapFromAutotileOrder(autotileWindowOrder, screenId);
+    QVector<ZoneAssignmentEntry> entries = calculateResnapFromAutotileOrder(autotileWindowOrder, screenId);
 
     if (entries.isEmpty()) {
         qCDebug(lcCore) << "calculateResnapEntriesFromAutotileOrder: no entries from autotile order,"
                         << "falling back to current assignments for screen" << screenId;
-        entries = m_windowTracker->calculateResnapFromCurrentAssignments(screenId);
+        entries = calculateResnapFromCurrentAssignments(screenId);
     }
 
     return entries;
@@ -115,7 +111,7 @@ void SnapEngine::emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries)
 
 SnapAllResultList SnapEngine::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
 {
-    QVector<ZoneAssignmentEntry> entries = m_windowTracker->calculateSnapAllWindows(windowIds, screenId);
+    QVector<ZoneAssignmentEntry> entries = calculateSnapAllWindowEntries(windowIds, screenId);
 
     SnapAllResultList result;
     result.reserve(entries.size());
