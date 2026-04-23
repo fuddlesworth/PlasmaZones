@@ -23,6 +23,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
+#include "dbus/snapadaptor.h"
 #include "dbus/windowtrackingadaptor.h"
 #include "snap/SnapEngine.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -136,6 +137,8 @@ private Q_SLOTS:
         m_wta->service()->setSnapEngine(m_snapEngine);
         m_wta->setEngines(m_snapEngine, nullptr);
 
+        m_snapAdaptor = new SnapAdaptor(m_snapEngine, m_wta, m_settings, m_parent);
+
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
         m_layoutManager->setActiveLayout(m_testLayout);
@@ -150,6 +153,12 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // SnapAdaptor is owned by m_parent (QDBusAbstractAdaptor parent)
+        // Clear engine before deleting to disconnect signals
+        if (m_snapAdaptor) {
+            m_snapAdaptor->clearEngine();
+        }
+        m_snapAdaptor = nullptr;
         // WTA is owned by m_parent (QDBusAbstractAdaptor parent)
         m_wta->service()->setSnapState(nullptr);
         delete m_snapEngine;
@@ -181,7 +190,7 @@ private Q_SLOTS:
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        m_wta->moveWindowToZone(windowId, m_zoneIds[0]);
+        m_snapAdaptor->moveWindowToZone(windowId, m_zoneIds[0]);
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), windowId);
@@ -196,7 +205,7 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("firefox|12345");
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        m_wta->moveWindowToZone(windowId, QStringLiteral("nonexistent-zone-id"));
+        m_snapAdaptor->moveWindowToZone(windowId, QStringLiteral("nonexistent-zone-id"));
 
         QCOMPARE(spy.count(), 0);
     }
@@ -205,7 +214,7 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        m_wta->moveWindowToZone(QString(), m_zoneIds[0]);
+        m_snapAdaptor->moveWindowToZone(QString(), m_zoneIds[0]);
 
         QCOMPARE(spy.count(), 0);
     }
@@ -222,12 +231,12 @@ private Q_SLOTS:
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 
         // Snap both windows to different zones via the WTA's windowSnapped slot
-        m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
-        m_wta->windowSnapped(window2, m_zoneIds[1], m_screenId);
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        m_wta->swapWindowsById(window1, window2);
+        m_snapAdaptor->swapWindowsById(window1, window2);
 
         QCOMPARE(spy.count(), 2);
 
@@ -246,11 +255,11 @@ private Q_SLOTS:
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 
         // Only snap window1
-        m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        m_wta->swapWindowsById(window1, window2);
+        m_snapAdaptor->swapWindowsById(window1, window2);
 
         QCOMPARE(spy.count(), 0);
     }
@@ -263,7 +272,7 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("firefox|12345");
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         WindowStateEntry state = m_wta->getWindowState(windowId);
         QCOMPARE(state.windowId, windowId);
@@ -277,7 +286,7 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("firefox|12345");
 
         // Snap then float
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
         m_wta->setWindowFloating(windowId, true);
 
         WindowStateEntry state = m_wta->getWindowState(windowId);
@@ -301,8 +310,8 @@ private Q_SLOTS:
         QString window1 = QStringLiteral("app1|11111");
         QString window2 = QStringLiteral("app2|22222");
 
-        m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
-        m_wta->windowSnapped(window2, m_zoneIds[1], m_screenId);
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
 
         WindowStateList allStates = m_wta->getAllWindowStates();
         QCOMPARE(allStates.size(), 2);
@@ -326,7 +335,7 @@ private Q_SLOTS:
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         QVERIFY(spy.count() >= 1);
 
@@ -347,11 +356,11 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("firefox|12345");
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
-        m_wta->windowUnsnapped(windowId);
+        m_snapEngine->uncommitSnap(windowId);
 
         QVERIFY(spy.count() >= 1);
 
@@ -371,7 +380,7 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("firefox|12345");
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
@@ -398,6 +407,7 @@ private:
     StubZoneDetectorConvenience* m_zoneDetector = nullptr;
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
+    SnapAdaptor* m_snapAdaptor = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

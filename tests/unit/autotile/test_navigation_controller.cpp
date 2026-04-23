@@ -66,7 +66,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win3")));
 
-        QSignalSpy focusSpy(engine.data(), &AutotileEngine::focusWindowRequested);
+        QSignalSpy focusSpy(engine.data(), &AutotileEngine::activateWindowRequested);
 
         // Focused on win3 (last window), focusNext should wrap to win1
         engine->focusNext();
@@ -80,7 +80,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy focusSpy(engine.data(), &AutotileEngine::focusWindowRequested);
+        QSignalSpy focusSpy(engine.data(), &AutotileEngine::activateWindowRequested);
 
         // Focused on win1 (first window), focusPrevious should wrap to win3
         engine->focusPrevious();
@@ -98,7 +98,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // win1 is already at position 0 (master). moveToTiledPosition returns true
         // for no-op moves (fromIndex == toIndex is treated as success in moveWindow),
@@ -128,7 +128,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         engine->rotateWindowOrder(true);
 
@@ -159,7 +159,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win1")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // win1 is at index 0. Swapping "left" (backward) should wrap to win3.
         engine->swapFocusedInDirection(QStringLiteral("left"), QStringLiteral("move"));
@@ -180,7 +180,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         QScopedPointer<AutotileEngine> engine(createEngineWithWindows(screen, 3, QStringLiteral("win3")));
 
-        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(engine.data(), &AutotileEngine::navigationFeedback);
 
         // Position 1 should map to index 0 (one-based to zero-based)
         engine->moveFocusedToPosition(1);
@@ -252,7 +252,7 @@ private Q_SLOTS:
         state->addWindow(QStringLiteral("win2"));
         // No focused window set, no m_activeScreen set
 
-        QSignalSpy focusSpy(&engine, &AutotileEngine::focusWindowRequested);
+        QSignalSpy focusSpy(&engine, &AutotileEngine::activateWindowRequested);
 
         // Without Phosphor::Screens::ScreenManager, the primary screen fallback in
         // tiledWindowsForFocusedScreen returns empty. No crash expected.
@@ -276,7 +276,7 @@ private Q_SLOTS:
         state->setFocusedWindow(QStringLiteral("win1"));
         // m_activeScreen is NOT set (no windowFocused call)
 
-        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedback);
 
         engine.increaseMasterRatio(0.05);
 

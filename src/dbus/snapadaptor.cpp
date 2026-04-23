@@ -8,10 +8,11 @@
 
 namespace PlasmaZones {
 
-SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, QObject* parent)
-    : QObject(parent)
+SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings, QObject* parent)
+    : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
     , m_adaptor(adaptor)
+    , m_settings(settings)
 {
     if (!m_engine || !adaptor) {
         qCWarning(lcDbusWindow) << "SnapAdaptor created with null engine or adaptor";
@@ -51,8 +52,8 @@ SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, QOb
     // Batched resnap: emitBatchedResnap is called from the Daemon layer (autotile→snap
     // transition) which bypasses WTA navigation methods. Route through handleBatchedResnap
     // for proper bookkeeping (windowSnapped per entry) + applyGeometriesBatch emission.
-    m_connections.append(connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, adaptor,
-                                 &WindowTrackingAdaptor::handleBatchedResnap));
+    m_connections.append(
+        connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, this, &SnapAdaptor::handleBatchedResnap));
 
     // Batched geometry application: rotate / resnap / snap-all paths build
     // a WindowGeometryList and emit it here. WTA's applyGeometriesBatch
@@ -80,6 +81,18 @@ void SnapAdaptor::clearEngine()
     m_connections.clear();
     m_engine = nullptr;
     m_adaptor = nullptr;
+    m_settings = nullptr;
+    m_screenModeRouter = nullptr;
+}
+
+void SnapAdaptor::setScreenModeRouter(ScreenModeRouter* router)
+{
+    m_screenModeRouter = router;
+}
+
+SnapEngine* SnapAdaptor::engine() const
+{
+    return m_engine;
 }
 
 } // namespace PlasmaZones

@@ -26,6 +26,7 @@ inline constexpr QLatin1String LayoutRegistry("org.plasmazones.LayoutRegistry");
 inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
+inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 }
 
 // Protocol version. Bumped when the D-Bus method/signal schema changes in a

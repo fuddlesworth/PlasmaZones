@@ -2457,10 +2457,10 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
     QString screenId = output ? resolveEffectiveScreenId(geoCenter, output) : getWindowScreenId(targetWindow);
 
     if (isDaemonReady("snap assist windowSnapped")) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Snap,
                                                        QStringLiteral("windowSnapped"),
                                                        {getWindowId(targetWindow), zoneId, screenId});
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Snap,
                                                        QStringLiteral("recordSnapIntent"),
                                                        {getWindowId(targetWindow), true});
 
@@ -2744,7 +2744,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
 
         // Ask daemon to calculate zone assignments
         QDBusPendingCall calcCall = PhosphorProtocol::ClientHelpers::asyncCall(
-            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("calculateSnapAllWindows"),
+            PhosphorProtocol::Service::Interface::Snap, QStringLiteral("calculateSnapAllWindows"),
             {QVariant::fromValue(unsnappedWindowIds), screenId});
         auto* calcWatcher = new QDBusPendingCallWatcher(calcCall, this);
 
@@ -2783,7 +2783,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
                 if (!confirmEntries.isEmpty()) {
                     QDBusMessage msg = QDBusMessage::createMethodCall(
                         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowsSnappedBatch"));
+                        PhosphorProtocol::Service::Interface::Snap, QStringLiteral("windowsSnappedBatch"));
                     msg << QVariant::fromValue(confirmEntries);
                     auto* batchWatcher =
                         new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
@@ -3023,7 +3023,7 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std
     // daemon restart or from KWin session restore), so its current frameGeometry is the
     // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
     // float toggle to restore to the zone geometry instead of the original free-floating position.
-    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("resolveWindowRestore"),
+    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
                      {windowId, screenId, sticky}, safeWindow, windowId, false, nullptr, nullptr,
                      /*skipAnimation=*/true, onComplete);
 }
@@ -3226,9 +3226,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
                         m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);
                     };
-                    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::WindowTracking,
-                                     QStringLiteral("snapToEmptyZone"), {windowId, outcome.targetScreenId, sticky},
-                                     safeWindow, windowId, true, nullptr, onSnapSuccess);
+                    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("snapToEmptyZone"),
+                                     {windowId, outcome.targetScreenId, sticky}, safeWindow, windowId, true, nullptr,
+                                     onSnapSuccess);
                 }
 
                 // Snap Assist: show the window picker if the daemon

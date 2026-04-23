@@ -1511,16 +1511,16 @@ void AutotileEngine::toggleFocusedWindowFloat()
     if (!state) {
         qCWarning(lcAutotile) << "toggleFocusedWindowFloat: no state found for focused screen"
                               << "- m_activeScreen=" << m_activeScreen;
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("no_focused_screen"),
-                                           QString(), QString(), m_activeScreen);
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_focused_screen"), QString(),
+                                  QString(), m_activeScreen);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
         qCWarning(lcAutotile) << "toggleFocusedWindowFloat: no focused window on screen" << screenId;
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("no_focused_window"),
-                                           QString(), QString(), screenId);
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_focused_window"), QString(),
+                                  QString(), screenId);
         return;
     }
 
@@ -1539,8 +1539,8 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
 
     if (screenId.isEmpty()) {
         qCWarning(lcAutotile) << "toggleWindowFloat: empty screenId for window" << windowId;
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("no_screen"), QString(),
-                                           QString(), QString());
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_screen"), QString(), QString(),
+                                  QString());
         return;
     }
 
@@ -1592,8 +1592,8 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
         }
         if (!state) {
             qCWarning(lcAutotile) << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
-            Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"),
-                                               QString(), QString(), screenId);
+            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
+                                      QString(), screenId);
             return;
         }
     }
@@ -2857,7 +2857,7 @@ void AutotileEngine::applyTiling(const QString& screenId)
     // Emit deferred focus AFTER windowsTiled so KWin processes tiles first
     // (including the onComplete raise loop), then focuses the new window on top.
     if (!m_pendingFocusWindowId.isEmpty()) {
-        Q_EMIT focusWindowRequested(m_pendingFocusWindowId);
+        Q_EMIT activateWindowRequested(m_pendingFocusWindowId);
         m_pendingFocusWindowId.clear();
     }
 

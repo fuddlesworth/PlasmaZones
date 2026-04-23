@@ -144,7 +144,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedback);
 
         engine.toggleWindowFloat(QStringLiteral("nonexistent"), screen);
 

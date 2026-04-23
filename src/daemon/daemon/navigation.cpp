@@ -13,6 +13,7 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
+#include "../../dbus/snapadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include "../../autotile/AutotileEngine.h"
@@ -252,11 +253,15 @@ void Daemon::handleRetile()
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
-            // QSet iteration order is non-deterministic; sort to get a stable fallback
-            QStringList sorted = m_autotileEngine->autotileScreens().values();
-            sorted.sort();
-            screenId = sorted.first();
+        if (screenId.isEmpty() && m_screenModeRouter) {
+            QStringList autotile =
+                m_screenModeRouter
+                    ->partitionByMode(m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList{})
+                    .autotile;
+            autotile.sort();
+            if (!autotile.isEmpty()) {
+                screenId = autotile.first();
+            }
         }
         m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
                                             QString(), screenId);
@@ -276,7 +281,7 @@ void Daemon::resnapIfManualMode()
         if (screenId.isEmpty()) {
             return; // No screen context — can't determine mode, skip resnap
         }
-        if (m_autotileEngine->isAutotileScreen(screenId)) {
+        if (isAutotileScreen(screenId)) {
             return; // This screen is autotile — engine handles retile
         }
     }
@@ -288,14 +293,15 @@ void Daemon::resnapIfManualMode()
     // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
     if (m_windowTrackingAdaptor) {
         QSet<QString> autotileScreens;
-        if (m_autotileEngine) {
-            autotileScreens = m_autotileEngine->autotileScreens();
+        if (m_screenModeRouter && m_screenManager) {
+            const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
+            autotileScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
         }
         m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
     }
     m_suppressResnapOsd = 1;
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->resnapToNewLayout();
+    if (m_snapAdaptor) {
+        m_snapAdaptor->resnapToNewLayout();
     }
 }
 

@@ -3,6 +3,8 @@
 
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
+#include "../snapadaptor.h"
+#include "../../snap/SnapEngine.h"
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -105,7 +107,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (capturedWasSnapped && m_windowTracking && releaseScreen) {
         QString storedScreen = m_windowTracking->service()->screenAssignments().value(windowId);
         if (!storedScreen.isEmpty() && storedScreen != releaseScreenId) {
-            m_windowTracking->windowUnsnapped(windowId);
+            m_windowTracking->snapEngine()->uncommitSnap(windowId);
             // Preserve pre-tile geometry: it holds the correct free-floating dimensions
             // from the original snap. Clearing it would cause tryStorePreSnapGeometry to
             // store zone geometry (capturedOriginalGeometry is zone-sized for snapped windows).
@@ -178,10 +180,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // by this branch) and the post-Phase-1B validator would drop
                     // the ApplySnap outcome for an empty zoneId.
                     resolvedZoneIdOut = zoneUuid;
-                    m_windowTracking->windowSnapped(windowId, zoneUuid, releaseScreenId);
+                    m_windowTracking->snapEngine()->commitSnap(windowId, zoneUuid, releaseScreenId);
                     // Record user-initiated snap (not auto-snap)
                     // This prevents auto-snapping windows that were never manually snapped by user
-                    m_windowTracking->recordSnapIntent(windowId, true);
+                    m_windowTracking->service()->recordSnapIntent(windowId, true);
 
                     // During drag, the C++ updateSelectorPosition path updates selection
                     // state but does NOT emit manualLayoutSelected (only the QML hover
@@ -244,9 +246,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 if (allZoneIds.isEmpty()) {
                     allZoneIds.append(capturedZoneId);
                 }
-                m_windowTracking->windowSnappedMultiZone(windowId, allZoneIds, releaseScreenId);
+                m_windowTracking->snapEngine()->commitMultiZoneSnap(windowId, allZoneIds, releaseScreenId);
                 // Record user-initiated snap (not auto-snap)
-                m_windowTracking->recordSnapIntent(windowId, true);
+                m_windowTracking->service()->recordSnapIntent(windowId, true);
             }
         } else if (capturedZoneGeometry.isValid()) {
             snapX = capturedZoneGeometry.x();
@@ -257,22 +259,24 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             resolvedZoneIdOut = capturedZoneId;
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
-                m_windowTracking->windowSnapped(windowId, capturedZoneId, releaseScreenId);
+                m_windowTracking->snapEngine()->commitSnap(windowId, capturedZoneId, releaseScreenId);
                 // Record user-initiated snap (not auto-snap)
-                m_windowTracking->recordSnapIntent(windowId, true);
+                m_windowTracking->service()->recordSnapIntent(windowId, true);
             }
         }
     }
 
     // Handle unsnap - window was snapped but dropped outside any zone
     // Use same state as float shortcut: save zone for restore and mark floating, so unfloat/snap-back works.
-    // Call unconditionally when capturedWasSnapped: windowUnsnappedForFloat handles the
+    // Call unconditionally when capturedWasSnapped: unsnapForFloat handles the
     // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
     // the zone (floating windows are excluded from persistence).
     if (!shouldApplyGeometry && capturedWasSnapped) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
         if (m_windowTracking) {
-            m_windowTracking->windowUnsnappedForFloat(windowId);
+            // unsnapForFloat on WTS: saves zone for restore, clears assignment.
+            // No-op if the window wasn't snapped.
+            m_windowTracking->service()->unsnapForFloat(windowId);
             m_windowTracking->setWindowFloating(windowId, true);
         }
 

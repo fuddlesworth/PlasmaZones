@@ -156,6 +156,9 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
     dbus/snapadaptor.cpp
+    dbus/snapadaptor/commit.cpp
+    dbus/snapadaptor/snaprestore.cpp
+    dbus/snapadaptor/navigation.cpp
     dbus/snapadaptor.h
     # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
     # machinery live in libs/phosphor-tiles/. Consumers include canonical
