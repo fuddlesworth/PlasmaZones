@@ -500,11 +500,17 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         return;
     }
 
-    // Save zone(s) and screen to WTS's own pre-float maps (supports appId
-    // fallback for session restore that SnapState doesn't do).
+    // Read zone/screen BEFORE unsnapForFloat clears them in SnapState.
+    // WTS keeps its own pre-float maps keyed by both windowId and appId
+    // for session-restore fallback (SnapState only keys by windowId).
     QStringList zoneIds = m_snapState->zonesForWindow(windowId);
-    m_preFloatZoneAssignments[windowId] = zoneIds;
     QString screenId = m_snapState->screenForWindow(windowId);
+
+    // SnapState::unsnapForFloat saves pre-float state internally and unassigns.
+    auto unassignResult = m_snapState->unsnapForFloat(windowId);
+
+    // Write WTS pre-float maps (appId-fallback for session restore).
+    m_preFloatZoneAssignments[windowId] = zoneIds;
     if (!screenId.isEmpty()) {
         m_preFloatScreenAssignments[windowId] = screenId;
     }
@@ -512,14 +518,9 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
 
     markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
 
-    // SnapState::unsnapForFloat saves pre-float state internally and unassigns.
-    auto unassignResult = m_snapState->unsnapForFloat(windowId);
-
     Q_EMIT windowZoneChanged(windowId, QString());
     markDirty(DirtyZoneAssignments | (unassignResult.lastUsedZoneCleared ? DirtyLastUsedZone : DirtyNone));
 
-    // Pop one pending-restore entry (FIFO) so this window doesn't get
-    // re-snapped to the old zone when closed and reopened.
     consumePendingAssignment(windowId);
 }
 

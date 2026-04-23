@@ -688,16 +688,7 @@ public:
         QList<int> zoneNumbers;
     };
 
-    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
-    // for windows that were in the previous layout, so resnapToNewLayout can map them
-    struct ResnapEntry
-    {
-        QString windowId;
-        int zonePosition; // Primary zone: 1-based position in sorted-by-zoneNumber order
-        QList<int> allZonePositions; // All zones (for multi-zone windows); empty = single-zone
-        QString screenId; // Stable EDID-based screen identifier (or connector name fallback)
-        int virtualDesktop = 0;
-    };
+    using ResnapEntry = PlasmaZones::ResnapEntry;
 
     /**
      * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)

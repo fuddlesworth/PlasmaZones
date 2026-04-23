@@ -481,7 +481,8 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         }
     }
 
-    // Tell SnapState to clean up its zone/screen/desktop/floating/preTile/preFloat/autoSnapped state.
+    // Order matters: zoneIds/screenId/desktop are read above BEFORE this call
+    // clears them in SnapState. Do not move reads below this line.
     m_snapState->windowClosed(windowId);
 
     // Convert pre-tile geometry from full windowId to appId for persistence

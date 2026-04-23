@@ -31,7 +31,7 @@ namespace PlasmaZones {
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 {
     QVector<ZoneAssignmentEntry> result;
-    QVector<WindowTrackingService::ResnapEntry> resnapBuffer = m_windowTracker->takeResnapBuffer();
+    const QVector<WindowTrackingService::ResnapEntry> resnapBuffer = m_windowTracker->takeResnapBuffer();
     if (resnapBuffer.isEmpty()) {
         qCDebug(lcCore) << "calculateResnapFromPreviousLayout: buffer is empty";
         return result;

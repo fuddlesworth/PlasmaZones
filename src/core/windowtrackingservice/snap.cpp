@@ -25,9 +25,6 @@ namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Auto-Snap Logic
-//
-// calculateSnapToAppRule, calculateSnapToLastZone, calculateSnapToEmptyZone,
-// calculateRestoreFromSession moved to SnapEngine (src/snap/snapengine/calculate.cpp).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
@@ -59,9 +56,6 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 // D-Bus slot entry points but forwards to these methods and relays the
 // WTS signals to its own D-Bus signals at connection wiring time.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// commitSnap, commitMultiZoneSnap, uncommitSnap, applyBatchAssignments
-// moved to SnapEngine (src/snap/snapengine/commit.cpp).
 
 void WindowTrackingService::markWindowReported(const QString& windowId)
 {

@@ -182,6 +182,4 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     return combined.toAlignedRect();
 }
 
-// calculateRotation moved to SnapEngine (src/snap/snapengine/resnap_calc.cpp).
-
 } // namespace PlasmaZones

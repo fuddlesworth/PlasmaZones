@@ -419,6 +419,9 @@ Q_SIGNALS:
     void activateWindowRequested(const QString& windowId);
 
 private:
+    void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                        SnapIntent intent);
+
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
     PhosphorZones::SnapState* m_snapState = nullptr;
@@ -445,8 +448,7 @@ private:
     // Float helpers (snapengine/float.cpp)
     //
     // The historical clearFloatingStateForSnap / assignToZones pair was
-    // removed — all snap commits now route through
-    // WindowTrackingService::commitSnap / commitMultiZoneSnap.
+    // removed — all snap commits now route through commitSnapImpl.
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool unfloatToZone(const QString& windowId, const QString& screenId);

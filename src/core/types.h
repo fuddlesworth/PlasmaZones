@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include <PhosphorEngineApi/NavigationContext.h>
+#include <QList>
 #include <QString>
 #include <QStringList>
 #include <QRect>
@@ -44,6 +45,15 @@ using NavigationContext = PhosphorEngineApi::NavigationContext;
 enum class SnapIntent {
     UserInitiated, ///< Explicit user action (shortcut, D-Bus call, float-toggle)
     AutoRestored, ///< Auto-snap on open, session restore, app-rule match
+};
+
+struct PLASMAZONES_EXPORT ResnapEntry
+{
+    QString windowId;
+    int zonePosition; ///< Primary zone: 1-based position in sorted-by-zoneNumber order
+    QList<int> allZonePositions; ///< All zones (for multi-zone windows); empty = single-zone
+    QString screenId; ///< Stable EDID-based screen identifier (or connector name fallback)
+    int virtualDesktop = 0;
 };
 
 /**

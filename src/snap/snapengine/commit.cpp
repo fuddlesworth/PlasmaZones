@@ -13,78 +13,62 @@
 
 namespace PlasmaZones {
 
-void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)
+void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                SnapIntent intent)
 {
     Q_ASSERT(m_snapState);
-    if (windowId.isEmpty() || zoneId.isEmpty()) {
-        qCWarning(lcCore) << "commitSnap: empty windowId or zoneId";
-        return;
-    }
-
-    if (m_windowTracker->clearFloatingForSnap(windowId)) {
-        Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
-    }
-
-    bool wasAutoSnapped = false;
-    if (intent == SnapIntent::UserInitiated) {
-        wasAutoSnapped = m_snapState->clearAutoSnapped(windowId);
-        if (!wasAutoSnapped) {
-            m_windowTracker->consumePendingAssignment(windowId);
-        }
-    }
-
-    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    m_windowTracker->assignWindowToZone(windowId, zoneId, screenId, currentDesktop);
-
-    if (intent == SnapIntent::UserInitiated && !wasAutoSnapped && !zoneId.startsWith(QStringLiteral("zoneselector-"))) {
-        const QString windowClass = m_windowTracker->currentAppIdFor(windowId);
-        m_windowTracker->updateLastUsedZone(zoneId, screenId, windowClass, currentDesktop);
-    }
-
-    qCInfo(lcCore) << "commitSnap:" << windowId << "zone=" << zoneId << "screen=" << screenId
-                   << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
-
-    Q_EMIT windowSnapStateChanged(
-        windowId, WindowStateEntry{windowId, zoneId, screenId, false, QStringLiteral("snapped"), QStringList{}, false});
-}
-
-void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                                     SnapIntent intent)
-{
-    Q_ASSERT(m_snapState);
-    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(lcCore) << "commitMultiZoneSnap: empty windowId or zoneIds";
-        return;
-    }
-
-    if (m_windowTracker->clearFloatingForSnap(windowId)) {
-        Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
-    }
-
-    bool wasAutoSnapped = false;
-    if (intent == SnapIntent::UserInitiated) {
-        wasAutoSnapped = m_snapState->clearAutoSnapped(windowId);
-        if (!wasAutoSnapped) {
-            m_windowTracker->consumePendingAssignment(windowId);
-        }
-    }
-
-    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
-
     const QString& primaryZoneId = zoneIds.first();
+
+    if (m_windowTracker->clearFloatingForSnap(windowId)) {
+        Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
+    }
+
+    bool wasAutoSnapped = false;
+    if (intent == SnapIntent::UserInitiated) {
+        wasAutoSnapped = m_snapState->clearAutoSnapped(windowId);
+        if (!wasAutoSnapped) {
+            m_windowTracker->consumePendingAssignment(windowId);
+        }
+    }
+
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    if (zoneIds.size() > 1) {
+        m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
+    } else {
+        m_windowTracker->assignWindowToZone(windowId, primaryZoneId, screenId, currentDesktop);
+    }
+
     if (intent == SnapIntent::UserInitiated && !wasAutoSnapped
         && !primaryZoneId.startsWith(QStringLiteral("zoneselector-"))) {
         const QString windowClass = m_windowTracker->currentAppIdFor(windowId);
         m_windowTracker->updateLastUsedZone(primaryZoneId, screenId, windowClass, currentDesktop);
     }
 
-    qCInfo(lcCore) << "commitMultiZoneSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
+    qCInfo(lcCore) << "commitSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
                    << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
 
     Q_EMIT windowSnapStateChanged(
         windowId,
         WindowStateEntry{windowId, primaryZoneId, screenId, false, QStringLiteral("snapped"), zoneIds, false});
+}
+
+void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)
+{
+    if (windowId.isEmpty() || zoneId.isEmpty()) {
+        qCWarning(lcCore) << "commitSnap: empty windowId or zoneId";
+        return;
+    }
+    commitSnapImpl(windowId, QStringList{zoneId}, screenId, intent);
+}
+
+void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                     SnapIntent intent)
+{
+    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
+        qCWarning(lcCore) << "commitMultiZoneSnap: empty windowId or zoneIds";
+        return;
+    }
+    commitSnapImpl(windowId, zoneIds, screenId, intent);
 }
 
 void SnapEngine::uncommitSnap(const QString& windowId)

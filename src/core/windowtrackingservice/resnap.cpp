@@ -22,8 +22,6 @@
 
 namespace PlasmaZones {
 
-// calculateResnapFromPreviousLayout moved to SnapEngine (src/snap/snapengine/resnap_calc.cpp).
-
 void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens,
                                                               const QSet<QString>& includeScreens)
 {
@@ -106,9 +104,6 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         qCInfo(lcCore) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
     }
 }
-
-// calculateResnapFromCurrentAssignments, calculateResnapFromAutotileOrder
-// moved to SnapEngine (src/snap/snapengine/resnap_calc.cpp).
 
 QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& screenId) const
 {
