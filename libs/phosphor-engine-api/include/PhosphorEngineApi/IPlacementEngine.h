@@ -6,7 +6,11 @@
 #include <PhosphorEngineApi/IPlacementState.h>
 #include <PhosphorEngineApi/NavigationContext.h>
 
+#include <QJsonObject>
+#include <QSet>
 #include <QString>
+#include <QStringList>
+#include <QVariantMap>
 
 namespace PhosphorEngineApi {
 
@@ -109,6 +113,124 @@ public:
 
     /// Toggle the focused window between managed and floating.
     virtual void toggleFocusedFloat(const NavigationContext& ctx) = 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Screen management
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QSet<QString> activeScreens() const
+    {
+        return {};
+    }
+    virtual void setActiveScreens(const QSet<QString>& screens)
+    {
+        Q_UNUSED(screens)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window ordering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QStringList managedWindowOrder(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+    virtual void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(windowIds)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-screen config
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(overrides)
+    }
+    virtual void clearPerScreenConfig(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+    virtual QVariantMap perScreenOverrides(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Mode-specific float tracking
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual bool isModeSpecificFloated(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+    virtual void clearModeSpecificFloatMarker(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+    virtual bool restoreSavedModeFloat(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+    virtual void clearSavedFloatingForWindows(const QStringList& windowIds)
+    {
+        Q_UNUSED(windowIds)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Drag insert preview
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual bool hasDragInsertPreview() const
+    {
+        return false;
+    }
+    virtual bool beginDragInsertPreview(const QString& windowId, const QString& screenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(screenId)
+        return false;
+    }
+    virtual void commitDragInsertPreview()
+    {
+    }
+    virtual void cancelDragInsertPreview()
+    {
+    }
+    virtual QString dragInsertPreviewScreenId() const
+    {
+        return {};
+    }
+    virtual bool isWindowTracked(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+    virtual bool isWindowManaged(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Engine state serialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QJsonObject serializeEngineState() const
+    {
+        return {};
+    }
+    virtual void deserializeEngineState(const QJsonObject& state)
+    {
+        Q_UNUSED(state)
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Persistence
