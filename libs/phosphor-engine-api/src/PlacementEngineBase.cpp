@@ -73,10 +73,11 @@ void PlacementEngineBase::releaseWindow(const QString& windowId)
     }
 
     WindowState oldState = m_windowStates.value(windowId);
-    onWindowReleased(windowId);
 
     auto entry = m_unmanagedGeometries.take(windowId);
     m_windowStates.remove(windowId);
+
+    onWindowReleased(windowId);
 
     if (entry.geometry.isValid()) {
         Q_EMIT geometryRestoreRequested(windowId, entry.geometry, entry.screenId);
@@ -96,8 +97,8 @@ void PlacementEngineBase::floatWindow(const QString& windowId)
         return;
     }
 
-    onWindowFloated(windowId);
     m_windowStates[windowId] = WindowState::Floated;
+    onWindowFloated(windowId);
     Q_EMIT windowStateTransitioned(windowId, WindowState::EngineOwned, WindowState::Floated);
 }
 
@@ -200,6 +201,7 @@ QJsonObject PlacementEngineBase::serializeBaseState() const
 void PlacementEngineBase::deserializeBaseState(const QJsonObject& state)
 {
     m_unmanagedGeometries.clear();
+    m_windowStates.clear();
 
     const QJsonObject geos = state.value(QLatin1String("unmanagedGeometries")).toObject();
     for (auto it = geos.constBegin(); it != geos.constEnd(); ++it) {

@@ -376,6 +376,189 @@ private Q_SLOTS:
         engine.releaseWindow(wid);
         QCOMPARE(engine.windowState(wid), WindowState::Unmanaged);
     }
+
+    void testFloatWindow_doubleFloatIsIdempotent()
+    {
+        ConcreteEngine engine;
+        const QString wid = QStringLiteral("app|uuid1");
+        engine.claimWindow(wid, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        engine.floatWindow(wid);
+
+        engine.floatWindow(wid);
+
+        QCOMPARE(engine.windowState(wid), WindowState::Floated);
+        QCOMPARE(engine.floatedCount, 1);
+    }
+
+    void testEviction_preservesCurrentWindowId()
+    {
+        ConcreteEngine engine;
+        for (int i = 0; i < 200; ++i) {
+            engine.storeUnmanagedGeometry(QStringLiteral("old%1").arg(i), QRect(0, 0, 100, 100), QStringLiteral("DP-1"),
+                                          true);
+        }
+
+        const QString current = QStringLiteral("current");
+        engine.storeUnmanagedGeometry(current, QRect(0, 0, 100, 100), QStringLiteral("DP-1"), true);
+
+        QVERIFY(engine.hasUnmanagedGeometry(current));
+        QVERIFY(engine.unmanagedGeometries().size() <= 200);
+    }
+
+    void testDeserialize_clearsPriorState()
+    {
+        ConcreteEngine engine;
+        engine.claimWindow(QStringLiteral("prior"), QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        engine.floatWindow(QStringLiteral("prior"));
+        QCOMPARE(engine.windowState(QStringLiteral("prior")), WindowState::Floated);
+
+        QJsonObject state;
+        QJsonObject geos;
+        QJsonObject entry;
+        entry[QLatin1String("x")] = 50;
+        entry[QLatin1String("y")] = 60;
+        entry[QLatin1String("w")] = 400;
+        entry[QLatin1String("h")] = 300;
+        geos[QStringLiteral("fresh")] = entry;
+        state[QLatin1String("unmanagedGeometries")] = geos;
+
+        engine.deserializeBaseState(state);
+
+        QCOMPARE(engine.windowState(QStringLiteral("prior")), WindowState::Unmanaged);
+        QVERIFY(!engine.hasUnmanagedGeometry(QStringLiteral("prior")));
+        QCOMPARE(engine.windowState(QStringLiteral("fresh")), WindowState::EngineOwned);
+        QVERIFY(engine.hasUnmanagedGeometry(QStringLiteral("fresh")));
+    }
+
+    void testReleaseFromFloated_emitsRestoreSignal()
+    {
+        ConcreteEngine engine;
+        QSignalSpy restoreSpy(&engine, &PlacementEngineBase::geometryRestoreRequested);
+        const QString wid = QStringLiteral("app|uuid1");
+
+        engine.claimWindow(wid, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        engine.floatWindow(wid);
+
+        engine.releaseWindow(wid);
+
+        QCOMPARE(engine.windowState(wid), WindowState::Unmanaged);
+        QCOMPARE(engine.releasedCount, 1);
+        QCOMPARE(restoreSpy.count(), 1);
+    }
+
+    void testHookSeesCurrentState()
+    {
+        struct StateCheckEngine : public PlacementEngineBase
+        {
+            WindowState stateInClaim = WindowState::Unmanaged;
+            WindowState stateInRelease = WindowState::Unmanaged;
+            WindowState stateInFloat = WindowState::Unmanaged;
+            WindowState stateInUnfloat = WindowState::Unmanaged;
+            StateCheckEngine()
+                : PlacementEngineBase(nullptr)
+            {
+            }
+            bool isActiveOnScreen(const QString&) const override
+            {
+                return true;
+            }
+            void windowOpened(const QString&, const QString&, int, int) override
+            {
+            }
+            void windowClosed(const QString&) override
+            {
+            }
+            void windowFocused(const QString&, const QString&) override
+            {
+            }
+            void toggleWindowFloat(const QString&, const QString&) override
+            {
+            }
+            void setWindowFloat(const QString&, bool) override
+            {
+            }
+            void focusInDirection(const QString&, const NavigationContext&) override
+            {
+            }
+            void moveFocusedInDirection(const QString&, const NavigationContext&) override
+            {
+            }
+            void swapFocusedInDirection(const QString&, const NavigationContext&) override
+            {
+            }
+            void moveFocusedToPosition(int, const NavigationContext&) override
+            {
+            }
+            void rotateWindows(bool, const NavigationContext&) override
+            {
+            }
+            void reapplyLayout(const NavigationContext&) override
+            {
+            }
+            void snapAllWindows(const NavigationContext&) override
+            {
+            }
+            void cycleFocus(bool, const NavigationContext&) override
+            {
+            }
+            void pushToEmptyZone(const NavigationContext&) override
+            {
+            }
+            void restoreFocusedWindow(const NavigationContext&) override
+            {
+            }
+            void toggleFocusedFloat(const NavigationContext&) override
+            {
+            }
+            void saveState() override
+            {
+            }
+            void loadState() override
+            {
+            }
+            IPlacementState* stateForScreen(const QString&) override
+            {
+                return nullptr;
+            }
+            const IPlacementState* stateForScreen(const QString&) const override
+            {
+                return nullptr;
+            }
+
+        protected:
+            void onWindowClaimed(const QString& wid) override
+            {
+                stateInClaim = windowState(wid);
+            }
+            void onWindowReleased(const QString& wid) override
+            {
+                stateInRelease = windowState(wid);
+            }
+            void onWindowFloated(const QString& wid) override
+            {
+                stateInFloat = windowState(wid);
+            }
+            void onWindowUnfloated(const QString& wid) override
+            {
+                stateInUnfloat = windowState(wid);
+            }
+        };
+
+        StateCheckEngine engine;
+        const QString wid = QStringLiteral("app|uuid1");
+
+        engine.claimWindow(wid, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        QCOMPARE(engine.stateInClaim, WindowState::EngineOwned);
+
+        engine.floatWindow(wid);
+        QCOMPARE(engine.stateInFloat, WindowState::Floated);
+
+        engine.unfloatWindow(wid);
+        QCOMPARE(engine.stateInUnfloat, WindowState::EngineOwned);
+
+        engine.releaseWindow(wid);
+        QCOMPARE(engine.stateInRelease, WindowState::Unmanaged);
+    }
 };
 
 QTEST_MAIN(TestPlacementEngineBase)
