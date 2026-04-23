@@ -106,19 +106,7 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 
 bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
-    // Look up unmanaged geometry from the engine (single store) and validate via WTS utility.
-    std::optional<QRect> geo;
-    if (hasUnmanagedGeometry(windowId)) {
-        geo = m_windowTracker->validateGeometryForScreen(unmanagedGeometry(windowId), unmanagedScreen(windowId),
-                                                         screenId);
-    } else {
-        // appId fallback: check by current class name
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        if (appId != windowId && hasUnmanagedGeometry(appId)) {
-            geo =
-                m_windowTracker->validateGeometryForScreen(unmanagedGeometry(appId), unmanagedScreen(appId), screenId);
-        }
-    }
+    auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcCore) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
         Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,

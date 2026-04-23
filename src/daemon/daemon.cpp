@@ -551,6 +551,18 @@ bool Daemon::init()
     // SnapEngine or WindowTrackingService and retire the back-reference.
     m_snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
+    // Clear stale autotile-floated flag when a window is snapped. A window
+    // dragged from an autotile VS to a snap VS retains its autotileFloated
+    // marker; without this, a subsequent mode change on the autotile VS
+    // incorrectly processes the already-snapped window as autotile-managed.
+    // Wired here (daemon) because engines must not know about each other.
+    connect(m_snapEngine.get(), &SnapEngine::windowSnapStateChanged, this,
+            [this](const QString& windowId, const WindowStateEntry&) {
+                if (m_autotileEngine) {
+                    m_autotileEngine->clearAutotileFloated(windowId);
+                }
+            });
+
     // Central routing table: single source of truth for "which engine owns
     // screen X". Every window-lifecycle / resnap / restore entry point in the
     // daemon and its adaptors consults this instead of scattering

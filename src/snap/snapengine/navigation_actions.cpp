@@ -370,7 +370,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     uncommitSnap(windowId);
-    removeUnmanagedGeometry(windowId);
+    clearUnmanagedGeometry(windowId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }

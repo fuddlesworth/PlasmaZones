@@ -218,6 +218,20 @@ public:
     std::optional<QRect> validateGeometryForScreen(const QRect& geo, const QString& savedScreen,
                                                    const QString& currentScreenName) const;
 
+    /**
+     * @brief Look up unmanaged geometry from the snap engine with appId fallback and validate.
+     *
+     * Combines the windowId lookup, appId fallback, and cross-screen validation
+     * into a single call. Returns nullopt if no geometry is found or if the
+     * snap engine is not wired.
+     *
+     * @param windowId        Full window ID
+     * @param screenId        Screen where the window currently is (for cross-screen adjustment)
+     * @param exactOnly       If true, skip the appId fallback (strict per-instance lookup)
+     */
+    std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
+                                                    bool exactOnly = false) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
     // ═══════════════════════════════════════════════════════════════════════════

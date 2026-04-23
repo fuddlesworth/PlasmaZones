@@ -137,7 +137,7 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
 {
     x = y = width = height = 0;
 
-    if (windowId.isEmpty() || !m_snapEngine) {
+    if (windowId.isEmpty()) {
         return false;
     }
 
@@ -146,17 +146,7 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         screenId = m_service->screenAssignments().value(windowId);
     }
 
-    std::optional<QRect> geo;
-    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
-        geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
-                                                   m_snapEngine->unmanagedScreen(windowId), screenId);
-    } else {
-        const QString appId = m_service->currentAppIdFor(windowId);
-        if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
-            geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
-                                                       m_snapEngine->unmanagedScreen(appId), screenId);
-        }
-    }
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         return false;
     }

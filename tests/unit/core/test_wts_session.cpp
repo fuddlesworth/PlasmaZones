@@ -145,6 +145,7 @@ private Q_SLOTS:
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
         m_service->setSnapState(m_engine->snapState());
+        m_service->setSnapEngine(m_engine);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);

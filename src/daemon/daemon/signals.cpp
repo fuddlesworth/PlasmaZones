@@ -91,66 +91,55 @@ void Daemon::initializeAutotile()
         // 2. Restore snap-mode floats that were saved when entering autotile —
         //    snap floats persist across autotile sessions.
         // Must check isAutotileFloated BEFORE clearing the marker.
-        connect(
-            m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling, this,
-            [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
-                if (m_windowTrackingAdaptor) {
-                    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-                    m_pendingSnapFloatRestores.clear();
-                    for (const QString& windowId : windowIds) {
-                        // Only process windows whose current WTS screen is one of the
-                        // screens being released. A window that moved to a different
-                        // screen (e.g., dragged from autotile VS to snap VS and resnapped)
-                        // is no longer on the releasing screen — its state on the current
-                        // screen must not be disturbed.
-                        const QString windowScreen = wts->screenAssignments().value(windowId);
-                        if (!windowScreen.isEmpty() && !releasedScreenIds.contains(windowScreen)) {
-                            // Window is on a different screen — do NOT touch its state.
-                            // It may be on another autotile screen (flag still valid) or
-                            // a snap screen (flag already cleared by assignWindowToZones).
-                            qCDebug(lcDaemon) << "windowsReleasedFromTiling: skipping" << windowId << "on screen"
-                                              << windowScreen << "(not in released set)";
-                            continue;
-                        }
-                        // Clear autotile-originated floats (they don't persist into snap mode)
-                        bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
-                        if (wasAutotileFloated) {
-                            m_windowTrackingAdaptor->setWindowFloating(windowId, false);
-                        }
-                        m_autotileEngine->clearAutotileFloated(windowId);
-                        // Restore snap-mode floats that were saved when entering autotile.
-                        // Float state is set immediately (lightweight cache update), but
-                        // geometry restore is deferred to the batched resnap signal to
-                        // avoid individual D-Bus signals queuing behind the resnap.
-                        if (m_snapEngine->restoreSnapFloating(windowId)) {
-                            qCInfo(lcDaemon) << "windowsReleasedFromTiling: restoring snap-float for" << windowId;
-                            m_windowTrackingAdaptor->setWindowFloating(windowId, true);
-                            QString screen = wts->screenAssignments().value(windowId);
-                            std::optional<QRect> geo;
-                            if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
-                                geo = wts->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
-                                                                     m_snapEngine->unmanagedScreen(windowId), screen);
-                            } else {
-                                const QString appId = wts->currentAppIdFor(windowId);
-                                if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
-                                    geo = wts->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
-                                                                         m_snapEngine->unmanagedScreen(appId), screen);
+        connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling, this,
+                [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
+                    if (m_windowTrackingAdaptor) {
+                        WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+                        m_pendingSnapFloatRestores.clear();
+                        for (const QString& windowId : windowIds) {
+                            // Only process windows whose current WTS screen is one of the
+                            // screens being released. A window that moved to a different
+                            // screen (e.g., dragged from autotile VS to snap VS and resnapped)
+                            // is no longer on the releasing screen — its state on the current
+                            // screen must not be disturbed.
+                            const QString windowScreen = wts->screenAssignments().value(windowId);
+                            if (!windowScreen.isEmpty() && !releasedScreenIds.contains(windowScreen)) {
+                                // Window is on a different screen — do NOT touch its state.
+                                // It may be on another autotile screen (flag still valid) or
+                                // a snap screen (flag already cleared by assignWindowToZones).
+                                qCDebug(lcDaemon) << "windowsReleasedFromTiling: skipping" << windowId << "on screen"
+                                                  << windowScreen << "(not in released set)";
+                                continue;
+                            }
+                            // Clear autotile-originated floats (they don't persist into snap mode)
+                            bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
+                            if (wasAutotileFloated) {
+                                m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+                            }
+                            m_autotileEngine->clearAutotileFloated(windowId);
+                            // Restore snap-mode floats that were saved when entering autotile.
+                            // Float state is set immediately (lightweight cache update), but
+                            // geometry restore is deferred to the batched resnap signal to
+                            // avoid individual D-Bus signals queuing behind the resnap.
+                            if (m_snapEngine->restoreSnapFloating(windowId)) {
+                                qCInfo(lcDaemon) << "windowsReleasedFromTiling: restoring snap-float for" << windowId;
+                                m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+                                QString screen = wts->screenAssignments().value(windowId);
+                                auto geo = wts->validatedUnmanagedGeometry(windowId, screen);
+                                if (geo) {
+                                    ZoneAssignmentEntry entry;
+                                    entry.windowId = windowId;
+                                    entry.targetZoneId = RestoreSentinel;
+                                    entry.targetGeometry = *geo;
+                                    m_pendingSnapFloatRestores.append(entry);
                                 }
+                            } else {
+                                qCDebug(lcDaemon) << "windowsReleasedFromTiling: no snap-float to restore for"
+                                                  << windowId << "wasAutotileFloated:" << wasAutotileFloated;
                             }
-                            if (geo) {
-                                ZoneAssignmentEntry entry;
-                                entry.windowId = windowId;
-                                entry.targetZoneId = RestoreSentinel;
-                                entry.targetGeometry = *geo;
-                                m_pendingSnapFloatRestores.append(entry);
-                            }
-                        } else {
-                            qCDebug(lcDaemon) << "windowsReleasedFromTiling: no snap-float to restore for" << windowId
-                                              << "wasAutotileFloated:" << wasAutotileFloated;
                         }
                     }
-                }
-            });
+                });
 
         // ═══════════════════════════════════════════════════════════════════════════
         // Autotile Shortcut Signals

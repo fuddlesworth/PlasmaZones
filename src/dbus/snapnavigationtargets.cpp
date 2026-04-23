@@ -4,7 +4,6 @@
 #include "snapnavigationtargets.h"
 #include "zonedetectionadaptor.h"
 
-#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -259,21 +258,7 @@ RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QStr
     }
 
     int x = 0, y = 0, w = 0, h = 0;
-    // Look up unmanaged geometry from the engine (single store) and validate.
-    std::optional<QRect> geo;
-    auto* engine = m_service->snapEngine();
-    if (engine) {
-        if (engine->hasUnmanagedGeometry(windowId)) {
-            geo = m_service->validateGeometryForScreen(engine->unmanagedGeometry(windowId),
-                                                       engine->unmanagedScreen(windowId), screenId);
-        } else {
-            const QString appId = m_service->currentAppIdFor(windowId);
-            if (appId != windowId && engine->hasUnmanagedGeometry(appId)) {
-                geo = m_service->validateGeometryForScreen(engine->unmanagedGeometry(appId),
-                                                           engine->unmanagedScreen(appId), screenId);
-            }
-        }
-    }
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     bool found = geo.has_value();
     if (found) {
         x = geo->x();

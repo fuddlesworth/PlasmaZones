@@ -49,6 +49,22 @@ void PlacementEngineBase::storeUnmanagedGeometry(const QString& windowId, const 
     if (overwrite || !m_unmanagedGeometries.contains(windowId)) {
         m_unmanagedGeometries[windowId] = {geometry, screenId};
     }
+
+    static constexpr int MaxEntries = 200;
+    while (m_unmanagedGeometries.size() > MaxEntries) {
+        bool evicted = false;
+        for (auto it = m_unmanagedGeometries.begin(); it != m_unmanagedGeometries.end(); ++it) {
+            if (it.key() != windowId) {
+                m_windowStates.remove(it.key());
+                m_unmanagedGeometries.erase(it);
+                evicted = true;
+                break;
+            }
+        }
+        if (!evicted) {
+            break;
+        }
+    }
 }
 
 void PlacementEngineBase::releaseWindow(const QString& windowId)
@@ -115,6 +131,11 @@ QString PlacementEngineBase::unmanagedScreen(const QString& windowId) const
 bool PlacementEngineBase::hasUnmanagedGeometry(const QString& windowId) const
 {
     return m_unmanagedGeometries.contains(windowId);
+}
+
+void PlacementEngineBase::clearUnmanagedGeometry(const QString& windowId)
+{
+    m_unmanagedGeometries.remove(windowId);
 }
 
 void PlacementEngineBase::removeUnmanagedGeometry(const QString& windowId)

@@ -134,6 +134,7 @@ private Q_SLOTS:
 
         m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
         m_wta->service()->setSnapState(m_snapEngine->snapState());
+        m_wta->service()->setSnapEngine(m_snapEngine);
         m_wta->setEngines(m_snapEngine, nullptr);
 
         m_testLayout = createTestLayout(3, m_layoutManager);

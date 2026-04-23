@@ -244,6 +244,26 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     return adjustGeometryToScreen(geo);
 }
 
+std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
+                                                                       bool exactOnly) const
+{
+    if (windowId.isEmpty() || !m_snapEngine) {
+        return std::nullopt;
+    }
+    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        return validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
+                                         m_snapEngine->unmanagedScreen(windowId), screenId);
+    }
+    if (!exactOnly) {
+        const QString appId = currentAppIdFor(windowId);
+        if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
+            return validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
+                                             m_snapEngine->unmanagedScreen(appId), screenId);
+        }
+    }
+    return std::nullopt;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Floating Window State
 // ═══════════════════════════════════════════════════════════════════════════════
