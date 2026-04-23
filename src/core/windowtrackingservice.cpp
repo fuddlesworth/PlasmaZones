@@ -188,7 +188,6 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeHash(m_preFloatScreenAssignments);
     removeHash(m_windowStickyStates);
     removeSet(m_floatingWindows);
-    removeSet(m_savedSnapFloatingWindows);
 
     if (pruned > 0 || wtsCleaned > 0) {
         markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);
@@ -443,20 +442,7 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
 
 // markAutotileFloated, clearAutotileFloated, isAutotileFloated moved to AutotileEngine.
 
-void WindowTrackingService::saveSnapFloating(const QString& windowId)
-{
-    m_savedSnapFloatingWindows.insert(windowId);
-}
-
-bool WindowTrackingService::restoreSnapFloating(const QString& windowId)
-{
-    return m_savedSnapFloatingWindows.remove(windowId);
-}
-
-void WindowTrackingService::clearSavedSnapFloating()
-{
-    m_savedSnapFloatingWindows.clear();
-}
+// saveSnapFloating, restoreSnapFloating, clearSavedSnapFloating moved to SnapEngine.
 
 QStringList WindowTrackingService::floatingWindows() const
 {

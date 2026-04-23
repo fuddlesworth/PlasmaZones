@@ -506,10 +506,6 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         m_preFloatScreenAssignments.remove(appId);
     }
     // Remove autotile-floated tracking outright — do NOT migrate to appId.
-    // This set is ephemeral (not persisted); migrating to appId would create
-    // a shared key that matches ALL instances of the same app, causing
-    // cross-contamination when isAutotileFloated() is called for other instances.
-    m_savedSnapFloatingWindows.remove(windowId);
     m_windowStickyStates.remove(windowId);
 
     scheduleSaveState();

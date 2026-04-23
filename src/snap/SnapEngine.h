@@ -327,6 +327,14 @@ public:
     QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Saved snap-floating windows (mode-transition bookkeeping)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void saveSnapFloating(const QString& windowId);
+    bool restoreSnapFloating(const QString& windowId);
+    void clearSavedSnapFloating();
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Effect-reported windows (runtime flag — not persisted)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -459,6 +467,7 @@ private:
     // by the fact that SnapEngine has to exist before a resolver that
     // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
+    QSet<QString> m_savedSnapFloatingWindows;
     QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════

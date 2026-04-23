@@ -121,7 +121,7 @@ void Daemon::initializeAutotile()
                             // Float state is set immediately (lightweight cache update), but
                             // geometry restore is deferred to the batched resnap signal to
                             // avoid individual D-Bus signals queuing behind the resnap.
-                            if (wts->restoreSnapFloating(windowId)) {
+                            if (m_snapEngine->restoreSnapFloating(windowId)) {
                                 qCInfo(lcDaemon) << "windowsReleasedFromTiling: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
                                 QString screen = wts->screenAssignments().value(windowId);
@@ -682,7 +682,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
             bool wasFloating = wts->isWindowFloating(windowId);
             bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
             if (wasFloating && !wasAutotileFloated) {
-                wts->saveSnapFloating(windowId);
+                m_snapEngine->saveSnapFloating(windowId);
                 qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(autotile clearing stale snap-float)";
             }
             m_windowTrackingAdaptor->setWindowFloating(windowId, false);
@@ -737,7 +737,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         bool wasFloating = wts->isWindowFloating(windowId);
         bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
         if (wasFloating && !wasAutotileFloated) {
-            wts->saveSnapFloating(windowId);
+            m_snapEngine->saveSnapFloating(windowId);
             qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(passive sync clearing stale snap-float)";
         }
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);

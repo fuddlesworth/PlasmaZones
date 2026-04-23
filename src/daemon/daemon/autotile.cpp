@@ -254,8 +254,8 @@ void Daemon::handleAutotileDisabled()
     }
     // Clear saved snap-floats — we're fully back in snap mode, so the
     // save/restore mechanism is no longer needed until next autotile entry.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->service()->clearSavedSnapFloating();
+    if (m_snapEngine) {
+        m_snapEngine->clearSavedSnapFloating();
     }
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleasedFromTiling clears floating state before windows are resnapped.
@@ -443,7 +443,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
                 continue;
             }
         }
-        wts->saveSnapFloating(fid);
+        m_snapEngine->saveSnapFloating(fid);
         qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
     }
 }

@@ -67,6 +67,21 @@ void SnapEngine::onWindowUnfloated(const QString& windowId)
     Q_UNUSED(windowId)
 }
 
+void SnapEngine::saveSnapFloating(const QString& windowId)
+{
+    m_savedSnapFloatingWindows.insert(windowId);
+}
+
+bool SnapEngine::restoreSnapFloating(const QString& windowId)
+{
+    return m_savedSnapFloatingWindows.remove(windowId);
+}
+
+void SnapEngine::clearSavedSnapFloating()
+{
+    m_savedSnapFloatingWindows.clear();
+}
+
 void SnapEngine::markWindowReported(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
