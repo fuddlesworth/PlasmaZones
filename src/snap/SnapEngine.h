@@ -178,14 +178,10 @@ public:
      */
     void setAutotileEngine(AutotileEngine* engine);
 
-    /**
-     * @brief Set the SnapState instance for state ownership.
-     *
-     * SnapEngine owns all snap state reads/writes and commit orchestration
-     * through this object. Must be set after construction and before any
-     * lifecycle or navigation method is called.
-     */
-    void setSnapState(PhosphorZones::SnapState* state);
+    PhosphorZones::SnapState* snapState() const
+    {
+        return m_snapState;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone detection adaptor (for daemon-driven navigation)

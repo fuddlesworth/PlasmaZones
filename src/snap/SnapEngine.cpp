@@ -23,6 +23,7 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrack
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
+    , m_snapState(new PhosphorZones::SnapState(QString(), this))
     , m_zoneDetector(zoneDetector)
     , m_settings(settings)
     , m_virtualDesktopManager(vdm)
@@ -87,12 +88,6 @@ void SnapEngine::markWindowReported(const QString& windowId)
     if (!windowId.isEmpty()) {
         m_effectReportedWindows.insert(windowId);
     }
-}
-
-void SnapEngine::setSnapState(PhosphorZones::SnapState* state)
-{
-    Q_ASSERT(state);
-    m_snapState = state;
 }
 
 void SnapEngine::setAutotileEngine(AutotileEngine* engine)

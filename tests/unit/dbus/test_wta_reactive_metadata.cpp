@@ -133,9 +133,7 @@ private Q_SLOTS:
         m_wta->setWindowRegistry(m_registry);
 
         m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
-        m_snapState = new PhosphorZones::SnapState(QString(), m_snapEngine);
-        m_snapEngine->setSnapState(m_snapState);
-        m_wta->service()->setSnapState(m_snapState);
+        m_wta->service()->setSnapState(m_snapEngine->snapState());
         m_wta->setEngines(m_snapEngine, nullptr);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
@@ -154,7 +152,6 @@ private Q_SLOTS:
         m_wta->service()->setSnapState(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
-        m_snapState = nullptr;
 
         delete m_parent;
         m_parent = nullptr;
@@ -279,7 +276,6 @@ private:
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
     SnapEngine* m_snapEngine = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QString m_screenId;

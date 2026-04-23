@@ -65,9 +65,7 @@ private Q_SLOTS:
         m_zoneDetector = new StubZoneDetectorCrossModeFloat(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
-        m_snapState = new PhosphorZones::SnapState(QString(), m_engine);
-        m_engine->setSnapState(m_snapState);
-        m_service->setSnapState(m_snapState);
+        m_service->setSnapState(m_engine->snapState());
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -84,7 +82,6 @@ private Q_SLOTS:
         m_service->setSnapState(nullptr);
         delete m_engine;
         m_engine = nullptr;
-        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -235,7 +232,6 @@ private:
     StubZoneDetectorCrossModeFloat* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

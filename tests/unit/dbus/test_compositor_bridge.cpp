@@ -117,9 +117,7 @@ private Q_SLOTS:
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_wtaParent);
 
         m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
-        m_snapState = new PhosphorZones::SnapState(QString(), m_snapEngine);
-        m_snapEngine->setSnapState(m_snapState);
-        m_wta->service()->setSnapState(m_snapState);
+        m_wta->service()->setSnapState(m_snapEngine->snapState());
         m_wta->setEngines(m_snapEngine, nullptr);
 
         // Create a test layout so getFullState has data
@@ -143,7 +141,6 @@ private Q_SLOTS:
         m_wta->service()->setSnapState(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
-        m_snapState = nullptr;
         delete m_wtaParent;
         m_wtaParent = nullptr;
         m_wta = nullptr;
@@ -294,7 +291,6 @@ private:
     QObject* m_wtaParent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
     SnapEngine* m_snapEngine = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
     QObject* m_controlParent = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
 };
