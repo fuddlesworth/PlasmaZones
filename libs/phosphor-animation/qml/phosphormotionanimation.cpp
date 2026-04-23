@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Curve.h>
+#include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
 #include <QEasingCurve>
@@ -59,29 +60,45 @@ void PhosphorMotionAnimation::applyResolvedEasing()
     // Duration: qreal ms from profile → int ms for QQuickPropertyAnimation.
     QQuickPropertyAnimation::setDuration(qRound(m_resolvedProfile.effectiveDuration()));
 
-    // Convert the Phase-3 curve to a QEasingCurve::BezierSpline.
     // If no curve is set, fall back to the library default (OutCubic).
     const auto curve = m_resolvedProfile.curve ? m_resolvedProfile.curve : defaultFallbackCurve();
 
     QEasingCurve ec(QEasingCurve::BezierSpline);
 
-    // Sample the curve into piecewise cubic Bezier segments.
-    // 16 segments gives sub-pixel accuracy at 60fps for all curve types
-    // (springs, elastics, bounces). For simple cubic-bezier curves this
-    // overshoots but the cost is negligible — a QEasingCurve with 16
-    // segments is still lighter than a single QVariantAnimation tick.
-    constexpr int kSegments = 16;
+    // Fast path: a plain cubic-bezier Easing round-trips exactly as a
+    // single canonical BezierSpline segment with the two original
+    // control points — no sampling, no approximation. Handles OutCubic,
+    // OutBack, InOutCubic, and every other CSS-style cubic we use.
+    if (const auto* easing = dynamic_cast<const Easing*>(curve.get());
+        easing && easing->type == Easing::Type::CubicBezier) {
+        ec.addCubicBezierSegment(QPointF(easing->x1, easing->y1), QPointF(easing->x2, easing->y2), QPointF(1.0, 1.0));
+        QQuickPropertyAnimation::setEasing(ec);
+        return;
+    }
+
+    // Parametric / stateful curves (Spring, Elastic, Bounce, user-authored):
+    // sample into piecewise cubic Bezier segments.
+    //
+    // Segment count is capped at 8 because Qt 6.11's
+    // QQuickPropertyAnimation::setEasing heap-corrupts on BezierSpline
+    // curves with >= 11 segments — observed as "malloc(): corrupted top
+    // size" / "unaligned tcache chunk detected" during downstream
+    // allocations. 8 keeps a safe margin under the boundary while still
+    // giving visually faithful springs/elastics at typical 150-300ms
+    // UI durations.
+    constexpr int kSegments = 8;
     for (int i = 0; i < kSegments; ++i) {
         const qreal t0 = static_cast<qreal>(i) / kSegments;
         const qreal t1 = static_cast<qreal>(i + 1) / kSegments;
         const qreal tMid1 = t0 + (t1 - t0) / 3.0;
         const qreal tMid2 = t0 + 2.0 * (t1 - t0) / 3.0;
 
-        // Sample the curve at the segment's 1/3 and 2/3 points to
-        // produce control points for a cubic Bezier approximation.
         const QPointF c1(tMid1, curve->evaluate(tMid1));
         const QPointF c2(tMid2, curve->evaluate(tMid2));
-        const QPointF end(t1, curve->evaluate(t1));
+        // Force the terminal endpoint to exactly (1,1) so the spline
+        // terminates canonically even when the source curve overshoots
+        // (springs/elastics often return != 1 at t=1).
+        const QPointF end(t1, (i == kSegments - 1) ? qreal(1.0) : curve->evaluate(t1));
         ec.addCubicBezierSegment(c1, c2, end);
     }
 
