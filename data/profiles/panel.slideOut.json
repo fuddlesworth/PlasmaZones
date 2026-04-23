@@ -1,5 +1,5 @@
 {
   "name": "panel.slideOut",
   "duration": 150,
-  "curve": "0.32,0.00,0.67,0.00"
+  "curve": "osd-in"
 }

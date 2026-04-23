@@ -61,6 +61,24 @@ void PhosphorMotionAnimation::setProfile(const QVariant& p)
     Q_EMIT profileChanged();
 }
 
+int PhosphorMotionAnimation::durationOverride() const
+{
+    return m_durationOverride;
+}
+
+void PhosphorMotionAnimation::setDurationOverride(int ms)
+{
+    if (m_durationOverride == ms) {
+        return;
+    }
+    m_durationOverride = ms;
+    // Re-apply so the override takes effect for the next tick. Curve
+    // stays the same — only the duration changes — but calling the
+    // full easing-install path keeps the single-source-of-truth shape.
+    applyResolvedEasing();
+    Q_EMIT durationOverrideChanged();
+}
+
 const Profile& PhosphorMotionAnimation::resolvedProfile() const
 {
     return m_resolvedProfile;
@@ -68,8 +86,16 @@ const Profile& PhosphorMotionAnimation::resolvedProfile() const
 
 void PhosphorMotionAnimation::applyResolvedEasing()
 {
-    // Duration: qreal ms from profile → int ms for QQuickPropertyAnimation.
-    QQuickPropertyAnimation::setDuration(qRound(m_resolvedProfile.effectiveDuration()));
+    // Duration: override wins when > 0, otherwise the profile's
+    // effective duration. The override exists so QML authors can bind
+    // `durationOverride: Kirigami.Units.longDuration` onto a shared
+    // profile JSON — the profile provides the curve shape while the
+    // caller's theme-scaled value drives the timing (Plasma's system
+    // animation-speed preference still applies). A zero / negative
+    // override means "use the profile's duration" — this is the
+    // default and the common case.
+    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
+    QQuickPropertyAnimation::setDuration(durationMs);
 
     // If no curve is set, fall back to the library default (OutCubic).
     const auto curve = m_resolvedProfile.curve ? m_resolvedProfile.curve : defaultFallbackCurve();
@@ -119,6 +145,12 @@ void PhosphorMotionAnimation::applyResolvedEasing()
 
 void PhosphorMotionAnimation::resolveFromVariant(const QVariant& p)
 {
+    // Capture the previous bound path before clearing — used below to
+    // distinguish "unbound property just evaluated to empty" (silent —
+    // common during startup) from "author explicitly cleared a
+    // previously-bound path" (warn — almost always a typo).
+    const QString priorPath = m_boundPath;
+
     // Clear any prior live-bind connection — we'll re-establish below
     // if the new profile is a path string.
     disconnectRegistrySignal();
@@ -126,23 +158,34 @@ void PhosphorMotionAnimation::resolveFromVariant(const QVariant& p)
 
     // Accept PhosphorProfile value: install the underlying Profile
     // verbatim as the compile-time snapshot branch per decision R.
-    if (p.canConvert<PhosphorProfile>()) {
-        // `canConvert` is permissive — explicitly check the typeId to
-        // distinguish a true PhosphorProfile value from, e.g., an
-        // integer that Qt would happily convert into nonsense. The
-        // typeId of PhosphorProfile is set by its Q_DECLARE_METATYPE
-        // registration in the QML plugin.
-        if (p.typeId() == qMetaTypeId<PhosphorProfile>()) {
-            applyResolvedProfile(p.value<PhosphorProfile>().value());
-            return;
-        }
+    //
+    // Check typeId directly — QVariant::canConvert<PhosphorProfile>
+    // is permissive enough that an int or other primitive can satisfy
+    // it via Qt's converter machinery, then fall through into this
+    // branch and explode in value<PhosphorProfile>(). The typeId
+    // equality is the authoritative "this QVariant truly holds a
+    // PhosphorProfile" check.
+    if (p.typeId() == qMetaTypeId<PhosphorProfile>()) {
+        applyResolvedProfile(p.value<PhosphorProfile>().value());
+        return;
     }
 
     // Path-string branch: look up the registry, subscribe to its
     // profileChanged(path) / profilesReloaded() signals for live
     // updates.
     if (p.typeId() == QMetaType::QString) {
-        rebindToRegistryPath(p.toString());
+        const QString path = p.toString();
+        if (path.isEmpty() && !priorPath.isEmpty()) {
+            // A previously-bound path being explicitly replaced with
+            // "" — almost always an author mistake (conditional
+            // expression evaluating to the wrong branch, stale
+            // property reference, typo). Without this warning the
+            // animation silently reverts to library defaults with no
+            // feedback that anything went wrong.
+            qCWarning(lcMotion).nospace()
+                << "setProfile: empty path replaces previous binding '" << priorPath << "' — using library defaults";
+        }
+        rebindToRegistryPath(path);
         return;
     }
 

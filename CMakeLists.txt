@@ -375,6 +375,17 @@ install(DIRECTORY data/layouts/
     FILES_MATCHING PATTERN "*.json"
 )
 
+# Install shared named curves. Profile JSONs reference these by name
+# (e.g. `"curve": "widget-out"`) so a single edit to a curve file
+# retunes every profile that uses it, and users can drop their own
+# JSON under ~/.local/share/plasmazones/curves/ to override a shipped
+# curve system-wide. The daemon's CurveLoader scans this path before
+# ProfileLoader runs.
+install(DIRECTORY data/curves/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/curves
+    FILES_MATCHING PATTERN "*.json"
+)
+
 # Install shell-opinionated animation profile defaults (per-path
 # PhosphorAnimation Profile blobs). The daemon's ProfileLoader scans
 # ${XDG_DATA_DIRS}/plasmazones/profiles at startup; user overrides at
@@ -383,6 +394,35 @@ install(DIRECTORY data/profiles/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/profiles
     FILES_MATCHING PATTERN "*.json"
 )
+
+# Build-time check: every `profile: "..."` string in the shipped QML
+# must correspond to a data/profiles/<name>.json file — otherwise the
+# registry silently falls back to library defaults at runtime and the
+# typo only surfaces via UX review. The custom target depends on every
+# shipped profile JSON + every QML file we scan, so it re-runs when
+# either side changes. Falls back to a no-op echo if python3 is
+# missing, so the check is advisory for distros that build without a
+# python interpreter (the daemon itself does not require one).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    file(GLOB _pz_profile_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/profiles/*.json")
+    file(GLOB _pz_curve_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/curves/*.json")
+    file(GLOB_RECURSE _pz_profile_qmls
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/editor/qml/*.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/settings/qml/*.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.qml"
+    )
+    add_custom_target(check-animation-profiles ALL
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
+                ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS ${_pz_profile_jsons} ${_pz_curve_jsons} ${_pz_profile_qmls}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
+        COMMENT "Verifying PhosphorAnimation profile names referenced in QML and curve refs in profiles"
+        VERBATIM
+    )
+endif()
 
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed)
 install(DIRECTORY data/shaders/

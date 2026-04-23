@@ -4,12 +4,16 @@
 #include <PhosphorAnimation/Profile.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Easing.h>
 
 #include <QJsonValue>
 #include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSet>
+
+#include <cmath>
+#include <limits>
 
 namespace PhosphorAnimation {
 
@@ -33,11 +37,27 @@ bool shouldWarnUnknownSequenceMode(int raw)
     seen.insert(raw);
     return true;
 }
+
+// Upper bound for a sane animation duration. A QQuickPropertyAnimation
+// takes `int ms`; anything more than an hour is clearly malformed JSON
+// and the downstream qRound() into int would otherwise risk overflow.
+constexpr qreal kMaxDurationMs = 60.0 * 60.0 * 1000.0; // 1 hour
 }
 
 Profile Profile::withDefaults() const
 {
     Profile out = *this;
+    if (!out.curve) {
+        // Match `AnimatedValue::defaultFallbackCurve()` and every other
+        // "no curve set" fallback across the library: a default-
+        // constructed Easing is OutCubic (0.33, 1.00, 0.68, 1.00).
+        // Filling this here means `withDefaults()` is now "every field
+        // has a concrete value" — matching the method name — rather
+        // than the previous "all scalars filled, curve silently still
+        // null" shape that surprised callers reading the header and
+        // expecting a fully-populated Profile.
+        out.curve = std::make_shared<const Easing>();
+    }
     if (!out.duration) {
         out.duration = DefaultDuration;
     }
@@ -101,10 +121,35 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
     }
 
     if (obj.contains(QLatin1String(JsonFieldDuration))) {
-        p.duration = obj.value(QLatin1String(JsonFieldDuration)).toDouble(DefaultDuration);
+        const qreal raw = obj.value(QLatin1String(JsonFieldDuration)).toDouble(DefaultDuration);
+        // Reject NaN / infinity / non-positive / absurdly-large values.
+        // The downstream qRound() into int and QQuickPropertyAnimation::
+        // setDuration(int) have no tolerance for these — NaN rounds to
+        // UB, negatives are silently treated as 0, and large doubles
+        // overflow the int conversion. Leaving the field unset makes
+        // `effectiveDuration()` substitute the library default, which
+        // is the correct fallback for garbage input.
+        if (!std::isfinite(raw) || raw <= 0.0 || raw > kMaxDurationMs) {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting duration " << raw << " (expected 0 < duration <= " << kMaxDurationMs
+                << " ms) — library default will apply";
+        } else {
+            p.duration = raw;
+        }
     }
     if (obj.contains(QLatin1String(JsonFieldMinDistance))) {
-        p.minDistance = obj.value(QLatin1String(JsonFieldMinDistance)).toInt(DefaultMinDistance);
+        const int raw = obj.value(QLatin1String(JsonFieldMinDistance)).toInt(DefaultMinDistance);
+        // Negative minDistance would make the distance-skip check
+        // trivially true for every animation (no real distance is
+        // less than a negative threshold), effectively disabling the
+        // skip everywhere. Zero is the documented "no skip" value
+        // and is accepted.
+        if (raw < 0) {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting negative minDistance " << raw << " — library default will apply";
+        } else {
+            p.minDistance = raw;
+        }
     }
     if (obj.contains(QLatin1String(JsonFieldSequenceMode))) {
         const int raw = obj.value(QLatin1String(JsonFieldSequenceMode)).toInt(static_cast<int>(DefaultSequenceMode));

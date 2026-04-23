@@ -222,7 +222,19 @@ void Daemon::setupAnimationProfiles()
     // config reload — would otherwise inherit stale profiles from the
     // prior instance, firing spurious profileChanged against bindings
     // that have long since disappeared.
-    PhosphorProfileRegistry::instance().clear();
+    //
+    // Narrow the clear to the two partitions we publish under: the
+    // loader-owned user-JSON partition (clearOwner by tag) and each
+    // individual settings-driven path (unregisterProfile per path).
+    // Wholesale `clear()` would also evict any other consumer's
+    // entries if they happened to register before us — not a concern
+    // in production today but the narrower scope is the correct
+    // contract for a shared registry.
+    auto& registry = PhosphorProfileRegistry::instance();
+    registry.clearOwner(QStringLiteral("plasmazones-user-profiles"));
+    for (const QString* path : kSettingsDrivenProfilePaths) {
+        registry.unregisterProfile(*path);
+    }
 
     // User-authored curve + profile packs. Consumer namespace is
     // `plasmazones/` per the LayoutManager precedent — library-level
@@ -281,6 +293,22 @@ void Daemon::setupAnimationProfiles()
                                                       QStringLiteral("plasmazones-user-profiles"), nullptr);
     m_profileLoader->loadLibraryBuiltins();
     m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
+
+    // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
+    // whose `curve` spec references a user-authored curve name that
+    // wasn't yet in CurveRegistry at parse time is stored with
+    // `curve = nullptr` (falls back to library default at animation
+    // time). When the user drops or edits a curve JSON AFTER the
+    // profile files were scanned, we need to re-parse every profile
+    // so the newly-available curve gets resolved. Without this wire,
+    // drop-order-matters: curves-before-profiles works, profiles-
+    // before-curves silently loses the curve reference until the
+    // profile file itself is touched.
+    //
+    // ProfileLoader::requestRescan goes through DirectoryLoader's
+    // debounced rescan path, so a curve-pack edit that changes many
+    // files coalesces into one profile rescan.
+    connect(m_curveLoader.get(), &CurveLoader::curvesChanged, m_profileLoader.get(), &ProfileLoader::requestRescan);
 
     // Connect BEFORE publishing so any signal Settings fires during
     // construction/load (or any signal the ProfileLoader fires during

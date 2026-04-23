@@ -1,5 +1,5 @@
 {
   "name": "osd.show",
-  "duration": 200,
-  "curve": "0.33,1.00,0.68,1.00"
+  "duration": 150,
+  "curve": "widget-out"
 }

@@ -18,6 +18,15 @@ import org.plasmazones.common as QFZCommon
  * Mouse: Click a layout to select, click outside to dismiss.
  */
 Window {
+    // Show / hide animations use the osd.* profiles for the curve
+    // shape, but bind `durationOverride` to metrics.showDuration /
+    // hideDuration (which are `Kirigami.Units.shortDuration`-derived
+    // and therefore follow Plasma's system-wide animation-speed
+    // preference). Without the override this picker would ignore
+    // that preference — the osd.* profiles ship with hardcoded
+    // fallback durations tuned for the in-shell OSD rather than the
+    // system-theme-scaled picker.
+
     id: root
 
     // Layout data (array of layout objects with id, name, zones, category, autoAssign)
@@ -138,7 +147,9 @@ Window {
         readonly property real showOvershoot: 1.1
     }
 
-    // Show animation
+    // Scale uses osd.pop (OutBack overshoot) to preserve the
+    // "pop" feel from the pre-PhosphorMotion easing.type=OutBack
+    // overshoot=1.2 design.
     ParallelAnimation {
         id: showAnimation
 
@@ -148,6 +159,7 @@ Window {
             from: 0
             to: 1
             profile: "osd.show"
+            durationOverride: metrics.showDuration
         }
 
         PhosphorMotionAnimation {
@@ -155,7 +167,8 @@ Window {
             properties: "scale"
             from: metrics.showScaleFrom
             to: 1
-            profile: "osd.show"
+            profile: "osd.pop"
+            durationOverride: metrics.showDuration
         }
 
     }
@@ -170,6 +183,7 @@ Window {
                 properties: "opacity"
                 to: 0
                 profile: "osd.hide"
+                durationOverride: metrics.hideDuration
             }
 
             PhosphorMotionAnimation {
@@ -177,6 +191,7 @@ Window {
                 properties: "scale"
                 to: metrics.hideScaleTo
                 profile: "osd.hide"
+                durationOverride: metrics.hideDuration
             }
 
         }

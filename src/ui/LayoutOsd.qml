@@ -74,9 +74,10 @@ Window {
     }
     // Timing
     property int displayDuration: 1500
-    // ms before auto-hide
-    property int fadeInDuration: 150
-    property int fadeOutDuration: 200
+    // ms before auto-hide. Show/hide fade shapes are driven by the
+    // "osd.show" / "osd.hide" / "osd.pop" profile JSONs — tune those
+    // to adjust the appear/disappear feel rather than re-introducing
+    // per-window duration overrides here.
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -152,7 +153,11 @@ Window {
         onTriggered: root.hide()
     }
 
-    // Show animation
+    // Show animation. Opacity uses osd.show (plain OutCubic decel).
+    // Scale uses osd.pop (OutBack overshoot) to preserve the subtle
+    // "pop" the original design used — matching the pre-PhosphorMotion
+    // NumberAnimation { easing.type: Easing.OutBack; overshoot: 1.2 }
+    // shape. Do not collapse both onto a single profile.
     ParallelAnimation {
         id: showAnimation
 
@@ -169,7 +174,7 @@ Window {
             properties: "scale"
             from: 0.8
             to: 1
-            profile: "osd.show"
+            profile: "osd.pop"
         }
 
     }

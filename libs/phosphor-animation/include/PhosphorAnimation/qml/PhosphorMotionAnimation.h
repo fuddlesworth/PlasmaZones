@@ -94,6 +94,21 @@ class PHOSPHORANIMATION_EXPORT PhosphorMotionAnimation : public QQuickPropertyAn
     /// doc for the dispatch shape.
     Q_PROPERTY(QVariant profile READ profile WRITE setProfile NOTIFY profileChanged)
 
+    /// Override the resolved profile's duration (milliseconds). When
+    /// `> 0`, this value is installed via `QQuickPropertyAnimation::
+    /// setDuration` instead of the profile's own duration — the
+    /// profile's curve is still used. Zero or negative means "use the
+    /// profile's duration unchanged".
+    ///
+    /// The intended use is binding a theme-scaled value like
+    /// `Kirigami.Units.longDuration` so a shared profile JSON
+    /// provides the curve shape while the caller's theme-scaled
+    /// duration drives the timing. Without this property, switching
+    /// a Behavior off a hardcoded `duration: Kirigami.Units.*` onto
+    /// a fixed-duration profile silently drops the user's animation-
+    /// speed preference from Plasma's system settings.
+    Q_PROPERTY(int durationOverride READ durationOverride WRITE setDurationOverride NOTIFY durationOverrideChanged)
+
 public:
     /// Number of piecewise cubic Bezier segments used to approximate
     /// parametric / stateful curves (Spring, Elastic, Bounce,
@@ -117,6 +132,9 @@ public:
     QVariant profile() const;
     void setProfile(const QVariant& p);
 
+    int durationOverride() const;
+    void setDurationOverride(int ms);
+
     /// Current effective profile (with library defaults filled in for
     /// unset fields). Exposed for tests and adapter code that needs to
     /// inspect the resolved snapshot — not a Q_PROPERTY because the
@@ -126,6 +144,7 @@ public:
 
 Q_SIGNALS:
     void profileChanged();
+    void durationOverrideChanged();
 
 private:
     void resolveFromVariant(const QVariant& p);
@@ -144,6 +163,7 @@ private:
     QVariant m_profile; ///< The QML-facing input: QString or PhosphorProfile.
     Profile m_resolvedProfile; ///< Effective value used by easing/duration.
     QString m_boundPath; ///< Non-empty when the input was a path string — drives live-rebind.
+    int m_durationOverride = 0; ///< When > 0, overrides the profile's duration.
     QMetaObject::Connection m_registryChangedConnection;
     QMetaObject::Connection m_registryReloadedConnection;
 };

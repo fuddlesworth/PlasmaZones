@@ -1,5 +1,5 @@
 {
   "name": "panel.popup",
   "duration": 150,
-  "curve": "0.33,1.00,0.68,1.00"
+  "curve": "widget-out"
 }

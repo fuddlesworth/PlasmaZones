@@ -143,6 +143,7 @@ Item {
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: root.animationDuration
             }
 
         }
@@ -150,6 +151,7 @@ Item {
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: root.animationDuration
             }
 
         }
@@ -206,6 +208,7 @@ Item {
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -213,6 +216,7 @@ Item {
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -220,6 +224,7 @@ Item {
             Behavior on border.width {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: root.shortAnimationDuration
                 }
 
             }
@@ -245,6 +250,7 @@ Item {
             Behavior on width {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -252,6 +258,7 @@ Item {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -287,6 +294,7 @@ Item {
             Behavior on width {
                 PhosphorMotionAnimation {
                     profile: "widget.badge"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -294,6 +302,7 @@ Item {
             Behavior on height {
                 PhosphorMotionAnimation {
                     profile: "widget.badge"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -301,6 +310,7 @@ Item {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.badge"
+                    durationOverride: root.shortAnimationDuration
                 }
 
             }
@@ -390,6 +400,7 @@ Item {
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.fade"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -397,6 +408,7 @@ Item {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.fade"
+                    durationOverride: root.animationDuration
                 }
 
             }

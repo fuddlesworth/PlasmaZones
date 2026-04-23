@@ -32,9 +32,10 @@ Window {
     property int windowCount: 1 // Number of windows affected (for rotation)
     // Timing
     property int displayDuration: 1000
-    // ms before auto-hide (shorter than layout OSD)
-    property int fadeInDuration: 150
-    property int fadeOutDuration: 200
+    // ms before auto-hide (shorter than layout OSD). Show/hide fade
+    // shapes are driven by the "osd.show" / "osd.hide" / "osd.pop"
+    // profile JSONs — tune those rather than re-introducing per-window
+    // duration overrides here.
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -276,7 +277,9 @@ Window {
         onTriggered: root.hide()
     }
 
-    // Show animation
+    // Show animation — see matching comment in LayoutOsd.qml for the
+    // osd.show / osd.pop split rationale (preserves the OutBack scale
+    // overshoot from the pre-PhosphorMotion design).
     ParallelAnimation {
         id: showAnimation
 
@@ -293,7 +296,7 @@ Window {
             properties: "scale"
             from: 0.8
             to: 1
-            profile: "osd.show"
+            profile: "osd.pop"
         }
 
     }

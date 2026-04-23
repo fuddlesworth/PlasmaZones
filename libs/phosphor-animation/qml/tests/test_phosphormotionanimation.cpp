@@ -87,6 +87,82 @@ private Q_SLOTS:
         QTRY_COMPARE(a.duration(), 200);
     }
 
+    // ─── durationOverride (B3: theme-scaling escape hatch) ───
+
+    void testDurationOverrideWinsOverProfile()
+    {
+        PhosphorMotionAnimation a;
+        Profile registered;
+        registered.duration = 400.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("p"), registered);
+        a.setProfile(QStringLiteral("p"));
+        QCOMPARE(a.duration(), 400);
+
+        a.setDurationOverride(200);
+        QCOMPARE(a.duration(), 200);
+    }
+
+    void testDurationOverrideZeroMeansProfileDuration()
+    {
+        PhosphorMotionAnimation a;
+        Profile registered;
+        registered.duration = 400.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("p"), registered);
+        a.setProfile(QStringLiteral("p"));
+        a.setDurationOverride(200);
+        QCOMPARE(a.duration(), 200);
+
+        // Zero clears the override — fall back to profile's own duration.
+        a.setDurationOverride(0);
+        QCOMPARE(a.duration(), 400);
+    }
+
+    void testDurationOverrideNegativeTreatedAsUnset()
+    {
+        PhosphorMotionAnimation a;
+        Profile registered;
+        registered.duration = 400.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("p"), registered);
+        a.setProfile(QStringLiteral("p"));
+
+        a.setDurationOverride(-50); // nonsensical — treat as "no override"
+        QCOMPARE(a.duration(), 400);
+    }
+
+    void testDurationOverrideEmitsSignal()
+    {
+        PhosphorMotionAnimation a;
+        QSignalSpy spy(&a, &PhosphorMotionAnimation::durationOverrideChanged);
+        a.setDurationOverride(250);
+        QCOMPARE(spy.count(), 1);
+        a.setDurationOverride(250); // same value — no signal
+        QCOMPARE(spy.count(), 1);
+        a.setDurationOverride(300); // change → signal
+        QCOMPARE(spy.count(), 2);
+    }
+
+    void testDurationOverrideSurvivesProfileRebind()
+    {
+        // User sets the override, then rebinds the profile (live reload
+        // fires profileChanged, or QML author swaps path at runtime).
+        // The override is a caller-property, not a profile-property —
+        // it must persist across rebinds.
+        PhosphorMotionAnimation a;
+        a.setDurationOverride(250);
+
+        Profile p1;
+        p1.duration = 400.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("a"), p1);
+        a.setProfile(QStringLiteral("a"));
+        QCOMPARE(a.duration(), 250); // override still wins
+
+        Profile p2;
+        p2.duration = 600.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("b"), p2);
+        a.setProfile(QStringLiteral("b"));
+        QCOMPARE(a.duration(), 250); // override still wins after rebind
+    }
+
     /// profilesReloaded bulk-signal triggers re-resolve of the bound
     /// path. Same queued-connection caveat as
     /// `testProfilePathLiveRebinds` — needs QTRY_COMPARE to spin the
