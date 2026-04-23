@@ -30,14 +30,28 @@ PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
     //
     // INVARIANT: this constructor-time setEasing is only safe because
     // `defaultFallbackCurve()` resolves to a single-segment cubic
-    // bezier (fast path at applyResolvedEasing lines 72-77). That path
-    // calls addCubicBezierSegment exactly once and does not trip Qt
-    // 6.11's BezierSpline heap corruption (see kBezierSplineSegments
-    // docs in PhosphorMotionAnimation.h for the upper-bound story).
+    // bezier (fast path at applyResolvedEasing's CubicBezier branch).
+    // That path calls addCubicBezierSegment exactly once and does not
+    // trip Qt 6.11's BezierSpline heap corruption (see
+    // kBezierSplineSegments docs in PhosphorMotionAnimation.h).
     // Changing the default to a sampled/parametric curve requires
     // moving this call to updateState(Running) or a similar deferred
     // hook so the installed easing is built after the object is fully
     // constructed and attached to its QML context.
+    //
+    // Compile-time enforcement: the fallback curve must be an Easing
+    // instance AND the fast-path branch in applyResolvedEasing keys on
+    // `Easing::Type::CubicBezier`. The runtime check below tripping
+    // would mean someone has changed defaultFallbackCurve() to a
+    // non-Easing or non-cubic type without updating this ctor — fail
+    // hard at startup so the regression can't ship silently.
+    {
+        const auto fallback = defaultFallbackCurve();
+        const auto* easing = dynamic_cast<const Easing*>(fallback.get());
+        Q_ASSERT_X(easing && easing->type == Easing::Type::CubicBezier, "PhosphorMotionAnimation",
+                   "defaultFallbackCurve() must be a cubic-bezier Easing for the ctor fast path — "
+                   "see INVARIANT comment above");
+    }
     applyResolvedEasing();
 }
 

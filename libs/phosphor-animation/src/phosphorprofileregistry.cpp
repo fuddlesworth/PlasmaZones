@@ -85,8 +85,17 @@ void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHa
     // let a loader silently wipe daemon-published entries on rescan —
     // the exact bug this method exists to prevent. Fail loud so callers
     // can't accidentally bypass the partitioning.
+    //
+    // Q_ASSERT_X traps in debug; the early return below additionally
+    // guards release builds where Q_ASSERT compiles out — without it
+    // a release-mode caller passing "" would silently corrupt the
+    // partition map. Match-shape with clearOwner() below.
     Q_ASSERT_X(!ownerTag.isEmpty(), "PhosphorProfileRegistry::reloadFromOwner",
                "ownerTag must be non-empty; pass a stable per-publisher identifier");
+    if (ownerTag.isEmpty()) {
+        qWarning("PhosphorProfileRegistry::reloadFromOwner: refusing empty ownerTag (would alias with direct-owner)");
+        return;
+    }
 
     // Two-phase: compute the diff under the lock (so the snapshot is
     // consistent), then emit signals outside the lock.
@@ -138,8 +147,17 @@ void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHa
 
 void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
 {
+    // Same release-build hardening as reloadFromOwner above — the
+    // Q_ASSERT alone compiles out in release, leaving a silent path
+    // where an empty tag would loop the entire registry trying to match
+    // entries with empty owner string, evicting every direct-owner
+    // entry as collateral damage.
     Q_ASSERT_X(!ownerTag.isEmpty(), "PhosphorProfileRegistry::clearOwner",
                "ownerTag must be non-empty; use clear() for the test-only wholesale wipe");
+    if (ownerTag.isEmpty()) {
+        qWarning("PhosphorProfileRegistry::clearOwner: refusing empty ownerTag (use clear() for wholesale wipe)");
+        return;
+    }
 
     QStringList removed;
     {

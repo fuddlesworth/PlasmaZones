@@ -22,14 +22,33 @@ Q_LOGGING_CATEGORY(lcLoader, "phosphorjsonloader.directoryloader")
 /// before arming anything. Watching `$HOME` turns every file operation in
 /// the user's home directory into a full rescan of all configured dirs;
 /// watching `/` is nonsensical.
+///
+/// Comparisons go through `samePath` (case-insensitive on macOS APFS /
+/// NTFS, case-sensitive on Linux) so a hand-edited XDG dir spelt with
+/// different case (`~/.Local/Share/...`) still trips the guard on
+/// case-insensitive filesystems where it resolves to the same inode as
+/// the canonical `$HOME`. Without this a re-cased ancestor would slip
+/// past the byte-equal compare and end up watching `$HOME`.
+bool samePath(const QString& a, const QString& b)
+{
+    if (a.isEmpty() || b.isEmpty()) {
+        return false;
+    }
+#if defined(Q_OS_DARWIN) || defined(Q_OS_WIN)
+    return a.compare(b, Qt::CaseInsensitive) == 0;
+#else
+    return a == b;
+#endif
+}
+
 bool isForbiddenWatchRoot(const QString& path)
 {
     const QString cleaned = QDir::cleanPath(path);
-    if (cleaned.isEmpty() || cleaned == QDir::rootPath()) {
+    if (cleaned.isEmpty() || samePath(cleaned, QDir::rootPath())) {
         return true;
     }
     const QString home = QDir::cleanPath(QDir::homePath());
-    if (cleaned == home) {
+    if (samePath(cleaned, home)) {
         return true;
     }
     // Also refuse to watch the GenericDataLocation / ConfigLocation
@@ -37,11 +56,11 @@ bool isForbiddenWatchRoot(const QString& path)
     // into those shared trees (GTK recently-used files, KDE session
     // state, etc.), which is effectively equivalent to watching $HOME.
     const QString genericData = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
-    if (!genericData.isEmpty() && cleaned == genericData) {
+    if (samePath(cleaned, genericData)) {
         return true;
     }
     const QString configLoc = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
-    if (!configLoc.isEmpty() && cleaned == configLoc) {
+    if (samePath(cleaned, configLoc)) {
         return true;
     }
     return false;

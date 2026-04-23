@@ -29,7 +29,15 @@ from pathlib import Path
 # tolerates any amount of whitespace between the colon and the quoted
 # value and matches both single- and double-quoted forms so a future
 # QML author using single quotes still gets caught.
-PROFILE_RE = re.compile(r"""profile\s*:\s*["']([a-zA-Z0-9_.\-]+)["']""")
+#
+# The `(?<![A-Za-z0-9_])` lookbehind anchors `profile` at an identifier
+# boundary so a future lowercase property name like `subprofile: "..."`
+# (or any `<word>profile:` binding — `audioprofile`, `tilingprofile`)
+# isn't misread as a `profile:` reference and trip a confusing
+# "missing data/profiles/<word>profile.json" build failure. CamelCase
+# names like `colorProfile:` are already safe (the `P` breaks the
+# lowercase substring match), but lowercase variants are not.
+PROFILE_RE = re.compile(r"""(?<![A-Za-z0-9_])profile\s*:\s*["']([a-zA-Z0-9_.\-]+)["']""")
 
 # Directories holding QML files that use PhosphorMotionAnimation. Keep
 # the scan scope small so we don't wander into third-party imports or

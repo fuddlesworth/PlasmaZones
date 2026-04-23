@@ -38,11 +38,23 @@ void CurveRegistry::Impl::registerBuiltins()
 {
     // Cubic-bezier wire format is bare 4-comma: pass params directly to
     // Easing::fromString (which dispatches on "no letters" → bezier).
+    //
+    // Register under BOTH "bezier" and "cubic-bezier" — the loader and the
+    // build-time check-animation-profiles.py validator both treat
+    // "cubic-bezier" as a known builtin (CurveLoader::Sink::parseFile
+    // accepts `"typeId": "cubic-bezier"`, isBuiltinTypeId() lists it,
+    // BUILTIN_CURVE_TYPEIDS contains it). Without the alias, a profile
+    // JSON with `"curve": "cubic-bezier:x1,y1,x2,y2"` passes the build
+    // check but resolves to nullptr at runtime (parseSpec splits on the
+    // colon → typeId="cubic-bezier" → factory miss), and the animation
+    // silently falls back to OutCubic with only a debug log.
     Factory bezierFactory = [](const QString&, const QString& params) -> std::shared_ptr<const Curve> {
         return std::make_shared<Easing>(Easing::fromString(params));
     };
     insertionOrder.push_back(QStringLiteral("bezier"));
     factories.insert(QStringLiteral("bezier"), bezierFactory);
+    insertionOrder.push_back(QStringLiteral("cubic-bezier"));
+    factories.insert(QStringLiteral("cubic-bezier"), bezierFactory);
 
     // Elastic + bounce variants use "name:params" — Easing::fromString
     // needs the typeId in the spec to choose the right Type enumerator.

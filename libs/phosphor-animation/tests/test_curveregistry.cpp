@@ -39,6 +39,40 @@ private Q_SLOTS:
         QVERIFY(reg.has(QStringLiteral("spring")));
     }
 
+    /// Regression: `cubic-bezier` is advertised as a builtin both by
+    /// `isBuiltinTypeId` (which the loader uses to reject user curves
+    /// that would shadow a builtin) and by the build-time
+    /// check-animation-profiles.py validator (which accepts profile
+    /// JSONs that reference `"curve": "cubic-bezier:..."`). Without a
+    /// matching factory registration, `tryCreate("cubic-bezier:...")`
+    /// returned null and the profile silently fell back to OutCubic at
+    /// runtime — passing the build check while shipping broken motion.
+    /// This test pins the three-way alignment.
+    void testBuiltInCubicBezierAlias()
+    {
+        CurveRegistry reg;
+        // 1. Factory is registered and resolvable through the colon-form
+        //    that the validator accepts.
+        QVERIFY(reg.has(QStringLiteral("cubic-bezier")));
+        auto curve = reg.tryCreate(QStringLiteral("cubic-bezier:0.25,0.10,0.25,1.00"));
+        QVERIFY(curve != nullptr);
+        QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
+
+        // 2. Output is identical to the canonical `bezier:` form — they
+        //    are aliases by construction, not two divergent implementations.
+        auto canonical = reg.tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
+        QVERIFY(canonical);
+        for (double t : {0.0, 0.25, 0.5, 0.75, 1.0}) {
+            QCOMPARE(curve->evaluate(t), canonical->evaluate(t));
+        }
+
+        // 3. isBuiltinTypeId() agrees — the loader's user-curve-name
+        //    rejection guard and the registered factory set must stay in
+        //    sync. This is the corner the documented "deliberate symmetry"
+        //    in registerBuiltins() actually relies on.
+        QVERIFY(CurveRegistry::isBuiltinTypeId(QStringLiteral("cubic-bezier")));
+    }
+
     // ─── create() parsing ───
 
     void testCreateBezierBareWireFormat()

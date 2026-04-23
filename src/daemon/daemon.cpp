@@ -270,18 +270,18 @@ void Daemon::setupAnimationProfiles()
         profileDirs.append(userProfileDir);
     }
 
-    // Library-level curve pack (if any ships) loads first so it's
-    // visible for user-authored overrides. Today the library ships no
-    // bundled curves — the call is a no-op that stays wired for future
-    // curve-pack additions without a code change here.
+    // Construct loaders with NO initial load — the loadFromDirectories
+    // calls below trigger the first scan AFTER every consumer signal is
+    // wired. A loader's initial-scan profilesChanged emit otherwise fires
+    // before the publishActiveAnimationProfile listener exists and is
+    // silently dropped — we'd still get a correct snapshot via the
+    // explicit publish call at the bottom, but the signal-driven path
+    // would be quietly broken until something else triggered a republish.
     //
     // Registry reference is captured at loader construction — this
     // prevents any later async rescan from landing on a different
     // registry than the one the daemon initialized against.
-    m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
-    m_curveLoader->loadLibraryBuiltins();
-    m_curveLoader->loadFromDirectories(curveDirs, LiveReload::On);
-
+    //
     // ProfileLoader is bound to PhosphorProfileRegistry with a
     // PlasmaZones-specific owner tag. Entries it registers are tagged
     // "plasmazones-user-profiles" in the registry's partitioned-ownership
@@ -289,10 +289,9 @@ void Daemon::setupAnimationProfiles()
     // the daemon's settings-fanned profiles registered below via
     // `publishActiveAnimationProfile` are owned by the empty/direct
     // tag and survive untouched.
+    m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
     m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(), m_curveRegistry,
                                                       QStringLiteral("plasmazones-user-profiles"), nullptr);
-    m_profileLoader->loadLibraryBuiltins();
-    m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
 
     // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
     // whose `curve` spec references a user-authored curve name that
@@ -310,9 +309,9 @@ void Daemon::setupAnimationProfiles()
     // files coalesces into one profile rescan.
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, m_profileLoader.get(), &ProfileLoader::requestRescan);
 
-    // Connect BEFORE publishing so any signal Settings fires during
-    // construction/load (or any signal the ProfileLoader fires during
-    // its own initial scan) is not lost. The registry's value-changed
+    // Connect BEFORE the initial scans below so any signal Settings
+    // fires during load (or any signal the ProfileLoader fires during
+    // its own initial scan) is captured. The registry's value-changed
     // guard makes the subsequent publishActiveAnimationProfile a no-op
     // if the signal-driven path already published the same values.
     //
@@ -328,11 +327,24 @@ void Daemon::setupAnimationProfiles()
         publishActiveAnimationProfile();
     });
 
-    // Initial publish AFTER connections are wired. Partitioned-ownership
-    // in the registry (see PhosphorProfileRegistry::reloadFromOwner)
-    // ensures the ProfileLoader's user-files entries are not wiped by
-    // this direct-owner publish, and vice versa — the two publishers
-    // live in disjoint path subsets by construction.
+    // Initial scans — order is curves-before-profiles so profile files
+    // referencing user-authored curve names resolve on first parse
+    // rather than waiting for the curveLoader→profileLoader rescan wire
+    // to fire on the second pass.
+    //
+    // Library-level pack first (today a no-op — the library ships no
+    // bundled curves/profiles — but kept for future curve-pack additions).
+    m_curveLoader->loadLibraryBuiltins();
+    m_curveLoader->loadFromDirectories(curveDirs, LiveReload::On);
+
+    m_profileLoader->loadLibraryBuiltins();
+    m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
+
+    // Final explicit publish covers the case where neither the Settings
+    // nor the ProfileLoader emitted during the loads above (e.g. fresh
+    // install with no user JSON, no settings edit during construction).
+    // Partitioned-ownership in the registry ensures the loader's
+    // user-files entries are not wiped by this direct-owner publish.
     publishActiveAnimationProfile();
 }
 

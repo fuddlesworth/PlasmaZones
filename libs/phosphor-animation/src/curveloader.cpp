@@ -235,11 +235,20 @@ public:
         // CurveRegistry::registerFactory is replace-semantic, so a
         // future registration can re-use the key — but the current
         // caller wants the key fully unregistered until then.
+        //
+        // Gate `lastBatchChanged` on the actual snapshot delete: a
+        // removedKeys entry whose key never made it into our snapshot
+        // (parsed and rejected on a prior pass, then deleted from disk)
+        // produced no externally-visible registration, so deleting it
+        // doesn't change anything a consumer would see. Only count it as
+        // a batch-change if we genuinely lose tracked state.
         for (const QString& key : removedKeys) {
-            registry->unregisterFactory(key);
-            entries.remove(key);
-            lastCommittedWireFormat.remove(key);
-            lastBatchChanged = true;
+            const bool hadEntry = entries.remove(key) > 0;
+            const bool hadWire = lastCommittedWireFormat.remove(key) > 0;
+            if (hadEntry || hadWire) {
+                registry->unregisterFactory(key);
+                lastBatchChanged = true;
+            }
         }
 
         // Install the current set. Skip re-registering entries whose

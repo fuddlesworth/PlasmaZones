@@ -175,7 +175,22 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         }
     }
     if (obj.contains(QLatin1String(JsonFieldStaggerInterval))) {
-        p.staggerInterval = obj.value(QLatin1String(JsonFieldStaggerInterval)).toInt(DefaultStaggerInterval);
+        const int raw = obj.value(QLatin1String(JsonFieldStaggerInterval)).toInt(DefaultStaggerInterval);
+        // Negative stagger would make every cascade element fire
+        // immediately (its scheduled-start would already be in the
+        // past), erasing the cascade visual. An hour-plus stagger would
+        // freeze the cascade for any practical animation. Same shape
+        // and rationale as the duration / minDistance / sequenceMode
+        // validators above — leaving the field unset routes
+        // `effectiveStaggerInterval()` to the library default.
+        constexpr int kMaxStaggerMs = 60 * 60 * 1000; // 1 hour
+        if (raw < 0 || raw > kMaxStaggerMs) {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting staggerInterval " << raw
+                << " (expected 0 <= staggerInterval <= " << kMaxStaggerMs << " ms) — library default will apply";
+        } else {
+            p.staggerInterval = raw;
+        }
     }
     if (obj.contains(QLatin1String(JsonFieldPresetName))) {
         p.presetName = obj.value(QLatin1String(JsonFieldPresetName)).toString();
