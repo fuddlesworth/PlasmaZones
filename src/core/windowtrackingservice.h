@@ -522,7 +522,7 @@ public:
      * matches the given physical screen, determines which virtual screen the window's
      * zone falls within and updates the assignment accordingly.
      *
-     * Also migrates m_preFloatScreenAssignments.
+     * Also migrates pre-float screen assignments in SnapState.
      *
      * @param physicalScreenId The physical screen being subdivided
      * @param virtualScreenIds Virtual screen IDs for the physical screen
@@ -707,27 +707,19 @@ public:
 
     /**
      * @brief Get pre-float zone assignments for persistence
+     *
+     * Delegates to SnapState (authoritative store).
      */
-    const QHash<QString, QStringList>& preFloatZoneAssignments() const
-    {
-        return m_preFloatZoneAssignments;
-    }
-    const QHash<QString, QString>& preFloatScreenAssignments() const
-    {
-        return m_preFloatScreenAssignments;
-    }
+    const QHash<QString, QStringList>& preFloatZoneAssignments() const;
+    const QHash<QString, QString>& preFloatScreenAssignments() const;
 
     /**
      * @brief Set pre-float zone assignments (loaded from KConfig by adaptor)
+     *
+     * Delegates to SnapState (authoritative store).
      */
-    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments)
-    {
-        m_preFloatZoneAssignments = assignments;
-    }
-    void setPreFloatScreenAssignments(const QHash<QString, QString>& assignments)
-    {
-        m_preFloatScreenAssignments = assignments;
-    }
+    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments);
+    void setPreFloatScreenAssignments(const QHash<QString, QString>& assignments);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Dirty field tracking (Phase 3 of refactor/dbus-performance)
@@ -918,11 +910,9 @@ private:
     // Session persistence: consumption queue (appId -> list of pending restores, consumed FIFO)
     QHash<QString, QList<PendingRestore>> m_pendingRestoreQueues;
 
-    // Pre-float zone and screen (for unfloat restore to correct monitor).
-    // Keyed by full windowId at runtime (to distinguish multiple instances of
-    // the same app). Converted to appId on window close and session save.
-    QHash<QString, QStringList> m_preFloatZoneAssignments;
-    QHash<QString, QString> m_preFloatScreenAssignments;
+    // Pre-float zone and screen state is owned by SnapState (authoritative store).
+    // WTS preFloat getter methods add appId-fallback queries for session-restored
+    // entries keyed by appId. SnapState itself uses windowId-only keys.
 
     // Sticky window states
     QHash<QString, bool> m_windowStickyStates;

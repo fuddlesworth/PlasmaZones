@@ -226,22 +226,31 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         m_snapState->setScreenAssignments(screenAssigns);
     }
 
-    // Also migrate pre-float screen assignments
-    for (auto it = m_preFloatScreenAssignments.begin(); it != m_preFloatScreenAssignments.end(); ++it) {
-        if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
-            continue;
-        }
+    // Also migrate pre-float screen assignments (owned by SnapState).
+    {
+        QHash<QString, QString> preFloatScreens = m_snapState->preFloatScreenAssignments();
+        const QHash<QString, QStringList>& preFloatZones = m_snapState->preFloatZoneAssignments();
+        bool preFloatMigrated = false;
+        for (auto it = preFloatScreens.begin(); it != preFloatScreens.end(); ++it) {
+            if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
+                continue;
+            }
 
-        // If the stored screen is already a valid virtual screen ID in the current config, skip it.
-        // Re-migrating would recompute via resolveVirtualScreen with stale zone coords.
-        if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
-            continue;
-        }
+            // If the stored screen is already a valid virtual screen ID in the current config, skip it.
+            // Re-migrating would recompute via resolveVirtualScreen with stale zone coords.
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
+                continue;
+            }
 
-        // Pre-float entries may have zone info too; try to resolve
-        QStringList zoneIds = m_preFloatZoneAssignments.value(it.key());
-        it.value() = resolveVirtualScreen(zoneIds, it.value());
-        anyStateMigrated = true;
+            // Pre-float entries may have zone info too; try to resolve
+            QStringList pfZoneIds = preFloatZones.value(it.key());
+            it.value() = resolveVirtualScreen(pfZoneIds, it.value());
+            preFloatMigrated = true;
+        }
+        if (preFloatMigrated) {
+            m_snapState->setPreFloatScreenAssignments(preFloatScreens);
+            anyStateMigrated = true;
+        }
     }
 
     // Also migrate pending restore queues — these have screenId per entry.
@@ -336,10 +345,18 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         m_snapState->setScreenAssignments(screenAssigns);
     }
 
-    // Also migrate pre-float screen assignments
-    for (auto it = m_preFloatScreenAssignments.begin(); it != m_preFloatScreenAssignments.end(); ++it) {
-        if (it.value().startsWith(prefix)) {
-            it.value() = physicalScreenId;
+    // Also migrate pre-float screen assignments (owned by SnapState).
+    {
+        QHash<QString, QString> preFloatScreens = m_snapState->preFloatScreenAssignments();
+        bool preFloatMigrated = false;
+        for (auto it = preFloatScreens.begin(); it != preFloatScreens.end(); ++it) {
+            if (it.value().startsWith(prefix)) {
+                it.value() = physicalScreenId;
+                preFloatMigrated = true;
+            }
+        }
+        if (preFloatMigrated) {
+            m_snapState->setPreFloatScreenAssignments(preFloatScreens);
             anyStateMigrated = true;
         }
     }
@@ -403,8 +420,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             auto unResult = m_snapState->unassignWindow(wId);
             lastUsedCleared |= unResult.lastUsedZoneCleared;
             m_preTileGeometries.remove(wId);
-            m_preFloatZoneAssignments.remove(wId);
-            m_preFloatScreenAssignments.remove(wId);
+            m_snapState->clearPreFloatZone(wId);
             m_windowStickyStates.remove(wId);
             anyStateMigrated = true;
         }
@@ -498,12 +514,11 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
     }
-    // Also clear pre-float zone/screen assignments since float state is gone
-    m_preFloatZoneAssignments.remove(windowId);
-    m_preFloatScreenAssignments.remove(windowId);
+    // Also clear pre-float zone/screen assignments since float state is gone.
+    // SnapState is the authoritative store; clear both windowId and appId keys.
+    m_snapState->clearPreFloatZone(windowId);
     if (appId != windowId) {
-        m_preFloatZoneAssignments.remove(appId);
-        m_preFloatScreenAssignments.remove(appId);
+        m_snapState->clearPreFloatZone(appId);
     }
     // Remove autotile-floated tracking outright — do NOT migrate to appId.
     m_windowStickyStates.remove(windowId);
