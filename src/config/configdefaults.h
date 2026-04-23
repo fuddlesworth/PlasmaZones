@@ -923,29 +923,6 @@ public:
     /// function returning the composite value.
     static QString animationProfile(const PhosphorAnimation::CurveRegistry& registry);
 
-    /// Per-path animation Profile defaults.
-    ///
-    /// Shell-level configuration: the PhosphorAnimation library is
-    /// consumer-agnostic (decision U), so it does NOT ship opinions
-    /// about how zone highlights should feel or how long a toggle
-    /// switch animates. Those decisions belong to PlasmaZones and
-    /// live here alongside the rest of the config defaults.
-    ///
-    /// Returns a map keyed on registry path (`"zone.highlight"`,
-    /// `"widget.toggle"`, etc.) to a library-default Profile. The
-    /// daemon registers these into PhosphorProfileRegistry at
-    /// startup — users override any of them by dropping a JSON file
-    /// into `~/.local/share/plasmazones/profiles/<path>.json`, which
-    /// ProfileLoader picks up and replaces at the registry. A future
-    /// settings-UI editor could also override per-path values by
-    /// writing to a per-path config key; this function stays as the
-    /// zero-customisation fallback.
-    ///
-    /// The `Global` path is intentionally NOT in this map — that
-    /// path follows `animationProfile()` (the settings-backed slider)
-    /// rather than a fixed library default.
-    PLASMAZONES_EXPORT static QHash<QString, PhosphorAnimation::Profile>
-    animationProfilesByPath(const PhosphorAnimation::CurveRegistry& registry);
     static bool autotileFocusFollowsMouse()
     {
         return false;

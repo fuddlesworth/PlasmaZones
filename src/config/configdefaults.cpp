@@ -5,7 +5,6 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QDir>
 #include <QFile>
@@ -96,88 +95,6 @@ QString ConfigDefaults::animationProfile(const PhosphorAnimation::CurveRegistry&
     p.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(animationSequenceMode());
     p.staggerInterval = animationStaggerInterval();
     return QString::fromUtf8(QJsonDocument(p.toJson()).toJson(QJsonDocument::Compact));
-}
-
-namespace {
-/// Build a Profile from an inline duration + cubic-bezier wire string.
-/// `curveWire == nullptr` leaves `curve` unset — the runtime will fall
-/// back to the library default OutCubic via `Profile::withDefaults`.
-PhosphorAnimation::Profile makeDefaultProfile(const PhosphorAnimation::CurveRegistry& registry, qreal durationMs,
-                                              const char* curveWire)
-{
-    PhosphorAnimation::Profile p;
-    p.duration = durationMs;
-    if (curveWire) {
-        p.curve = registry.create(QString::fromUtf8(curveWire));
-    }
-    return p;
-}
-} // namespace
-
-QHash<QString, PhosphorAnimation::Profile>
-ConfigDefaults::animationProfilesByPath(const PhosphorAnimation::CurveRegistry& registry)
-{
-    static const auto cached = [&registry] {
-        namespace PA = PhosphorAnimation;
-
-        // Wire-format curve strings understood by CurveRegistry:
-        //   OutBack overshoot: "0.34,1.56,0.64,1.00"  (CSS ease-out-back)
-        //   OutCubic:          "0.33,1.00,0.68,1.00"
-        //   InCubic:           "0.32,0.00,0.67,0.00"
-        //   Linear:            nullptr (library default OutCubic takes over)
-        //
-        // Per-path durations + curves were chosen to preserve the
-        // pre-PR-344 per-site motion intent — OutBack spring on toggle
-        // switches + badge pops, slow linear tint on needs-save, short
-        // snappy durations on cursor feedback, etc.
-        //
-        // Users override any of these by dropping a JSON profile at the
-        // matching path under `~/.local/share/plasmazones/profiles/`. The
-        // `Global` path follows `animationProfile()` instead and is not
-        // in this map.
-        QHash<QString, PA::Profile> map;
-
-        // zone.* — zone highlight + tiling motion
-        map.insert(PA::ProfilePaths::ZoneHighlight, makeDefaultProfile(registry, 150.0, "0.34,1.56,0.64,1.00"));
-        map.insert(PA::ProfilePaths::ZoneSnapIn, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::ZoneSnapOut, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::ZoneSnapResize, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::ZoneLayoutSwitchIn, makeDefaultProfile(registry, 250.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::ZoneLayoutSwitchOut, makeDefaultProfile(registry, 250.0, "0.33,1.00,0.68,1.00"));
-
-        // osd.* — notifications + feedback
-        map.insert(PA::ProfilePaths::OsdShow, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::OsdHide, makeDefaultProfile(registry, 150.0, "0.32,0.00,0.67,0.00"));
-        map.insert(PA::ProfilePaths::OsdDim, makeDefaultProfile(registry, 300.0, nullptr));
-
-        // panel.* — docks / sidebars / popups
-        map.insert(PA::ProfilePaths::PanelSlideIn, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::PanelSlideOut, makeDefaultProfile(registry, 150.0, "0.32,0.00,0.67,0.00"));
-        map.insert(PA::ProfilePaths::PanelPopup, makeDefaultProfile(registry, 150.0, "0.33,1.00,0.68,1.00"));
-
-        // cursor.* — hover / click / drag feedback
-        map.insert(PA::ProfilePaths::CursorHover, makeDefaultProfile(registry, 100.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::CursorClick, makeDefaultProfile(registry, 100.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::CursorDrag, makeDefaultProfile(registry, 50.0, nullptr));
-
-        // widget.* — archetype defaults. These preserve the pre-PR-344
-        // feel (OutBack overshoot on toggles + badges, slow linear tint
-        // on needs-save, etc.) that the original single-profile migration
-        // had collapsed.
-        map.insert(PA::ProfilePaths::WidgetHover, makeDefaultProfile(registry, 150.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::WidgetPress, makeDefaultProfile(registry, 100.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::WidgetToggle, makeDefaultProfile(registry, 250.0, "0.34,1.56,0.64,1.00"));
-        map.insert(PA::ProfilePaths::WidgetBadge, makeDefaultProfile(registry, 200.0, "0.34,1.56,0.64,1.00"));
-        map.insert(PA::ProfilePaths::WidgetTint, makeDefaultProfile(registry, 300.0, nullptr));
-        map.insert(PA::ProfilePaths::WidgetDim, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::WidgetFade, makeDefaultProfile(registry, 150.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::WidgetReorder, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::WidgetAccordion, makeDefaultProfile(registry, 250.0, "0.33,1.00,0.68,1.00"));
-        map.insert(PA::ProfilePaths::WidgetProgress, makeDefaultProfile(registry, 200.0, "0.33,1.00,0.68,1.00"));
-
-        return map;
-    }();
-    return cached;
 }
 
 } // namespace PlasmaZones

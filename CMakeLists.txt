@@ -375,6 +375,15 @@ install(DIRECTORY data/layouts/
     FILES_MATCHING PATTERN "*.json"
 )
 
+# Install shell-opinionated animation profile defaults (per-path
+# PhosphorAnimation Profile blobs). The daemon's ProfileLoader scans
+# ${XDG_DATA_DIRS}/plasmazones/profiles at startup; user overrides at
+# ~/.local/share/plasmazones/profiles win over these.
+install(DIRECTORY data/profiles/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/profiles
+    FILES_MATCHING PATTERN "*.json"
+)
+
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed)
 install(DIRECTORY data/shaders/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/shaders

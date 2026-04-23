@@ -192,10 +192,11 @@ Daemon::Daemon(QObject* parent)
 }
 
 // Paths that follow the user's `Settings.animationProfile` slider
-// directly. Every other PhosphorAnimation path is served by the
-// per-path defaults in `ConfigDefaults::animationProfilesByPath()`
-// (and can still be user-overridden via JSON under
-// `~/.local/share/plasmazones/profiles/`).
+// directly. Every other PhosphorAnimation path is served by
+// `${KDE_INSTALL_DATADIR}/plasmazones/profiles/<path>.json` (shipped
+// defaults), with user overrides at
+// `~/.local/share/plasmazones/profiles/<path>.json` — all discovered
+// and merged by `ProfileLoader`.
 //
 // Keeping this list in a file-scope array lets us add another
 // settings-backed path (e.g., a second slider for snap-specific
@@ -296,19 +297,19 @@ void Daemon::publishActiveAnimationProfile()
 {
     using namespace PhosphorAnimation;
 
-    // Publish every daemon-owned profile path. Two sources:
-    //   - Settings.animationProfile drives `Global` (the user-visible
-    //     "animation feel" slider).
-    //   - Each entry in `kLibraryDefaultProfiles` drives its path with
-    //     a fixed library default, preserving the pre-PR-344 per-site
-    //     intent (OutBack overshoot on toggles + badges, slow linear
-    //     tint on needs-save, etc.).
+    // Publish the settings-driven paths (Global). Every OTHER path is
+    // served by `ProfileLoader` from `plasmazones/profiles/*.json` —
+    // shipped defaults live in `${KDE_INSTALL_DATADIR}/plasmazones/
+    // profiles/`, user overrides in `~/.local/share/plasmazones/
+    // profiles/`. `registerProfile` has an equality guard so
+    // re-publishing identical values on every settingsChanged signal
+    // is a cheap no-op on the hot path.
     //
-    // User-wins: if the ProfileLoader has a user-authored JSON file at
-    // the same path, we skip it here — their owner-tagged entry in the
-    // registry beats the direct publish. On JSON delete, the loader
-    // emits profilesChanged, this function re-runs, and the path gets
-    // the library/settings default again.
+    // User-wins at the registry level: if the ProfileLoader has a
+    // user-authored JSON file at a settings-driven path, we skip the
+    // direct publish so their owner-tagged entry wins. On JSON delete,
+    // the loader emits profilesChanged, this function re-runs, and the
+    // settings-default path is restored.
     QSet<QString> userClaimedPaths;
     if (m_profileLoader) {
         for (const auto& e : m_profileLoader->entries()) {
@@ -318,25 +319,12 @@ void Daemon::publishActiveAnimationProfile()
 
     auto& reg = PhosphorProfileRegistry::instance();
 
-    // Settings-driven paths — Global (and any aliases we add later).
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
         if (userClaimedPaths.contains(*path)) {
             continue;
         }
         reg.registerProfile(*path, settingsProfile);
-    }
-
-    // Per-path defaults from the shell's config layer (NOT hardcoded
-    // here — the daemon is the wiring, not the policy). `registerProfile`
-    // has an equality guard so re-publishing identical values on every
-    // settingsChanged signal is a cheap no-op on the hot path.
-    const QHash<QString, Profile> pathDefaults = ConfigDefaults::animationProfilesByPath(m_curveRegistry);
-    for (auto it = pathDefaults.constBegin(); it != pathDefaults.constEnd(); ++it) {
-        if (userClaimedPaths.contains(it.key())) {
-            continue;
-        }
-        reg.registerProfile(it.key(), it.value());
     }
 }
 
