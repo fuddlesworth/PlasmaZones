@@ -86,7 +86,7 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
     // zone-snapped, so it should not be restored as floating during a
     // future mode transition. This is a float-specific side effect that
     // doesn't belong in commitSnap's generic orchestration.
-    m_windowTracker->restoreSnapFloating(windowId); // consumes and discards
+    restoreSnapFloating(windowId);
 
     // Commit the snap via the unified orchestration. User-initiated because
     // the user just toggled float off — they want this snap to update the
@@ -106,7 +106,7 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 
 bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
-    auto geo = m_windowTracker->validatedPreTileGeometry(windowId, screenId);
+    auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcCore) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
         Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,

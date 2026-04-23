@@ -50,7 +50,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
-    : QObject(parent)
+    : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
     , m_screenManager(screenManager)
@@ -85,6 +85,59 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, Win
 }
 
 AutotileEngine::~AutotileEngine() = default;
+
+void AutotileEngine::onWindowClaimed(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    // No WTS propagation needed.
+}
+
+void AutotileEngine::onWindowReleased(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    // No WTS propagation needed.
+}
+
+void AutotileEngine::markAutotileFloated(const QString& windowId)
+{
+    m_autotileFloatedWindows.insert(windowId);
+}
+
+void AutotileEngine::clearAutotileFloated(const QString& windowId)
+{
+    m_autotileFloatedWindows.remove(windowId);
+}
+
+bool AutotileEngine::isAutotileFloated(const QString& windowId) const
+{
+    return m_autotileFloatedWindows.contains(windowId);
+}
+
+void AutotileEngine::onWindowFloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void AutotileEngine::onWindowUnfloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    for (auto it = m_autotileFloatedWindows.begin(); it != m_autotileFloatedWindows.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_autotileFloatedWindows.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    return pruned;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Signal connections
@@ -1801,6 +1854,7 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     // This must happen before onWindowRemoved because removeWindow() early-returns
     // when the window isn't in m_windowToStateKey (not tracked in any PhosphorTiles::TilingState).
     removeSavedFloatingEntry(windowId);
+    m_autotileFloatedWindows.remove(windowId);
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may

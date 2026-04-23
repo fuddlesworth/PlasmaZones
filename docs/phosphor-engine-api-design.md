@@ -320,31 +320,412 @@ phosphor-zones           phosphor-tiles
 5. Deleted `IEngineLifecycle`, `INavigationActions`, `SnapNavigationAdapter`, `AutotileNavigationAdapter` (6 files, -614 net lines)
 6. `ScreenModeRouter` holds two `IPlacementEngine*`, daemon never branches on mode
 
-### PR 2: SnapEngine owns SnapState (state migration)
+### PR 2: SnapEngine owns SnapState — DONE
 
-Move state ownership from WTS to SnapState — SnapEngine creates per-screen
-SnapState instances and uses them for zone assignment CRUD, floating state,
-pre-tile geometry, and pre-float memory. The orchestration methods
-(`commitSnap`, `calculate*`, `applyBatchAssignments`) stay on WTS initially
-but are refactored to accept `SnapState&` parameters instead of reading
-internal maps.
+SnapState wired to SnapEngine for pure state reads/writes. Dual-store
+with WTS propagating mutations.
 
-1. SnapEngine creates/holds `QHash<QString, SnapState*>` keyed by screen ID
-2. Redirect pure state reads (isWindowSnapped, zoneForWindow, etc.) to SnapState
-3. Redirect pure state writes (assignWindowToZone, setFloating, etc.) to SnapState
-4. Refactor `commitSnap` / `uncommitSnap` to operate on SnapState& instead of WTS internal maps
-5. Remove duplicated state maps from WTS
-6. `stateForScreen()` returns the live SnapState instance
+### PR 3: Move orchestration + collapse dual-store — DONE
 
-### PR 3: Move orchestration to SnapEngine / phosphor-zones
+1. commitSnap/commitMultiZoneSnap/uncommitSnap/applyBatchAssignments → SnapEngine
+2. 9 calculate* methods → SnapEngine
+3. resolveUnfloatGeometry → SnapEngine
+4. Dual-store collapsed: 9 WTS member variables removed, SnapState is single source of truth
+5. WTS shrinks to: cross-mode state + persistence + geometry helpers
 
-The `calculate*` methods (calculateRotation, calculateSnapAllWindows,
-calculateResnap*, calculateSnapToAppRule/EmptyZone/LastZone) are pure
-functions over SnapState + LayoutRegistry + ZoneDetector. They can move
-to either SnapEngine or phosphor-zones as free functions, making phosphor-zones
-self-contained for snap orchestration (symmetric with phosphor-tiles).
+### PR 4: Engine contract redesign — unified window state model
 
-1. Move calculate methods out of WTS
-2. Move commitSnap/uncommitSnap to SnapEngine
-3. WTS shrinks to: D-Bus shadow state + persistence dirty masks + pending restore queues
-4. Update library-extraction-survey.md
+---
+
+## PR 4: Engine Contract Redesign
+
+**Goal:** Make `IPlacementEngine` a complete, self-contained contract that any
+third-party can implement to create a new window management engine (snap zones,
+autotile, i3-tree, paperwm-scroll, floating-only, etc.).
+
+### Window State Model
+
+A window has exactly 3 states relative to an engine:
+
+| State | Who controls geometry | Who remembers |
+|-------|----------------------|---------------|
+| **Unmanaged** | User / compositor | Nobody — natural geometry |
+| **Engine-owned** | Engine decides placement | Engine owns placement data |
+| **Floated** | User / compositor | Engine remembers prior placement for unfloat |
+
+State transitions:
+
+```
+                    ┌──────────────┐
+                    │  Unmanaged   │
+                    └──────┬───────┘
+                           │ engine claims window
+                           │ (captures unmanaged geometry)
+                           ▼
+                    ┌──────────────┐
+          ┌────────│ Engine-owned  │────────┐
+          │        └──────────────┘        │
+          │ float                   restore │
+          │ (engine remembers       (engine │
+          │  placement)             restores│
+          ▼                        geometry)│
+    ┌──────────┐                           │
+    │ Floated  │───────────────────────────┘
+    └──────────┘ unfloat
+                 (engine restores to
+                  remembered placement)
+```
+
+### Base class + engine hooks
+
+Universal float/unfloat mechanics are the same for every engine. Engines
+should not reimplement geometry save/restore — only placement logic.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              IPlacementEngine (interface)                │
+│  lifecycle + navigation + state access (existing)       │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────┐
+│           PlacementEngineBase (abstract base)            │
+│                                                         │
+│  UNIVERSAL MECHANICS (final — engines don't override):  │
+│  • claimWindow(id, geo)     Unmanaged → EngineOwned     │
+│  • releaseWindow(id)        EngineOwned → Unmanaged     │
+│  • floatWindow(id)          EngineOwned → Floated        │
+│  • unfloatWindow(id)        Floated → EngineOwned        │
+│  • windowState(id)          query current state          │
+│  • unmanagedGeometry(id)    geometry before any engine   │
+│  • serializeBaseState()     persist universal state      │
+│  • deserializeBaseState()   restore universal state      │
+│                                                         │
+│  INTERNAL STATE (owned by base):                        │
+│  • m_unmanagedGeometries    QHash<id, QRect+screen>     │
+│  • m_windowStates           QHash<id, WindowState>      │
+│                                                         │
+│  ENGINE HOOKS (abstract — each engine implements):      │
+│  • onWindowClaimed(id)      engine decides placement     │
+│  • onWindowReleased(id)     engine cleans up placement   │
+│  • onWindowFloated(id)      engine saves placement data  │
+│  • onWindowUnfloated(id)    engine restores placement    │
+│  • placementGeometry(id)    current engine geometry      │
+│  • serializeEngineState()   engine-specific persistence  │
+│  • deserializeEngineState() engine-specific restore      │
+└─────────────────────────────────────────────────────────┘
+         │                              │
+┌────────▼────────┐           ┌────────▼────────┐
+│   SnapEngine    │           │ AutotileEngine  │
+│                 │           │                 │
+│ onWindowClaimed │           │ onWindowClaimed │
+│  → zone assign  │           │  → tile insert  │
+│ onWindowFloated │           │ onWindowFloated │
+│  → save zone    │           │  → save position│
+│ onWindowUnfloat │           │ onWindowUnfloat │
+│  → restore zone │           │  → restore pos  │
+│                 │           │                 │
+│ Owns: SnapState │           │ Owns: TilingState│
+└─────────────────┘           └─────────────────┘
+```
+
+#### PlacementEngineBase implementation
+
+```cpp
+namespace PhosphorEngineApi {
+
+enum class WindowState { Unmanaged, EngineOwned, Floated };
+
+class PlacementEngineBase : public QObject, public IPlacementEngine
+{
+    Q_OBJECT
+
+public:
+    // ── Universal mechanics (final — engines don't touch) ──
+
+    void claimWindow(const QString& windowId, const QRect& currentGeometry) final
+    {
+        m_unmanagedGeometries[windowId] = {currentGeometry, screenId};
+        m_windowStates[windowId] = WindowState::EngineOwned;
+        onWindowClaimed(windowId);
+    }
+
+    void releaseWindow(const QString& windowId) final
+    {
+        onWindowReleased(windowId);
+        m_windowStates.remove(windowId);
+        // Caller restores unmanagedGeometry via signal
+    }
+
+    void floatWindow(const QString& windowId) final
+    {
+        Q_ASSERT(m_windowStates.value(windowId) == WindowState::EngineOwned);
+        onWindowFloated(windowId); // engine saves placement
+        m_windowStates[windowId] = WindowState::Floated;
+    }
+
+    void unfloatWindow(const QString& windowId) final
+    {
+        Q_ASSERT(m_windowStates.value(windowId) == WindowState::Floated);
+        m_windowStates[windowId] = WindowState::EngineOwned;
+        onWindowUnfloated(windowId); // engine restores placement
+    }
+
+    WindowState windowState(const QString& windowId) const final
+    {
+        return m_windowStates.value(windowId, WindowState::Unmanaged);
+    }
+
+    QRect unmanagedGeometry(const QString& windowId) const final
+    {
+        return m_unmanagedGeometries.value(windowId).geometry;
+    }
+
+protected:
+    // ── Engine hooks (abstract — each engine implements) ──
+
+    virtual void onWindowClaimed(const QString& windowId) = 0;
+    virtual void onWindowReleased(const QString& windowId) = 0;
+    virtual void onWindowFloated(const QString& windowId) = 0;
+    virtual void onWindowUnfloated(const QString& windowId) = 0;
+
+    // Engine-specific geometry for the current placement
+    virtual QRect placementGeometry(const QString& windowId) const = 0;
+
+    // Engine-specific serialization
+    virtual QJsonObject serializeEngineState() const = 0;
+    virtual void deserializeEngineState(const QJsonObject& state) = 0;
+
+Q_SIGNALS:
+    void applyGeometryRequested(const QString& windowId, const QRect& geometry,
+                                const QString& screenId);
+
+private:
+    struct UnmanagedEntry { QRect geometry; QString screenId; };
+    QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
+    QHash<QString, WindowState> m_windowStates;
+};
+
+} // namespace PhosphorEngineApi
+```
+
+#### What a third-party engine implements
+
+A new engine (e.g., PaperWM-style horizontal scroll):
+
+```cpp
+class ScrollEngine : public PhosphorEngineApi::PlacementEngineBase
+{
+protected:
+    void onWindowClaimed(const QString& windowId) override
+    {
+        m_windowOrder.append(windowId);
+        recalculateViewport();
+    }
+    void onWindowReleased(const QString& windowId) override
+    {
+        m_windowOrder.removeAll(windowId);
+        recalculateViewport();
+    }
+    void onWindowFloated(const QString& windowId) override
+    {
+        m_savedPositions[windowId] = m_windowOrder.indexOf(windowId);
+        m_windowOrder.removeAll(windowId);
+    }
+    void onWindowUnfloated(const QString& windowId) override
+    {
+        int pos = m_savedPositions.take(windowId);
+        m_windowOrder.insert(pos, windowId);
+        recalculateViewport();
+    }
+
+private:
+    QStringList m_windowOrder;
+    QHash<QString, int> m_savedPositions;
+};
+```
+
+No geometry save/restore boilerplate. No float FSM. Just placement logic.
+
+### What the daemon provides (not the engine)
+
+The daemon is the coordinator. It provides:
+
+| Responsibility | Component |
+|---------------|-----------|
+| Screen topology | `ScreenManager` |
+| Which engine owns which screen | `ScreenModeRouter` |
+| Floating flag (cross-mode) | `WindowTrackingService` |
+| Sticky state (cross-mode) | `WindowTrackingService` |
+| D-Bus facade | `WindowTrackingAdaptor` |
+| Persistence (save/load) | `WindowTrackingAdaptor` |
+| Mode transitions | Daemon signal handlers |
+
+**WTS does NOT own:**
+- Zone assignments (engine-specific → SnapState)
+- Tiling order (engine-specific → TilingState)
+- Pre-tile geometry (engine responsibility → IPlacementEngine)
+- Pre-float zones/screen (engine responsibility → IPlacementEngine)
+- Auto-snap bookkeeping (engine responsibility → SnapEngine)
+- Session restore queues (engine responsibility → each engine)
+
+### What moves where
+
+| Current location | Current name | Target | New concept |
+|-----------------|-------------|--------|-------------|
+| WTS `m_preTileGeometries` | "pre-tile geometry" | Each engine | `unmanagedGeometry` — captured on claim |
+| WTS `m_preFloatZoneAssignments` | "pre-float zones" | SnapState | Engine-internal float restore data |
+| WTS `m_preFloatScreenAssignments` | "pre-float screen" | SnapState | Engine-internal float restore data |
+| WTS `m_floatingWindows` | "floating windows" | WTS (stays) | Cross-mode flag: "window is floated" |
+| WTS `m_autotileFloatedWindows` | "autotile-floated" | AutotileEngine | Engine-local transition state |
+| WTS `m_savedSnapFloatingWindows` | "saved snap floating" | Daemon signals | Mode-transition bookkeeping |
+| WTS `m_pendingRestoreQueues` | "pending restore" | SnapEngine | Engine-owned session restore |
+| WTS `m_effectReportedWindows` | "effect reported" | SnapEngine | Engine-owned runtime flag |
+
+### WTS after PR 4
+
+WTS becomes a thin cross-mode service:
+
+```cpp
+class WindowTrackingService {
+    // Cross-mode state (used by ALL engines)
+    bool isWindowFloating(const QString& windowId) const;
+    void setWindowFloating(const QString& windowId, bool floating);
+    bool isWindowSticky(const QString& windowId) const;
+    void setWindowSticky(const QString& windowId, bool sticky);
+
+    // Geometry helpers (shared infrastructure)
+    QRect zoneGeometry(const QString& zoneId, const QString& screenId) const;
+    QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
+    QString resolveEffectiveScreenId(const QString& screenId) const;
+    QString currentAppIdFor(const QString& windowId) const;
+
+    // Persistence coordination
+    void markDirty(DirtyMask fields);
+    DirtyMask takeDirty();
+};
+```
+
+Everything else moves to the engines. Each engine is self-contained:
+- Creates its own state object (SnapState / TilingState) internally
+- Owns all placement logic
+- Owns its own unmanaged-geometry cache
+- Owns its own session restore queues
+- Serializes/deserializes its own state
+
+### Third-party engine contract
+
+A new engine needs to:
+
+1. Subclass `PlacementEngineBase` (gets universal mechanics for free)
+2. Implement the 4 hooks: `onWindowClaimed`, `onWindowReleased`, `onWindowFloated`, `onWindowUnfloated`
+3. Implement `IPlacementState` for per-screen D-Bus queries
+4. Implement `serializeEngineState()` / `deserializeEngineState()`
+5. Register with `ScreenModeRouter` via a new `AssignmentEntry::Mode` value
+
+The daemon doesn't branch on engine type. `ScreenModeRouter::engineFor(screenId)`
+returns the right `IPlacementEngine*` and every call goes through the base class.
+
+### Migration sequence
+
+Phase 1: Create PlacementEngineBase
+1. Create `libs/phosphor-engine-api/PlacementEngineBase.h` with universal mechanics
+2. SnapEngine + AutotileEngine inherit from `PlacementEngineBase` instead of raw `IPlacementEngine`
+3. Move unmanaged geometry cache from WTS `m_preTileGeometries` → base class `m_unmanagedGeometries`
+
+Phase 2: Move engine-specific state out of WTS
+4. Move `m_preFloatZoneAssignments` + `m_preFloatScreenAssignments` → SnapState (engine-internal float restore)
+5. Move `m_pendingRestoreQueues` + `m_effectReportedWindows` → SnapEngine
+6. Move `m_autotileFloatedWindows` → AutotileEngine
+7. Move `m_savedSnapFloatingWindows` → daemon mode-transition handler
+
+Phase 3: Engine symmetry
+8. SnapEngine creates SnapState in constructor (symmetric with AutotileEngine/TilingState)
+9. Each engine implements `serializeEngineState()` / `deserializeEngineState()`
+10. WTS shrinks to: floating flag + sticky flag + geometry helpers + dirty mask
+
+### Persistence impact — config schema migration required
+
+The old vocabulary (`preTileGeometries`, `preFloatZones`, `preFloatScreens`)
+no longer exists. On-disk KConfig keys must be renamed to match the new
+model. This requires a `ConfigSchemaVersion` bump and a migration function.
+
+#### Key renames
+
+| Old key | New key | Owner after migration |
+|---------|---------|----------------------|
+| `preTileGeometries` | `unmanagedGeometries` | `PlacementEngineBase` (per-engine section) |
+| `preFloatZones` | (removed — engine-internal) | SnapState serialization |
+| `preFloatScreens` | (removed — engine-internal) | SnapState serialization |
+| `zoneAssignments` | `snap/zoneAssignments` | SnapEngine section |
+| `screenAssignments` | `snap/screenAssignments` | SnapEngine section |
+| `desktopAssignments` | `snap/desktopAssignments` | SnapEngine section |
+| `lastUsedZone` | `snap/lastUsedZone` | SnapEngine section |
+| `userSnappedClasses` | `snap/userSnappedClasses` | SnapEngine section |
+| `autoSnappedWindows` | (not persisted) | Runtime only |
+| `pendingRestores` | `snap/pendingRestores` | SnapEngine section |
+
+#### Migration function
+
+```cpp
+// configmigration.cpp
+void migrateV2ToV3(QJsonObject& root)
+{
+    // Rename preTileGeometries → unmanagedGeometries
+    if (root.contains("preTileGeometries")) {
+        root["unmanagedGeometries"] = root.take("preTileGeometries");
+    }
+
+    // Move snap-specific fields into snap/ section
+    QJsonObject snap;
+    for (const auto& key : {"zoneAssignments", "screenAssignments",
+                            "desktopAssignments", "lastUsedZone",
+                            "userSnappedClasses", "pendingRestores"}) {
+        if (root.contains(QLatin1String(key))) {
+            snap[QLatin1String(key)] = root.take(QLatin1String(key));
+        }
+    }
+    if (!snap.isEmpty()) {
+        root["snap"] = snap;
+    }
+
+    // preFloatZones/preFloatScreens folded into snap engine state
+    if (root.contains("preFloatZones") || root.contains("preFloatScreens")) {
+        QJsonObject floatRestore;
+        floatRestore["zones"] = root.take("preFloatZones");
+        floatRestore["screens"] = root.take("preFloatScreens");
+        snap["floatRestore"] = floatRestore;
+        root["snap"] = snap;
+    }
+
+    root["_version"] = 3;
+}
+```
+
+#### Per-engine serialization format
+
+After migration, the session file has top-level sections per engine:
+
+```json
+{
+    "_version": 3,
+    "unmanagedGeometries": { ... },
+    "floatingWindows": [ ... ],
+    "snap": {
+        "zoneAssignments": { ... },
+        "screenAssignments": { ... },
+        "desktopAssignments": { ... },
+        "lastUsedZone": { ... },
+        "userSnappedClasses": [ ... ],
+        "pendingRestores": { ... },
+        "floatRestore": { "zones": { ... }, "screens": { ... } }
+    },
+    "autotile": {
+        "windowOrders": { ... },
+        "pendingInitialOrders": { ... }
+    }
+}
+```
+
+Each engine reads/writes its own section via `serializeEngineState()` /
+`deserializeEngineState()`. The base class reads/writes `unmanagedGeometries`.
+WTS reads/writes `floatingWindows` (cross-mode).

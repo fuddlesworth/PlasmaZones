@@ -144,9 +144,8 @@ private Q_SLOTS:
             layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
         QScopedPointer<SnapEngine> engine(
             new SnapEngine(layoutManager.data(), service.data(), detector.data(), settings.data(), nullptr, nullptr));
-        auto* snapState = new PhosphorZones::SnapState(QString(), engine.data());
-        engine->setSnapState(snapState);
-        service->setSnapState(snapState);
+        service->setSnapState(engine->snapState());
+        service->setSnapEngine(engine.data());
 
         auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new PhosphorZones::Zone(layout);

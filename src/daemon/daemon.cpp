@@ -521,13 +521,10 @@ bool Daemon::init()
         std::make_unique<SnapEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_zoneDetector.get(),
                                      m_settings.get(), m_virtualDesktopManager.get(), this);
 
-    // Wire SnapState — shared between SnapEngine (reads) and WTS (write
-    // propagation). SnapEngine delegates pure state reads/writes; WTS
-    // propagates mutations from commitSnap/commitMultiZoneSnap so the two
-    // stores stay in sync during the transitional dual-store period.
-    auto* snapState = new PhosphorZones::SnapState(QString(), m_snapEngine.get());
-    m_snapEngine->setSnapState(snapState);
-    m_windowTrackingAdaptor->service()->setSnapState(snapState);
+    // SnapEngine creates its own SnapState internally (symmetric with
+    // AutotileEngine/TilingState). WTS references it for zone queries.
+    m_windowTrackingAdaptor->service()->setSnapState(m_snapEngine->snapState());
+    m_windowTrackingAdaptor->service()->setSnapEngine(m_snapEngine.get());
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
@@ -553,6 +550,18 @@ bool Daemon::init()
     // clearPreTileGeometry). A future refactor should move that state onto
     // SnapEngine or WindowTrackingService and retire the back-reference.
     m_snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
+
+    // Clear stale autotile-floated flag when a window is snapped. A window
+    // dragged from an autotile VS to a snap VS retains its autotileFloated
+    // marker; without this, a subsequent mode change on the autotile VS
+    // incorrectly processes the already-snapped window as autotile-managed.
+    // Wired here (daemon) because engines must not know about each other.
+    connect(m_snapEngine.get(), &SnapEngine::windowSnapStateChanged, this,
+            [this](const QString& windowId, const WindowStateEntry&) {
+                if (m_autotileEngine) {
+                    m_autotileEngine->clearAutotileFloated(windowId);
+                }
+            });
 
     // Central routing table: single source of truth for "which engine owns
     // screen X". Every window-lifecycle / resnap / restore entry point in the

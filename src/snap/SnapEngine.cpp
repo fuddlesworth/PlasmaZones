@@ -20,9 +20,10 @@ namespace PlasmaZones {
 SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                        QObject* parent)
-    : QObject(parent)
+    : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
+    , m_snapState(new PhosphorZones::SnapState(QString(), this))
     , m_zoneDetector(zoneDetector)
     , m_settings(settings)
     , m_virtualDesktopManager(vdm)
@@ -34,10 +35,72 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrack
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
 
-void SnapEngine::setSnapState(PhosphorZones::SnapState* state)
+void SnapEngine::onWindowClaimed(const QString& windowId)
 {
-    Q_ASSERT(state);
-    m_snapState = state;
+    Q_UNUSED(windowId)
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    // No WTS propagation needed.
+}
+
+void SnapEngine::onWindowReleased(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    // No WTS propagation needed.
+}
+
+void SnapEngine::onWindowFloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void SnapEngine::onWindowUnfloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void SnapEngine::saveSnapFloating(const QString& windowId)
+{
+    m_savedSnapFloatingWindows.insert(windowId);
+}
+
+bool SnapEngine::restoreSnapFloating(const QString& windowId)
+{
+    return m_savedSnapFloatingWindows.remove(windowId);
+}
+
+void SnapEngine::clearSavedSnapFloating()
+{
+    m_savedSnapFloatingWindows.clear();
+}
+
+void SnapEngine::markWindowReported(const QString& windowId)
+{
+    if (!windowId.isEmpty()) {
+        m_effectReportedWindows.insert(windowId);
+    }
+}
+
+int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    for (auto it = m_savedSnapFloatingWindows.begin(); it != m_savedSnapFloatingWindows.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_savedSnapFloatingWindows.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_effectReportedWindows.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    return pruned;
 }
 
 void SnapEngine::setAutotileEngine(AutotileEngine* engine)
@@ -122,11 +185,7 @@ bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 
 void SnapEngine::windowClosed(const QString& windowId)
 {
-    Q_UNUSED(windowId)
-    // Engine-specific cleanup only. WTS cleanup is handled by
-    // WindowTrackingAdaptor::windowClosed() which owns the D-Bus contract.
-    // Calling WTS here would cause double-cleanup since the adaptor always runs.
-    // When SnapEngine gains its own state (e.g., pending snap queue), clean it here.
+    m_effectReportedWindows.remove(windowId);
 }
 
 void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)

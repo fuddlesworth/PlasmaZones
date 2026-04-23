@@ -428,7 +428,6 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->setWindowFloating(win1, true);
-        m_service->markAutotileFloated(win1);
 
         // Only win2 is alive — win1 should be fully cleaned
         QSet<QString> alive{win2};
@@ -436,7 +435,6 @@ private Q_SLOTS:
 
         QVERIFY(pruned >= 1);
         QVERIFY(!m_service->isWindowFloating(win1));
-        QVERIFY(!m_service->isAutotileFloated(win1));
     }
 
     void testScreensMatch_virtualScreenIdsAreDistinct()
