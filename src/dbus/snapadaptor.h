@@ -22,7 +22,6 @@ struct SnapResult;
 class SnapEngine;
 class ScreenModeRouter;
 class WindowTrackingAdaptor;
-class WindowTrackingService;
 class ISettings;
 
 /**

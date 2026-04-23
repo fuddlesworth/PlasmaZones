@@ -41,7 +41,8 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::Scre
     connect(m_engine, &AutotileEngine::algorithmChanged, this, &AutotileAdaptor::algorithmChanged);
     connect(m_engine, &AutotileEngine::tilingChanged, this, &AutotileAdaptor::tilingChanged);
     connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
-    connect(m_engine, &AutotileEngine::activateWindowRequested, this, &AutotileAdaptor::focusWindowRequested);
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::activateWindowRequested, this,
+            &AutotileAdaptor::focusWindowRequested);
     // The in-process engine signal has a 2nd QSet<QString> argument for
     // daemon-side bookkeeping; strip it before forwarding over D-Bus since
     // QSet is not a D-Bus-marshallable type.

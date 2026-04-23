@@ -1010,7 +1010,8 @@ Q_SIGNALS:
      * shows the navigation OSD, etc. Emitted from performToggleFloat and
      * setWindowFloat (explicit user/caller toggles).
      *
-     * windowFloatingChanged inherited from PlacementEngineBase.
+     * windowFloatingChanged, activateWindowRequested, and navigationFeedback
+     * are inherited from PlacementEngineBase.
      */
 
     /**

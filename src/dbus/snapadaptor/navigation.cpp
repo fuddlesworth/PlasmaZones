@@ -4,11 +4,8 @@
 #include "../snapadaptor.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/logging.h"
-#include "../../core/screenmoderouter.h"
 #include "../../core/windowtrackingservice.h"
 #include "../../snap/SnapEngine.h"
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/VirtualScreen.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -86,7 +83,7 @@ void SnapAdaptor::cycleWindowsInZone(bool forward)
 // handleBatchedResnap). Thin wrapper over
 // SnapEngine::applyBatchAssignments.
 // ═══════════════════════════════════════════════════════════════════════════════
-static bool processBatchEntries(SnapAdaptor* adaptor, WindowTrackingAdaptor* wta, SnapEngine* engine,
+static bool processBatchEntries(WindowTrackingAdaptor* wta, SnapEngine* engine,
                                 const QVector<ZoneAssignmentEntry>& entries, const QString& action)
 {
     if (!engine || !wta) {
@@ -106,30 +103,12 @@ static bool processBatchEntries(SnapAdaptor* adaptor, WindowTrackingAdaptor* wta
     return true;
 }
 
-// Build the effective list of snap-mode screens this resnap should target.
 QStringList SnapAdaptor::resolveSnapModeScreensForResnap(const QString& screenFilter) const
 {
-    if (!m_adaptor || !m_adaptor->service()) {
+    if (!m_adaptor) {
         return {};
     }
-
-    QStringList candidates;
-    if (!screenFilter.isEmpty()) {
-        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)) {
-            candidates.append(screenFilter);
-        } else if (auto* mgr = m_adaptor->service()->screenManager()) {
-            candidates = mgr->virtualScreenIdsFor(screenFilter);
-        } else {
-            candidates.append(screenFilter);
-        }
-    } else if (auto* mgr = m_adaptor->service()->screenManager()) {
-        candidates = mgr->effectiveScreenIds();
-    }
-
-    if (!m_screenModeRouter) {
-        return candidates;
-    }
-    return m_screenModeRouter->partitionByMode(candidates).snap;
+    return m_adaptor->resolveSnapModeScreensForResnap(screenFilter);
 }
 
 void SnapAdaptor::resnapToNewLayout()
@@ -154,7 +133,7 @@ void SnapAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder
         QVector<ZoneAssignmentEntry> entries =
             m_engine->calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
         if (!entries.isEmpty()) {
-            processBatchEntries(this, m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+            processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("resnap"));
         }
     }
 }
@@ -180,7 +159,7 @@ void SnapAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScree
     // Tagged "vs_reconfigure" so the kwin-effect does NOT fire snap-assist
     // continuation — no user-initiated snap happened here, windows are just
     // following their VS's new geometry after a swap/rotate/split edit.
-    processBatchEntries(this, m_adaptor, m_engine, entries, QStringLiteral("vs_reconfigure"));
+    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("vs_reconfigure"));
 }
 
 SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
@@ -234,7 +213,7 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
         }
     }
 
-    processBatchEntries(this, m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("resnap"));
 }
 
 } // namespace PlasmaZones

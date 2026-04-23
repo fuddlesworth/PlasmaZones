@@ -81,6 +81,8 @@ void SnapAdaptor::clearEngine()
     m_connections.clear();
     m_engine = nullptr;
     m_adaptor = nullptr;
+    m_settings = nullptr;
+    m_screenModeRouter = nullptr;
 }
 
 void SnapAdaptor::setScreenModeRouter(ScreenModeRouter* router)
