@@ -414,15 +414,6 @@ public:
                             int virtualDesktop);
 
     /**
-     * @brief Mark a window as reported by the effect (confirmed live)
-     *
-     * Called when the effect reports a window via windowOpened/resolveWindowRestore.
-     * Used by calculateRestoreFromSession's sibling check to distinguish live windows
-     * (daemon-only restart) from stale config entries (KWin restart where UUIDs changed).
-     */
-    void markWindowReported(const QString& windowId);
-
-    /**
      * @brief Mark a window as auto-snapped
      *
      * Auto-snapped windows should not update the last-used zone tracking
@@ -698,10 +689,6 @@ public:
         return m_pendingRestoreQueues;
     }
 
-    const QSet<QString>& effectReportedWindows() const
-    {
-        return m_effectReportedWindows;
-    }
     QVector<ResnapEntry> takeResnapBuffer()
     {
         return std::exchange(m_resnapBuffer, {});
@@ -988,11 +975,6 @@ private:
 
     // Sticky window states
     QHash<QString, bool> m_windowStickyStates;
-
-    // Windows confirmed as live by the effect (runtime only, not persisted).
-    // Used by the sibling check in calculateRestoreFromSession to distinguish
-    // live siblings (daemon-only restart) from stale config entries (KWin restart).
-    QSet<QString> m_effectReportedWindows;
 
     QVector<ResnapEntry> m_resnapBuffer;
 

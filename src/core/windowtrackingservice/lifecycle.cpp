@@ -406,7 +406,6 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_preFloatZoneAssignments.remove(wId);
             m_preFloatScreenAssignments.remove(wId);
             m_windowStickyStates.remove(wId);
-            m_effectReportedWindows.remove(wId);
             m_autotileFloatedWindows.remove(wId);
             anyStateMigrated = true;
         }
@@ -514,7 +513,6 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     m_autotileFloatedWindows.remove(windowId);
     m_savedSnapFloatingWindows.remove(windowId);
     m_windowStickyStates.remove(windowId);
-    m_effectReportedWindows.remove(windowId);
 
     scheduleSaveState();
 }

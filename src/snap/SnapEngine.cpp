@@ -67,6 +67,13 @@ void SnapEngine::onWindowUnfloated(const QString& windowId)
     Q_UNUSED(windowId)
 }
 
+void SnapEngine::markWindowReported(const QString& windowId)
+{
+    if (!windowId.isEmpty()) {
+        m_effectReportedWindows.insert(windowId);
+    }
+}
+
 void SnapEngine::setSnapState(PhosphorZones::SnapState* state)
 {
     Q_ASSERT(state);
@@ -155,11 +162,7 @@ bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 
 void SnapEngine::windowClosed(const QString& windowId)
 {
-    Q_UNUSED(windowId)
-    // Engine-specific cleanup only. WTS cleanup is handled by
-    // WindowTrackingAdaptor::windowClosed() which owns the D-Bus contract.
-    // Calling WTS here would cause double-cleanup since the adaptor always runs.
-    // When SnapEngine gains its own state (e.g., pending snap queue), clean it here.
+    m_effectReportedWindows.remove(windowId);
 }
 
 void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)

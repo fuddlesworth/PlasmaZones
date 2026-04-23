@@ -312,7 +312,7 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     // consume it. Only confirmed-live siblings block; stale entries from KWin
     // restarts (where UUIDs changed and no window will ever match) are ignored.
     const auto& zoneAssignments = m_windowTracker->zoneAssignments();
-    const auto& effectReported = m_windowTracker->effectReportedWindows();
+    const auto& effectReported = effectReportedWindows();
     if (appId != windowId) { // windowId contains UUID (full format)
         for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
             if (it.key() != windowId && m_windowTracker->currentAppIdFor(it.key()) == appId

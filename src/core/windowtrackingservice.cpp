@@ -197,7 +197,6 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeSet(m_floatingWindows);
     removeSet(m_autotileFloatedWindows);
     removeSet(m_savedSnapFloatingWindows);
-    removeSet(m_effectReportedWindows);
 
     if (pruned > 0 || wtsCleaned > 0) {
         markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);

@@ -327,6 +327,16 @@ public:
     QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Effect-reported windows (runtime flag — not persisted)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void markWindowReported(const QString& windowId);
+    const QSet<QString>& effectReportedWindows() const
+    {
+        return m_effectReportedWindows;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //
     // Returns the single SnapState wired by Daemon::init(). Currently a
@@ -449,6 +459,7 @@ private:
     // by the fact that SnapEngine has to exist before a resolver that
     // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
+    QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (snapengine/float.cpp)
