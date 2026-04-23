@@ -325,7 +325,7 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     }
 
     // Take the first entry (FIFO — mirrors KWin's takeSessionInfo pattern)
-    const WindowTrackingService::PendingRestore& entry = queueIt->first();
+    const PendingRestore& entry = queueIt->first();
 
     QStringList zoneIds = entry.zoneIds;
     if (zoneIds.isEmpty()) {

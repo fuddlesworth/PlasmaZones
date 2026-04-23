@@ -358,7 +358,6 @@ void WindowTrackingAdaptor::loadState()
     // daemon-only restart (KWin still running, UUIDs stable). Also build appId-keyed
     // pending queues as fallback for KWin restarts (UUIDs change).
 
-    using PendingRestore = WindowTrackingService::PendingRestore;
     QHash<QString, QList<PendingRestore>> pendingQueues;
 
     // Pending entries derived from active assignments (fallback for KWin restarts where

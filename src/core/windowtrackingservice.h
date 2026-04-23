@@ -626,21 +626,7 @@ public:
         return m_preTileGeometries;
     }
 
-    /**
-     * @brief Pending restore entry for a single window instance
-     *
-     * Stores all data needed to restore a window to its previous zone.
-     * Multiple entries per appId support multi-instance apps (e.g. 3 Konsole windows).
-     */
-    struct PendingRestore
-    {
-        QStringList zoneIds;
-        QString screenId;
-        int virtualDesktop = 0;
-        QString layoutId;
-        QList<int> zoneNumbers;
-    };
-
+    using PendingRestore = PlasmaZones::PendingRestore;
     using ResnapEntry = PlasmaZones::ResnapEntry;
 
     /**
