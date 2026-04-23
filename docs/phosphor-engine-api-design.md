@@ -643,18 +643,89 @@ Phase 3: Engine symmetry
 9. Each engine implements `serializeEngineState()` / `deserializeEngineState()`
 10. WTS shrinks to: floating flag + sticky flag + geometry helpers + dirty mask
 
-### Persistence impact
+### Persistence impact — config schema migration required
 
-Session persistence currently lives in `WindowTrackingAdaptor` (KConfig).
-After PR 4, each engine serializes its own state. WTA calls
-`engine->serializeEngineState()` and writes the result to its per-engine
-KConfig section. On load, WTA reads the section and calls
-`engine->deserializeEngineState()`. The base class handles
-`serializeBaseState()` / `deserializeBaseState()` for the universal
-unmanaged-geometry cache.
+The old vocabulary (`preTileGeometries`, `preFloatZones`, `preFloatScreens`)
+no longer exists. On-disk KConfig keys must be renamed to match the new
+model. This requires a `ConfigSchemaVersion` bump and a migration function.
 
-No config schema migration needed — the KConfig format is already
-per-field (zones, screens, desktops, preTile, etc.). The fields just
-move from WTA-managed to engine-managed, but the on-disk keys stay the
-same. A version bump in `ConfigSchemaVersion` documents the ownership
-change for auditability but the actual serialized data is compatible.
+#### Key renames
+
+| Old key | New key | Owner after migration |
+|---------|---------|----------------------|
+| `preTileGeometries` | `unmanagedGeometries` | `PlacementEngineBase` (per-engine section) |
+| `preFloatZones` | (removed — engine-internal) | SnapState serialization |
+| `preFloatScreens` | (removed — engine-internal) | SnapState serialization |
+| `zoneAssignments` | `snap/zoneAssignments` | SnapEngine section |
+| `screenAssignments` | `snap/screenAssignments` | SnapEngine section |
+| `desktopAssignments` | `snap/desktopAssignments` | SnapEngine section |
+| `lastUsedZone` | `snap/lastUsedZone` | SnapEngine section |
+| `userSnappedClasses` | `snap/userSnappedClasses` | SnapEngine section |
+| `autoSnappedWindows` | (not persisted) | Runtime only |
+| `pendingRestores` | `snap/pendingRestores` | SnapEngine section |
+
+#### Migration function
+
+```cpp
+// configmigration.cpp
+void migrateV2ToV3(QJsonObject& root)
+{
+    // Rename preTileGeometries → unmanagedGeometries
+    if (root.contains("preTileGeometries")) {
+        root["unmanagedGeometries"] = root.take("preTileGeometries");
+    }
+
+    // Move snap-specific fields into snap/ section
+    QJsonObject snap;
+    for (const auto& key : {"zoneAssignments", "screenAssignments",
+                            "desktopAssignments", "lastUsedZone",
+                            "userSnappedClasses", "pendingRestores"}) {
+        if (root.contains(QLatin1String(key))) {
+            snap[QLatin1String(key)] = root.take(QLatin1String(key));
+        }
+    }
+    if (!snap.isEmpty()) {
+        root["snap"] = snap;
+    }
+
+    // preFloatZones/preFloatScreens folded into snap engine state
+    if (root.contains("preFloatZones") || root.contains("preFloatScreens")) {
+        QJsonObject floatRestore;
+        floatRestore["zones"] = root.take("preFloatZones");
+        floatRestore["screens"] = root.take("preFloatScreens");
+        snap["floatRestore"] = floatRestore;
+        root["snap"] = snap;
+    }
+
+    root["_version"] = 3;
+}
+```
+
+#### Per-engine serialization format
+
+After migration, the session file has top-level sections per engine:
+
+```json
+{
+    "_version": 3,
+    "unmanagedGeometries": { ... },
+    "floatingWindows": [ ... ],
+    "snap": {
+        "zoneAssignments": { ... },
+        "screenAssignments": { ... },
+        "desktopAssignments": { ... },
+        "lastUsedZone": { ... },
+        "userSnappedClasses": [ ... ],
+        "pendingRestores": { ... },
+        "floatRestore": { "zones": { ... }, "screens": { ... } }
+    },
+    "autotile": {
+        "windowOrders": { ... },
+        "pendingInitialOrders": { ... }
+    }
+}
+```
+
+Each engine reads/writes its own section via `serializeEngineState()` /
+`deserializeEngineState()`. The base class reads/writes `unmanagedGeometries`.
+WTS reads/writes `floatingWindows` (cross-mode).
