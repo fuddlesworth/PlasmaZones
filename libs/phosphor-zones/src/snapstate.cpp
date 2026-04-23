@@ -196,12 +196,14 @@ void SnapState::assignWindowToZones(const QString& windowId, const QStringList& 
     }
 }
 
-void SnapState::unassignWindow(const QString& windowId)
+SnapState::UnassignResult SnapState::unassignWindow(const QString& windowId)
 {
+    UnassignResult result;
     QStringList previousZones = m_windowZoneAssignments.value(windowId);
     if (!m_windowZoneAssignments.remove(windowId)) {
-        return;
+        return result;
     }
+    result.wasAssigned = true;
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
     if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
@@ -209,9 +211,11 @@ void SnapState::unassignWindow(const QString& windowId)
         m_lastUsedScreenId.clear();
         m_lastUsedZoneClass.clear();
         m_lastUsedDesktop = 0;
+        result.lastUsedZoneCleared = true;
     }
     Q_EMIT windowUnassigned(windowId);
     Q_EMIT stateChanged();
+    return result;
 }
 
 QString SnapState::screenForWindow(const QString& windowId) const
@@ -283,7 +287,7 @@ void SnapState::setFloating(const QString& windowId, bool floating)
     }
 }
 
-void SnapState::unsnapForFloat(const QString& windowId)
+SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
 {
     const auto zones = zonesForWindow(windowId);
     if (!zones.isEmpty()) {
@@ -293,7 +297,7 @@ void SnapState::unsnapForFloat(const QString& windowId)
             m_preFloatScreenAssignments[windowId] = screen;
         }
     }
-    unassignWindow(windowId);
+    return unassignWindow(windowId);
 }
 
 QString SnapState::preFloatScreen(const QString& windowId) const

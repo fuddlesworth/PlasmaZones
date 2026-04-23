@@ -916,7 +916,6 @@ public:
     /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
     static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
 
-public:
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     ///
     /// Uses Phosphor::Screens::ScreenIdentity::screensMatch() for format-agnostic screen comparison.
@@ -929,7 +928,6 @@ public:
     ///   "occupied" and "candidate" definitions symmetric.
     QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
 
-public:
     /**
      * @brief Current app class for a windowId, preferring the live registry.
      *
