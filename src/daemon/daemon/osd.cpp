@@ -48,18 +48,11 @@ void Daemon::showOverlay()
 {
     // Don't show overlay when all screens are in autotile mode
     // (the overlay is for manual zone selection during drag)
-    if (m_autotileEngine && m_screenManager) {
-        const auto& autotileScreens = m_autotileEngine->autotileScreens();
-        if (!autotileScreens.isEmpty()) {
-            bool allAutotile = true;
-            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-            for (const QString& screenId : effectiveIds) {
-                if (!autotileScreens.contains(screenId)) {
-                    allAutotile = false;
-                    break;
-                }
-            }
-            if (allAutotile) {
+    if (m_screenModeRouter && m_screenManager) {
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+        const auto parts = m_screenModeRouter->partitionByMode(effectiveIds);
+        if (!parts.autotile.isEmpty()) {
+            if (parts.snap.isEmpty()) {
                 return;
             }
         }
