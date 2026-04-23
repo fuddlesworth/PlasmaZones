@@ -15,6 +15,7 @@ namespace PlasmaZones {
 
 void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)
 {
+    Q_ASSERT(m_snapState);
     if (windowId.isEmpty() || zoneId.isEmpty()) {
         qCWarning(lcCore) << "commitSnap: empty windowId or zoneId";
         return;
@@ -50,6 +51,7 @@ void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, cons
 void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                      SnapIntent intent)
 {
+    Q_ASSERT(m_snapState);
     if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
         qCWarning(lcCore) << "commitMultiZoneSnap: empty windowId or zoneIds";
         return;
@@ -87,6 +89,7 @@ void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList&
 
 void SnapEngine::uncommitSnap(const QString& windowId)
 {
+    Q_ASSERT(m_snapState);
     if (windowId.isEmpty()) {
         return;
     }

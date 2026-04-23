@@ -23,8 +23,23 @@ using NavigationContext = PhosphorEngineApi::NavigationContext;
 /**
  * @brief Whether a snap was user-initiated or auto-restored.
  *
- * Controls last-used-zone tracking, pending-restore consumption,
- * and auto-snapped flag handling in commitSnap orchestration.
+ * commitSnap's side effects depend on WHY the snap is happening:
+ *
+ *   UserInitiated (default):
+ *     - Clears any stale auto-snapped flag (so a subsequent
+ *       windowActivated's last-used-zone gate sees "user-initiated")
+ *     - Consumes one pending-restore entry (so the session entry can't
+ *       drag the window back on next close/reopen)
+ *     - Updates last-used-zone tracking
+ *
+ *   AutoRestored:
+ *     - Does NOT touch the auto-snapped flag — the caller sets it
+ *       BEFORE commit and the flag persists until windowClosed/pruneStale
+ *     - Does NOT consume pending-restore — the resolve path already did
+ *     - Does NOT update last-used-zone
+ *
+ * Floating-state clear (+ windowFloatingClearedForSnap emit) and the
+ * windowSnapStateChanged emit fire for both intents.
  */
 enum class SnapIntent {
     UserInitiated, ///< Explicit user action (shortcut, D-Bus call, float-toggle)

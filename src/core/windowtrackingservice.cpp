@@ -495,42 +495,32 @@ QStringList WindowTrackingService::floatingWindows() const
 
 void WindowTrackingService::unsnapForFloat(const QString& windowId)
 {
-    // Save zone(s) and screen for restore on unfloat.
-    // Key by full windowId (not appId) so multiple instances of the same
-    // application each remember their own zone independently.
     Q_ASSERT(m_snapState);
-    if (m_snapState->isWindowSnapped(windowId)) {
-        QStringList zoneIds = m_snapState->zonesForWindow(windowId);
-        m_preFloatZoneAssignments[windowId] = zoneIds;
-        // Save the screen where the window was snapped so unfloat restores to the correct monitor
-        QString screenId = m_snapState->screenForWindow(windowId);
-        if (!screenId.isEmpty()) {
-            m_preFloatScreenAssignments[windowId] = screenId;
-        }
-        qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
-
-        // Mark the pre-float mutations dirty in their own right. Historically
-        // every caller immediately follows up with setWindowFloating(true),
-        // which uses DirtyAll and masks the hole — but that's an implicit
-        // contract between unrelated methods. Marking here makes
-        // unsnapForFloat self-sufficient so a future refactor that separates
-        // the two calls cannot silently lose pre-float restore state.
-        markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
-
-        // SnapState::unsnapForFloat saves pre-float state internally and unassigns.
-        auto unassignResult = m_snapState->unsnapForFloat(windowId);
-
-        Q_EMIT windowZoneChanged(windowId, QString());
-        markDirty(DirtyZoneAssignments | (unassignResult.lastUsedZoneCleared ? DirtyLastUsedZone : DirtyNone));
-
-        // Pop one pending-restore entry (FIFO) so this window doesn't get
-        // re-snapped to the old zone when closed and reopened. The queue is
-        // per-appId, so popping one entry leaves any remaining entries for
-        // other instances of the same app intact — unsnapping one Konsole
-        // doesn't disturb restore entries for the other two.
-        consumePendingAssignment(windowId);
+    if (!m_snapState->isWindowSnapped(windowId)) {
+        return;
     }
-    // Note: If window not in assignments, it's already unsnapped - no action needed
+
+    // Save zone(s) and screen to WTS's own pre-float maps (supports appId
+    // fallback for session restore that SnapState doesn't do).
+    QStringList zoneIds = m_snapState->zonesForWindow(windowId);
+    m_preFloatZoneAssignments[windowId] = zoneIds;
+    QString screenId = m_snapState->screenForWindow(windowId);
+    if (!screenId.isEmpty()) {
+        m_preFloatScreenAssignments[windowId] = screenId;
+    }
+    qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
+
+    markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
+
+    // SnapState::unsnapForFloat saves pre-float state internally and unassigns.
+    auto unassignResult = m_snapState->unsnapForFloat(windowId);
+
+    Q_EMIT windowZoneChanged(windowId, QString());
+    markDirty(DirtyZoneAssignments | (unassignResult.lastUsedZoneCleared ? DirtyLastUsedZone : DirtyNone));
+
+    // Pop one pending-restore entry (FIFO) so this window doesn't get
+    // re-snapped to the old zone when closed and reopened.
+    consumePendingAssignment(windowId);
 }
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
@@ -691,20 +681,24 @@ const QSet<QString>& WindowTrackingService::userSnappedClasses() const
 
 void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)
 {
-    if (m_snapState) {
-        m_snapState->setUserSnappedClasses(classes);
+    if (!m_snapState) {
+        qCWarning(lcCore) << "setUserSnappedClasses: no SnapState — dropping" << classes.size() << "classes";
+        return;
     }
+    m_snapState->setUserSnappedClasses(classes);
 }
 
 void WindowTrackingService::setActiveAssignments(const QHash<QString, QStringList>& zones,
                                                  const QHash<QString, QString>& screens,
                                                  const QHash<QString, int>& desktops)
 {
-    if (m_snapState) {
-        m_snapState->setZoneAssignments(zones);
-        m_snapState->setScreenAssignments(screens);
-        m_snapState->setDesktopAssignments(desktops);
+    if (!m_snapState) {
+        qCWarning(lcCore) << "setActiveAssignments: no SnapState — dropping" << zones.size() << "assignments";
+        return;
     }
+    m_snapState->setZoneAssignments(zones);
+    m_snapState->setScreenAssignments(screens);
+    m_snapState->setDesktopAssignments(desktops);
 }
 
 QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const

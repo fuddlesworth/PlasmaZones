@@ -398,8 +398,10 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
                 windowsToRemove.append(it.key());
             }
         }
+        bool lastUsedCleared = false;
         for (const QString& wId : windowsToRemove) {
-            m_snapState->unassignWindow(wId);
+            auto unResult = m_snapState->unassignWindow(wId);
+            lastUsedCleared |= unResult.lastUsedZoneCleared;
             m_preTileGeometries.remove(wId);
             m_preFloatZoneAssignments.remove(wId);
             m_preFloatScreenAssignments.remove(wId);
@@ -407,6 +409,9 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_effectReportedWindows.remove(wId);
             m_autotileFloatedWindows.remove(wId);
             anyStateMigrated = true;
+        }
+        if (lastUsedCleared) {
+            markDirty(DirtyLastUsedZone);
         }
     }
 
