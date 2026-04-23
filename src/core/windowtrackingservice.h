@@ -359,19 +359,6 @@ public:
      */
     bool clearFloatingForSnap(const QString& windowId);
 
-    /**
-     * @brief Resolve unfloat geometry for a floating window
-     *
-     * Shared logic: get pre-float zones → validate saved screen →
-     * compute single/multi-zone geometry → return result.
-     * Used by both SnapEngine::unfloatToZone() and WTA::calculateUnfloatRestore().
-     *
-     * @param windowId Full window ID
-     * @param fallbackScreen Screen to use if saved screen no longer exists
-     * @return UnfloatResult with geometry and zone info, or {found=false}
-     */
-    UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Sticky Window Handling
     // ═══════════════════════════════════════════════════════════════════════════

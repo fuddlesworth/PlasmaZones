@@ -3,6 +3,8 @@
 
 #include "../SnapEngine.h"
 #include <PhosphorZones/SnapState.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include "core/logging.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
@@ -75,7 +77,7 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 
 bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 {
-    UnfloatResult unfloat = m_windowTracker->resolveUnfloatGeometry(windowId, screenId);
+    UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
         return false;
     }
@@ -121,5 +123,40 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
 // state as step 1 of its orchestration. The D-Bus-visible behaviour is
 // identical: commitSnap emits windowFloatingClearedForSnap, WTA relays
 // it as windowFloatingChanged on the same D-Bus interface.
+
+UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const
+{
+    UnfloatResult result;
+
+    QStringList zoneIds = m_windowTracker->preFloatZones(windowId);
+    if (zoneIds.isEmpty()) {
+        return result;
+    }
+
+    QString restoreScreen = m_windowTracker->preFloatScreen(windowId);
+    if (!restoreScreen.isEmpty()) {
+        restoreScreen = m_windowTracker->resolveEffectiveScreenId(restoreScreen);
+        auto* mgr = m_windowTracker->screenManager();
+        QScreen* physScreen = mgr ? mgr->physicalQScreenFor(restoreScreen)
+                                  : Phosphor::Screens::ScreenIdentity::findByIdOrName(restoreScreen);
+        if (!physScreen) {
+            restoreScreen.clear();
+        }
+    }
+    if (restoreScreen.isEmpty() && !fallbackScreen.isEmpty()) {
+        restoreScreen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
+    }
+
+    QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
+    if (!geo.isValid()) {
+        return result;
+    }
+
+    result.found = true;
+    result.zoneIds = zoneIds;
+    result.geometry = geo;
+    result.screenId = restoreScreen;
+    return result;
+}
 
 } // namespace PlasmaZones

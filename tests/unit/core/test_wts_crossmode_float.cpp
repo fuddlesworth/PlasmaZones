@@ -28,7 +28,9 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
+#include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -62,6 +64,10 @@ private Q_SLOTS:
         m_settings = new StubSettingsCrossModeFloat(nullptr);
         m_zoneDetector = new StubZoneDetectorCrossModeFloat(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_engine);
+        m_engine->setSnapState(m_snapState);
+        m_service->setSnapState(m_snapState);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -75,6 +81,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_engine;
+        m_engine = nullptr;
+        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -123,7 +133,7 @@ private Q_SLOTS:
 
         // Step 6: resolveUnfloatGeometry should return found=false
         // because there is no pre-float zone to restore to
-        UnfloatResult result = m_service->resolveUnfloatGeometry(windowId, screenId);
+        UnfloatResult result = m_engine->resolveUnfloatGeometry(windowId, screenId);
         QCOMPARE(result.found, false);
         QVERIFY(result.zoneIds.isEmpty());
     }
@@ -159,7 +169,7 @@ private Q_SLOTS:
 
         // Step 6: Attempt unfloat on a different VS — must return found=false
         // because autotile cleared the stale pre-float state
-        UnfloatResult result = m_service->resolveUnfloatGeometry(windowId, vs1);
+        UnfloatResult result = m_engine->resolveUnfloatGeometry(windowId, vs1);
         QCOMPARE(result.found, false);
         QVERIFY(result.zoneIds.isEmpty());
     }
@@ -193,7 +203,7 @@ private Q_SLOTS:
         // invalid QRect because there is no physical screen, so found stays false.
         // Gate the full assertion on screen availability; in both cases the
         // pre-float state in the service must remain intact (resolve is read-only).
-        UnfloatResult result = m_service->resolveUnfloatGeometry(windowId, screenId);
+        UnfloatResult result = m_engine->resolveUnfloatGeometry(windowId, screenId);
         if (QGuiApplication::screens().size() > 0) {
             QVERIFY2(result.found,
                      "resolveUnfloatGeometry should find pre-float state after snap->float->unfloat cycle");
@@ -215,7 +225,7 @@ private Q_SLOTS:
         QVERIFY(m_service->preFloatScreen(windowId).isEmpty());
 
         // resolveUnfloatGeometry should now return found=false
-        UnfloatResult result2 = m_service->resolveUnfloatGeometry(windowId, screenId);
+        UnfloatResult result2 = m_engine->resolveUnfloatGeometry(windowId, screenId);
         QCOMPARE(result2.found, false);
     }
 
@@ -225,6 +235,8 @@ private:
     StubSettingsCrossModeFloat* m_settings = nullptr;
     StubZoneDetectorCrossModeFloat* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
+    SnapEngine* m_engine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

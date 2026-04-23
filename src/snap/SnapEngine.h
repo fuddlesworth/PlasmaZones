@@ -299,6 +299,8 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
+    UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
+
     WindowGeometryList applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries,
                                              SnapIntent intent = SnapIntent::UserInitiated,
                                              std::function<QString()> fallbackScreenResolver = {});

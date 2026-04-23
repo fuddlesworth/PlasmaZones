@@ -685,50 +685,7 @@ bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
     return true;
 }
 
-UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windowId,
-                                                            const QString& fallbackScreen) const
-{
-    UnfloatResult result;
-
-    QStringList zoneIds = preFloatZones(windowId);
-    if (zoneIds.isEmpty()) {
-        return result;
-    }
-
-    // Validate saved screen — fall back to caller's screen if monitor is gone
-    QString restoreScreen = preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty()) {
-        // Validate virtual screen still exists — configuration may have changed since float
-        restoreScreen = resolveEffectiveScreenId(restoreScreen);
-        // Check if the physical screen still exists. When no ScreenManager is
-        // wired (unit-test construction path), fall back to the library's
-        // ID-aware lookup so the predicate still answers "does this restore
-        // screen exist?" rather than "is the primary screen alive?" — the
-        // prior fallback of findScreenAtPosition(0,0) returned the primary
-        // regardless of @p restoreScreen and silently mis-answered.
-        QScreen* physScreen = m_screenManager ? m_screenManager->physicalQScreenFor(restoreScreen)
-                                              : Phosphor::Screens::ScreenIdentity::findByIdOrName(restoreScreen);
-        if (!physScreen) {
-            restoreScreen.clear();
-        }
-    }
-    if (restoreScreen.isEmpty() && !fallbackScreen.isEmpty()) {
-        restoreScreen = resolveEffectiveScreenId(fallbackScreen);
-    }
-
-    // Compute geometry (combined for multi-zone)
-    QRect geo = resolveZoneGeometry(zoneIds, restoreScreen);
-
-    if (!geo.isValid()) {
-        return result;
-    }
-
-    result.found = true;
-    result.zoneIds = zoneIds;
-    result.geometry = geo;
-    result.screenId = restoreScreen;
-    return result;
-}
+// resolveUnfloatGeometry moved to SnapEngine (src/snap/snapengine/float.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sticky Window Handling
