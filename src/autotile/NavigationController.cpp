@@ -42,13 +42,13 @@ void NavigationController::focusMaster()
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
     if (windows.isEmpty()) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("focus_master"),
-                                                     QStringLiteral("no_windows"), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("focus_master"), QStringLiteral("no_windows"),
+                                            QString(), QString(), screenId);
         return;
     }
     emitFocusRequestAtIndex(0, true);
-    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("focus_master"), QStringLiteral("master"),
-                                                 QString(), QString(), screenId);
+    Q_EMIT m_engine->navigationFeedback(true, QStringLiteral("focus_master"), QStringLiteral("master"), QString(),
+                                        QString(), screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -62,15 +62,15 @@ void NavigationController::swapFocusedWithMaster()
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"), QStringLiteral("no_windows"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("swap_master"), QStringLiteral("no_windows"),
+                                            QString(), QString(), screenId);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("swap_master"), QStringLiteral("no_focus"), QString(),
+                                            QString(), screenId);
         return;
     }
 
@@ -78,11 +78,11 @@ void NavigationController::swapFocusedWithMaster()
     m_engine->retileAfterOperation(screenId, promoted);
 
     if (promoted) {
-        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("swap_master"), QStringLiteral("master"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(true, QStringLiteral("swap_master"), QStringLiteral("master"), QString(),
+                                            QString(), screenId);
     } else {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"),
-                                                     QStringLiteral("already_master"), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("swap_master"), QStringLiteral("already_master"),
+                                            QString(), QString(), screenId);
     }
 }
 
@@ -93,8 +93,8 @@ void NavigationController::rotateWindowOrder(bool clockwise)
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.size() < 2 || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            false, QStringLiteral("rotate"), QStringLiteral("nothing_to_rotate"), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("nothing_to_rotate"),
+                                            QString(), QString(), screenId);
         return; // Nothing to rotate with 0 or 1 window
     }
 
@@ -106,11 +106,10 @@ void NavigationController::rotateWindowOrder(bool clockwise)
         QString reason = QStringLiteral("%1:%2")
                              .arg(clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
                              .arg(windows.size());
-        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("rotate"), reason, QString(), QString(),
-                                                     screenId);
+        Q_EMIT m_engine->navigationFeedback(true, QStringLiteral("rotate"), reason, QString(), QString(), screenId);
     } else {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"), QString(),
+                                            QString(), screenId);
     }
 
     qCInfo(lcAutotile) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
@@ -125,22 +124,20 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.size() < 2 || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("nothing_to_swap"), QString(),
-                                                     QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
+                                            screenId);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_focus"), QString(), QString(),
-                                                     screenId);
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
         return;
     }
 
     const int currentIndex = windows.indexOf(focused);
     if (currentIndex < 0) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_focus"), QString(), QString(),
-                                                     screenId);
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
         return;
     }
 
@@ -156,7 +153,7 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     const bool swapped = state->swapWindowsById(focused, targetWindow);
     m_engine->retileAfterOperation(screenId, swapped);
 
-    Q_EMIT m_engine->navigationFeedbackRequested(swapped, action, direction, QString(), QString(), screenId);
+    Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
 }
 
 void NavigationController::focusInDirection(const QString& direction, const QString& action)
@@ -168,8 +165,8 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_windows"), QString(), QString(),
-                                                     screenId);
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(),
+                                            screenId);
         return;
     }
 
@@ -177,8 +174,8 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     const int currentIndex = qMax(0, windows.indexOf(focused));
     const int targetIndex = (currentIndex + (forward ? 1 : -1) + windows.size()) % windows.size();
 
-    Q_EMIT m_engine->focusWindowRequested(windows.at(targetIndex));
-    Q_EMIT m_engine->navigationFeedbackRequested(true, action, direction, QString(), QString(), screenId);
+    Q_EMIT m_engine->activateWindowRequested(windows.at(targetIndex));
+    Q_EMIT m_engine->navigationFeedback(true, action, direction, QString(), QString(), screenId);
 }
 
 void NavigationController::moveFocusedToPosition(int position)
@@ -188,15 +185,15 @@ void NavigationController::moveFocusedToPosition(int position)
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_windows"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_windows"), QString(),
+                                            QString(), screenId);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_focus"), QString(),
+                                            QString(), screenId);
         return;
     }
 
@@ -206,11 +203,11 @@ void NavigationController::moveFocusedToPosition(int position)
     m_engine->retileAfterOperation(screenId, moved);
 
     if (moved) {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            true, QStringLiteral("snap"), QStringLiteral("position_%1").arg(position), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(true, QStringLiteral("snap"), QStringLiteral("position_%1").arg(position),
+                                            QString(), QString(), screenId);
     } else {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            false, QStringLiteral("snap"), QStringLiteral("already_at_position"), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("already_at_position"),
+                                            QString(), QString(), screenId);
     }
 }
 
@@ -223,8 +220,8 @@ void NavigationController::increaseMasterRatio(qreal delta)
     QString screenId;
     PhosphorTiles::TilingState* state = resolveActiveState(screenId);
     if (!state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_ratio"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), QString());
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("master_ratio"), QStringLiteral("no_focus"),
+                                            QString(), QString(), QString());
         return;
     }
 
@@ -252,8 +249,8 @@ void NavigationController::increaseMasterRatio(qreal delta)
     // Always show OSD with the clamped value — even at min/max bounds
     int pct = qRound(resultRatio * 100.0);
     QString reason = (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(pct);
-    Q_EMIT m_engine->navigationFeedbackRequested(changed, QStringLiteral("master_ratio"), reason, QString(), QString(),
-                                                 screenId);
+    Q_EMIT m_engine->navigationFeedback(changed, QStringLiteral("master_ratio"), reason, QString(), QString(),
+                                        screenId);
 }
 
 void NavigationController::decreaseMasterRatio(qreal delta)
@@ -290,8 +287,8 @@ void NavigationController::adjustMasterCount(int delta)
     QString screenId;
     PhosphorTiles::TilingState* state = resolveActiveState(screenId);
     if (!state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_count"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), QString());
+        Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("master_count"), QStringLiteral("no_focus"),
+                                            QString(), QString(), QString());
         return;
     }
 
@@ -316,8 +313,8 @@ void NavigationController::adjustMasterCount(int delta)
     // Always show OSD with the clamped value — even at bounds
     QString reason =
         (delta > 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(resultCount);
-    Q_EMIT m_engine->navigationFeedbackRequested(changed, QStringLiteral("master_count"), reason, QString(), QString(),
-                                                 screenId);
+    Q_EMIT m_engine->navigationFeedback(changed, QStringLiteral("master_count"), reason, QString(), QString(),
+                                        screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -366,7 +363,7 @@ void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirs
         targetIndex = (currentIndex + indexOffset + windows.size()) % windows.size();
     }
 
-    Q_EMIT m_engine->focusWindowRequested(windows.at(targetIndex));
+    Q_EMIT m_engine->activateWindowRequested(windows.at(targetIndex));
 }
 
 QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScreenId,

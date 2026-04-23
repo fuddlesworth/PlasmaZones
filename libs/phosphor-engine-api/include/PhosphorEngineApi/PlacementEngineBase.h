@@ -80,6 +80,11 @@ Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);
     void windowStateTransitioned(const QString& windowId, WindowState oldState, WindowState newState);
 
+    void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceId,
+                            const QString& targetId, const QString& screenId);
+    void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
+    void activateWindowRequested(const QString& windowId);
+
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
     QHash<QString, WindowState> m_windowStates;

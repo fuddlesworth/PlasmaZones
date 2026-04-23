@@ -406,13 +406,6 @@ Q_SIGNALS:
     /// Floating state cleared as part of a commit. WTA relays as windowFloatingChanged(id, false, screen).
     void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
 
-    /// Navigation feedback for OSD display
-    void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-                            const QString& targetZoneId, const QString& screenId);
-
-    /// Window floating state changed (for KWin effect sync)
-    void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
-
     /// Daemon-driven geometry application (used by autotile float restore)
     void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
                                 const QString& screenId, bool sizeOnly);
@@ -428,11 +421,6 @@ Q_SIGNALS:
     /// label disambiguates the cause downstream ("rotate", "resnap",
     /// "snap_all", "vs_reconfigure"). Relayed to D-Bus via WTA.
     void applyGeometriesBatch(const PlasmaZones::WindowGeometryList& geometries, const QString& action);
-
-    /// Request KWin effect to activate (raise + focus) @p windowId.
-    /// Used by focus-in-direction and cycle operations. Relayed to D-Bus
-    /// via WTA.
-    void activateWindowRequested(const QString& windowId);
 
 protected:
     void onWindowClaimed(const QString& windowId) override;

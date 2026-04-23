@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// toggleFloatForWindow, calculateUnfloatRestore, windowUnsnappedForFloat
+// moved to SnapAdaptor (src/dbus/snapadaptor/commit.cpp).
+//
+// This file retains cross-mode float methods that stay on WTA:
+//   notifyDragOutUnsnap, getPreFloatZone, clearPreFloatZone,
+//   isWindowFloating, queryWindowFloating, setWindowFloating (WTS delegate),
+//   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
+
 #include "../windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../core/interfaces.h"
@@ -25,7 +33,11 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
 
     QString screenId = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
-    windowUnsnappedForFloat(windowId);
+
+    // Delegate unsnap-for-float to the service directly (the SnapAdaptor
+    // method windowUnsnappedForFloat does the same thing, but this path
+    // doesn't need the SnapAdaptor detour for a WTS-level operation).
+    m_service->unsnapForFloat(windowId);
     setWindowFloating(windowId, true);
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
@@ -40,25 +52,6 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
             qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
         }
     }
-}
-
-void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
-{
-    if (!validateWindowId(windowId, QStringLiteral("prepare float"))) {
-        return;
-    }
-
-    QString previousZoneId = m_service->zoneForWindow(windowId);
-    if (previousZoneId.isEmpty()) {
-        // Window was not snapped - no-op
-        qCDebug(lcDbusWindow) << "windowUnsnappedForFloat: window not in any zone:" << windowId;
-        return;
-    }
-
-    // Delegate to service
-    m_service->unsnapForFloat(windowId);
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped for float from zone" << previousZoneId;
 }
 
 bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneIdOut)
@@ -87,31 +80,6 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
     if (hadPreFloatZone) {
         qCDebug(lcDbusWindow) << "Cleared pre-float zone for window" << windowId;
     }
-}
-
-UnfloatRestoreResult WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenId)
-{
-    if (windowId.isEmpty()) {
-        return UnfloatRestoreResult{};
-    }
-
-    UnfloatResult unfloat = m_snapEngine->resolveUnfloatGeometry(windowId, screenId);
-    if (!unfloat.found) {
-        qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
-        return UnfloatRestoreResult{};
-    }
-
-    qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
-                          << "geo:" << unfloat.geometry;
-    return UnfloatRestoreResult{
-        true,
-        unfloat.zoneIds,
-        unfloat.screenId,
-        unfloat.geometry.x(),
-        unfloat.geometry.y(),
-        unfloat.geometry.width(),
-        unfloat.geometry.height(),
-    };
 }
 
 bool WindowTrackingAdaptor::isWindowFloating(const QString& windowId)
@@ -158,24 +126,6 @@ QStringList WindowTrackingAdaptor::getFloatingWindows()
 {
     // Delegate to service
     return m_service->floatingWindows();
-}
-
-void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const QString& screenId)
-{
-    qCInfo(lcDbusWindow) << "toggleFloatForWindow: windowId=" << windowId << "screen=" << screenId;
-
-    if (!validateWindowId(windowId, QStringLiteral("toggle float"))) {
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("invalid_window"), QString(),
-                                  QString(), screenId);
-        return;
-    }
-
-    // Route to the correct engine based on screen mode
-    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
-        m_autotileEngine->toggleWindowFloat(windowId, screenId);
-    } else if (m_snapEngine) {
-        m_snapEngine->toggleWindowFloat(windowId, screenId);
-    }
 }
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenId)

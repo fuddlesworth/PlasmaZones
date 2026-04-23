@@ -21,6 +21,7 @@
 #include "../../dbus/controladaptor.h"
 #include "../../dbus/overlayadaptor.h"
 #include "../../dbus/zonedetectionadaptor.h"
+#include "../../dbus/snapadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/screenadaptor.h"
 #include "../../dbus/windowdragadaptor.h"
@@ -691,8 +692,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // VS-aware via Utils::belongsToPhysicalScreen. The vs_reconfigure-tagged
     // variant suppresses the kwin-effect snap-assist continuation so users
     // don't get a thumbnail picker popping up after every VS swap/rotate.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
+    if (m_snapAdaptor) {
+        m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
 
     // Trigger debounced geometry recalculation for the rest of the system
@@ -732,7 +733,9 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
 
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->service()->clearResnapBuffer();
-        m_windowTrackingAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
+    }
+    if (m_snapAdaptor) {
+        m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
 }
 

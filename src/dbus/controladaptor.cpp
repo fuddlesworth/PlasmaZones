@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "controladaptor.h"
+#include "snapadaptor.h"
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -22,11 +23,12 @@
 
 namespace PlasmaZones {
 
-ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor,
+ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
                                PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
                                Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
+    , m_snapAdaptor(snapAdaptor)
     , m_layoutAdaptor(layoutAdaptor)
     , m_layoutManager(layoutManager)
     , m_autotileEngine(autotileEngine)
@@ -58,9 +60,9 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
         return;
     }
 
-    // Delegate to WTA's moveWindowToZone convenience method
-    if (m_wta) {
-        m_wta->moveWindowToZone(windowId, zone->id().toString());
+    // Delegate to SnapAdaptor's moveWindowToZone convenience method
+    if (m_snapAdaptor) {
+        m_snapAdaptor->moveWindowToZone(windowId, zone->id().toString());
     }
 }
 
@@ -144,6 +146,7 @@ QString ControlAdaptor::getFullState()
 void ControlAdaptor::detach()
 {
     m_wta = nullptr;
+    m_snapAdaptor = nullptr;
     m_layoutAdaptor = nullptr;
     m_layoutManager = nullptr;
     m_autotileEngine = nullptr;

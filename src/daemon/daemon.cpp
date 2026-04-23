@@ -607,7 +607,7 @@ bool Daemon::init()
         // skips autotile screens) so resnap uses original snap assignments.
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
             m_suppressResnapOsd = 1;
-            m_windowTrackingAdaptor->resnapCurrentAssignments();
+            m_snapAdaptor->resnapCurrentAssignments();
             restoreAutotileOnlyGeometries();
         }
 
@@ -851,15 +851,16 @@ bool Daemon::init()
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
-    m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
+    m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, m_settings.get(), this);
+    m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
     m_autotileAdaptor =
         new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
     // it borrows are destroyed.
-    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(),
-                                          m_autotileEngine.get(), m_screenManager.get(), this);
+    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
+                                          m_layoutManager.get(), m_autotileEngine.get(), m_screenManager.get(), this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all

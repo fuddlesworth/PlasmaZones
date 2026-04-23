@@ -20,6 +20,7 @@ class LayoutRegistry;
 namespace PlasmaZones {
 
 class WindowTrackingAdaptor;
+class SnapAdaptor;
 class LayoutAdaptor;
 class AutotileEngine;
 
@@ -45,7 +46,7 @@ class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Control")
 
 public:
-    explicit ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor,
+    explicit ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
                             PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
                             Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
@@ -98,6 +99,7 @@ public Q_SLOTS:
 
 private:
     WindowTrackingAdaptor* m_wta;
+    SnapAdaptor* m_snapAdaptor;
     LayoutAdaptor* m_layoutAdaptor;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     AutotileEngine* m_autotileEngine;

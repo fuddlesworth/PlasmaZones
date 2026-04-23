@@ -86,7 +86,7 @@ private Q_SLOTS:
         // 3. The failing call from the discussion — toggleWindowFloat arrives
         //    with the rebranded composite. It must hit the already-tracked
         //    window, not the "window not found in any autotile state" path.
-        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedback);
         QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
 
         engine.toggleWindowFloat(afterRename, screen);
@@ -213,7 +213,7 @@ private Q_SLOTS:
         // instance id and doesn't care.
         registry.upsert(instanceId, {QStringLiteral("media.emby.client.beta"), QString(), QString()});
 
-        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedback);
         QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
 
         // toggleWindowFloat arrives with the same bare instance id — exact match.
