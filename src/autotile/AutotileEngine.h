@@ -1010,11 +1010,8 @@ Q_SIGNALS:
      * shows the navigation OSD, etc. Emitted from performToggleFloat and
      * setWindowFloat (explicit user/caller toggles).
      *
-     * @param windowId Window whose floating state changed
-     * @param floating True if the window is now floating, false if tiled
-     * @param screenId Screen where the window is (for OSD placement)
+     * windowFloatingChanged inherited from PlacementEngineBase.
      */
-    void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
 
     /**
      * @brief Emitted to sync WTS floating state without restoring geometry
@@ -1056,31 +1053,8 @@ Q_SIGNALS:
      */
     void windowsTiled(const QString& tileRequestsJson);
 
-    /**
-     * @brief Emitted when a window should be focused
-     *
-     * The D-Bus adaptor forwards this signal to KWin effect for activation.
-     *
-     * @param windowId Window ID to focus
-     */
-    void focusWindowRequested(const QString& windowId);
-
-    /**
-     * @brief Emitted when an autotile navigation operation completes (for OSD)
-     *
-     * Same signature as WindowTrackingAdaptor::navigationFeedback so the daemon
-     * can use a single handler for both manual (KWin effect) and autotile
-     * (engine) feedback. Ensures consistent OSD display: shortcut → operation → OSD.
-     *
-     * @param success Whether the operation succeeded
-     * @param action Operation type: "rotate", "focus_master", "swap_master", etc.
-     * @param reason Failure reason or success detail (e.g. "clockwise:3")
-     * @param sourceZoneId Source zone (empty for rotate)
-     * @param targetZoneId Target zone (empty for rotate)
-     * @param screenId Screen where operation occurred
-     */
-    void navigationFeedbackRequested(bool success, const QString& action, const QString& reason,
-                                     const QString& sourceZoneId, const QString& targetZoneId, const QString& screenId);
+    // focusWindowRequested → activateWindowRequested (inherited from PlacementEngineBase)
+    // navigationFeedbackRequested → navigationFeedback (inherited from PlacementEngineBase)
 
     /**
      * @brief Emitted when windows are released from autotile management

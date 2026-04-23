@@ -67,7 +67,8 @@ void Daemon::initializeAutotile()
         });
 
         // Sync autotile float state and show OSD when a window is floated/unfloated
-        connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingChanged, this, &Daemon::syncAutotileFloatState);
+        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingChanged, this,
+                &Daemon::syncAutotileFloatState);
 
         // Passive float state sync for engine-internal state divergence (e.g. a
         // newly-inserted window carrying stale snap-mode float state). Routes to

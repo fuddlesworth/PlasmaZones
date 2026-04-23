@@ -180,7 +180,7 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
 {
     // Disconnect previous autotile engine nav feedback (the only signal connected here)
     if (m_autotileEngine) {
-        disconnect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
 
     m_snapEngine = snapEngine;
@@ -221,7 +221,7 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
     // geometry application). See ADR docs/adr-snapengine-migration.md.
     // ═══════════════════════════════════════════════════════════════════════════
     if (m_autotileEngine) {
-        connect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this,
+        connect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
     }
 }
