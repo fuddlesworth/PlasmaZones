@@ -3,6 +3,7 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
+#include "../../snap/SnapEngine.h"
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -37,7 +38,9 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
         return;
     }
 
-    m_service->storePreTileGeometry(windowId, QRect(x, y, width, height), screenId, overwrite);
+    if (m_snapEngine) {
+        m_snapEngine->storeUnmanagedGeometry(windowId, QRect(x, y, width, height), screenId, overwrite);
+    }
     qCDebug(lcDbusWindow) << "Stored pre-tile geometry for" << windowId << "screen=" << screenId
                           << "overwrite=" << overwrite;
 }
@@ -50,24 +53,38 @@ bool WindowTrackingAdaptor::getPreTileGeometry(const QString& windowId, int& x, 
         return false;
     }
 
-    auto geo = m_service->preTileGeometry(windowId);
-    if (!geo) {
-        return false;
+    if (!m_snapEngine || !m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        // appId fallback
+        const QString appId = m_service->currentAppIdFor(windowId);
+        if (appId == windowId || !m_snapEngine || !m_snapEngine->hasUnmanagedGeometry(appId)) {
+            return false;
+        }
+        QRect geo = m_snapEngine->unmanagedGeometry(appId);
+        x = geo.x();
+        y = geo.y();
+        width = geo.width();
+        height = geo.height();
+        return true;
     }
 
-    x = geo->x();
-    y = geo->y();
-    width = geo->width();
-    height = geo->height();
+    QRect geo = m_snapEngine->unmanagedGeometry(windowId);
+    x = geo.x();
+    y = geo.y();
+    width = geo.width();
+    height = geo.height();
     return true;
 }
 
 bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
 {
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || !m_snapEngine) {
         return false;
     }
-    return m_service->hasPreTileGeometry(windowId);
+    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        return true;
+    }
+    const QString appId = m_service->currentAppIdFor(windowId);
+    return (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId));
 }
 
 void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
@@ -75,8 +92,17 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
         return;
     }
-    bool hadGeometry = m_service->hasPreTileGeometry(windowId);
-    m_service->clearPreTileGeometry(windowId);
+    if (!m_snapEngine) {
+        return;
+    }
+    bool hadGeometry = m_snapEngine->hasUnmanagedGeometry(windowId);
+    m_snapEngine->removeUnmanagedGeometry(windowId);
+    // Also remove appId entry
+    const QString appId = m_service->currentAppIdFor(windowId);
+    if (appId != windowId) {
+        hadGeometry |= m_snapEngine->hasUnmanagedGeometry(appId);
+        m_snapEngine->removeUnmanagedGeometry(appId);
+    }
     if (hadGeometry) {
         qCDebug(lcDbusWindow) << "Cleared pre-tile geometry for" << windowId;
     }
@@ -85,20 +111,21 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
 PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
 {
     PreTileGeometryList result;
-    const auto& map = m_service->preTileGeometries();
+    if (!m_snapEngine) {
+        return result;
+    }
+    const auto& map = m_snapEngine->unmanagedGeometries();
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
         PreTileGeometryEntry entry;
-        // V3 added WindowRegistry-based appId lookup — use currentAppIdFor to
-        // get the live class name (handles mid-session app renames).
         entry.appId = m_service->currentAppIdFor(it.key());
         entry.x = it.value().geometry.x();
         entry.y = it.value().geometry.y();
         entry.width = it.value().geometry.width();
         entry.height = it.value().geometry.height();
-        if (!it.value().connectorName.isEmpty()) {
-            entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().connectorName)
-                ? it.value().connectorName
-                : Phosphor::Screens::ScreenIdentity::idForName(it.value().connectorName);
+        if (!it.value().screenId.isEmpty()) {
+            entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
+                ? it.value().screenId
+                : Phosphor::Screens::ScreenIdentity::idForName(it.value().screenId);
         }
         result.append(entry);
     }
@@ -110,7 +137,7 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
 {
     x = y = width = height = 0;
 
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || !m_snapEngine) {
         return false;
     }
 
@@ -118,7 +145,18 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     if (m_service) {
         screenId = m_service->screenAssignments().value(windowId);
     }
-    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+
+    std::optional<QRect> geo;
+    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
+                                                   m_snapEngine->unmanagedScreen(windowId), screenId);
+    } else {
+        const QString appId = m_service->currentAppIdFor(windowId);
+        if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
+            geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
+                                                       m_snapEngine->unmanagedScreen(appId), screenId);
+        }
+    }
     if (!geo) {
         return false;
     }

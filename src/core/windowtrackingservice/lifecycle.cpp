@@ -6,6 +6,7 @@
 
 #include "../windowtrackingservice.h"
 #include "../constants.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
@@ -297,17 +298,23 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         validateLastUsedZone(targetVs);
     }
 
-    // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual.
-    // Only migrate entries for windows that have zone assignments — without zone info,
-    // resolveVirtualScreen falls back to the first VS which may be wrong. Leaving the
-    // physical ID lets validatedPreTileGeometry handle cross-screen adjustment correctly.
-    for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
-        if (it->connectorName == physicalScreenId || it->connectorName.startsWith(prefix)) {
-            QStringList ptZoneIds = zoneAssigns.value(it.key());
-            if (ptZoneIds.isEmpty()) {
-                continue; // No zone info — keep physical ID, don't guess VS
+    // Migrate pre-tile geometry screenId fields from physical (or old virtual) to new virtual.
+    // PlacementEngineBase is the single store — mutate via engine pointer.
+    if (m_snapEngine) {
+        auto geos = m_snapEngine->unmanagedGeometries(); // take a copy
+        bool geosChanged = false;
+        for (auto it = geos.begin(); it != geos.end(); ++it) {
+            if (it->screenId == physicalScreenId || it->screenId.startsWith(prefix)) {
+                QStringList ptZoneIds = zoneAssigns.value(it.key());
+                if (ptZoneIds.isEmpty()) {
+                    continue; // No zone info — keep physical ID, don't guess VS
+                }
+                it->screenId = resolveVirtualScreen(ptZoneIds, it->screenId);
+                geosChanged = true;
             }
-            it->connectorName = resolveVirtualScreen(ptZoneIds, it->connectorName);
+        }
+        if (geosChanged) {
+            m_snapEngine->setUnmanagedGeometries(geos);
             anyStateMigrated = true;
         }
     }
@@ -382,11 +389,19 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         }
     }
 
-    // B3: Migrate pre-tile geometry connectorName fields
-    for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
-        if (PhosphorIdentity::VirtualScreenId::isVirtual(it->connectorName)
-            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(it->connectorName) == physicalScreenId) {
-            it->connectorName = physicalScreenId;
+    // B3: Migrate pre-tile geometry screenId fields via engine
+    if (m_snapEngine) {
+        auto geos = m_snapEngine->unmanagedGeometries();
+        bool geosChanged = false;
+        for (auto it = geos.begin(); it != geos.end(); ++it) {
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(it->screenId)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(it->screenId) == physicalScreenId) {
+                it->screenId = physicalScreenId;
+                geosChanged = true;
+            }
+        }
+        if (geosChanged) {
+            m_snapEngine->setUnmanagedGeometries(geos);
         }
     }
 
@@ -419,7 +434,9 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         for (const QString& wId : windowsToRemove) {
             auto unResult = m_snapState->unassignWindow(wId);
             lastUsedCleared |= unResult.lastUsedZoneCleared;
-            m_preTileGeometries.remove(wId);
+            if (m_snapEngine) {
+                m_snapEngine->removeUnmanagedGeometry(wId);
+            }
             m_snapState->clearPreFloatZone(wId);
             m_windowStickyStates.remove(wId);
             anyStateMigrated = true;
@@ -501,10 +518,12 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 
     // Convert pre-tile geometry from full windowId to appId for persistence
     // so that when the window reopens (with a new internal ID), the geometry
-    // can still be found via appId fallback. storePreTileGeometry writes both
-    // keys, so we just clean up the stale full-windowId entry.
-    if (m_preTileGeometries.contains(windowId) && appId != windowId) {
-        m_preTileGeometries.remove(windowId);
+    // can still be found via appId fallback. The engine's storeUnmanagedGeometry
+    // writes both keys, so we just clean up the stale full-windowId entry.
+    if (m_snapEngine && m_snapEngine->hasUnmanagedGeometry(windowId) && appId != windowId) {
+        m_snapEngine->storeUnmanagedGeometry(appId, m_snapEngine->unmanagedGeometry(windowId),
+                                             m_snapEngine->unmanagedScreen(windowId), true);
+        m_snapEngine->removeUnmanagedGeometry(windowId);
     }
     // Clear floating state on close — floating is a runtime-only state that
     // should not carry over when the window is reopened. Without this, closing

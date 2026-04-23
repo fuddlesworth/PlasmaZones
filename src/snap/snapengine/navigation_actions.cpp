@@ -370,7 +370,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     uncommitSnap(windowId);
-    m_windowTracker->clearPreTileGeometry(windowId);
+    removeUnmanagedGeometry(windowId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }
@@ -406,7 +406,7 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     if (m_wta && m_snapState->isFloating(windowId)) {
         const QRect geo = m_wta->frameGeometry(windowId);
         if (geo.isValid()) {
-            m_windowTracker->storePreTileGeometry(windowId, geo, screenId, /*overwrite=*/true);
+            storeUnmanagedGeometry(windowId, geo, screenId, /*overwrite=*/true);
         }
     }
 

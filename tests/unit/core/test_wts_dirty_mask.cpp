@@ -183,29 +183,6 @@ private Q_SLOTS:
                  static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
     }
 
-    void testStorePreTileGeometry_marksPreTileOnly()
-    {
-        m_service->storePreTileGeometry(QStringLiteral("app|abc"), QRect(0, 0, 400, 300), QStringLiteral("DP-1"),
-                                        /*overwrite=*/false);
-        const auto mask = m_service->peekDirty();
-        QVERIFY((mask & WindowTrackingService::DirtyPreTileGeometries) != 0);
-        QCOMPARE((mask & ~WindowTrackingService::DirtyPreTileGeometries),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
-    }
-
-    void testClearPreTileGeometry_marksPreTileOnly()
-    {
-        // First store so the subsequent clear has something to remove.
-        m_service->storePreTileGeometry(QStringLiteral("app|abc"), QRect(0, 0, 400, 300), QStringLiteral("DP-1"),
-                                        false);
-        m_service->clearDirty();
-        m_service->clearPreTileGeometry(QStringLiteral("app|abc"));
-        const auto mask = m_service->peekDirty();
-        QVERIFY((mask & WindowTrackingService::DirtyPreTileGeometries) != 0);
-        QCOMPARE((mask & ~WindowTrackingService::DirtyPreTileGeometries),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
-    }
-
     void testUpdateLastUsedZone_marksLastUsedZoneOnly()
     {
         m_service->updateLastUsedZone(m_zone1Id, QStringLiteral("DP-1"), QStringLiteral("app"), 1);
@@ -252,18 +229,13 @@ private Q_SLOTS:
         // the mask), the prune was silently dropped at saveState's DirtyNone
         // early-return — ghost windows came back on the next daemon restart.
         m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
-        m_service->storePreTileGeometry(QStringLiteral("app|abc"), QRect(0, 0, 400, 300), QStringLiteral("DP-1"),
-                                        /*overwrite=*/false);
         m_service->clearDirty();
 
-        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{}); // empty alive set — prune everything
+        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{});
         QVERIFY(pruned >= 1);
 
         const auto mask = m_service->peekDirty();
-        // Prune touched zone maps and pre-tile geometries; both must appear
-        // in the dirty mask so saveState rewrites their JSON fields.
         QVERIFY((mask & WindowTrackingService::DirtyZoneAssignments) != 0);
-        QVERIFY((mask & WindowTrackingService::DirtyPreTileGeometries) != 0);
     }
 
     void testPruneStaleAssignments_noop_leavesDirtyMaskClean()

@@ -41,11 +41,16 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
     // Helper: create a "__restore__" entry that tells the KWin effect to move
     // the window back to its pre-tile geometry instead of snapping it to a zone.
     auto tryAppendRestore = [this, &result](const ResnapEntry* entry) {
-        auto preTile = m_windowTracker->preTileGeometry(entry->windowId);
-        if (!preTile) {
+        std::optional<QRect> preTile;
+        if (hasUnmanagedGeometry(entry->windowId)) {
+            preTile = unmanagedGeometry(entry->windowId);
+        } else {
             // Second attempt: look up by current class so a renamed window
             // still finds its persisted pre-tile geometry.
-            preTile = m_windowTracker->preTileGeometry(m_windowTracker->currentAppIdFor(entry->windowId));
+            const QString appId = m_windowTracker->currentAppIdFor(entry->windowId);
+            if (hasUnmanagedGeometry(appId)) {
+                preTile = unmanagedGeometry(appId);
+            }
         }
         if (preTile && preTile->isValid()) {
             ZoneAssignmentEntry restoreEntry;

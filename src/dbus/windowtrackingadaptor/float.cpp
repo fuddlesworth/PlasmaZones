@@ -7,6 +7,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../snap/SnapEngine.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 
 namespace PlasmaZones {
 
@@ -29,13 +30,21 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
     // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped.
-    if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
-        auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+    if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_snapEngine) {
+        std::optional<QRect> geo;
+        if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+            geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
+                                                       m_snapEngine->unmanagedScreen(windowId), screenId);
+        } else {
+            const QString appId = m_service->currentAppIdFor(windowId);
+            if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
+                geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
+                                                           m_snapEngine->unmanagedScreen(appId), screenId);
+            }
+        }
         if (geo) {
-            // Emit size-only restore: use 0,0 position with the pre-snap dimensions.
-            // The effect applies width/height while preserving the window's current position.
             Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
-            m_service->clearPreTileGeometry(windowId);
+            m_snapEngine->removeUnmanagedGeometry(windowId);
             qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
         }
     }
@@ -179,7 +188,19 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
-    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+    std::optional<QRect> geo;
+    if (m_snapEngine) {
+        if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+            geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
+                                                       m_snapEngine->unmanagedScreen(windowId), screenId);
+        } else {
+            const QString appId = m_service->currentAppIdFor(windowId);
+            if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
+                geo = m_service->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
+                                                           m_snapEngine->unmanagedScreen(appId), screenId);
+            }
+        }
+    }
     if (geo) {
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo
                              << "screen=" << screenId;

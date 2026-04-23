@@ -131,26 +131,7 @@ public:
         Q_EMIT stateChanged();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Pre-Tile Geometry
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    struct PreTileGeometry
-    {
-        QRect geometry;
-        QString connectorName;
-
-        bool operator==(const PreTileGeometry& other) const
-        {
-            return geometry == other.geometry && connectorName == other.connectorName;
-        }
-    };
-
-    void storePreTileGeometry(const QString& windowId, const QRect& geometry, const QString& connectorName = {},
-                              bool overwrite = false);
-    std::optional<QRect> preTileGeometry(const QString& windowId) const;
-    bool hasPreTileGeometry(const QString& windowId) const;
-    void clearPreTileGeometry(const QString& windowId);
+    // Pre-tile geometry removed — PlacementEngineBase is the single store.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Lifecycle
@@ -252,10 +233,6 @@ public:
     {
         return m_windowZoneAssignments;
     }
-    const QHash<QString, PreTileGeometry>& preTileGeometries() const
-    {
-        return m_preTileGeometries;
-    }
 
     void setZoneAssignments(const QHash<QString, QStringList>& zones)
     {
@@ -263,14 +240,6 @@ public:
             return;
         }
         m_windowZoneAssignments = zones;
-        Q_EMIT stateChanged();
-    }
-    void setPreTileGeometries(const QHash<QString, PreTileGeometry>& geos)
-    {
-        if (m_preTileGeometries == geos) {
-            return;
-        }
-        m_preTileGeometries = geos;
         Q_EMIT stateChanged();
     }
     void setFloatingWindows(const QSet<QString>& windows)
@@ -302,15 +271,11 @@ private:
     QSet<QString> allManagedWindowIds() const
     {
         QSet<QString> all;
-        all.reserve(m_windowZoneAssignments.size() + m_floatingWindows.size() + m_preTileGeometries.size()
-                    + m_autoSnappedWindows.size());
+        all.reserve(m_windowZoneAssignments.size() + m_floatingWindows.size() + m_autoSnappedWindows.size());
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             all.insert(it.key());
         }
         all.unite(m_floatingWindows);
-        for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
-            all.insert(it.key());
-        }
         all.unite(m_autoSnappedWindows);
         return all;
     }
@@ -321,7 +286,6 @@ private:
     QHash<QString, QString> m_windowScreenAssignments;
     QHash<QString, int> m_windowDesktopAssignments;
     QSet<QString> m_floatingWindows;
-    QHash<QString, PreTileGeometry> m_preTileGeometries;
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
 

@@ -183,7 +183,6 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
         }
     };
 
-    removeHash(m_preTileGeometries);
     removeHash(m_windowStickyStates);
     removeSet(m_floatingWindows);
 
@@ -200,169 +199,13 @@ bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Pre-Tile Geometry Storage (unified snap + autotile)
+// Geometry Validation Utility
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::storePreTileGeometry(const QString& windowId, const QRect& geometry,
-                                                 const QString& connectorName, bool overwrite)
+std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRect& geo, const QString& savedScreen,
+                                                                      const QString& currentScreenName) const
 {
-    if (windowId.isEmpty()) {
-        qCWarning(lcCore) << "Cannot store pre-tile geometry: empty windowId";
-        return;
-    }
-    if (!geometry.isValid()) {
-        return;
-    }
-
-    QString appId = currentAppIdFor(windowId);
-
-    if (!overwrite) {
-        // First-only mode (snap): don't overwrite this runtime instance's already-
-        // captured pre-snap entry when moving A→B. Match on the EXACT windowId only.
-        //
-        // Do NOT skip on a matching appId entry: appId-keyed entries are persisted
-        // across daemon restarts and window close/reopen (for cross-session restore).
-        // A stale appId entry from a prior session must never block the fresh per-
-        // instance capture — otherwise float-restore/mode-change teleports the new
-        // window back to ancient coordinates. The fresh write below replaces the
-        // appId entry with current-session data.
-        if (m_preTileGeometries.contains(windowId)) {
-            qCDebug(lcCore) << "storePreTileGeometry: skipping (windowId exists)" << windowId
-                            << "existing:" << m_preTileGeometries.value(windowId).geometry << "proposed:" << geometry;
-            return;
-        }
-    }
-
-    PreTileGeometry entry{geometry, connectorName};
-    qCDebug(lcCore) << "storePreTileGeometry:" << windowId << "=" << geometry << "screen:" << connectorName
-                    << "overwrite:" << overwrite;
-    m_preTileGeometries[windowId] = entry;
-    if (appId != windowId) {
-        m_preTileGeometries[appId] = entry;
-    }
-
-    if (m_snapState) {
-        m_snapState->storePreTileGeometry(windowId, geometry, connectorName, overwrite);
-    }
-
-    // Memory cleanup: limit cache to prevent unbounded growth.
-    // Each window stores up to 2 keys (windowId + appId), so evict until we're
-    // back at the cap. Skip just-inserted keys.
-    // Note: The inner loop is O(N) per eviction, but N is bounded by
-    // MaxPreTileGeometries (100), so the total cost is acceptable.
-    static constexpr int MaxPreTileGeometries = 100;
-    while (m_preTileGeometries.size() > MaxPreTileGeometries) {
-        bool evicted = false;
-        for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
-            if (it.key() != windowId && it.key() != appId) {
-                m_preTileGeometries.erase(it);
-                evicted = true;
-                break;
-            }
-        }
-        if (!evicted) {
-            break; // Only our own keys remain
-        }
-    }
-
-    markDirty(DirtyPreTileGeometries);
-}
-
-std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windowId) const
-{
-    if (windowId.isEmpty()) {
-        return std::nullopt;
-    }
-    if (m_preTileGeometries.contains(windowId)) {
-        const auto& entry = m_preTileGeometries.value(windowId);
-        qCDebug(lcCore) << "preTileGeometry: found by windowId" << windowId << "=" << entry.geometry
-                        << "screen:" << entry.connectorName;
-        return entry.geometry;
-    }
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId && m_preTileGeometries.contains(appId)) {
-        const auto& entry = m_preTileGeometries.value(appId);
-        qCDebug(lcCore) << "preTileGeometry: found by appId" << appId << "=" << entry.geometry
-                        << "screen:" << entry.connectorName;
-        return entry.geometry;
-    }
-    qCDebug(lcCore) << "preTileGeometry: not found for" << windowId;
-    return std::nullopt;
-}
-
-bool WindowTrackingService::hasPreTileGeometry(const QString& windowId) const
-{
-    if (windowId.isEmpty()) {
-        return false;
-    }
-    if (m_preTileGeometries.contains(windowId)) {
-        return true;
-    }
-    QString appId = currentAppIdFor(windowId);
-    return (appId != windowId && m_preTileGeometries.contains(appId));
-}
-
-void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
-{
-    if (windowId.isEmpty()) {
-        return;
-    }
-    bool removed = m_preTileGeometries.remove(windowId) > 0;
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId) {
-        removed |= (m_preTileGeometries.remove(appId) > 0);
-    }
-    if (removed) {
-        qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
-        markDirty(DirtyPreTileGeometries);
-    }
-    if (m_snapState) {
-        m_snapState->clearPreTileGeometry(windowId);
-    }
-}
-
-std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QString& windowId,
-                                                                     const QString& currentScreenName) const
-{
-    return validatePreTileEntry(windowId, currentScreenName, /*exactOnly=*/false);
-}
-
-std::optional<QRect> WindowTrackingService::validatedPreTileGeometryExact(const QString& windowId,
-                                                                          const QString& currentScreenName) const
-{
-    return validatePreTileEntry(windowId, currentScreenName, /*exactOnly=*/true);
-}
-
-std::optional<QRect> WindowTrackingService::validatePreTileEntry(const QString& windowId,
-                                                                 const QString& currentScreenName, bool exactOnly) const
-{
-    if (windowId.isEmpty()) {
-        return std::nullopt;
-    }
-
-    // Look up the full entry (with screen context)
-    QString storedScreen;
-    QRect rect;
-    auto lookupEntry = [&](const QString& key) -> bool {
-        auto it = m_preTileGeometries.constFind(key);
-        if (it == m_preTileGeometries.constEnd()) {
-            return false;
-        }
-        rect = it->geometry;
-        storedScreen = it->connectorName;
-        return true;
-    };
-    if (!lookupEntry(windowId)) {
-        if (exactOnly) {
-            return std::nullopt;
-        }
-        QString appId = currentAppIdFor(windowId);
-        if (appId == windowId || !lookupEntry(appId)) {
-            return std::nullopt;
-        }
-    }
-
-    if (!rect.isValid() || rect.width() <= 0 || rect.height() <= 0) {
+    if (!geo.isValid() || geo.width() <= 0 || geo.height() <= 0) {
         return std::nullopt;
     }
 
@@ -372,8 +215,8 @@ std::optional<QRect> WindowTrackingService::validatePreTileEntry(const QString& 
     // 1. Different physical monitors (e.g. DP-1 vs HDMI-1)
     // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
     //    — the virtual screens have different geometry bounds, so coordinates are wrong.
-    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty()
-        && !Phosphor::Screens::ScreenIdentity::screensMatch(storedScreen, currentScreenName)) {
+    if (!savedScreen.isEmpty() && !currentScreenName.isEmpty()
+        && !Phosphor::Screens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
         auto* mgr = m_screenManager;
         QScreen* target = mgr ? mgr->physicalQScreenFor(currentScreenName)
                               : Phosphor::Screens::ScreenIdentity::findByIdOrName(currentScreenName);
@@ -384,21 +227,21 @@ std::optional<QRect> WindowTrackingService::validatePreTileEntry(const QString& 
                 : target->availableGeometry();
             // Clamp size to fit within the target screen (the window may have been
             // larger than the target VS when captured on a wider screen/physical monitor).
-            int w = qMin(rect.width(), available.width());
-            int h = qMin(rect.height(), available.height());
+            int w = qMin(geo.width(), available.width());
+            int h = qMin(geo.height(), available.height());
             int x = available.x() + (available.width() - w) / 2;
             int y = available.y() + (available.height() - h) / 2;
             QRect adjusted(x, y, w, h);
-            qCDebug(lcCore) << "validatedPreTileGeometry: cross-screen adjustment for" << windowId << "from"
-                            << storedScreen << "to" << currentScreenName << ":" << rect << "->" << adjusted;
+            qCDebug(lcCore) << "validateGeometryForScreen: cross-screen adjustment from" << savedScreen << "to"
+                            << currentScreenName << ":" << geo << "->" << adjusted;
             return adjusted;
         }
     }
 
-    if (isGeometryOnScreen(rect)) {
-        return rect;
+    if (isGeometryOnScreen(geo)) {
+        return geo;
     }
-    return adjustGeometryToScreen(rect);
+    return adjustGeometryToScreen(geo);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

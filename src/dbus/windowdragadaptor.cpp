@@ -10,6 +10,7 @@
 #include "../config/configdefaults.h"
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
+#include "../snap/SnapEngine.h"
 #include "../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -561,8 +562,8 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wa
 {
     Q_UNUSED(wasSnapped)
     // Store pre-tile geometry for restore on unsnap/float (first-only: overwrite=false).
-    // The service handles the "already stored" case internally.
-    if (m_windowTracking && originalGeometry.isValid()) {
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    if (m_windowTracking && m_windowTracking->snapEngine() && originalGeometry.isValid()) {
         QString screenId = effectiveScreenIdAt(originalGeometry.center().x(), originalGeometry.center().y());
         if (screenId.isEmpty()) {
             QScreen* screen = Utils::findScreenAtPosition(originalGeometry.center());
@@ -570,8 +571,7 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wa
                 screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             }
         }
-        m_windowTracking->storePreTileGeometry(windowId, originalGeometry.x(), originalGeometry.y(),
-                                               originalGeometry.width(), originalGeometry.height(), screenId, false);
+        m_windowTracking->snapEngine()->storeUnmanagedGeometry(windowId, originalGeometry, screenId, false);
     }
 }
 

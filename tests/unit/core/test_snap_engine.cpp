@@ -315,15 +315,18 @@ private Q_SLOTS:
         QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
     }
 
-    void testDualStoreSync_preTileGeometry()
+    void testEngineBaseUnmanagedGeometry()
     {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
         const QString windowId = QStringLiteral("app|uuid-pretile-sync");
 
-        m_wts->storePreTileGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
-        QVERIFY(m_snapState->hasPreTileGeometry(windowId));
+        engine.storeUnmanagedGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
+        QVERIFY(engine.hasUnmanagedGeometry(windowId));
 
-        m_wts->clearPreTileGeometry(windowId);
-        QVERIFY(!m_snapState->hasPreTileGeometry(windowId));
+        engine.removeUnmanagedGeometry(windowId);
+        QVERIFY(!engine.hasUnmanagedGeometry(windowId));
+        m_wts->setSnapState(nullptr);
     }
 
     void testDualStoreSync_windowClosed()
@@ -332,9 +335,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("DP-1");
 
         m_wts->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 1);
-        m_wts->storePreTileGeometry(windowId, QRect(0, 0, 400, 300), screen);
         QVERIFY(m_snapState->isWindowSnapped(windowId));
-        QVERIFY(m_snapState->hasPreTileGeometry(windowId));
 
         m_wts->windowClosed(windowId);
         QVERIFY(!m_snapState->isWindowSnapped(windowId));

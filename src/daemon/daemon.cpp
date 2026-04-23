@@ -524,6 +524,7 @@ bool Daemon::init()
     // SnapEngine creates its own SnapState internally (symmetric with
     // AutotileEngine/TilingState). WTS references it for zone queries.
     m_windowTrackingAdaptor->service()->setSnapState(m_snapEngine->snapState());
+    m_windowTrackingAdaptor->service()->setSnapEngine(m_snapEngine.get());
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.

@@ -21,7 +21,8 @@ WindowState PlacementEngineBase::windowState(const QString& windowId) const
     return m_windowStates.value(windowId, WindowState::Unmanaged);
 }
 
-void PlacementEngineBase::claimWindow(const QString& windowId, const QRect& geometry, const QString& screenId)
+void PlacementEngineBase::claimWindow(const QString& windowId, const QRect& geometry, const QString& screenId,
+                                      bool overwrite)
 {
     if (windowId.isEmpty()) {
         return;
@@ -29,15 +30,24 @@ void PlacementEngineBase::claimWindow(const QString& windowId, const QRect& geom
 
     WindowState oldState = m_windowStates.value(windowId, WindowState::Unmanaged);
 
-    if (!m_unmanagedGeometries.contains(windowId) && geometry.isValid()) {
-        m_unmanagedGeometries[windowId] = {geometry, screenId};
-    }
+    storeUnmanagedGeometry(windowId, geometry, screenId, overwrite);
 
     m_windowStates[windowId] = WindowState::EngineOwned;
     onWindowClaimed(windowId);
 
     if (oldState != WindowState::EngineOwned) {
         Q_EMIT windowStateTransitioned(windowId, oldState, WindowState::EngineOwned);
+    }
+}
+
+void PlacementEngineBase::storeUnmanagedGeometry(const QString& windowId, const QRect& geometry,
+                                                 const QString& screenId, bool overwrite)
+{
+    if (windowId.isEmpty() || !geometry.isValid()) {
+        return;
+    }
+    if (overwrite || !m_unmanagedGeometries.contains(windowId)) {
+        m_unmanagedGeometries[windowId] = {geometry, screenId};
     }
 }
 

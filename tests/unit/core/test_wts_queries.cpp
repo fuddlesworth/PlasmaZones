@@ -311,18 +311,12 @@ private Q_SLOTS:
 
     void testPreSnapGeometry_stableIdFallback()
     {
-        // Pre-snap geometry keyed by appId should be found when looking up by full windowId
         QString appId = QStringLiteral("dolphin");
         QString windowId = QStringLiteral("dolphin|a1b2c3d4-0000-0000-0000-000088888888");
 
-        QHash<QString, WindowTrackingService::PreTileGeometry> geos;
-        geos[appId] = {QRect(50, 100, 640, 480), QString()};
-        m_service->setPreTileGeometries(geos);
-
-        QVERIFY(m_service->hasPreTileGeometry(windowId));
-        auto geo = m_service->preTileGeometry(windowId);
-        QVERIFY(geo.has_value());
-        QCOMPARE(geo->width(), 640);
+        m_engine->storeUnmanagedGeometry(appId, QRect(50, 100, 640, 480), QString());
+        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
+        QCOMPARE(m_engine->unmanagedGeometry(appId).width(), 640);
     }
 
 private:

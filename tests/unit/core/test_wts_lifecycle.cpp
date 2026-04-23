@@ -71,6 +71,7 @@ private Q_SLOTS:
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
         m_service->setSnapState(m_engine->snapState());
+        m_service->setSnapEngine(m_engine);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -137,16 +138,15 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("org.kde.dolphin|99999");
         QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
-        m_service->storePreTileGeometry(windowId, QRect(100, 200, 800, 600));
-        QVERIFY(m_service->hasPreTileGeometry(windowId));
+        m_engine->storeUnmanagedGeometry(windowId, QRect(100, 200, 800, 600), QString());
+        QVERIFY(m_engine->hasUnmanagedGeometry(windowId));
 
         m_service->windowClosed(windowId);
 
-        QVERIFY(m_service->hasPreTileGeometry(appId));
-        auto geo = m_service->preTileGeometry(appId);
-        QVERIFY(geo.has_value());
-        QCOMPARE(geo->x(), 100);
-        QCOMPARE(geo->width(), 800);
+        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
+        QRect geo = m_engine->unmanagedGeometry(appId);
+        QCOMPARE(geo.x(), 100);
+        QCOMPARE(geo.width(), 800);
     }
 
     void testWindowClosed_floatStateClearedOnClose()

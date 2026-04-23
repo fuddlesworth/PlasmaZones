@@ -4,6 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
 #include "persistenceworker.h"
+#include "../../snap/SnapEngine.h"
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
 #include <PhosphorScreens/VirtualScreen.h>
@@ -154,11 +155,11 @@ void WindowTrackingAdaptor::saveState()
     // even after daemon restart (windows stay at their zone positions across restarts).
     // Save full windowId format for daemon-only restarts (UUIDs stable, multi-instance distinction).
     // Save appId format as fallback for KWin restarts (UUIDs change).
-    if (dirty & D::DirtyPreTileGeometries) {
+    if ((dirty & D::DirtyPreTileGeometries) && m_snapEngine) {
         tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
-                              serializeGeometryMapFull(m_service->preTileGeometries()));
+                              serializeGeometryMapFull(m_snapEngine->unmanagedGeometries()));
         tracking->writeString(ConfigKeys::preTileGeometriesKey(),
-                              serializeGeometryMap(m_service->preTileGeometries(), m_service));
+                              serializeGeometryMap(m_snapEngine->unmanagedGeometries(), m_service));
     }
 
     // Save last used zone info (from service)
@@ -292,7 +293,8 @@ void WindowTrackingAdaptor::saveState()
         m_sessionBackend->sync();
     }
     qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec << "zones=" << fullAssignments.size()
-                         << "pending=" << pendingQueuesObj.size() << "preTile=" << m_service->preTileGeometries().size()
+                         << "pending=" << pendingQueuesObj.size()
+                         << "preTile=" << (m_snapEngine ? m_snapEngine->unmanagedGeometries().size() : 0)
                          << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size();
 }
 
@@ -529,10 +531,10 @@ void WindowTrackingAdaptor::loadState()
 
     m_service->setPendingRestoreQueues(pendingQueues);
 
-    // Load pre-tile geometries (with migration from old split keys)
-    using PreTileGeometry = WindowTrackingService::PreTileGeometry;
-    QHash<QString, PreTileGeometry> preTileGeometries;
-    auto loadGeometries = [](const QString& json, QHash<QString, PreTileGeometry>& out) {
+    // Load pre-tile geometries into the engine's unmanaged-geometry store.
+    using UnmanagedEntry = PhosphorEngineApi::PlacementEngineBase::UnmanagedEntry;
+    QHash<QString, UnmanagedEntry> unmanagedGeometries;
+    auto loadGeometries = [](const QString& json, QHash<QString, UnmanagedEntry>& out) {
         if (json.isEmpty()) {
             return;
         }
@@ -548,7 +550,7 @@ void WindowTrackingAdaptor::loadState()
                            geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = geomObj[QLatin1String("screen")].toString();
-                    out[it.key()] = PreTileGeometry{geom, screen};
+                    out[it.key()] = UnmanagedEntry{geom, screen};
                 }
             }
         }
@@ -556,11 +558,7 @@ void WindowTrackingAdaptor::loadState()
 
     // Load full windowId format (per-runtime-instance data from a daemon-only
     // restart where KWin UUIDs are still valid). These are instance-scoped —
-    // deliberately NOT mirrored to the appId key on load. The appId slot is
-    // the cross-session inheritance baseline owned exclusively by the legacy
-    // format below, so a ghost per-instance entry (e.g. from a window that
-    // was never cleanly closed) cannot poison the appId fallback used by
-    // validatedPreTileGeometry on window reopen.
+    // deliberately NOT mirrored to the appId key on load.
     QString fullTileJson = readVal(ConfigKeys::preTileGeometriesFullKey(), QString());
     if (!fullTileJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(fullTileJson.toUtf8());
@@ -578,29 +576,26 @@ void WindowTrackingAdaptor::loadState()
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = entry[QLatin1String("screen")].toString();
-                    preTileGeometries[windowId] = PreTileGeometry{geom, screen};
+                    unmanagedGeometries[windowId] = UnmanagedEntry{geom, screen};
                 }
             }
         }
     }
 
-    // Load appId-keyed format (cross-session baseline — the "what this app
-    // looked like last time a user explicitly floated it" fallback).
+    // Load appId-keyed format (cross-session baseline).
     QString tileJson = readVal(ConfigKeys::preTileGeometriesKey(), QString());
     if (!tileJson.isEmpty()) {
-        QHash<QString, PreTileGeometry> appIdGeometries;
+        QHash<QString, UnmanagedEntry> appIdGeometries;
         loadGeometries(tileJson, appIdGeometries);
         for (auto it = appIdGeometries.constBegin(); it != appIdGeometries.constEnd(); ++it) {
-            // Do not overwrite a full-windowId entry that happens to collide
-            // (shouldn't happen — appId keys never contain '|'), but the
-            // general rule is: full entries are per-instance, appId entries
-            // are cross-session, they live in separate key namespaces.
-            if (!preTileGeometries.contains(it.key())) {
-                preTileGeometries[it.key()] = it.value();
+            if (!unmanagedGeometries.contains(it.key())) {
+                unmanagedGeometries[it.key()] = it.value();
             }
         }
     }
-    m_service->setPreTileGeometries(preTileGeometries);
+    if (m_snapEngine) {
+        m_snapEngine->setUnmanagedGeometries(unmanagedGeometries);
+    }
 
     // Load last used zone info
     QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());

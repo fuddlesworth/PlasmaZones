@@ -17,6 +17,10 @@
 #include <utility>
 #include <PhosphorScreens/ScreenIdentity.h>
 
+namespace PhosphorEngineApi {
+class PlacementEngineBase;
+}
+
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
@@ -93,6 +97,25 @@ public:
     void setSnapState(PhosphorZones::SnapState* state)
     {
         m_snapState = state;
+    }
+
+    /**
+     * @brief Wire the snap-mode placement engine for unmanaged geometry queries.
+     *
+     * PlacementEngineBase is the single store for pre-tile (unmanaged) geometry.
+     * WTS delegates to this engine for geometry lookup, store, and clear
+     * operations used by the D-Bus facade and persistence layer.
+     *
+     * Must be set after construction. Not owned.
+     */
+    void setSnapEngine(PhosphorEngineApi::PlacementEngineBase* engine)
+    {
+        m_snapEngine = engine;
+    }
+
+    PhosphorEngineApi::PlacementEngineBase* snapEngine() const
+    {
+        return m_snapEngine;
     }
 
     /**
@@ -175,79 +198,25 @@ public:
     bool isWindowSnapped(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Pre-Tile Geometry Storage (unified snap + autotile)
+    // Geometry Validation Utility
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Stored pre-tile geometry with screen context
+     * @brief Validate and adjust a saved geometry for screen-aware restore.
      *
-     * Tracks both the geometry and the screen where it was captured, so that
-     * cross-screen restores can detect coordinate mismatch and adjust.
-     */
-    struct PreTileGeometry
-    {
-        QRect geometry;
-        QString connectorName; ///< connector name at time of save (may be empty for legacy entries)
-    };
-
-    /**
-     * @brief Store geometry before tiling (snap or autotile)
-     * @param windowId Full window ID
-     * @param geometry Window geometry before tiling
-     * @param connectorName Screen connector name where the window currently is
-     * @param overwrite If false (snap mode), skip if entry already exists (first-only).
-     *                  If true (autotile mode), always overwrite.
-     */
-    void storePreTileGeometry(const QString& windowId, const QRect& geometry, const QString& connectorName = QString(),
-                              bool overwrite = false);
-
-    /**
-     * @brief Get stored pre-tile geometry
-     * @param windowId Full window ID
-     * @return Geometry if stored, nullopt otherwise
-     */
-    std::optional<QRect> preTileGeometry(const QString& windowId) const;
-
-    /**
-     * @brief Check if window has stored pre-tile geometry
-     */
-    bool hasPreTileGeometry(const QString& windowId) const;
-
-    /**
-     * @brief Clear stored pre-tile geometry (after restore)
-     */
-    void clearPreTileGeometry(const QString& windowId);
-
-    /**
-     * @brief Get validated pre-tile geometry within screen bounds
-     * @param windowId Full window ID
-     * @param currentScreenName Screen where the window currently is (for cross-screen adjustment).
-     *        If empty, uses existing isGeometryOnScreen/adjustGeometryToScreen logic.
-     * @return Adjusted geometry within visible screens, nullopt if not found
-     */
-    std::optional<QRect> validatedPreTileGeometry(const QString& windowId,
-                                                  const QString& currentScreenName = QString()) const;
-
-    /**
-     * @brief Strict per-instance lookup: no appId fallback.
+     * Pure utility — reads no internal state. Given a saved geometry and the
+     * screen it was captured on, returns the geometry adjusted for the
+     * @p currentScreenName. Cross-screen mismatches are resolved by centering
+     * on the target screen (size clamped to fit). On-screen geometries are
+     * returned as-is; off-screen geometries are nudged to the nearest screen.
      *
-     * Returns the pre-tile geometry ONLY when an entry was captured for the
-     * EXACT runtime windowId. Cross-session appId-keyed entries (which may
-     * hold stale coordinates from a prior instance or daemon session) are
-     * deliberately ignored.
-     *
-     * Use this for restores that must not teleport a window to ancient
-     * coordinates left behind by a ghost instance — e.g. autotile→snap
-     * mode-toggle restoring windows that were never explicitly floated.
-     *
-     * @param windowId Full window ID (must include the '|uuid' suffix)
-     * @param currentScreenName Screen where the window currently is (for
-     *        cross-screen adjustment; see validatedPreTileGeometry)
-     * @return Adjusted geometry within visible screens, nullopt if no exact
-     *         per-instance entry exists
+     * @param geo             Saved geometry (e.g. from PlacementEngineBase::unmanagedGeometry)
+     * @param savedScreen     Screen connector name at capture time (may be empty)
+     * @param currentScreenName Screen where the window currently is
+     * @return Adjusted geometry, or nullopt if @p geo is invalid
      */
-    std::optional<QRect> validatedPreTileGeometryExact(const QString& windowId,
-                                                       const QString& currentScreenName = QString()) const;
+    std::optional<QRect> validateGeometryForScreen(const QRect& geo, const QString& savedScreen,
+                                                   const QString& currentScreenName) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -618,13 +587,8 @@ public:
      */
     const QHash<QString, int>& desktopAssignments() const;
 
-    /**
-     * @brief Get all pre-tile geometries for persistence
-     */
-    const QHash<QString, PreTileGeometry>& preTileGeometries() const
-    {
-        return m_preTileGeometries;
-    }
+    // preTileGeometries() removed — PlacementEngineBase is the single store.
+    // Persistence reads from the engine's unmanagedGeometries() map.
 
     using PendingRestore = PlasmaZones::PendingRestore;
     using ResnapEntry = PlasmaZones::ResnapEntry;
@@ -665,13 +629,8 @@ public:
         m_pendingRestoreQueues = queues;
     }
 
-    /**
-     * @brief Set pre-tile geometries (loaded from KConfig by adaptor)
-     */
-    void setPreTileGeometries(const QHash<QString, PreTileGeometry>& geometries)
-    {
-        m_preTileGeometries = geometries;
-    }
+    // setPreTileGeometries() removed — PlacementEngineBase is the single store.
+    // Load uses the engine's setUnmanagedGeometries().
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
@@ -795,11 +754,6 @@ private:
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 
-    /// Shared implementation for validatedPreTileGeometry and validatedPreTileGeometryExact.
-    /// When exactOnly is true, does not fall back to the appId-keyed entry.
-    std::optional<QRect> validatePreTileEntry(const QString& windowId, const QString& currentScreenName,
-                                              bool exactOnly) const;
-
     /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
     void validateLastUsedZone(const QString& targetScreen);
 
@@ -875,19 +829,11 @@ private:
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorEngineApi::PlacementEngineBase* m_snapEngine = nullptr;
 
-    // Pre-tile geometries (unified snap + autotile): full windowId + appId at runtime,
-    // appId only for session-restored entries. Converted on window close for persistence.
-    // Each entry includes the screen name where the geometry was captured, enabling
-    // cross-screen restore to detect coordinate mismatch and center on the target screen.
-    //
-    // Authoritative store. The kwin-effect keeps a per-screen cache
-    // (`AutotileHandler::m_preAutotileGeometries`) populated on the first
-    // autotile transition so it can restore frames without a D-Bus round-trip,
-    // but this map is the source of truth: it persists across daemon restarts
-    // via session save/load, drives session-restore geometry resolution, and
-    // is the only copy keyed by appId for windows that haven't reopened yet.
-    QHash<QString, PreTileGeometry> m_preTileGeometries;
+    // m_preTileGeometries removed — PlacementEngineBase is the single store
+    // for unmanaged (pre-tile) geometry. Engines own the data; WTS provides
+    // validation utilities and delegates persistence to the adaptor layer.
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence

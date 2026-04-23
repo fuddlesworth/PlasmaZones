@@ -85,19 +85,7 @@ QJsonObject SnapState::toJson() const
     }
     obj[QLatin1String("floatingWindows")] = floating;
 
-    QJsonObject preTile;
-    for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
-        QJsonObject geo;
-        geo[QLatin1String("x")] = it->geometry.x();
-        geo[QLatin1String("y")] = it->geometry.y();
-        geo[QLatin1String("w")] = it->geometry.width();
-        geo[QLatin1String("h")] = it->geometry.height();
-        if (!it->connectorName.isEmpty()) {
-            geo[QLatin1String("connector")] = it->connectorName;
-        }
-        preTile[it.key()] = geo;
-    }
-    obj[QLatin1String("preTileGeometries")] = preTile;
+    // preTileGeometries removed — PlacementEngineBase is the single store.
 
     QJsonObject preFloat;
     for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
@@ -322,38 +310,7 @@ void SnapState::clearPreFloatZone(const QString& windowId)
     m_preFloatScreenAssignments.remove(windowId);
 }
 
-// ── Pre-Tile Geometry ───────────────────────────────────────────────────────
-
-void SnapState::storePreTileGeometry(const QString& windowId, const QRect& geometry, const QString& connectorName,
-                                     bool overwrite)
-{
-    if (!overwrite && m_preTileGeometries.contains(windowId)) {
-        return;
-    }
-    m_preTileGeometries[windowId] = {geometry, connectorName};
-    Q_EMIT stateChanged();
-}
-
-std::optional<QRect> SnapState::preTileGeometry(const QString& windowId) const
-{
-    const auto it = m_preTileGeometries.constFind(windowId);
-    if (it == m_preTileGeometries.constEnd()) {
-        return std::nullopt;
-    }
-    return it->geometry;
-}
-
-bool SnapState::hasPreTileGeometry(const QString& windowId) const
-{
-    return m_preTileGeometries.contains(windowId);
-}
-
-void SnapState::clearPreTileGeometry(const QString& windowId)
-{
-    if (m_preTileGeometries.remove(windowId)) {
-        Q_EMIT stateChanged();
-    }
-}
+// Pre-tile geometry removed — PlacementEngineBase is the single store.
 
 // ── Window Lifecycle ────────────────────────────────────────────────────────
 
@@ -364,7 +321,6 @@ bool SnapState::removeWindowData(const QString& windowId)
     removed |= m_windowScreenAssignments.remove(windowId);
     removed |= m_windowDesktopAssignments.remove(windowId);
     removed |= m_floatingWindows.remove(windowId);
-    removed |= m_preTileGeometries.remove(windowId);
     removed |= m_preFloatZoneAssignments.remove(windowId);
     removed |= m_preFloatScreenAssignments.remove(windowId);
     removed |= m_autoSnappedWindows.remove(windowId);
@@ -381,10 +337,10 @@ void SnapState::windowClosed(const QString& windowId)
 bool SnapState::isEmpty() const
 {
     return m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty()
-        && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preTileGeometries.isEmpty()
-        && m_preFloatZoneAssignments.isEmpty() && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty()
-        && m_lastUsedScreenId.isEmpty() && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0
-        && m_userSnappedClasses.isEmpty() && m_autoSnappedWindows.isEmpty();
+        && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preFloatZoneAssignments.isEmpty()
+        && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty() && m_lastUsedScreenId.isEmpty()
+        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0 && m_userSnappedClasses.isEmpty()
+        && m_autoSnappedWindows.isEmpty();
 }
 
 void SnapState::clear()
@@ -396,7 +352,6 @@ void SnapState::clear()
     m_windowScreenAssignments.clear();
     m_windowDesktopAssignments.clear();
     m_floatingWindows.clear();
-    m_preTileGeometries.clear();
     m_preFloatZoneAssignments.clear();
     m_preFloatScreenAssignments.clear();
     m_lastUsedZoneId.clear();
@@ -569,9 +524,6 @@ int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
         allTracked.insert(it.key());
     }
     allTracked.unite(m_floatingWindows);
-    for (auto it = m_preTileGeometries.constBegin(); it != m_preTileGeometries.constEnd(); ++it) {
-        allTracked.insert(it.key());
-    }
     for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
         allTracked.insert(it.key());
     }
@@ -626,22 +578,7 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
         }
     }
 
-    const QJsonObject preTile = json.value(QLatin1String("preTileGeometries")).toObject();
-    for (auto it = preTile.constBegin(); it != preTile.constEnd(); ++it) {
-        if (it.key().isEmpty()) {
-            continue;
-        }
-        const QJsonObject geo = it->toObject();
-        const int w = geo.value(QLatin1String("w")).toInt();
-        const int h = geo.value(QLatin1String("h")).toInt();
-        if (w <= 0 || h <= 0) {
-            continue;
-        }
-        PreTileGeometry ptg;
-        ptg.geometry = QRect(geo.value(QLatin1String("x")).toInt(), geo.value(QLatin1String("y")).toInt(), w, h);
-        ptg.connectorName = geo.value(QLatin1String("connector")).toString();
-        state->m_preTileGeometries[it.key()] = ptg;
-    }
+    // preTileGeometries deserialization removed — PlacementEngineBase is the single store.
 
     const QJsonObject preFloat = json.value(QLatin1String("preFloatZones")).toObject();
     for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {

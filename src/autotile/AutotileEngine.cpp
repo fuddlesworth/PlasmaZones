@@ -88,25 +88,16 @@ AutotileEngine::~AutotileEngine() = default;
 
 void AutotileEngine::onWindowClaimed(const QString& windowId)
 {
-    // Propagate unmanaged geometry from the base class into WTS's preTileGeometry
-    // store so that callers using the IPlacementEngine::claimWindow() entry point
-    // automatically get WTS persistence, appId-keyed cross-session restore, and
-    // cross-screen validation. First-only semantics match both claimWindow (won't
-    // overwrite) and storePreTileGeometry(overwrite=false).
-    if (m_windowTracker && hasUnmanagedGeometry(windowId)) {
-        m_windowTracker->storePreTileGeometry(windowId, unmanagedGeometry(windowId), unmanagedScreen(windowId),
-                                              /*overwrite=*/false);
-    }
+    Q_UNUSED(windowId)
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    // No WTS propagation needed.
 }
 
 void AutotileEngine::onWindowReleased(const QString& windowId)
 {
-    // When the engine releases a window, also clear the WTS preTileGeometry entry
-    // so callers reading from WTS see consistent state. The base class already
-    // removed the entry from m_unmanagedGeometries before calling this hook.
-    if (m_windowTracker) {
-        m_windowTracker->clearPreTileGeometry(windowId);
-    }
+    Q_UNUSED(windowId)
+    // PlacementEngineBase is the single store for unmanaged geometry.
+    // No WTS propagation needed.
 }
 
 void AutotileEngine::markAutotileFloated(const QString& windowId)

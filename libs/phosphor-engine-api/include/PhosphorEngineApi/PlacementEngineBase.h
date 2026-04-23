@@ -35,9 +35,15 @@ class PHOSPHORENGINEAPI_EXPORT PlacementEngineBase : public QObject, public IPla
     Q_OBJECT
 
 public:
+    struct UnmanagedEntry
+    {
+        QRect geometry;
+        QString screenId;
+    };
+
     WindowState windowState(const QString& windowId) const;
 
-    void claimWindow(const QString& windowId, const QRect& geometry, const QString& screenId);
+    void claimWindow(const QString& windowId, const QRect& geometry, const QString& screenId, bool overwrite = false);
     void releaseWindow(const QString& windowId);
     void floatWindow(const QString& windowId);
     void unfloatWindow(const QString& windowId);
@@ -46,6 +52,17 @@ public:
     QString unmanagedScreen(const QString& windowId) const;
     bool hasUnmanagedGeometry(const QString& windowId) const;
     void removeUnmanagedGeometry(const QString& windowId);
+    void storeUnmanagedGeometry(const QString& windowId, const QRect& geometry, const QString& screenId,
+                                bool overwrite = false);
+
+    const QHash<QString, UnmanagedEntry>& unmanagedGeometries() const
+    {
+        return m_unmanagedGeometries;
+    }
+    void setUnmanagedGeometries(const QHash<QString, UnmanagedEntry>& geos)
+    {
+        m_unmanagedGeometries = geos;
+    }
 
     QJsonObject serializeBaseState() const;
     void deserializeBaseState(const QJsonObject& state);
@@ -64,11 +81,6 @@ Q_SIGNALS:
     void windowStateTransitioned(const QString& windowId, WindowState oldState, WindowState newState);
 
 private:
-    struct UnmanagedEntry
-    {
-        QRect geometry;
-        QString screenId;
-    };
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
     QHash<QString, WindowState> m_windowStates;
 };

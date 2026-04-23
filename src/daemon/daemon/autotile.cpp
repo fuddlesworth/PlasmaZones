@@ -405,7 +405,12 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
             // window to stale coordinates left behind by a ghost instance.
             // Leaving the window at its current tiled position is the least
             // surprising outcome.
-            auto geo = wts->validatedPreTileGeometryExact(windowId, screenId);
+            // Strict per-instance lookup: no appId fallback. Use engine directly.
+            std::optional<QRect> geo;
+            if (m_snapEngine && m_snapEngine->hasUnmanagedGeometry(windowId)) {
+                geo = wts->validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
+                                                     m_snapEngine->unmanagedScreen(windowId), screenId);
+            }
             if (geo) {
                 ZoneAssignmentEntry entry;
                 entry.windowId = windowId;

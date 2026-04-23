@@ -107,7 +107,7 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
     for (const auto& entry : entries) {
         if (entry.targetZoneId == QLatin1String("__restore__")) {
             uncommitSnap(entry.windowId);
-            m_windowTracker->clearPreTileGeometry(entry.windowId);
+            removeUnmanagedGeometry(entry.windowId);
             continue;
         }
 
