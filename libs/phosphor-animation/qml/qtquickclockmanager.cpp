@@ -31,47 +31,108 @@ IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)
         return nullptr;
     }
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    // Phase 1: map mutation under the manager lock. We find-or-insert
+    // the Entry and decide whether this call is the one that created
+    // it — but we defer the QObject::connect call until AFTER the
+    // lock is released. Qt6's connect() takes internal per-object
+    // locks (a per-QObject signal/slot table mutex plus, for
+    // DirectConnection with a functor receiver, Qt's per-thread
+    // dispatcher state); nesting our own mutex around that call is a
+    // lock-ordering hazard — any other code path that takes Qt's
+    // internal lock first and then wants our mutex (e.g., a
+    // `destroyed` signal firing into releaseClockFor while another
+    // thread is mid-clockFor) could deadlock.
+    //
+    // Two-phase design constraint: another thread racing this one on
+    // the SAME window must not install a second `destroyed`
+    // connection. We guard this via a `justCreated` flag returned
+    // from the locked block — only the winning inserter connects; the
+    // loser sees an existing entry and returns its clock unchanged.
+    IMotionClock* rawClock = nullptr;
+    bool justCreated = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
 
-    if (auto it = m_entries.find(window); it != m_entries.end()) {
-        // Stale-window check: the raw pointer matches a map key but
-        // the QPointer inside the entry has gone null. With eager
-        // `destroyed`-signal eviction (below) this should be rare,
-        // but we still handle it defensively: the destroyed signal
-        // can race with a direct teardown where Qt tears down the
-        // QObject without emitting `destroyed` (process-exit path).
-        if (!it->second.window) {
-            m_entries.erase(it);
+        if (auto it = m_entries.find(window); it != m_entries.end()) {
+            // Stale-window check: the raw pointer matches a map key
+            // but the QPointer inside the entry has gone null. With
+            // eager `destroyed`-signal eviction (below) this should
+            // be rare, but we still handle it defensively: the
+            // destroyed signal can race with a direct teardown where
+            // Qt tears down the QObject without emitting `destroyed`
+            // (process-exit path).
+            if (!it->second.window) {
+                m_entries.erase(it);
+            } else {
+                return it->second.clock.get();
+            }
+        }
+
+        // First lookup for this window — construct a fresh QtQuickClock.
+        // QtQuickClock's ctor subscribes to beforeRendering internally;
+        // no further wiring needed here.
+        auto clock = std::make_unique<QtQuickClock>(window);
+        rawClock = clock.get();
+
+        Entry entry{QPointer<QQuickWindow>(window), std::move(clock), {}};
+        // The destroyedConnection field is left default-constructed
+        // here; we populate it below (outside the lock) so the
+        // QObject::connect call does not nest Qt's internal locks
+        // under m_mutex.
+        m_entries.emplace(window, std::move(entry));
+        justCreated = true;
+    }
+
+    if (justCreated) {
+        // Eager eviction: when the window emits `destroyed`, drop the
+        // entry synchronously on the GUI thread. This prevents the
+        // address-reuse hazard (Qt recycling the QQuickWindow* for a
+        // fresh window) AND lets consumers assume that after
+        // `destroyed`, nobody is handing out a stale `IMotionClock*`
+        // to this window.
+        //
+        // DirectConnection because the signal fires from the QObject
+        // destructor on the GUI thread — there is no event loop to
+        // deliver a queued connection to, and we need the eviction to
+        // happen before other GUI-thread teardown hooks run.
+        //
+        // Race window between emplace() above and this connect(): if
+        // the window is destroyed in this narrow gap (only possible
+        // on the GUI thread for a GUI-thread-owned QObject), the
+        // destroyed signal has already fired without a listener and
+        // the map holds a stale entry. We catch that by rechecking
+        // the QPointer under the lock below; if it's null we evict
+        // and return nullptr so the caller does not route animations
+        // onto a dead clock.
+        auto connection = QObject::connect(
+            window, &QObject::destroyed, window,
+            [this, window](QObject*) {
+                releaseClockFor(window);
+            },
+            Qt::DirectConnection);
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (auto it = m_entries.find(window); it != m_entries.end()) {
+            if (!it->second.window) {
+                // Window died between emplace() and connect() — evict
+                // and refuse to hand out the clock; the caller will
+                // re-resolve on the next frame tick and either find
+                // the window gone entirely or bind to its replacement.
+                QObject::disconnect(connection);
+                m_entries.erase(it);
+                return nullptr;
+            }
+            it->second.destroyedConnection = connection;
         } else {
-            return it->second.clock.get();
+            // Entry was evicted by a concurrent releaseClockFor (rare
+            // but possible under the address-reuse path). Drop the
+            // just-installed connection so it does not fire into a
+            // map lookup that will miss.
+            QObject::disconnect(connection);
+            return nullptr;
         }
     }
 
-    // First lookup for this window — construct a fresh QtQuickClock.
-    // QtQuickClock's ctor subscribes to beforeRendering internally;
-    // no further wiring needed here.
-    auto clock = std::make_unique<QtQuickClock>(window);
-    IMotionClock* rawClock = clock.get();
-
-    Entry entry{QPointer<QQuickWindow>(window), std::move(clock), {}};
-    // Eager eviction: when the window emits `destroyed`, drop the
-    // entry synchronously on the GUI thread. This prevents the
-    // address-reuse hazard (Qt recycling the QQuickWindow* for a
-    // fresh window) AND lets consumers assume that after `destroyed`,
-    // nobody is handing out a stale `IMotionClock*` to this window.
-    //
-    // DirectConnection because the signal fires from the QObject
-    // destructor on the GUI thread — there is no event loop to
-    // deliver a queued connection to, and we need the eviction to
-    // happen before other GUI-thread teardown hooks run.
-    entry.destroyedConnection = QObject::connect(
-        window, &QObject::destroyed, window,
-        [this, window](QObject*) {
-            releaseClockFor(window);
-        },
-        Qt::DirectConnection);
-
-    m_entries.emplace(window, std::move(entry));
     return rawClock;
 }
 

@@ -121,6 +121,22 @@ public:
     /// True if @p typeId has a registered factory.
     bool has(const QString& typeId) const;
 
+    /**
+     * @brief True if @p typeId names one of the built-in factories
+     *        (auto-registered by the constructor).
+     *
+     * User-authored JSON curves whose `name` matches a built-in typeId
+     * would silently shadow the built-in under `registerFactory`'s
+     * replace-semantic. `CurveLoader` consults this to reject such
+     * files up-front with a clear diagnostic instead of letting a
+     * user's `"name": "spring"` permanently break the built-in spring
+     * curve for the rest of the process lifetime.
+     *
+     * Comparison is case-sensitive — all built-in typeIds are
+     * lower-case by convention.
+     */
+    static bool isBuiltinTypeId(const QString& typeId);
+
     // Not copyable / movable — owned by composition root via member or
     // unique_ptr. Move would invalidate the QMutex inside Impl.
     CurveRegistry(const CurveRegistry&) = delete;

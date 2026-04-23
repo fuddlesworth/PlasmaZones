@@ -72,6 +72,7 @@ qt_add_qml_module(PhosphorAnimationQml
         ../include/PhosphorAnimation/qml/PhosphorAnimatedRect.h
         ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
         ../include/PhosphorAnimation/qml/PhosphorMotionAnimation.h
+        ../include/PhosphorAnimation/qml/detail/PhosphorAnimatedValueImpl.h
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/phosphor/animation
 )
 
@@ -139,4 +140,9 @@ install(FILES
         ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
         ../include/PhosphorAnimation/qml/PhosphorMotionAnimation.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation/qml
+)
+
+install(FILES
+        ../include/PhosphorAnimation/qml/detail/PhosphorAnimatedValueImpl.h
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation/qml/detail
 )

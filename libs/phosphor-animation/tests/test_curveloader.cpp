@@ -90,7 +90,7 @@ private Q_SLOTS:
     void testUnknownTypeIdIsRejected()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("weird.json")), QStringLiteral(R"({
+        writeFile(dir.filePath(QStringLiteral("bad.json")), QStringLiteral(R"({
             "name": "bad",
             "typeId": "warp-drive",
             "parameters": {}
@@ -145,7 +145,7 @@ private Q_SLOTS:
     void testCubicBezierCurve()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("bez.json")), QStringLiteral(R"({
+        writeFile(dir.filePath(QStringLiteral("user-bezier.json")), QStringLiteral(R"({
             "name": "user-bezier",
             "typeId": "cubic-bezier",
             "parameters": { "x1": 0.25, "y1": 0.75, "x2": 0.75, "y2": 0.25 }
@@ -162,7 +162,7 @@ private Q_SLOTS:
     void testElasticCurve()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("e.json")), QStringLiteral(R"({
+        writeFile(dir.filePath(QStringLiteral("user-elastic.json")), QStringLiteral(R"({
             "name": "user-elastic",
             "typeId": "elastic-out",
             "parameters": { "amplitude": 1.5, "period": 0.4 }
@@ -173,12 +173,16 @@ private Q_SLOTS:
         cleanupRegistry({QStringLiteral("user-elastic")});
     }
 
-    /// requestRescan + signal fires after rescanAll runs (via debounce
-    /// timer). Verified by starting rescan and processing events.
-    void testRescanFiresSignal()
+    /// `curvesChanged` fires on a rescan that sees new content on disk.
+    /// Exercises the positive-emit side of the commitBatch diff — the
+    /// old shape of this test called `requestRescan()` with no content
+    /// change and passed trivially on a loader that emitted
+    /// unconditionally.
+    void testRescanFiresSignal_whenContentChanged()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("initial.json")), QStringLiteral(R"({
+        const QString path = dir.filePath(QStringLiteral("initial.json"));
+        writeFile(path, QStringLiteral(R"({
             "name": "initial",
             "typeId": "spring",
             "parameters": { "omega": 14.0, "zeta": 0.6 }
@@ -188,10 +192,55 @@ private Q_SLOTS:
         loader.loadFromDirectory(dir.path());
 
         QSignalSpy spy(&loader, &CurveLoader::curvesChanged);
+
+        // Mutate the underlying file so the next rescan sees new wire-
+        // format for the same key. QFile::remove + writeFile gets a
+        // clean atomic rewrite and avoids partial-read races.
+        QVERIFY(QFile::remove(path));
+        writeFile(path, QStringLiteral(R"({
+            "name": "initial",
+            "typeId": "spring",
+            "parameters": { "omega": 20.0, "zeta": 0.3 }
+        })"));
+
         loader.requestRescan();
-        // Wait up to 200 ms for the 50ms-debounced timer to fire.
-        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 200);
+        // 50 ms debounce + scheduling slack — 500 ms is more than enough
+        // on a loaded machine without being flaky on a cold one.
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
         cleanupRegistry({QStringLiteral("initial")});
+    }
+
+    /// `curvesChanged` must NOT fire on a rescan that re-parses the same
+    /// files without any content difference — the commitBatch diff in
+    /// CurveLoader::Sink catches this and suppresses the consumer signal.
+    ///
+    /// Without this guard, a cross-process D-Bus rescan trigger or a
+    /// harmless `touch(1)`-style mtime bump would churn every bound
+    /// consumer's rebind logic on no-op rescans.
+    void testRescanDoesNotFireSignal_whenContentUnchanged()
+    {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("stable.json")), QStringLiteral(R"({
+            "name": "stable",
+            "typeId": "spring",
+            "parameters": { "omega": 14.0, "zeta": 0.6 }
+        })"));
+
+        CurveLoader loader(m_registry);
+        loader.loadFromDirectory(dir.path());
+
+        // Attach the spy AFTER the initial load — only interested in
+        // the rescan-produced signal (or lack thereof).
+        QSignalSpy spy(&loader, &CurveLoader::curvesChanged);
+
+        loader.requestRescan();
+        // Wait past the 50 ms debounce window and give the watcher a
+        // chance to (not) fire. A clean no-op rescan should produce
+        // zero signals within 300 ms.
+        QVERIFY2(!spy.wait(300),
+                 "curvesChanged fired on a no-op rescan — commitBatch diff did not suppress unchanged content");
+        QCOMPARE(spy.count(), 0);
+        cleanupRegistry({QStringLiteral("stable")});
     }
 };
 

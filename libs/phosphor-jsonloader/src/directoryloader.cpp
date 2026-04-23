@@ -48,12 +48,10 @@ bool isForbiddenWatchRoot(const QString& path)
 }
 } // namespace
 
-DirectoryLoader::DirectoryLoader(IDirectoryLoaderSink* sink, QObject* parent)
+DirectoryLoader::DirectoryLoader(IDirectoryLoaderSink& sink, QObject* parent)
     : QObject(parent)
-    , m_sink(sink)
+    , m_sink(&sink)
 {
-    Q_ASSERT_X(sink, "DirectoryLoader", "sink must not be null");
-
     // Single-shot debounce coalesces the save-temp-rename storm most
     // editors produce (QSaveFile / most IDEs fire three events in the
     // same ~10 ms) into one rescan.
@@ -106,6 +104,11 @@ void DirectoryLoader::requestRescan()
     m_debounceTimer.start();
 }
 
+void DirectoryLoader::setDebounceIntervalForTest(int ms)
+{
+    m_debounceTimer.setInterval(ms);
+}
+
 int DirectoryLoader::registeredCount() const
 {
     return m_entries.size();
@@ -137,7 +140,13 @@ void DirectoryLoader::rescanAll()
     // path so deleting the user copy restores the system path on a
     // future rescan (the sink decides what to do with that metadata).
     QHash<QString, Entry> fresh;
-    QList<ParsedEntry> freshParsed;
+    // Parsed entries accumulated by key. Keyed rather than listed so
+    // overwrite on cross-directory user-wins is O(1). The final
+    // `freshParsed` list handed to the sink is rebuilt from this hash
+    // AFTER the scan loop — the previous implementation did an O(N)
+    // linear replace per file, which was O(N²) across a dir full of
+    // overrides.
+    QHash<QString, ParsedEntry> freshParsedByKey;
 
     for (const QString& directory : m_directories) {
         QDir dir(directory);
@@ -157,6 +166,14 @@ void DirectoryLoader::rescanAll()
         // key so the warning can name both the winning file and the
         // ignored file — anything less leaves the user hunting for the
         // collision by grep.
+        //
+        // Lookup key is case-folded so rsync-from-macOS-APFS
+        // (case-insensitive) onto ext4 (case-sensitive) — where
+        // `Curve.json` and `curve.json` coexist on ext4 but collide on
+        // APFS — warns consistently on both platforms. The ORIGINAL
+        // case is still used for the registered entry key (sinks may
+        // care about case for display purposes) — only the collision
+        // check itself is case-folded.
         QHash<QString, QString> keysInThisDir;
 
         for (const QString& file : files) {
@@ -185,25 +202,25 @@ void DirectoryLoader::rescanAll()
             }
 
             // Intra-directory duplicate: two files in the SAME dir with
-            // the same key. Filesystem enumeration is alphabetic (we
-            // sort above), so the first-seen file wins deterministically.
-            // Warn naming BOTH files so the user can actually find the
-            // collision without grepping.
-            if (auto winnerIt = keysInThisDir.constFind(key); winnerIt != keysInThisDir.constEnd()) {
+            // the same key (case-folded). Filesystem enumeration is
+            // alphabetic (we sort above), so the first-seen file wins
+            // deterministically. Warn naming BOTH files so the user can
+            // actually find the collision without grepping.
+            const QString foldedKey = key.toLower();
+            if (auto winnerIt = keysInThisDir.constFind(foldedKey); winnerIt != keysInThisDir.constEnd()) {
                 qCWarning(lcLoader).nospace()
                     << "Duplicate key '" << key << "' within directory " << directory << " — kept '" << winnerIt.value()
                     << "', ignored '" << fullPath << "' (winner is alphabetically first)";
                 continue;
             }
-            keysInThisDir.insert(key, fullPath);
+            keysInThisDir.insert(foldedKey, fullPath);
 
             // Cross-directory: user-wins layering. Record the previous
             // source as the shadowed system path on the new entry, then
-            // overwrite. The shadowed `ParsedEntry` in `freshParsed` is
-            // replaced in-place below. When the user copy is later
-            // deleted, the next rescan re-parses the system file fresh
-            // (no need to consult `systemSourcePath` at commit time —
-            // the field is introspection metadata, not a restore hook).
+            // overwrite. When the user copy is later deleted, the next
+            // rescan re-parses the system file fresh (no need to
+            // consult `systemSourcePath` at commit time — the field is
+            // introspection metadata, not a restore hook).
             if (auto existing = fresh.find(key); existing != fresh.end()) {
                 parsed->systemSourcePath = existing->sourcePath;
             }
@@ -214,22 +231,23 @@ void DirectoryLoader::rescanAll()
             trackedEntry.systemSourcePath = parsed->systemSourcePath;
             fresh.insert(key, trackedEntry);
 
-            // Replace any earlier-scanned parsed entry for the same
-            // key (in-place, preserving order is not required — the
-            // sink only needs the final set).
-            bool replaced = false;
-            for (auto& p : freshParsed) {
-                if (p.key == key) {
-                    p = *parsed;
-                    replaced = true;
-                    break;
-                }
-            }
-            if (!replaced) {
-                freshParsed.push_back(std::move(*parsed));
-            }
+            // Keyed insert — later directory wins on cross-dir
+            // collision, consistent with `fresh`'s override semantics.
+            freshParsedByKey.insert(key, std::move(*parsed));
         }
     }
+
+    // Materialise the final parsed-entry list from the hash. Sorting
+    // by key gives the sink a stable iteration order across platforms
+    // and Qt versions (QHash iteration order is randomised in Qt6).
+    QList<ParsedEntry> freshParsed;
+    freshParsed.reserve(freshParsedByKey.size());
+    for (auto it = freshParsedByKey.cbegin(); it != freshParsedByKey.cend(); ++it) {
+        freshParsed.append(it.value());
+    }
+    std::sort(freshParsed.begin(), freshParsed.end(), [](const ParsedEntry& a, const ParsedEntry& b) {
+        return a.key < b.key;
+    });
 
     // Diff against the previous tracked set — anything that was
     // registered before but is no longer on disk is a removal. The
@@ -370,8 +388,35 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         // parent(s) don't exist, we silently skip the watch until the
         // tree materialises — consumers should call `requestRescan()`
         // after creating the directory structure.
-        QString ancestor = info.absolutePath();
+        //
+        // Resolve symlinks at the bottom of the chain via
+        // canonicalPath(). A pathological symlink loop
+        // (`/a/b -> /a`) would otherwise make the while loop below
+        // climb forever as `next != ancestor` every iteration.
+        // canonicalPath() returns empty on unresolvable chains, which
+        // the first guard below catches.
+        QString ancestor = info.canonicalPath();
+        if (ancestor.isEmpty()) {
+            // Target path has no canonical form (doesn't exist and
+            // neither does any ancestor). Fall back to the textual
+            // absolute path — the climb still terminates because we
+            // bound it below.
+            ancestor = info.absolutePath();
+        }
+        // Bounded climb — defense in depth against pathological
+        // symlink topologies where even canonicalPath() resolution
+        // left residual loops (shouldn't happen on Linux / macOS
+        // since canonicalPath already collapses symlinks, but
+        // cheap insurance). 32 levels is deeper than any sane
+        // filesystem layout.
+        constexpr int kMaxClimb = 32;
+        int climbed = 0;
         while (!ancestor.isEmpty() && !QDir(ancestor).exists()) {
+            if (++climbed > kMaxClimb) {
+                qCWarning(lcLoader) << "attachWatcherForDir: climb exceeded" << kMaxClimb << "levels for target"
+                                    << directory << "— aborting watcher installation";
+                return;
+            }
             const QString next = QFileInfo(ancestor).absolutePath();
             if (next == ancestor) {
                 break; // reached root

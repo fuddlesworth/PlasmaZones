@@ -221,20 +221,18 @@ Item {
             SequentialAnimation {
                 id: collapseAnim
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "opacity"
+                    properties: "opacity"
                     to: 0
-                    duration: 150
-                    easing.type: Easing.InCubic
+                    profile: "widget.fade"
                 }
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "height"
+                    properties: "height"
                     to: 0
-                    duration: 200
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordion"
                 }
 
             }
@@ -242,20 +240,18 @@ Item {
             SequentialAnimation {
                 id: expandAnim
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "height"
+                    properties: "height"
                     to: contentColumn.implicitHeight
-                    duration: 200
-                    easing.type: Easing.OutCubic
+                    profile: "widget.accordion"
                 }
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: contentClip
-                    property: "opacity"
+                    properties: "opacity"
                     to: root.showToggle && !root.toggleChecked ? 0.5 : 1
-                    duration: 150
-                    easing.type: Easing.OutCubic
+                    profile: "widget.fade"
                 }
 
                 ScriptAction {

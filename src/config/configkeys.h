@@ -371,12 +371,13 @@ public:
     // Phase 4 sub-commit 6: animation fields migrated from 5 per-field
     // keys (duration / easingCurve / minDistance / sequenceMode /
     // staggerInterval) to a single Profile JSON blob under animationProfileKey.
-    // The 5 old keys are now DEAD on disk — no migration code per v3's
-    // no-backwards-compat convention; users with old configs fall back
-    // to the library-default Profile on first read. The per-field
-    // accessor surface on Settings (animationDuration / etc.) is
-    // preserved and projects through the Profile blob at read/write
-    // time for QML Q_PROPERTY binding compatibility.
+    // The v1 keys are folded into the Profile blob by `migrateV1ToV2`
+    // (see `configmigration.cpp`). The v1 key accessors are retained for
+    // that migration function only; no separate backwards-compat code
+    // exists within v2. The per-field accessor surface on Settings
+    // (animationDuration / etc.) is preserved and projects through the
+    // Profile blob at read/write time for QML Q_PROPERTY binding
+    // compatibility.
     PZ_CONFIG_KEY(animationProfileKey, "Profile")
     PZ_CONFIG_KEY(durationKey, "Duration")
     PZ_CONFIG_KEY(easingCurveKey, "EasingCurve")

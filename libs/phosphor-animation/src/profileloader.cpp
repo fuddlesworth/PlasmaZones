@@ -11,10 +11,13 @@
 #include <PhosphorJsonLoader/ParsedEntry.h>
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QStandardPaths>
+
+#include <algorithm>
 
 namespace PhosphorAnimation {
 
@@ -36,6 +39,17 @@ public:
     CurveRegistry* curveRegistry; ///< pinned at ctor — used by parseFile
     QString ownerTag; ///< stable per-instance tag for partitioned reload
     QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
+    /// Snapshot of the last-committed profiles by path, used by
+    /// commitBatch to decide whether the consumer-facing
+    /// `profilesChanged` signal should fire. Populated after every
+    /// commit; cleared on removedKeys. A rescan that produces an
+    /// identical set is a no-op and suppresses the signal.
+    QHash<QString, Profile> lastCommittedProfiles;
+    /// Set by commitBatch whenever the tracked profile set actually
+    /// changed (a path added / removed / or an existing path's Profile
+    /// value differs). Read by ProfileLoader's entriesChanged adapter
+    /// to decide whether to emit `profilesChanged`.
+    bool lastBatchChanged = false;
 
     std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
@@ -61,6 +75,20 @@ public:
             return std::nullopt;
         }
 
+        // Reject mismatched filename / name. Users who copy an
+        // existing profile file and forget to rename the inner `name`
+        // would otherwise silently register under the original path
+        // (shadowing a system entry they had no intention to replace).
+        // Clear diagnostic naming both sides so the user can fix
+        // whichever side is wrong.
+        const QString basename = QFileInfo(filePath).completeBaseName();
+        if (path != basename) {
+            qCWarning(lcProfileLoader).nospace()
+                << "Skipping " << filePath << ": profile name '" << path << "' does not match filename '" << basename
+                << "' — rejecting to avoid silent shadowing";
+            return std::nullopt;
+        }
+
         // Profile::fromJson reads the remaining fields (curve / duration /
         // minDistance / sequenceMode / staggerInterval / presetName). We
         // strip 'name' first so it doesn't leak into presetName — the two
@@ -81,6 +109,11 @@ public:
     {
         Q_ASSERT(registry);
 
+        // Reset the per-batch change flag. Any add / remove / value-diff
+        // below flips it to true, which gates the consumer-facing
+        // `profilesChanged` signal in ProfileLoader.
+        lastBatchChanged = false;
+
         // Build the full replacement map from the current-entries list
         // (the loader already applied user-wins-collision, so this
         // map is the authoritative post-scan shape). Missing entries
@@ -98,6 +131,24 @@ public:
                 continue;
             }
             map.insert(p.key, *profile);
+        }
+
+        // Diff against the previous commit to decide whether the
+        // consumer signal fires. The registry's own reloadFromOwner
+        // is also diff-gated internally, but we need our own flag so
+        // the consumer's `profilesChanged` mirrors that behaviour —
+        // DirectoryLoader always fires entriesChanged on every rescan.
+        for (const QString& key : removedKeys) {
+            if (lastCommittedProfiles.remove(key) > 0) {
+                lastBatchChanged = true;
+            }
+        }
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            auto existingIt = lastCommittedProfiles.constFind(it.key());
+            if (existingIt == lastCommittedProfiles.constEnd() || !(*existingIt == it.value())) {
+                lastCommittedProfiles.insert(it.key(), it.value());
+                lastBatchChanged = true;
+            }
         }
 
         // Single reloadFromOwner → one profilesReloaded signal regardless
@@ -137,10 +188,17 @@ ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& c
                              QObject* parent)
     : QObject(parent)
     , m_sink(std::make_unique<Sink>(registry, curveRegistry, ownerTag.isEmpty() ? defaultOwnerTag(this) : ownerTag))
-    , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(m_sink.get()))
+    , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(*m_sink))
 {
-    connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this,
-            &ProfileLoader::profilesChanged);
+    // Gate `profilesChanged` on the per-batch change flag — same
+    // contract as CurveLoader::curvesChanged. DirectoryLoader emits
+    // entriesChanged on every rescan, but ProfileLoader consumers only
+    // care when the tracked set or a Profile's value actually changed.
+    connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this, [this]() {
+        if (m_sink->lastBatchChanged) {
+            Q_EMIT profilesChanged();
+        }
+    });
 }
 
 ProfileLoader::~ProfileLoader()
@@ -191,7 +249,14 @@ int ProfileLoader::registeredCount() const
 
 QList<ProfileLoader::Entry> ProfileLoader::entries() const
 {
-    return m_sink->entries.values();
+    // Sort by path for deterministic ordering — same rationale as
+    // DirectoryLoader::entries(). QHash iteration order is randomised
+    // in Qt6.
+    QList<ProfileLoader::Entry> sorted = m_sink->entries.values();
+    std::sort(sorted.begin(), sorted.end(), [](const Entry& a, const Entry& b) {
+        return a.path < b.path;
+    });
+    return sorted;
 }
 
 } // namespace PhosphorAnimation

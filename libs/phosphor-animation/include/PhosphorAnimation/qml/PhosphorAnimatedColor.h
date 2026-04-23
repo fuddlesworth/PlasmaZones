@@ -92,13 +92,23 @@ protected:
 private:
     bool startImpl(const QColor& from, const QColor& to, IMotionClock* clock);
 
+    /// Current-space AnimatedValue accessor helpers — keep the active-
+    /// instance dispatch in one place so the public from/to/value
+    /// readers read "live" state through a single ternary rather than
+    /// duplicating it across three methods.
+    QColor activeFrom() const;
+    QColor activeTo() const;
+    QColor activeValue() const;
+
     /// The runtime-dispatched animation core. `variant`-style: one of
     /// Linear or OkLab is active; swapping via setColorSpace replaces
     /// the active member while both are kept as fields to simplify
     /// the state-machine (and avoid a shared_ptr for no gain at this
-    /// scale). Both fields share the same state when not animating;
-    /// `m_activeSpace` selects which one routes `start` / `advance`
-    /// calls.
+    /// scale). `m_activeSpace` selects which one routes `start` /
+    /// `advance` calls. `setColorSpace` propagates idle state across
+    /// the flip via `AnimatedValue::seedFrom` so post-flip reads
+    /// through `from()/to()/value()` stay continuous even though the
+    /// two instances are otherwise independent.
     AnimatedValue<QColor, PhosphorAnimation::ColorSpace::Linear> m_animatedValueLinear;
     AnimatedValue<QColor, PhosphorAnimation::ColorSpace::OkLab> m_animatedValueOkLab;
     ColorSpace m_activeSpace = ColorSpace::Linear;

@@ -78,6 +78,19 @@ Settings::Settings(QObject* parent)
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
 {
+    // m_curveRegistry is left null; `animationProfile()` /
+    // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
+    // That fallback is a process-static CurveRegistry — NOT the daemon's
+    // injected instance — so `shared_ptr<const Curve>` identity is NOT
+    // preserved across the Settings ↔ daemon boundary when this ctor is
+    // used. The standalone settings app runs in a separate process, so
+    // that contract break is expected there; this warning makes the
+    // contract violation explicit for anyone constructing Settings
+    // without an injected registry (tests, one-off tools) who might
+    // otherwise assume curve-identity sharing.
+    qCWarning(lcConfig)
+        << "Settings constructed without explicit CurveRegistry — falling back to process-static instance; "
+           "curve shared_ptr identity will NOT be preserved across Settings/daemon boundary.";
     load();
 }
 

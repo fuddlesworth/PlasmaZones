@@ -26,6 +26,24 @@ namespace PhosphorAnimation {
  * Every `PhosphorMotionAnimation` bound to `"<path>"` auto-re-resolves on the
  * emitted `profileChanged(path)` signal.
  *
+ * ## Why a singleton (and not per-consumer DI like `CurveRegistry`)
+ *
+ * Process-global by design so that the QML plugin's
+ * `PhosphorMotionAnimation` — a QML-instantiable type with no native
+ * owner the consumer can inject into — has a stable anchor without
+ * per-consumer dependency injection. Every QML element instantiated
+ * through `import org.kde.phosphoranimation` must reach the same
+ * registry instance the daemon populated, and QML has no ergonomic
+ * hook for "pass this registry pointer through 15 layers of
+ * declarative instantiation". The singleton is the simplest correct
+ * shape for that.
+ *
+ * To prevent cross-instance state leakage in tests and on daemon
+ * restart, consumers MUST call `clear()` (or the owner-scoped
+ * `clearOwner(tag)`) on teardown and before re-populating at startup.
+ * The `PlasmaZones::Daemon` composition root does both, mirroring its
+ * equivalent lifecycle hooks for the daemon-owned `CurveRegistry`.
+ *
  * ## Consumer model
  *
  * The registry is agnostic to path naming conventions. PlasmaZones populates

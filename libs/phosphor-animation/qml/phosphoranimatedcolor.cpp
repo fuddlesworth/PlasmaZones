@@ -18,29 +18,50 @@ PhosphorAnimatedColor::PhosphorAnimatedColor(QObject* parent)
 {
 }
 
-PhosphorAnimatedColor::~PhosphorAnimatedColor() = default;
+PhosphorAnimatedColor::~PhosphorAnimatedColor()
+{
+    // Cancel BOTH underlying AnimatedValue instances first, THEN let
+    // the default-destruction path run. See
+    // PhosphorAnimatedReal::~PhosphorAnimatedReal for the UAF
+    // rationale — Color has two instances because `colorSpace`
+    // selects between a Linear-space and an OkLab-space core, so
+    // both need the pre-destruction cancel.
+    m_animatedValueLinear.cancel();
+    m_animatedValueOkLab.cancel();
+}
 
-// Dispatch accessor reading from whichever space is active. NOTE: the
-// two AnimatedValue<QColor> instances are INDEPENDENT — writes to one
-// do not propagate to the other. Flipping `colorSpace` while idle
-// therefore yields the target-space instance's stale (or default-
-// constructed) `from/to/value` — NOT a translation of the source-space
-// state. `setColorSpace` refuses the flip mid-animation to avoid
-// visible chromatic-path jumps; callers who want continuity across
-// flips must either issue a fresh `start(currentValue, currentValue)`
-// on the new space after the flip, or live with the default-
-// constructed initial state in the newly-active space.
-QColor PhosphorAnimatedColor::from() const
+QColor PhosphorAnimatedColor::activeFrom() const
 {
     return m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.from() : m_animatedValueLinear.from();
 }
-QColor PhosphorAnimatedColor::to() const
+
+QColor PhosphorAnimatedColor::activeTo() const
 {
     return m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.to() : m_animatedValueLinear.to();
 }
-QColor PhosphorAnimatedColor::value() const
+
+QColor PhosphorAnimatedColor::activeValue() const
 {
     return m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.value() : m_animatedValueLinear.value();
+}
+
+// Dispatch accessor reading from whichever space is active. The two
+// AnimatedValue<QColor> instances are independent — writes to one do
+// not propagate to the other — but `setColorSpace` calls
+// `AnimatedValue::seedFrom` on the target instance before flipping
+// `m_activeSpace`, so the idle-state endpoints and current value stay
+// continuous across a space flip.
+QColor PhosphorAnimatedColor::from() const
+{
+    return activeFrom();
+}
+QColor PhosphorAnimatedColor::to() const
+{
+    return activeTo();
+}
+QColor PhosphorAnimatedColor::value() const
+{
+    return activeValue();
 }
 
 bool PhosphorAnimatedColor::isAnimating() const
@@ -76,8 +97,42 @@ void PhosphorAnimatedColor::setColorSpace(ColorSpace space)
                                       "(call after isComplete(), or retarget to the same value to quiesce)";
         return;
     }
+
+    // Seed the target-space instance with the outgoing instance's
+    // idle state (from, to, current value, isComplete) so post-flip
+    // reads through from()/to()/value()/isComplete() stay continuous.
+    // Without this, start(red, blue) → wait idle → setColorSpace(OkLab)
+    // would jump value() to the OkLab instance's default-constructed
+    // QColor() — the two AnimatedValue<QColor, Space> instances are
+    // otherwise independent. `seedFrom` is a no-op if either side is
+    // animating; the isAnimating() guard above gates that case.
+    //
+    // Snapshot prev-read values so we can emit fromChanged /
+    // toChanged / valueChanged only if the post-flip read differs
+    // from the pre-flip read — matches the project's "only emit
+    // when value actually changes" contract.
+    const QColor prevFrom = from();
+    const QColor prevTo = to();
+    const QColor prevValue = value();
+
+    if (space == ColorSpace::OkLab) {
+        m_animatedValueOkLab.seedFrom(m_animatedValueLinear);
+    } else {
+        m_animatedValueLinear.seedFrom(m_animatedValueOkLab);
+    }
+
     m_activeSpace = space;
     Q_EMIT colorSpaceChanged();
+
+    if (from() != prevFrom) {
+        Q_EMIT fromChanged();
+    }
+    if (to() != prevTo) {
+        Q_EMIT toChanged();
+    }
+    if (value() != prevValue) {
+        Q_EMIT valueChanged();
+    }
 }
 
 bool PhosphorAnimatedColor::start(const QColor& from, const QColor& to)
@@ -90,8 +145,7 @@ bool PhosphorAnimatedColor::startImpl(const QColor& from, const QColor& to, IMot
     if (!clock) {
         return false;
     }
-    // Check-before-emit via the dispatch accessors, so the compare
-    // operates on whichever AnimatedValue<QColor> is active. Mirrors
+    // Check-before-emit via the dispatch accessors. Mirrors
     // PhosphorAnimatedReal::startImpl.
     const QColor prevFrom = this->from();
     const QColor prevTo = this->to();

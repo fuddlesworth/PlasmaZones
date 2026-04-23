@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -155,23 +156,20 @@ Window {
     ParallelAnimation {
         id: showAnimation
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: contentWrapper
-            property: "opacity"
+            properties: "opacity"
             from: 0
             to: 1
-            duration: root.fadeInDuration
-            easing.type: Easing.OutCubic
+            profile: "osd.show"
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: container
-            property: "scale"
+            properties: "scale"
             from: 0.8
             to: 1
-            duration: root.fadeInDuration
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.2
+            profile: "osd.show"
         }
 
     }
@@ -181,20 +179,18 @@ Window {
         id: hideAnimation
 
         ParallelAnimation {
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 target: contentWrapper
-                property: "opacity"
+                properties: "opacity"
                 to: 0
-                duration: root.fadeOutDuration
-                easing.type: Easing.InCubic
+                profile: "osd.hide"
             }
 
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 target: container
-                property: "scale"
+                properties: "scale"
                 to: 0.9
-                duration: root.fadeOutDuration
-                easing.type: Easing.InCubic
+                profile: "osd.hide"
             }
 
         }

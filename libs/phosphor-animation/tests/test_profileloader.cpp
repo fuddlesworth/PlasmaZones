@@ -35,6 +35,18 @@ private Q_SLOTS:
         PhosphorProfileRegistry::instance().clear();
     }
 
+    /// Guarantees no registry state leaks between test methods even
+    /// when a test forgets to clean up after itself. Without this,
+    /// later tests (including tests in other executables that hit the
+    /// same process-singleton when run together) can see stale entries
+    /// from whichever prior test exited last. `init()` already clears
+    /// on entry, but pairing with `cleanup()` keeps the guarantee
+    /// end-to-end rather than entry-only.
+    void cleanup()
+    {
+        PhosphorProfileRegistry::instance().clear();
+    }
+
     /// Missing directory is a no-op.
     void testMissingDirectoryIsNoOp()
     {
@@ -50,7 +62,7 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        writeFile(dir.filePath(QStringLiteral("overlay.json")), QStringLiteral(R"({
+        writeFile(dir.filePath(QStringLiteral("overlay.fade.json")), QStringLiteral(R"({
             "name": "overlay.fade",
             "curve": "spring:14.0,0.6",
             "duration": 250,
@@ -96,11 +108,11 @@ private Q_SLOTS:
     {
         QTemporaryDir systemDir;
         QTemporaryDir userDir;
-        writeFile(systemDir.filePath(QStringLiteral("p.json")), QStringLiteral(R"({
+        writeFile(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral(R"({
             "name": "x",
             "duration": 100
         })"));
-        writeFile(userDir.filePath(QStringLiteral("p.json")), QStringLiteral(R"({
+        writeFile(userDir.filePath(QStringLiteral("x.json")), QStringLiteral(R"({
             "name": "x",
             "duration": 500
         })"));
@@ -114,8 +126,8 @@ private Q_SLOTS:
 
         const auto entries = loader.entries();
         QCOMPARE(entries.size(), 1);
-        QCOMPARE(entries.first().sourcePath, userDir.filePath(QStringLiteral("p.json")));
-        QCOMPARE(entries.first().systemSourcePath, systemDir.filePath(QStringLiteral("p.json")));
+        QCOMPARE(entries.first().sourcePath, userDir.filePath(QStringLiteral("x.json")));
+        QCOMPARE(entries.first().systemSourcePath, systemDir.filePath(QStringLiteral("x.json")));
     }
 
     /// `name` field becomes the registry path; it must NOT leak into
@@ -123,7 +135,7 @@ private Q_SLOTS:
     void testNameDoesNotLeakIntoPresetName()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("p.json")), QStringLiteral(R"({
+        writeFile(dir.filePath(QStringLiteral("overlay.fade.json")), QStringLiteral(R"({
             "name": "overlay.fade",
             "presetName": "My Overlay Preset",
             "duration": 150
@@ -136,16 +148,15 @@ private Q_SLOTS:
         QCOMPARE(resolved->presetName.value_or(QString()), QStringLiteral("My Overlay Preset"));
     }
 
-    /// Rescan on a file that actually changes content fires the signal.
-    /// Previously this test wrote `{"name": "a"}` with no other fields
-    /// and only checked that the signal fired — which would pass on any
-    /// broken parser that happily registers empty profiles. Now we
-    /// write a semantically-meaningful profile and also assert the
-    /// resolved value round-trips.
-    void testRescanFiresSignal()
+    /// `profilesChanged` fires on a rescan that sees content change on
+    /// disk. Asserts the post-rescan resolved value matches the new file
+    /// so a broken parser can't pass the spy assertion by registering
+    /// empty profiles.
+    void testRescanFiresSignal_whenContentChanged()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("p.json")), QStringLiteral(R"({
+        const QString path = dir.filePath(QStringLiteral("a.json"));
+        writeFile(path, QStringLiteral(R"({
             "name": "a",
             "duration": 123,
             "minDistance": 7
@@ -159,8 +170,48 @@ private Q_SLOTS:
         QCOMPARE(resolved->minDistance.value_or(-1), 7);
 
         QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+
+        // Mutate the file on disk — next rescan sees new values.
+        QVERIFY(QFile::remove(path));
+        writeFile(path, QStringLiteral(R"({
+            "name": "a",
+            "duration": 456,
+            "minDistance": 9
+        })"));
+
         loader.requestRescan();
-        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 200);
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
+
+        // Round-trip sanity: the registry reflects the new values.
+        auto reResolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("a"));
+        QVERIFY(reResolved.has_value());
+        QCOMPARE(reResolved->duration.value_or(-1.0), 456.0);
+        QCOMPARE(reResolved->minDistance.value_or(-1), 9);
+    }
+
+    /// `profilesChanged` must NOT fire on a no-op rescan — the
+    /// commitBatch diff in ProfileLoader::Sink suppresses the consumer
+    /// signal when the re-parsed profile set is identical to the
+    /// previous commit.
+    void testRescanDoesNotFireSignal_whenContentUnchanged()
+    {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("stable.json")), QStringLiteral(R"({
+            "name": "stable",
+            "duration": 200,
+            "minDistance": 5
+        })"));
+        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        loader.loadFromDirectory(dir.path());
+
+        // Attach spy AFTER initial load — only interested in the
+        // rescan-produced signal (or its absence).
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
+
+        loader.requestRescan();
+        QVERIFY2(!spy.wait(300),
+                 "profilesChanged fired on a no-op rescan — commitBatch diff did not suppress unchanged content");
+        QCOMPARE(spy.count(), 0);
     }
 
     /// Partitioned-ownership contract: a daemon-direct registration
@@ -180,7 +231,7 @@ private Q_SLOTS:
 
         // User drops ONE profile JSON for a different path.
         QTemporaryDir userDir;
-        writeFile(userDir.filePath(QStringLiteral("zone.json")),
+        writeFile(userDir.filePath(QStringLiteral("Zone.json")),
                   QStringLiteral(R"({"name": "Zone", "duration": 200})"));
         ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-user-profiles"));
         loader.loadFromDirectory(userDir.path());
@@ -204,9 +255,10 @@ private Q_SLOTS:
 
         QTemporaryDir systemDir;
         QTemporaryDir userDir;
-        writeFile(systemDir.filePath(QStringLiteral("p.json")),
+        writeFile(systemDir.filePath(QStringLiteral("shared.json")),
                   QStringLiteral(R"({"name": "shared", "duration": 100})"));
-        writeFile(userDir.filePath(QStringLiteral("p.json")), QStringLiteral(R"({"name": "shared", "duration": 500})"));
+        writeFile(userDir.filePath(QStringLiteral("shared.json")),
+                  QStringLiteral(R"({"name": "shared", "duration": 500})"));
 
         ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-restore"));
         loader.loadFromDirectories({systemDir.path(), userDir.path()});
@@ -217,7 +269,7 @@ private Q_SLOTS:
         QCOMPARE(resolved->duration.value_or(0.0), 500.0);
 
         // Delete user copy, request rescan.
-        QVERIFY(QFile::remove(userDir.filePath(QStringLiteral("p.json"))));
+        QVERIFY(QFile::remove(userDir.filePath(QStringLiteral("shared.json"))));
         loader.requestRescan();
         QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
         QVERIFY(spy.wait(500));

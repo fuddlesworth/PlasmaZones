@@ -11,11 +11,16 @@
 
 namespace PhosphorAnimation {
 
-CurveRegistry* PhosphorCurve::s_registry = nullptr;
+std::atomic<CurveRegistry*> PhosphorCurve::s_registry{nullptr};
 
 void PhosphorCurve::setDefaultRegistry(CurveRegistry* registry)
 {
-    s_registry = registry;
+    // Relaxed store: the publishing thread must have fully constructed
+    // *registry before calling this method, and the consumer-side
+    // load-and-use sequence below is a single pointer dereference that
+    // needs no happens-before with any other memory. Matches the
+    // process-lifetime-singleton contract documented on setDefaultRegistry.
+    s_registry.store(registry, std::memory_order_relaxed);
 }
 
 PhosphorCurve PhosphorCurve::fromString(const QString& str)
@@ -25,10 +30,11 @@ PhosphorCurve PhosphorCurve::fromString(const QString& str)
     // CurveLoader (Phase 4 decision U). Returning a null handle on
     // parse failure (rather than a default-constructed Easing) gives
     // QML callers an `isNull()` signal they can check.
-    if (!s_registry) {
+    CurveRegistry* registry = s_registry.load(std::memory_order_relaxed);
+    if (!registry) {
         return PhosphorCurve();
     }
-    auto curve = s_registry->tryCreate(str);
+    auto curve = registry->tryCreate(str);
     return PhosphorCurve(std::move(curve));
 }
 

@@ -122,6 +122,48 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    /// Flipping colorSpace while idle must not lose the visible state.
+    /// The two underlying AnimatedValue<QColor, Space> instances are
+    /// independent, so a naive flip would jump value() to the target
+    /// instance's default-constructed QColor(). `setColorSpace` calls
+    /// `AnimatedValue::seedFrom` to copy idle from/to/current across
+    /// the boundary — this test pins that invariant.
+    void testColorSpaceFlipPreservesIdleState()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        PhosphorAnimatedColor c;
+        c.setWindow(window.get());
+
+        // Drive a full animation on Linear, then quiesce with finish()
+        // so the Linear instance holds (from=red, to=blue, value=blue,
+        // isComplete=true).
+        c.start(QColor(Qt::red), QColor(Qt::blue));
+        c.finish();
+        QVERIFY(!c.isAnimating());
+        QCOMPARE(c.from(), QColor(Qt::red));
+        QCOMPARE(c.to(), QColor(Qt::blue));
+        QCOMPARE(c.value(), QColor(Qt::blue));
+        QVERIFY(c.isComplete());
+
+        // Flip to OkLab. Post-flip reads must still see red/blue/blue —
+        // the OkLab instance was never started but seedFrom propagates
+        // the quiesced state.
+        c.setColorSpace(PhosphorAnimatedColor::ColorSpace::OkLab);
+        QCOMPARE(c.colorSpace(), PhosphorAnimatedColor::ColorSpace::OkLab);
+        QCOMPARE(c.from(), QColor(Qt::red));
+        QCOMPARE(c.to(), QColor(Qt::blue));
+        QCOMPARE(c.value(), QColor(Qt::blue));
+        QVERIFY(c.isComplete());
+
+        // Flipping back to Linear is also continuous — the Linear
+        // instance still holds its original state, so seedFrom is a
+        // no-op-equivalent write (same values in, same values out).
+        c.setColorSpace(PhosphorAnimatedColor::ColorSpace::Linear);
+        QCOMPARE(c.from(), QColor(Qt::red));
+        QCOMPARE(c.to(), QColor(Qt::blue));
+        QCOMPARE(c.value(), QColor(Qt::blue));
+    }
+
     /// All four typed wrappers register their metatype and properties
     /// so QML bindings reach them.
     void testMetaObjectRegistration()

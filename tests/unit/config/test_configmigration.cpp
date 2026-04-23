@@ -984,11 +984,16 @@ private Q_SLOTS:
 
         // Every v1 value must be preserved through to the v2 blob.
         // Note: curves are stored in their WIRE FORMAT — the migration
-        // runs the v1 curve string through CurveRegistry and
-        // re-serialises. A friendly-named alias like "easeOutCubic"
-        // resolves to a cubic-bezier whose canonical wire string is
-        // "0.33,1.00,0.68,1.00" (the library default). Assert the
-        // wire-form rather than the input name.
+        // runs the v1 curve string through CurveRegistry. If the
+        // registry resolves the input, `Curve::toString()` is stored
+        // (canonical form); otherwise the input string is stored
+        // verbatim. "easeOutCubic" is a friendly name the runtime
+        // CurveRegistry does not register a factory for — it falls
+        // through as-is, NOT canonicalised. That's intentional — the
+        // canonical round-trip happens on inputs CurveRegistry knows
+        // (bezier wire-form, spring:, elastic-*:, bounce-*:). The
+        // dedicated `testV1AnimationMigration_canonicalisesKnownCurve`
+        // test below exercises the canonicalisation path.
         QCOMPARE(profile.value(QStringLiteral("duration")).toDouble(-1.0), 200.0);
         const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
         QVERIFY2(!storedCurve.isEmpty(), "Migrated curve field must be non-empty");
@@ -1004,6 +1009,69 @@ private Q_SLOTS:
         QVERIFY(!animations.contains(QStringLiteral("AnimationMinDistance")));
         QVERIFY(!animations.contains(QStringLiteral("AnimationSequenceMode")));
         QVERIFY(!animations.contains(QStringLiteral("AnimationStaggerInterval")));
+    }
+
+    /// v1→v2 animation migration MUST canonicalise the curve spec
+    /// through `CurveRegistry` when the input resolves to a known
+    /// factory. Without this, a settings-UI edit after migration would
+    /// re-serialise the curve via `Easing::toString()` (which always
+    /// emits canonical wire form) and produce a spurious config rewrite
+    /// on first interaction — even though the user made no change.
+    ///
+    /// Inputs exercised:
+    ///   - A cubic-bezier wire-form with non-canonical precision
+    ///     ("0.25,0.1,0.25,1.0") → canonicalises to "0.25,0.10,0.25,1.00"
+    ///     (two decimal places per `Easing::toString`).
+    ///   - A spring wire-form ("spring:14.0,0.6") → canonicalises to
+    ///     the same spec (spring wire form is already canonical) —
+    ///     proves spring inputs don't get corrupted by the registry
+    ///     round-trip either.
+    void testV1AnimationMigration_canonicalisesKnownCurve()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=200\n"
+                                    "AnimationEasingCurve=0.25,0.1,0.25,1.0\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY(!profileString.isEmpty());
+
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+        const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
+
+        // The stored curve MUST be the canonical wire form with two
+        // decimal places per component — not the original input string.
+        QCOMPARE(storedCurve, QStringLiteral("0.25,0.10,0.25,1.00"));
+    }
+
+    /// Companion to `_canonicalisesKnownCurve`: a spring spec round-trips
+    /// through CurveRegistry without corruption. Spring's canonical form
+    /// uses two-decimal precision on both omega and zeta.
+    void testV1AnimationMigration_canonicalisesSpringCurve()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=250\n"
+                                    "AnimationEasingCurve=spring:14.0,0.6\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY(!profileString.isEmpty());
+
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+        const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
+
+        // Spring::toString uses two-decimal precision.
+        QCOMPARE(storedCurve, QStringLiteral("spring:14.00,0.60"));
     }
 
     /// v1 config missing all the animation keys — v2 result should

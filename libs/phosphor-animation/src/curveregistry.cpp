@@ -9,6 +9,7 @@
 #include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QSet>
 
 #include <vector>
 
@@ -227,6 +228,22 @@ bool CurveRegistry::has(const QString& typeId) const
 {
     QMutexLocker locker(&m_impl->mutex);
     return m_impl->factories.contains(typeId);
+}
+
+bool CurveRegistry::isBuiltinTypeId(const QString& typeId)
+{
+    // Mirrors Impl::registerBuiltins. Kept in a file-scope static so
+    // it is constructed once per process and its contains() cost is
+    // O(log N) instead of O(N) per check. Adding a builtin requires
+    // updating both this set and registerBuiltins — a deliberate
+    // symmetry so the list can't rot unnoticed (a new builtin that is
+    // NOT in this set would silently be overridable by a user JSON).
+    static const QSet<QString> kBuiltins = {
+        QStringLiteral("bezier"),     QStringLiteral("cubic-bezier"), QStringLiteral("spring"),
+        QStringLiteral("elastic-in"), QStringLiteral("elastic-out"),  QStringLiteral("elastic-in-out"),
+        QStringLiteral("bounce-in"),  QStringLiteral("bounce-out"),   QStringLiteral("bounce-in-out"),
+    };
+    return kBuiltins.contains(typeId);
 }
 
 } // namespace PhosphorAnimation

@@ -83,12 +83,14 @@ public:
     /**
      * @brief Construct with a borrowed sink.
      *
-     * `sink` must outlive the loader. The loader holds a raw pointer
-     * — `QPointer` isn't appropriate (the sink isn't necessarily a
-     * QObject), and `unique_ptr` would force consumers to hand over
-     * ownership, which is inconvenient for registry-backed sinks.
+     * `sink` must outlive the loader. Taken by reference rather than
+     * raw pointer so there is no need for a null-check at the call
+     * site — the previous pointer-based signature relied on
+     * `Q_ASSERT_X(sink, …)` to catch null, but that's compiled out in
+     * release builds. A reference makes "sink is always valid" a
+     * compile-time guarantee.
      */
-    explicit DirectoryLoader(IDirectoryLoaderSink* sink, QObject* parent = nullptr);
+    explicit DirectoryLoader(IDirectoryLoaderSink& sink, QObject* parent = nullptr);
     ~DirectoryLoader() override;
 
     DirectoryLoader(const DirectoryLoader&) = delete;
@@ -138,6 +140,19 @@ public:
     /// far above any legitimate curve / profile / layout schema in this
     /// library's ecosystem.
     static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
+
+    /// Test-only: override the debounce interval (default 50 ms).
+    ///
+    /// Live-reload tests otherwise wait on `QSignalSpy::wait(N ms)` with
+    /// N chosen to accommodate the 50 ms debounce plus filesystem / CI
+    /// scheduling jitter — which is why loaded CI runs see flakes at
+    /// N=2000 ms. Shrinking the debounce to ~1 ms lets tests wait <500 ms
+    /// deterministically without changing production behaviour.
+    ///
+    /// Production code MUST NOT call this — the 50 ms debounce is a hard
+    /// requirement for collapsing the 2-3 event save-temp-rename dance
+    /// every editor performs.
+    void setDebounceIntervalForTest(int ms);
 
 Q_SIGNALS:
     /**

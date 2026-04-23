@@ -12,6 +12,7 @@
 #include <QtCore/QString>
 #include <QtQml/qqmlregistration.h>
 
+#include <atomic>
 #include <memory>
 
 namespace PhosphorAnimation {
@@ -129,7 +130,15 @@ public:
     }
 
 private:
-    static CurveRegistry* s_registry;
+    // Atomic so concurrent QML loaders (multiple QQmlEngine instances
+    // on different threads — a background-prerender shell is the
+    // canonical case) cannot race on install-vs-read. Pointer loads
+    // are lock-free on every platform Qt supports; `relaxed` ordering
+    // is sufficient because the registry object's own initialisation
+    // is synchronised by the composition root's construction (the
+    // pointed-to `CurveRegistry` is already fully constructed before
+    // the publishing thread calls setDefaultRegistry).
+    static std::atomic<CurveRegistry*> s_registry;
     std::shared_ptr<const Curve> m_curve;
 };
 

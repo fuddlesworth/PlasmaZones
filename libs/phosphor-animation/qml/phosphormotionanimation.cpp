@@ -27,6 +27,17 @@ PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
     // PhosphorMotionAnimation with no profile set still animates
     // with the library-default OutCubic curve rather than Qt Quick's
     // default InOutQuad.
+    //
+    // INVARIANT: this constructor-time setEasing is only safe because
+    // `defaultFallbackCurve()` resolves to a single-segment cubic
+    // bezier (fast path at applyResolvedEasing lines 72-77). That path
+    // calls addCubicBezierSegment exactly once and does not trip Qt
+    // 6.11's BezierSpline heap corruption (see kBezierSplineSegments
+    // docs in PhosphorMotionAnimation.h for the upper-bound story).
+    // Changing the default to a sampled/parametric curve requires
+    // moving this call to updateState(Running) or a similar deferred
+    // hook so the installed easing is built after the object is fully
+    // constructed and attached to its QML context.
     applyResolvedEasing();
 }
 
@@ -178,18 +189,33 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
     // Per-path emits for targeted updates (settings UI edits the
     // overlay.fade profile); reload emits when the loader rescans
     // the XDG dir after a QFileSystemWatcher fire.
-    m_registryChangedConnection =
-        connect(&registry, &PhosphorProfileRegistry::profileChanged, this, [this](const QString& changedPath) {
+    //
+    // Queued connection guards against registry signals emitted from
+    // worker threads per PhosphorProfileRegistry thread-safety
+    // contract (registerProfile / reloadFromOwner / clear are documented
+    // as callable from any thread). `applyResolvedProfile` lands in
+    // QQuickPropertyAnimation::setEasing — the exact API that heap-
+    // corrupted in commit 1f09962d when called off the GUI thread.
+    // Forcing delivery through the receiver's event loop ensures the
+    // setEasing call always runs on the thread that owns this object,
+    // regardless of which thread publishes the registry update.
+    m_registryChangedConnection = connect(
+        &registry, &PhosphorProfileRegistry::profileChanged, this,
+        [this](const QString& changedPath) {
             if (changedPath != m_boundPath) {
                 return;
             }
             auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
             applyResolvedProfile(resolved.value_or(Profile{}));
-        });
-    m_registryReloadedConnection = connect(&registry, &PhosphorProfileRegistry::profilesReloaded, this, [this]() {
-        auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
-        applyResolvedProfile(resolved.value_or(Profile{}));
-    });
+        },
+        Qt::QueuedConnection);
+    m_registryReloadedConnection = connect(
+        &registry, &PhosphorProfileRegistry::profilesReloaded, this,
+        [this]() {
+            auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
+            applyResolvedProfile(resolved.value_or(Profile{}));
+        },
+        Qt::QueuedConnection);
 }
 
 void PhosphorMotionAnimation::disconnectRegistrySignal()

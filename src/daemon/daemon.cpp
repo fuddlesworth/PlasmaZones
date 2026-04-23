@@ -215,6 +215,15 @@ void Daemon::setupAnimationProfiles()
 {
     using namespace PhosphorAnimation;
 
+    // Wipe any entries left over from a previous Daemon instance. The
+    // PhosphorProfileRegistry is a process-global singleton (see its
+    // header for the rationale), so a Daemon rebuilt in the same
+    // process — typical in tests, occasionally in production on
+    // config reload — would otherwise inherit stale profiles from the
+    // prior instance, firing spurious profileChanged against bindings
+    // that have long since disappeared.
+    PhosphorProfileRegistry::instance().clear();
+
     // User-authored curve + profile packs. Consumer namespace is
     // `plasmazones/` per the LayoutManager precedent — library-level
     // CurveLoader / ProfileLoader are agnostic (decision U); the daemon
@@ -992,6 +1001,15 @@ void Daemon::stop()
     // call landing during teardown or in a subsequent Daemon instance
     // dereferences freed memory.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
+
+    // Tear down the process-global PhosphorProfileRegistry state this
+    // Daemon populated so a later Daemon reconstruction (tests, or a
+    // live reconfigure that tears down and rebuilds the daemon in
+    // place) starts from an empty registry. The ProfileLoader's dtor
+    // already issues a targeted clearOwner() for its tagged entries;
+    // this full clear() also covers the settings-fan-out direct
+    // entries published by publishActiveAnimationProfile.
+    PhosphorAnimation::PhosphorProfileRegistry::instance().clear();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();

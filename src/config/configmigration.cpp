@@ -714,8 +714,23 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             v1Animations.value(QLatin1String("AnimationDuration")).toDouble();
     }
     if (v1Animations.contains(QLatin1String("AnimationEasingCurve"))) {
-        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] =
-            v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
+        // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
+        // stack-local CurveRegistry so we store the canonical wire form
+        // (e.g. "0.33,1.00,0.68,1.00") in the Profile blob. Without this
+        // step, `Profile::fromJson` resolves the friendly name on read
+        // via the consumer's registry, but the first UI save then
+        // serialises the Curve back using `Curve::toString()` — which
+        // always emits canonical wire form — causing a spurious config
+        // rewrite on first post-migration interaction. Built-in curves
+        // auto-register via the CurveRegistry constructor, so no
+        // explicit registerBuiltins() call is needed here. Unknown
+        // specs fall through as-is: `Profile::fromJson` on the consumer
+        // side will retry through its own (potentially extended)
+        // registry, and worst case returns a best-effort default.
+        const QString v1Curve = v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
+        PhosphorAnimation::CurveRegistry registry;
+        const auto resolved = registry.tryCreate(v1Curve);
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved ? resolved->toString() : v1Curve;
     }
     if (v1Animations.contains(QLatin1String("AnimationMinDistance"))) {
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] =

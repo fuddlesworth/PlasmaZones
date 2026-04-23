@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import org.phosphor.animation
 
 /**
  * @brief Fill animation for zone expansion operations
@@ -88,36 +89,32 @@ Item {
             fillAnimator.externalAnimation = false;
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: zoneRoot
-            property: "visualX"
+            properties: "visualX"
             to: fillAnimator.targetX
-            duration: 150
-            easing.type: Easing.OutCubic
+            profile: "zone.snapIn"
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: zoneRoot
-            property: "visualY"
+            properties: "visualY"
             to: fillAnimator.targetY
-            duration: 150
-            easing.type: Easing.OutCubic
+            profile: "zone.snapIn"
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: zoneRoot
-            property: "visualWidth"
+            properties: "visualWidth"
             to: fillAnimator.targetWidth
-            duration: 150
-            easing.type: Easing.OutCubic
+            profile: "zone.snapIn"
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: zoneRoot
-            property: "visualHeight"
+            properties: "visualHeight"
             to: fillAnimator.targetHeight
-            duration: 150
-            easing.type: Easing.OutCubic
+            profile: "zone.snapIn"
         }
 
     }

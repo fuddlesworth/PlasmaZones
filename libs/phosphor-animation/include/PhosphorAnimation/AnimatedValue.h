@@ -147,6 +147,15 @@ public:
     AnimatedValue(AnimatedValue&&) noexcept = default;
     AnimatedValue& operator=(AnimatedValue&&) noexcept = default;
 
+    // Sibling Space instantiations are friends so `seedFrom` can copy
+    // private idle state (m_from, m_to, m_current, m_isComplete) across
+    // a space boundary without a public setter per field. Used by
+    // wrappers (PhosphorAnimatedColor) that keep one instance per
+    // ColorSpace and need to propagate the quiesced visual state when
+    // the active space flips.
+    template<typename, ColorSpace>
+    friend class AnimatedValue;
+
     // The Space template parameter is only consulted when T == QColor.
     // For every other T the value is ignored and the default Linear is
     // harmless noise in the type. Enforced via `if constexpr` in the
@@ -575,6 +584,53 @@ public:
     {
         m_isAnimating = false;
         m_isComplete = false;
+    }
+
+    /**
+     * @brief Copy idle state (from, to, current, isComplete) from a
+     *        sibling AnimatedValue that differs only in the `Space`
+     *        template parameter.
+     *
+     * Used by wrappers that keep parallel AnimatedValue instances per
+     * ColorSpace and dispatch at runtime — PhosphorAnimatedColor is
+     * the canonical consumer. When the active space flips while idle,
+     * the target-space instance has never seen the quiesced state from
+     * the source-space instance and would read default-constructed
+     * values through `from/to/value` until the next `start()`. This
+     * method propagates the source's visible endpoints and current
+     * interpolated value so the flip is continuous.
+     *
+     * Precondition: both `*this` and @p other must be idle
+     * (`!isAnimating()`). A no-op if either side is animating — a
+     * live segment's state must not be overwritten from the outside
+     * because the callbacks wired to it (`onValueChanged`,
+     * `onComplete`) are captured in a MotionSpec that the incoming
+     * state does not carry. Silently no-oping on the animating path
+     * matches the contract `setColorSpace` enforces at the wrapper
+     * level (flip mid-animation is refused with a warning; by the
+     * time seedFrom reaches an AnimatedValue the caller has already
+     * gated on idle).
+     *
+     * Does NOT touch `m_spec` (clock, callbacks, profile) — the
+     * target instance keeps its own spec for the next `start()` call.
+     * The scalar `state.value` / `state.velocity` are also left
+     * alone: they describe curve progression, which is meaningful
+     * only during an animation, not in idle. `m_isComplete` IS
+     * copied because the wrapper's `isComplete()` reads through the
+     * active instance — a flip from a completed source to a
+     * never-started target would otherwise drop `isComplete` from
+     * true to false for no user-visible reason.
+     */
+    template<ColorSpace OtherSpace>
+    void seedFrom(const AnimatedValue<T, OtherSpace>& other)
+    {
+        if (m_isAnimating || other.m_isAnimating) {
+            return;
+        }
+        m_from = other.m_from;
+        m_to = other.m_to;
+        m_current = other.m_current;
+        m_isComplete = other.m_isComplete;
     }
 
     /**

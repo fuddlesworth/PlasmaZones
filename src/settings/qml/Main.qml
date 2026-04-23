@@ -436,12 +436,11 @@ ApplicationWindow {
         property string pendingMode: ""
         property string pendingPage: ""
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 0
-            duration: 80
-            easing.type: Easing.InQuad
+            profile: "widget.fade"
         }
 
         ScriptAction {
@@ -454,12 +453,11 @@ ApplicationWindow {
             }
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 1
-            duration: 120
-            easing.type: Easing.OutQuad
+            profile: "widget.fade"
         }
 
     }
@@ -784,22 +782,20 @@ ApplicationWindow {
 
                                     }
 
-                                    NumberAnimation {
+                                    PhosphorMotionAnimation {
                                         target: dirtyBadge
-                                        property: "opacity"
+                                        properties: "opacity"
                                         from: 1
                                         to: 0.4
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.badge"
                                     }
 
-                                    NumberAnimation {
+                                    PhosphorMotionAnimation {
                                         target: dirtyBadge
-                                        property: "opacity"
+                                        properties: "opacity"
                                         from: 0.4
                                         to: 1
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.badge"
                                     }
 
                                 }
@@ -880,22 +876,20 @@ ApplicationWindow {
 
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 1
                                     to: 0.4
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.badge"
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 0.4
                                     to: 1
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.badge"
                                 }
 
                             }
@@ -1180,15 +1174,14 @@ ApplicationWindow {
                         fadeIn.restart();
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: fadeIn
 
                         target: pageLoader.item
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 180
-                        easing.type: Easing.OutCubic
+                        profile: "widget.fade"
                     }
 
                 }
@@ -1225,15 +1218,14 @@ ApplicationWindow {
                         font.weight: Font.Medium
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: toastShow
 
                         target: toast
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                        profile: "panel.popup"
                     }
 
                     SequentialAnimation {
@@ -1243,13 +1235,12 @@ ApplicationWindow {
                             duration: 2000
                         }
 
-                        NumberAnimation {
+                        PhosphorMotionAnimation {
                             target: toast
-                            property: "opacity"
+                            properties: "opacity"
                             from: 1
                             to: 0
-                            duration: 400
-                            easing.type: Easing.InCubic
+                            profile: "widget.fade"
                         }
 
                     }

@@ -68,6 +68,13 @@ private Q_SLOTS:
 
     /// Path-string for a missing path — resolves to defaults, but
     /// live-rebinds when the path is later registered.
+    ///
+    /// The registry signal uses `Qt::QueuedConnection` so the re-resolve
+    /// runs on the receiver's event loop (guards the GUI-thread-only
+    /// `QQuickPropertyAnimation::setEasing` call from an off-thread
+    /// registerProfile). Tests must spin the event loop after mutating
+    /// the registry to observe the effect — `QTRY_COMPARE` pumps events
+    /// and polls until the condition holds or the timeout expires.
     void testProfilePathLiveRebinds()
     {
         PhosphorMotionAnimation a;
@@ -77,11 +84,13 @@ private Q_SLOTS:
         Profile p;
         p.duration = 200.0;
         PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("later"), p);
-        QCOMPARE(a.duration(), 200);
+        QTRY_COMPARE(a.duration(), 200);
     }
 
     /// profilesReloaded bulk-signal triggers re-resolve of the bound
-    /// path.
+    /// path. Same queued-connection caveat as
+    /// `testProfilePathLiveRebinds` — needs QTRY_COMPARE to spin the
+    /// event loop.
     void testProfileReloadRebinds()
     {
         PhosphorMotionAnimation a;
@@ -93,7 +102,7 @@ private Q_SLOTS:
         all.insert(QStringLiteral("bulk"), p);
         PhosphorProfileRegistry::instance().reloadAll(all);
 
-        QCOMPARE(a.duration(), 600);
+        QTRY_COMPARE(a.duration(), 600);
     }
 
     /// Switching from a path binding to a value snapshot disconnects
@@ -227,6 +236,43 @@ private Q_SLOTS:
         // encodes each segment as three QPointFs (c1, c2, end), so
         // `size() / 3` is the segment count. Must stay strictly under
         // Qt's 11-segment heap-corruption boundary.
+        const QVector<QPointF> spline = a.easing().toCubicSpline();
+        const int segmentCount = static_cast<int>(spline.size() / 3);
+        QCOMPARE(segmentCount, PhosphorMotionAnimation::kBezierSplineSegments);
+        QVERIFY2(segmentCount < 11,
+                 qPrintable(QStringLiteral("installed easing has %1 segments — at or above Qt 6.11's "
+                                           "setEasing heap-corruption boundary (11)")
+                                .arg(segmentCount)));
+    }
+
+    /// Companion to `testParametricCurveStaysUnderQtSegmentBoundary` —
+    /// exercises the elastic sampling path (a DIFFERENT parametric curve
+    /// family from Spring) so we catch a future change that accidentally
+    /// routes one family through the fast path while leaving the other
+    /// on the sampling path with >= 11 segments.
+    ///
+    /// Also re-asserts the `static_assert(kSegments < 11, …)` compile-time
+    /// guard is in place by checking the exposed constant — if someone
+    /// were to raise `kBezierSplineSegments` to 11 the build would break
+    /// first on the static_assert, and THIS test breaks on the constant.
+    void testBezierSplineCappedAtSafeSegmentCount()
+    {
+        // Compile-time constant must be under the Qt boundary. Paired with
+        // the `static_assert` in phosphormotionanimation.cpp line ~101.
+        static_assert(PhosphorMotionAnimation::kBezierSplineSegments < 11,
+                      "kBezierSplineSegments exceeds Qt's setEasing heap-corruption boundary");
+
+        // ElasticOut takes the parametric sampling branch — NOT the
+        // cubic-bezier fast path. Distinct from Spring to catch family-
+        // specific regressions.
+        Profile p;
+        p.curve = std::make_shared<Easing>(Easing::fromString(QStringLiteral("elastic-out:1.0,0.3")));
+        p.duration = 300.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.elastic"), p);
+
+        PhosphorMotionAnimation a;
+        a.setProfile(QStringLiteral("test.elastic"));
+
         const QVector<QPointF> spline = a.easing().toCubicSpline();
         const int segmentCount = static_cast<int>(spline.size() / 3);
         QCOMPARE(segmentCount, PhosphorMotionAnimation::kBezierSplineSegments);

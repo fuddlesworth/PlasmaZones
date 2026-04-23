@@ -20,6 +20,14 @@ private Q_SLOTS:
         PhosphorProfileRegistry::instance().clear();
     }
 
+    /// Guarantees no registry state leaks between test methods even
+    /// when a test forgets to clean up after itself. See the matching
+    /// comment in test_profileloader.cpp.
+    void cleanup()
+    {
+        PhosphorProfileRegistry::instance().clear();
+    }
+
     void testSingletonIdentity()
     {
         PhosphorProfileRegistry& a = PhosphorProfileRegistry::instance();
