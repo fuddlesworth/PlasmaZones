@@ -122,8 +122,7 @@ private Q_SLOTS:
         QCOMPARE(m_service->preFloatScreen(windowId), screenId);
 
         // Step 4: Simulate autotile taking over the window —
-        // autotile marks its own float and clears stale pre-float snap state
-        m_service->markAutotileFloated(windowId);
+        // clear stale pre-float snap state (autotile-float marking now on AutotileEngine)
         m_service->clearPreFloatZone(windowId);
 
         // Step 5: Verify pre-float zone is now empty

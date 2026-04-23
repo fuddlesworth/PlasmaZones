@@ -109,6 +109,21 @@ void AutotileEngine::onWindowReleased(const QString& windowId)
     }
 }
 
+void AutotileEngine::markAutotileFloated(const QString& windowId)
+{
+    m_autotileFloatedWindows.insert(windowId);
+}
+
+void AutotileEngine::clearAutotileFloated(const QString& windowId)
+{
+    m_autotileFloatedWindows.remove(windowId);
+}
+
+bool AutotileEngine::isAutotileFloated(const QString& windowId) const
+{
+    return m_autotileFloatedWindows.contains(windowId);
+}
+
 void AutotileEngine::onWindowFloated(const QString& windowId)
 {
     Q_UNUSED(windowId)

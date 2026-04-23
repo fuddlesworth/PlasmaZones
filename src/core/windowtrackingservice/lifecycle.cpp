@@ -406,7 +406,6 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_preFloatZoneAssignments.remove(wId);
             m_preFloatScreenAssignments.remove(wId);
             m_windowStickyStates.remove(wId);
-            m_autotileFloatedWindows.remove(wId);
             anyStateMigrated = true;
         }
         if (lastUsedCleared) {
@@ -510,7 +509,6 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     // This set is ephemeral (not persisted); migrating to appId would create
     // a shared key that matches ALL instances of the same app, causing
     // cross-contamination when isAutotileFloated() is called for other instances.
-    m_autotileFloatedWindows.remove(windowId);
     m_savedSnapFloatingWindows.remove(windowId);
     m_windowStickyStates.remove(windowId);
 

@@ -431,7 +431,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
-        if (wts->isAutotileFloated(fid)) {
+        if (m_autotileEngine->isAutotileFloated(fid)) {
             continue;
         }
         // When scoped to a screen, only save windows on that screen.

@@ -117,13 +117,6 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
 
     m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
 
-    // Clear stale autotile-floated flag when a window is zone-assigned in snap mode.
-    // A window that crossed from an autotile VS to a snap VS via drag keeps its
-    // autotileFloated marker (only windowsReleasedFromTiling clears it). Without
-    // this, a subsequent mode change on the autotile VS incorrectly processes the
-    // window (already snapped on the snap VS) as if it were still autotile-managed.
-    m_autotileFloatedWindows.remove(windowId);
-
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
@@ -195,7 +188,6 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeHash(m_preFloatScreenAssignments);
     removeHash(m_windowStickyStates);
     removeSet(m_floatingWindows);
-    removeSet(m_autotileFloatedWindows);
     removeSet(m_savedSnapFloatingWindows);
 
     if (pruned > 0 || wtsCleaned > 0) {
@@ -440,9 +432,6 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         if (appId != windowId) {
             m_floatingWindows.remove(appId);
         }
-        // Clear autotile-floated origin tracking for this specific instance only.
-        // No appId removal — autotile-floated is per-instance, never shared.
-        m_autotileFloatedWindows.remove(windowId);
     }
 
     if (m_snapState) {
@@ -452,25 +441,7 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     scheduleSaveState();
 }
 
-void WindowTrackingService::markAutotileFloated(const QString& windowId)
-{
-    m_autotileFloatedWindows.insert(windowId);
-}
-
-void WindowTrackingService::clearAutotileFloated(const QString& windowId)
-{
-    m_autotileFloatedWindows.remove(windowId);
-}
-
-bool WindowTrackingService::isAutotileFloated(const QString& windowId) const
-{
-    // Exact match only — NO appId fallback.
-    // m_autotileFloatedWindows is ephemeral runtime state (not persisted).
-    // A appId fallback would cross-contaminate multiple instances of the
-    // same app (e.g., 3 Dolphin windows share appId "dolphin:dolphin",
-    // so floating one would incorrectly mark all three).
-    return m_autotileFloatedWindows.contains(windowId);
-}
+// markAutotileFloated, clearAutotileFloated, isAutotileFloated moved to AutotileEngine.
 
 void WindowTrackingService::saveSnapFloating(const QString& windowId)
 {

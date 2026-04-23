@@ -271,25 +271,6 @@ public:
     QStringList floatingWindows() const;
 
     /**
-     * @brief Mark a window's float as originating from autotile mode
-     *
-     * Used to distinguish autotile-originated floats from manual snapping-mode
-     * floats. Only autotile floats are cleared on autotile→snapping transitions;
-     * manual floats are preserved. Must be called AFTER setWindowFloating(true).
-     */
-    void markAutotileFloated(const QString& windowId);
-
-    /**
-     * @brief Clear autotile-floated origin for a window
-     */
-    void clearAutotileFloated(const QString& windowId);
-
-    /**
-     * @brief Check if a window was floated by the autotile engine (not manually in snapping mode)
-     */
-    bool isAutotileFloated(const QString& windowId) const;
-
-    /**
      * @brief Save a snap-mode floating window for later restoration
      *
      * Called when a snap-mode-floated window enters autotile and its WTS
@@ -952,12 +933,6 @@ private:
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence
     QSet<QString> m_floatingWindows;
-
-    // Subset of m_floatingWindows: windows whose float originated from autotile mode.
-    // NOT persisted — on session restore all floats are treated as manual-mode.
-    // Used to distinguish autotile floats from manual snapping-mode floats during
-    // mode transitions (only autotile floats are cleared on autotile→snapping).
-    QSet<QString> m_autotileFloatedWindows;
 
     // Saved snap-mode floating windows. When a snap-mode-floated window enters
     // autotile and its WTS floating is cleared, we save it here so it can be

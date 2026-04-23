@@ -1093,6 +1093,15 @@ Q_SIGNALS:
      */
     void windowsReleasedFromTiling(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
+public:
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile-float origin tracking (ephemeral, not persisted)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void markAutotileFloated(const QString& windowId);
+    void clearAutotileFloated(const QString& windowId);
+    bool isAutotileFloated(const QString& windowId) const;
+
 private Q_SLOTS:
     void onWindowAdded(const QString& windowId);
     void onWindowRemoved(const QString& windowId);
@@ -1328,6 +1337,8 @@ private:
      * @return PhosphorTiles::TilingState pointer or nullptr if window not tracked/screen invalid
      */
     PhosphorTiles::TilingState* stateForWindow(const QString& windowId, QString* outScreenId = nullptr);
+
+    QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
