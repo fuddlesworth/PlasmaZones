@@ -21,6 +21,17 @@ using NavigationContext = PhosphorEngineApi::NavigationContext;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * @brief Whether a snap was user-initiated or auto-restored.
+ *
+ * Controls last-used-zone tracking, pending-restore consumption,
+ * and auto-snapped flag handling in commitSnap orchestration.
+ */
+enum class SnapIntent {
+    UserInitiated, ///< Explicit user action (shortcut, D-Bus call, float-toggle)
+    AutoRestored, ///< Auto-snap on open, session restore, app-rule match
+};
+
+/**
  * @brief Result of a snap calculation
  *
  * Used by WindowTrackingService and D-Bus adaptor to communicate

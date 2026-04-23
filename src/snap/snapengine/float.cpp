@@ -92,11 +92,9 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
     // (and emits windowFloatingClearedForSnap which WTA relays as
     // windowFloatingChanged), plus the zone assignment.
     if (unfloat.zoneIds.size() > 1) {
-        m_windowTracker->commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId,
-                                             WindowTrackingService::SnapIntent::UserInitiated);
+        commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId, SnapIntent::UserInitiated);
     } else {
-        m_windowTracker->commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId,
-                                    WindowTrackingService::SnapIntent::UserInitiated);
+        commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId, SnapIntent::UserInitiated);
     }
 
     Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),

@@ -242,11 +242,9 @@ void WindowTrackingAdaptor::applySnapResult(const SnapResult& result, const QStr
     m_service->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
-        m_service->commitMultiZoneSnap(windowId, zoneIds, result.screenId,
-                                       WindowTrackingService::SnapIntent::AutoRestored);
+        m_snapEngine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored);
     } else {
-        m_service->commitSnap(windowId, zoneIds.first(), result.screenId,
-                              WindowTrackingService::SnapIntent::AutoRestored);
+        m_snapEngine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
 }
 

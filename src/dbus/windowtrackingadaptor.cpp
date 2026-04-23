@@ -54,17 +54,9 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Forward service signals to D-Bus
     connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
 
-    // Relay WTS snap-commit signals (emitted by commitSnap / commitMultiZoneSnap
-    // / uncommitSnap orchestration methods) to WTA's D-Bus surface. These
-    // signals replaced the D-Bus emissions that used to happen inline inside
-    // WTA::windowSnapped — the business logic moved to WTS, but the D-Bus
-    // contract is unchanged.
-    connect(m_service, &WindowTrackingService::windowSnapStateChanged, this,
-            &WindowTrackingAdaptor::windowStateChanged);
-    connect(m_service, &WindowTrackingService::windowFloatingClearedForSnap, this,
-            [this](const QString& windowId, const QString& screenId) {
-                Q_EMIT windowFloatingChanged(windowId, false, screenId);
-            });
+    // Snap-commit signal wiring is deferred to setEngines() where m_snapEngine
+    // is available — commitSnap/commitMultiZoneSnap/uncommitSnap live on
+    // SnapEngine, not WTS.
 
     // Connect service state changes to persistence
     connect(m_service, &WindowTrackingService::stateChanged, this, &WindowTrackingAdaptor::scheduleSaveState);
@@ -172,6 +164,11 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 // unit that includes this header.
 WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
+SnapEngine* WindowTrackingAdaptor::snapEngine() const
+{
+    return m_snapEngine;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Engine wiring — cross-references and shared navigation feedback
 //
@@ -198,6 +195,12 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
     if (m_snapEngine) {
         m_snapEngine->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
         m_snapEngine->setAutotileEngine(m_autotileEngine);
+
+        connect(m_snapEngine, &SnapEngine::windowSnapStateChanged, this, &WindowTrackingAdaptor::windowStateChanged);
+        connect(m_snapEngine, &SnapEngine::windowFloatingClearedForSnap, this,
+                [this](const QString& windowId, const QString& screenId) {
+                    Q_EMIT windowFloatingChanged(windowId, false, screenId);
+                });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -267,10 +270,9 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
 //   1. Validate and resolve the screen id (cursor/active shadows live on WTA)
 //   2. Forward to the service
 //
-// The WTS signals (windowSnapStateChanged, windowFloatingClearedForSnap) are
-// wired to WTA's D-Bus signals (windowStateChanged, windowFloatingChanged)
-// in the constructor — external consumers see the same wire format as
-// before, just sourced from the service instead of inline-emitted here.
+// The SnapEngine signals (windowSnapStateChanged, windowFloatingClearedForSnap)
+// are wired to WTA's D-Bus signals (windowStateChanged, windowFloatingChanged)
+// in setEngines() — external consumers see the same wire format as before.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
@@ -286,7 +288,7 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     // before handing off to WTS — the service has no compositor-layer
     // cursor tracking and takes an already-resolved screen.
     const QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
-    m_service->commitSnap(windowId, zoneId, resolvedScreen);
+    m_snapEngine->commitSnap(windowId, zoneId, resolvedScreen);
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
@@ -300,7 +302,7 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
         return;
     }
     const QString resolvedScreen = resolveScreenForSnap(screenId, zoneIds.first());
-    m_service->commitMultiZoneSnap(windowId, zoneIds, resolvedScreen);
+    m_snapEngine->commitMultiZoneSnap(windowId, zoneIds, resolvedScreen);
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -308,7 +310,7 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("untrack window"))) {
         return;
     }
-    m_service->uncommitSnap(windowId);
+    m_snapEngine->uncommitSnap(windowId);
 }
 
 void WindowTrackingAdaptor::windowsSnappedBatch(const SnapConfirmationList& entries)

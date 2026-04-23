@@ -212,7 +212,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         qCWarning(lcCore) << "SnapEngine::moveFocusedInDirection: invalid geometry from nav result";
         return;
     }
-    m_windowTracker->commitSnap(windowId, result.zoneId, result.screenName);
+    commitSnap(windowId, result.zoneId, result.screenName);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
                                   result.screenName, false);
@@ -249,7 +249,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     if (!result.success) {
         return;
     }
-    m_windowTracker->commitSnap(result.windowId1, result.zoneId1, result.screenName);
+    commitSnap(result.windowId1, result.zoneId1, result.screenName);
     m_windowTracker->recordSnapIntent(result.windowId1, true);
     Q_EMIT applyGeometryRequested(result.windowId1, result.x1, result.y1, result.w1, result.h1, result.zoneId1,
                                   result.screenName, false);
@@ -259,7 +259,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         if (screen2.isEmpty()) {
             screen2 = result.screenName;
         }
-        m_windowTracker->commitSnap(result.windowId2, result.zoneId2, screen2);
+        commitSnap(result.windowId2, result.zoneId2, screen2);
         m_windowTracker->recordSnapIntent(result.windowId2, true);
         Q_EMIT applyGeometryRequested(result.windowId2, result.x2, result.y2, result.w2, result.h2, result.zoneId2,
                                       screen2, false);
@@ -303,7 +303,7 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
         qCWarning(lcCore) << "SnapEngine::moveFocusedToPosition: invalid geometry from nav result";
         return;
     }
-    m_windowTracker->commitSnap(windowId, result.zoneId, effectiveScreen);
+    commitSnap(windowId, result.zoneId, effectiveScreen);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
                                   false);
@@ -340,7 +340,7 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
         qCWarning(lcCore) << "SnapEngine::pushFocusedToEmptyZone: invalid geometry from nav result";
         return;
     }
-    m_windowTracker->commitSnap(windowId, result.zoneId, effectiveScreen);
+    commitSnap(windowId, result.zoneId, effectiveScreen);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
                                   false);
@@ -369,7 +369,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
     if (!result.success) {
         return;
     }
-    m_windowTracker->uncommitSnap(windowId);
+    uncommitSnap(windowId);
     m_windowTracker->clearPreTileGeometry(windowId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
@@ -475,14 +475,13 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
     // built-in strategies (targetScreenId / geometry.center() /
     // QGuiApplication::screens()) yield a screen.
     const QPointer<WindowTrackingAdaptor> wta = m_wta;
-    WindowGeometryList geometries = m_windowTracker->applyBatchAssignments(
-        entries, WindowTrackingService::SnapIntent::UserInitiated, [wta]() -> QString {
-            if (!wta) {
-                return QString();
-            }
-            const QString cursor = wta->lastCursorScreenName();
-            return cursor.isEmpty() ? wta->lastActiveScreenName() : cursor;
-        });
+    WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
+        if (!wta) {
+            return QString();
+        }
+        const QString cursor = wta->lastCursorScreenName();
+        return cursor.isEmpty() ? wta->lastActiveScreenName() : cursor;
+    });
     if (!geometries.isEmpty()) {
         Q_EMIT applyGeometriesBatch(geometries, QStringLiteral("rotate"));
     }

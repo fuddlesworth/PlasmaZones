@@ -58,11 +58,9 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     m_snapState->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
-        m_windowTracker->commitMultiZoneSnap(windowId, zoneIds, result.screenId,
-                                             WindowTrackingService::SnapIntent::AutoRestored);
+        commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored);
     } else {
-        m_windowTracker->commitSnap(windowId, zoneIds.first(), result.screenId,
-                                    WindowTrackingService::SnapIntent::AutoRestored);
+        commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
 
     // Emit geometry for KWin effect to apply

@@ -31,6 +31,7 @@ using PhosphorProtocol::SnapAllResultEntry;
 using PhosphorProtocol::SnapAllResultList;
 using PhosphorProtocol::SwapTargetResult;
 using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
 
 class AutotileEngine;
 class ISettings;
@@ -178,15 +179,11 @@ public:
     void setAutotileEngine(AutotileEngine* engine);
 
     /**
-     * @brief Set the SnapState instance for pure state reads/writes.
+     * @brief Set the SnapState instance for state ownership.
      *
-     * SnapEngine delegates zone-assignment queries, floating state,
-     * pre-tile geometry, and auto-snap bookkeeping to this state object.
-     * Orchestration methods (commitSnap, calculate*, applyBatchAssignments)
-     * remain on WindowTrackingService.
-     *
-     * Must be set after construction and before any lifecycle or navigation
-     * method is called. Typically parented to SnapEngine via QObject ownership.
+     * SnapEngine owns all snap state reads/writes and commit orchestration
+     * through this object. Must be set after construction and before any
+     * lifecycle or navigation method is called.
      */
     void setSnapState(PhosphorZones::SnapState* state);
 
@@ -287,6 +284,26 @@ public:
     void cycleFocus(bool forward, const NavigationContext& ctx) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Snap commit orchestration
+    //
+    // Full snap lifecycle: clear floating, assign to zone, update tracking,
+    // emit state-changed signals. Owns the orchestration that was previously
+    // on WindowTrackingService.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
+                    SnapIntent intent = SnapIntent::UserInitiated);
+
+    void commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                             SnapIntent intent = SnapIntent::UserInitiated);
+
+    void uncommitSnap(const QString& windowId);
+
+    WindowGeometryList applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries,
+                                             SnapIntent intent = SnapIntent::UserInitiated,
+                                             std::function<QString()> fallbackScreenResolver = {});
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //
     // Returns the single SnapState wired by Daemon::init(). Currently a
@@ -343,6 +360,12 @@ Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Signals (relayed via SnapAdaptor → WTA → D-Bus → effect)
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Snap state changed (commit / uncommit). WTA relays to D-Bus windowStateChanged.
+    void windowSnapStateChanged(const QString& windowId, const WindowStateEntry& entry);
+
+    /// Floating state cleared as part of a commit. WTA relays as windowFloatingChanged(id, false, screen).
+    void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
 
     /// Navigation feedback for OSD display
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
