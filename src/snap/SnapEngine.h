@@ -304,6 +304,27 @@ public:
                                              std::function<QString()> fallbackScreenResolver = {});
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Auto-snap calculations (moved from WTS)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
+    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId, bool isSticky) const;
+    SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId, bool isSticky) const;
+    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky) const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Resnap / rotation calculations (moved from WTS)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    QVector<ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+    QVector<ZoneAssignmentEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                  const QString& screenId) const;
+    QVector<ZoneAssignmentEntry> calculateSnapAllWindowEntries(const QStringList& windowIds,
+                                                               const QString& screenId) const;
+    QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //
     // Returns the single SnapState wired by Daemon::init(). Currently a

@@ -14,6 +14,7 @@
 #include <QRect>
 #include <functional>
 #include <optional>
+#include <utility>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones {
@@ -390,46 +391,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Calculate snap result based on app-to-zone rules
-     * @param windowId Full window ID
-     * @param windowScreenName Screen where window currently is
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info, or noSnap if no rule matches
-     */
-    SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
-
-    /**
-     * @brief Calculate snap result for new window to last used zone
-     * @param windowId Full window ID
-     * @param windowScreenId Screen where window currently is
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info
-     */
-    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId, bool isSticky) const;
-
-    /**
-     * @brief Calculate snap result for new window to first empty zone (auto-assign)
-     * @param windowId Full window ID
-     * @param windowScreenId Screen where window currently is
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info
-     */
-    SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId, bool isSticky) const;
-
-    /**
-     * @brief Calculate snap result to restore from persisted session
-     * @param windowId Full window ID
-     * @param screenId Screen for geometry calculation
-     * @param isSticky Whether window is on all desktops
-     * @return SnapResult with geometry and zone info
-     *
-     * @note This method peeks at the pending queue but does NOT consume the entry.
-     * Callers MUST call consumePendingAssignment() after acting on a successful result
-     * to prevent duplicate restoration for the next window of the same app class.
-     */
-    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky) const;
-
-    /**
      * @brief Record that a window class was user-snapped
      * @param windowId Full window ID to extract class from
      * @param wasUserInitiated true if user-initiated snap
@@ -574,37 +535,6 @@ public:
     QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId = QString()) const;
 
     /**
-     * @brief Calculate rotation data for windows on a specific screen
-     * @param clockwise true for clockwise rotation
-     * @param screenFilter When non-empty, only rotate windows on this screen
-     * @return List of zone assignment entries
-     */
-    QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
-
-    /**
-     * @brief Calculate snap assignments for all unsnapped windows
-     * @param windowIds List of unsnapped window IDs (from KWin effect)
-     * @param screenId Screen for layout/geometry resolution
-     * @return List of ZoneAssignmentEntry with target zone assignments
-     *
-     * Assigns windows to zones in zone-number order, skipping already-occupied
-     * zones. If more windows than zones, extra windows are left unassigned.
-     */
-    QVector<ZoneAssignmentEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId) const;
-
-    /**
-     * @brief Calculate resnap data for windows from previous layout to current layout
-     *
-     * When layout changes, windows that were in the previous layout are buffered.
-     * This method maps them to the current layout by zone number (1->1, 2->2, etc.)
-     * with cycling when the new layout has fewer zones (e.g. zone 4->1, 5->2 when
-     * going from 5 zones to 3).
-     *
-     * @return List of zone assignment entries for KWin to apply
-     */
-    QVector<ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
-
-    /**
      * @brief Populate the resnap buffer for all screens independently.
      *
      * For each window, looks up its current zone assignment and determines
@@ -632,34 +562,6 @@ public:
     {
         m_resnapBuffer.clear();
     }
-
-    /**
-     * @brief Calculate resnap data from current zone assignments
-     *
-     * Used when restoring windows after autotile toggle-off: the autotile engine
-     * repositioned windows, but m_windowZoneAssignments still holds the pre-autotile
-     * zone assignments. This method computes zone geometries for those assignments
-     * so windows can be moved back to their zone positions.
-     *
-     * @param screenFilter When non-empty, only include windows on this screen
-     * @return List of zone assignment entries for KWin to apply
-     */
-    QVector<ZoneAssignmentEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
-
-    /**
-     * @brief Calculate resnap data from an explicit autotile window order
-     *
-     * Maps autotile position to manual zone number: windowOrder[0] → zone 1,
-     * [1] → zone 2, etc. If there are more windows than zones, excess windows
-     * are not resnapped (they stay where they are) — no cycling.
-     * Uses the current (manual) layout's zones for geometry calculation.
-     *
-     * @param autotileWindowOrder Ordered list of window IDs from autotile (master first)
-     * @param screenId Screen for layout/geometry resolution
-     * @return List of zone assignment entries for KWin to apply
-     */
-    QVector<ZoneAssignmentEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                  const QString& screenId) const;
 
     /**
      * @brief Build a zone-ordered window list for a screen from current zone assignments
@@ -817,12 +719,32 @@ public:
         QList<int> zoneNumbers;
     };
 
+    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
+    // for windows that were in the previous layout, so resnapToNewLayout can map them
+    struct ResnapEntry
+    {
+        QString windowId;
+        int zonePosition; // Primary zone: 1-based position in sorted-by-zoneNumber order
+        QList<int> allZonePositions; // All zones (for multi-zone windows); empty = single-zone
+        QString screenId; // Stable EDID-based screen identifier (or connector name fallback)
+        int virtualDesktop = 0;
+    };
+
     /**
      * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)
      */
     const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const
     {
         return m_pendingRestoreQueues;
+    }
+
+    const QSet<QString>& effectReportedWindows() const
+    {
+        return m_effectReportedWindows;
+    }
+    QVector<ResnapEntry> takeResnapBuffer()
+    {
+        return std::exchange(m_resnapBuffer, {});
     }
 
     /**
@@ -1001,18 +923,9 @@ private:
     /// When exactOnly is true, does not fall back to the appId-keyed entry.
     std::optional<QRect> validatePreTileEntry(const QString& windowId, const QString& currentScreenName,
                                               bool exactOnly) const;
-    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId, int desktopFilter = 0) const;
-
-    /// Resolve a screen ID to an effective screen ID, falling back to the physical
-    /// screen ID if a virtual screen no longer exists in the current configuration.
-    QString resolveEffectiveScreenId(const QString& screenId) const;
 
     /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
     void validateLastUsedZone(const QString& targetScreen);
-
-    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
-    /// when multiple zones share the same number.
-    static void sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones);
 
     /// Find the nearest virtual screen by index proximity.
     /// Used when a stored virtual screen ID no longer exists in the current configuration.
@@ -1027,12 +940,23 @@ private:
     };
     ZoneLookupResult findZoneInAllLayouts(const QUuid& zoneUuid) const;
 
-    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
-    static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
+public:
+    /// Resolve a screen ID to an effective screen ID, falling back to the physical
+    /// screen ID if a virtual screen no longer exists in the current configuration.
+    QString resolveEffectiveScreenId(const QString& screenId) const;
 
     /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
     /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
     QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
+
+    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId, int desktopFilter = 0) const;
+
+    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
+    /// when multiple zones share the same number.
+    static void sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones);
+
+    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
+    static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
 
 public:
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
@@ -1142,16 +1066,6 @@ private:
     // live siblings (daemon-only restart) from stale config entries (KWin restart).
     QSet<QString> m_effectReportedWindows;
 
-    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
-    // for windows that were in the previous layout, so resnapToNewLayout can map them
-    struct ResnapEntry
-    {
-        QString windowId;
-        int zonePosition; // Primary zone: 1-based position in sorted-by-zoneNumber order
-        QList<int> allZonePositions; // All zones (for multi-zone windows); empty = single-zone
-        QString screenId; // Stable EDID-based screen identifier (or connector name fallback)
-        int virtualDesktop = 0;
-    };
     QVector<ResnapEntry> m_resnapBuffer;
 
     // Delta-persistence dirty mask. Initial value DirtyAll forces the first

@@ -61,7 +61,7 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
         return;
     }
 
-    SnapResult result = m_service->calculateSnapToLastZone(windowId, windowScreenId, sticky);
+    SnapResult result = m_snapEngine->calculateSnapToLastZone(windowId, windowScreenId, sticky);
     if (!result.shouldSnap) {
         return;
     }
@@ -84,7 +84,7 @@ void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString
         return;
     }
 
-    SnapResult result = m_service->calculateSnapToAppRule(windowId, windowScreenName, sticky);
+    SnapResult result = m_snapEngine->calculateSnapToAppRule(windowId, windowScreenName, sticky);
     if (!result.shouldSnap) {
         return;
     }
@@ -108,7 +108,7 @@ void WindowTrackingAdaptor::snapToEmptyZone(const QString& windowId, const QStri
     }
 
     qCDebug(lcDbusWindow) << "snapToEmptyZone: windowId=" << windowId << "screen=" << windowScreenId;
-    SnapResult result = m_service->calculateSnapToEmptyZone(windowId, windowScreenId, sticky);
+    SnapResult result = m_snapEngine->calculateSnapToEmptyZone(windowId, windowScreenId, sticky);
     if (!result.shouldSnap) {
         qCDebug(lcDbusWindow) << "snapToEmptyZone: no snap";
         return;
@@ -138,7 +138,7 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
         return;
     }
 
-    SnapResult result = m_service->calculateRestoreFromSession(windowId, screenId, sticky);
+    SnapResult result = m_snapEngine->calculateRestoreFromSession(windowId, screenId, sticky);
     if (!result.shouldSnap) {
         return;
     }

@@ -452,7 +452,7 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
                                   QString(), screenId);
         return;
     }
-    QVector<ZoneAssignmentEntry> entries = m_windowTracker->calculateRotation(clockwise, screenId);
+    QVector<ZoneAssignmentEntry> entries = calculateRotation(clockwise, screenId);
     if (entries.isEmpty()) {
         auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout) {

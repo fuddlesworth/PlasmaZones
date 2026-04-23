@@ -27,7 +27,9 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
+#include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -136,6 +138,10 @@ private Q_SLOTS:
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_engine);
+        m_engine->setSnapState(m_snapState);
+        m_service->setSnapState(m_snapState);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -149,6 +155,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_engine;
+        m_engine = nullptr;
+        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -267,7 +277,7 @@ private Q_SLOTS:
             QStringLiteral("new2:win:222"),
         };
 
-        QVector<ZoneAssignmentEntry> entries = m_service->calculateSnapAllWindows(unsnappedWindows, QString());
+        QVector<ZoneAssignmentEntry> entries = m_engine->calculateSnapAllWindowEntries(unsnappedWindows, QString());
 
         // In headless mode, result is empty (no screen -> no geometry)
         Q_UNUSED(entries);
@@ -324,6 +334,8 @@ private:
     StubSettingsQueries* m_settings = nullptr;
     StubZoneDetectorQueries* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
+    SnapEngine* m_engine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

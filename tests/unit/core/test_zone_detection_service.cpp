@@ -19,7 +19,9 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/windowtrackingservice.h"
+#include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include "core/utils.h"
@@ -140,6 +142,11 @@ private Q_SLOTS:
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
             layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
+        QScopedPointer<SnapEngine> engine(
+            new SnapEngine(layoutManager.data(), service.data(), detector.data(), settings.data(), nullptr, nullptr));
+        auto* snapState = new PhosphorZones::SnapState(QString(), engine.data());
+        engine->setSnapState(snapState);
+        service->setSnapState(snapState);
 
         auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new PhosphorZones::Zone(layout);
@@ -162,14 +169,14 @@ private Q_SLOTS:
         service->assignWindowToZone(QStringLiteral("app:win:123"), zoneIdWithBraces, QString(), 0);
 
         // calculateRotation should handle both formats without error
-        QVector<ZoneAssignmentEntry> result = service->calculateRotation(true);
+        QVector<ZoneAssignmentEntry> result = engine->calculateRotation(true);
         Q_UNUSED(result);
 
         // Now try with without-braces format
         service->unassignWindow(QStringLiteral("app:win:123"));
         service->assignWindowToZone(QStringLiteral("app:win:456"), zoneIdWithoutBraces, QString(), 0);
 
-        QVector<ZoneAssignmentEntry> result2 = service->calculateRotation(false);
+        QVector<ZoneAssignmentEntry> result2 = engine->calculateRotation(false);
         Q_UNUSED(result2);
     }
 };

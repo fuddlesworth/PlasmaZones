@@ -190,7 +190,7 @@ void WindowTrackingAdaptor::resnapForVirtualScreenReconfigure(const QString& phy
     const QStringList snapScreens = resolveSnapModeScreensForResnap(physicalScreenId);
     QVector<ZoneAssignmentEntry> entries;
     for (const QString& sid : snapScreens) {
-        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+        entries.append(m_snapEngine->calculateResnapFromCurrentAssignments(sid));
     }
 
     if (entries.isEmpty()) {

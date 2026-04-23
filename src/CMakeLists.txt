@@ -175,11 +175,13 @@ set(plasmazones_core_SRCS
     # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
     snap/SnapEngine.cpp
     snap/SnapEngine.h
+    snap/snapengine/calculate.cpp
     snap/snapengine/commit.cpp
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
     snap/snapengine/navigation_actions.cpp
+    snap/snapengine/resnap_calc.cpp
 )
 
 # Create core library
