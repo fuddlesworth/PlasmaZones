@@ -609,9 +609,8 @@ Window {
                 Behavior on anchors.leftMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -619,9 +618,8 @@ Window {
                 Behavior on anchors.topMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -629,9 +627,8 @@ Window {
                 Behavior on anchors.rightMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -639,9 +636,8 @@ Window {
                 Behavior on anchors.bottomMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }

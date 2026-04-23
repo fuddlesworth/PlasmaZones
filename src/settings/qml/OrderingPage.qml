@@ -29,13 +29,15 @@ Flickable {
     property bool hideZeroBadge: false
     property bool _rebuilding: false
     property bool _movingLocally: false
-    property var _zoneCache: ({})
+    property var _zoneCache: ({
+    })
 
     function rebuildModel() {
         _rebuilding = true;
         orderModel.clear();
         let items = resolveOrder();
-        let cache = {};
+        let cache = {
+        };
         for (let i = 0; i < items.length; i++) {
             let item = items[i];
             let key = root.previewZonesKey;
@@ -409,9 +411,8 @@ Flickable {
                             Behavior on y {
                                 enabled: !dragArea.drag.active
 
-                                NumberAnimation {
-                                    duration: Kirigami.Units.longDuration
-                                    easing.type: Easing.OutCubic
+                                PhosphorMotionAnimation {
+                                    profile: "widget.reorder"
                                 }
 
                             }

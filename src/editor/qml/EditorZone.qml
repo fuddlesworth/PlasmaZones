@@ -505,9 +505,8 @@ Item {
         Behavior on color {
             enabled: root._animationsReady
 
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
             }
 
         }
@@ -515,9 +514,8 @@ Item {
         Behavior on border.color {
             enabled: root._animationsReady
 
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
             }
 
         }
@@ -639,9 +637,8 @@ Item {
     Behavior on visualX {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
         }
 
     }
@@ -649,9 +646,8 @@ Item {
     Behavior on visualY {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
         }
 
     }
@@ -659,9 +655,8 @@ Item {
     Behavior on visualWidth {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
         }
 
     }
@@ -669,9 +664,8 @@ Item {
     Behavior on visualHeight {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
         }
 
     }

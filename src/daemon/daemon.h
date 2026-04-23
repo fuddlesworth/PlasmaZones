@@ -436,6 +436,20 @@ private:
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
+    /// Per-daemon curve registry. Replaces the prior per-process
+    /// `CurveRegistry::instance()` singleton — composition roots own
+    /// their own.
+    ///
+    /// DECLARATION ORDER INVARIANT: must be declared BEFORE `m_settings`
+    /// (which takes a borrowed pointer to it in its constructor) and
+    /// BEFORE `m_curveLoader` / `m_profileLoader` (which also borrow).
+    /// Reverse-order destruction then tears every consumer down before
+    /// the registry itself, guaranteeing no UAF on the Settings /
+    /// loader teardown paths. Also reset from `PhosphorCurve::s_registry`
+    /// in `~Daemon` before teardown so the QML static helper doesn't
+    /// dangle into freed memory on process shutdown or successive
+    /// Daemon constructions in tests.
+    PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
     // Single source of truth for live-window instance identity + metadata.
@@ -511,13 +525,6 @@ private:
     std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
-
-    /// Per-daemon curve registry. Replaces the prior per-process
-    /// CurveRegistry::instance() singleton — composition roots own
-    /// their own. Declared BEFORE m_curveLoader and m_profileLoader
-    /// so reverse-order member destruction tears the loaders down
-    /// before the registry they borrow.
-    PhosphorAnimation::CurveRegistry m_curveRegistry;
 
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
     /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG

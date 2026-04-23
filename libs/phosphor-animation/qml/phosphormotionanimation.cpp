@@ -79,14 +79,15 @@ void PhosphorMotionAnimation::applyResolvedEasing()
     // Parametric / stateful curves (Spring, Elastic, Bounce, user-authored):
     // sample into piecewise cubic Bezier segments.
     //
-    // Segment count is capped at 8 because Qt 6.11's
-    // QQuickPropertyAnimation::setEasing heap-corrupts on BezierSpline
-    // curves with >= 11 segments — observed as "malloc(): corrupted top
-    // size" / "unaligned tcache chunk detected" during downstream
-    // allocations. 8 keeps a safe margin under the boundary while still
-    // giving visually faithful springs/elastics at typical 150-300ms
-    // UI durations.
-    constexpr int kSegments = 8;
+    // Segment count is capped by `kBezierSplineSegments` because Qt
+    // 6.11's QQuickPropertyAnimation::setEasing heap-corrupts on
+    // BezierSpline curves with >= 11 segments — observed as "malloc():
+    // corrupted top size" / "unaligned tcache chunk detected" during
+    // downstream allocations. The constant lives on the public class
+    // surface so the regression test can assert the installed easing
+    // stays under the Qt boundary.
+    constexpr int kSegments = kBezierSplineSegments;
+    static_assert(kSegments < 11, "Qt 6.11 setEasing heap-corrupts at >=11 BezierSpline segments");
     for (int i = 0; i < kSegments; ++i) {
         const qreal t0 = static_cast<qreal>(i) / kSegments;
         const qreal t1 = static_cast<qreal>(i + 1) / kSegments;
@@ -137,8 +138,12 @@ void PhosphorMotionAnimation::resolveFromVariant(const QVariant& p)
     // Unrecognised shape — leave the resolved profile at defaults.
     // A setter chain that passes garbage (typo on `profile` spelled
     // `profiles`, an accidental int) falls through cleanly rather
-    // than crashing.
-    qCDebug(lcMotion) << "setProfile: unrecognised QVariant shape" << p << "— falling back to default profile";
+    // than crashing. Warn rather than debug: this is almost always a
+    // QML authoring bug and the silent fallback to library defaults
+    // looks like the animation is just "off" — turning this into a
+    // warning surfaces the typo the first time a QML file with the
+    // mistake is loaded.
+    qCWarning(lcMotion) << "setProfile: unrecognised QVariant shape" << p << "— falling back to default profile";
     applyResolvedProfile(Profile{});
 }
 

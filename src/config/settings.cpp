@@ -47,10 +47,11 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 }
 } // namespace
 
-Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
+Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
+    , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
     // file. Production entry points (daemon/main, settings/main, editor
@@ -58,6 +59,13 @@ Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     // startup, before instantiating the backend. The non-owning ctor is
     // used when callers share one backend across Settings + PhosphorZones::LayoutRegistry
     // + other components, so the migration responsibility lives with them.
+    //
+    // Wire the curve registry BEFORE load() so the initial property
+    // snapshot parses Profile blobs through the caller's registry and
+    // preserves `shared_ptr<const Curve>` identity end-to-end. Without
+    // this ordering, load() falls back to a local static registry and
+    // the first re-publish after setCurveRegistry() re-parses with
+    // different curve identities — defeating the shared-curve cache.
     //
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
@@ -628,6 +636,20 @@ void Settings::setCurveRegistry(PhosphorAnimation::CurveRegistry* reg)
     m_curveRegistry = reg;
 }
 
+// Process-wide fallback registry for standalone Settings instances
+// constructed without an injected CurveRegistry (tests, settings-app
+// tools that don't share a registry with the daemon). Consolidated
+// here as a single function-local static so every fallback path
+// resolves curve wire-format strings through the same registry —
+// avoids the "two identical spring:14,0.6 strings resolve to different
+// shared_ptr<const Curve> instances" surprise that three separate
+// per-method statics introduced.
+static PhosphorAnimation::CurveRegistry& fallbackCurveRegistry()
+{
+    static PhosphorAnimation::CurveRegistry s_registry;
+    return s_registry;
+}
+
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
     // Parse the stored JSON string through Profile::fromJson. Malformed
@@ -641,22 +663,29 @@ PhosphorAnimation::Profile Settings::animationProfile() const
     if (!doc.isObject()) {
         return PhosphorAnimation::Profile{};
     }
-    if (m_curveRegistry) {
-        return PhosphorAnimation::Profile::fromJson(doc.object(), *m_curveRegistry);
-    }
-    static PhosphorAnimation::CurveRegistry sFallback;
-    return PhosphorAnimation::Profile::fromJson(doc.object(), sFallback);
+    const PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
+    return PhosphorAnimation::Profile::fromJson(doc.object(), reg);
 }
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
-    // Serialise through Profile::toJson — keeps engaged-optional
-    // semantics so round-tripping doesn't fabricate explicit values
-    // for fields the user left inheriting defaults.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
-    const QString after = QString::fromUtf8(QJsonDocument(profile.toJson()).toJson(QJsonDocument::Compact));
-    if (before == after) {
+    // Compare semantically via `Profile::operator==` rather than through
+    // serialised-JSON string equality. Two reasons:
+    //   1. `QJsonDocument(Compact)` orders keys in hash-bucket order,
+    //      which matches within a Qt version but not across upgrades
+    //      (and decisively not across different code paths that
+    //      construct the blob in different key orders — e.g. the v1→v2
+    //      migration produces a different ordering than Profile::toJson).
+    //   2. `Profile::operator==` is the project-canonical equality for
+    //      this type — curve comparison goes through the virtual
+    //      `Curve::equals()` hook, so polymorphic curve identity /
+    //      parameter equivalence is correctly handled.
+    // With string-compare, the first setAnimationProfile after a
+    // migration takes the "changed" branch and fires every dependent
+    // signal even when the resolved Profile is identical, producing a
+    // visible signal storm across ~30 Hz slider-drag sessions.
+    const PhosphorAnimation::Profile prev = animationProfile();
+    if (profile == prev) {
         return;
     }
 
@@ -668,23 +697,13 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // `animationStaggerInterval` — at ~30 Hz that's a lot of wasted
     // re-evaluation. The project rule "only emit when value actually
     // changed" applies at the per-field granularity here.
-    const QJsonDocument beforeDoc = QJsonDocument::fromJson(before.toUtf8());
-    const auto& reg = [this]() -> const PhosphorAnimation::CurveRegistry& {
-        if (m_curveRegistry) {
-            return *m_curveRegistry;
-        }
-        static PhosphorAnimation::CurveRegistry sFallback;
-        return sFallback;
-    }();
-    const PhosphorAnimation::Profile prev = beforeDoc.isObject()
-        ? PhosphorAnimation::Profile::fromJson(beforeDoc.object(), reg)
-        : PhosphorAnimation::Profile{};
     const int prevDuration = qRound(prev.effectiveDuration());
     const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
     const int prevMinDistance = prev.effectiveMinDistance();
     const int prevSequenceMode = static_cast<int>(prev.effectiveSequenceMode());
     const int prevStaggerInterval = prev.effectiveStaggerInterval();
 
+    const QString after = QString::fromUtf8(QJsonDocument(profile.toJson()).toJson(QJsonDocument::Compact));
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
 
     // Aggregate first — consumers that want to observe the Profile
@@ -753,12 +772,8 @@ void Settings::setAnimationEasingCurve(const QString& curve)
     if (currentWire == curve) {
         return;
     }
-    if (m_curveRegistry) {
-        p.curve = m_curveRegistry->create(curve);
-    } else {
-        static PhosphorAnimation::CurveRegistry sFallback;
-        p.curve = sFallback.create(curve);
-    }
+    PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
+    p.curve = reg.create(curve);
     setAnimationProfile(p);
 }
 

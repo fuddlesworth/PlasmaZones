@@ -146,6 +146,18 @@ public:
     Profile withDefaults() const;
 
     // ─────── Serialization ───────
+    //
+    // JSON field names exposed as public constants so consumers that
+    // assemble a Profile blob without linking this library (e.g. the
+    // downstream config-migration code) share the keys with
+    // `toJson` / `fromJson` at the source. Changing a field name here
+    // updates both producers and consumers atomically.
+    static constexpr auto JsonFieldCurve = "curve";
+    static constexpr auto JsonFieldDuration = "duration";
+    static constexpr auto JsonFieldMinDistance = "minDistance";
+    static constexpr auto JsonFieldSequenceMode = "sequenceMode";
+    static constexpr auto JsonFieldStaggerInterval = "staggerInterval";
+    static constexpr auto JsonFieldPresetName = "presetName";
 
     /**
      * @brief Serialize to a JSON object.

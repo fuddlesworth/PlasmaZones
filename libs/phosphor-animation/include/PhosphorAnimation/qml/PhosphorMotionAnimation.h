@@ -41,9 +41,12 @@ namespace PhosphorAnimation {
  * `interpolated()` override is needed.
  *
  * The BezierSpline approximation samples the Phase-3 `Curve::evaluate(t)`
- * into 16 piecewise cubic Bezier segments. For simple cubic-bezier
- * curves (4-parameter) this overshoots but the cost is negligible.
- * For springs/elastics, 16 segments gives sub-pixel accuracy at 60fps.
+ * into `kBezierSplineSegments` piecewise cubic Bezier segments (8 by
+ * default — chosen to stay safely below Qt 6.11's `setEasing` heap-
+ * corruption threshold at ≥11 segments while keeping visual faithfulness
+ * at typical 150-300 ms UI durations). Plain cubic-bezier `Easing`
+ * profiles take a fast path that installs a single canonical segment
+ * with the two original control points — no sampling.
  *
  * ## Profile binding (decision R)
  *
@@ -92,6 +95,22 @@ class PHOSPHORANIMATION_EXPORT PhosphorMotionAnimation : public QQuickPropertyAn
     Q_PROPERTY(QVariant profile READ profile WRITE setProfile NOTIFY profileChanged)
 
 public:
+    /// Number of piecewise cubic Bezier segments used to approximate
+    /// parametric / stateful curves (Spring, Elastic, Bounce,
+    /// user-authored). Must stay below 11 — Qt 6.11's
+    /// `QQuickPropertyAnimation::setEasing` heap-corrupts on
+    /// `QEasingCurve::BezierSpline` curves with ≥11 segments. 8 keeps
+    /// a safe margin while giving visually faithful approximations at
+    /// 150-300 ms durations. Plain cubic-bezier `Easing` curves take
+    /// the fast path (single canonical segment) and are not subject
+    /// to this cap.
+    ///
+    /// Exposed as a public static so tests can assert the installed
+    /// easing's segment count stays under the Qt boundary — see the
+    /// BezierSpline regression test in
+    /// test_phosphormotionanimation.cpp.
+    static constexpr int kBezierSplineSegments = 8;
+
     explicit PhosphorMotionAnimation(QObject* parent = nullptr);
     ~PhosphorMotionAnimation() override;
 
@@ -116,9 +135,10 @@ private:
 
     /// Convert the resolved Profile's curve + duration into
     /// QQuickPropertyAnimation's native `easing` and `duration`
-    /// properties. The curve is sampled into a piecewise cubic
-    /// BezierSpline with 16 segments — sub-pixel accurate at 60fps
-    /// for all supported curve types (springs, elastics, bounces).
+    /// properties. Plain cubic-bezier `Easing` profiles install as a
+    /// single canonical segment (exact round-trip); parametric /
+    /// stateful curves are sampled into `kBezierSplineSegments`
+    /// piecewise cubic Bezier segments.
     void applyResolvedEasing();
 
     QVariant m_profile; ///< The QML-facing input: QString or PhosphorProfile.

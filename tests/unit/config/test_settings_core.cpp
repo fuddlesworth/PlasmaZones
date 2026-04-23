@@ -804,6 +804,52 @@ private Q_SLOTS:
         QCOMPARE(seqModeSpy.count(), 0);
         QCOMPARE(staggerSpy.count(), 0);
     }
+
+    /// Save → load → save round-trip must produce a byte-identical
+    /// Profile blob. Absent this guarantee, `QJsonDocument::Compact`'s
+    /// hash-bucket key order can drift between writes (same values,
+    /// different serialisation), producing config-file churn on every
+    /// daemon restart and spurious `animationProfileChanged` emissions.
+    /// Pre-PR-344-review setAnimationProfile compared serialised
+    /// strings rather than semantic Profile values — this test
+    /// defended against the reverse regression where the on-disk
+    /// serialisation itself drifts.
+    void testAnimationProfile_saveLoadSaveByteIdentical()
+    {
+        IsolatedConfigGuard guard;
+        const QString curveWire = QStringLiteral("0.25,0.75,0.75,0.25");
+
+        // First session: write a Profile blob, save, capture the
+        // stored bytes.
+        QString firstBlob;
+        {
+            Settings settings;
+            settings.setAnimationDuration(275);
+            settings.setAnimationEasingCurve(curveWire);
+            settings.setAnimationMinDistance(9);
+            settings.setAnimationSequenceMode(1);
+            settings.setAnimationStaggerInterval(42);
+            settings.save();
+
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            firstBlob = animations->readString(ConfigDefaults::animationProfileKey());
+        }
+        QVERIFY(!firstBlob.isEmpty());
+
+        // Second session: load, re-save without mutating, capture the
+        // stored bytes. Must match the first session exactly.
+        QString secondBlob;
+        {
+            Settings settings;
+            settings.save();
+
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            secondBlob = animations->readString(ConfigDefaults::animationProfileKey());
+        }
+        QCOMPARE(secondBlob, firstBlob);
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

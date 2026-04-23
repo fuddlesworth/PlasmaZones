@@ -90,7 +90,11 @@ Daemon::Daemon(QObject* parent)
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
                                                                       QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
+    // Pass &m_curveRegistry into Settings so its initial load() resolves
+    // Profile blobs through the daemon-owned registry. Requires
+    // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
+    // see the DECLARATION ORDER INVARIANT comment there.
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
@@ -176,10 +180,12 @@ Daemon::Daemon(QObject* parent)
     // (one literal typo away from silently breaking preview-cache reuse).
     m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 
-    // Wire the daemon-owned CurveRegistry into Settings and the QML
-    // static helper so every callsite that needs to resolve curve
-    // wire-format strings uses the same per-process registry.
-    m_settings->setCurveRegistry(&m_curveRegistry);
+    // Wire the daemon-owned CurveRegistry into the QML static helper
+    // so every QML callsite that resolves curve wire-format strings
+    // uses the same per-process registry. Settings already received
+    // the registry through its constructor; the null-out in ~Daemon
+    // below prevents the static from dangling across process-lifetime
+    // Daemon reconstruction (e.g. in tests).
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
 
     // Wire Settings::animationProfile into PhosphorProfileRegistry so
@@ -978,6 +984,14 @@ void Daemon::stop()
     if (!m_running) {
         return;
     }
+
+    // Null the QML static registry pointer before our m_curveRegistry
+    // member is destroyed (unique_ptr member destruction runs AFTER
+    // ~Daemon body but after stop() completes — tearing the static's
+    // borrowed pointer now guarantees no QML PhosphorCurve.fromString()
+    // call landing during teardown or in a subsequent Daemon instance
+    // dereferences freed memory.
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();

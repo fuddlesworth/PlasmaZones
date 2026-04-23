@@ -144,10 +144,11 @@ private Q_SLOTS:
     // which exercises Curve::evaluate() directly without QEasingCurve.
 
     /// The default fallback curve (OutCubic) must be monotonically
-    /// increasing and satisfy f(0)=0, f(1)=1. The 16-segment
-    /// BezierSpline approximation in applyResolvedEasing() samples
-    /// at 1/3 and 2/3 within each segment — verify those sample
-    /// points are monotonic and within [0,1].
+    /// increasing and satisfy f(0)=0, f(1)=1. The BezierSpline
+    /// approximation in `applyResolvedEasing` samples at 1/3 and 2/3
+    /// within each of `PhosphorMotionAnimation::kBezierSplineSegments`
+    /// segments — verify those sample points are monotonic and
+    /// within [0,1].
     void testBezierSplineSamplingGeometry()
     {
         const auto curve = defaultFallbackCurve();
@@ -158,7 +159,10 @@ private Q_SLOTS:
 
         // Replicate applyResolvedEasing()'s sampling to verify
         // the control-point geometry is valid for a monotonic curve.
-        constexpr int kSegments = 16;
+        // Uses the same public constant the production code uses so
+        // a future retune of the segment count exercises this test
+        // without a manual touch.
+        constexpr int kSegments = PhosphorMotionAnimation::kBezierSplineSegments;
         qreal prevY = 0.0;
 
         for (int i = 0; i < kSegments; ++i) {
@@ -173,25 +177,63 @@ private Q_SLOTS:
 
             // All sampled Y values must be in [0, 1].
             QVERIFY2(y1 >= 0.0 && y1 <= 1.0,
-                qPrintable(QStringLiteral("c1 y=%1 out of range at segment %2")
-                               .arg(y1, 0, 'f', 6).arg(i)));
+                     qPrintable(QStringLiteral("c1 y=%1 out of range at segment %2").arg(y1, 0, 'f', 6).arg(i)));
             QVERIFY2(y2 >= 0.0 && y2 <= 1.0,
-                qPrintable(QStringLiteral("c2 y=%1 out of range at segment %2")
-                               .arg(y2, 0, 'f', 6).arg(i)));
+                     qPrintable(QStringLiteral("c2 y=%1 out of range at segment %2").arg(y2, 0, 'f', 6).arg(i)));
             QVERIFY2(yEnd >= 0.0 && yEnd <= 1.0,
-                qPrintable(QStringLiteral("end y=%1 out of range at segment %2")
-                               .arg(yEnd, 0, 'f', 6).arg(i)));
+                     qPrintable(QStringLiteral("end y=%1 out of range at segment %2").arg(yEnd, 0, 'f', 6).arg(i)));
 
             // OutCubic is monotonically increasing — each segment
             // end must be >= the previous segment end.
             QVERIFY2(yEnd >= prevY - 1e-12,
-                qPrintable(QStringLiteral("monotonicity violated: segment %1 end=%2 < prev=%3")
-                               .arg(i).arg(yEnd, 0, 'f', 6).arg(prevY, 0, 'f', 6)));
+                     qPrintable(QStringLiteral("monotonicity violated: segment %1 end=%2 < prev=%3")
+                                    .arg(i)
+                                    .arg(yEnd, 0, 'f', 6)
+                                    .arg(prevY, 0, 'f', 6)));
             prevY = yEnd;
         }
 
         // Final segment end must be 1.0.
         QCOMPARE(prevY, 1.0);
+    }
+
+    /// Regression guard for the Qt 6.11 `QEasingCurve::BezierSpline` /
+    /// `QQuickPropertyAnimation::setEasing` heap-corruption bug (see
+    /// commit `1f09962d`). The production code caps the sampling at
+    /// `kBezierSplineSegments`; this test installs a spring profile
+    /// (which takes the parametric-sampling branch, not the
+    /// cubic-bezier fast path) and asserts the resulting easing's
+    /// cubic-spline representation stays well below Qt's boundary.
+    ///
+    /// A regression here would re-open the heap-corruption window — any
+    /// change that raises `kBezierSplineSegments` to 11 or more must
+    /// also adjust Qt, not just this cap. The production `static_assert`
+    /// in phosphormotionanimation.cpp is the belt; this test is the
+    /// suspenders, covering the runtime install path the assert can't.
+    void testParametricCurveStaysUnderQtSegmentBoundary()
+    {
+        // Build a spring profile. Spring curves dispatch to the
+        // parametric-sampling branch (they are NOT the CubicBezier
+        // fast-path shape).
+        Profile p;
+        p.curve = std::make_shared<Spring>(12.0, 0.6);
+        p.duration = 250.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.spring"), p);
+
+        PhosphorMotionAnimation a;
+        a.setProfile(QStringLiteral("test.spring"));
+
+        // The installed QEasingCurve's cubic-spline serialisation
+        // encodes each segment as three QPointFs (c1, c2, end), so
+        // `size() / 3` is the segment count. Must stay strictly under
+        // Qt's 11-segment heap-corruption boundary.
+        const QVector<QPointF> spline = a.easing().toCubicSpline();
+        const int segmentCount = static_cast<int>(spline.size() / 3);
+        QCOMPARE(segmentCount, PhosphorMotionAnimation::kBezierSplineSegments);
+        QVERIFY2(segmentCount < 11,
+                 qPrintable(QStringLiteral("installed easing has %1 segments — at or above Qt 6.11's "
+                                           "setEasing heap-corruption boundary (11)")
+                                .arg(segmentCount)));
     }
 
     /// Default-constructed animation installs the library-default

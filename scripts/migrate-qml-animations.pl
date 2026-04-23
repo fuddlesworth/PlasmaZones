@@ -195,32 +195,58 @@ sub migrate_one_file {
             my $body_start = pos($text);
             my $body       = substr($text, $body_start, $behavior_close - $body_start);
 
-            # Only rewrite if the Behavior's body starts (modulo
-            # whitespace / comments) with (Number|Color)Animation {.
-            # We peek via a non-consuming regex.
-            if ($body =~ /\A\s*(?:Number|Color)Animation\s*\{/) {
-                # Find the animation's opening brace relative to body.
-                if ($body =~ /\A(\s*)(Number|Color)Animation(\s*)\{/) {
-                    my $anim_brace_offset = length($1) + length($2) + length("Animation") + length($3);
+            # Rewrite if the Behavior's body contains, at top level,
+            # zero or more simple property assignments (e.g. `enabled:
+            # expr;`) followed by `(Number|Color)Animation {`. The
+            # sibling-property tolerance is load-bearing: the common
+            # QML idiom
+            #
+            #     Behavior on anchors.leftMargin {
+            #         enabled: drawingArea._insetsReady
+            #         NumberAnimation { duration: 150; ... }
+            #     }
+            #
+            # must migrate the animation while preserving the
+            # `enabled:` gate. Each sibling assignment is matched as
+            # `identifier : <non-brace-until-;/\n>` — rich enough to
+            # cover `enabled: bindingExpression && foo` but restrictive
+            # enough to bail on anything that opens a nested object
+            # (which would require more careful replacement).
+            my $PREFIX = qr{(?:\s*\w+\s*:[^{};\n]*[;\n])*};
+            if ($body =~ /\A${PREFIX}\s*(?:Number|Color)Animation\s*\{/) {
+                # Extract prefix (sibling props), leading whitespace,
+                # and the animation's opening token positions.
+                if ($body =~ /\A(${PREFIX})(\s*)(Number|Color)Animation(\s*)\{/) {
+                    my $prefix     = $1;
+                    my $leading_ws = $2;
+                    my $animation_kind = $3;
+                    my $ws_before_brace = $4;
+                    my $anim_brace_offset = length($prefix) + length($leading_ws)
+                        + length($animation_kind) + length("Animation") + length($ws_before_brace);
                     my $anim_brace_abs    = $body_start + $anim_brace_offset;
                     my $anim_close_abs    = find_matching_brace($text, $anim_brace_abs);
                     if ($anim_close_abs != -1 && $anim_close_abs < $behavior_close) {
                         # Everything between Animation's `{` and `}`
                         # is the body we drop. Build replacement with
-                        # indentation matching the Animation line.
-                        my $anim_line_indent = indent_of_line_at($text, $body_start + length($1));
+                        # indentation matching the Animation line
+                        # (not the Behavior line — that way a properly-
+                        # indented Behavior body stays properly
+                        # indented).
+                        my $anim_line_indent =
+                            indent_of_line_at($text, $body_start + length($prefix) + length($leading_ws));
                         my $replacement =
                               "PhosphorMotionAnimation {\n"
                             . $anim_line_indent . "    "
                             . qq(profile: "$profile"\n)
                             . $anim_line_indent . "}";
 
-                        # Emit: Behavior prefix + leading body whitespace
-                        # + replacement + trailing body content
-                        # (anything after the animation and before the
-                        # Behavior's closing brace — typically empty).
+                        # Emit: Behavior prefix + prefix (sibling props)
+                        # + leading whitespace + replacement + trailing
+                        # body content (after Animation's closing
+                        # brace, before Behavior's).
                         $out .= substr($text, $i, $body_start - $i);     # "Behavior on X {"
-                        $out .= $1;                                       # leading whitespace inside body
+                        $out .= $prefix;                                   # sibling property assignments
+                        $out .= $leading_ws;                               # whitespace before Animation
                         $out .= $replacement;
                         $out .= substr($text, $anim_close_abs + 1, $behavior_close - ($anim_close_abs + 1));
                         $out .= '}';                                      # Behavior closing brace

@@ -1630,7 +1630,7 @@ ApplicationWindow {
 
                 Behavior on implicitHeight {
                     PhosphorMotionAnimation {
-                        profile: "widget.dim"
+                        profile: "widget.accordion"
                     }
 
                 }

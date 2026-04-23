@@ -80,24 +80,73 @@ public:
         // Build the wire-format string from the typeId + parameters and
         // route through CurveRegistry. Decision V: no new curve classes
         // through JSON, just parameter tuning on existing types.
+        //
+        // Each branch validates its own parameter ranges before
+        // delegating to `tryCreate`. Validation at the library boundary
+        // catches negative stiffness / period / amplitude /
+        // out-of-unit-range bezier control points up front, giving the
+        // author a clear "value X is out of range" message instead of
+        // the opaque "CurveRegistry could not build" downstream warning
+        // that a bad parameter would otherwise produce via
+        // `tryCreate`'s generic parser.
+        const auto reject = [&](const QString& field, auto value, const QString& constraint) {
+            qCWarning(lcCurveLoader).nospace() << "Skipping " << filePath << ": " << typeId << " parameter '" << field
+                                               << "' = " << value << " — " << constraint;
+        };
         QString wireFormat;
         if (typeId == QLatin1String("spring")) {
             const qreal omega = params.value(QLatin1String("omega")).toDouble(12.0);
             const qreal zeta = params.value(QLatin1String("zeta")).toDouble(0.8);
+            if (!(omega > 0.0)) {
+                reject(QStringLiteral("omega"), omega, QStringLiteral("must be > 0 (angular frequency)"));
+                return std::nullopt;
+            }
+            if (zeta < 0.0) {
+                reject(QStringLiteral("zeta"), zeta, QStringLiteral("must be >= 0 (damping ratio)"));
+                return std::nullopt;
+            }
             wireFormat = QStringLiteral("spring:%1,%2").arg(omega).arg(zeta);
         } else if (typeId == QLatin1String("cubic-bezier")) {
             const qreal x1 = params.value(QLatin1String("x1")).toDouble(0.33);
             const qreal y1 = params.value(QLatin1String("y1")).toDouble(1.0);
             const qreal x2 = params.value(QLatin1String("x2")).toDouble(0.68);
             const qreal y2 = params.value(QLatin1String("y2")).toDouble(1.0);
+            // Cubic Bezier control points: x must stay in [0,1] (CSS
+            // spec + QEasingCurve constraint). y can legitimately exceed
+            // the unit range — that's how overshoot curves work — so we
+            // deliberately DO NOT bound y1/y2.
+            if (x1 < 0.0 || x1 > 1.0) {
+                reject(QStringLiteral("x1"), x1, QStringLiteral("must be in [0, 1] (control-point x)"));
+                return std::nullopt;
+            }
+            if (x2 < 0.0 || x2 > 1.0) {
+                reject(QStringLiteral("x2"), x2, QStringLiteral("must be in [0, 1] (control-point x)"));
+                return std::nullopt;
+            }
             wireFormat = QStringLiteral("%1,%2,%3,%4").arg(x1).arg(y1).arg(x2).arg(y2);
         } else if (typeId.startsWith(QLatin1String("elastic-"))) {
             const qreal amplitude = params.value(QLatin1String("amplitude")).toDouble(1.0);
             const qreal period = params.value(QLatin1String("period")).toDouble(0.3);
+            if (!(amplitude > 0.0)) {
+                reject(QStringLiteral("amplitude"), amplitude, QStringLiteral("must be > 0"));
+                return std::nullopt;
+            }
+            if (!(period > 0.0)) {
+                reject(QStringLiteral("period"), period, QStringLiteral("must be > 0"));
+                return std::nullopt;
+            }
             wireFormat = QStringLiteral("%1:%2,%3").arg(typeId).arg(amplitude).arg(period);
         } else if (typeId.startsWith(QLatin1String("bounce-"))) {
             const qreal amplitude = params.value(QLatin1String("amplitude")).toDouble(1.0);
             const int bounces = params.value(QLatin1String("bounces")).toInt(3);
+            if (!(amplitude > 0.0)) {
+                reject(QStringLiteral("amplitude"), amplitude, QStringLiteral("must be > 0"));
+                return std::nullopt;
+            }
+            if (bounces < 1) {
+                reject(QStringLiteral("bounces"), bounces, QStringLiteral("must be >= 1"));
+                return std::nullopt;
+            }
             wireFormat = QStringLiteral("%1:%2,%3").arg(typeId).arg(amplitude).arg(bounces);
         } else {
             qCWarning(lcCurveLoader) << "Skipping" << filePath << ": unknown typeId" << typeId;

@@ -692,37 +692,51 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // single `Profile` JSON blob (decision S) while keeping `Enabled` as an
     // orthogonal bool. Preserve v1 users' customisation by composing the
     // Profile blob inline here rather than dropping the fields.
+    //
+    // v2-side key strings go through ConfigDefaults / Profile constants
+    // (per CLAUDE.md rule: no inline QStringLiteral for config keys) so
+    // a schema rename touches one accessor, not this migration. v1-side
+    // keys stay as literals — they are the stable v1 shape by
+    // definition and will never be renamed.
     QJsonObject animations;
-    moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, QLatin1String("Enabled"));
+    moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, ConfigDefaults::enabledKey());
 
-    // Assemble Profile fields from the v1 keys (if present). We build the
-    // JSON shape directly — matches Profile::toJson output without linking
-    // phosphor-animation into the migration code (which would bloat the
-    // daemon-startup dependency graph for a transient code path).
+    // Assemble Profile fields from the v1 keys (if present). We build
+    // the JSON shape directly using Profile's public field-name
+    // constants — matches `Profile::toJson` output without pulling
+    // phosphor-animation runtime objects into the migration path
+    // (which would bloat the daemon-startup dependency graph for a
+    // transient code path). Sharing the constants guarantees that a
+    // Profile field rename touches producer and migration together.
     QJsonObject profile;
     if (v1Animations.contains(QLatin1String("AnimationDuration"))) {
-        profile[QLatin1String("duration")] = v1Animations.value(QLatin1String("AnimationDuration")).toDouble();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] =
+            v1Animations.value(QLatin1String("AnimationDuration")).toDouble();
     }
     if (v1Animations.contains(QLatin1String("AnimationEasingCurve"))) {
-        profile[QLatin1String("curve")] = v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] =
+            v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
     }
     if (v1Animations.contains(QLatin1String("AnimationMinDistance"))) {
-        profile[QLatin1String("minDistance")] = v1Animations.value(QLatin1String("AnimationMinDistance")).toInt();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] =
+            v1Animations.value(QLatin1String("AnimationMinDistance")).toInt();
     }
     if (v1Animations.contains(QLatin1String("AnimationSequenceMode"))) {
-        profile[QLatin1String("sequenceMode")] = v1Animations.value(QLatin1String("AnimationSequenceMode")).toInt();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] =
+            v1Animations.value(QLatin1String("AnimationSequenceMode")).toInt();
     }
     if (v1Animations.contains(QLatin1String("AnimationStaggerInterval"))) {
-        profile[QLatin1String("staggerInterval")] =
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] =
             v1Animations.value(QLatin1String("AnimationStaggerInterval")).toInt();
     }
     if (!profile.isEmpty()) {
-        // Stored as a JSON-encoded string under `Profile` — matches the
-        // schema's QMetaType::QString declaration for this key.
-        animations[QLatin1String("Profile")] = QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
+        // Stored as a JSON-encoded string under the animation-profile
+        // key — matches the schema's QMetaType::QString declaration.
+        animations[ConfigDefaults::animationProfileKey()] =
+            QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
     }
     if (!animations.isEmpty())
-        root[QLatin1String("Animations")] = animations;
+        root[ConfigDefaults::animationsGroup()] = animations;
 
     // ── Shortcuts.Global (drop "Shortcut" suffix from some keys) ────────────
     QJsonObject globalShortcuts;

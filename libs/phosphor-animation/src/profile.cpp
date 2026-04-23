@@ -57,22 +57,22 @@ QJsonObject Profile::toJson() const
 {
     QJsonObject obj;
     if (curve) {
-        obj.insert(QLatin1String("curve"), curve->toString());
+        obj.insert(QLatin1String(JsonFieldCurve), curve->toString());
     }
     if (duration) {
-        obj.insert(QLatin1String("duration"), *duration);
+        obj.insert(QLatin1String(JsonFieldDuration), *duration);
     }
     if (minDistance) {
-        obj.insert(QLatin1String("minDistance"), *minDistance);
+        obj.insert(QLatin1String(JsonFieldMinDistance), *minDistance);
     }
     if (sequenceMode) {
-        obj.insert(QLatin1String("sequenceMode"), static_cast<int>(*sequenceMode));
+        obj.insert(QLatin1String(JsonFieldSequenceMode), static_cast<int>(*sequenceMode));
     }
     if (staggerInterval) {
-        obj.insert(QLatin1String("staggerInterval"), *staggerInterval);
+        obj.insert(QLatin1String(JsonFieldStaggerInterval), *staggerInterval);
     }
     if (presetName) {
-        obj.insert(QLatin1String("presetName"), *presetName);
+        obj.insert(QLatin1String(JsonFieldPresetName), *presetName);
     }
     return obj;
 }
@@ -81,21 +81,33 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     Profile p;
 
-    if (obj.contains(QLatin1String("curve"))) {
-        const QString spec = obj.value(QLatin1String("curve")).toString();
+    if (obj.contains(QLatin1String(JsonFieldCurve))) {
+        const QString spec = obj.value(QLatin1String(JsonFieldCurve)).toString();
         if (!spec.isEmpty()) {
-            p.curve = registry.create(spec);
+            // Route through tryCreate (not create): a malformed spec
+            // would otherwise silently fall through to the library
+            // default cubic-bezier inside create(), masking user typos
+            // like "srping:14,0.6" as "my curve works but feels wrong".
+            // When resolution fails, leave p.curve unset (effectiveXxx
+            // will still substitute the library default) and warn loudly
+            // with the original spec so the author can find the typo.
+            p.curve = registry.tryCreate(spec);
+            if (!p.curve) {
+                qCWarning(lcProfile).nospace() << "Profile::fromJson: curve spec '" << spec
+                                               << "' did not resolve — keeping profile without a curve "
+                                                  "(library default will apply at animation time)";
+            }
         }
     }
 
-    if (obj.contains(QLatin1String("duration"))) {
-        p.duration = obj.value(QLatin1String("duration")).toDouble(DefaultDuration);
+    if (obj.contains(QLatin1String(JsonFieldDuration))) {
+        p.duration = obj.value(QLatin1String(JsonFieldDuration)).toDouble(DefaultDuration);
     }
-    if (obj.contains(QLatin1String("minDistance"))) {
-        p.minDistance = obj.value(QLatin1String("minDistance")).toInt(DefaultMinDistance);
+    if (obj.contains(QLatin1String(JsonFieldMinDistance))) {
+        p.minDistance = obj.value(QLatin1String(JsonFieldMinDistance)).toInt(DefaultMinDistance);
     }
-    if (obj.contains(QLatin1String("sequenceMode"))) {
-        const int raw = obj.value(QLatin1String("sequenceMode")).toInt(static_cast<int>(DefaultSequenceMode));
+    if (obj.contains(QLatin1String(JsonFieldSequenceMode))) {
+        const int raw = obj.value(QLatin1String(JsonFieldSequenceMode)).toInt(static_cast<int>(DefaultSequenceMode));
         // Map valid enumerators; anything else falls back to the library
         // default. This is NOT forward-compat with future enumerators
         // written by a newer client — those would silently land on
@@ -117,11 +129,11 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             p.sequenceMode = DefaultSequenceMode;
         }
     }
-    if (obj.contains(QLatin1String("staggerInterval"))) {
-        p.staggerInterval = obj.value(QLatin1String("staggerInterval")).toInt(DefaultStaggerInterval);
+    if (obj.contains(QLatin1String(JsonFieldStaggerInterval))) {
+        p.staggerInterval = obj.value(QLatin1String(JsonFieldStaggerInterval)).toInt(DefaultStaggerInterval);
     }
-    if (obj.contains(QLatin1String("presetName"))) {
-        p.presetName = obj.value(QLatin1String("presetName")).toString();
+    if (obj.contains(QLatin1String(JsonFieldPresetName))) {
+        p.presetName = obj.value(QLatin1String(JsonFieldPresetName)).toString();
     }
 
     return p;

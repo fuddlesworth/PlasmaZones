@@ -55,9 +55,17 @@ public:
      * editor controller) already do this at startup.
      *
      * @param backend Non-owned backend pointer (must outlive this Settings)
+     * @param curveRegistry Non-owned curve registry pointer used for Profile
+     *                      JSON parsing. If nullptr, falls back to a local
+     *                      static registry (standalone tests). Must outlive
+     *                      this Settings. Supplying at construction time
+     *                      guarantees the initial `load()` resolves curves
+     *                      through the caller's registry, preserving
+     *                      `shared_ptr<const Curve>` identity across the
+     *                      Settings ↔ daemon boundary.
      * @param parent Parent QObject
      */
-    Settings(PhosphorConfig::IBackend* backend, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY

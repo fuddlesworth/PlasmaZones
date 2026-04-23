@@ -65,9 +65,15 @@ void PhosphorAnimatedColor::setColorSpace(ColorSpace space)
     }
     if (isAnimating()) {
         // Flipping space mid-animation would produce a visible
-        // chromatic-path jump. Refuse the write and log once — rare
-        // enough that per-instance flags aren't worth adding.
-        qCDebug(lcAnimatedColor) << "setColorSpace ignored while animating — flip requires a quiesced animation";
+        // chromatic-path jump. Refuse the write and warn: a silent
+        // ignore desyncs QML two-way bindings (a Slider bound to
+        // colorSpace that fires during a fade sees its write
+        // dropped and read-back reports the old value — user-visible
+        // drift with no diagnostic). Warn rather than debug so the
+        // caller sees the drop on the first occurrence.
+        qCWarning(lcAnimatedColor) << "setColorSpace" << static_cast<int>(space)
+                                   << "ignored while animating — flip requires a quiesced animation "
+                                      "(call after isComplete(), or retarget to the same value to quiesce)";
         return;
     }
     m_activeSpace = space;

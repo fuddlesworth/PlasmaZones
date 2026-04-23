@@ -153,7 +153,11 @@ void DirectoryLoader::rescanAll()
         // Track keys already seen within THIS directory so we can warn
         // on intra-directory collisions (across directories is legitimate
         // user-wins-over-system layering, which we handle below).
-        QSet<QString> keysInThisDir;
+        // Map value is the absolute path of the first file claiming the
+        // key so the warning can name both the winning file and the
+        // ignored file — anything less leaves the user hunting for the
+        // collision by grep.
+        QHash<QString, QString> keysInThisDir;
 
         for (const QString& file : files) {
             const QString fullPath = dir.absoluteFilePath(file);
@@ -183,13 +187,15 @@ void DirectoryLoader::rescanAll()
             // Intra-directory duplicate: two files in the SAME dir with
             // the same key. Filesystem enumeration is alphabetic (we
             // sort above), so the first-seen file wins deterministically.
-            // Warn so the user can clean up.
-            if (keysInThisDir.contains(key)) {
-                qCWarning(lcLoader) << "Duplicate key" << key << "within directory" << directory << "— ignoring"
-                                    << fullPath << "(alphabetically-first file won)";
+            // Warn naming BOTH files so the user can actually find the
+            // collision without grepping.
+            if (auto winnerIt = keysInThisDir.constFind(key); winnerIt != keysInThisDir.constEnd()) {
+                qCWarning(lcLoader).nospace()
+                    << "Duplicate key '" << key << "' within directory " << directory << " — kept '" << winnerIt.value()
+                    << "', ignored '" << fullPath << "' (winner is alphabetically first)";
                 continue;
             }
-            keysInThisDir.insert(key);
+            keysInThisDir.insert(key, fullPath);
 
             // Cross-directory: user-wins layering. Record the previous
             // source as the shadowed system path on the new entry, then
