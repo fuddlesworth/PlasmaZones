@@ -50,7 +50,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
-    : QObject(parent)
+    : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
     , m_screenManager(screenManager)
@@ -85,6 +85,26 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, Win
 }
 
 AutotileEngine::~AutotileEngine() = default;
+
+void AutotileEngine::onWindowClaimed(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void AutotileEngine::onWindowReleased(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void AutotileEngine::onWindowFloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void AutotileEngine::onWindowUnfloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Signal connections

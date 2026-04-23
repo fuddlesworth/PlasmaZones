@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "core/types.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QPointer>
@@ -56,7 +56,7 @@ class ZoneDetectionAdaptor;
  *
  * @see PhosphorEngineApi::IPlacementEngine, AutotileEngine, WindowTrackingService
  */
-class PLASMAZONES_EXPORT SnapEngine : public QObject, public PhosphorEngineApi::IPlacementEngine
+class PLASMAZONES_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineBase
 {
     Q_OBJECT
 
@@ -417,6 +417,12 @@ Q_SIGNALS:
     /// Used by focus-in-direction and cycle operations. Relayed to D-Bus
     /// via WTA.
     void activateWindowRequested(const QString& windowId);
+
+protected:
+    void onWindowClaimed(const QString& windowId) override;
+    void onWindowReleased(const QString& windowId) override;
+    void onWindowFloated(const QString& windowId) override;
+    void onWindowUnfloated(const QString& windowId) override;
 
 private:
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,

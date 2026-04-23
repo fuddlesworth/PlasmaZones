@@ -20,7 +20,7 @@ namespace PlasmaZones {
 SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                        QObject* parent)
-    : QObject(parent)
+    : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
     , m_zoneDetector(zoneDetector)
@@ -33,6 +33,26 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrack
 // pimpl-style owned resolver without its full type being visible in the
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
+
+void SnapEngine::onWindowClaimed(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void SnapEngine::onWindowReleased(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void SnapEngine::onWindowFloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
+
+void SnapEngine::onWindowUnfloated(const QString& windowId)
+{
+    Q_UNUSED(windowId)
+}
 
 void SnapEngine::setSnapState(PhosphorZones::SnapState* state)
 {

@@ -6,7 +6,7 @@
 #include "plasmazones_export.h"
 #include "core/constants.h"
 #include "core/types.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <QHash>
 #include <QJsonArray>
 #include <QObject>
@@ -116,7 +116,7 @@ namespace PlasmaZones {
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
  */
-class PLASMAZONES_EXPORT AutotileEngine : public QObject, public PhosphorEngineApi::IPlacementEngine
+class PLASMAZONES_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEngineBase
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -1099,6 +1099,12 @@ private Q_SLOTS:
     void onWindowFocused(const QString& windowId);
     void onScreenGeometryChanged(const QString& screenId);
     void onLayoutChanged(PhosphorZones::Layout* layout);
+
+protected:
+    void onWindowClaimed(const QString& windowId) override;
+    void onWindowReleased(const QString& windowId) override;
+    void onWindowFloated(const QString& windowId) override;
+    void onWindowUnfloated(const QString& windowId) override;
 
 private:
     void connectSignals();
