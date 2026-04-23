@@ -17,6 +17,70 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Snap-mode navigation D-Bus slots — thin forwarders to SnapEngine.
+//
+// Moved from WindowTrackingAdaptor::navigation.cpp to complete the D-Bus
+// surface split. The bodies are identical: guard on m_engine, forward with
+// a default NavigationContext.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapAdaptor::moveWindowToAdjacentZone(const QString& direction)
+{
+    if (m_engine) {
+        m_engine->moveFocusedInDirection(direction, NavigationContext{});
+    }
+}
+
+void SnapAdaptor::focusAdjacentZone(const QString& direction)
+{
+    if (m_engine) {
+        m_engine->focusInDirection(direction, NavigationContext{});
+    }
+}
+
+void SnapAdaptor::pushToEmptyZone(const QString& screenId)
+{
+    if (m_engine) {
+        m_engine->pushFocusedToEmptyZone(NavigationContext{QString(), screenId});
+    }
+}
+
+void SnapAdaptor::restoreWindowSize()
+{
+    if (m_engine) {
+        m_engine->restoreFocusedWindow(NavigationContext{});
+    }
+}
+
+void SnapAdaptor::swapWindowWithAdjacentZone(const QString& direction)
+{
+    if (m_engine) {
+        m_engine->swapFocusedInDirection(direction, NavigationContext{});
+    }
+}
+
+void SnapAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenId)
+{
+    if (m_engine) {
+        m_engine->moveFocusedToPosition(zoneNumber, NavigationContext{QString(), screenId});
+    }
+}
+
+void SnapAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenId)
+{
+    if (m_engine) {
+        m_engine->rotateWindowsInLayout(clockwise, screenId);
+    }
+}
+
+void SnapAdaptor::cycleWindowsInZone(bool forward)
+{
+    if (m_engine) {
+        m_engine->cycleFocus(forward, NavigationContext{});
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Batch helper used by methods that operate on pre-built
 // ZoneAssignmentEntry vectors (resnapForVirtualScreenReconfigure,
 // handleBatchedResnap). Thin wrapper over

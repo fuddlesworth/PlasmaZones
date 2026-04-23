@@ -7,6 +7,7 @@
 #include <PhosphorProtocol/WireTypes.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
+#include <QRect>
 #include <QStringList>
 #include <QVector>
 
@@ -14,6 +15,7 @@ namespace PlasmaZones {
 
 using PhosphorProtocol::SnapAllResultList;
 using PhosphorProtocol::SnapConfirmationList;
+using PhosphorProtocol::UnfloatRestoreResult;
 using PhosphorProtocol::WindowGeometryList;
 
 struct SnapResult;
@@ -30,8 +32,11 @@ class ISettings;
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
  * (appRule / persisted / emptyZone / lastZone / resolveWindowRestore),
- * resnap, calculateSnapAll, and windowsSnappedBatch. Navigation methods
- * that go through IPlacementEngine remain on WindowTrackingAdaptor.
+ * resnap, calculateSnapAll, windowsSnappedBatch, snap-mode navigation
+ * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
+ * snap-mode convenience (moveWindowToZone, swapWindowsById), and
+ * snap-mode float (toggleFloat, setWindowFloat, calculateUnfloatRestore,
+ * windowUnsnappedForFloat).
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
@@ -181,6 +186,109 @@ public Q_SLOTS:
      * @brief Process a batch of resnap entries
      */
     void handleBatchedResnap(const QString& resnapData);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Snap-mode navigation D-Bus slots
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Move the focused window to an adjacent zone (daemon-driven)
+     * @param direction Direction to move ("left", "right", "up", "down")
+     */
+    void moveWindowToAdjacentZone(const QString& direction);
+
+    /**
+     * @brief Focus a window in an adjacent zone (daemon-driven)
+     * @param direction Direction to look for windows ("left", "right", "up", "down")
+     */
+    void focusAdjacentZone(const QString& direction);
+
+    /**
+     * @brief Push the focused window to the first empty zone (daemon-driven)
+     * @param screenId Screen to find layout/geometry for (empty = active layout)
+     */
+    void pushToEmptyZone(const QString& screenId = QString());
+
+    /**
+     * @brief Restore the focused window to its original size (daemon-driven)
+     */
+    void restoreWindowSize();
+
+    /**
+     * @brief Swap the focused window with the window in an adjacent zone (daemon-driven)
+     * @param direction Direction to swap ("left", "right", "up", "down")
+     */
+    void swapWindowWithAdjacentZone(const QString& direction);
+
+    /**
+     * @brief Snap the focused window to a zone by its number (daemon-driven)
+     * @param zoneNumber Zone number (1-9)
+     * @param screenId Screen to resolve layout for (empty = active layout)
+     */
+    void snapToZoneByNumber(int zoneNumber, const QString& screenId = QString());
+
+    /**
+     * @brief Rotate windows in the layout for a specific screen (daemon-driven)
+     * @param clockwise true for clockwise rotation, false for counterclockwise
+     * @param screenId Screen to rotate on (empty = all screens)
+     */
+    void rotateWindowsInLayout(bool clockwise, const QString& screenId = QString());
+
+    /**
+     * @brief Cycle focus between windows stacked in the same zone (daemon-driven)
+     * @param forward true to cycle to next window, false to cycle to previous
+     */
+    void cycleWindowsInZone(bool forward);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Snap-mode convenience D-Bus slots
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Convenience: snap a window to a specific zone by ID
+     * @param windowId Window to snap
+     * @param zoneId Target zone UUID
+     */
+    void moveWindowToZone(const QString& windowId, const QString& zoneId);
+
+    /**
+     * @brief Convenience: swap two specific windows by ID
+     * @param windowId1 First window
+     * @param windowId2 Second window
+     */
+    void swapWindowsById(const QString& windowId1, const QString& windowId2);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Snap-mode float D-Bus slots
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Daemon-driven float toggle for snap-mode screens
+     * @param windowId Window identifier
+     * @param screenId Screen where window is located
+     */
+    void toggleFloatForWindow(const QString& windowId, const QString& screenId);
+
+    /**
+     * @brief Set a window's floating state (snap-mode direct)
+     * @param windowId Window identifier
+     * @param floating true to float, false to unfloat
+     */
+    void setWindowFloat(const QString& windowId, bool floating);
+
+    /**
+     * @brief Calculate unfloat restore geometry and zone IDs in a single call
+     * @param windowId Window identifier
+     * @param screenId Screen for geometry calculation
+     * @return UnfloatRestoreResult with found, zoneIds, screenName, x, y, width, height
+     */
+    PlasmaZones::UnfloatRestoreResult calculateUnfloatRestore(const QString& windowId, const QString& screenId);
+
+    /**
+     * @brief Unsnap a window for floating: save its zone to restore on unfloat
+     * @param windowId Window identifier
+     */
+    void windowUnsnappedForFloat(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Internal (not D-Bus, but callable from daemon C++ code)
