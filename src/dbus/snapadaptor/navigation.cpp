@@ -1,0 +1,176 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "../snapadaptor.h"
+#include "../windowtrackingadaptor.h"
+#include "../../core/logging.h"
+#include "../../core/screenmoderouter.h"
+#include "../../core/windowtrackingservice.h"
+#include "../../snap/SnapEngine.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/VirtualScreen.h>
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
+namespace PlasmaZones {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Batch helper used by methods that operate on pre-built
+// ZoneAssignmentEntry vectors (resnapForVirtualScreenReconfigure,
+// handleBatchedResnap). Thin wrapper over
+// SnapEngine::applyBatchAssignments.
+// ═══════════════════════════════════════════════════════════════════════════════
+static bool processBatchEntries(SnapAdaptor* adaptor, WindowTrackingAdaptor* wta, SnapEngine* engine,
+                                const QVector<ZoneAssignmentEntry>& entries, const QString& action)
+{
+    if (!engine || !wta) {
+        return false;
+    }
+
+    WindowGeometryList geometries =
+        engine->applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
+            const QString cursor = wta->lastCursorScreenName();
+            return cursor.isEmpty() ? wta->lastActiveScreenName() : cursor;
+        });
+
+    if (geometries.isEmpty()) {
+        return false;
+    }
+    Q_EMIT wta->applyGeometriesBatch(geometries, action);
+    return true;
+}
+
+// Build the effective list of snap-mode screens this resnap should target.
+QStringList SnapAdaptor::resolveSnapModeScreensForResnap(const QString& screenFilter) const
+{
+    if (!m_adaptor || !m_adaptor->service()) {
+        return {};
+    }
+
+    QStringList candidates;
+    if (!screenFilter.isEmpty()) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)) {
+            candidates.append(screenFilter);
+        } else if (auto* mgr = m_adaptor->service()->screenManager()) {
+            candidates = mgr->virtualScreenIdsFor(screenFilter);
+        } else {
+            candidates.append(screenFilter);
+        }
+    } else if (auto* mgr = m_adaptor->service()->screenManager()) {
+        candidates = mgr->effectiveScreenIds();
+    }
+
+    if (!m_screenModeRouter) {
+        return candidates;
+    }
+    return m_screenModeRouter->partitionByMode(candidates).snap;
+}
+
+void SnapAdaptor::resnapToNewLayout()
+{
+    if (m_engine) {
+        m_engine->resnapToNewLayout();
+    }
+}
+
+void SnapAdaptor::resnapCurrentAssignments(const QString& screenFilter)
+{
+    if (m_engine) {
+        m_engine->resnapCurrentAssignments(screenFilter);
+    }
+}
+
+void SnapAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
+{
+    qCDebug(lcDbusWindow) << "resnapFromAutotileOrder: count=" << autotileWindowOrder.size() << "screen=" << screenId;
+
+    if (m_engine) {
+        QVector<ZoneAssignmentEntry> entries =
+            m_engine->calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
+        if (!entries.isEmpty()) {
+            processBatchEntries(this, m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+        }
+    }
+}
+
+void SnapAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScreenId)
+{
+    qCDebug(lcDbusWindow) << "resnapForVirtualScreenReconfigure: physId=" << physicalScreenId;
+
+    if (!m_engine) {
+        return;
+    }
+
+    const QStringList snapScreens = resolveSnapModeScreensForResnap(physicalScreenId);
+    QVector<ZoneAssignmentEntry> entries;
+    for (const QString& sid : snapScreens) {
+        entries.append(m_engine->calculateResnapFromCurrentAssignments(sid));
+    }
+
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    // Tagged "vs_reconfigure" so the kwin-effect does NOT fire snap-assist
+    // continuation — no user-initiated snap happened here, windows are just
+    // following their VS's new geometry after a swap/rotate/split edit.
+    processBatchEntries(this, m_adaptor, m_engine, entries, QStringLiteral("vs_reconfigure"));
+}
+
+SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
+{
+    qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
+    if (m_engine) {
+        return m_engine->calculateSnapAllWindows(windowIds, screenId);
+    }
+    return {};
+}
+
+void SnapAdaptor::snapAllWindows(const QString& screenId)
+{
+    qCDebug(lcDbusWindow) << "snapAllWindows: screen=" << screenId;
+    if (m_engine) {
+        m_engine->snapAllWindows(screenId);
+    }
+}
+
+void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
+{
+    qCDebug(lcDbusWindow) << "handleBatchedResnap: processing batched resnap from SnapEngine";
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(resnapData.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcDbusWindow) << "handleBatchedResnap: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    // Deserialize ZoneAssignmentEntry array
+    QVector<ZoneAssignmentEntry> entries;
+    const QJsonArray arr = doc.array();
+    for (const QJsonValue& val : arr) {
+        QJsonObject obj = val.toObject();
+        ZoneAssignmentEntry entry;
+        entry.windowId = obj.value(QLatin1String("windowId")).toString();
+        entry.targetZoneId = obj.value(QLatin1String("targetZoneId")).toString();
+        entry.sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+        // Deserialize multi-zone IDs (for zone-spanning windows)
+        const QJsonArray zoneIdsArr = obj.value(QLatin1String("targetZoneIds")).toArray();
+        if (!zoneIdsArr.isEmpty()) {
+            for (const QJsonValue& v : zoneIdsArr)
+                entry.targetZoneIds.append(v.toString());
+        }
+        entry.targetGeometry =
+            QRect(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
+                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+        if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
+            entries.append(entry);
+        }
+    }
+
+    processBatchEntries(this, m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+}
+
+} // namespace PlasmaZones

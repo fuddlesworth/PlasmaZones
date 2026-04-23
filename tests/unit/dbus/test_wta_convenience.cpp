@@ -222,8 +222,8 @@ private Q_SLOTS:
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 
         // Snap both windows to different zones via the WTA's windowSnapped slot
-        m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
-        m_wta->windowSnapped(window2, m_zoneIds[1], m_screenId);
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
@@ -246,7 +246,7 @@ private Q_SLOTS:
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 
         // Only snap window1
-        m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
@@ -263,7 +263,7 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("firefox|12345");
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         WindowStateEntry state = m_wta->getWindowState(windowId);
         QCOMPARE(state.windowId, windowId);
@@ -277,7 +277,7 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("firefox|12345");
 
         // Snap then float
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
         m_wta->setWindowFloating(windowId, true);
 
         WindowStateEntry state = m_wta->getWindowState(windowId);
@@ -301,8 +301,8 @@ private Q_SLOTS:
         QString window1 = QStringLiteral("app1|11111");
         QString window2 = QStringLiteral("app2|22222");
 
-        m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
-        m_wta->windowSnapped(window2, m_zoneIds[1], m_screenId);
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
 
         WindowStateList allStates = m_wta->getAllWindowStates();
         QCOMPARE(allStates.size(), 2);
@@ -326,7 +326,7 @@ private Q_SLOTS:
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         QVERIFY(spy.count() >= 1);
 
@@ -347,11 +347,11 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("firefox|12345");
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
-        m_wta->windowUnsnapped(windowId);
+        m_snapEngine->uncommitSnap(windowId);
 
         QVERIFY(spy.count() >= 1);
 
@@ -371,7 +371,7 @@ private Q_SLOTS:
     {
         QString windowId = QStringLiteral("firefox|12345");
 
-        m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 

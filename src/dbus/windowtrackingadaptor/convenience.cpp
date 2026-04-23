@@ -4,6 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../snap/SnapEngine.h"
 
 namespace PlasmaZones {
 
@@ -28,8 +29,10 @@ void WindowTrackingAdaptor::moveWindowToZone(const QString& windowId, const QStr
         return;
     }
 
-    // Perform snap bookkeeping
-    windowSnapped(windowId, zoneId, screenId);
+    // Perform snap bookkeeping via SnapEngine
+    if (m_snapEngine) {
+        m_snapEngine->commitSnap(windowId, zoneId, screenId);
+    }
     m_service->recordSnapIntent(windowId, true);
 
     // Request compositor to apply geometry
@@ -75,8 +78,10 @@ void WindowTrackingAdaptor::swapWindowsById(const QString& windowId1, const QStr
     }
 
     // Update bookkeeping: window1 goes to zone2, window2 goes to zone1
-    windowSnapped(windowId1, zoneId2, screen2);
-    windowSnapped(windowId2, zoneId1, screen1);
+    if (m_snapEngine) {
+        m_snapEngine->commitSnap(windowId1, zoneId2, screen2);
+        m_snapEngine->commitSnap(windowId2, zoneId1, screen1);
+    }
 
     // Emit geometry requests for both
     Q_EMIT applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zoneId2, screen2, false);

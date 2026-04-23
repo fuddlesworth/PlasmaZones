@@ -13,6 +13,7 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
+#include "../../dbus/snapadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include "../../autotile/AutotileEngine.h"
@@ -294,8 +295,8 @@ void Daemon::resnapIfManualMode()
         m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
     }
     m_suppressResnapOsd = 1;
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->resnapToNewLayout();
+    if (m_snapAdaptor) {
+        m_snapAdaptor->resnapToNewLayout();
     }
 }
 

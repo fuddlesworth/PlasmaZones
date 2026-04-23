@@ -391,7 +391,7 @@ bool Daemon::init()
         // skips autotile screens) so resnap uses original snap assignments.
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
             m_suppressResnapOsd = 1;
-            m_windowTrackingAdaptor->resnapCurrentAssignments();
+            m_snapAdaptor->resnapCurrentAssignments();
             restoreAutotileOnlyGeometries();
         }
 
@@ -635,7 +635,8 @@ bool Daemon::init()
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
-    m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
+    m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, m_settings.get(), this);
+    m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
     m_autotileAdaptor =
         new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
 

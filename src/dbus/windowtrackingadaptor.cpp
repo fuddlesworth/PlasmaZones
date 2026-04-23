@@ -255,84 +255,36 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Window Snapping - Delegate to Service
+// Window Snapping
+//
+// Snap-commit D-Bus slots (windowSnapped, windowSnappedMultiZone,
+// windowUnsnapped, windowsSnappedBatch, recordSnapIntent) moved to
+// SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Snap-commit D-Bus slots — thin forwarders over WindowTrackingService.
-//
-// The full orchestration (clear floating, clear auto-snapped flag, consume
-// pending restore, assign to zone, update last-used tracking, emit state-
-// change signal) moved to WindowTrackingService::commitSnap /
-// commitMultiZoneSnap / uncommitSnap in Phase 5C. These D-Bus entry points
-// survive as the external contract, but their bodies do only two things:
-//
-//   1. Validate and resolve the screen id (cursor/active shadows live on WTA)
-//   2. Forward to the service
-//
-// The SnapEngine signals (windowSnapStateChanged, windowFloatingClearedForSnap)
-// are wired to WTA's D-Bus signals (windowStateChanged, windowFloatingChanged)
-// in setEngines() — external consumers see the same wire format as before.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
+bool WindowTrackingAdaptor::validateWindowId(const QString& windowId, const QString& operation) const
 {
-    if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
-        return;
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Cannot" << operation << "- empty window ID";
+        return false;
     }
-    if (zoneId.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Window snap: cannot track, empty zone ID";
-        return;
-    }
-    // Resolve the effective screen using WTA's cursor/active-window shadows
-    // before handing off to WTS — the service has no compositor-layer
-    // cursor tracking and takes an already-resolved screen.
-    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
-    m_snapEngine->commitSnap(windowId, zoneId, resolvedScreen);
+    return true;
 }
 
-void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
-                                                   const QString& screenId)
+QString WindowTrackingAdaptor::resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const
 {
-    if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
-        return;
+    if (!callerScreen.isEmpty()) {
+        return callerScreen;
     }
-    if (zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(lcDbusWindow) << "Multi-zone window snap: cannot track, empty zone IDs";
-        return;
+    QString detected = detectScreenForZone(zoneId);
+    if (!detected.isEmpty()) {
+        return detected;
     }
-    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneIds.first());
-    m_snapEngine->commitMultiZoneSnap(windowId, zoneIds, resolvedScreen);
-}
-
-void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
-{
-    if (!validateWindowId(windowId, QStringLiteral("untrack window"))) {
-        return;
+    // Tertiary: use cursor or active window screen
+    if (!m_lastCursorScreenId.isEmpty()) {
+        return m_lastCursorScreenId;
     }
-    m_snapEngine->uncommitSnap(windowId);
-}
-
-void WindowTrackingAdaptor::windowsSnappedBatch(const SnapConfirmationList& entries)
-{
-    qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
-
-    // Note: entry.isRestore == true means the window should be unsnapped (its zone no
-    // longer exists in the new layout), NOT restored to a zone. The name is misleading
-    // but preserved for wire compatibility.
-    for (const auto& entry : entries) {
-        if (entry.windowId.isEmpty()) {
-            continue;
-        }
-
-        if (entry.isRestore) {
-            // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
-            windowUnsnapped(entry.windowId);
-            clearPreTileGeometry(entry.windowId);
-        } else {
-            windowSnapped(entry.windowId, entry.zoneId, entry.screenId);
-        }
-    }
+    return m_lastActiveScreenId;
 }
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
