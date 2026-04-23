@@ -31,6 +31,8 @@
 #include "core/virtualdesktopmanager.h"
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
+#include "snap/SnapEngine.h"
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
 
@@ -130,6 +132,12 @@ private Q_SLOTS:
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
         m_wta->setWindowRegistry(m_registry);
 
+        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_snapEngine);
+        m_snapEngine->setSnapState(m_snapState);
+        m_wta->service()->setSnapState(m_snapState);
+        m_wta->setEngines(m_snapEngine, nullptr);
+
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
         m_layoutManager->setActiveLayout(m_testLayout);
@@ -143,6 +151,11 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_wta->service()->setSnapState(nullptr);
+        delete m_snapEngine;
+        m_snapEngine = nullptr;
+        m_snapState = nullptr;
+
         delete m_parent;
         m_parent = nullptr;
         m_wta = nullptr;
@@ -265,6 +278,8 @@ private:
     WindowRegistry* m_registry = nullptr;
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
+    SnapEngine* m_snapEngine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QString m_screenId;

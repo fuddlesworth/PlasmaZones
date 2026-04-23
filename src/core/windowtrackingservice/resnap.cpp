@@ -7,6 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -50,13 +51,17 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         }
     }
 
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+    const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
+    const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
+    const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
+
+    for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
         const QString& windowId = it.key();
         const QStringList& zoneIds = it.value();
         if (zoneIds.isEmpty() || isWindowFloating(windowId))
             continue;
 
-        const QString screenId = m_windowScreenAssignments.value(windowId);
+        const QString screenId = snapScreens.value(windowId);
         if (screenId.isEmpty())
             continue;
 
@@ -82,7 +87,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         entry.windowId = windowId;
         entry.zonePosition = position;
         entry.screenId = screenId;
-        entry.virtualDesktop = m_windowDesktopAssignments.value(windowId, 0);
+        entry.virtualDesktop = snapDesktops.value(windowId, 0);
 
         // Multi-zone: collect all positions
         if (zoneIds.size() > 1) {
@@ -125,11 +130,14 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     }
 
     // Collect (zoneNumber, insertionIndex, windowId) for windows on this screen.
-    // m_windowScreenAssignments may store connector names or EDID-based screen IDs
+    // Screen assignments may store connector names or EDID-based screen IDs
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
+    const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
+    const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
+
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
-    for (auto it = m_windowScreenAssignments.constBegin(); it != m_windowScreenAssignments.constEnd(); ++it) {
+    for (auto it = snapScreens.constBegin(); it != snapScreens.constEnd(); ++it) {
         if (!Phosphor::Screens::ScreenIdentity::screensMatch(it.value(), screenId)) {
             continue;
         }
@@ -139,7 +147,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         if (isWindowFloating(windowId)) {
             continue;
         }
-        const QStringList& zoneIds = m_windowZoneAssignments.value(windowId);
+        const QStringList& zoneIds = snapZones.value(windowId);
         if (zoneIds.isEmpty()) {
             continue;
         }
@@ -185,13 +193,16 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+    const QHash<QString, QStringList>& uwgZones = m_snapState->zoneAssignments();
+    const QHash<QString, QString>& uwgScreens = m_snapState->screenAssignments();
+
+    for (auto it = uwgZones.constBegin(); it != uwgZones.constEnd(); ++it) {
         QString windowId = it.key();
         const QStringList& zoneIds = it.value();
         if (zoneIds.isEmpty()) {
             continue;
         }
-        QString screenId = m_windowScreenAssignments.value(windowId);
+        QString screenId = uwgScreens.value(windowId);
 
         QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (geo.isValid()) {

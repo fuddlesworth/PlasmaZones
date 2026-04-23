@@ -8,6 +8,7 @@
 #include "../constants.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -28,8 +29,12 @@ namespace PlasmaZones {
 
 QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFilter, int desktopFilter) const
 {
+    const QHash<QString, QStringList>& zones = m_snapState->zoneAssignments();
+    const QHash<QString, QString>& screens = m_snapState->screenAssignments();
+    const QHash<QString, int>& desktops = m_snapState->desktopAssignments();
+
     QSet<QUuid> occupiedZoneIds;
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
         // Skip floating windows — they have preserved zone assignments (for resnap
         // on mode switch) but should not make zones appear occupied.
         if (isWindowFloating(it.key())) {
@@ -39,23 +44,15 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         // This prevents windows on other screens (or desktops sharing the same layout)
         // from making zones appear occupied on the target screen.
         if (!screenFilter.isEmpty()) {
-            QString windowScreen = m_windowScreenAssignments.value(it.key());
+            QString windowScreen = screens.value(it.key());
             if (!Phosphor::Screens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
                 continue;
             }
         }
         // When desktop filter is set, only count zones from windows on that desktop.
         // Desktop 0 means "all desktops" (pinned window) — always include those.
-        // Without this, a window parked on another virtual desktop keeps its zone
-        // "occupied" on the current desktop, blocking snap assist from offering the
-        // zone to fill — even though SnapAssistHandler::buildCandidates() already
-        // excludes other-desktop windows from the candidate list. This asymmetry
-        // produces discussion #323: snap-to-top never shows snap assist for the
-        // bottom zone when other-desktop windows are parked there. With virtual
-        // screens this matters even more, since different virtual desktops can
-        // share the same layout (and thus the same zone IDs).
         if (desktopFilter > 0) {
-            int windowDesktop = m_windowDesktopAssignments.value(it.key(), 0);
+            int windowDesktop = desktops.value(it.key(), 0);
             if (windowDesktop != 0 && windowDesktop != desktopFilter) {
                 continue;
             }

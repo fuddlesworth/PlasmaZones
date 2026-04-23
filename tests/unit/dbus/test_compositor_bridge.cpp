@@ -22,7 +22,9 @@
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/windowtrackingadaptor.h"
+#include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -114,6 +116,12 @@ private Q_SLOTS:
         m_wtaParent = new QObject(nullptr);
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_wtaParent);
 
+        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_snapEngine);
+        m_snapEngine->setSnapState(m_snapState);
+        m_wta->service()->setSnapState(m_snapState);
+        m_wta->setEngines(m_snapEngine, nullptr);
+
         // Create a test layout so getFullState has data
         auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), m_layoutManager);
         auto* zone = new PhosphorZones::Zone(layout);
@@ -132,6 +140,10 @@ private Q_SLOTS:
         delete m_controlParent;
         m_controlParent = nullptr;
         m_controlAdaptor = nullptr;
+        m_wta->service()->setSnapState(nullptr);
+        delete m_snapEngine;
+        m_snapEngine = nullptr;
+        m_snapState = nullptr;
         delete m_wtaParent;
         m_wtaParent = nullptr;
         m_wta = nullptr;
@@ -281,6 +293,8 @@ private:
     StubZoneDetectorBridge* m_zoneDetector = nullptr;
     QObject* m_wtaParent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
+    SnapEngine* m_snapEngine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     QObject* m_controlParent = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
 };

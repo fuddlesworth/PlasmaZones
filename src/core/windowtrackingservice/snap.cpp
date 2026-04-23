@@ -35,10 +35,7 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
     if (wasUserInitiated) {
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
-            m_userSnappedClasses.insert(windowClass);
-            if (m_snapState) {
-                m_snapState->recordSnapIntent(windowClass, true);
-            }
+            m_snapState->recordSnapIntent(windowClass, true);
             markDirty(DirtyUserSnapped);
         }
     }
@@ -47,13 +44,7 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
 void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenId,
                                                const QString& windowClass, int virtualDesktop)
 {
-    m_lastUsedZoneId = zoneId;
-    m_lastUsedScreenId = screenId;
-    m_lastUsedZoneClass = windowClass;
-    m_lastUsedDesktop = virtualDesktop;
-    if (m_snapState) {
-        m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
-    }
+    m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
     markDirty(DirtyLastUsedZone);
 }
 
@@ -82,24 +73,18 @@ void WindowTrackingService::markWindowReported(const QString& windowId)
 void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
-        m_autoSnappedWindows.insert(windowId);
-        if (m_snapState) {
-            m_snapState->markAsAutoSnapped(windowId);
-        }
+        m_snapState->markAsAutoSnapped(windowId);
     }
 }
 
 bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 {
-    return m_autoSnappedWindows.contains(windowId);
+    return m_snapState->isAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 {
-    if (m_snapState) {
-        m_snapState->clearAutoSnapped(windowId);
-    }
-    return m_autoSnappedWindows.remove(windowId);
+    return m_snapState->clearAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::consumePendingAssignment(const QString& windowId)

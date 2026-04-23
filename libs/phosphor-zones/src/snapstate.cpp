@@ -198,12 +198,20 @@ void SnapState::assignWindowToZones(const QString& windowId, const QStringList& 
 
 void SnapState::unassignWindow(const QString& windowId)
 {
-    if (m_windowZoneAssignments.remove(windowId)) {
-        m_windowScreenAssignments.remove(windowId);
-        m_windowDesktopAssignments.remove(windowId);
-        Q_EMIT windowUnassigned(windowId);
-        Q_EMIT stateChanged();
+    QStringList previousZones = m_windowZoneAssignments.value(windowId);
+    if (!m_windowZoneAssignments.remove(windowId)) {
+        return;
     }
+    m_windowScreenAssignments.remove(windowId);
+    m_windowDesktopAssignments.remove(windowId);
+    if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
+        m_lastUsedZoneId.clear();
+        m_lastUsedScreenId.clear();
+        m_lastUsedZoneClass.clear();
+        m_lastUsedDesktop = 0;
+    }
+    Q_EMIT windowUnassigned(windowId);
+    Q_EMIT stateChanged();
 }
 
 QString SnapState::screenForWindow(const QString& windowId) const

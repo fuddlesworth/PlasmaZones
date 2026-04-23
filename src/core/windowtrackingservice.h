@@ -387,10 +387,7 @@ public:
     /**
      * @brief Get last used zone ID
      */
-    QString lastUsedZoneId() const
-    {
-        return m_lastUsedZoneId;
-    }
+    QString lastUsedZoneId() const;
 
     /**
      * @brief App class string stamped on the last-used-zone tracking.
@@ -398,10 +395,7 @@ public:
      * Used by the reactive metadata handler to detect stale class tags after
      * a mid-session rename.
      */
-    QString lastUsedZoneClass() const
-    {
-        return m_lastUsedZoneClass;
-    }
+    QString lastUsedZoneClass() const;
 
     /**
      * @brief Update the last-used-zone class tag without touching zone/screen.
@@ -411,10 +405,7 @@ public:
      * class string is refreshed so the next auto-snap-by-class lookup matches
      * against the live name.
      */
-    void retagLastUsedZoneClass(const QString& newClass)
-    {
-        m_lastUsedZoneClass = newClass;
-    }
+    void retagLastUsedZoneClass(const QString& newClass);
 
     /**
      * @brief Update last used zone tracking
@@ -662,26 +653,17 @@ public:
      * @brief Get all zone assignments for persistence
      * @return Map of windowId -> zoneIds (list of zone UUIDs)
      */
-    const QHash<QString, QStringList>& zoneAssignments() const
-    {
-        return m_windowZoneAssignments;
-    }
+    const QHash<QString, QStringList>& zoneAssignments() const;
 
     /**
      * @brief Get all screen assignments for persistence
      */
-    const QHash<QString, QString>& screenAssignments() const
-    {
-        return m_windowScreenAssignments;
-    }
+    const QHash<QString, QString>& screenAssignments() const;
 
     /**
      * @brief Get all desktop assignments for persistence
      */
-    const QHash<QString, int>& desktopAssignments() const
-    {
-        return m_windowDesktopAssignments;
-    }
+    const QHash<QString, int>& desktopAssignments() const;
 
     /**
      * @brief Get all pre-tile geometries for persistence
@@ -737,10 +719,7 @@ public:
     /**
      * @brief Get user-snapped classes
      */
-    const QSet<QString>& userSnappedClasses() const
-    {
-        return m_userSnappedClasses;
-    }
+    const QSet<QString>& userSnappedClasses() const;
 
     /**
      * @brief Set active zone/screen/desktop assignments (loaded from KConfig by adaptor)
@@ -750,12 +729,7 @@ public:
      * restore for multi-instance apps (e.g. 2 Ghostty windows, only 1 was snapped).
      */
     void setActiveAssignments(const QHash<QString, QStringList>& zones, const QHash<QString, QString>& screens,
-                              const QHash<QString, int>& desktops)
-    {
-        m_windowZoneAssignments = zones;
-        m_windowScreenAssignments = screens;
-        m_windowDesktopAssignments = desktops;
-    }
+                              const QHash<QString, int>& desktops);
 
     /**
      * @brief Set pending restore queues (loaded from KConfig by adaptor)
@@ -776,10 +750,7 @@ public:
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
      */
-    void setUserSnappedClasses(const QSet<QString>& classes)
-    {
-        m_userSnappedClasses = classes;
-    }
+    void setUserSnappedClasses(const QSet<QString>& classes);
 
     /**
      * @brief Set last used zone info (loaded from KConfig by adaptor)
@@ -989,13 +960,6 @@ private:
     WindowRegistry* m_windowRegistry = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
 
-    // PhosphorZones::Zone assignments: windowId -> zoneIds (supports multi-zone snap)
-    QHash<QString, QStringList> m_windowZoneAssignments;
-    // Screen tracking: windowId -> screenId
-    QHash<QString, QString> m_windowScreenAssignments;
-    // Desktop tracking: windowId -> virtual desktop
-    QHash<QString, int> m_windowDesktopAssignments;
-
     // Pre-tile geometries (unified snap + autotile): full windowId + appId at runtime,
     // appId only for session-restored entries. Converted on window close for persistence.
     // Each entry includes the screen name where the geometry was captured, enabling
@@ -1008,12 +972,6 @@ private:
     // via session save/load, drives session-restore geometry resolution, and
     // is the only copy keyed by appId for windows that haven't reopened yet.
     QHash<QString, PreTileGeometry> m_preTileGeometries;
-
-    // Last used zone tracking
-    QString m_lastUsedZoneId;
-    QString m_lastUsedScreenId;
-    QString m_lastUsedZoneClass;
-    int m_lastUsedDesktop = 0;
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence
@@ -1039,14 +997,8 @@ private:
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
 
-    // User-snapped classes (for auto-snap eligibility)
-    QSet<QString> m_userSnappedClasses;
-
     // Sticky window states
     QHash<QString, bool> m_windowStickyStates;
-
-    // Auto-snapped windows (to avoid updating last-used zone)
-    QSet<QString> m_autoSnappedWindows;
 
     // Windows confirmed as live by the effect (runtime only, not persisted).
     // Used by the sibling check in calculateRestoreFromSession to distinguish

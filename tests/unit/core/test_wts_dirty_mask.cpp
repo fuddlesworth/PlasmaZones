@@ -33,6 +33,7 @@
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
@@ -71,6 +72,8 @@ private Q_SLOTS:
 
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings,
                                               m_virtualDesktopManager, m_parent);
+        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_service->setSnapState(m_snapState);
         // Construction leaves mask = DirtyAll; clear so subsequent mutator
         // tests start from a known-clean state and only assert on the
         // bits that the mutator under test is responsible for.
@@ -79,6 +82,11 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        if (m_service) {
+            m_service->setSnapState(nullptr);
+        }
+        delete m_snapState;
+        m_snapState = nullptr;
         delete m_parent;
         m_parent = nullptr;
         m_layoutManager = nullptr;
@@ -107,7 +115,10 @@ private Q_SLOTS:
 
         WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr, freshSettings,
                                     freshVirtualDesktopManager, &freshParent);
+        PhosphorZones::SnapState freshSnapState(QString(), nullptr);
+        fresh.setSnapState(&freshSnapState);
         QCOMPARE(fresh.peekDirty(), static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
+        fresh.setSnapState(nullptr);
     }
 
     void testMarkDirty_orsBits()
@@ -320,6 +331,7 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_layout = nullptr;
     WindowTrackingService* m_service = nullptr;
     QString m_zone1Id;
