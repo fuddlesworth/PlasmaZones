@@ -31,7 +31,7 @@ namespace PlasmaZones {
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 {
     QVector<ZoneAssignmentEntry> result;
-    const QVector<WindowTrackingService::ResnapEntry> resnapBuffer = m_windowTracker->takeResnapBuffer();
+    const QVector<ResnapEntry> resnapBuffer = m_windowTracker->takeResnapBuffer();
     if (resnapBuffer.isEmpty()) {
         qCDebug(lcCore) << "calculateResnapFromPreviousLayout: buffer is empty";
         return result;
@@ -40,7 +40,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 
     // Helper: create a "__restore__" entry that tells the KWin effect to move
     // the window back to its pre-tile geometry instead of snapping it to a zone.
-    auto tryAppendRestore = [this, &result](const WindowTrackingService::ResnapEntry* entry) {
+    auto tryAppendRestore = [this, &result](const ResnapEntry* entry) {
         auto preTile = m_windowTracker->preTileGeometry(entry->windowId);
         if (!preTile) {
             // Second attempt: look up by current class so a renamed window
@@ -61,8 +61,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
     };
 
     // Group resnap entries by screen so each screen uses its own layout
-    QHash<QString, QVector<const WindowTrackingService::ResnapEntry*>> entriesByScreen;
-    for (const WindowTrackingService::ResnapEntry& entry : resnapBuffer) {
+    QHash<QString, QVector<const ResnapEntry*>> entriesByScreen;
+    for (const ResnapEntry& entry : resnapBuffer) {
         entriesByScreen[entry.screenId].append(&entry);
     }
 
@@ -79,7 +79,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         WindowTrackingService::sortZonesByNumber(newZones);
         const int newZoneCount = newZones.size();
 
-        for (const WindowTrackingService::ResnapEntry* entry : screenIt.value()) {
+        for (const ResnapEntry* entry : screenIt.value()) {
             // Multi-zone windows: map zone positions to the new layout.
             // Only include positions that exist in the new layout — don't cycle
             // excess positions (e.g. zone 3 shouldn't map to zone 1 when going

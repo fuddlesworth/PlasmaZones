@@ -29,6 +29,7 @@ namespace PlasmaZones {
 
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
+    Q_ASSERT(m_snapState);
     if (wasUserInitiated) {
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
@@ -41,6 +42,7 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
 void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenId,
                                                const QString& windowClass, int virtualDesktop)
 {
+    Q_ASSERT(m_snapState);
     m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
     markDirty(DirtyLastUsedZone);
 }
@@ -66,6 +68,7 @@ void WindowTrackingService::markWindowReported(const QString& windowId)
 
 void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
+    Q_ASSERT(m_snapState);
     if (!windowId.isEmpty()) {
         m_snapState->markAsAutoSnapped(windowId);
     }
@@ -73,11 +76,13 @@ void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 
 bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 {
+    Q_ASSERT(m_snapState);
     return m_snapState->isAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 {
+    Q_ASSERT(m_snapState);
     return m_snapState->clearAutoSnapped(windowId);
 }
 

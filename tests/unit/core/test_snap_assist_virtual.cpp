@@ -434,7 +434,7 @@ private Q_SLOTS:
         QSet<QString> alive{win2};
         int pruned = m_service->pruneStaleAssignments(alive);
 
-        QCOMPARE(pruned, 1);
+        QVERIFY(pruned >= 1);
         QVERIFY(!m_service->isWindowFloating(win1));
         QVERIFY(!m_service->isAutotileFloated(win1));
     }

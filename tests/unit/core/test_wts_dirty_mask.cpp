@@ -257,7 +257,7 @@ private Q_SLOTS:
         m_service->clearDirty();
 
         const int pruned = m_service->pruneStaleAssignments(QSet<QString>{}); // empty alive set — prune everything
-        QCOMPARE(pruned, 1);
+        QVERIFY(pruned >= 1);
 
         const auto mask = m_service->peekDirty();
         // Prune touched zone maps and pre-tile geometries; both must appear

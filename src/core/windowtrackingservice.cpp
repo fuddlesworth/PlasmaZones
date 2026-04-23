@@ -168,12 +168,12 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
 {
     int pruned = m_snapState->pruneStaleAssignments(aliveWindowIds);
 
-    bool wtsCleaned = false;
+    int wtsCleaned = 0;
     auto removeHash = [&](auto& hash) {
         for (auto it = hash.begin(); it != hash.end();) {
             if (!aliveWindowIds.contains(it.key())) {
                 it = hash.erase(it);
-                wtsCleaned = true;
+                ++wtsCleaned;
             } else {
                 ++it;
             }
@@ -183,7 +183,7 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
         for (auto it = set.begin(); it != set.end();) {
             if (!aliveWindowIds.contains(*it)) {
                 it = set.erase(it);
-                wtsCleaned = true;
+                ++wtsCleaned;
             } else {
                 ++it;
             }
@@ -199,11 +199,11 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeSet(m_savedSnapFloatingWindows);
     removeSet(m_effectReportedWindows);
 
-    if (pruned > 0 || wtsCleaned) {
+    if (pruned > 0 || wtsCleaned > 0) {
         markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);
     }
 
-    return pruned;
+    return pruned + wtsCleaned;
 }
 
 bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
@@ -638,46 +638,46 @@ QHash<QString, int> WindowTrackingService::buildZonePositionMap(PhosphorZones::L
 // Out-of-line accessors delegating to SnapState
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static const QHash<QString, QStringList> s_emptyZoneMap;
-static const QHash<QString, QString> s_emptyScreenMap;
-static const QHash<QString, int> s_emptyDesktopMap;
-static const QSet<QString> s_emptyStringSet;
-
 const QHash<QString, QStringList>& WindowTrackingService::zoneAssignments() const
 {
-    return m_snapState ? m_snapState->zoneAssignments() : s_emptyZoneMap;
+    Q_ASSERT(m_snapState);
+    return m_snapState->zoneAssignments();
 }
 
 const QHash<QString, QString>& WindowTrackingService::screenAssignments() const
 {
-    return m_snapState ? m_snapState->screenAssignments() : s_emptyScreenMap;
+    Q_ASSERT(m_snapState);
+    return m_snapState->screenAssignments();
 }
 
 const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
 {
-    return m_snapState ? m_snapState->desktopAssignments() : s_emptyDesktopMap;
+    Q_ASSERT(m_snapState);
+    return m_snapState->desktopAssignments();
 }
 
 QString WindowTrackingService::lastUsedZoneId() const
 {
-    return m_snapState ? m_snapState->lastUsedZoneId() : QString();
+    Q_ASSERT(m_snapState);
+    return m_snapState->lastUsedZoneId();
 }
 
 QString WindowTrackingService::lastUsedZoneClass() const
 {
-    return m_snapState ? m_snapState->lastUsedZoneClass() : QString();
+    Q_ASSERT(m_snapState);
+    return m_snapState->lastUsedZoneClass();
 }
 
 void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
 {
-    if (m_snapState) {
-        m_snapState->retagLastUsedZoneClass(newClass);
-    }
+    Q_ASSERT(m_snapState);
+    m_snapState->retagLastUsedZoneClass(newClass);
 }
 
 const QSet<QString>& WindowTrackingService::userSnappedClasses() const
 {
-    return m_snapState ? m_snapState->userSnappedClasses() : s_emptyStringSet;
+    Q_ASSERT(m_snapState);
+    return m_snapState->userSnappedClasses();
 }
 
 void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)

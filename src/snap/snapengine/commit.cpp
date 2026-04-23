@@ -25,7 +25,7 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
 
     bool wasAutoSnapped = false;
     if (intent == SnapIntent::UserInitiated) {
-        wasAutoSnapped = m_snapState->clearAutoSnapped(windowId);
+        wasAutoSnapped = m_windowTracker->clearAutoSnapped(windowId);
         if (!wasAutoSnapped) {
             m_windowTracker->consumePendingAssignment(windowId);
         }
