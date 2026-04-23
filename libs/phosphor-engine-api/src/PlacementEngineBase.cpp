@@ -137,7 +137,7 @@ void PlacementEngineBase::clearUnmanagedGeometry(const QString& windowId)
     m_unmanagedGeometries.remove(windowId);
 }
 
-void PlacementEngineBase::removeUnmanagedGeometry(const QString& windowId)
+void PlacementEngineBase::forgetWindow(const QString& windowId)
 {
     m_unmanagedGeometries.remove(windowId);
     m_windowStates.remove(windowId);
@@ -166,7 +166,7 @@ int PlacementEngineBase::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
     }
     for (auto it = m_windowStates.begin(); it != m_windowStates.end();) {
-        if (!aliveWindowIds.contains(it.key())) {
+        if (!aliveWindowIds.contains(it.key()) && !m_unmanagedGeometries.contains(it.key())) {
             it = m_windowStates.erase(it);
             ++pruned;
         } else {

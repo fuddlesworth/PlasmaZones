@@ -324,7 +324,7 @@ private Q_SLOTS:
         engine.storeUnmanagedGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
         QVERIFY(engine.hasUnmanagedGeometry(windowId));
 
-        engine.removeUnmanagedGeometry(windowId);
+        engine.forgetWindow(windowId);
         QVERIFY(!engine.hasUnmanagedGeometry(windowId));
         m_wts->setSnapState(nullptr);
     }

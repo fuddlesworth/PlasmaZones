@@ -4,7 +4,6 @@
 #include "windowtrackingservice.h"
 #include "constants.h"
 #include "interfaces.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
@@ -345,58 +344,42 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     consumePendingAssignment(windowId);
 }
 
-QString WindowTrackingService::preFloatZone(const QString& windowId) const
+template<typename Func>
+auto WindowTrackingService::preFloatLookup(const QString& windowId, Func&& getter) const -> decltype(getter(windowId))
 {
     if (!m_snapState) {
         return {};
     }
-    // Try SnapState with full windowId first (runtime)
-    QString zone = m_snapState->preFloatZone(windowId);
-    if (!zone.isEmpty()) {
-        return zone;
+    auto result = getter(windowId);
+    if (!result.isEmpty()) {
+        return result;
     }
-    // Fall back to appId (session-restored entries keyed by appId)
     QString appId = currentAppIdFor(windowId);
     if (appId != windowId) {
-        zone = m_snapState->preFloatZone(appId);
+        result = getter(appId);
     }
-    return zone;
+    return result;
+}
+
+QString WindowTrackingService::preFloatZone(const QString& windowId) const
+{
+    return preFloatLookup(windowId, [this](const QString& id) {
+        return m_snapState->preFloatZone(id);
+    });
 }
 
 QStringList WindowTrackingService::preFloatZones(const QString& windowId) const
 {
-    if (!m_snapState) {
-        return {};
-    }
-    // Try SnapState with full windowId first (runtime)
-    QStringList zones = m_snapState->preFloatZones(windowId);
-    if (!zones.isEmpty()) {
-        return zones;
-    }
-    // Fall back to appId (session-restored entries keyed by appId)
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId) {
-        zones = m_snapState->preFloatZones(appId);
-    }
-    return zones;
+    return preFloatLookup(windowId, [this](const QString& id) {
+        return m_snapState->preFloatZones(id);
+    });
 }
 
 QString WindowTrackingService::preFloatScreen(const QString& windowId) const
 {
-    if (!m_snapState) {
-        return {};
-    }
-    // Try SnapState with full windowId first (runtime)
-    QString screen = m_snapState->preFloatScreen(windowId);
-    if (!screen.isEmpty()) {
-        return screen;
-    }
-    // Fall back to appId (session-restored entries keyed by appId)
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId) {
-        screen = m_snapState->preFloatScreen(appId);
-    }
-    return screen;
+    return preFloatLookup(windowId, [this](const QString& id) {
+        return m_snapState->preFloatScreen(id);
+    });
 }
 
 void WindowTrackingService::clearPreFloatZoneForWindow(const QString& windowId)

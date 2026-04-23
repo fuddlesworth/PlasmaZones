@@ -6,7 +6,6 @@
 
 #include "../windowtrackingservice.h"
 #include "../constants.h"
-#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
@@ -435,7 +434,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             auto unResult = m_snapState->unassignWindow(wId);
             lastUsedCleared |= unResult.lastUsedZoneCleared;
             if (m_snapEngine) {
-                m_snapEngine->removeUnmanagedGeometry(wId);
+                m_snapEngine->forgetWindow(wId);
             }
             m_snapState->clearPreFloatZone(wId);
             m_windowStickyStates.remove(wId);
@@ -523,7 +522,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     if (m_snapEngine && m_snapEngine->hasUnmanagedGeometry(windowId) && appId != windowId) {
         m_snapEngine->storeUnmanagedGeometry(appId, m_snapEngine->unmanagedGeometry(windowId),
                                              m_snapEngine->unmanagedScreen(windowId), true);
-        m_snapEngine->removeUnmanagedGeometry(windowId);
+        m_snapEngine->forgetWindow(windowId);
     }
     // Clear floating state on close — floating is a runtime-only state that
     // should not carry over when the window is reopened. Without this, closing

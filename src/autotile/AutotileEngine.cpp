@@ -125,6 +125,20 @@ void AutotileEngine::onWindowUnfloated(const QString& windowId)
     Q_UNUSED(windowId)
 }
 
+int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    for (auto it = m_autotileFloatedWindows.begin(); it != m_autotileFloatedWindows.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_autotileFloatedWindows.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    return pruned;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Signal connections
 // ═══════════════════════════════════════════════════════════════════════════════

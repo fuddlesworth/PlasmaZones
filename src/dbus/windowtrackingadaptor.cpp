@@ -624,6 +624,9 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int pruned = m_service->pruneStaleAssignments(alive);
+    if (m_autotileEngine) {
+        pruned += m_autotileEngine->pruneStaleWindows(alive);
+    }
     if (pruned > 0) {
         qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";
         scheduleSaveState();

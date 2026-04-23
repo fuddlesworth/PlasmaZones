@@ -15,11 +15,9 @@
 #include <functional>
 #include <optional>
 #include <utility>
+#include <QPointer>
 #include <PhosphorScreens/ScreenIdentity.h>
-
-namespace PhosphorEngineApi {
-class PlacementEngineBase;
-}
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 
 namespace PhosphorZones {
 class IZoneDetector;
@@ -115,7 +113,7 @@ public:
 
     PhosphorEngineApi::PlacementEngineBase* snapEngine() const
     {
-        return m_snapEngine;
+        return m_snapEngine.data();
     }
 
     /**
@@ -762,6 +760,10 @@ private:
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 
+    /// windowId-then-appId fallback lookup against SnapState.
+    template<typename Func>
+    auto preFloatLookup(const QString& windowId, Func&& getter) const -> decltype(getter(windowId));
+
     /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
     void validateLastUsedZone(const QString& targetScreen);
 
@@ -837,7 +839,7 @@ private:
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
-    PhosphorEngineApi::PlacementEngineBase* m_snapEngine = nullptr;
+    QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence

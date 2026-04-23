@@ -1102,6 +1102,8 @@ public:
     void clearAutotileFloated(const QString& windowId);
     bool isAutotileFloated(const QString& windowId) const;
 
+    int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
+
 private Q_SLOTS:
     void onWindowAdded(const QString& windowId);
     void onWindowRemoved(const QString& windowId);

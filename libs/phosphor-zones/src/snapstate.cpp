@@ -310,12 +310,18 @@ void SnapState::clearPreFloatZone(const QString& windowId)
 
 void SnapState::addPreFloatZone(const QString& windowId, const QStringList& zoneIds)
 {
+    if (m_preFloatZoneAssignments.value(windowId) == zoneIds) {
+        return;
+    }
     m_preFloatZoneAssignments[windowId] = zoneIds;
     Q_EMIT stateChanged();
 }
 
 void SnapState::addPreFloatScreen(const QString& windowId, const QString& screenId)
 {
+    if (m_preFloatScreenAssignments.value(windowId) == screenId) {
+        return;
+    }
     m_preFloatScreenAssignments[windowId] = screenId;
     Q_EMIT stateChanged();
 }

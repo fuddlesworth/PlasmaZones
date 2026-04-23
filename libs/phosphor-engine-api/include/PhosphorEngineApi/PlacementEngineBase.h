@@ -53,7 +53,7 @@ public:
     QString unmanagedScreen(const QString& windowId) const;
     bool hasUnmanagedGeometry(const QString& windowId) const;
     void clearUnmanagedGeometry(const QString& windowId);
-    void removeUnmanagedGeometry(const QString& windowId);
+    void forgetWindow(const QString& windowId);
     void storeUnmanagedGeometry(const QString& windowId, const QRect& geometry, const QString& screenId,
                                 bool overwrite = false);
 

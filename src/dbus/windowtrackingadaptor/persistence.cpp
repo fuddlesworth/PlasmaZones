@@ -96,12 +96,12 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
         return;
     }
     bool hadGeometry = m_snapEngine->hasUnmanagedGeometry(windowId);
-    m_snapEngine->removeUnmanagedGeometry(windowId);
+    m_snapEngine->forgetWindow(windowId);
     // Also remove appId entry
     const QString appId = m_service->currentAppIdFor(windowId);
     if (appId != windowId) {
         hadGeometry |= m_snapEngine->hasUnmanagedGeometry(appId);
-        m_snapEngine->removeUnmanagedGeometry(appId);
+        m_snapEngine->forgetWindow(appId);
     }
     if (hadGeometry) {
         qCDebug(lcDbusWindow) << "Cleared pre-tile geometry for" << windowId;
