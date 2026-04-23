@@ -32,7 +32,9 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
+#include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -67,6 +69,10 @@ private Q_SLOTS:
         m_settings = new StubSettingsLifecycle(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_engine);
+        m_engine->setSnapState(m_snapState);
+        m_service->setSnapState(m_snapState);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -80,6 +86,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_engine;
+        m_engine = nullptr;
+        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -233,7 +243,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         // Two windows were assigned above, so the resnap buffer should contain
         // entries for both (mapped to the new layout's zones by relative position).
         // In headless mode zone geometry resolution may differ, but the buffer
@@ -253,7 +263,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         for (const ZoneAssignmentEntry& entry : resnap) {
             QVERIFY(entry.windowId != windowId);
         }
@@ -265,6 +275,8 @@ private:
     StubSettingsLifecycle* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
+    SnapEngine* m_engine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

@@ -60,7 +60,12 @@ public:
                             int virtualDesktop);
     void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                              int virtualDesktop);
-    void unassignWindow(const QString& windowId);
+    struct UnassignResult
+    {
+        bool wasAssigned = false;
+        bool lastUsedZoneCleared = false;
+    };
+    UnassignResult unassignWindow(const QString& windowId);
 
     QString zoneForWindow(const QString& windowId) const;
     QStringList zonesForWindow(const QString& windowId) const;
@@ -103,7 +108,7 @@ public:
     void setFloating(const QString& windowId, bool floating);
 
     /// Save zone assignment before floating for later restore.
-    void unsnapForFloat(const QString& windowId);
+    UnassignResult unsnapForFloat(const QString& windowId);
     QString preFloatZone(const QString& windowId) const;
     QStringList preFloatZones(const QString& windowId) const;
     QString preFloatScreen(const QString& windowId) const;

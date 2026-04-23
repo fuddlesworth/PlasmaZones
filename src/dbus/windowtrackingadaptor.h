@@ -138,6 +138,8 @@ public:
      */
     void setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine);
 
+    SnapEngine* snapEngine() const;
+
     /**
      * @brief Wire the daemon's central ScreenModeRouter.
      *

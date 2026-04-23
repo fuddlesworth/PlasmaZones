@@ -94,7 +94,7 @@ UnfloatRestoreResult WindowTrackingAdaptor::calculateUnfloatRestore(const QStrin
         return UnfloatRestoreResult{};
     }
 
-    UnfloatResult unfloat = m_service->resolveUnfloatGeometry(windowId, screenId);
+    UnfloatResult unfloat = m_snapEngine->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
         qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
         return UnfloatRestoreResult{};

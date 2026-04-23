@@ -58,11 +58,9 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     m_snapState->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
-        m_windowTracker->commitMultiZoneSnap(windowId, zoneIds, result.screenId,
-                                             WindowTrackingService::SnapIntent::AutoRestored);
+        commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored);
     } else {
-        m_windowTracker->commitSnap(windowId, zoneIds.first(), result.screenId,
-                                    WindowTrackingService::SnapIntent::AutoRestored);
+        commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
 
     // Emit geometry for KWin effect to apply
@@ -144,7 +142,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // 1. App rules (highest priority). May cross-screen migrate.
     {
-        SnapResult result = m_windowTracker->calculateSnapToAppRule(windowId, screenId, sticky);
+        SnapResult result = calculateSnapToAppRule(windowId, screenId, sticky);
         if (result.shouldSnap) {
             qCInfo(lcCore) << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
             return result;
@@ -156,7 +154,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // calculateRestoreFromSession returns noSnap if that screen is now in
     // autotile mode (letting the autotile engine own it).
     if (m_settings && m_settings->restoreWindowsToZonesOnLogin()) {
-        SnapResult result = m_windowTracker->calculateRestoreFromSession(windowId, screenId, sticky);
+        SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky);
         if (result.shouldSnap) {
             m_windowTracker->consumePendingAssignment(windowId);
             qCInfo(lcCore) << "resolveWindowRestore: persisted matched for" << windowId << "zone=" << result.zoneId
@@ -182,7 +180,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // 3. Auto-assign to empty zone
     {
-        SnapResult result = m_windowTracker->calculateSnapToEmptyZone(windowId, screenId, sticky);
+        SnapResult result = calculateSnapToEmptyZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
             qCInfo(lcCore) << "resolveWindowRestore: emptyZone matched for" << windowId << "zone=" << result.zoneId;
             return result;
@@ -191,7 +189,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // 4. Snap to last zone (final fallback)
     {
-        SnapResult result = m_windowTracker->calculateSnapToLastZone(windowId, screenId, sticky);
+        SnapResult result = calculateSnapToLastZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
             qCInfo(lcCore) << "resolveWindowRestore: lastZone matched for" << windowId << "zone=" << result.zoneId;
             return result;

@@ -32,7 +32,9 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
+#include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -141,6 +143,10 @@ private Q_SLOTS:
         m_settings = new StubSettingsSession(nullptr);
         m_zoneDetector = new StubZoneDetectorSession(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapState = new PhosphorZones::SnapState(QString(), m_engine);
+        m_engine->setSnapState(m_snapState);
+        m_service->setSnapState(m_snapState);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -154,6 +160,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_engine;
+        m_engine = nullptr;
+        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -186,7 +196,7 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        SnapResult result = m_service->calculateRestoreFromSession(QStringLiteral("firefox|99999"), QString(), false);
+        SnapResult result = m_engine->calculateRestoreFromSession(QStringLiteral("firefox|99999"), QString(), false);
         Q_UNUSED(result);
 
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
@@ -209,7 +219,7 @@ private Q_SLOTS:
         floating.insert(appId);
         m_service->setFloatingWindows(floating);
 
-        SnapResult result = m_service->calculateRestoreFromSession(windowId, QString(), false);
+        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QString(), false);
         QVERIFY(!result.shouldSnap);
     }
 
@@ -257,8 +267,8 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
-        QVector<ZoneAssignmentEntry> secondCall = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> secondCall = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
     }
 
@@ -274,8 +284,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
         m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
 
-        QVector<ZoneAssignmentEntry> cw = m_service->calculateRotation(true);
-        QVector<ZoneAssignmentEntry> ccw = m_service->calculateRotation(false);
+        QVector<ZoneAssignmentEntry> cw = m_engine->calculateRotation(true);
+        QVector<ZoneAssignmentEntry> ccw = m_engine->calculateRotation(false);
 
         Q_UNUSED(cw);
         Q_UNUSED(ccw);
@@ -334,7 +344,7 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        SnapResult result = m_service->calculateRestoreFromSession(windowId, QStringLiteral("DP-1"), false);
+        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QStringLiteral("DP-1"), false);
         if (result.shouldSnap) {
             QVERIFY(result.geometry.isValid());
         }
@@ -405,6 +415,8 @@ private:
     StubSettingsSession* m_settings = nullptr;
     StubZoneDetectorSession* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
+    SnapEngine* m_engine = nullptr;
+    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

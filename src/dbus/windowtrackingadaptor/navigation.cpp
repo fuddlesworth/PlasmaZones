@@ -130,13 +130,13 @@ void WindowTrackingAdaptor::resnapToNewLayout()
 static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<ZoneAssignmentEntry>& entries,
                                 const QString& action)
 {
-    WindowTrackingService* service = adaptor ? adaptor->service() : nullptr;
-    if (!service) {
+    SnapEngine* engine = adaptor ? adaptor->snapEngine() : nullptr;
+    if (!engine) {
         return false;
     }
 
-    WindowGeometryList geometries = service->applyBatchAssignments(
-        entries, WindowTrackingService::SnapIntent::UserInitiated, [adaptor]() -> QString {
+    WindowGeometryList geometries =
+        engine->applyBatchAssignments(entries, SnapIntent::UserInitiated, [adaptor]() -> QString {
             const QString cursor = adaptor->lastCursorScreenName();
             return cursor.isEmpty() ? adaptor->lastActiveScreenName() : cursor;
         });
@@ -190,7 +190,7 @@ void WindowTrackingAdaptor::resnapForVirtualScreenReconfigure(const QString& phy
     const QStringList snapScreens = resolveSnapModeScreensForResnap(physicalScreenId);
     QVector<ZoneAssignmentEntry> entries;
     for (const QString& sid : snapScreens) {
-        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+        entries.append(m_snapEngine->calculateResnapFromCurrentAssignments(sid));
     }
 
     if (entries.isEmpty()) {
