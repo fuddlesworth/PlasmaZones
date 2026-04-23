@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QRect>
+#include <QSet>
 #include <QString>
 
 namespace PhosphorEngineApi {
@@ -60,10 +61,8 @@ public:
     {
         return m_unmanagedGeometries;
     }
-    void setUnmanagedGeometries(const QHash<QString, UnmanagedEntry>& geos)
-    {
-        m_unmanagedGeometries = geos;
-    }
+    void setUnmanagedGeometries(const QHash<QString, UnmanagedEntry>& geos);
+    virtual int pruneStaleWindows(const QSet<QString>& aliveWindowIds);
 
     QJsonObject serializeBaseState() const;
     void deserializeBaseState(const QJsonObject& state);

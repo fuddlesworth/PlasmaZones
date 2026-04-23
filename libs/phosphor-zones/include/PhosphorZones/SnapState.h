@@ -113,6 +113,8 @@ public:
     QStringList preFloatZones(const QString& windowId) const;
     QString preFloatScreen(const QString& windowId) const;
     void clearPreFloatZone(const QString& windowId);
+    void addPreFloatZone(const QString& windowId, const QStringList& zoneIds);
+    void addPreFloatScreen(const QString& windowId, const QString& screenId);
 
     const QHash<QString, QStringList>& preFloatZoneAssignments() const
     {
@@ -130,8 +132,6 @@ public:
         m_preFloatScreenAssignments = a;
         Q_EMIT stateChanged();
     }
-
-    // Pre-tile geometry removed — PlacementEngineBase is the single store.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Lifecycle

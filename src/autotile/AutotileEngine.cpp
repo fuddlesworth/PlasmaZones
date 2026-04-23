@@ -1840,6 +1840,7 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     // This must happen before onWindowRemoved because removeWindow() early-returns
     // when the window isn't in m_windowToStateKey (not tracked in any PhosphorTiles::TilingState).
     removeSavedFloatingEntry(windowId);
+    m_autotileFloatedWindows.remove(windowId);
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may

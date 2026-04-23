@@ -81,6 +81,28 @@ void SnapEngine::markWindowReported(const QString& windowId)
     }
 }
 
+int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    for (auto it = m_savedSnapFloatingWindows.begin(); it != m_savedSnapFloatingWindows.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_savedSnapFloatingWindows.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_effectReportedWindows.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    return pruned;
+}
+
 void SnapEngine::setAutotileEngine(AutotileEngine* engine)
 {
     m_autotileEngine = engine;

@@ -340,6 +340,8 @@ public:
         return m_effectReportedWindows;
     }
 
+    int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //

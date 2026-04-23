@@ -3,7 +3,6 @@
 
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 
-#include <QJsonArray>
 #include <QJsonObject>
 #include <QLatin1String>
 
@@ -142,6 +141,39 @@ void PlacementEngineBase::removeUnmanagedGeometry(const QString& windowId)
 {
     m_unmanagedGeometries.remove(windowId);
     m_windowStates.remove(windowId);
+}
+
+void PlacementEngineBase::setUnmanagedGeometries(const QHash<QString, UnmanagedEntry>& geos)
+{
+    m_unmanagedGeometries = geos;
+    for (auto it = geos.constBegin(); it != geos.constEnd(); ++it) {
+        if (!m_windowStates.contains(it.key())) {
+            m_windowStates[it.key()] = WindowState::EngineOwned;
+        }
+    }
+}
+
+int PlacementEngineBase::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = 0;
+    for (auto it = m_unmanagedGeometries.begin(); it != m_unmanagedGeometries.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            m_windowStates.remove(it.key());
+            it = m_unmanagedGeometries.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_windowStates.begin(); it != m_windowStates.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_windowStates.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    return pruned;
 }
 
 QJsonObject PlacementEngineBase::serializeBaseState() const

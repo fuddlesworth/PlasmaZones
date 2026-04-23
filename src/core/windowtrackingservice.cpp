@@ -4,6 +4,7 @@
 #include "windowtrackingservice.h"
 #include "constants.h"
 #include "interfaces.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
@@ -186,6 +187,10 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeHash(m_windowStickyStates);
     removeSet(m_floatingWindows);
 
+    if (m_snapEngine) {
+        wtsCleaned += m_snapEngine->pruneStaleWindows(aliveWindowIds);
+    }
+
     if (pruned > 0 || wtsCleaned > 0) {
         markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);
     }
@@ -301,10 +306,6 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     scheduleSaveState();
 }
 
-// markAutotileFloated, clearAutotileFloated, isAutotileFloated moved to AutotileEngine.
-
-// saveSnapFloating, restoreSnapFloating, clearSavedSnapFloating moved to SnapEngine.
-
 QStringList WindowTrackingService::floatingWindows() const
 {
     return m_floatingWindows.values();
@@ -312,8 +313,7 @@ QStringList WindowTrackingService::floatingWindows() const
 
 void WindowTrackingService::unsnapForFloat(const QString& windowId)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState->isWindowSnapped(windowId)) {
+    if (!m_snapState || !m_snapState->isWindowSnapped(windowId)) {
         return;
     }
 
@@ -330,17 +330,9 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     // close+reopen cycle where the windowId changes but the appId persists.
     QString appId = currentAppIdFor(windowId);
     if (appId != windowId && !appId.isEmpty()) {
-        m_snapState->setPreFloatZoneAssignments([&] {
-            auto map = m_snapState->preFloatZoneAssignments();
-            map[appId] = zoneIds;
-            return map;
-        }());
+        m_snapState->addPreFloatZone(appId, zoneIds);
         if (!screenId.isEmpty()) {
-            m_snapState->setPreFloatScreenAssignments([&] {
-                auto map = m_snapState->preFloatScreenAssignments();
-                map[appId] = screenId;
-                return map;
-            }());
+            m_snapState->addPreFloatScreen(appId, screenId);
         }
     }
     qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
@@ -355,7 +347,9 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
 {
-    Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return {};
+    }
     // Try SnapState with full windowId first (runtime)
     QString zone = m_snapState->preFloatZone(windowId);
     if (!zone.isEmpty()) {
@@ -371,7 +365,9 @@ QString WindowTrackingService::preFloatZone(const QString& windowId) const
 
 QStringList WindowTrackingService::preFloatZones(const QString& windowId) const
 {
-    Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return {};
+    }
     // Try SnapState with full windowId first (runtime)
     QStringList zones = m_snapState->preFloatZones(windowId);
     if (!zones.isEmpty()) {
@@ -387,7 +383,9 @@ QStringList WindowTrackingService::preFloatZones(const QString& windowId) const
 
 QString WindowTrackingService::preFloatScreen(const QString& windowId) const
 {
-    Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return {};
+    }
     // Try SnapState with full windowId first (runtime)
     QString screen = m_snapState->preFloatScreen(windowId);
     if (!screen.isEmpty()) {
@@ -403,16 +401,17 @@ QString WindowTrackingService::preFloatScreen(const QString& windowId) const
 
 void WindowTrackingService::clearPreFloatZoneForWindow(const QString& windowId)
 {
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || !m_snapState) {
         return;
     }
-    Q_ASSERT(m_snapState);
     m_snapState->clearPreFloatZone(windowId);
 }
 
 void WindowTrackingService::clearPreFloatZone(const QString& windowId)
 {
-    Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     // Remove by full window ID (runtime entries)
     m_snapState->clearPreFloatZone(windowId);
     // Also remove by app ID (session-restored entries)
@@ -530,13 +529,19 @@ void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)
 
 const QHash<QString, QStringList>& WindowTrackingService::preFloatZoneAssignments() const
 {
-    Q_ASSERT(m_snapState);
+    static const QHash<QString, QStringList> empty;
+    if (!m_snapState) {
+        return empty;
+    }
     return m_snapState->preFloatZoneAssignments();
 }
 
 const QHash<QString, QString>& WindowTrackingService::preFloatScreenAssignments() const
 {
-    Q_ASSERT(m_snapState);
+    static const QHash<QString, QString> empty;
+    if (!m_snapState) {
+        return empty;
+    }
     return m_snapState->preFloatScreenAssignments();
 }
 

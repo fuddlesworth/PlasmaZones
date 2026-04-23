@@ -601,9 +601,6 @@ public:
      */
     const QHash<QString, int>& desktopAssignments() const;
 
-    // preTileGeometries() removed — PlacementEngineBase is the single store.
-    // Persistence reads from the engine's unmanagedGeometries() map.
-
     using PendingRestore = PlasmaZones::PendingRestore;
     using ResnapEntry = PlasmaZones::ResnapEntry;
 
@@ -642,9 +639,6 @@ public:
     {
         m_pendingRestoreQueues = queues;
     }
-
-    // setPreTileGeometries() removed — PlacementEngineBase is the single store.
-    // Load uses the engine's setUnmanagedGeometries().
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
@@ -844,10 +838,6 @@ private:
     WindowRegistry* m_windowRegistry = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     PhosphorEngineApi::PlacementEngineBase* m_snapEngine = nullptr;
-
-    // m_preTileGeometries removed — PlacementEngineBase is the single store
-    // for unmanaged (pre-tile) geometry. Engines own the data; WTS provides
-    // validation utilities and delegates persistence to the adaptor layer.
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence

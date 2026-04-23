@@ -85,8 +85,6 @@ QJsonObject SnapState::toJson() const
     }
     obj[QLatin1String("floatingWindows")] = floating;
 
-    // preTileGeometries removed — PlacementEngineBase is the single store.
-
     QJsonObject preFloat;
     for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
         QJsonArray arr;
@@ -310,7 +308,17 @@ void SnapState::clearPreFloatZone(const QString& windowId)
     m_preFloatScreenAssignments.remove(windowId);
 }
 
-// Pre-tile geometry removed — PlacementEngineBase is the single store.
+void SnapState::addPreFloatZone(const QString& windowId, const QStringList& zoneIds)
+{
+    m_preFloatZoneAssignments[windowId] = zoneIds;
+    Q_EMIT stateChanged();
+}
+
+void SnapState::addPreFloatScreen(const QString& windowId, const QString& screenId)
+{
+    m_preFloatScreenAssignments[windowId] = screenId;
+    Q_EMIT stateChanged();
+}
 
 // ── Window Lifecycle ────────────────────────────────────────────────────────
 
@@ -577,8 +585,6 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
             state->m_floatingWindows.insert(wId);
         }
     }
-
-    // preTileGeometries deserialization removed — PlacementEngineBase is the single store.
 
     const QJsonObject preFloat = json.value(QLatin1String("preFloatZones")).toObject();
     for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
