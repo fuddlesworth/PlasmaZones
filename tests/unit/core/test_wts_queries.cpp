@@ -139,9 +139,8 @@ private Q_SLOTS:
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
-        m_snapState = new PhosphorZones::SnapState(QString(), m_engine);
-        m_engine->setSnapState(m_snapState);
-        m_service->setSnapState(m_snapState);
+        m_service->setSnapState(m_engine->snapState());
+        m_service->setSnapEngine(m_engine);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
@@ -158,7 +157,6 @@ private Q_SLOTS:
         m_service->setSnapState(nullptr);
         delete m_engine;
         m_engine = nullptr;
-        m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -314,18 +312,12 @@ private Q_SLOTS:
 
     void testPreSnapGeometry_stableIdFallback()
     {
-        // Pre-snap geometry keyed by appId should be found when looking up by full windowId
         QString appId = QStringLiteral("dolphin");
         QString windowId = QStringLiteral("dolphin|a1b2c3d4-0000-0000-0000-000088888888");
 
-        QHash<QString, WindowTrackingService::PreTileGeometry> geos;
-        geos[appId] = {QRect(50, 100, 640, 480), QString()};
-        m_service->setPreTileGeometries(geos);
-
-        QVERIFY(m_service->hasPreTileGeometry(windowId));
-        auto geo = m_service->preTileGeometry(windowId);
-        QVERIFY(geo.has_value());
-        QCOMPARE(geo->width(), 640);
+        m_engine->storeUnmanagedGeometry(appId, QRect(50, 100, 640, 480), QString());
+        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
+        QCOMPARE(m_engine->unmanagedGeometry(appId).width(), 640);
     }
 
 private:
@@ -335,7 +327,6 @@ private:
     StubZoneDetectorQueries* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

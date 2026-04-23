@@ -72,6 +72,13 @@ target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus pla
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — PlacementEngineBase Tests (LGPL shared library FSM + serialization)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_placement_engine_base core/test_placement_engine_base.cpp)
+target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngineApi)
+add_test(NAME test_placement_engine_base COMMAND test_placement_engine_base)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_tiling_algo_masterstack autotile/test_tiling_algo_masterstack.cpp)

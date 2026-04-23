@@ -1,19 +1,18 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorEngineApi — Unified placement engine contracts.
+# PhosphorEngineApi — Unified placement engine contracts + base class.
 #
-# Header-only INTERFACE library defining IPlacementEngine, IPlacementState,
-# and NavigationContext.  Both phosphor-zones (snap) and phosphor-tiles
-# (autotile) implement these interfaces so daemons and compositor plugins
-# dispatch all window lifecycle and navigation through a single polymorphic
-# call — zero mode branches.
+# Shared library providing IPlacementEngine, IPlacementState,
+# NavigationContext, and PlacementEngineBase. Both phosphor-zones (snap)
+# and phosphor-tiles (autotile) inherit PlacementEngineBase so daemons
+# and compositor plugins get universal window-state mechanics for free.
 #
-# Depends on Qt6::Core (QString, QStringList, QRect, QJsonObject).
+# Depends on Qt6::Core (QString, QStringList, QRect, QJsonObject, QObject).
 
 cmake_minimum_required(VERSION 3.16)
 
-set(PHOSPHORENGINEAPI_VERSION "0.1.0")
+set(PHOSPHORENGINEAPI_VERSION "0.2.0")
 
 if(NOT PROJECT_VERSION)
     project(PhosphorEngineApi VERSION ${PHOSPHORENGINEAPI_VERSION} LANGUAGES CXX)
@@ -21,23 +20,36 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
+include(GenerateExportHeader)
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# PhosphorEngineApi Library (INTERFACE — header-only)
+# PhosphorEngineApi Library (SHARED)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-add_library(PhosphorEngineApi INTERFACE)
+set(CMAKE_AUTOMOC ON)
+
+add_library(PhosphorEngineApi SHARED
+    include/PhosphorEngineApi/PlacementEngineBase.h
+    src/PlacementEngineBase.cpp
+)
 add_library(PhosphorEngineApi::PhosphorEngineApi ALIAS PhosphorEngineApi)
 
+generate_export_header(PhosphorEngineApi
+    EXPORT_FILE_NAME phosphorengineapi_export.h
+    EXPORT_MACRO_NAME PHOSPHORENGINEAPI_EXPORT
+)
+
 target_include_directories(PhosphorEngineApi
-    INTERFACE
+    PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
 )
 
-target_compile_features(PhosphorEngineApi INTERFACE cxx_std_20)
+target_compile_features(PhosphorEngineApi PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorEngineApi
-    INTERFACE
+    PUBLIC
         Qt6::Core
 )
 
@@ -53,10 +65,15 @@ endif()
 
 install(TARGETS PhosphorEngineApi
     EXPORT PhosphorEngineApiTargets
+    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
 install(DIRECTORY include/PhosphorEngineApi
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/phosphorengineapi_export.h"
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorEngineApi
 )
 
 install(EXPORT PhosphorEngineApiTargets

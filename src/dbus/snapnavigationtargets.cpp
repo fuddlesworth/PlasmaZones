@@ -258,7 +258,7 @@ RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QStr
     }
 
     int x = 0, y = 0, w = 0, h = 0;
-    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     bool found = geo.has_value();
     if (found) {
         x = geo->x();

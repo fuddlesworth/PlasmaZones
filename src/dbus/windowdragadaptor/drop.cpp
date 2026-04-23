@@ -3,6 +3,7 @@
 
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -281,7 +282,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // toggle path passes screenId to validatedPreTileGeometry; without it, coordinates
         // captured on another screen may fail isGeometryOnScreen and not restore).
         if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
-            auto geo = m_windowTracking->service()->validatedPreTileGeometry(windowId, releaseScreenId);
+            auto* wts = m_windowTracking->service();
+            auto geo = wts->validatedUnmanagedGeometry(windowId, releaseScreenId);
             // Require strictly-positive dimensions: a degenerate stored
             // rect would produce a RestoreSize outcome that validates to
             // "requires non-zero size" and gets dropped effect-side, so
@@ -291,10 +293,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 snapHeight = geo->height();
                 shouldApplyGeometry = true;
                 restoreSizeOnlyOut = true;
-                // Only clear pre-tile geometry after successful restore.
-                // If not cleared, it remains available for a subsequent float
-                // toggle (applyGeometryForFloat) if the user re-floats later.
-                m_windowTracking->clearPreTileGeometry(windowId);
+                // Only clear unmanaged geometry after successful restore.
+                if (auto* engine = wts->snapEngine()) {
+                    engine->clearUnmanagedGeometry(windowId);
+                }
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
             } else {
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: no valid pre-tile geometry for" << windowId;

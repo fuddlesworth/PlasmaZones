@@ -6,7 +6,7 @@
 #include "plasmazones_export.h"
 #include "core/constants.h"
 #include "core/types.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <QHash>
 #include <QJsonArray>
 #include <QObject>
@@ -116,7 +116,7 @@ namespace PlasmaZones {
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
  */
-class PLASMAZONES_EXPORT AutotileEngine : public QObject, public PhosphorEngineApi::IPlacementEngine
+class PLASMAZONES_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEngineBase
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -1093,12 +1093,29 @@ Q_SIGNALS:
      */
     void windowsReleasedFromTiling(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
+public:
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile-float origin tracking (ephemeral, not persisted)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void markAutotileFloated(const QString& windowId);
+    void clearAutotileFloated(const QString& windowId);
+    bool isAutotileFloated(const QString& windowId) const;
+
+    int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
+
 private Q_SLOTS:
     void onWindowAdded(const QString& windowId);
     void onWindowRemoved(const QString& windowId);
     void onWindowFocused(const QString& windowId);
     void onScreenGeometryChanged(const QString& screenId);
     void onLayoutChanged(PhosphorZones::Layout* layout);
+
+protected:
+    void onWindowClaimed(const QString& windowId) override;
+    void onWindowReleased(const QString& windowId) override;
+    void onWindowFloated(const QString& windowId) override;
+    void onWindowUnfloated(const QString& windowId) override;
 
 private:
     void connectSignals();
@@ -1322,6 +1339,8 @@ private:
      * @return PhosphorTiles::TilingState pointer or nullptr if window not tracked/screen invalid
      */
     PhosphorTiles::TilingState* stateForWindow(const QString& windowId, QString* outScreenId = nullptr);
+
+    QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;

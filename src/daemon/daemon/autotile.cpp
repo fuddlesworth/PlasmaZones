@@ -254,8 +254,8 @@ void Daemon::handleAutotileDisabled()
     }
     // Clear saved snap-floats — we're fully back in snap mode, so the
     // save/restore mechanism is no longer needed until next autotile entry.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->service()->clearSavedSnapFloating();
+    if (m_snapEngine) {
+        m_snapEngine->clearSavedSnapFloating();
     }
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleasedFromTiling clears floating state before windows are resnapped.
@@ -405,7 +405,8 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
             // window to stale coordinates left behind by a ghost instance.
             // Leaving the window at its current tiled position is the least
             // surprising outcome.
-            auto geo = wts->validatedPreTileGeometryExact(windowId, screenId);
+            // Strict per-instance lookup: no appId fallback.
+            auto geo = wts->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
             if (geo) {
                 ZoneAssignmentEntry entry;
                 entry.windowId = windowId;
@@ -431,7 +432,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
-        if (wts->isAutotileFloated(fid)) {
+        if (m_autotileEngine->isAutotileFloated(fid)) {
             continue;
         }
         // When scoped to a screen, only save windows on that screen.
@@ -443,7 +444,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
                 continue;
             }
         }
-        wts->saveSnapFloating(fid);
+        m_snapEngine->saveSnapFloating(fid);
         qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
     }
 }

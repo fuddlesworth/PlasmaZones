@@ -5,7 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "core/types.h"
-#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QPointer>
@@ -56,7 +56,7 @@ class ZoneDetectionAdaptor;
  *
  * @see PhosphorEngineApi::IPlacementEngine, AutotileEngine, WindowTrackingService
  */
-class PLASMAZONES_EXPORT SnapEngine : public QObject, public PhosphorEngineApi::IPlacementEngine
+class PLASMAZONES_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineBase
 {
     Q_OBJECT
 
@@ -178,14 +178,10 @@ public:
      */
     void setAutotileEngine(AutotileEngine* engine);
 
-    /**
-     * @brief Set the SnapState instance for state ownership.
-     *
-     * SnapEngine owns all snap state reads/writes and commit orchestration
-     * through this object. Must be set after construction and before any
-     * lifecycle or navigation method is called.
-     */
-    void setSnapState(PhosphorZones::SnapState* state);
+    PhosphorZones::SnapState* snapState() const
+    {
+        return m_snapState;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone detection adaptor (for daemon-driven navigation)
@@ -327,6 +323,26 @@ public:
     QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Saved snap-floating windows (mode-transition bookkeeping)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void saveSnapFloating(const QString& windowId);
+    bool restoreSnapFloating(const QString& windowId);
+    void clearSavedSnapFloating();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Effect-reported windows (runtime flag — not persisted)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void markWindowReported(const QString& windowId);
+    const QSet<QString>& effectReportedWindows() const
+    {
+        return m_effectReportedWindows;
+    }
+
+    int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //
     // Returns the single SnapState wired by Daemon::init(). Currently a
@@ -418,6 +434,12 @@ Q_SIGNALS:
     /// via WTA.
     void activateWindowRequested(const QString& windowId);
 
+protected:
+    void onWindowClaimed(const QString& windowId) override;
+    void onWindowReleased(const QString& windowId) override;
+    void onWindowFloated(const QString& windowId) override;
+    void onWindowUnfloated(const QString& windowId) override;
+
 private:
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         SnapIntent intent);
@@ -443,6 +465,8 @@ private:
     // by the fact that SnapEngine has to exist before a resolver that
     // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
+    QSet<QString> m_savedSnapFloatingWindows;
+    QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (snapengine/float.cpp)

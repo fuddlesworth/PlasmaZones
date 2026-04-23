@@ -59,13 +59,6 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 // WTS signals to its own D-Bus signals at connection wiring time.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::markWindowReported(const QString& windowId)
-{
-    if (!windowId.isEmpty()) {
-        m_effectReportedWindows.insert(windowId);
-    }
-}
-
 void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
     Q_ASSERT(m_snapState);

@@ -209,4 +209,22 @@ struct PLASMAZONES_EXPORT ZoneAssignmentEntry
     QString targetScreenId{};
 };
 
+/**
+ * @brief Pending restore entry for a single window instance
+ *
+ * Stores all data needed to restore a window to its previous zone.
+ * Multiple entries per appId support multi-instance apps (e.g. 3 Konsole windows).
+ *
+ * Produced by WindowTrackingService::windowClosed() (cross-mode), consumed by
+ * SnapEngine paths via WindowTrackingService::consumePendingAssignment().
+ */
+struct PLASMAZONES_EXPORT PendingRestore
+{
+    QStringList zoneIds;
+    QString screenId;
+    int virtualDesktop = 0;
+    QString layoutId;
+    QList<int> zoneNumbers;
+};
+
 } // namespace PlasmaZones
