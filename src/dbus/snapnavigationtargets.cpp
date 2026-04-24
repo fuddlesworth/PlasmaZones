@@ -11,7 +11,6 @@
 #include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
 
 #include <QRect>
@@ -98,7 +97,7 @@ bool checkDirection(const QString& direction)
 // Construction
 // ═══════════════════════════════════════════════════════════════════════════
 
-SnapNavigationTargetResolver::SnapNavigationTargetResolver(WindowTrackingService* service,
+SnapNavigationTargetResolver::SnapNavigationTargetResolver(PhosphorEngineApi::IWindowTrackingService* service,
                                                            PhosphorZones::LayoutRegistry* layoutManager,
                                                            ZoneDetectionAdaptor* zoneDetector, FeedbackFn feedback)
     : m_service(service)

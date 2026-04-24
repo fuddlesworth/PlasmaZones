@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include "core/constants.h"
 #include "core/types.h"
+#include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <QHash>
 #include <QJsonArray>
@@ -75,7 +76,6 @@ class ISettings;
 class Settings;
 class SettingsBridge;
 class WindowRegistry;
-class WindowTrackingService;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
@@ -106,7 +106,8 @@ class PLASMAZONES_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEng
     friend class SettingsBridge;
 
 public:
-    explicit AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
+    explicit AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
+                            PhosphorEngineApi::IWindowTrackingService* windowTracker,
                             Phosphor::Screens::ScreenManager* screenManager,
                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileEngine() override;
@@ -1062,6 +1063,7 @@ public:
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
 private Q_SLOTS:
+    void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);
     void onWindowRemoved(const QString& windowId);
     void onWindowFocused(const QString& windowId);
@@ -1300,7 +1302,7 @@ private:
     QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    WindowTrackingService* m_windowTracker = nullptr;
+    PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     WindowRegistry* m_windowRegistry = nullptr; ///< Shared registry for class lookups; not owned
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine

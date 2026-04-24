@@ -33,9 +33,7 @@
 #include "../../core/logging.h"
 #include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
-#include "../../core/virtualdesktopmanager.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../core/windowtrackingservice.h"
 #include "../../dbus/snapnavigationtargets.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -57,8 +55,8 @@ namespace {
 ///      rather than the one KWin happens to think the window is on.
 ///   2. An explicit @p preferredScreen from the NavigationContext.
 ///   3. The WTA cursor / last-active screen shadows.
-QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& windowId, WindowTrackingService* service,
-                         const QString& preferredScreen = QString())
+QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& windowId,
+                         PhosphorEngineApi::IWindowTrackingService* service, const QString& preferredScreen = QString())
 {
     if (service && !windowId.isEmpty()) {
         const QString zoneId = service->zoneForWindow(windowId);

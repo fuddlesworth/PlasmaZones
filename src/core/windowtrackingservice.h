@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "types.h"
+#include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QString>
@@ -67,7 +68,7 @@ class WindowRegistry;
  * - Maintainable: Clear separation of concerns
  * - Debuggable: Easier to trace logic flow
  */
-class PLASMAZONES_EXPORT WindowTrackingService : public QObject
+class PLASMAZONES_EXPORT WindowTrackingService : public QObject, public PhosphorEngineApi::IWindowTrackingService
 {
     Q_OBJECT
 
@@ -76,6 +77,11 @@ public:
                                    PhosphorZones::IZoneDetector* zoneDetector,
                                    Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                    VirtualDesktopManager* vdm, QObject* parent = nullptr);
+
+    QObject* asQObject() override
+    {
+        return this;
+    }
     ~WindowTrackingService() override;
 
     /**
@@ -124,7 +130,7 @@ public:
         return m_windowRegistry;
     }
 
-    Phosphor::Screens::ScreenManager* screenManager() const
+    Phosphor::Screens::ScreenManager* screenManager() const override
     {
         return m_screenManager;
     }
@@ -141,7 +147,7 @@ public:
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
     void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
-                            int virtualDesktop);
+                            int virtualDesktop) override;
 
     /**
      * @brief Assign a window to multiple zones (multi-zone snap)
@@ -151,34 +157,34 @@ public:
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
     void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                             int virtualDesktop);
+                             int virtualDesktop) override;
 
     /**
      * @brief Remove window from its assigned zone
      * @param windowId Full window ID
      */
-    void unassignWindow(const QString& windowId);
+    void unassignWindow(const QString& windowId) override;
 
     /**
      * @brief Get the primary zone ID for a window
      * @param windowId Full window ID
      * @return PhosphorZones::Zone ID or empty string if not assigned
      */
-    QString zoneForWindow(const QString& windowId) const;
+    QString zoneForWindow(const QString& windowId) const override;
 
     /**
      * @brief Get all zone IDs for a window (multi-zone support)
      * @param windowId Full window ID
      * @return List of zone IDs (empty if not assigned)
      */
-    QStringList zonesForWindow(const QString& windowId) const;
+    QStringList zonesForWindow(const QString& windowId) const override;
 
     /**
      * @brief Get all windows in a specific zone
      * @param zoneId PhosphorZones::Zone UUID string
      * @return List of window IDs
      */
-    QStringList windowsInZone(const QString& zoneId) const;
+    QStringList windowsInZone(const QString& zoneId) const override;
 
     /**
      * @brief Get all snapped windows
@@ -193,7 +199,7 @@ public:
     /**
      * @brief Check if a window is assigned to any zone
      */
-    bool isWindowSnapped(const QString& windowId) const;
+    bool isWindowSnapped(const QString& windowId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Geometry Validation Utility
@@ -228,7 +234,7 @@ public:
      * @param exactOnly       If true, skip the appId fallback (strict per-instance lookup)
      */
     std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                    bool exactOnly = false) const;
+                                                    bool exactOnly = false) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -237,14 +243,14 @@ public:
     /**
      * @brief Check if a window is floating (excluded from snapping)
      */
-    bool isWindowFloating(const QString& windowId) const;
+    bool isWindowFloating(const QString& windowId) const override;
 
     /**
      * @brief Set window floating state
      * @param windowId Full window ID
      * @param floating true to float, false to unfloat
      */
-    void setWindowFloating(const QString& windowId, bool floating);
+    void setWindowFloating(const QString& windowId, bool floating) override;
 
     /**
      * @brief Get all floating window IDs
@@ -255,7 +261,7 @@ public:
      * @brief Unsnap window for floating (saves zone for later restore)
      * @param windowId Full window ID
      */
-    void unsnapForFloat(const QString& windowId);
+    void unsnapForFloat(const QString& windowId) override;
 
     /**
      * @brief Get primary zone to restore to when unfloating
@@ -269,14 +275,14 @@ public:
      * @param windowId Full window ID
      * @return List of zone IDs (empty if none)
      */
-    QStringList preFloatZones(const QString& windowId) const;
+    QStringList preFloatZones(const QString& windowId) const override;
 
     /**
      * @brief Get the screen name where the window was snapped before floating
      * @param windowId Full window ID
      * @return Screen name or empty string if unknown
      */
-    QString preFloatScreen(const QString& windowId) const;
+    QString preFloatScreen(const QString& windowId) const override;
 
     /**
      * @brief Clear pre-float zone after restore (both windowId and appId keys)
@@ -300,7 +306,7 @@ public:
      * @param windowId Window identifier
      * @return true if the window was floating (caller should emit windowFloatingChanged)
      */
-    bool clearFloatingForSnap(const QString& windowId);
+    bool clearFloatingForSnap(const QString& windowId) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Sticky Window Handling
@@ -314,7 +320,7 @@ public:
     /**
      * @brief Check if window is sticky
      */
-    bool isWindowSticky(const QString& windowId) const;
+    bool isWindowSticky(const QString& windowId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Auto-Snap Logic
@@ -325,7 +331,7 @@ public:
      * @param windowId Full window ID to extract class from
      * @param wasUserInitiated true if user-initiated snap
      */
-    void recordSnapIntent(const QString& windowId, bool wasUserInitiated);
+    void recordSnapIntent(const QString& windowId, bool wasUserInitiated) override;
 
     /**
      * @brief Get last used zone ID
@@ -354,7 +360,7 @@ public:
      * @brief Update last used zone tracking
      */
     void updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
-                            int virtualDesktop);
+                            int virtualDesktop) override;
 
     /**
      * @brief Mark a window as auto-snapped
@@ -379,7 +385,7 @@ public:
      * @param windowId Full window ID
      * @return true if the window had the auto-snapped flag
      */
-    bool clearAutoSnapped(const QString& windowId);
+    bool clearAutoSnapped(const QString& windowId) override;
 
     /**
      * @brief Pop the oldest pending restore entry for this window's appId.
@@ -410,7 +416,7 @@ public:
      * @return true if an entry was popped, false if the queue was empty.
      *         Callers that don't care about the result may ignore it.
      */
-    bool consumePendingAssignment(const QString& windowId);
+    bool consumePendingAssignment(const QString& windowId) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
@@ -421,7 +427,7 @@ public:
      * @param screenId Screen to find layout for (empty = active layout)
      * @return PhosphorZones::Zone ID or empty string if all occupied
      */
-    QString findEmptyZone(const QString& screenId = QString()) const;
+    QString findEmptyZone(const QString& screenId = QString()) const override;
 
     /**
      * @brief Get typed list of all empty zones for Snap Assist continuation
@@ -436,7 +442,7 @@ public:
      * @param screenId Screen identifier (empty = primary)
      * @return PhosphorZones::Zone geometry in pixels, or invalid QRect if not found
      */
-    QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const;
+    QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const override;
 
     /**
      * @brief Get combined geometry for multiple zones on a specific screen
@@ -587,12 +593,12 @@ public:
      * @brief Get all zone assignments for persistence
      * @return Map of windowId -> zoneIds (list of zone UUIDs)
      */
-    const QHash<QString, QStringList>& zoneAssignments() const;
+    const QHash<QString, QStringList>& zoneAssignments() const override;
 
     /**
      * @brief Get all screen assignments for persistence
      */
-    const QHash<QString, QString>& screenAssignments() const;
+    const QHash<QString, QString>& screenAssignments() const override;
 
     /**
      * @brief Get all desktop assignments for persistence
@@ -605,12 +611,12 @@ public:
     /**
      * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)
      */
-    const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const
+    const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const override
     {
         return m_pendingRestoreQueues;
     }
 
-    QVector<ResnapEntry> takeResnapBuffer()
+    QVector<ResnapEntry> takeResnapBuffer() override
     {
         return std::exchange(m_resnapBuffer, {});
     }
@@ -783,13 +789,14 @@ private:
 public:
     /// Resolve a screen ID to an effective screen ID, falling back to the physical
     /// screen ID if a virtual screen no longer exists in the current configuration.
-    QString resolveEffectiveScreenId(const QString& screenId) const;
+    QString resolveEffectiveScreenId(const QString& screenId) const override;
 
     /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
     /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
-    QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
+    QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const override;
 
-    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId, int desktopFilter = 0) const;
+    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,
+                                  int desktopFilter = 0) const override;
 
     /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
     /// when multiple zones share the same number.
@@ -808,7 +815,7 @@ public:
     ///   do not make zones appear occupied — this mirrors the filtering done by
     ///   SnapAssistHandler::buildCandidates() in the KWin effect, keeping the
     ///   "occupied" and "candidate" definitions symmetric.
-    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
+    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const override;
 
     /**
      * @brief Current app class for a windowId, preferring the live registry.
@@ -818,7 +825,7 @@ public:
      * matching against a freshly-renamed window (Electron/CEF) sees the
      * current class.
      */
-    QString currentAppIdFor(const QString& anyWindowId) const;
+    QString currentAppIdFor(const QString& anyWindowId) const override;
 
     /**
      * @brief Canonicalize for read-only callers (no map mutation).

@@ -16,8 +16,6 @@
 #include "core/interfaces.h"
 #include "core/logging.h"
 #include "core/utils.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowtrackingservice.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>

@@ -34,7 +34,6 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/windowregistry.h"
-#include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -60,7 +59,8 @@ T* checkedCast(QObject* obj, const char* context)
 
 } // namespace
 
-AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
+AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
+                               PhosphorEngineApi::IWindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : PlacementEngineBase(parent)
@@ -156,6 +156,23 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 // Signal connections
 // ═══════════════════════════════════════════════════════════════════════════════
 
+void AutotileEngine::onWindowZoneChanged(const QString& windowId, const QString& zoneId)
+{
+    if (m_retiling)
+        return;
+    if (zoneId.isEmpty()) {
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+                continue;
+            }
+            if (it.value() && it.value()->isFloating(windowId)) {
+                return;
+            }
+        }
+        onWindowRemoved(windowId);
+    }
+}
+
 void AutotileEngine::connectSignals()
 {
     // Window tracking signals
@@ -164,35 +181,8 @@ void AutotileEngine::connectSignals()
     // WindowTrackingAdaptor signals. This connection also handles zone changes:
     if (m_windowTracker) {
         // Use windowZoneChanged as a proxy until dedicated signals are added
-        connect(m_windowTracker, &WindowTrackingService::windowZoneChanged, this,
-                [this](const QString& windowId, const QString& zoneId) {
-                    if (m_retiling)
-                        return; // Ignore zone changes during retile
-                    if (zoneId.isEmpty()) {
-                        // Don't remove floating windows — clearing their zone assignment
-                        // (e.g., by an external D-Bus caller or legacy code path) would
-                        // cause onWindowRemoved to drop the window from autotile. Since
-                        // floating windows are still managed by autotile, skip removal.
-                        // Note: windowClosed() calls onWindowRemoved() directly and
-                        // bypasses this guard, so closed floating windows are cleaned up.
-                        // Only check current desktop/activity states — a window
-                        // floating on desktop 1 should not block removal on desktop 2.
-                        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-                            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
-                                continue;
-                            }
-                            if (it.value() && it.value()->isFloating(windowId)) {
-                                return;
-                            }
-                        }
-                        onWindowRemoved(windowId);
-                    }
-                    // Non-empty zoneId for already-tracked windows: no action needed,
-                    // the zone assignment is handled by the retile path.
-                    // Untracked windows (snap-mode zone assignments from SnapEngine)
-                    // are intentionally ignored — autotile windows are always added via
-                    // windowOpened() which stores m_windowToStateKey before onWindowAdded.
-                });
+        connect(m_windowTracker->asQObject(), SIGNAL(windowZoneChanged(QString, QString)), this,
+                SLOT(onWindowZoneChanged(QString, QString)));
     }
 
     // Screen geometry changes

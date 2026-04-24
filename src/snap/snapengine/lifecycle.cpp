@@ -8,8 +8,6 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
 #include "core/utils.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowtrackingservice.h"
 
 namespace PlasmaZones {
 
