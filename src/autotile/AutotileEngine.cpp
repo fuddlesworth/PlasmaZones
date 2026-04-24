@@ -180,9 +180,13 @@ void AutotileEngine::connectSignals()
     // windowOpened(), windowClosed(), windowFocused() - connected by Daemon to
     // WindowTrackingAdaptor signals. This connection also handles zone changes:
     if (m_windowTracker) {
-        // Use windowZoneChanged as a proxy until dedicated signals are added
-        connect(m_windowTracker->asQObject(), SIGNAL(windowZoneChanged(QString, QString)), this,
-                SLOT(onWindowZoneChanged(QString, QString)));
+        // String-based connect is required: m_windowTracker is IWindowTrackingService*
+        // (non-QObject ABC), so PMF syntax is unavailable. The asQObject() escape
+        // hatch is the standard Qt pattern for interface-based signal routing.
+        // Verify the connection succeeds so signal/slot renames are caught at startup.
+        bool ok = connect(m_windowTracker->asQObject(), SIGNAL(windowZoneChanged(QString, QString)), this,
+                          SLOT(onWindowZoneChanged(QString, QString)));
+        Q_ASSERT(ok);
     }
 
     // Screen geometry changes

@@ -83,10 +83,16 @@ inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 } // namespace PerScreenAutotileKey
 
-/**
- * Per-screen snapping override key constants.
- */
 namespace PerScreenSnappingKey {
+
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGap;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapBottom;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapLeft;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapRight;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapTop;
+using PhosphorEngineApi::PerScreenSnappingKey::UsePerSideOuterGap;
+using PhosphorEngineApi::PerScreenSnappingKey::ZonePadding;
+
 inline constexpr const char SnapAssistEnabled[] = "SnapAssistEnabled";
 inline constexpr const char ZoneSelectorEnabled[] = "ZoneSelectorEnabled";
 inline constexpr const char ZoneSelectorTriggerDistance[] = "ZoneSelectorTriggerDistance";
@@ -96,14 +102,6 @@ inline constexpr const char ZoneSelectorSizeMode[] = "ZoneSelectorSizeMode";
 inline constexpr const char ZoneSelectorMaxRows[] = "ZoneSelectorMaxRows";
 inline constexpr const char ZoneSelectorPreviewWidth[] = "ZoneSelectorPreviewWidth";
 inline constexpr const char ZoneSelectorPreviewHeight[] = "ZoneSelectorPreviewHeight";
-// Geometry override keys
-inline constexpr const char ZonePadding[] = "ZonePadding";
-inline constexpr const char OuterGap[] = "OuterGap";
-inline constexpr const char UsePerSideOuterGap[] = "UsePerSideOuterGap";
-inline constexpr const char OuterGapTop[] = "OuterGapTop";
-inline constexpr const char OuterGapBottom[] = "OuterGapBottom";
-inline constexpr const char OuterGapLeft[] = "OuterGapLeft";
-inline constexpr const char OuterGapRight[] = "OuterGapRight";
 } // namespace PerScreenSnappingKey
 
 // ═══════════════════════════════════════════════════════════════════════════════

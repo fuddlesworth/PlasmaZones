@@ -38,6 +38,8 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Screen manager access
+    // Tech debt: returns concrete ScreenManager* — should be an IScreenManager
+    // interface once one exists. Acceptable for now as a stepping stone.
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual Phosphor::Screens::ScreenManager* screenManager() const = 0;
@@ -118,6 +120,8 @@ public:
     virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const = 0;
     virtual QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const = 0;
     virtual QString resolveEffectiveScreenId(const QString& screenId) const = 0;
+    // Tech debt: takes concrete Layout* — should take an opaque layout identifier
+    // once the layout interface is extracted. Acceptable for this extraction phase.
     virtual QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,
                                           int desktopFilter = 0) const = 0;
     virtual QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const = 0;

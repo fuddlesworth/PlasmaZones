@@ -19,6 +19,8 @@ inline constexpr const char OuterGapLeft[] = "OuterGapLeft";
 inline constexpr const char OuterGapRight[] = "OuterGapRight";
 } // namespace PerScreenSnappingKey
 
+// Library-level fallback defaults. The app-level authority is ConfigDefaults (GPL);
+// these must be kept in sync manually since the LGPL library cannot depend on it.
 namespace GeometryDefaults {
 inline constexpr int ZonePadding = 8;
 inline constexpr int OuterGap = 8;

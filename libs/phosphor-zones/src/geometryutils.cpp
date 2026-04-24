@@ -11,17 +11,10 @@
 #include <PhosphorZones/ZoneDefaults.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QScreen>
 #include <QVariantMap>
 
-#include <algorithm>
-#include <cmath>
-
 using PhosphorEngineApi::IGeometrySettings;
-using PhosphorEngineApi::ZoneAssignmentEntry;
 namespace GeometryDefaults = PhosphorEngineApi::GeometryDefaults;
 namespace PerScreenSnappingKey = PhosphorEngineApi::PerScreenSnappingKey;
 
@@ -53,7 +46,7 @@ ScreenGeometries resolveScreenGeometries(Phosphor::Screens::ScreenManager* mgr, 
     return {mgr->screenGeometry(screenId), mgr->screenAvailableGeometry(screenId)};
 }
 
-QRectF calculateZoneGeometry(PhosphorZones::Zone* zone, QScreen* screen)
+QRectF calculateZoneGeometry(Zone* zone, QScreen* screen)
 {
     if (!zone || !screen) {
         return QRectF();
@@ -61,8 +54,7 @@ QRectF calculateZoneGeometry(PhosphorZones::Zone* zone, QScreen* screen)
     return zone->calculateAbsoluteGeometry(QRectF(screen->geometry()));
 }
 
-QRectF calculateZoneGeometryInAvailableArea(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
-                                            QScreen* screen)
+QRectF calculateZoneGeometryInAvailableArea(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen)
 {
     if (!zone || !screen) {
         return QRectF();
@@ -79,7 +71,7 @@ struct EdgeBoundaries
     bool bottom = false;
 };
 
-EdgeBoundaries detectEdgeBoundaries(PhosphorZones::Zone* zone, const QRectF& screenGeom)
+EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
 {
     EdgeBoundaries edges;
     if (zone->isFixedGeometry()) {
@@ -100,8 +92,8 @@ EdgeBoundaries detectEdgeBoundaries(PhosphorZones::Zone* zone, const QRectF& scr
     return edges;
 }
 
-QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, PhosphorZones::Zone* zone, const QRectF& referenceGeom,
-                               int innerGap, const ::PhosphorLayout::EdgeGaps& outerGaps,
+QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF& referenceGeom, int innerGap,
+                               const ::PhosphorLayout::EdgeGaps& outerGaps,
                                const Phosphor::Screens::VirtualScreenDef::PhysicalEdges& physEdges = {true, true, true,
                                                                                                       true})
 {
@@ -121,23 +113,8 @@ QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, PhosphorZones::Zone* zone
 }
 } // anonymous namespace
 
-QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen)
-{
-    if (!screen) {
-        return geometry;
-    }
-    const QRectF screenGeom = screen->geometry();
-    return QRectF(geometry.x() - screenGeom.x(), geometry.y() - screenGeom.y(), geometry.width(), geometry.height());
-}
-
-QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry)
-{
-    return QRectF(geometry.x() - overlayGeometry.x(), geometry.y() - overlayGeometry.y(), geometry.width(),
-                  geometry.height());
-}
-
-QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone, QScreen* screen,
-                               int innerGap, const ::PhosphorLayout::EdgeGaps& outerGaps, bool useAvailableGeometry,
+QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen, int innerGap,
+                               const ::PhosphorLayout::EdgeGaps& outerGaps, bool useAvailableGeometry,
                                const QString& screenId)
 {
     if (!zone || !screen) {
@@ -160,8 +137,8 @@ QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZo
     return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps, physEdges);
 }
 
-QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
-                               const QRect& screenGeometry, const QRect& availableGeometry, int innerGap,
+QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, Zone* zone, const QRect& screenGeometry,
+                               const QRect& availableGeometry, int innerGap,
                                const ::PhosphorLayout::EdgeGaps& outerGaps, bool useAvailableGeometry,
                                const QString& screenId)
 {
@@ -177,8 +154,8 @@ QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZo
     return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps);
 }
 
-QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone, QScreen* screen,
-                                 const QString& screenId, PhosphorZones::Layout* layout, IGeometrySettings* settings)
+QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen,
+                                 const QString& screenId, Layout* layout, IGeometrySettings* settings)
 {
     if (!zone) {
         return QRectF();
@@ -200,14 +177,14 @@ QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, Phosphor
     return QRectF();
 }
 
-QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone, QScreen* screen,
-                               const QString& screenId, PhosphorZones::Layout* layout, IGeometrySettings* settings)
+QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen,
+                               const QString& screenId, Layout* layout, IGeometrySettings* settings)
 {
     QRectF geoF = getZoneGeometryForScreenF(mgr, zone, screen, screenId, layout, settings);
-    return geoF.isValid() ? snapToRect(geoF) : QRect();
+    return geoF.isValid() ? PhosphorEngineApi::GeometryUtils::snapToRect(geoF) : QRect();
 }
 
-int getEffectiveZonePadding(PhosphorZones::Layout* layout, IGeometrySettings* settings, const QString& screenId)
+int getEffectiveZonePadding(Layout* layout, IGeometrySettings* settings, const QString& screenId)
 {
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
@@ -225,17 +202,7 @@ int getEffectiveZonePadding(PhosphorZones::Layout* layout, IGeometrySettings* se
     return GeometryDefaults::ZonePadding;
 }
 
-QRect snapToRect(const QRectF& rf)
-{
-    const int left = qRound(rf.x());
-    const int top = qRound(rf.y());
-    const int right = qRound(rf.x() + rf.width());
-    const int bottom = qRound(rf.y() + rf.height());
-    return QRect(left, top, std::max(0, right - left), std::max(0, bottom - top));
-}
-
-::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, IGeometrySettings* settings,
-                                                 const QString& screenId)
+::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(Layout* layout, IGeometrySettings* settings, const QString& screenId)
 {
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
@@ -300,7 +267,7 @@ QRect snapToRect(const QRectF& rf)
     return ::PhosphorLayout::EdgeGaps::uniform(GeometryDefaults::OuterGap);
 }
 
-QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen)
+QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, Layout* layout, QScreen* screen)
 {
     if (!screen) {
         return QRectF();
@@ -311,8 +278,7 @@ QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZo
     return mgr ? mgr->actualAvailableGeometry(screen) : screen->availableGeometry();
 }
 
-QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
-                               const QString& screenId)
+QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, Layout* layout, const QString& screenId)
 {
     auto [geom, availGeom] = resolveScreenGeometries(mgr, screenId);
     if (geom.isValid()) {
@@ -327,150 +293,16 @@ QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZo
 
 QRectF extractZoneGeometry(const QVariantMap& zone)
 {
-    return QRectF(zone.value(::PhosphorZones::ZoneJsonKeys::X).toDouble(),
-                  zone.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble(),
-                  zone.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble(),
-                  zone.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble());
+    return QRectF(zone.value(ZoneJsonKeys::X).toDouble(), zone.value(ZoneJsonKeys::Y).toDouble(),
+                  zone.value(ZoneJsonKeys::Width).toDouble(), zone.value(ZoneJsonKeys::Height).toDouble());
 }
 
 void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
 {
-    zone[::PhosphorZones::ZoneJsonKeys::X] = rect.x();
-    zone[::PhosphorZones::ZoneJsonKeys::Y] = rect.y();
-    zone[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
-    zone[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
-}
-
-void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold, int innerGap)
-{
-    if (zones.size() != minSizes.size()) {
-        return;
-    }
-    for (int i = 0; i < zones.size(); ++i) {
-        QRect& zone = zones[i];
-        const QSize& minSize = minSizes[i];
-        if (minSize.isEmpty()) {
-            continue;
-        }
-        int needWidth = minSize.width() - zone.width();
-        int needHeight = minSize.height() - zone.height();
-        if (needWidth <= 0 && needHeight <= 0) {
-            continue;
-        }
-        for (int j = 0; j < zones.size(); ++j) {
-            if (i == j)
-                continue;
-            QRect& neighbor = zones[j];
-            bool adjacentH = (std::abs(zone.right() - neighbor.left()) <= gapThreshold
-                              || std::abs(neighbor.right() - zone.left()) <= gapThreshold)
-                && zone.top() < neighbor.bottom() && zone.bottom() > neighbor.top();
-            bool adjacentV = (std::abs(zone.bottom() - neighbor.top()) <= gapThreshold
-                              || std::abs(neighbor.bottom() - zone.top()) <= gapThreshold)
-                && zone.left() < neighbor.right() && zone.right() > neighbor.left();
-
-            if (needWidth > 0 && adjacentH) {
-                int steal = std::min(needWidth, neighbor.width() / 3);
-                if (steal <= 0)
-                    continue;
-                if (zone.right() <= neighbor.left() + gapThreshold) {
-                    zone.setRight(zone.right() + steal);
-                    neighbor.setLeft(neighbor.left() + steal);
-                } else {
-                    zone.setLeft(zone.left() - steal);
-                    neighbor.setRight(neighbor.right() - steal);
-                }
-                needWidth -= steal;
-            }
-            if (needHeight > 0 && adjacentV) {
-                int steal = std::min(needHeight, neighbor.height() / 3);
-                if (steal <= 0)
-                    continue;
-                if (zone.bottom() <= neighbor.top() + gapThreshold) {
-                    zone.setBottom(zone.bottom() + steal);
-                    neighbor.setTop(neighbor.top() + steal);
-                } else {
-                    zone.setTop(zone.top() - steal);
-                    neighbor.setBottom(neighbor.bottom() - steal);
-                }
-                needHeight -= steal;
-            }
-        }
-    }
-    removeZoneOverlaps(zones, minSizes, innerGap);
-}
-
-void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, int innerGap)
-{
-    for (int i = 0; i < zones.size(); ++i) {
-        for (int j = i + 1; j < zones.size(); ++j) {
-            QRect& a = zones[i];
-            QRect& b = zones[j];
-            QRect overlap = a.intersected(b);
-            if (overlap.isEmpty()) {
-                continue;
-            }
-            int surplusA_w = a.width() - (minSizes.size() > i ? minSizes[i].width() : 0);
-            int surplusB_w = b.width() - (minSizes.size() > j ? minSizes[j].width() : 0);
-            int surplusA_h = a.height() - (minSizes.size() > i ? minSizes[i].height() : 0);
-            int surplusB_h = b.height() - (minSizes.size() > j ? minSizes[j].height() : 0);
-
-            if (overlap.width() < overlap.height()) {
-                int mid = overlap.left() + overlap.width() / 2;
-                if (surplusA_w >= surplusB_w) {
-                    a.setRight(mid - innerGap / 2);
-                    b.setLeft(mid + (innerGap + 1) / 2);
-                } else {
-                    b.setRight(mid - innerGap / 2);
-                    a.setLeft(mid + (innerGap + 1) / 2);
-                }
-            } else {
-                int mid = overlap.top() + overlap.height() / 2;
-                if (surplusA_h >= surplusB_h) {
-                    a.setBottom(mid - innerGap / 2);
-                    b.setTop(mid + (innerGap + 1) / 2);
-                } else {
-                    b.setBottom(mid - innerGap / 2);
-                    a.setTop(mid + (innerGap + 1) / 2);
-                }
-            }
-        }
-    }
-}
-
-QString rectToJson(const QRect& rect)
-{
-    QJsonObject obj;
-    obj[::PhosphorZones::ZoneJsonKeys::X] = rect.x();
-    obj[::PhosphorZones::ZoneJsonKeys::Y] = rect.y();
-    obj[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
-    obj[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
-    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-}
-
-QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
-{
-    if (entries.isEmpty()) {
-        return QStringLiteral("[]");
-    }
-    QJsonArray array;
-    for (const ZoneAssignmentEntry& entry : entries) {
-        QJsonObject obj;
-        obj[QLatin1String("windowId")] = entry.windowId;
-        obj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
-        obj[QLatin1String("targetZoneId")] = entry.targetZoneId;
-        if (!entry.targetZoneIds.isEmpty()) {
-            QJsonArray zoneIdsArr;
-            for (const QString& zid : entry.targetZoneIds)
-                zoneIdsArr.append(zid);
-            obj[QLatin1String("targetZoneIds")] = zoneIdsArr;
-        }
-        obj[::PhosphorZones::ZoneJsonKeys::X] = entry.targetGeometry.x();
-        obj[::PhosphorZones::ZoneJsonKeys::Y] = entry.targetGeometry.y();
-        obj[::PhosphorZones::ZoneJsonKeys::Width] = entry.targetGeometry.width();
-        obj[::PhosphorZones::ZoneJsonKeys::Height] = entry.targetGeometry.height();
-        array.append(obj);
-    }
-    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+    zone[ZoneJsonKeys::X] = rect.x();
+    zone[ZoneJsonKeys::Y] = rect.y();
+    zone[ZoneJsonKeys::Width] = rect.width();
+    zone[ZoneJsonKeys::Height] = rect.height();
 }
 
 } // namespace GeometryUtils
