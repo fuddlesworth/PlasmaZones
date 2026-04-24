@@ -3,6 +3,7 @@
 
 #include "settingscontroller.h"
 
+#include "editorpagecontroller.h"
 #include "../config/configbackends.h"
 
 #include "../common/layoutpreviewserialize.h"
@@ -291,25 +292,11 @@ SettingsController::SettingsController(QObject* parent)
         }
     }
 
-    // Editor and fill-on-drop settings lack Q_PROPERTY on Settings, so the
-    // meta-object loop above misses their NOTIFY signals.  Connect explicitly.
-    connect(&m_settings, &Settings::editorDuplicateShortcutChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSplitHorizontalShortcutChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSplitVerticalShortcutChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorFillShortcutChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorGridSnappingEnabledChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorEdgeSnappingEnabledChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalXChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalYChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSnapOverrideModifierChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::fillOnDropEnabledChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::fillOnDropModifierChanged, this, &SettingsController::onSettingsPropertyChanged);
+    // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
+    // meta-object loop above misses them. EditorPageController forwards each
+    // NOTIFY to QML and emits changed() which drives dirty tracking here.
+    m_editorPage = new EditorPageController(&m_settings, this);
+    connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -385,24 +372,9 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                           QStringLiteral("currentActivityChanged"), this, SLOT(onActivitiesChanged()));
 
-    // Connect editor settings signals from Settings to SettingsController for QML forwarding
-    connect(&m_settings, &Settings::editorDuplicateShortcutChanged, this,
-            &SettingsController::editorDuplicateShortcutChanged);
-    connect(&m_settings, &Settings::editorSplitHorizontalShortcutChanged, this,
-            &SettingsController::editorSplitHorizontalShortcutChanged);
-    connect(&m_settings, &Settings::editorSplitVerticalShortcutChanged, this,
-            &SettingsController::editorSplitVerticalShortcutChanged);
-    connect(&m_settings, &Settings::editorFillShortcutChanged, this, &SettingsController::editorFillShortcutChanged);
-    connect(&m_settings, &Settings::editorGridSnappingEnabledChanged, this,
-            &SettingsController::editorGridSnappingEnabledChanged);
-    connect(&m_settings, &Settings::editorEdgeSnappingEnabledChanged, this,
-            &SettingsController::editorEdgeSnappingEnabledChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalXChanged, this, &SettingsController::editorSnapIntervalXChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalYChanged, this, &SettingsController::editorSnapIntervalYChanged);
-    connect(&m_settings, &Settings::editorSnapOverrideModifierChanged, this,
-            &SettingsController::editorSnapOverrideModifierChanged);
-    connect(&m_settings, &Settings::fillOnDropEnabledChanged, this, &SettingsController::fillOnDropEnabledChanged);
-    connect(&m_settings, &Settings::fillOnDropModifierChanged, this, &SettingsController::fillOnDropModifierChanged);
+    // (Editor NOTIFY signals are forwarded to QML by EditorPageController
+    // itself — see its constructor — so no SettingsController-side plumbing
+    // is needed here.)
     // Forward lock state changes (from Settings::load() after external D-Bus settingsChanged)
     connect(&m_settings, &Settings::lockedScreensChanged, this, &SettingsController::lockedScreensChanged);
 
@@ -1818,106 +1790,6 @@ void SettingsController::refreshActivities()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Editor settings (delegated to Settings class for [Editor] group)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Editor getters — delegate to m_settings
-
-QString SettingsController::editorDuplicateShortcut() const
-{
-    return m_settings.editorDuplicateShortcut();
-}
-QString SettingsController::editorSplitHorizontalShortcut() const
-{
-    return m_settings.editorSplitHorizontalShortcut();
-}
-QString SettingsController::editorSplitVerticalShortcut() const
-{
-    return m_settings.editorSplitVerticalShortcut();
-}
-QString SettingsController::editorFillShortcut() const
-{
-    return m_settings.editorFillShortcut();
-}
-bool SettingsController::editorGridSnappingEnabled() const
-{
-    return m_settings.editorGridSnappingEnabled();
-}
-bool SettingsController::editorEdgeSnappingEnabled() const
-{
-    return m_settings.editorEdgeSnappingEnabled();
-}
-qreal SettingsController::editorSnapIntervalX() const
-{
-    return m_settings.editorSnapIntervalX();
-}
-qreal SettingsController::editorSnapIntervalY() const
-{
-    return m_settings.editorSnapIntervalY();
-}
-int SettingsController::editorSnapOverrideModifier() const
-{
-    return m_settings.editorSnapOverrideModifier();
-}
-bool SettingsController::fillOnDropEnabled() const
-{
-    return m_settings.fillOnDropEnabled();
-}
-int SettingsController::fillOnDropModifier() const
-{
-    return m_settings.fillOnDropModifier();
-}
-
-// Editor setters — write to m_settings + mark dirty
-
-// Editor setters — delegate to Settings. The meta-object NOTIFY connection
-// in the constructor handles setNeedsSave(true) when the value actually changes.
-void SettingsController::setEditorDuplicateShortcut(const QString& s)
-{
-    m_settings.setEditorDuplicateShortcut(s);
-}
-void SettingsController::setEditorSplitHorizontalShortcut(const QString& s)
-{
-    m_settings.setEditorSplitHorizontalShortcut(s);
-}
-void SettingsController::setEditorSplitVerticalShortcut(const QString& s)
-{
-    m_settings.setEditorSplitVerticalShortcut(s);
-}
-void SettingsController::setEditorFillShortcut(const QString& s)
-{
-    m_settings.setEditorFillShortcut(s);
-}
-void SettingsController::setEditorGridSnappingEnabled(bool v)
-{
-    m_settings.setEditorGridSnappingEnabled(v);
-}
-void SettingsController::setEditorEdgeSnappingEnabled(bool v)
-{
-    m_settings.setEditorEdgeSnappingEnabled(v);
-}
-void SettingsController::setEditorSnapIntervalX(qreal v)
-{
-    m_settings.setEditorSnapIntervalX(v);
-}
-void SettingsController::setEditorSnapIntervalY(qreal v)
-{
-    m_settings.setEditorSnapIntervalY(v);
-}
-void SettingsController::setEditorSnapOverrideModifier(int v)
-{
-    m_settings.setEditorSnapOverrideModifier(v);
-}
-void SettingsController::setFillOnDropEnabled(bool v)
-{
-    m_settings.setFillOnDropEnabled(v);
-}
-void SettingsController::setFillOnDropModifier(int v)
-{
-    m_settings.setFillOnDropModifier(v);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Virtual desktop / activity D-Bus signal handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3279,22 +3151,6 @@ void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVa
     DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                            QStringLiteral("updateLayout"), {updatedJson});
     scheduleLayoutLoad();
-}
-
-void SettingsController::resetEditorDefaults()
-{
-    m_settings.setEditorDuplicateShortcut(QStringLiteral("Ctrl+D"));
-    m_settings.setEditorSplitHorizontalShortcut(QStringLiteral("Ctrl+Shift+H"));
-    m_settings.setEditorSplitVerticalShortcut(QStringLiteral("Ctrl+Alt+V"));
-    m_settings.setEditorFillShortcut(QStringLiteral("Ctrl+Shift+F"));
-    m_settings.setEditorGridSnappingEnabled(true);
-    m_settings.setEditorEdgeSnappingEnabled(true);
-    m_settings.setEditorSnapIntervalX(0.05);
-    m_settings.setEditorSnapIntervalY(0.05);
-    m_settings.setEditorSnapOverrideModifier(static_cast<int>(Qt::ShiftModifier));
-    m_settings.setFillOnDropEnabled(true);
-    m_settings.setFillOnDropModifier(static_cast<int>(Qt::ControlModifier));
-    setNeedsSave(true);
 }
 
 QVariantMap SettingsController::loadWindowGeometry() const

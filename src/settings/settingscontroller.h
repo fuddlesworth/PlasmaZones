@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Central controller for the standalone settings application.
-// Manages page navigation, layout CRUD (via D-Bus), screen info,
-// editor config, and owns the shared Settings instance.
+// Manages page navigation, layout CRUD (via D-Bus), screen info, and owns
+// the shared Settings instance. Per-page Q_PROPERTY surfaces are split out
+// into page-scoped sub-controllers (EditorPageController, …) hung off this
+// class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 
 #pragma once
 
@@ -36,6 +38,8 @@ class ScriptedAlgorithmLoader;
 
 namespace PlasmaZones {
 
+class EditorPageController;
+
 class SettingsController : public QObject
 {
     Q_OBJECT
@@ -61,28 +65,9 @@ class SettingsController : public QObject
     // Screen management
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
 
-    // Editor settings
-    Q_PROPERTY(QString editorDuplicateShortcut READ editorDuplicateShortcut WRITE setEditorDuplicateShortcut NOTIFY
-                   editorDuplicateShortcutChanged)
-    Q_PROPERTY(QString editorSplitHorizontalShortcut READ editorSplitHorizontalShortcut WRITE
-                   setEditorSplitHorizontalShortcut NOTIFY editorSplitHorizontalShortcutChanged)
-    Q_PROPERTY(QString editorSplitVerticalShortcut READ editorSplitVerticalShortcut WRITE setEditorSplitVerticalShortcut
-                   NOTIFY editorSplitVerticalShortcutChanged)
-    Q_PROPERTY(
-        QString editorFillShortcut READ editorFillShortcut WRITE setEditorFillShortcut NOTIFY editorFillShortcutChanged)
-    Q_PROPERTY(bool editorGridSnappingEnabled READ editorGridSnappingEnabled WRITE setEditorGridSnappingEnabled NOTIFY
-                   editorGridSnappingEnabledChanged)
-    Q_PROPERTY(bool editorEdgeSnappingEnabled READ editorEdgeSnappingEnabled WRITE setEditorEdgeSnappingEnabled NOTIFY
-                   editorEdgeSnappingEnabledChanged)
-    Q_PROPERTY(qreal editorSnapIntervalX READ editorSnapIntervalX WRITE setEditorSnapIntervalX NOTIFY
-                   editorSnapIntervalXChanged)
-    Q_PROPERTY(int editorSnapOverrideModifier READ editorSnapOverrideModifier WRITE setEditorSnapOverrideModifier NOTIFY
-                   editorSnapOverrideModifierChanged)
-    Q_PROPERTY(bool fillOnDropEnabled READ fillOnDropEnabled WRITE setFillOnDropEnabled NOTIFY fillOnDropEnabledChanged)
-    Q_PROPERTY(
-        int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
-    Q_PROPERTY(qreal editorSnapIntervalY READ editorSnapIntervalY WRITE setEditorSnapIntervalY NOTIFY
-                   editorSnapIntervalYChanged)
+    // Editor page — properties live on EditorPageController, exposed here as a
+    // child QObject so QML reads `settingsController.editorPage.duplicateShortcut`.
+    Q_PROPERTY(EditorPageController* editorPage READ editorPage CONSTANT)
 
     // Trigger configuration
     Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
@@ -400,32 +385,11 @@ public:
     Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
                                        int mode);
 
-    // ── Editor settings (delegated to Settings class) ─────────────────────
-    QString editorDuplicateShortcut() const;
-    QString editorSplitHorizontalShortcut() const;
-    QString editorSplitVerticalShortcut() const;
-    QString editorFillShortcut() const;
-    bool editorGridSnappingEnabled() const;
-    bool editorEdgeSnappingEnabled() const;
-    qreal editorSnapIntervalX() const;
-    qreal editorSnapIntervalY() const;
-    int editorSnapOverrideModifier() const;
-    bool fillOnDropEnabled() const;
-    int fillOnDropModifier() const;
-
-    void setEditorDuplicateShortcut(const QString& shortcut);
-    void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    void setEditorSplitVerticalShortcut(const QString& shortcut);
-    void setEditorFillShortcut(const QString& shortcut);
-    void setEditorGridSnappingEnabled(bool enabled);
-    void setEditorEdgeSnappingEnabled(bool enabled);
-    void setEditorSnapIntervalX(qreal interval);
-    void setEditorSnapIntervalY(qreal interval);
-    void setEditorSnapOverrideModifier(int mod);
-    void setFillOnDropEnabled(bool enabled);
-    void setFillOnDropModifier(int mod);
-
-    Q_INVOKABLE void resetEditorDefaults();
+    // ── Editor page sub-controller ────────────────────────────────────────
+    EditorPageController* editorPage() const
+    {
+        return m_editorPage;
+    }
 
     // ── Trigger configuration ────────────────────────────────────────────────
     bool alwaysActivateOnDrag() const;
@@ -817,19 +781,6 @@ Q_SIGNALS:
     void stagedSnappingOrderChanged();
     void stagedTilingOrderChanged();
 
-    // Editor signals
-    void editorDuplicateShortcutChanged();
-    void editorSplitHorizontalShortcutChanged();
-    void editorSplitVerticalShortcutChanged();
-    void editorFillShortcutChanged();
-    void editorGridSnappingEnabledChanged();
-    void editorEdgeSnappingEnabledChanged();
-    void editorSnapIntervalXChanged();
-    void editorSnapIntervalYChanged();
-    void editorSnapOverrideModifierChanged();
-    void fillOnDropEnabledChanged();
-    void fillOnDropModifierChanged();
-
 private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
@@ -874,6 +825,9 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+    /// Per-page sub-controller: exposes the Q_PROPERTY surface for the
+    /// Editor settings page. Parented to `this`, so Qt handles cleanup.
+    EditorPageController* m_editorPage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;
