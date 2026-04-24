@@ -5,7 +5,7 @@
 
 #include "editorpagecontroller.h"
 #include "snappingbehaviorcontroller.h"
-#include "triggerutils.h"
+#include "tilingbehaviorcontroller.h"
 #include "../config/configbackends.h"
 
 #include "../common/layoutpreviewserialize.h"
@@ -300,11 +300,13 @@ SettingsController::SettingsController(QObject* parent)
     m_editorPage = new EditorPageController(&m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Behavior page sub-controller. Its underlying settings ARE
-    // Q_PROPERTY on Settings, so the meta-object loop above already wires
-    // them to onSettingsPropertyChanged(); the sub-controller only provides
-    // the QML-facing forwarders + storage/QML trigger-list conversion.
+    // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
+    // underlying settings ARE Q_PROPERTY on Settings, so the meta-object
+    // loop above already wires them to onSettingsPropertyChanged(); the
+    // sub-controllers only provide the QML-facing forwarders + storage/QML
+    // trigger-list conversion.
     m_snappingBehaviorPage = new SnappingBehaviorController(&m_settings, this);
+    m_tilingBehaviorPage = new TilingBehaviorController(&m_settings, this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -1849,52 +1851,6 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
     Q_UNUSED(virtualDesktop)
     // External assignment change (hotkey, script, toggle) — refresh overview
     Q_EMIT screenLayoutChanged();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Tiling trigger getters/setters (snapping triggers moved to
-// SnappingBehaviorController). Conversion helpers live in triggerutils.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool SettingsController::alwaysReinsertIntoStack() const
-{
-    return TriggerUtils::hasAlwaysActiveTrigger(m_settings.autotileDragInsertTriggers());
-}
-
-QVariantList SettingsController::autotileDragInsertTriggers() const
-{
-    return TriggerUtils::convertTriggersForQml(m_settings.autotileDragInsertTriggers());
-}
-
-QVariantList SettingsController::defaultAutotileDragInsertTriggers() const
-{
-    return TriggerUtils::convertTriggersForQml(ConfigDefaults::autotileDragInsertTriggers());
-}
-
-void SettingsController::setAutotileDragInsertTriggers(const QVariantList& triggers)
-{
-    const bool wasAlwaysActive = alwaysReinsertIntoStack();
-    const QVariantList converted = TriggerUtils::convertTriggersForStorage(triggers);
-    if (m_settings.autotileDragInsertTriggers() != converted) {
-        m_settings.setAutotileDragInsertTriggers(converted);
-        Q_EMIT autotileDragInsertTriggersChanged();
-        if (alwaysReinsertIntoStack() != wasAlwaysActive) {
-            Q_EMIT alwaysReinsertIntoStackChanged();
-        }
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setAlwaysReinsertIntoStack(bool enabled)
-{
-    if (alwaysReinsertIntoStack() == enabled) {
-        return;
-    }
-    m_settings.setAutotileDragInsertTriggers(enabled ? TriggerUtils::makeAlwaysActiveTriggerList()
-                                                     : ConfigDefaults::autotileDragInsertTriggers());
-    Q_EMIT alwaysReinsertIntoStackChanged();
-    Q_EMIT autotileDragInsertTriggersChanged();
-    setNeedsSave(true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

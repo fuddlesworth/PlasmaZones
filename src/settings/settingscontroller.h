@@ -38,6 +38,7 @@ class ScriptedAlgorithmLoader;
 
 #include "editorpagecontroller.h"
 #include "snappingbehaviorcontroller.h"
+#include "tilingbehaviorcontroller.h"
 
 namespace PlasmaZones {
 
@@ -70,17 +71,9 @@ class SettingsController : public QObject
     // child QObject so QML reads `settingsController.editorPage.duplicateShortcut`.
     Q_PROPERTY(EditorPageController* editorPage READ editorPage CONSTANT)
 
-    // Snapping behavior page — drag-activation / zone-span / snap-assist
-    // trigger lists moved to SnappingBehaviorController.
+    // Snapping/Tiling behavior pages — trigger surfaces moved to per-page controllers.
     Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
-
-    // Tiling behavior trigger configuration (still on SettingsController
-    // until the TilingBehaviorController slice lands).
-    Q_PROPERTY(bool alwaysReinsertIntoStack READ alwaysReinsertIntoStack WRITE setAlwaysReinsertIntoStack NOTIFY
-                   alwaysReinsertIntoStackChanged)
-    Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
-                   setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
-    Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
+    Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
 
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
@@ -387,15 +380,10 @@ public:
     {
         return m_snappingBehaviorPage;
     }
-
-    // ── Trigger configuration (tiling; snapping triggers moved to
-    //    SnappingBehaviorController). ─────────────────────────────────────
-    bool alwaysReinsertIntoStack() const;
-    QVariantList autotileDragInsertTriggers() const;
-    QVariantList defaultAutotileDragInsertTriggers() const;
-
-    void setAlwaysReinsertIntoStack(bool enabled);
-    void setAutotileDragInsertTriggers(const QVariantList& triggers);
+    TilingBehaviorController* tilingBehaviorPage() const
+    {
+        return m_tilingBehaviorPage;
+    }
 
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
@@ -716,11 +704,6 @@ Q_SIGNALS:
     void screenLayoutChanged();
     void quickLayoutSlotsChanged();
 
-    // Tiling-behavior trigger signals (snapping triggers moved to
-    // SnappingBehaviorController).
-    void alwaysReinsertIntoStackChanged();
-    void autotileDragInsertTriggersChanged();
-
     // Color import signals
     void colorImportError(const QString& error);
     void colorImportSuccess();
@@ -802,6 +785,7 @@ private:
     /// settings page each. Parented to `this`, so Qt handles cleanup.
     EditorPageController* m_editorPage = nullptr;
     SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
+    TilingBehaviorController* m_tilingBehaviorPage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;
