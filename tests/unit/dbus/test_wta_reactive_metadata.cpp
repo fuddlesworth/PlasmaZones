@@ -32,7 +32,7 @@
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
 #include "snap/SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "snap/SnapState.h"
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
 

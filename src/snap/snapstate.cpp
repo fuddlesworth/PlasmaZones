@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <PhosphorZones/SnapState.h>
+#include "SnapState.h"
 
 #include <QJsonArray>
 

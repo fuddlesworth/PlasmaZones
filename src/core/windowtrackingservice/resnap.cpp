@@ -8,7 +8,7 @@
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorZones/SnapState.h>
+#include "../../snap/SnapState.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>

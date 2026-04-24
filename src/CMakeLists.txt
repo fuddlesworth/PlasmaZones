@@ -176,6 +176,7 @@ set(plasmazones_core_SRCS
     autotile/OverflowManager.cpp
     autotile/OverflowManager.h
     # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
+    snap/snapstate.cpp
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapengine/calculate.cpp

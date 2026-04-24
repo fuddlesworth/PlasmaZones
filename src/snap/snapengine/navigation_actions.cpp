@@ -24,7 +24,7 @@
  */
 
 #include "../SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "../SnapState.h"
 
 #include "../../config/settings.h"
 #include "../../core/isettings.h"

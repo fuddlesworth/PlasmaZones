@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "../SnapState.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/logging.h"

@@ -30,7 +30,7 @@
 #include "core/windowtrackingservice.h"
 #include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/SnapState.h>
+#include "snap/SnapState.h"
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
