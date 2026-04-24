@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/IPlacementState.h>
+#include <PhosphorEngineTypes/IPlacementState.h>
 #include <phosphorzones_export.h>
 
 #include <QHash>

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <PhosphorEngineApi/GeometryUtils.h>
-#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorGeometry/GeometryUtils.h>
+#include <PhosphorGeometry/IGeometrySettings.h>
 #include <phosphorzones_export.h>
 
 #include <PhosphorLayoutApi/EdgeGaps.h>
@@ -28,12 +28,11 @@ class ScreenManager;
 namespace PhosphorZones {
 namespace GeometryUtils {
 
-using PhosphorEngineApi::GeometryUtils::availableAreaToOverlayCoordinates;
-using PhosphorEngineApi::GeometryUtils::enforceWindowMinSizes;
-using PhosphorEngineApi::GeometryUtils::rectToJson;
-using PhosphorEngineApi::GeometryUtils::removeZoneOverlaps;
-using PhosphorEngineApi::GeometryUtils::serializeZoneAssignments;
-using PhosphorEngineApi::GeometryUtils::snapToRect;
+using PhosphorGeometry::availableAreaToOverlayCoordinates;
+using PhosphorGeometry::enforceWindowMinSizes;
+using PhosphorGeometry::rectToJson;
+using PhosphorGeometry::removeZoneOverlaps;
+using PhosphorGeometry::snapToRect;
 
 PHOSPHORZONES_EXPORT QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                     QScreen* screen, int innerGap,
@@ -48,19 +47,19 @@ PHOSPHORZONES_EXPORT QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenMan
 PHOSPHORZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                     QScreen* screen, const QString& screenId,
                                                     PhosphorZones::Layout* layout,
-                                                    PhosphorEngineApi::IGeometrySettings* settings);
+                                                    PhosphorGeometry::IGeometrySettings* settings);
 
 PHOSPHORZONES_EXPORT QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                       QScreen* screen, const QString& screenId,
                                                       PhosphorZones::Layout* layout,
-                                                      PhosphorEngineApi::IGeometrySettings* settings);
+                                                      PhosphorGeometry::IGeometrySettings* settings);
 
 PHOSPHORZONES_EXPORT int getEffectiveZonePadding(PhosphorZones::Layout* layout,
-                                                 PhosphorEngineApi::IGeometrySettings* settings,
+                                                 PhosphorGeometry::IGeometrySettings* settings,
                                                  const QString& screenId = {});
 
 PHOSPHORZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout,
-                                                                      PhosphorEngineApi::IGeometrySettings* settings,
+                                                                      PhosphorGeometry::IGeometrySettings* settings,
                                                                       const QString& screenId = {});
 
 PHOSPHORZONES_EXPORT QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr,

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/GeometryUtils.h>
-#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorGeometry/IGeometrySettings.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -14,9 +14,9 @@
 #include <QScreen>
 #include <QVariantMap>
 
-using PhosphorEngineApi::IGeometrySettings;
-namespace GeometryDefaults = PhosphorEngineApi::GeometryDefaults;
-namespace PerScreenSnappingKey = PhosphorEngineApi::PerScreenSnappingKey;
+using PhosphorGeometry::IGeometrySettings;
+namespace GeometryDefaults = PhosphorGeometry::Defaults;
+namespace PerScreenSnappingKey = PhosphorGeometry::PerScreenSnappingKey;
 
 namespace PhosphorZones {
 
@@ -181,7 +181,7 @@ QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, Zone* zone
                                const QString& screenId, Layout* layout, IGeometrySettings* settings)
 {
     QRectF geoF = getZoneGeometryForScreenF(mgr, zone, screen, screenId, layout, settings);
-    return geoF.isValid() ? PhosphorEngineApi::GeometryUtils::snapToRect(geoF) : QRect();
+    return geoF.isValid() ? PhosphorGeometry::snapToRect(geoF) : QRect();
 }
 
 int getEffectiveZonePadding(Layout* layout, IGeometrySettings* settings, const QString& screenId)

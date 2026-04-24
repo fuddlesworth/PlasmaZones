@@ -3,20 +3,17 @@
 
 #pragma once
 
-#include <QLatin1String>
+#include <PhosphorGeometry/JsonKeys.h>
 
 namespace PhosphorEngineApi {
 namespace JsonKeys {
-
-inline constexpr QLatin1String WindowId{"windowId"};
-inline constexpr QLatin1String SourceZoneId{"sourceZoneId"};
-inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
-inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
-
-inline constexpr QLatin1String X{"x"};
-inline constexpr QLatin1String Y{"y"};
-inline constexpr QLatin1String Width{"width"};
-inline constexpr QLatin1String Height{"height"};
-
+using PhosphorGeometry::JsonKeys::Height;
+using PhosphorGeometry::JsonKeys::SourceZoneId;
+using PhosphorGeometry::JsonKeys::TargetZoneId;
+using PhosphorGeometry::JsonKeys::TargetZoneIds;
+using PhosphorGeometry::JsonKeys::Width;
+using PhosphorGeometry::JsonKeys::WindowId;
+using PhosphorGeometry::JsonKeys::X;
+using PhosphorGeometry::JsonKeys::Y;
 } // namespace JsonKeys
 } // namespace PhosphorEngineApi

@@ -131,7 +131,8 @@ target_link_libraries(PhosphorZones
         Qt6::Core
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngineTypes::PhosphorEngineTypes
+        PhosphorGeometry::PhosphorGeometry
         # LayoutRegistry's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
         # — type must be visible to callers that include LayoutRegistry.h.
         PhosphorConfig::PhosphorConfig

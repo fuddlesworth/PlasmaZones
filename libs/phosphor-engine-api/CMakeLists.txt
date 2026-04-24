@@ -52,7 +52,8 @@ target_compile_features(PhosphorEngineApi PUBLIC cxx_std_20)
 target_link_libraries(PhosphorEngineApi
     PUBLIC
         Qt6::Core
-        Qt6::Gui
+        PhosphorEngineTypes::PhosphorEngineTypes
+        PhosphorGeometry::PhosphorGeometry
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

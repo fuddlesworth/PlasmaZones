@@ -321,6 +321,8 @@ add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (La
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
 add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline — needed by phosphor-screens
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
+add_subdirectory(libs/phosphor-engine-types) # engine value types + state contracts (IPlacementState, NavigationContext)
+add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size)
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
