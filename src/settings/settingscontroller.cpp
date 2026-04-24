@@ -4,6 +4,7 @@
 #include "settingscontroller.h"
 
 #include "editorpagecontroller.h"
+#include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
@@ -218,13 +219,6 @@ SettingsController::SettingsController(QObject* parent)
     // an in-process PhosphorZones::LayoutRegistry independent of the daemon.
     recalcLocalLayouts();
 
-    // Translate rendering backend display names once at construction
-    for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
-        m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
-
-    // Snapshot current backend so the QML "restart required" message survives page recreation
-    m_startupRenderingBackend = m_settings.renderingBackend();
-
     // Load scripted algorithms so they appear in the algorithm dropdown.
     // The daemon owns its own AlgorithmRegistry + loader; the KCM runs in
     // a separate process and binds to its own per-process registry
@@ -336,6 +330,12 @@ SettingsController::SettingsController(QObject* parent)
     m_tilingAlgorithmPage = new TilingAlgorithmController(&m_settings, m_localAlgorithmRegistry.get(), this);
     connect(m_tilingAlgorithmPage, &TilingAlgorithmController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
+
+    // General page sub-controller — owns rendering-backend picker data and
+    // animation bounds. Its startup backend snapshot is captured at ctor
+    // time, so this must run AFTER m_settings is fully initialised (which
+    // is guaranteed since m_settings is the first member declared).
+    m_generalPage = new GeneralPageController(&m_settings, this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();

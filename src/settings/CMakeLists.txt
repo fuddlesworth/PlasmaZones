@@ -13,6 +13,8 @@ set(plasmazones_settings_SRCS
     # exposing the Q_PROPERTY surface for a single settings page each.
     editorpagecontroller.h
     editorpagecontroller.cpp
+    generalpagecontroller.h
+    generalpagecontroller.cpp
     snappingappearancecontroller.h
     snappingappearancecontroller.cpp
     snappingbehaviorcontroller.h

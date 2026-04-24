@@ -107,16 +107,16 @@ Flickable {
                         id: renderingBackendCombo
 
                         function syncIndex() {
-                            currentIndex = Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend));
+                            currentIndex = Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend));
                         }
 
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
-                        model: settingsController.renderingBackendDisplayNames
-                        currentIndex: Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend))
+                        model: settingsController.generalPage.renderingBackendDisplayNames
+                        currentIndex: Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend))
                         onActivated: (index) => {
-                            if (index >= 0 && index < settingsController.renderingBackendOptions.length)
-                                appSettings.renderingBackend = settingsController.renderingBackendOptions[index];
+                            if (index >= 0 && index < settingsController.generalPage.renderingBackendOptions.length)
+                                appSettings.renderingBackend = settingsController.generalPage.renderingBackendOptions[index];
 
                         }
 
@@ -136,7 +136,7 @@ Flickable {
                     Layout.fillWidth: true
                     type: Kirigami.MessageType.Information
                     text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
-                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.startupRenderingBackend
+                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend
                 }
 
             }

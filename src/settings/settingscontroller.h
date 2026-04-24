@@ -37,6 +37,7 @@ class ScriptedAlgorithmLoader;
 #include <optional>
 
 #include "editorpagecontroller.h"
+#include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
@@ -84,21 +85,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
-
-    // Rendering backend info
-    Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
-    Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
-    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
-
-    // Settings bounds (single source of truth from ConfigDefaults)
-    // Animation bounds remain here until a dedicated sub-controller lands
-    // for the page that owns them.
-    Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
-    Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
-    Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
-    Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
-    Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
-    Q_PROPERTY(int animationMinDistanceMin READ animationMinDistanceMin CONSTANT)
+    Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -383,49 +370,9 @@ public:
     {
         return m_tilingAlgorithmPage;
     }
-
-    // ── Rendering backend ─────────────────────────────────────────────────────
-    QStringList renderingBackendOptions() const
+    GeneralPageController* generalPage() const
     {
-        return PlasmaZones::ConfigDefaults::renderingBackendOptions();
-    }
-
-    QStringList renderingBackendDisplayNames() const
-    {
-        return m_renderingBackendDisplayNames;
-    }
-
-    // Backend value at settings app launch — survives page recreation so the
-    // "restart required" InlineMessage stays visible after navigating away and back.
-    QString startupRenderingBackend() const
-    {
-        return m_startupRenderingBackend;
-    }
-
-    // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
-    int animationDurationMin() const
-    {
-        return ConfigDefaults::animationDurationMin();
-    }
-    int animationDurationMax() const
-    {
-        return ConfigDefaults::animationDurationMax();
-    }
-    int animationMinDistanceMax() const
-    {
-        return ConfigDefaults::animationMinDistanceMax();
-    }
-    int animationStaggerIntervalMin() const
-    {
-        return ConfigDefaults::animationStaggerIntervalMin();
-    }
-    int animationStaggerIntervalMax() const
-    {
-        return ConfigDefaults::animationStaggerIntervalMax();
-    }
-    int animationMinDistanceMin() const
-    {
-        return ConfigDefaults::animationMinDistanceMin();
+        return m_generalPage;
     }
 
     // ── Running window picker (async flow) ──────────────────────────────────
@@ -633,9 +580,8 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     TilingAlgorithmController* m_tilingAlgorithmPage = nullptr;
+    GeneralPageController* m_generalPage = nullptr;
 
-    QStringList m_renderingBackendDisplayNames;
-    QString m_startupRenderingBackend;
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;
