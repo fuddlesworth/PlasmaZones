@@ -55,9 +55,13 @@ class PhosphorProfileRegistry;
  * ## Commit semantics
  *
  * Each rescan produces a single `PhosphorProfileRegistry::reloadFromOwner`
- * call (decision W: coalesce). Bound consumers see one
- * `profilesReloaded` signal per scan instead of N per-path signals,
- * avoiding N² re-resolution cost when several files change at once.
+ * call (decision W: coalesce). The registry emits per-path
+ * `profileChanged(path)` for each path that actually changed in the
+ * rescan; `profilesReloaded` is reserved for wholesale ops and is NOT
+ * fired here. Bound consumers that subscribe per-path only wake for
+ * paths that moved; avoiding N² re-resolution cost when several files
+ * change at once falls out naturally because the registry's own diff
+ * suppresses no-op updates.
  *
  * Profiles loaded here are preset templates — decision Y says settings
  * UIs deep-copy into the user's active profile rather than referencing
@@ -107,6 +111,13 @@ public:
         QString systemSourcePath;
     };
     QList<Entry> entries() const;
+
+    /// O(1) membership check. Prefer this over `entries()` when the
+    /// caller only needs a contains test — `entries()` copies + sorts
+    /// the full tracked set for deterministic iteration, which becomes
+    /// expensive on hot paths (e.g. the daemon's
+    /// `publishActiveAnimationProfile` runs per settings-slider tick).
+    bool hasPath(const QString& path) const;
 
 Q_SIGNALS:
     void profilesChanged();

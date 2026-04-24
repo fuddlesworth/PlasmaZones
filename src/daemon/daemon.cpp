@@ -365,18 +365,15 @@ void Daemon::publishActiveAnimationProfile()
     // direct publish so their owner-tagged entry wins. On JSON delete,
     // the loader emits profilesChanged, this function re-runs, and the
     // settings-default path is restored.
-    QSet<QString> userClaimedPaths;
-    if (m_profileLoader) {
-        for (const auto& e : m_profileLoader->entries()) {
-            userClaimedPaths.insert(e.path);
-        }
-    }
-
+    //
+    // This runs on the settings-slider hot path (~30 Hz during drag),
+    // so O(1) `hasPath` is used instead of `entries()` which copies
+    // and sorts the full tracked set on every tick.
     auto& reg = PhosphorProfileRegistry::instance();
 
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
-        if (userClaimedPaths.contains(*path)) {
+        if (m_profileLoader && m_profileLoader->hasPath(*path)) {
             continue;
         }
         reg.registerProfile(*path, settingsProfile);

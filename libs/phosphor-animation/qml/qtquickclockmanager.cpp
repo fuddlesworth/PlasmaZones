@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/QtQuickClock.h>
 
+#include <QtCore/QThread>
 #include <QtQuick/QQuickWindow>
 
 namespace PhosphorAnimation {
@@ -30,6 +31,21 @@ IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)
     if (!window) {
         return nullptr;
     }
+
+    // Thread contract: must be called from the thread that owns
+    // @p window (always the GUI thread for a live QQuickWindow). The
+    // `QObject::connect` call below dereferences `window` outside the
+    // manager's lock; letting a non-owning thread run that would race
+    // with a concurrent window teardown on the owning thread and UAF
+    // inside Qt's connection machinery before the post-connect recheck
+    // could catch the stale QPointer.
+    //
+    // In practice every caller today (PhosphorMotionAnimation,
+    // PhosphorAnimatedValueBase, direct QML-adjacent consumers) runs
+    // on the GUI thread by construction, so this assertion documents
+    // the true contract rather than narrowing it.
+    Q_ASSERT_X(window->thread() == QThread::currentThread(), "QtQuickClockManager::clockFor",
+               "must be called from the window's owning thread (GUI thread for QQuickWindow)");
 
     // Phase 1: map mutation under the manager lock. We find-or-insert
     // the Entry and decide whether this call is the one that created

@@ -39,18 +39,24 @@ PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
     // hook so the installed easing is built after the object is fully
     // constructed and attached to its QML context.
     //
-    // Compile-time enforcement: the fallback curve must be an Easing
-    // instance AND the fast-path branch in applyResolvedEasing keys on
-    // `Easing::Type::CubicBezier`. The runtime check below tripping
-    // would mean someone has changed defaultFallbackCurve() to a
-    // non-Easing or non-cubic type without updating this ctor — fail
-    // hard at startup so the regression can't ship silently.
+    // Enforcement: the fallback curve must be an Easing instance AND
+    // the fast-path branch in applyResolvedEasing keys on
+    // `Easing::Type::CubicBezier`. Tripping here would mean someone has
+    // changed defaultFallbackCurve() to a non-Easing or non-cubic type
+    // without updating this ctor — fail hard at startup so the
+    // regression can't ship silently.
+    //
+    // qFatal (not Q_ASSERT_X) so the check also trips in release builds
+    // — Q_ASSERT_X compiles out there, which is exactly the scenario
+    // the "can't ship silently" comment above warns about.
     {
         const auto fallback = defaultFallbackCurve();
         const auto* easing = dynamic_cast<const Easing*>(fallback.get());
-        Q_ASSERT_X(easing && easing->type == Easing::Type::CubicBezier, "PhosphorMotionAnimation",
-                   "defaultFallbackCurve() must be a cubic-bezier Easing for the ctor fast path — "
-                   "see INVARIANT comment above");
+        if (!easing || easing->type != Easing::Type::CubicBezier) {
+            qFatal(
+                "PhosphorMotionAnimation: defaultFallbackCurve() must be a cubic-bezier Easing "
+                "for the ctor fast path — see INVARIANT comment above");
+        }
     }
     applyResolvedEasing();
 }
@@ -242,10 +248,13 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
         applyResolvedProfile(Profile{});
     }
 
-    // Live-rebind: per-path change signal AND bulk-reload signal.
-    // Per-path emits for targeted updates (settings UI edits the
-    // overlay.fade profile); reload emits when the loader rescans
-    // the XDG dir after a QFileSystemWatcher fire.
+    // Live-rebind: per-path change signal handles every targeted
+    // update (settings UI edits, ProfileLoader rescans — both go
+    // through registerProfile / reloadFromOwner which emit per-path
+    // profileChanged). `profilesReloaded` fires only on wholesale
+    // ops (reloadAll / clear) — those don't enumerate paths so the
+    // bulk subscription is the only way to catch a wipe that just
+    // evicted our bound path.
     //
     // Queued connection guards against registry signals emitted from
     // worker threads per PhosphorProfileRegistry thread-safety

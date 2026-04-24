@@ -259,4 +259,9 @@ QList<ProfileLoader::Entry> ProfileLoader::entries() const
     return sorted;
 }
 
+bool ProfileLoader::hasPath(const QString& path) const
+{
+    return m_sink->entries.contains(path);
+}
+
 } // namespace PhosphorAnimation

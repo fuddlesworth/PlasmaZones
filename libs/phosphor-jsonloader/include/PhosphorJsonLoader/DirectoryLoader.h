@@ -102,6 +102,13 @@ public:
      * Idempotent on the directory path — adding the same directory
      * twice is a no-op on the second call. Returns the count of
      * entries CURRENTLY registered after the scan (not the delta).
+     *
+     * `liveReload` is a one-way enable: once any call passes
+     * `LiveReload::On`, the loader keeps watching for the rest of its
+     * lifetime. Subsequent `LiveReload::Off` calls do not disarm the
+     * watcher — they just skip arming new watches for the newly-added
+     * directory. Callers that need to stop watching should destroy and
+     * rebuild the loader.
      */
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
@@ -112,6 +119,8 @@ public:
      * in the "system-first, user-last" order (the reverse of
      * `QStandardPaths::locateAll`'s natural output — see the daemon's
      * `setupAnimationProfiles` for the canonical pattern).
+     *
+     * Same one-way `liveReload` semantics as `loadFromDirectory`.
      */
     int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
 
@@ -139,6 +148,11 @@ public:
     /// (or a mis-mounted filesystem returning runaway sizes). 1 MiB is
     /// far above any legitimate curve / profile / layout schema in this
     /// library's ecosystem.
+    ///
+    /// Note: no corresponding cap on *total* entry count. A directory
+    /// with tens of thousands of tiny JSON files would all be parsed on
+    /// the GUI thread at rescan time. Consumers with untrusted-input
+    /// concerns should enforce a count cap in their sink's `parseFile`.
     static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
 
     /// Test-only: override the debounce interval (default 50 ms).

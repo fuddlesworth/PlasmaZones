@@ -121,16 +121,20 @@ public:
     ///   - paths in the new map are (re-)registered with @p ownerTag;
     ///     if the Profile value differs from the existing entry OR the
     ///     owner tag differs, a `profileChanged(path)` fires.
-    ///   - if any change occurred, exactly one `profilesReloaded()`
-    ///     fires at the end — consumers listening to the bulk signal
-    ///     only see one event per rescan regardless of file count.
+    ///   - `profilesReloaded()` is NOT emitted — per-path signals cover
+    ///     every change this method makes. Consumers that care about a
+    ///     specific path listen to `profileChanged(path)`; consumers
+    ///     that want a catch-all for wholesale registry mutation listen
+    ///     to `profilesReloaded` (which fires only from `clear` /
+    ///     `reloadAll`).
     ///
     /// An empty @p ownerTag is rejected (Q_ASSERT) — that would alias
     /// with the direct-owner path and defeat the partitioning.
     void reloadFromOwner(const QString& ownerTag, const QHash<QString, Profile>& profiles);
 
-    /// Remove every entry owned by @p ownerTag. Fires
-    /// `profilesReloaded()` if anything was removed.
+    /// Remove every entry owned by @p ownerTag. Fires one
+    /// `profileChanged(path)` for each removed path (same shape as
+    /// `reloadFromOwner`). Does NOT fire `profilesReloaded()`.
     void clearOwner(const QString& ownerTag);
 
     /// Wholesale replace the entire registry contents with @p profiles
@@ -169,9 +173,15 @@ Q_SIGNALS:
     /// and rebind.
     void profileChanged(const QString& path);
 
-    /// Fired when the registry is bulk-reloaded or cleared. Bound
-    /// consumers re-resolve every path they hold rather than listening
-    /// to N individual `profileChanged` signals.
+    /// Fired only on wholesale operations (`reloadAll`, `clear`) where
+    /// the registry cannot enumerate which individual paths changed.
+    /// Bound consumers should re-resolve every path they hold on this
+    /// signal.
+    ///
+    /// Targeted methods (`reloadFromOwner`, `clearOwner`,
+    /// `registerProfile`, `unregisterProfile`) do NOT fire this signal
+    /// — they emit per-path `profileChanged(path)` for every change so
+    /// consumers only wake for paths that actually moved.
     void profilesReloaded();
 
 private:

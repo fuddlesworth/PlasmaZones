@@ -134,15 +134,19 @@ void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHa
         return;
     }
 
-    // Per-path signals first so consumers bound to a specific path
-    // see the targeted change before the bulk profilesReloaded.
+    // Per-path signals only — `profilesReloaded` is reserved for truly
+    // wholesale ops (`clear`, `reloadAll`). Firing both here would make
+    // every bound `PhosphorMotionAnimation` in the process re-resolve
+    // TWICE on each targeted update (once from per-path, once from the
+    // bulk signal), and a bulk signal additionally wakes every bound
+    // animation regardless of which path changed. Per-path covers every
+    // change this method makes.
     for (const QString& path : std::as_const(pathsRemoved)) {
         Q_EMIT profileChanged(path);
     }
     for (const QString& path : std::as_const(pathsChanged)) {
         Q_EMIT profileChanged(path);
     }
-    Q_EMIT profilesReloaded();
 }
 
 void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
@@ -175,10 +179,12 @@ void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
     if (removed.isEmpty()) {
         return;
     }
+    // Per-path only — same shape as `reloadFromOwner`. `profilesReloaded`
+    // is reserved for wholesale ops (`clear`, `reloadAll`) where the
+    // registry cannot enumerate which paths changed.
     for (const QString& path : std::as_const(removed)) {
         Q_EMIT profileChanged(path);
     }
-    Q_EMIT profilesReloaded();
 }
 
 void PhosphorProfileRegistry::reloadAll(const QHash<QString, Profile>& profiles)

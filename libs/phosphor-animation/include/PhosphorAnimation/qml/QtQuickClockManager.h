@@ -56,13 +56,18 @@ class QtQuickClock;
  *
  * ## Thread safety
  *
- * `instance()` and `clockFor()` are callable from any thread — an
- * internal `std::mutex` guards the map. The returned
- * `IMotionClock*` is the `QtQuickClock` instance; its own
- * `now()` / `requestFrame()` thread-safety story (documented on
- * `QtQuickClock`) applies to subsequent use. Constructing the clock
- * (first `clockFor` for a given window) runs on the calling thread —
- * typically GUI/render thread at animation-setup time.
+ * `instance()` is callable from any thread. `clockFor()` MUST be
+ * called on the thread that owns @p window (always the GUI thread
+ * for a live `QQuickWindow`); it asserts this contract in debug
+ * builds. The internal `std::mutex` guards the map mutation, but
+ * the `QObject::connect(window, ...)` call the method performs
+ * outside the lock dereferences @p window directly — letting a
+ * non-owning thread race a concurrent window destruction there
+ * would UAF inside Qt's connection machinery.
+ *
+ * The returned `IMotionClock*` is the `QtQuickClock` instance; its
+ * own `now()` / `requestFrame()` thread-safety story (documented on
+ * `QtQuickClock`) applies to subsequent use.
  *
  * ## Lifetime
  *
@@ -92,6 +97,11 @@ public:
     /// Return the clock for @p window, constructing it on first call.
     /// Returns nullptr if @p window is nullptr. Subsequent calls with
     /// the same @p window return the same pointer.
+    ///
+    /// Must be called on the thread that owns @p window (always the
+    /// GUI thread for a live `QQuickWindow`); the call installs a
+    /// `destroyed` hook on @p window which dereferences the pointer
+    /// outside the manager's lock. Asserted in debug builds.
     ///
     /// Stale-window handling: the manager tracks entries via
     /// `QPointer<QQuickWindow>`. A call after the window was destroyed

@@ -786,7 +786,22 @@ void Settings::setAnimationEasingCurve(const QString& curve)
         return;
     }
     PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
-    p.curve = reg.create(curve);
+    // Route through `tryCreate` (not `create`) so malformed specs
+    // surface as a diagnostic instead of silently collapsing to the
+    // default OutCubic. A typo like "sping:14,0.6" would otherwise be
+    // stored as the default curve without any feedback to the caller —
+    // the user loses their intended curve and has no way to tell why.
+    // On resolution failure we refuse the write and keep the previous
+    // curve, matching the getter/read contract (`animationProfile`
+    // falls back to defaults for unresolved wire strings rather than
+    // committing them).
+    auto resolved = reg.tryCreate(curve);
+    if (!resolved) {
+        qCWarning(lcConfig) << "setAnimationEasingCurve: rejecting unresolved curve spec" << curve
+                            << "— keeping previous curve";
+        return;
+    }
+    p.curve = std::move(resolved);
     setAnimationProfile(p);
 }
 
