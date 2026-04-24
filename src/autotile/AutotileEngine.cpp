@@ -187,6 +187,9 @@ void AutotileEngine::connectSignals()
         bool ok = connect(m_windowTracker->asQObject(), SIGNAL(windowZoneChanged(QString, QString)), this,
                           SLOT(onWindowZoneChanged(QString, QString)));
         Q_ASSERT(ok);
+        if (Q_UNLIKELY(!ok)) {
+            qCCritical(lcAutotile) << "Failed to connect windowZoneChanged — autotile will not react to zone changes";
+        }
     }
 
     // Screen geometry changes

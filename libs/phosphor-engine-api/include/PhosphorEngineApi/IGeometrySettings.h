@@ -4,19 +4,20 @@
 #pragma once
 
 #include <phosphorengineapi_export.h>
+#include <QLatin1String>
 #include <QString>
 #include <QVariantMap>
 
 namespace PhosphorEngineApi {
 
 namespace PerScreenSnappingKey {
-inline constexpr const char ZonePadding[] = "ZonePadding";
-inline constexpr const char OuterGap[] = "OuterGap";
-inline constexpr const char UsePerSideOuterGap[] = "UsePerSideOuterGap";
-inline constexpr const char OuterGapTop[] = "OuterGapTop";
-inline constexpr const char OuterGapBottom[] = "OuterGapBottom";
-inline constexpr const char OuterGapLeft[] = "OuterGapLeft";
-inline constexpr const char OuterGapRight[] = "OuterGapRight";
+inline constexpr QLatin1String ZonePadding{"ZonePadding"};
+inline constexpr QLatin1String OuterGap{"OuterGap"};
+inline constexpr QLatin1String UsePerSideOuterGap{"UsePerSideOuterGap"};
+inline constexpr QLatin1String OuterGapTop{"OuterGapTop"};
+inline constexpr QLatin1String OuterGapBottom{"OuterGapBottom"};
+inline constexpr QLatin1String OuterGapLeft{"OuterGapLeft"};
+inline constexpr QLatin1String OuterGapRight{"OuterGapRight"};
 } // namespace PerScreenSnappingKey
 
 // Library-level fallback defaults. The app-level authority is ConfigDefaults (GPL);

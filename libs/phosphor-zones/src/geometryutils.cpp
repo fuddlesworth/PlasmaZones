@@ -188,7 +188,7 @@ int getEffectiveZonePadding(Layout* layout, IGeometrySettings* settings, const Q
 {
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
-        auto it = perScreen.constFind(QLatin1String(PerScreenSnappingKey::ZonePadding));
+        auto it = perScreen.constFind(PerScreenSnappingKey::ZonePadding);
         if (it != perScreen.constEnd()) {
             return it->toInt();
         }
@@ -207,16 +207,16 @@ int getEffectiveZonePadding(Layout* layout, IGeometrySettings* settings, const Q
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         if (!perScreen.isEmpty()) {
-            auto usePerSideIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::UsePerSideOuterGap));
+            auto usePerSideIt = perScreen.constFind(PerScreenSnappingKey::UsePerSideOuterGap);
             bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
             if (usePerSide) {
-                auto topIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapTop));
-                auto bottomIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapBottom));
-                auto leftIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapLeft));
-                auto rightIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapRight));
+                auto topIt = perScreen.constFind(PerScreenSnappingKey::OuterGapTop);
+                auto bottomIt = perScreen.constFind(PerScreenSnappingKey::OuterGapBottom);
+                auto leftIt = perScreen.constFind(PerScreenSnappingKey::OuterGapLeft);
+                auto rightIt = perScreen.constFind(PerScreenSnappingKey::OuterGapRight);
                 if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
                     || rightIt != perScreen.constEnd()) {
-                    auto uniformIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGap));
+                    auto uniformIt = perScreen.constFind(PerScreenSnappingKey::OuterGap);
                     int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : settings->outerGap();
                     return {(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
                             (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
@@ -224,7 +224,7 @@ int getEffectiveZonePadding(Layout* layout, IGeometrySettings* settings, const Q
                             (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
                 }
             }
-            auto uniformIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGap));
+            auto uniformIt = perScreen.constFind(PerScreenSnappingKey::OuterGap);
             if (uniformIt != perScreen.constEnd()) {
                 return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
             }

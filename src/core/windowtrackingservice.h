@@ -798,12 +798,8 @@ public:
     QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,
                                   int desktopFilter = 0) const override;
 
-    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
-    /// when multiple zones share the same number.
-    static void sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones);
-
-    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
-    static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
+    // Zone sort / position-map helpers now live in PhosphorZones::LayoutUtils.
+    // Call PhosphorZones::LayoutUtils::sortZonesByNumber / buildZonePositionMap directly.
 
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     ///

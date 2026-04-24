@@ -10,7 +10,6 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/LayoutUtils.h>
 #include "virtualdesktopmanager.h"
 #include "utils.h"
 #include "logging.h"
@@ -433,15 +432,8 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 // Shared Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones)
-{
-    PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
-}
-
-QHash<QString, int> WindowTrackingService::buildZonePositionMap(PhosphorZones::Layout* layout)
-{
-    return PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
-}
+// sortZonesByNumber / buildZonePositionMap removed — callers should use
+// PhosphorZones::LayoutUtils directly.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Out-of-line accessors delegating to SnapState
