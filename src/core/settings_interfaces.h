@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "enums.h"
+#include <PhosphorEngineApi/IGeometrySettings.h>
 #include <QString>
 #include <QStringList>
 #include <QSet>
@@ -231,24 +232,17 @@ public:
  * - Settings: values are clamped to [0, INT_MAX]; -1 is not valid (global config always has a value)
  * - PhosphorZones::Layout: -1 sentinel means "use global setting"; >= 0 is a per-layout override
  */
-class PLASMAZONES_EXPORT IZoneGeometrySettings
+class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngineApi::IGeometrySettings
 {
 public:
-    virtual ~IZoneGeometrySettings() = default;
+    ~IZoneGeometrySettings() override = default;
 
-    virtual int zonePadding() const = 0;
     virtual void setZonePadding(int padding) = 0;
-    virtual int outerGap() const = 0;
     virtual void setOuterGap(int gap) = 0;
-    virtual bool usePerSideOuterGap() const = 0;
     virtual void setUsePerSideOuterGap(bool enabled) = 0;
-    virtual int outerGapTop() const = 0;
     virtual void setOuterGapTop(int gap) = 0;
-    virtual int outerGapBottom() const = 0;
     virtual void setOuterGapBottom(int gap) = 0;
-    virtual int outerGapLeft() const = 0;
     virtual void setOuterGapLeft(int gap) = 0;
-    virtual int outerGapRight() const = 0;
     virtual void setOuterGapRight(int gap) = 0;
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
@@ -258,9 +252,6 @@ public:
     virtual void setMinimumZoneSizePx(int size) = 0;
     virtual int minimumZoneDisplaySizePx() const = 0;
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
-    // Per-screen snapping overrides are declared on ISettings alongside the
-    // autotile / zone-selector per-screen APIs so all three share one home.
-    // See PlasmaZones::ISettings in core/interfaces.h.
 };
 
 /**

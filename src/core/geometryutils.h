@@ -6,6 +6,7 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
+#include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QRectF>
 #include <QScreen>
