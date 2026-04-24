@@ -7,21 +7,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QScreen>
 
 #include <algorithm>
 #include <cmath>
 
 namespace PhosphorGeometry {
-
-QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen)
-{
-    if (!screen) {
-        return geometry;
-    }
-    const QRectF screenGeom = screen->geometry();
-    return QRectF(geometry.x() - screenGeom.x(), geometry.y() - screenGeom.y(), geometry.width(), geometry.height());
-}
 
 QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry)
 {

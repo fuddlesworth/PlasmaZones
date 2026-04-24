@@ -11,11 +11,8 @@
 #include <QString>
 #include <QVector>
 
-class QScreen;
-
 namespace PhosphorGeometry {
 
-PHOSPHORGEOMETRY_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);
 PHOSPHORGEOMETRY_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry);
 
 PHOSPHORGEOMETRY_EXPORT QRect snapToRect(const QRectF& rf);

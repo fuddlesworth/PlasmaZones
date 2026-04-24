@@ -7,8 +7,11 @@
 #include <PhosphorGeometry/GeometryUtils.h>
 #include <phosphorengineapi_export.h>
 
+#include <QRectF>
 #include <QString>
 #include <QVector>
+
+class QScreen;
 
 namespace PhosphorEngineApi {
 namespace GeometryUtils {
@@ -18,6 +21,8 @@ using PhosphorGeometry::enforceWindowMinSizes;
 using PhosphorGeometry::rectToJson;
 using PhosphorGeometry::removeZoneOverlaps;
 using PhosphorGeometry::snapToRect;
+
+PHOSPHORENGINEAPI_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);
 
 PHOSPHORENGINEAPI_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);
 

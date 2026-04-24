@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorGeometry — Pure geometry math utilities.
+# PhosphorGeometry — Pure geometry math library.
 #
-# Zero phosphor dependencies. Provides coordinate transforms, overlap
-# resolution, min-size enforcement, and JSON serialization for zone
-# geometry. Used by engines, overlay, and daemon code.
+# Zero phosphor dependencies, Qt6::Core only. Provides coordinate
+# transforms, overlap resolution, min-size enforcement, and JSON
+# serialization for zone geometry.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -41,7 +41,6 @@ target_compile_features(PhosphorGeometry PUBLIC cxx_std_20)
 target_link_libraries(PhosphorGeometry
     PUBLIC
         Qt6::Core
-        Qt6::Gui
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -6,6 +6,9 @@
 # Header-only INTERFACE library providing IPlacementState, NavigationContext,
 # and shared POD types. Both domain libraries (phosphor-zones, phosphor-tiles)
 # and engine libraries depend on this without pulling in the full engine API.
+#
+# NOTE: Headers declare types in namespace PhosphorEngineApi (not PhosphorEngineTypes)
+# to avoid mass-renaming existing consumers. Library name ≠ namespace is intentional.
 
 cmake_minimum_required(VERSION 3.16)
 

@@ -1,7 +1,7 @@
 # Phosphor Library Architecture Analysis
 
 Date: 2026-04-24
-Branch: feat/snap-state-ownership (post-PR 7)
+Branch: feat/library-architecture-restructuring
 Status: Planning document for library extraction and restructuring
 
 ---
@@ -508,6 +508,9 @@ Engines emit these signals (inherited from PlacementEngineBase):
 - Do not change runtime behavior -- pure structural refactoring
 - PRs that only move files can be parallelized
 - PRs that change interface signatures must be sequential
+
+**NOTE**: Step numbers below (8–15) are logical sequence numbers in the
+migration plan, not GitHub PR numbers. Map to actual PRs as work is merged.
 
 ### Phase A: Prepare the Ground (2 PRs, sequential)
 

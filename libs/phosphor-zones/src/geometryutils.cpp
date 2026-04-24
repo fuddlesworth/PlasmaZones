@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/GeometryUtils.h>
-#include <PhosphorGeometry/IGeometrySettings.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -14,21 +13,7 @@
 #include <QScreen>
 #include <QVariantMap>
 
-using PhosphorGeometry::IGeometrySettings;
-namespace GeometryDefaults = PhosphorGeometry::Defaults;
-namespace PerScreenSnappingKey = PhosphorGeometry::PerScreenSnappingKey;
-
 namespace PhosphorZones {
-
-static QVariantMap getPerScreenSnappingWithFallback(IGeometrySettings* settings, const QString& screenId)
-{
-    QVariantMap result = settings->getPerScreenSnappingSettings(screenId);
-    if (result.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        result = settings->getPerScreenSnappingSettings(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
-    }
-    return result;
-}
-
 namespace GeometryUtils {
 
 namespace {
@@ -113,6 +98,14 @@ QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF&
 }
 } // anonymous namespace
 
+QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen)
+{
+    if (!screen) {
+        return geometry;
+    }
+    return PhosphorGeometry::availableAreaToOverlayCoordinates(geometry, screen->geometry());
+}
+
 QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen, int innerGap,
                                const ::PhosphorLayout::EdgeGaps& outerGaps, bool useAvailableGeometry,
                                const QString& screenId)
@@ -155,13 +148,12 @@ QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, Zone* zone
 }
 
 QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen,
-                                 const QString& screenId, Layout* layout, IGeometrySettings* settings)
+                                 const QString& screenId, Layout* layout, int zonePadding,
+                                 const ::PhosphorLayout::EdgeGaps& outerGaps)
 {
     if (!zone) {
         return QRectF();
     }
-    int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
-    ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     auto [vsGeom, vsAvailGeom] = resolveScreenGeometries(mgr, screenId);
     if (vsGeom.isValid()) {
@@ -178,93 +170,11 @@ QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, Zone* zo
 }
 
 QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, Zone* zone, QScreen* screen,
-                               const QString& screenId, Layout* layout, IGeometrySettings* settings)
+                               const QString& screenId, Layout* layout, int zonePadding,
+                               const ::PhosphorLayout::EdgeGaps& outerGaps)
 {
-    QRectF geoF = getZoneGeometryForScreenF(mgr, zone, screen, screenId, layout, settings);
+    QRectF geoF = getZoneGeometryForScreenF(mgr, zone, screen, screenId, layout, zonePadding, outerGaps);
     return geoF.isValid() ? PhosphorGeometry::snapToRect(geoF) : QRect();
-}
-
-int getEffectiveZonePadding(Layout* layout, IGeometrySettings* settings, const QString& screenId)
-{
-    if (!screenId.isEmpty() && settings) {
-        QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
-        auto it = perScreen.constFind(PerScreenSnappingKey::ZonePadding);
-        if (it != perScreen.constEnd()) {
-            return it->toInt();
-        }
-    }
-    if (layout && layout->hasZonePaddingOverride()) {
-        return layout->zonePadding();
-    }
-    if (settings) {
-        return settings->zonePadding();
-    }
-    return GeometryDefaults::ZonePadding;
-}
-
-::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(Layout* layout, IGeometrySettings* settings, const QString& screenId)
-{
-    if (!screenId.isEmpty() && settings) {
-        QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
-        if (!perScreen.isEmpty()) {
-            auto usePerSideIt = perScreen.constFind(PerScreenSnappingKey::UsePerSideOuterGap);
-            bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
-            if (usePerSide) {
-                auto topIt = perScreen.constFind(PerScreenSnappingKey::OuterGapTop);
-                auto bottomIt = perScreen.constFind(PerScreenSnappingKey::OuterGapBottom);
-                auto leftIt = perScreen.constFind(PerScreenSnappingKey::OuterGapLeft);
-                auto rightIt = perScreen.constFind(PerScreenSnappingKey::OuterGapRight);
-                if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
-                    || rightIt != perScreen.constEnd()) {
-                    auto uniformIt = perScreen.constFind(PerScreenSnappingKey::OuterGap);
-                    int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : settings->outerGap();
-                    return {(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
-                            (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
-                            (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
-                            (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
-                }
-            }
-            auto uniformIt = perScreen.constFind(PerScreenSnappingKey::OuterGap);
-            if (uniformIt != perScreen.constEnd()) {
-                return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
-            }
-        }
-    }
-    if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
-        ::PhosphorLayout::EdgeGaps gaps = layout->rawOuterGaps();
-        if (settings && settings->usePerSideOuterGap()) {
-            if (gaps.top < 0)
-                gaps.top = settings->outerGapTop();
-            if (gaps.bottom < 0)
-                gaps.bottom = settings->outerGapBottom();
-            if (gaps.left < 0)
-                gaps.left = settings->outerGapLeft();
-            if (gaps.right < 0)
-                gaps.right = settings->outerGapRight();
-        } else {
-            int fallback = settings ? settings->outerGap() : GeometryDefaults::OuterGap;
-            if (gaps.top < 0)
-                gaps.top = fallback;
-            if (gaps.bottom < 0)
-                gaps.bottom = fallback;
-            if (gaps.left < 0)
-                gaps.left = fallback;
-            if (gaps.right < 0)
-                gaps.right = fallback;
-        }
-        return gaps;
-    }
-    if (layout && layout->hasOuterGapOverride()) {
-        return ::PhosphorLayout::EdgeGaps::uniform(layout->outerGap());
-    }
-    if (settings) {
-        if (settings->usePerSideOuterGap()) {
-            return {settings->outerGapTop(), settings->outerGapBottom(), settings->outerGapLeft(),
-                    settings->outerGapRight()};
-        }
-        return ::PhosphorLayout::EdgeGaps::uniform(settings->outerGap());
-    }
-    return ::PhosphorLayout::EdgeGaps::uniform(GeometryDefaults::OuterGap);
 }
 
 QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, Layout* layout, QScreen* screen)
