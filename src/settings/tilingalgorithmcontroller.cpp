@@ -155,6 +155,14 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
     QVariantMap perAlgo = m_settings->autotilePerAlgorithmSettings();
     QVariantMap algoEntry = perAlgo.value(algorithmId).toMap();
     QVariantMap customParams = algoEntry.value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
+
+    // No-op if the coerced value already matches what's stored — avoids
+    // emitting NOTIFY + flipping the dirty flag for slider re-emits that
+    // resolve to the same snapped value.
+    if (customParams.contains(paramName) && customParams.value(paramName) == coerced) {
+        return;
+    }
+
     customParams[paramName] = coerced;
     algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
 

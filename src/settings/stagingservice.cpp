@@ -197,16 +197,17 @@ const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(cons
 
 void StagingService::flushAssignmentsToDaemon()
 {
-    qCInfo(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
+    qCDebug(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         const auto& s = it.value();
         const bool isActivity = !s.activityId.isEmpty();
         const bool isDesktop = s.virtualDesktop > 0;
-        qCInfo(lcCore) << "  flush: screen=" << s.screenId << "fullCleared=" << s.fullCleared << "mode="
-                       << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
-                       << "snapping="
-                       << (s.snappingLayoutId.has_value() ? *s.snappingLayoutId : QStringLiteral("(none)")) << "tiling="
-                       << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"));
+        qCDebug(lcCore) << "  flush: screen=" << s.screenId << "fullCleared=" << s.fullCleared << "mode="
+                        << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
+                        << "snapping="
+                        << (s.snappingLayoutId.has_value() ? *s.snappingLayoutId : QStringLiteral("(none)"))
+                        << "tiling="
+                        << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"));
 
         // Full clear — clear the entire entry for this context.
         if (s.fullCleared) {
@@ -224,60 +225,80 @@ void StagingService::flushAssignmentsToDaemon()
             continue;
         }
 
+        // Normalise the tiling id — callers may store either the raw algo id
+        // or the `autotile:` prefixed form; the D-Bus surface wants the raw id.
+        const auto normTile = [](const QString& val) {
+            return PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
+        };
+
         // Explicit mode staging (Overview page) — setAssignmentEntry targets
         // a full context triple, matching the KCM batch-save path.
         if (s.stagedMode.has_value()) {
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
-            const QString tiling = s.tilingAlgorithmId.has_value()
-                ? (PhosphorLayout::LayoutId::isAutotile(*s.tilingAlgorithmId)
-                       ? PhosphorLayout::LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
-                       : *s.tilingAlgorithmId)
-                : QString();
+            const QString tiling = s.tilingAlgorithmId.has_value() ? normTile(*s.tilingAlgorithmId) : QString();
             DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                    QStringLiteral("setAssignmentEntry"),
                                    {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
             continue;
         }
 
-        // Snapping layout assignment (per-field path — assignment pages).
-        if (s.snappingLayoutId.has_value() && !s.snappingLayoutId->isEmpty()) {
+        const bool hasSnap = s.snappingLayoutId.has_value();
+        const bool hasTile = s.tilingAlgorithmId.has_value();
+        if (!hasSnap && !hasTile) {
+            continue;
+        }
+
+        // If BOTH fields are staged (e.g. snap assign followed by tiling clear
+        // on the same context), the two per-field D-Bus calls are not atomic:
+        // `assignLayoutToScreen(snap)` followed by `setAssignmentEntry(mode=0,
+        // "", "")` clobbers the snap we just assigned. Coalesce into a single
+        // `setAssignmentEntry` so the daemon writes the combined state in one
+        // shot. Mode = 1 when a non-empty tiling algo is staged, 0 otherwise.
+        if (hasSnap && hasTile) {
+            const QString snap = *s.snappingLayoutId;
+            const QString tile = normTile(*s.tilingAlgorithmId);
+            const int mode = tile.isEmpty() ? 0 : 1;
+            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                   QStringLiteral("setAssignmentEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile});
+            continue;
+        }
+
+        // Only snap staged — use the per-field path. An empty staged value
+        // here has no dedicated D-Bus surface (there is no `clearSnappingOnly`
+        // method); assignment-page UI always routes empty-snap through
+        // stageFullClear, which took the `fullCleared` branch above.
+        if (hasSnap) {
+            const QString& layoutId = *s.snappingLayoutId;
+            if (layoutId.isEmpty()) {
+                continue;
+            }
             QDBusMessage reply;
             if (isActivity) {
                 reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                QStringLiteral("assignLayoutToScreenActivity"),
-                                               {s.screenId, s.activityId, *s.snappingLayoutId});
+                                               {s.screenId, s.activityId, layoutId});
             } else if (isDesktop) {
                 reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                QStringLiteral("assignLayoutToScreenDesktop"),
-                                               {s.screenId, s.virtualDesktop, *s.snappingLayoutId});
+                                               {s.screenId, s.virtualDesktop, layoutId});
             } else {
-                reply =
-                    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                           QStringLiteral("assignLayoutToScreen"), {s.screenId, *s.snappingLayoutId});
+                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                               QStringLiteral("assignLayoutToScreen"), {s.screenId, layoutId});
             }
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 qCWarning(lcCore) << "  assignLayout FAILED:" << reply.errorMessage();
             }
+            continue;
         }
 
-        // Tiling algorithm assignment.
-        if (s.tilingAlgorithmId.has_value() && !s.tilingAlgorithmId->isEmpty()) {
-            const QString algoId = PhosphorLayout::LayoutId::isAutotile(*s.tilingAlgorithmId)
-                ? PhosphorLayout::LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
-                : *s.tilingAlgorithmId;
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, 1, QString(), algoId});
-        }
-
-        // Tiling-only clear — clearing the algorithm reverts to snapping mode (mode=0).
-        // The daemon clamps mode via qBound(0, mode, 1).
-        if (s.tilingAlgorithmId.has_value() && s.tilingAlgorithmId->isEmpty() && !s.fullCleared) {
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, 0, QString(), QString()});
-        }
+        // Only tile staged. Empty ≡ tiling-clear (reverts to snapping mode 0).
+        const QString tile = normTile(*s.tilingAlgorithmId);
+        const int mode = tile.isEmpty() ? 0 : 1;
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("setAssignmentEntry"),
+                               {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile});
     }
     m_assignments.clear();
 }

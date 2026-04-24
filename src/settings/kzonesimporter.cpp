@@ -25,10 +25,10 @@
 
 namespace PlasmaZones::KZonesImporter {
 
-namespace {
 constexpr auto kKwinrcGroup = "Script-kzones";
 constexpr auto kLayoutsJsonKey = "layoutsJson";
 
+namespace {
 QString kwinrcPath()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");

@@ -1047,6 +1047,17 @@ public:
     {
         return 0.1;
     }
+    /// Per-axis defaults — currently share the same value as editorSnapInterval
+    /// but split so future aspect-aware defaults don't require auditing every
+    /// call site. Use these from resetDefaults / first-run paths.
+    static double editorSnapIntervalX()
+    {
+        return editorSnapInterval();
+    }
+    static double editorSnapIntervalY()
+    {
+        return editorSnapInterval();
+    }
     static double editorSnapIntervalMin()
     {
         return 0.01;

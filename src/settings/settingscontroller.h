@@ -167,6 +167,11 @@ public:
     }
     Q_INVOKABLE void markWhatsNewSeen();
 
+private:
+    /// Highest entry version in m_whatsNewEntries, or empty if no entries.
+    QString latestWhatsNewVersion() const;
+
+public:
     // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
@@ -688,7 +693,8 @@ private:
     // virtual screen configs, quick layout slots. Flushed by save() in a
     // specific order (persistence → Settings::save → D-Bus). Ordering
     // (m_stagedSnappingOrder / m_stagedTilingOrder below) stays here because
-    // it couples to per-page NOTIFY signals the service isn't a QObject.
+    // it couples to per-page NOTIFY signals, and the service isn't a QObject
+    // so it can't emit them itself.
     StagingService m_staging;
 
     // Staged ordering changes (flushed to m_settings on save)

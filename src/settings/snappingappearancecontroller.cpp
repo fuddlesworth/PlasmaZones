@@ -7,8 +7,9 @@
 #include "../config/settings.h"
 #include "../pz_i18n.h"
 
-#include <QDir>
 #include <QFile>
+#include <QStandardPaths>
+#include <QStringLiteral>
 
 namespace PlasmaZones {
 
@@ -41,7 +42,11 @@ int SnappingAppearanceController::borderRadiusMax() const
 
 void SnappingAppearanceController::loadColorsFromPywal()
 {
-    const QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
+    // Honour $XDG_CACHE_HOME via QStandardPaths rather than hardcoding
+    // ~/.cache/wal — pywal itself follows XDG, so hardcoded ~/.cache skips
+    // users who've relocated their cache dir.
+    const QString pywalPath =
+        QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/wal/colors.json");
     if (!QFile::exists(pywalPath)) {
         Q_EMIT colorImportError(PzI18n::tr("Pywal colors not found. Run 'wal' to generate colors first.\n\n"
                                            "Expected file: %1")

@@ -137,8 +137,8 @@ void EditorPageController::resetDefaults()
     m_settings->setEditorFillShortcut(ConfigDefaults::editorFillShortcut());
     m_settings->setEditorGridSnappingEnabled(ConfigDefaults::editorGridSnappingEnabled());
     m_settings->setEditorEdgeSnappingEnabled(ConfigDefaults::editorEdgeSnappingEnabled());
-    m_settings->setEditorSnapIntervalX(ConfigDefaults::editorSnapInterval());
-    m_settings->setEditorSnapIntervalY(ConfigDefaults::editorSnapInterval());
+    m_settings->setEditorSnapIntervalX(ConfigDefaults::editorSnapIntervalX());
+    m_settings->setEditorSnapIntervalY(ConfigDefaults::editorSnapIntervalY());
     m_settings->setEditorSnapOverrideModifier(ConfigDefaults::editorSnapOverrideModifier());
     m_settings->setFillOnDropEnabled(ConfigDefaults::fillOnDropEnabled());
     m_settings->setFillOnDropModifier(ConfigDefaults::fillOnDropModifier());

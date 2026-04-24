@@ -13,14 +13,60 @@
 #include "tilingalgorithmcontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
-#include "../config/configbackends.h"
-
 #include "virtualscreenutils.h"
+#include "../config/configbackends.h"
+#include "../config/configdefaults.h"
+#include "../config/configmigration.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
+#include "../core/constants.h"
+#include "../core/geometryutils.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
+#include "../core/logging.h"
+#include "../core/utils.h"
+#include "../pz_i18n.h"
+#include "dbusutils.h"
+#include "version.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
+
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDate>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QFontDatabase>
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QScreen>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QTimer>
+#include <QUrl>
+#include <QVersionNumber>
+#include <QWindow>
+
+#include <algorithm>
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -40,60 +86,6 @@ static void sortMergedLayoutList(QVariantList& list)
             < mapB.value(QStringLiteral("displayName")).toString().toLower();
     });
 }
-
-} // namespace PlasmaZones
-#include "../core/constants.h"
-#include "version.h"
-#include "../core/geometryutils.h"
-#include "../core/layoutworker/layoutcomputeservice.h"
-#include "../core/logging.h"
-#include "../core/utils.h"
-#include <PhosphorScreens/VirtualScreen.h>
-#include "dbusutils.h"
-
-#include <PhosphorZones/Layout.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
-
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorZones/IZoneLayoutRegistry.h>
-#include <PhosphorTiles/TilingState.h>
-#include <PhosphorTiles/ScriptedAlgorithm.h>
-#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-
-#include "../config/configdefaults.h"
-#include "../config/configmigration.h"
-#include "../pz_i18n.h"
-
-#include <QDBusMessage>
-#include <QFile>
-#include <QFileInfo>
-#include <QFontDatabase>
-#include <QGuiApplication>
-#include <QScreen>
-#include <QWindow>
-
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDesktopServices>
-#include <QDate>
-#include <QDir>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QProcess>
-#include <QRegularExpression>
-#include <QStandardPaths>
-#include <QSettings>
-#include <QTimer>
-#include <QUrl>
-
-#include <algorithm>
-#include <memory>
-#include <PhosphorScreens/ScreenIdentity.h>
-
-namespace PlasmaZones {
 
 SettingsController::~SettingsController() = default;
 
@@ -431,19 +423,48 @@ void SettingsController::dismissUpdate()
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
 }
 
+// Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
+// sorts after "1.9.0" (plain string compare gets that wrong). Entries come
+// from the bundled whatsnew.json resource in no guaranteed order.
+QString SettingsController::latestWhatsNewVersion() const
+{
+    QVersionNumber best;
+    QString bestStr;
+    for (const QVariant& v : m_whatsNewEntries) {
+        const QString ver = v.toMap().value(QStringLiteral("version")).toString();
+        const QVersionNumber parsed = QVersionNumber::fromString(ver);
+        if (parsed.isNull())
+            continue;
+        if (bestStr.isEmpty() || best < parsed) {
+            best = parsed;
+            bestStr = ver;
+        }
+    }
+    return bestStr;
+}
+
 bool SettingsController::hasUnseenWhatsNew() const
 {
-    if (m_whatsNewEntries.isEmpty())
+    const QString latest = latestWhatsNewVersion();
+    if (latest.isEmpty())
         return false;
-    return m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING;
+    // Unseen iff the latest bundled entry is strictly newer than what the
+    // user last marked seen. String compare after normalisation would still
+    // mis-order "1.10" vs "1.9", so go through QVersionNumber.
+    const QVersionNumber latestV = QVersionNumber::fromString(latest);
+    const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
+    return seenV < latestV;
 }
 
 void SettingsController::markWhatsNewSeen()
 {
-    if (m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING) {
-        m_lastSeenWhatsNewVersion = PlasmaZones::VERSION_STRING;
+    const QString latest = latestWhatsNewVersion();
+    if (latest.isEmpty())
+        return;
+    if (m_lastSeenWhatsNewVersion != latest) {
+        m_lastSeenWhatsNewVersion = latest;
         QSettings appSettings;
-        appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), PlasmaZones::VERSION_STRING);
+        appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), latest);
         Q_EMIT lastSeenWhatsNewVersionChanged();
     }
 }
@@ -684,6 +705,16 @@ void SettingsController::beginExternalEdit(const QString& page)
         qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
         return;
     }
+    // Nested begin without a prior end means the previous caller leaked
+    // state — dirty tracking for subsequent changes would target the wrong
+    // page. Warn loudly (debug-assert in dev builds) and fall through so
+    // the new target wins.
+    if (!m_externalEditPage.isEmpty()) {
+        qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: nested call without endExternalEdit — previous target:"
+                                       << m_externalEditPage << "new target:" << resolved;
+        Q_ASSERT_X(false, "SettingsController::beginExternalEdit",
+                   "Nested call without endExternalEdit. Wrap sidebar/global edits with matched begin/end pairs.");
+    }
     m_externalEditPage = resolved;
 }
 
@@ -830,7 +861,7 @@ QVariantMap SettingsController::localLayoutPreview(const QString& id, int window
 
 void SettingsController::createNewLayout()
 {
-    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
+    createNewLayout(PzI18n::tr("New Layout"), QStringLiteral("custom"), -1, true);
 }
 
 bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
@@ -838,7 +869,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 {
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
-        sanitizedName = QStringLiteral("New Layout");
+        sanitizedName = PzI18n::tr("New Layout");
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 

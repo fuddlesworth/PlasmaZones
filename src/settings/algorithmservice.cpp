@@ -59,6 +59,69 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
     return QString();
 }
 
+/// Index of the first line AFTER the `};` that closes `var metadata = { ... }`
+/// at file scope in @p lines. Returns -1 if no such declaration exists.
+///
+/// Uses a brace-depth tracker so nested objects / arrays inside metadata
+/// (e.g. `customParams: [{ ... }]`) don't end the block early. String
+/// literals are skipped so stray `{`/`}` inside description values don't
+/// throw the count off. One trailing blank line after the metadata close
+/// is consumed (the convention in every bundled template).
+///
+/// Contract with template authors: `var metadata = ` must appear at file
+/// scope (not inside a function), and its value must be a single object
+/// literal terminated by `};` — which all 25 bundled templates satisfy.
+/// Block and line comments INSIDE the metadata value are not supported
+/// (no bundled template uses them); adding that would require a full
+/// tokeniser.
+int findMetadataBodyStart(const QStringList& lines)
+{
+    int depth = 0;
+    bool insideMetadata = false;
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString& line = lines[i];
+        if (!insideMetadata) {
+            if (!line.trimmed().startsWith(QLatin1String("var metadata"))) {
+                continue;
+            }
+            insideMetadata = true;
+        }
+        bool inString = false;
+        QChar stringQuote;
+        for (int j = 0; j < line.size(); ++j) {
+            const QChar c = line[j];
+            if (inString) {
+                if (c == QLatin1Char('\\') && j + 1 < line.size()) {
+                    ++j; // skip the escaped character
+                    continue;
+                }
+                if (c == stringQuote) {
+                    inString = false;
+                }
+                continue;
+            }
+            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+                inString = true;
+                stringQuote = c;
+                continue;
+            }
+            if (c == QLatin1Char('{')) {
+                ++depth;
+            } else if (c == QLatin1Char('}')) {
+                --depth;
+            }
+        }
+        if (depth == 0) {
+            int bodyStart = i + 1;
+            if (bodyStart < lines.size() && lines[bodyStart].trimmed().isEmpty()) {
+                ++bodyStart;
+            }
+            return bodyStart;
+        }
+    }
+    return -1;
+}
+
 } // anonymous namespace
 
 AlgorithmService::AlgorithmService(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
@@ -451,17 +514,38 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     // Replace the first name: and id: values inside the var metadata object.
     // Anchored to line start to avoid matching inside algorithm body strings.
     // Capture leading whitespace so the replacement preserves indentation.
+    //
+    // These patterns only match double-quoted values on metadata-object lines
+    // (the form every bundled template uses). Single-quoted, JSDoc-style, or
+    // property-shorthand metadata is unsupported — if either match fails, the
+    // duplicate would otherwise be written with the original name + id,
+    // colliding with the source in the registry. Bail out instead.
     static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name:\s*"[^"]*")"),
                                            QRegularExpression::MultilineOption);
     static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id:\s*"[^"]*")"), QRegularExpression::MultilineOption);
-    QRegularExpressionMatch nameMatch = nameRe.match(content);
-    if (nameMatch.hasMatch())
-        content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
-                        nameMatch.captured(1) + QStringLiteral("name: \"") + newName + QStringLiteral("\""));
-    QRegularExpressionMatch idMatch = idRe.match(content);
-    if (idMatch.hasMatch())
-        content.replace(idMatch.capturedStart(), idMatch.capturedLength(),
-                        idMatch.captured(1) + QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
+    const QRegularExpressionMatch nameMatch = nameRe.match(content);
+    const QRegularExpressionMatch idMatch = idRe.match(content);
+    if (!nameMatch.hasMatch() || !idMatch.hasMatch()) {
+        qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: could not locate metadata name/id in" << canonicalSource
+                                       << "(nameMatch=" << nameMatch.hasMatch() << "idMatch=" << idMatch.hasMatch()
+                                       << ")";
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not duplicate algorithm — its metadata format is not recognised. "
+                       "Expected `name: \"...\"` and `id: \"...\"` on separate lines."));
+        return false;
+    }
+    content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
+                    nameMatch.captured(1) + QStringLiteral("name: \"") + newName + QStringLiteral("\""));
+    // idMatch captured positions may have shifted after the name replacement;
+    // re-run id match over the updated content so we don't corrupt bytes.
+    const QRegularExpressionMatch idMatch2 = idRe.match(content);
+    if (!idMatch2.hasMatch()) {
+        qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: id match disappeared after name replacement";
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not duplicate algorithm — metadata rewrite failed."));
+        return false;
+    }
+    content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
+                    idMatch2.captured(1) + QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
 
     QFile destFile(destPath);
     if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -614,7 +698,9 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
     content += QStringLiteral("};\n\n");
 
-    // Try to read base template body from system algorithm dirs
+    // Try to read base template body from system algorithm dirs. We emit
+    // our own SPDX + metadata above, then splice in the template's body
+    // (everything AFTER its own `var metadata = { ... };` block).
     bool foundTemplate = false;
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         const QString templateFile =
@@ -627,69 +713,13 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                // Skip the metadata header: SPDX lines, `// @annotation` lines,
-                // `var metadata = { ... };` blocks, `/* ... */` block comments
-                // before the first code line, and surrounding blank lines.
-                // Stop as soon as we hit a non-metadata line (including
-                // doc-comments like `/** ... */` or `// Helper:`) so the
-                // template body's own documentation is preserved.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
-                int bodyStart = 0;
-                bool inBlockComment = false;
-                bool inMetadataObject = false;
-                for (int i = 0; i < lines.size(); ++i) {
-                    const QString trimmed = lines[i].trimmed();
-                    // Track /* ... */ block comments in the header region
-                    if (inBlockComment) {
-                        bodyStart = i + 1;
-                        if (trimmed.contains(QLatin1String("*/")))
-                            inBlockComment = false;
-                        continue;
-                    }
-                    // Track var metadata = { ... }; block
-                    if (inMetadataObject) {
-                        bodyStart = i + 1;
-                        if (trimmed.startsWith(QLatin1String("};")))
-                            inMetadataObject = false;
-                        continue;
-                    }
-                    // SPDX headers
-                    if (trimmed.startsWith(QLatin1String("// SPDX-"))) {
-                        bodyStart = i + 1;
-                        continue;
-                    }
-                    // Old-style metadata annotations (// @name, etc.) — skip if present
-                    if (trimmed.startsWith(QLatin1String("// @"))) {
-                        bodyStart = i + 1;
-                        continue;
-                    }
-                    // JS metadata object: var metadata = { ... };
-                    if (trimmed.startsWith(QLatin1String("var metadata"))) {
-                        bodyStart = i + 1;
-                        if (!trimmed.contains(QLatin1String("};")))
-                            inMetadataObject = true;
-                        continue;
-                    }
-                    // Block comment opening in the header — only skip if we haven't
-                    // yet passed into the body (avoids stripping doc-comments after metadata).
-                    // NOTE: this also matches /** JSDoc */ style comments. We assume bundled
-                    // templates do not place JSDoc between metadata annotations.
-                    if (trimmed.startsWith(QLatin1String("/*"))) {
-                        bodyStart = i + 1;
-                        if (!trimmed.contains(QLatin1String("*/")))
-                            inBlockComment = true;
-                        continue;
-                    }
-                    // Blank lines between metadata lines are part of the header
-                    if (trimmed.isEmpty() && i == bodyStart) {
-                        bodyStart = i + 1;
-                        continue;
-                    }
-                    break;
-                }
-
-                // Append everything from bodyStart onwards
-                if (bodyStart < lines.size()) {
+                const int bodyStart = findMetadataBodyStart(lines);
+                if (bodyStart < 0) {
+                    qCWarning(PlasmaZones::lcCore)
+                        << "createNewAlgorithm: template" << baseTemplate
+                        << "has no recognisable `var metadata = { ... };` block — using fallback body.";
+                } else if (bodyStart < lines.size()) {
                     for (int i = bodyStart; i < lines.size(); ++i) {
                         content += lines[i];
                         if (i < lines.size() - 1)
@@ -697,6 +727,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                     }
                     foundTemplate = true;
                 }
+            } else {
+                qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: could not read template file:" << templateFile;
             }
         }
     }
