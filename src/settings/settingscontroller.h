@@ -38,6 +38,7 @@ class ScriptedAlgorithmLoader;
 
 #include "editorpagecontroller.h"
 #include "snappingbehaviorcontroller.h"
+#include "snappingzoneselectorcontroller.h"
 #include "tilingbehaviorcontroller.h"
 
 namespace PlasmaZones {
@@ -74,6 +75,7 @@ class SettingsController : public QObject
     // Snapping/Tiling behavior pages — trigger surfaces moved to per-page controllers.
     Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
     Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
+    Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
 
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
@@ -86,14 +88,6 @@ class SettingsController : public QObject
     // Settings bounds (single source of truth from ConfigDefaults)
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
-    Q_PROPERTY(int gapMax READ gapMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorTriggerDistanceMin READ zoneSelectorTriggerDistanceMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorTriggerDistanceMax READ zoneSelectorTriggerDistanceMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewWidthMin READ zoneSelectorPreviewWidthMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewWidthMax READ zoneSelectorPreviewWidthMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewHeightMin READ zoneSelectorPreviewHeightMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewHeightMax READ zoneSelectorPreviewHeightMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorGridColumnsMax READ zoneSelectorGridColumnsMax CONSTANT)
     Q_PROPERTY(int shaderFrameRateMin READ shaderFrameRateMin CONSTANT)
     Q_PROPERTY(int shaderFrameRateMax READ shaderFrameRateMax CONSTANT)
     Q_PROPERTY(int audioSpectrumBarCountMin READ audioSpectrumBarCountMin CONSTANT)
@@ -108,7 +102,6 @@ class SettingsController : public QObject
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
-    Q_PROPERTY(int gapMin READ gapMin CONSTANT)
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
     Q_PROPERTY(int autotileBorderWidthMin READ autotileBorderWidthMin CONSTANT)
     Q_PROPERTY(int autotileBorderRadiusMin READ autotileBorderRadiusMin CONSTANT)
@@ -118,8 +111,6 @@ class SettingsController : public QObject
     Q_PROPERTY(qreal autotileSplitRatioStepMin READ autotileSplitRatioStepMin CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
     Q_PROPERTY(int animationMinDistanceMin READ animationMinDistanceMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorGridColumnsMin READ zoneSelectorGridColumnsMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorMaxRowsMin READ zoneSelectorMaxRowsMin CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -384,6 +375,10 @@ public:
     {
         return m_tilingBehaviorPage;
     }
+    SnappingZoneSelectorController* snappingZoneSelectorPage() const
+    {
+        return m_snappingZoneSelectorPage;
+    }
 
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
@@ -414,38 +409,6 @@ public:
     int borderRadiusMax() const
     {
         return ConfigDefaults::borderRadiusMax();
-    }
-    int gapMax() const
-    {
-        return ConfigDefaults::outerGapMax();
-    } // Shared max for padding + outer gaps
-    int zoneSelectorTriggerDistanceMin() const
-    {
-        return ConfigDefaults::triggerDistanceMin();
-    }
-    int zoneSelectorTriggerDistanceMax() const
-    {
-        return ConfigDefaults::triggerDistanceMax();
-    }
-    int zoneSelectorPreviewWidthMin() const
-    {
-        return ConfigDefaults::previewWidthMin();
-    }
-    int zoneSelectorPreviewWidthMax() const
-    {
-        return ConfigDefaults::previewWidthMax();
-    }
-    int zoneSelectorPreviewHeightMin() const
-    {
-        return ConfigDefaults::previewHeightMin();
-    }
-    int zoneSelectorPreviewHeightMax() const
-    {
-        return ConfigDefaults::previewHeightMax();
-    }
-    int zoneSelectorGridColumnsMax() const
-    {
-        return ConfigDefaults::gridColumnsMax();
     }
     int shaderFrameRateMin() const
     {
@@ -503,10 +466,6 @@ public:
     {
         return ConfigDefaults::borderRadiusMin();
     }
-    int gapMin() const
-    {
-        return ConfigDefaults::outerGapMin();
-    }
     int autotileGapMin() const
     {
         return ConfigDefaults::autotileOuterGapMin();
@@ -542,14 +501,6 @@ public:
     int animationMinDistanceMin() const
     {
         return ConfigDefaults::animationMinDistanceMin();
-    }
-    int zoneSelectorGridColumnsMin() const
-    {
-        return ConfigDefaults::gridColumnsMin();
-    }
-    int zoneSelectorMaxRowsMin() const
-    {
-        return ConfigDefaults::maxRowsMin();
     }
 
     // ── Color import ─────────────────────────────────────────────────────────
@@ -786,6 +737,7 @@ private:
     EditorPageController* m_editorPage = nullptr;
     SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
     TilingBehaviorController* m_tilingBehaviorPage = nullptr;
+    SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;

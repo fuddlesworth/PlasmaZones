@@ -5,6 +5,7 @@
 
 #include "editorpagecontroller.h"
 #include "snappingbehaviorcontroller.h"
+#include "snappingzoneselectorcontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "../config/configbackends.h"
 
@@ -307,6 +308,10 @@ SettingsController::SettingsController(QObject* parent)
     // trigger-list conversion.
     m_snappingBehaviorPage = new SnappingBehaviorController(&m_settings, this);
     m_tilingBehaviorPage = new TilingBehaviorController(&m_settings, this);
+
+    // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
+    // facade over ConfigDefaults — no Settings wiring required.
+    m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();

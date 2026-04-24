@@ -15,6 +15,8 @@ set(plasmazones_settings_SRCS
     editorpagecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
+    snappingzoneselectorcontroller.h
+    snappingzoneselectorcontroller.cpp
     tilingbehaviorcontroller.h
     tilingbehaviorcontroller.cpp
     # Shared helpers used by multiple sub-controllers.
