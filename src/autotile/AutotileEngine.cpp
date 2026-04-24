@@ -1079,12 +1079,22 @@ void AutotileEngine::connectToSettings(Settings* settings)
 
 void AutotileEngine::syncFromSettings(ISettings* settings)
 {
-    syncFromSettings(qobject_cast<Settings*>(settings));
+    auto* concrete = qobject_cast<Settings*>(settings);
+    if (settings && !concrete) {
+        qCWarning(lcAutotile) << "syncFromSettings: ISettings is not a Settings instance — skipping";
+        return;
+    }
+    syncFromSettings(concrete);
 }
 
 void AutotileEngine::connectToSettings(ISettings* settings)
 {
-    connectToSettings(qobject_cast<Settings*>(settings));
+    auto* concrete = qobject_cast<Settings*>(settings);
+    if (settings && !concrete) {
+        qCWarning(lcAutotile) << "connectToSettings: ISettings is not a Settings instance — skipping";
+        return;
+    }
+    connectToSettings(concrete);
 }
 
 void AutotileEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)

@@ -206,6 +206,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
                 [this](const QString& windowId, const QString& screenId) {
                     Q_EMIT windowFloatingChanged(windowId, false, screenId);
                 });
+    } else if (snapEngine) {
+        qCWarning(lcDbusWindow) << "setEngines: snapEngine is not a SnapEngine — snap-specific signals not connected";
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

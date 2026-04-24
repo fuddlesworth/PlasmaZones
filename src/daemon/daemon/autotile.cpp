@@ -133,7 +133,11 @@ void Daemon::updateAutotileScreens()
                         // be stale if updateAutotileScreens runs before
                         // setAlgorithm syncs settings via QSignalBlocker.
                         auto* concreteEngine = qobject_cast<AutotileEngine*>(m_autotileEngine.get());
-                        const int runtimeMaxWindows = concreteEngine ? concreteEngine->config()->maxWindows : 0;
+                        Q_ASSERT(concreteEngine);
+                        if (!concreteEngine) {
+                            continue;
+                        }
+                        const int runtimeMaxWindows = concreteEngine->config()->maxWindows;
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
                             overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
                         }

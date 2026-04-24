@@ -67,6 +67,7 @@ public:
     QJsonObject serializeBaseState() const;
     void deserializeBaseState(const QJsonObject& state);
 
+    // Public dtor required for unique_ptr<PlacementEngineBase> in Daemon.
     ~PlacementEngineBase() override;
 
 protected:

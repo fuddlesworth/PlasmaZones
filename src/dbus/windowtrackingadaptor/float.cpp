@@ -10,11 +10,9 @@
 //   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
 
 #include "../windowtrackingadaptor.h"
-#include "../../autotile/AutotileEngine.h"
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../snap/SnapEngine.h"
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 
 namespace PlasmaZones {
@@ -161,12 +159,10 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // Route to the correct engine based on screen mode
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
         // If the window isn't tracked by autotile yet (e.g., dragged from a snap screen),
-        // adopt it as floating before setting state. adoptWindowAsFloating is
-        // AutotileEngine-specific (snap mode has no equivalent concept).
+        // adopt it as floating before setting state. Virtual dispatch handles the
+        // engine-specific logic (AutotileEngine overrides; SnapEngine no-ops).
         if (floating) {
-            if (auto* autotile = qobject_cast<AutotileEngine*>(m_autotileEngine.data())) {
-                autotile->adoptWindowAsFloating(windowId, screenId);
-            }
+            m_autotileEngine->adoptWindowAsFloating(windowId, screenId);
         }
         m_autotileEngine->setWindowFloat(windowId, floating);
     } else if (m_snapEngine) {

@@ -337,8 +337,9 @@ public:
     }
     void clearSavedFloatingForWindows(const QStringList& windowIds) override
     {
-        Q_UNUSED(windowIds)
-        clearSavedSnapFloating();
+        for (const QString& windowId : windowIds) {
+            m_savedSnapFloatingWindows.remove(windowId);
+        }
     }
     void saveModeFloat(const QString& windowId) override
     {
