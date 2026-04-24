@@ -16,7 +16,6 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include "core/geometryutils.h"
-#include "core/utils.h"
 #include "AutotileConfig.h"
 #include "NavigationController.h"
 #include "PerScreenConfigResolver.h"
@@ -31,10 +30,10 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/windowregistry.h"
-#include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -60,7 +59,8 @@ T* checkedCast(QObject* obj, const char* context)
 
 } // namespace
 
-AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
+AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
+                               PhosphorEngineApi::IWindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : PlacementEngineBase(parent)
@@ -156,6 +156,23 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 // Signal connections
 // ═══════════════════════════════════════════════════════════════════════════════
 
+void AutotileEngine::onWindowZoneChanged(const QString& windowId, const QString& zoneId)
+{
+    if (m_retiling)
+        return;
+    if (zoneId.isEmpty()) {
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+                continue;
+            }
+            if (it.value() && it.value()->isFloating(windowId)) {
+                return;
+            }
+        }
+        onWindowRemoved(windowId);
+    }
+}
+
 void AutotileEngine::connectSignals()
 {
     // Window tracking signals
@@ -163,36 +180,16 @@ void AutotileEngine::connectSignals()
     // windowOpened(), windowClosed(), windowFocused() - connected by Daemon to
     // WindowTrackingAdaptor signals. This connection also handles zone changes:
     if (m_windowTracker) {
-        // Use windowZoneChanged as a proxy until dedicated signals are added
-        connect(m_windowTracker, &WindowTrackingService::windowZoneChanged, this,
-                [this](const QString& windowId, const QString& zoneId) {
-                    if (m_retiling)
-                        return; // Ignore zone changes during retile
-                    if (zoneId.isEmpty()) {
-                        // Don't remove floating windows — clearing their zone assignment
-                        // (e.g., by an external D-Bus caller or legacy code path) would
-                        // cause onWindowRemoved to drop the window from autotile. Since
-                        // floating windows are still managed by autotile, skip removal.
-                        // Note: windowClosed() calls onWindowRemoved() directly and
-                        // bypasses this guard, so closed floating windows are cleaned up.
-                        // Only check current desktop/activity states — a window
-                        // floating on desktop 1 should not block removal on desktop 2.
-                        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-                            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
-                                continue;
-                            }
-                            if (it.value() && it.value()->isFloating(windowId)) {
-                                return;
-                            }
-                        }
-                        onWindowRemoved(windowId);
-                    }
-                    // Non-empty zoneId for already-tracked windows: no action needed,
-                    // the zone assignment is handled by the retile path.
-                    // Untracked windows (snap-mode zone assignments from SnapEngine)
-                    // are intentionally ignored — autotile windows are always added via
-                    // windowOpened() which stores m_windowToStateKey before onWindowAdded.
-                });
+        // String-based connect is required: m_windowTracker is IWindowTrackingService*
+        // (non-QObject ABC), so PMF syntax is unavailable. The asQObject() escape
+        // hatch is the standard Qt pattern for interface-based signal routing.
+        // Verify the connection succeeds so signal/slot renames are caught at startup.
+        bool ok = connect(m_windowTracker->asQObject(), SIGNAL(windowZoneChanged(QString, QString)), this,
+                          SLOT(onWindowZoneChanged(QString, QString)));
+        Q_ASSERT(ok);
+        if (Q_UNLIKELY(!ok)) {
+            qCCritical(lcAutotile) << "Failed to connect windowZoneChanged — autotile will not react to zone changes";
+        }
     }
 
     // Screen geometry changes
@@ -2407,7 +2404,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         if (qscreen) {
             const QRect geom = qscreen->geometry();
             screenInfo.portrait = geom.height() > geom.width();
-            screenInfo.aspectRatio = Utils::screenAspectRatio(qscreen);
+            screenInfo.aspectRatio = geom.height() > 0 ? static_cast<qreal>(geom.width()) / geom.height() : 0.0;
         } else if (m_screenManager) {
             // Virtual screen IDs have no QScreen — use Phosphor::Screens::ScreenManager geometry
             const QRect geom = m_screenManager->screenGeometry(screenId);

@@ -8,6 +8,7 @@
 
 #include <QColor>
 #include <QJsonArray>
+#include <algorithm>
 
 namespace PhosphorZones {
 
@@ -183,6 +184,29 @@ void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<
             activities.append(v.toString());
         }
     }
+}
+
+void sortZonesByNumber(QVector<Zone*>& zones)
+{
+    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+        if (a->zoneNumber() != b->zoneNumber())
+            return a->zoneNumber() < b->zoneNumber();
+        return a->id() < b->id();
+    });
+}
+
+QHash<QString, int> buildZonePositionMap(Layout* layout)
+{
+    QHash<QString, int> map;
+    if (!layout) {
+        return map;
+    }
+    QVector<Zone*> zones = layout->zones();
+    sortZonesByNumber(zones);
+    for (int i = 0; i < zones.size(); ++i) {
+        map[zones[i]->id().toString()] = i + 1;
+    }
+    return map;
 }
 
 } // namespace LayoutUtils

@@ -291,4 +291,18 @@ bool screensMatch(const QString& a, const QString& b)
     return sb && sa == sb;
 }
 
+bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId)
+{
+    if (storedScreenId.isEmpty() || physicalScreenId.isEmpty()) {
+        return false;
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
+        return false;
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreenId)) {
+        return screensMatch(PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreenId), physicalScreenId);
+    }
+    return screensMatch(storedScreenId, physicalScreenId);
+}
+
 } // namespace Phosphor::Screens::ScreenIdentity

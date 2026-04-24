@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <PhosphorEngineApi/EngineTypes.h>
 #include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorEngineApi/IPlacementState.h>
+#include <PhosphorEngineApi/IVirtualDesktopManager.h>
+#include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/NavigationContext.h>

@@ -31,6 +31,7 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorEngineApi SHARED
     include/PhosphorEngineApi/PlacementEngineBase.h
     src/PlacementEngineBase.cpp
+    src/GeometryUtils.cpp
 )
 add_library(PhosphorEngineApi::PhosphorEngineApi ALIAS PhosphorEngineApi)
 
@@ -51,6 +52,7 @@ target_compile_features(PhosphorEngineApi PUBLIC cxx_std_20)
 target_link_libraries(PhosphorEngineApi
     PUBLIC
         Qt6::Core
+        Qt6::Gui
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

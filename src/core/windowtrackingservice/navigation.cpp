@@ -8,6 +8,7 @@
 #include "../constants.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
@@ -81,7 +82,7 @@ QString WindowTrackingService::findEmptyZoneInLayout(PhosphorZones::Layout* layo
 
     // Sort by zone number so "first empty" is the lowest-numbered empty zone
     QVector<PhosphorZones::Zone*> sortedZones = layout->zones();
-    sortZonesByNumber(sortedZones);
+    PhosphorZones::LayoutUtils::sortZonesByNumber(sortedZones);
 
     for (PhosphorZones::Zone* zone : sortedZones) {
         if (!occupiedZoneIds.contains(zone->id())) {

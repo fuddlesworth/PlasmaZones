@@ -184,7 +184,7 @@ public:
         return false;
     }
 
-    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
+    QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
     }
