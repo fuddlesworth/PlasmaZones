@@ -57,8 +57,8 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
-        // Validate that the target screen exists. Use Phosphor::Screens::ScreenManager::resolvePhysicalScreen
-        // which properly handles virtual screen IDs (resolving to backing QScreen*).
+        // Null-screenManager fallback is test/edge-case only; primaryScreen() may
+        // differ from the screen at (0,0) on multi-monitor setups.
         QScreen* screen =
             (screenManager ? screenManager->physicalQScreenFor(effectiveScreen) : QGuiApplication::primaryScreen());
         if (!screen) {

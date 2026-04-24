@@ -93,15 +93,15 @@ using PhosphorEngineApi::PerScreenSnappingKey::OuterGapTop;
 using PhosphorEngineApi::PerScreenSnappingKey::UsePerSideOuterGap;
 using PhosphorEngineApi::PerScreenSnappingKey::ZonePadding;
 
-inline constexpr const char SnapAssistEnabled[] = "SnapAssistEnabled";
-inline constexpr const char ZoneSelectorEnabled[] = "ZoneSelectorEnabled";
-inline constexpr const char ZoneSelectorTriggerDistance[] = "ZoneSelectorTriggerDistance";
-inline constexpr const char ZoneSelectorPosition[] = "ZoneSelectorPosition";
-inline constexpr const char ZoneSelectorLayoutMode[] = "ZoneSelectorLayoutMode";
-inline constexpr const char ZoneSelectorSizeMode[] = "ZoneSelectorSizeMode";
-inline constexpr const char ZoneSelectorMaxRows[] = "ZoneSelectorMaxRows";
-inline constexpr const char ZoneSelectorPreviewWidth[] = "ZoneSelectorPreviewWidth";
-inline constexpr const char ZoneSelectorPreviewHeight[] = "ZoneSelectorPreviewHeight";
+inline constexpr QLatin1String SnapAssistEnabled{"SnapAssistEnabled"};
+inline constexpr QLatin1String ZoneSelectorEnabled{"ZoneSelectorEnabled"};
+inline constexpr QLatin1String ZoneSelectorTriggerDistance{"ZoneSelectorTriggerDistance"};
+inline constexpr QLatin1String ZoneSelectorPosition{"ZoneSelectorPosition"};
+inline constexpr QLatin1String ZoneSelectorLayoutMode{"ZoneSelectorLayoutMode"};
+inline constexpr QLatin1String ZoneSelectorSizeMode{"ZoneSelectorSizeMode"};
+inline constexpr QLatin1String ZoneSelectorMaxRows{"ZoneSelectorMaxRows"};
+inline constexpr QLatin1String ZoneSelectorPreviewWidth{"ZoneSelectorPreviewWidth"};
+inline constexpr QLatin1String ZoneSelectorPreviewHeight{"ZoneSelectorPreviewHeight"};
 } // namespace PerScreenSnappingKey
 
 // ═══════════════════════════════════════════════════════════════════════════════

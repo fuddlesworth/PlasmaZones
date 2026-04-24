@@ -737,9 +737,9 @@ public:
     void clearDirty();
 
 Q_SIGNALS:
-    /**
-     * @brief Emitted when a window's zone assignment changes
-     */
+    // WARNING: AutotileEngine connects to this signal via string-based SIGNAL/SLOT
+    // (it holds IWindowTrackingService*, not WindowTrackingService*, so PMF connect
+    // is unavailable). Renaming this signal will silently break autotile zone tracking.
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
