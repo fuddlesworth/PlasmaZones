@@ -807,7 +807,7 @@ private:
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
     QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
-    SnapEngine* m_cachedSnapEngine = nullptr; // Cached qobject_cast result from setEngines()
+    QPointer<SnapEngine> m_cachedSnapEngine; // Cached qobject_cast result from setEngines()
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
