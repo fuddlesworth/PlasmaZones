@@ -340,6 +340,14 @@ public:
         Q_UNUSED(windowIds)
         clearSavedSnapFloating();
     }
+    void saveModeFloat(const QString& windowId) override
+    {
+        saveSnapFloating(windowId);
+    }
+    void clearSavedModeFloating() override
+    {
+        clearSavedSnapFloating();
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Effect-reported windows (runtime flag — not persisted)

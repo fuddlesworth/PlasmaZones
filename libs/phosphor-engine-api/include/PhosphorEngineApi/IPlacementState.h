@@ -49,6 +49,18 @@ public:
     /// Empty if the window is floating or unassigned.
     virtual QString placementIdForWindow(const QString& windowId) const = 0;
 
+    /// Number of tiled (non-floating) windows in the managed set.
+    virtual int tiledWindowCount() const
+    {
+        return 0;
+    }
+
+    /// Number of master windows (autotile concept; snap returns 1).
+    virtual int masterCount() const
+    {
+        return 1;
+    }
+
     /// Serialize to JSON for session persistence.
     virtual QJsonObject toJson() const = 0;
 };

@@ -55,6 +55,7 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
+#include "enginefactory.h"
 #include "../autotile/AutotileEngine.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
@@ -382,7 +383,7 @@ bool Daemon::init()
         }
 
         // Re-derive autotile screens and apply per-screen overrides.
-        // windowsReleasedFromTiling clears floating state for released windows.
+        // windowsReleased clears floating state for released windows.
         updateAutotileScreens();
         updateLayoutFilter();
 
@@ -486,17 +487,7 @@ bool Daemon::init()
                 m_windowDragAdaptor->clearForCompositorReconnect();
             });
 
-    // Initialize autotile engine. Tile-algorithm registry was created
-    // earlier so the engine + its sub-services pick up the same
-    // per-daemon registry every other consumer uses.
-    m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), m_algorithmRegistry.get(), this);
-    // Attach the shared window registry so the engine queries current class
-    // instead of parsing canonical windowIds — fixes Emby-style mid-session
-    // class mutations (discussion #271).
-    m_autotileEngine->setWindowRegistry(m_windowRegistry.get());
-
-    // Initialize scripted algorithm loader BEFORE syncFromSettings so that
+    // Initialize scripted algorithm loader BEFORE engine construction so that
     // user-defined algorithms are registered in the daemon registry before
     // the engine resolves the configured algorithm ID.
     m_scriptedAlgorithmLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(
@@ -509,17 +500,21 @@ bool Daemon::init()
             });
     m_scriptedAlgorithmLoader->scanAndRegister();
 
+    // Create both placement engines and the mode router via factory.
+    // The factory is the ONE translation unit with concrete engine includes.
+    auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
+                                 m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
+                                 m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
+    m_autotileEngine = std::move(engines.autotile);
+    m_snapEngine = std::move(engines.snap);
+    m_screenModeRouter = std::move(engines.router);
+
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
 
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens)
     m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
-
-    // Initialize SnapEngine for manual zone-based snapping
-    m_snapEngine =
-        std::make_unique<SnapEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_zoneDetector.get(),
-                                     m_settings.get(), m_virtualDesktopManager.get(), this);
 
     // SnapEngine creates its own SnapState internally (symmetric with
     // AutotileEngine/TilingState). WTS references it for zone queries.
@@ -563,12 +558,7 @@ bool Daemon::init()
                 }
             });
 
-    // Central routing table: single source of truth for "which engine owns
-    // screen X". Every window-lifecycle / resnap / restore entry point in the
-    // daemon and its adaptors consults this instead of scattering
-    // isAutotileScreen() checks at each call site.
-    m_screenModeRouter =
-        std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
+    // ScreenModeRouter was created by createEngines() above; wire it to WTA.
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
     // m_virtualScreenStore is constructed in the initializer list (it's a
@@ -618,7 +608,7 @@ bool Daemon::init()
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count).
     // Narrower dirty mask than the default DirtyAll — only the two autotile-owned
-    // fields can change as a result of a tilingChanged signal, so the next save
+    // fields can change as a result of a placementChanged signal, so the next save
     // rewrites just those keys rather than the whole window-tracking blob.
     //
     // markDirty() emits WindowTrackingService::stateChanged, which is wired to
@@ -626,12 +616,13 @@ bool Daemon::init()
     // that connection is what actually kicks the debounced save timer. If the
     // stateChanged hookup ever gets severed, autotile state will silently
     // stop persisting; add an explicit scheduleSaveState() call here if so.
-    connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged, m_windowTrackingAdaptor, [this]() {
-        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-            m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
-                                                          | WindowTrackingService::DirtyAutotilePending);
-        }
-    });
+    connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor,
+            [this]() {
+                if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+                    m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
+                                                                  | WindowTrackingService::DirtyAutotilePending);
+                }
+            });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
@@ -855,7 +846,7 @@ void Daemon::stop()
     // Autotile tiling state is now included in WTA's saveStateOnShutdown() above
     // via the tiling state serialization delegates. No separate save needed.
     //
-    // Do NOT call setAutotileScreens({}) here — it emits windowsReleasedFromTiling
+    // Do NOT call setAutotileScreens({}) here — it emits windowsReleased
     // which clears WTS floating state and restarts the save timer, potentially
     // overwriting the correct WTS state saved above. The engine is destroyed
     // immediately after, so cleanup is unnecessary.

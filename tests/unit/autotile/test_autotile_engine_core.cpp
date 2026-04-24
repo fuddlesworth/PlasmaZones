@@ -113,7 +113,7 @@ private Q_SLOTS:
     void testAlgorithm_setValid()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
+        QSignalSpy spy(&engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged);
 
         engine.setAlgorithm(QLatin1String("columns"));
 
@@ -129,7 +129,7 @@ private Q_SLOTS:
         engine.setAlgorithm(QLatin1String("master-stack"));
         QCOMPARE(engine.algorithm(), QLatin1String("master-stack"));
 
-        QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
+        QSignalSpy spy(&engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged);
         engine.setAlgorithm(QStringLiteral("nonexistent-algorithm"));
 
         QCOMPARE(engine.algorithm(), PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId());
@@ -139,7 +139,7 @@ private Q_SLOTS:
     void testAlgorithm_sameValueNoSignal()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
+        QSignalSpy spy(&engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged);
 
         engine.setAlgorithm(engine.algorithm());
 
@@ -347,7 +347,7 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QVERIFY(engine.isEnabled());
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         engine.windowOpened(windowId, screenName);
 

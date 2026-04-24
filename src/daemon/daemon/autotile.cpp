@@ -258,7 +258,7 @@ void Daemon::handleAutotileDisabled()
         m_snapEngine->clearSavedSnapFloating();
     }
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
-    // windowsReleasedFromTiling clears floating state before windows are resnapped.
+    // windowsReleased clears floating state before windows are resnapped.
 }
 
 /**

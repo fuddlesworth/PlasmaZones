@@ -6,11 +6,19 @@
 #include <PhosphorEngineApi/IPlacementState.h>
 #include <PhosphorEngineApi/NavigationContext.h>
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
+
+#include <functional>
+
+namespace PlasmaZones {
+class ISettings;
+class WindowRegistry;
+} // namespace PlasmaZones
 
 namespace PhosphorEngineApi {
 
@@ -217,6 +225,169 @@ public:
     {
         Q_UNUSED(windowId)
         return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Algorithm / mode identity
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QString algorithmId() const
+    {
+        return {};
+    }
+    virtual void setAlgorithm(const QString& algorithmId)
+    {
+        Q_UNUSED(algorithmId)
+    }
+    virtual bool isEnabled() const
+    {
+        return false;
+    }
+    virtual QString activeScreen() const
+    {
+        return {};
+    }
+    virtual void setActiveScreenHint(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Desktop/activity context
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void setCurrentDesktop(int desktop)
+    {
+        Q_UNUSED(desktop)
+    }
+    virtual void setCurrentActivity(const QString& activity)
+    {
+        Q_UNUSED(activity)
+    }
+    virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+    {
+        Q_UNUSED(isWindowSticky)
+    }
+    virtual QSet<int> desktopsWithActiveState() const
+    {
+        return {};
+    }
+    virtual void pruneStatesForDesktop(int removedDesktop)
+    {
+        Q_UNUSED(removedDesktop)
+    }
+    virtual void pruneStatesForActivities(const QStringList& validActivities)
+    {
+        Q_UNUSED(validActivities)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Settings synchronization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void syncFromSettings(PlasmaZones::ISettings* settings)
+    {
+        Q_UNUSED(settings)
+    }
+    virtual void connectToSettings(PlasmaZones::ISettings* settings)
+    {
+        Q_UNUSED(settings)
+    }
+    virtual qreal effectiveSplitRatioStep(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return 0.05;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Retile / refresh
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void retile(const QString& screenId = QString())
+    {
+        Q_UNUSED(screenId)
+    }
+    virtual void scheduleRetileForScreen(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Float origin
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void markModeSpecificFloated(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+    virtual void clearAllSavedFloating()
+    {
+    }
+    virtual void saveModeFloat(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+    virtual void clearSavedModeFloating()
+    {
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Serialization delegates
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QJsonArray serializeWindowOrders() const
+    {
+        return {};
+    }
+    virtual void deserializeWindowOrders(const QJsonArray& orders)
+    {
+        Q_UNUSED(orders)
+    }
+    virtual QJsonObject serializePendingRestores() const
+    {
+        return {};
+    }
+    virtual void deserializePendingRestores(const QJsonObject& obj)
+    {
+        Q_UNUSED(obj)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Init hooks
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void setWindowRegistry(PlasmaZones::WindowRegistry* registry)
+    {
+        Q_UNUSED(registry)
+    }
+    virtual void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
+    {
+        Q_UNUSED(fn)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Master operations (autotile-specific, no-op on snap)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void increaseMasterRatio(qreal delta = 0.05)
+    {
+        Q_UNUSED(delta)
+    }
+    virtual void decreaseMasterRatio(qreal delta = 0.05)
+    {
+        Q_UNUSED(delta)
+    }
+    virtual void increaseMasterCount()
+    {
+    }
+    virtual void decreaseMasterCount()
+    {
+    }
+    virtual void focusMaster()
+    {
+    }
+    virtual void swapFocusedWithMaster()
+    {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

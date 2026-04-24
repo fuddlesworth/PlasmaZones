@@ -32,6 +32,8 @@
 #include <QScreen>
 #include <QTimer>
 
+using PlacementEngineBase = PhosphorEngineApi::PlacementEngineBase;
+
 namespace PlasmaZones {
 
 void Daemon::initializeAutotile()
@@ -44,27 +46,28 @@ void Daemon::initializeAutotile()
         // Autotile engine signals → OSD (use display name, not algorithm ID)
         // Show OSD when algorithm changes (not on every retile — tilingChanged
         // fires for float, swap, window open/close, etc. which is too noisy)
-        connect(m_autotileEngine.get(), &AutotileEngine::algorithmChanged, this, [this](const QString& algorithmId) {
-            // Only show OSD when actually in autotile mode — loadState() emits
-            // algorithmChanged during startup even if we're in manual mode.
-            // Defer OSD display (same rationale as autotileApplied handler above).
-            if (m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
-                && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
-                auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
-                QString displayName = algo ? algo->name() : algorithmId;
-                QString screenId;
-                if (m_autotileEngine) {
-                    screenId = m_autotileEngine->activeScreen();
-                }
-                if (screenId.isEmpty() && m_unifiedLayoutController) {
-                    screenId = m_unifiedLayoutController->currentScreenName();
-                }
-                if (screenId.isEmpty() && m_windowTrackingAdaptor) {
-                    screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-                }
-                showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
-            }
-        });
+        connect(m_autotileEngine.get(), &PlacementEngineBase::algorithmChanged, this,
+                [this](const QString& algorithmId) {
+                    // Only show OSD when actually in autotile mode — loadState() emits
+                    // algorithmChanged during startup even if we're in manual mode.
+                    // Defer OSD display (same rationale as autotileApplied handler above).
+                    if (m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
+                        && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
+                        auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
+                        QString displayName = algo ? algo->name() : algorithmId;
+                        QString screenId;
+                        if (m_autotileEngine) {
+                            screenId = m_autotileEngine->activeScreen();
+                        }
+                        if (screenId.isEmpty() && m_unifiedLayoutController) {
+                            screenId = m_unifiedLayoutController->currentScreenName();
+                        }
+                        if (screenId.isEmpty() && m_windowTrackingAdaptor) {
+                            screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+                        }
+                        showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
+                    }
+                });
 
         // Sync autotile float state and show OSD when a window is floated/unfloated
         connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingChanged, this,
@@ -92,7 +95,7 @@ void Daemon::initializeAutotile()
         // 2. Restore snap-mode floats that were saved when entering autotile —
         //    snap floats persist across autotile sessions.
         // Must check isModeSpecificFloated BEFORE clearing the marker.
-        connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling, this,
+        connect(m_autotileEngine.get(), &PlacementEngineBase::windowsReleased, this,
                 [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
                     if (m_windowTrackingAdaptor) {
                         WindowTrackingService* wts = m_windowTrackingAdaptor->service();

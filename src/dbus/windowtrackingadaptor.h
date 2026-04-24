@@ -502,7 +502,7 @@ public Q_SLOTS:
      *
      * Starts/restarts the 500ms debounce timer. After the timer fires,
      * saveState() is called once. Used by the daemon to trigger saves
-     * when autotile state changes (tilingChanged signal).
+     * when autotile state changes (placementChanged signal).
      */
     void scheduleSaveState();
 

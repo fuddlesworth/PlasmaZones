@@ -23,6 +23,7 @@
 #include "SettingsBridge.h"
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "config/settings.h"
+#include "core/isettings.h"
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
@@ -248,7 +249,7 @@ void AutotileEngine::connectSignals()
                         m_windowToStateKey.remove(windowId);
                     }
                     if (!releasedWindows.isEmpty()) {
-                        Q_EMIT windowsReleasedFromTiling(releasedWindows, orphanedVsIds);
+                        Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
                     }
 
                     // Clean up per-screen autotile settings for removed virtual screens.
@@ -624,7 +625,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     if (!releasedWindows.isEmpty()) {
-        Q_EMIT windowsReleasedFromTiling(releasedWindows, removed);
+        Q_EMIT windowsReleased(releasedWindows, removed);
     }
 
     // Clean up any remaining overflow entries for removed screens.
@@ -1074,6 +1075,16 @@ void AutotileEngine::syncFromSettings(Settings* settings)
 void AutotileEngine::connectToSettings(Settings* settings)
 {
     m_settingsBridge->connectToSettings(settings);
+}
+
+void AutotileEngine::syncFromSettings(ISettings* settings)
+{
+    syncFromSettings(qobject_cast<Settings*>(settings));
+}
+
+void AutotileEngine::connectToSettings(ISettings* settings)
+{
+    connectToSettings(qobject_cast<Settings*>(settings));
 }
 
 void AutotileEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
@@ -3106,11 +3117,11 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // Step 4: Emit all deferred signals after state is fully consistent.
     // Recovery signals first (unfloated windows), then overflow signals
     // (newly floated windows) were already handled inside applyTiling's
-    // batch emit, and tilingChanged is emitted last.
+    // batch emit, and placementChanged is emitted last.
     for (const QString& wid : unfloated) {
         Q_EMIT windowFloatingChanged(wid, false, screenId);
     }
-    Q_EMIT tilingChanged(screenId);
+    Q_EMIT placementChanged(screenId);
 }
 
 void AutotileEngine::retileAfterOperation(const QString& screenId, bool operationSucceeded)

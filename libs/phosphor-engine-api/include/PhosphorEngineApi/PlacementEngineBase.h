@@ -92,6 +92,15 @@ Q_SIGNALS:
     /// Emitted when overflow windows are batch-floated during applyTiling.
     void windowsBatchFloated(const QStringList& windowIds, const QString& screenId);
 
+    /// Emitted when the active tiling algorithm changes.
+    void algorithmChanged(const QString& algorithmId);
+
+    /// Emitted when the placement layout changes for a screen.
+    void placementChanged(const QString& screenId);
+
+    /// Emitted when windows are released from engine management.
+    void windowsReleased(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
+
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
     QHash<QString, WindowState> m_windowStates;

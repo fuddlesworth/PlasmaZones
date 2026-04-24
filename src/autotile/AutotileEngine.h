@@ -93,6 +93,7 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 namespace PlasmaZones {
+class ISettings;
 class Settings;
 class SettingsBridge;
 class WindowRegistry;
@@ -154,7 +155,7 @@ public:
      *
      * Must be set before start. Not owned.
      */
-    void setWindowRegistry(WindowRegistry* registry);
+    void setWindowRegistry(WindowRegistry* registry) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen autotile state (derived from layout assignments)
@@ -164,7 +165,7 @@ public:
      * @brief Check if any screen has autotile enabled
      * @return true if at least one screen uses autotile
      */
-    bool isEnabled() const noexcept;
+    bool isEnabled() const noexcept override;
 
     /**
      * @brief Return the set of virtual-desktop numbers that currently have
@@ -185,7 +186,7 @@ public:
      * objects through any public accessor — that's why screenStates()
      * is private.
      */
-    QSet<int> desktopsWithActiveState() const;
+    QSet<int> desktopsWithActiveState() const override;
 
     /**
      * @brief Check if a specific screen uses autotile
@@ -249,6 +250,14 @@ public:
     {
         return isWindowTiled(windowId);
     }
+    QString algorithmId() const override
+    {
+        return algorithm();
+    }
+    void markModeSpecificFloated(const QString& windowId) override
+    {
+        markAutotileFloated(windowId);
+    }
 
     /**
      * @brief Get the set of screens currently using autotile
@@ -263,7 +272,7 @@ public:
      * @brief Get the last-focused screen (updated by onWindowFocused)
      * @return Screen ID of the most recently focused screen, or empty string
      */
-    QString activeScreen() const
+    QString activeScreen() const override
     {
         return m_activeScreen;
     }
@@ -288,7 +297,7 @@ public:
      *
      * @param desktop Virtual desktop number (1-based from KWin)
      */
-    void setCurrentDesktop(int desktop);
+    void setCurrentDesktop(int desktop) override;
 
     /**
      * @brief Set the current activity for per-activity tiling state
@@ -299,7 +308,7 @@ public:
      *
      * @param activity Activity ID (empty string for no activity)
      */
-    void setCurrentActivity(const QString& activity);
+    void setCurrentActivity(const QString& activity) override;
 
     /**
      * @brief Pin screens where all autotiled windows are sticky (on all desktops)
@@ -315,7 +324,7 @@ public:
      *
      * @param isWindowSticky Callback returning true if the window is on all desktops
      */
-    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky);
+    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState and saved floating entries for a removed desktop
@@ -323,7 +332,7 @@ public:
      * Removes all states where key.desktop == removedDesktop. Called when a
      * virtual desktop is deleted so stale entries don't accumulate.
      */
-    void pruneStatesForDesktop(int removedDesktop);
+    void pruneStatesForDesktop(int removedDesktop) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState entries for activities not in the given set
@@ -331,7 +340,7 @@ public:
      * Removes states whose activity is non-empty and not in validActivities.
      * Called when activities change so stale entries don't accumulate.
      */
-    void pruneStatesForActivities(const QStringList& validActivities);
+    void pruneStatesForActivities(const QStringList& validActivities) override;
 
     /**
      * @brief Get the current virtual desktop tracked by the engine
@@ -366,7 +375,7 @@ public:
      *
      * @param algorithmId Algorithm identifier from PhosphorTiles::AlgorithmRegistry
      */
-    void setAlgorithm(const QString& algorithmId);
+    void setAlgorithm(const QString& algorithmId) override;
 
     /**
      * @brief Get the current algorithm instance
@@ -409,7 +418,7 @@ public:
      * including both snap and autotile state. Autotile window orders are embedded
      * in WTA's save cycle via setTilingStateDelegates — this method exists to
      * satisfy the IPlacementEngine interface. For autotile-only persistence,
-     * the tilingChanged signal → WTA::scheduleSaveState() connection is the
+     * the placementChanged signal → WTA::scheduleSaveState() connection is the
      * primary path.
      */
     void saveState() override;
@@ -444,7 +453,7 @@ public:
      *
      * Used by toggleWindowFloat to adopt untracked floating windows into autotile.
      */
-    void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
+    void setIsWindowFloatingFn(std::function<bool(const QString&)> fn) override
     {
         m_isWindowFloatingFn = std::move(fn);
     }
@@ -465,7 +474,7 @@ public:
      * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.
      * masterCount/splitRatio are NOT included — Settings owns those.
      */
-    QJsonArray serializeWindowOrders() const;
+    QJsonArray serializeWindowOrders() const override;
 
     /**
      * @brief Deserialize per-context autotile window orders from JSON
@@ -474,21 +483,21 @@ public:
      *
      * @param orders JSON array produced by serializeWindowOrders()
      */
-    void deserializeWindowOrders(const QJsonArray& orders);
+    void deserializeWindowOrders(const QJsonArray& orders) override;
 
     /**
      * @brief Serialize pending autotile restore queues to JSON
      *
      * Forwarded to SettingsBridge. Returns appId-keyed pending restore entries.
      */
-    QJsonObject serializePendingRestores() const;
+    QJsonObject serializePendingRestores() const override;
 
     /**
      * @brief Deserialize pending autotile restore queues from JSON
      *
      * Forwarded to SettingsBridge. Restores close/reopen queue.
      */
-    void deserializePendingRestores(const QJsonObject& obj);
+    void deserializePendingRestores(const QJsonObject& obj) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -504,6 +513,7 @@ public:
      * @param settings Settings object to read from (not owned)
      */
     void syncFromSettings(Settings* settings);
+    void syncFromSettings(ISettings* settings) override;
 
     // Per-screen config — forwarded to PerScreenConfigResolver (IPlacementEngine overrides)
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
@@ -519,7 +529,7 @@ public:
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
-    qreal effectiveSplitRatioStep(const QString& screenId) const;
+    qreal effectiveSplitRatioStep(const QString& screenId) const override;
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
@@ -533,6 +543,7 @@ public:
      * @param settings Settings object to connect to (not owned, must outlive engine)
      */
     void connectToSettings(Settings* settings);
+    void connectToSettings(ISettings* settings) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
@@ -550,7 +561,7 @@ public:
      *
      * @param screenId Screen to retile, or empty for all screens
      */
-    Q_INVOKABLE void retile(const QString& screenId = QString());
+    Q_INVOKABLE void retile(const QString& screenId = QString()) override;
 
     /**
      * @brief Swap positions of two tiled windows
@@ -585,7 +596,7 @@ public:
      * Convenience method that promotes the focused window to master position.
      * If the focused window is already master, this is a no-op.
      */
-    Q_INVOKABLE void swapFocusedWithMaster();
+    Q_INVOKABLE void swapFocusedWithMaster() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Focus/window cycling
@@ -610,7 +621,7 @@ public:
      *
      * For algorithms with a master concept, focuses the master window.
      */
-    Q_INVOKABLE void focusMaster();
+    Q_INVOKABLE void focusMaster() override;
 
     /**
      * @brief Notify the engine that a window has been focused
@@ -631,7 +642,7 @@ public:
      *
      * @param screenId Resolved screen ID (virtual or physical)
      */
-    void setActiveScreenHint(const QString& screenId);
+    void setActiveScreenHint(const QString& screenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Split ratio adjustment
@@ -644,7 +655,7 @@ public:
      *
      * @param delta Amount to increase (default 0.05 = 5%)
      */
-    Q_INVOKABLE void increaseMasterRatio(qreal delta = 0.05);
+    Q_INVOKABLE void increaseMasterRatio(qreal delta = 0.05) override;
 
     /**
      * @brief Decrease the master area ratio
@@ -653,7 +664,7 @@ public:
      *
      * @param delta Amount to decrease (default 0.05 = 5%)
      */
-    Q_INVOKABLE void decreaseMasterRatio(qreal delta = 0.05);
+    Q_INVOKABLE void decreaseMasterRatio(qreal delta = 0.05) override;
 
     /**
      * @brief Set master ratio globally (config + all per-screen states)
@@ -682,12 +693,12 @@ public:
     /**
      * @brief Increase the number of master windows
      */
-    Q_INVOKABLE void increaseMasterCount();
+    Q_INVOKABLE void increaseMasterCount() override;
 
     /**
      * @brief Decrease the number of master windows
      */
-    Q_INVOKABLE void decreaseMasterCount();
+    Q_INVOKABLE void decreaseMasterCount() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window rotation and floating (context-aware shortcuts support)
@@ -841,7 +852,7 @@ public:
      *
      * Prevents stale entries from incorrectly floating windows on next activation.
      */
-    void clearAllSavedFloating();
+    void clearAllSavedFloating() override;
 
     /**
      * @brief Get the current tiled window order for a screen
@@ -917,7 +928,7 @@ public:
      * to processPendingRetiles(). Multiple calls in the same event loop pass
      * are coalesced — only one retile fires per screen.
      */
-    void scheduleRetileForScreen(const QString& screenId);
+    void scheduleRetileForScreen(const QString& screenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Drag-insert preview (trigger-held window drag reorders autotile stack)
@@ -1001,7 +1012,7 @@ public:
     /**
      * @brief Helper to retile a screen after a window operation
      *
-     * Recalculates layout and applies tiling if enabled, then emits tilingChanged.
+     * Recalculates layout and applies tiling if enabled, then emits placementChanged.
      * Only emits signal if operationSucceeded is true.
      *
      * @param screenId Screen to retile
@@ -1023,17 +1034,12 @@ Q_SIGNALS:
      */
     void autotileScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
 
-    /**
-     * @brief Emitted when the algorithm changes
-     * @param algorithmId New algorithm ID
-     */
-    void algorithmChanged(const QString& algorithmId);
-
-    /**
-     * @brief Emitted when tiling layout changes for a screen
-     * @param screenId Screen that was retiled
-     */
-    void tilingChanged(const QString& screenId);
+    // algorithmChanged(const QString&) — inherited from PlacementEngineBase.
+    // placementChanged(const QString&) — inherited from PlacementEngineBase.
+    //   Replaces the former tilingChanged signal; all internal emitters now
+    //   emit placementChanged, and callers connect to the base-class signal.
+    // windowsReleased(const QStringList&, const QSet<QString>&) — inherited
+    //   from PlacementEngineBase. Replaces windowsReleasedFromTiling.
 
     /**
      * @brief Emitted when a window's floating state changes due to a user action
@@ -1063,20 +1069,6 @@ Q_SIGNALS:
      * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
     void windowsTiled(const QString& tileRequestsJson);
-
-    // focusWindowRequested → activateWindowRequested (inherited from PlacementEngineBase)
-    // navigationFeedbackRequested → navigationFeedback (inherited from PlacementEngineBase)
-
-    /**
-     * @brief Emitted when windows are released from autotile management
-     *
-     * Fired when screens are removed from autotile.
-     *
-     * @param windowIds Window IDs no longer under autotile control
-     * @param releasedScreenIds Screen IDs that triggered the release — handlers
-     *        must only process windows whose current WTS screen is in this set
-     */
-    void windowsReleasedFromTiling(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1181,7 +1173,7 @@ private:
      * @brief Recover overflow windows and retile a single screen
      *
      * Encapsulates the four-step retile sequence: pre-validate screen geometry,
-     * overflow recovery, recalculate layout, apply tiling, emit tilingChanged.
+     * overflow recovery, recalculate layout, apply tiling, emit placementChanged.
      *
      * If screen geometry is transiently unavailable (e.g. during a virtual
      * desktop switch on Wayland), schedules a bounded retry instead of
