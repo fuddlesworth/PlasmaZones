@@ -19,7 +19,6 @@
 #include "../core/enums.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
-#include "../core/modifierutils.h"
 
 namespace PhosphorTiles {
 class AlgorithmRegistry;
