@@ -5,6 +5,7 @@
 
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
+#include "kzonesimporter.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
@@ -2910,197 +2911,34 @@ void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// KZones Import
+// KZones Import — thin wrappers around kzonesimporter.{h,cpp}
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool SettingsController::hasKZonesConfig()
 {
-    const QString kwinrcPath =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
-    QSettings kwinrc(kwinrcPath, QSettings::IniFormat);
-    kwinrc.beginGroup(QStringLiteral("Script-kzones"));
-    bool has = kwinrc.contains(QStringLiteral("layoutsJson"))
-        && !kwinrc.value(QStringLiteral("layoutsJson")).toString().trimmed().isEmpty();
-    kwinrc.endGroup();
-    return has;
+    return KZonesImporter::hasKZonesConfig();
 }
 
 int SettingsController::importFromKZones()
 {
-    const QString kwinrcPath =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
-    QSettings kwinrc(kwinrcPath, QSettings::IniFormat);
-    kwinrc.beginGroup(QStringLiteral("Script-kzones"));
-    QString jsonStr = kwinrc.value(QStringLiteral("layoutsJson")).toString();
-    kwinrc.endGroup();
-
-    if (jsonStr.isEmpty()) {
-        Q_EMIT kzonesImportFinished(0, tr("No KZones configuration found in kwinrc"));
-        return 0;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        Q_EMIT kzonesImportFinished(0, tr("Failed to parse KZones layoutsJson: %1").arg(parseError.errorString()));
-        return 0;
-    }
-
-    int count = importKZonesLayouts(doc.array());
-    if (count > 0) {
+    const auto result = KZonesImporter::importFromKwinrc();
+    if (result.imported > 0) {
+        m_pendingSelectLayoutId = result.pendingSelectLayoutId;
         scheduleLayoutLoad();
-        Q_EMIT kzonesImportFinished(count, tr("Imported %n layout(s) from KZones", "", count));
-    } else {
-        Q_EMIT kzonesImportFinished(0, tr("No layouts found in KZones configuration"));
     }
-    return count;
+    Q_EMIT kzonesImportFinished(result.imported, result.message);
+    return result.imported;
 }
 
 int SettingsController::importFromKZonesFile(const QString& filePath)
 {
-    if (filePath.isEmpty()) {
-        Q_EMIT kzonesImportFinished(0, tr("No file path specified"));
-        return 0;
-    }
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        Q_EMIT kzonesImportFinished(0, tr("Could not open file: %1").arg(filePath));
-        return 0;
-    }
-
-    QByteArray data = file.readAll();
-    file.close();
-    // Strip UTF-8 BOM if present (common in Windows-edited files)
-    if (data.startsWith("\xEF\xBB\xBF"))
-        data.remove(0, 3);
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-
-    if (parseError.error != QJsonParseError::NoError) {
-        Q_EMIT kzonesImportFinished(0, tr("Failed to parse KZones JSON: %1").arg(parseError.errorString()));
-        return 0;
-    }
-
-    QJsonArray array;
-    if (doc.isArray()) {
-        array = doc.array();
-    } else if (doc.isObject()) {
-        // Single layout object — wrap in array
-        array.append(doc.object());
-    } else {
-        Q_EMIT kzonesImportFinished(0, tr("KZones file does not contain a JSON array or object"));
-        return 0;
-    }
-
-    int count = importKZonesLayouts(array);
-    if (count > 0) {
+    const auto result = KZonesImporter::importFromFile(filePath);
+    if (result.imported > 0) {
+        m_pendingSelectLayoutId = result.pendingSelectLayoutId;
         scheduleLayoutLoad();
-        Q_EMIT kzonesImportFinished(count, tr("Imported %n layout(s) from KZones file", "", count));
-    } else {
-        Q_EMIT kzonesImportFinished(0, tr("No valid layouts found in file"));
     }
-    return count;
-}
-
-int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
-{
-    int imported = 0;
-
-    for (const QJsonValue& layoutVal : kzonesArray) {
-        if (!layoutVal.isObject())
-            continue;
-
-        QJsonObject kzLayout = layoutVal.toObject();
-
-        // Build PlasmaZones layout JSON
-        QJsonObject pzLayout;
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
-            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
-
-        int padding = kzLayout[QStringLiteral("padding")].toInt(0);
-        if (padding > 0) {
-            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = padding;
-        }
-
-        // Convert zones — skip layouts with no zones
-        const QJsonArray kzZones = kzLayout[QStringLiteral("zones")].toArray();
-        if (kzZones.isEmpty())
-            continue;
-
-        QJsonArray pzZones;
-        QJsonArray appRules;
-
-        for (int i = 0; i < kzZones.size(); ++i) {
-            const QJsonObject kzZone = kzZones[i].toObject();
-
-            // Convert 0-100 percentage to 0.0-1.0, clamped to valid range
-            double x = qBound(0.0, kzZone[QStringLiteral("x")].toDouble(0) / 100.0, 1.0);
-            double y = qBound(0.0, kzZone[QStringLiteral("y")].toDouble(0) / 100.0, 1.0);
-            double w = qBound(0.0, kzZone[QStringLiteral("width")].toDouble(50) / 100.0, 1.0);
-            double h = qBound(0.0, kzZone[QStringLiteral("height")].toDouble(100) / 100.0, 1.0);
-
-            // Skip zero-area zones
-            if (w <= 0.0 || h <= 0.0)
-                continue;
-
-            // Use contiguous numbering (skipped zones don't leave gaps)
-            int zoneNum = pzZones.size() + 1;
-
-            QJsonObject pzZone;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
-
-            QJsonObject relGeo;
-            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;
-            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = y;
-            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = w;
-            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = h;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
-
-            pzZones.append(pzZone);
-
-            // Collect per-zone applications into layout-level appRules
-            const QJsonArray apps = kzZone[QStringLiteral("applications")].toArray();
-            for (const QJsonValue& appVal : apps) {
-                QString appClass = appVal.toString().trimmed();
-                if (appClass.isEmpty())
-                    continue;
-                QJsonObject rule;
-                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::Pattern)] = appClass;
-                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-                appRules.append(rule);
-            }
-        }
-
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = pzZones;
-        if (!appRules.isEmpty()) {
-            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::AppRules)] = appRules;
-        }
-
-        // Send to daemon via createLayoutFromJson D-Bus method
-        QString layoutJson = QString::fromUtf8(QJsonDocument(pzLayout).toJson(QJsonDocument::Compact));
-        QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                    QStringLiteral("createLayoutFromJson"), {layoutJson});
-
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            QString newId = reply.arguments().first().toString();
-            if (!newId.isEmpty()) {
-                ++imported;
-                if (imported == 1) {
-                    m_pendingSelectLayoutId = newId;
-                }
-            }
-        }
-    }
-
-    return imported;
+    Q_EMIT kzonesImportFinished(result.imported, result.message);
+    return result.imported;
 }
 
 // ── Virtual screen configuration ──────────────────────────────────────────

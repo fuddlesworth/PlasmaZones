@@ -566,7 +566,6 @@ private:
     void refreshActivities();
 
     void saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules);
-    int importKZonesLayouts(const QJsonArray& kzonesArray);
 
     Settings m_settings;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
