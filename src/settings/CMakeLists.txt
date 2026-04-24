@@ -37,6 +37,8 @@ set(plasmazones_settings_SRCS
     kzonesimporter.cpp
     stagingservice.h
     stagingservice.cpp
+    algorithmservice.h
+    algorithmservice.cpp
     settingslaunchcontroller.h
     settingslaunchcontroller.cpp
     settingsappadaptor.h

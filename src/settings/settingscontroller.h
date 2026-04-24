@@ -35,6 +35,7 @@ class ScriptedAlgorithmLoader;
 #include <memory>
 #include <optional>
 
+#include "algorithmservice.h"
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
@@ -556,12 +557,6 @@ private Q_SLOTS:
     void onRunningWindowsAvailable(const QString& json);
 
 private:
-    QString scriptedFilePath(const QString& algorithmId) const;
-    void watchForAlgorithmRegistration(const QString& expectedId);
-    void cancelAlgorithmWatcher(const QString& expectedId);
-
-    QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
-
     void setNeedsSave(bool needs);
     void refreshVirtualDesktops();
     void refreshActivities();
@@ -637,6 +632,15 @@ private:
     /// unique_ptr, leaving the loader's destructor to call
     /// unregisterAlgorithm on a freed registry.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptLoader;
+
+    /// Algorithm registry / loader surface — owns the scripted-algorithm
+    /// lifecycle helpers (availableAlgorithms, import/export/duplicate/
+    /// delete, createNewAlgorithm, etc.). Borrows the registry + loader
+    /// above via raw pointers, so this unique_ptr MUST be declared AFTER
+    /// them; reverse-order destruction tears the service down (which
+    /// disconnects its watchers on the registry) BEFORE m_scriptLoader
+    /// and m_localAlgorithmRegistry reset.
+    std::unique_ptr<AlgorithmService> m_algorithmService;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so
