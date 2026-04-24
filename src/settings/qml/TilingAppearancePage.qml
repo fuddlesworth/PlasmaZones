@@ -10,6 +10,8 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    readonly property var settingsBridge: settingsController.tilingAppearancePage
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -140,8 +142,8 @@ Flickable {
                     description: i18n("Thickness of colored borders around tiled windows")
 
                     SettingsSpinBox {
-                        from: settingsController.autotileBorderWidthMin
-                        to: settingsController.autotileBorderWidthMax
+                        from: root.settingsBridge.autotileBorderWidthMin
+                        to: root.settingsBridge.autotileBorderWidthMax
                         value: appSettings.autotileBorderWidth
                         onValueModified: (value) => {
                             return appSettings.autotileBorderWidth = value;
@@ -158,8 +160,8 @@ Flickable {
                     description: i18n("Roundness of border corners (0 for square)")
 
                     SettingsSpinBox {
-                        from: settingsController.autotileBorderRadiusMin
-                        to: settingsController.autotileBorderRadiusMax
+                        from: root.settingsBridge.autotileBorderRadiusMin
+                        to: root.settingsBridge.autotileBorderRadiusMax
                         value: appSettings.autotileBorderRadius
                         onValueModified: (value) => {
                             return appSettings.autotileBorderRadius = value;

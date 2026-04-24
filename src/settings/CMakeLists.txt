@@ -17,8 +17,12 @@ set(plasmazones_settings_SRCS
     snappingappearancecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
+    snappingeffectscontroller.h
+    snappingeffectscontroller.cpp
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
+    tilingappearancecontroller.h
+    tilingappearancecontroller.cpp
     tilingbehaviorcontroller.h
     tilingbehaviorcontroller.cpp
     # Shared helpers used by multiple sub-controllers.

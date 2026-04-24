@@ -39,7 +39,9 @@ class ScriptedAlgorithmLoader;
 #include "editorpagecontroller.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
+#include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
+#include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 
 namespace PlasmaZones {
@@ -78,31 +80,22 @@ class SettingsController : public QObject
     Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
     Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
+    Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
+    Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
 
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
     Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
     Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
 
-    // Cava detection
-    Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
-
     // Settings bounds (single source of truth from ConfigDefaults)
-    Q_PROPERTY(int shaderFrameRateMin READ shaderFrameRateMin CONSTANT)
-    Q_PROPERTY(int shaderFrameRateMax READ shaderFrameRateMax CONSTANT)
-    Q_PROPERTY(int audioSpectrumBarCountMin READ audioSpectrumBarCountMin CONSTANT)
-    Q_PROPERTY(int audioSpectrumBarCountMax READ audioSpectrumBarCountMax CONSTANT)
     Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
-    Q_PROPERTY(int autotileBorderWidthMax READ autotileBorderWidthMax CONSTANT)
-    Q_PROPERTY(int autotileBorderRadiusMax READ autotileBorderRadiusMax CONSTANT)
     Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
     Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
     Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
-    Q_PROPERTY(int autotileBorderWidthMin READ autotileBorderWidthMin CONSTANT)
-    Q_PROPERTY(int autotileBorderRadiusMin READ autotileBorderRadiusMin CONSTANT)
     Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
     Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
@@ -381,6 +374,14 @@ public:
     {
         return m_snappingAppearancePage;
     }
+    SnappingEffectsController* snappingEffectsPage() const
+    {
+        return m_snappingEffectsPage;
+    }
+    TilingAppearanceController* tilingAppearancePage() const
+    {
+        return m_tilingAppearancePage;
+    }
 
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
@@ -401,37 +402,11 @@ public:
     }
 
     // ── Cava detection ───────────────────────────────────────────────────────
-    bool cavaAvailable() const;
-
     // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
-    int shaderFrameRateMin() const
-    {
-        return ConfigDefaults::shaderFrameRateMin();
-    }
-    int shaderFrameRateMax() const
-    {
-        return ConfigDefaults::shaderFrameRateMax();
-    }
-    int audioSpectrumBarCountMin() const
-    {
-        return ConfigDefaults::audioSpectrumBarCountMin();
-    }
-    int audioSpectrumBarCountMax() const
-    {
-        return ConfigDefaults::audioSpectrumBarCountMax();
-    }
     int autotileGapMax() const
     {
         return ConfigDefaults::autotileOuterGapMax();
     } // Shared max for inner + outer gaps
-    int autotileBorderWidthMax() const
-    {
-        return ConfigDefaults::autotileBorderWidthMax();
-    }
-    int autotileBorderRadiusMax() const
-    {
-        return ConfigDefaults::autotileBorderRadiusMax();
-    }
     int animationDurationMin() const
     {
         return ConfigDefaults::animationDurationMin();
@@ -455,14 +430,6 @@ public:
     int autotileGapMin() const
     {
         return ConfigDefaults::autotileOuterGapMin();
-    }
-    int autotileBorderWidthMin() const
-    {
-        return ConfigDefaults::autotileBorderWidthMin();
-    }
-    int autotileBorderRadiusMin() const
-    {
-        return ConfigDefaults::autotileBorderRadiusMin();
     }
     int autotileMaxWindowsMin() const
     {
@@ -717,6 +684,8 @@ private:
     TilingBehaviorController* m_tilingBehaviorPage = nullptr;
     SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
     SnappingAppearanceController* m_snappingAppearancePage = nullptr;
+    SnappingEffectsController* m_snappingEffectsPage = nullptr;
+    TilingAppearanceController* m_tilingAppearancePage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;

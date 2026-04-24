@@ -6,7 +6,9 @@
 #include "editorpagecontroller.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
+#include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
+#include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "../config/configbackends.h"
 
@@ -320,6 +322,10 @@ SettingsController::SettingsController(QObject* parent)
     m_snappingAppearancePage = new SnappingAppearanceController(&m_settings, this);
     connect(m_snappingAppearancePage, &SnappingAppearanceController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
+
+    // Snapping→Effects + Tiling→Appearance pages — CONSTANT-only bounds facades.
+    m_snappingEffectsPage = new SnappingEffectsController(this);
+    m_tilingAppearancePage = new TilingAppearanceController(this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -1864,15 +1870,6 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
     Q_UNUSED(virtualDesktop)
     // External assignment change (hotkey, script, toggle) — refresh overview
     Q_EMIT screenLayoutChanged();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Cava detection
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool SettingsController::cavaAvailable() const
-{
-    return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
 }
 
 // Parses the daemon's running-windows JSON payload into a QVariantList of
