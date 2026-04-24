@@ -37,6 +37,7 @@ class ScriptedAlgorithmLoader;
 #include <optional>
 
 #include "editorpagecontroller.h"
+#include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "tilingbehaviorcontroller.h"
@@ -76,6 +77,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
     Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
+    Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
 
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
@@ -86,8 +88,6 @@ class SettingsController : public QObject
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
 
     // Settings bounds (single source of truth from ConfigDefaults)
-    Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
-    Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
     Q_PROPERTY(int shaderFrameRateMin READ shaderFrameRateMin CONSTANT)
     Q_PROPERTY(int shaderFrameRateMax READ shaderFrameRateMax CONSTANT)
     Q_PROPERTY(int audioSpectrumBarCountMin READ audioSpectrumBarCountMin CONSTANT)
@@ -100,8 +100,6 @@ class SettingsController : public QObject
     Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
-    Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
-    Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
     Q_PROPERTY(int autotileBorderWidthMin READ autotileBorderWidthMin CONSTANT)
     Q_PROPERTY(int autotileBorderRadiusMin READ autotileBorderRadiusMin CONSTANT)
@@ -379,6 +377,10 @@ public:
     {
         return m_snappingZoneSelectorPage;
     }
+    SnappingAppearanceController* snappingAppearancePage() const
+    {
+        return m_snappingAppearancePage;
+    }
 
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
@@ -402,14 +404,6 @@ public:
     bool cavaAvailable() const;
 
     // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
-    int borderWidthMax() const
-    {
-        return ConfigDefaults::borderWidthMax();
-    }
-    int borderRadiusMax() const
-    {
-        return ConfigDefaults::borderRadiusMax();
-    }
     int shaderFrameRateMin() const
     {
         return ConfigDefaults::shaderFrameRateMin();
@@ -458,14 +452,6 @@ public:
     {
         return ConfigDefaults::animationStaggerIntervalMax();
     }
-    int borderWidthMin() const
-    {
-        return ConfigDefaults::borderWidthMin();
-    }
-    int borderRadiusMin() const
-    {
-        return ConfigDefaults::borderRadiusMin();
-    }
     int autotileGapMin() const
     {
         return ConfigDefaults::autotileOuterGapMin();
@@ -502,10 +488,6 @@ public:
     {
         return ConfigDefaults::animationMinDistanceMin();
     }
-
-    // ── Color import ─────────────────────────────────────────────────────────
-    Q_INVOKABLE void loadColorsFromPywal();
-    Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
 
     // ── Running window picker (async flow) ──────────────────────────────────
     //
@@ -655,10 +637,6 @@ Q_SIGNALS:
     void screenLayoutChanged();
     void quickLayoutSlotsChanged();
 
-    // Color import signals
-    void colorImportError(const QString& error);
-    void colorImportSuccess();
-
     /**
      * @brief Fresh running-windows list has arrived from the daemon.
      *
@@ -738,6 +716,7 @@ private:
     SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
     TilingBehaviorController* m_tilingBehaviorPage = nullptr;
     SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
+    SnappingAppearanceController* m_snappingAppearancePage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;

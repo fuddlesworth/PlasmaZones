@@ -4,6 +4,7 @@
 #include "settingscontroller.h"
 
 #include "editorpagecontroller.h"
+#include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "tilingbehaviorcontroller.h"
@@ -312,6 +313,13 @@ SettingsController::SettingsController(QObject* parent)
     // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
     // facade over ConfigDefaults — no Settings wiring required.
     m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
+
+    // Snapping→Appearance page sub-controller. Owns border bounds plus the
+    // color-import action surface; its changed() signal drives dirty
+    // tracking on successful imports.
+    m_snappingAppearancePage = new SnappingAppearanceController(&m_settings, this);
+    connect(m_snappingAppearancePage, &SnappingAppearanceController::changed, this,
+            &SettingsController::onSettingsPropertyChanged);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -1865,41 +1873,6 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
 bool SettingsController::cavaAvailable() const
 {
     return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Color import
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::loadColorsFromPywal()
-{
-    QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
-    if (!QFile::exists(pywalPath)) {
-        Q_EMIT colorImportError(
-            tr("Pywal colors not found. Run 'wal' to generate colors first.\n\nExpected file: %1").arg(pywalPath));
-        return;
-    }
-
-    QString error = m_settings.loadColorsFromFile(pywalPath);
-    if (!error.isEmpty()) {
-        Q_EMIT colorImportError(error);
-        return;
-    }
-
-    Q_EMIT colorImportSuccess();
-    setNeedsSave(true);
-}
-
-void SettingsController::loadColorsFromFile(const QString& filePath)
-{
-    QString error = m_settings.loadColorsFromFile(filePath);
-    if (!error.isEmpty()) {
-        Q_EMIT colorImportError(error);
-        return;
-    }
-
-    Q_EMIT colorImportSuccess();
-    setNeedsSave(true);
 }
 
 // Parses the daemon's running-windows JSON payload into a QVariantList of
