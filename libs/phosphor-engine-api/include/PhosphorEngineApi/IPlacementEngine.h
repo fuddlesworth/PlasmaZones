@@ -6,11 +6,27 @@
 #include <PhosphorEngineApi/IPlacementState.h>
 #include <PhosphorEngineApi/NavigationContext.h>
 
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QPoint>
+#include <QSet>
 #include <QString>
+#include <QStringList>
+#include <QVariantMap>
+
+#include <functional>
+
+class QObject;
 
 namespace PhosphorEngineApi {
 
 /// Unified placement engine interface.
+///
+/// NOTE: This interface carries methods for both snap and autotile engines.
+/// Methods documented as engine-specific (e.g., master operations) are no-ops
+/// on engines that don't implement them. A future pass may split this into
+/// focused facets (IScreenManagement, IMasterOperations, IDragPreview, etc.)
+/// once a third engine arrives and the real seams become clearer.
 ///
 /// Both snap-mode (manual zone layouts) and autotile-mode (automatic
 /// tiling algorithms) implement this so the daemon can dispatch all
@@ -109,6 +125,337 @@ public:
 
     /// Toggle the focused window between managed and floating.
     virtual void toggleFocusedFloat(const NavigationContext& ctx) = 0;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Screen management
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QSet<QString> activeScreens() const
+    {
+        return {};
+    }
+    virtual void setActiveScreens(const QSet<QString>& screens)
+    {
+        Q_UNUSED(screens)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window ordering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QStringList managedWindowOrder(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+    virtual void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(windowIds)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-screen config
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(overrides)
+    }
+    virtual void clearPerScreenConfig(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+    virtual QVariantMap perScreenOverrides(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Mode-specific float tracking
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual bool isModeSpecificFloated(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+    virtual void clearModeSpecificFloatMarker(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+    virtual bool restoreSavedModeFloat(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+    /// Remove saved floating state for the given windows (per-window, not bulk clear).
+    virtual void clearSavedFloatingForWindows(const QStringList& windowIds)
+    {
+        Q_UNUSED(windowIds)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Drag insert preview
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual bool hasDragInsertPreview() const
+    {
+        return false;
+    }
+    virtual bool beginDragInsertPreview(const QString& windowId, const QString& screenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(screenId)
+        return false;
+    }
+    virtual void commitDragInsertPreview()
+    {
+    }
+    virtual void cancelDragInsertPreview()
+    {
+    }
+    virtual QString dragInsertPreviewScreenId() const
+    {
+        return {};
+    }
+    virtual bool isWindowTracked(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+    /// Whether the engine considers the window "managed" (eligible for
+    /// layout operations). Semantics are engine-specific:
+    /// - Autotile: equivalent to isWindowTiled (floating windows excluded).
+    /// - Snap: a window assigned to a zone (including floated-in-zone).
+    /// Callers that need a consistent cross-engine check for "engine owns
+    /// this window at all" should use isWindowTracked instead.
+    virtual bool isWindowManaged(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+
+    /// Whether the window is actively tiled (engine-owned, non-floating).
+    /// Distinct from isWindowTracked (which includes floating windows).
+    virtual bool isWindowTiled(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+
+    /// Adopt an untracked window as floating on this engine's screen.
+    /// Used when a window is dragged from one engine's screen to another.
+    virtual void adoptWindowAsFloating(const QString& windowId, const QString& screenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(screenId)
+    }
+
+    /// Compute the insert index for a cursor position on a managed screen.
+    /// Returns -1 if the screen has no active state.
+    virtual int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        return -1;
+    }
+
+    /// Update the target insert index for an active drag-insert preview.
+    virtual void updateDragInsertPreview(int insertIndex)
+    {
+        Q_UNUSED(insertIndex)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Algorithm / mode identity
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QString algorithmId() const
+    {
+        return {};
+    }
+    virtual void setAlgorithm(const QString& algorithmId)
+    {
+        Q_UNUSED(algorithmId)
+    }
+    virtual bool isEnabled() const noexcept
+    {
+        return false;
+    }
+    virtual QString activeScreen() const
+    {
+        return {};
+    }
+    virtual void setActiveScreenHint(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Desktop/activity context
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void setCurrentDesktop(int desktop)
+    {
+        Q_UNUSED(desktop)
+    }
+    virtual void setCurrentActivity(const QString& activity)
+    {
+        Q_UNUSED(activity)
+    }
+    virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+    {
+        Q_UNUSED(isWindowSticky)
+    }
+    virtual QSet<int> desktopsWithActiveState() const
+    {
+        return {};
+    }
+    virtual void pruneStatesForDesktop(int removedDesktop)
+    {
+        Q_UNUSED(removedDesktop)
+    }
+    virtual void pruneStatesForActivities(const QStringList& validActivities)
+    {
+        Q_UNUSED(validActivities)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Settings synchronization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Sync tuning values from a settings object (QObject carrying ISettings).
+    /// Engines qobject_cast to their concrete settings type internally.
+    virtual void syncFromSettings(QObject* settings)
+    {
+        Q_UNUSED(settings)
+    }
+    /// Connect live-update signals from a settings object.
+    virtual void connectToSettings(QObject* settings)
+    {
+        Q_UNUSED(settings)
+    }
+    virtual qreal effectiveSplitRatioStep(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return 0.05;
+    }
+    /// Runtime max-windows limit. Returns -1 (unlimited sentinel) by default;
+    /// engines that enforce a cap override with the actual value.
+    /// Callers must treat -1 as "no limit" — never use as a divisor.
+    virtual int runtimeMaxWindows() const
+    {
+        return -1;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Retile / refresh
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void retile(const QString& screenId = QString())
+    {
+        Q_UNUSED(screenId)
+    }
+    virtual void scheduleRetileForScreen(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Float origin
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void markModeSpecificFloated(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+    virtual void clearAllSavedFloating()
+    {
+    }
+    virtual void saveModeFloat(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+    virtual void clearSavedModeFloating()
+    {
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Serialization delegates
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QJsonArray serializeWindowOrders() const
+    {
+        return {};
+    }
+    virtual void deserializeWindowOrders(const QJsonArray& orders)
+    {
+        Q_UNUSED(orders)
+    }
+    virtual QJsonObject serializePendingRestores() const
+    {
+        return {};
+    }
+    virtual void deserializePendingRestores(const QJsonObject& obj)
+    {
+        Q_UNUSED(obj)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Init hooks
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Attach a window-class registry (QObject carrying WindowRegistry).
+    /// Engines qobject_cast to their concrete type internally.
+    virtual void setWindowRegistry(QObject* registry)
+    {
+        Q_UNUSED(registry)
+    }
+    virtual void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
+    {
+        Q_UNUSED(fn)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Master operations (autotile-specific, no-op on snap)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual void increaseMasterRatio(qreal delta = 0.05)
+    {
+        Q_UNUSED(delta)
+    }
+    virtual void decreaseMasterRatio(qreal delta = 0.05)
+    {
+        Q_UNUSED(delta)
+    }
+    virtual void increaseMasterCount()
+    {
+    }
+    virtual void decreaseMasterCount()
+    {
+    }
+    virtual void focusMaster()
+    {
+    }
+    virtual void swapFocusedWithMaster()
+    {
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Engine state serialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    virtual QJsonObject serializeEngineState() const
+    {
+        return {};
+    }
+    virtual void deserializeEngineState(const QJsonObject& state)
+    {
+        Q_UNUSED(state)
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Persistence

@@ -76,7 +76,7 @@ public:
     /**
      * @brief Get number of tiled windows (excluding floating)
      */
-    int tiledWindowCount() const;
+    int tiledWindowCount() const override;
 
     /**
      * @brief Get the ordered list of window IDs
@@ -147,7 +147,7 @@ public:
     /**
      * @brief Get number of windows in master area
      */
-    int masterCount() const;
+    int masterCount() const override;
 
     /**
      * @brief Set number of windows in master area

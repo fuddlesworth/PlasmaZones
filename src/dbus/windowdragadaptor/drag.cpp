@@ -19,7 +19,7 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/constants.h"
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -169,7 +169,7 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     }
 
     // Skip overlay and zone detection on autotile-managed screens
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(outScreenId)) {
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(outScreenId)) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
@@ -492,7 +492,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
         const QString autotileScreenId = effectiveScreenIdAt(cursorX, cursorY);
         const bool onAutotileScreen =
-            !autotileScreenId.isEmpty() && m_autotileEngine->isAutotileScreen(autotileScreenId);
+            !autotileScreenId.isEmpty() && m_autotileEngine->isActiveOnScreen(autotileScreenId);
 
         // Reorder-mode override: the Krohnkite-style drag-to-swap setting makes
         // drag-insert the default behavior on autotile screens (no modifier

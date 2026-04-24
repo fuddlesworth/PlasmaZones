@@ -27,11 +27,10 @@
 #include "../../dbus/windowdragadaptor.h"
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include "../../snap/SnapEngine.h"
 #include "../../core/shaderregistry.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>

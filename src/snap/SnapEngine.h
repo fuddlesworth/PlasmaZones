@@ -330,6 +330,26 @@ public:
     bool restoreSnapFloating(const QString& windowId);
     void clearSavedSnapFloating();
 
+    // IPlacementEngine — generic mode-float overrides
+    bool restoreSavedModeFloat(const QString& windowId) override
+    {
+        return restoreSnapFloating(windowId);
+    }
+    void clearSavedFloatingForWindows(const QStringList& windowIds) override
+    {
+        for (const QString& windowId : windowIds) {
+            m_savedSnapFloatingWindows.remove(windowId);
+        }
+    }
+    void saveModeFloat(const QString& windowId) override
+    {
+        saveSnapFloating(windowId);
+    }
+    void clearSavedModeFloating() override
+    {
+        clearSavedSnapFloating();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Effect-reported windows (runtime flag — not persisted)
     // ═══════════════════════════════════════════════════════════════════════════

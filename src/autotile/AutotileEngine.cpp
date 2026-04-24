@@ -23,6 +23,7 @@
 #include "SettingsBridge.h"
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "config/settings.h"
+#include "core/isettings.h"
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
@@ -44,6 +45,18 @@ namespace {
 // If windows fail to open (e.g., app crash during startup), this prevents
 // m_pendingInitialOrders from leaking state indefinitely.
 constexpr int PendingOrderTimeoutMs = 10000;
+
+template<typename T>
+T* checkedCast(QObject* obj, const char* context)
+{
+    if (!obj)
+        return nullptr;
+    auto* concrete = qobject_cast<T*>(obj);
+    if (!concrete) {
+        qCWarning(lcAutotile) << context << ": QObject is not the expected type — skipping";
+    }
+    return concrete;
+}
 
 } // namespace
 
@@ -248,7 +261,7 @@ void AutotileEngine::connectSignals()
                         m_windowToStateKey.remove(windowId);
                     }
                     if (!releasedWindows.isEmpty()) {
-                        Q_EMIT windowsReleasedFromTiling(releasedWindows, orphanedVsIds);
+                        Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
                     }
 
                     // Clean up per-screen autotile settings for removed virtual screens.
@@ -624,7 +637,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     if (!releasedWindows.isEmpty()) {
-        Q_EMIT windowsReleasedFromTiling(releasedWindows, removed);
+        Q_EMIT windowsReleased(releasedWindows, removed);
     }
 
     // Clean up any remaining overflow entries for removed screens.
@@ -1076,6 +1089,22 @@ void AutotileEngine::connectToSettings(Settings* settings)
     m_settingsBridge->connectToSettings(settings);
 }
 
+void AutotileEngine::syncFromSettings(QObject* settings)
+{
+    auto* concrete = checkedCast<Settings>(settings, "syncFromSettings");
+    if (settings && !concrete)
+        return;
+    syncFromSettings(concrete);
+}
+
+void AutotileEngine::connectToSettings(QObject* settings)
+{
+    auto* concrete = checkedCast<Settings>(settings, "connectToSettings");
+    if (settings && !concrete)
+        return;
+    connectToSettings(concrete);
+}
+
 void AutotileEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
 {
     m_configResolver->applyPerScreenConfig(screenId, overrides);
@@ -1134,6 +1163,11 @@ int AutotileEngine::effectiveMaxWindows(const QString& screenId) const
 qreal AutotileEngine::effectiveSplitRatioStep(const QString& screenId) const
 {
     return m_configResolver->effectiveSplitRatioStep(screenId);
+}
+
+int AutotileEngine::runtimeMaxWindows() const
+{
+    return m_config->maxWindows;
 }
 
 QString AutotileEngine::effectiveAlgorithmId(const QString& screenId) const
@@ -3106,11 +3140,11 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // Step 4: Emit all deferred signals after state is fully consistent.
     // Recovery signals first (unfloated windows), then overflow signals
     // (newly floated windows) were already handled inside applyTiling's
-    // batch emit, and tilingChanged is emitted last.
+    // batch emit, and placementChanged is emitted last.
     for (const QString& wid : unfloated) {
         Q_EMIT windowFloatingChanged(wid, false, screenId);
     }
-    Q_EMIT tilingChanged(screenId);
+    Q_EMIT placementChanged(screenId);
 }
 
 void AutotileEngine::retileAfterOperation(const QString& screenId, bool operationSucceeded)
@@ -3194,6 +3228,14 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
                     algo->setAppIdResolver(resolver);
                 }
             });
+}
+
+void AutotileEngine::setWindowRegistry(QObject* registry)
+{
+    auto* concrete = checkedCast<WindowRegistry>(registry, "setWindowRegistry");
+    if (registry && !concrete)
+        return;
+    setWindowRegistry(concrete);
 }
 
 QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)

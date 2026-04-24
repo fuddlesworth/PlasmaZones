@@ -31,6 +31,10 @@ class Zone;
 class LayoutRegistry;
 }
 
+namespace PhosphorEngineApi {
+class IPlacementEngine;
+}
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::DragBypassReason;
@@ -42,7 +46,6 @@ class IOverlayService;
 
 class ISettings;
 class WindowTrackingAdaptor;
-class AutotileEngine;
 
 /**
  * @brief D-Bus adaptor for window drag handling
@@ -74,7 +77,7 @@ public:
      * prepareHandlerContext() skips overlay display on them.
      * Pass nullptr during shutdown to prevent dangling pointer access.
      */
-    void setAutotileEngine(AutotileEngine* engine)
+    void setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
     {
         m_autotileEngine = engine;
     }
@@ -288,7 +291,8 @@ public:
      * @param curDesktop Current virtual desktop (for context-disabled check)
      * @param curActivity Current activity (for context-disabled check)
      */
-    static PlasmaZones::DragPolicy computeDragPolicy(const ISettings* settings, const AutotileEngine* autotileEngine,
+    static PlasmaZones::DragPolicy computeDragPolicy(const ISettings* settings,
+                                                     const PhosphorEngineApi::IPlacementEngine* autotileEngine,
                                                      const QString& windowId, const QString& screenId, int curDesktop,
                                                      const QString& curActivity);
 
@@ -330,7 +334,7 @@ private:
     Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
-    AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
+    PhosphorEngineApi::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
     Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_shortcutRegistrar =
         nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 

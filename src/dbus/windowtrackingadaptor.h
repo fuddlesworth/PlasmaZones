@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
@@ -129,11 +130,13 @@ public:
      * Both must be set before navigation/float D-Bus calls work.
      *
      * Signal connections from SnapEngine to adaptor D-Bus signals are established here.
+     * The snap-specific signal (windowSnapStateChanged) is connected via qobject_cast.
      *
-     * @param snapEngine SnapEngine instance (not owned, must outlive adaptor)
-     * @param autotileEngine AutotileEngine instance (not owned, must outlive adaptor)
+     * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
+     * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
      */
-    void setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine);
+    void setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
+                    PhosphorEngineApi::PlacementEngineBase* autotileEngine);
 
     SnapEngine* snapEngine() const;
 
@@ -499,7 +502,7 @@ public Q_SLOTS:
      *
      * Starts/restarts the 500ms debounce timer. After the timer fires,
      * saveState() is called once. Used by the daemon to trigger saves
-     * when autotile state changes (tilingChanged signal).
+     * when autotile state changes (placementChanged signal).
      */
     void scheduleSaveState();
 
@@ -802,8 +805,9 @@ private:
 
     // Engine references for per-screen routing (set via setEngines())
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
-    QPointer<SnapEngine> m_snapEngine;
-    QPointer<AutotileEngine> m_autotileEngine;
+    QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
+    QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
+    QPointer<SnapEngine> m_cachedSnapEngine; // Cached qobject_cast result from setEngines()
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.

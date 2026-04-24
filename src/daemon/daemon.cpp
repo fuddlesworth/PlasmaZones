@@ -55,6 +55,7 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
+#include "enginefactory.h"
 #include "../autotile/AutotileEngine.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
@@ -382,7 +383,7 @@ bool Daemon::init()
         }
 
         // Re-derive autotile screens and apply per-screen overrides.
-        // windowsReleasedFromTiling clears floating state for released windows.
+        // windowsReleased clears floating state for released windows.
         updateAutotileScreens();
         updateLayoutFilter();
 
@@ -486,17 +487,7 @@ bool Daemon::init()
                 m_windowDragAdaptor->clearForCompositorReconnect();
             });
 
-    // Initialize autotile engine. Tile-algorithm registry was created
-    // earlier so the engine + its sub-services pick up the same
-    // per-daemon registry every other consumer uses.
-    m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), m_algorithmRegistry.get(), this);
-    // Attach the shared window registry so the engine queries current class
-    // instead of parsing canonical windowIds — fixes Emby-style mid-session
-    // class mutations (discussion #271).
-    m_autotileEngine->setWindowRegistry(m_windowRegistry.get());
-
-    // Initialize scripted algorithm loader BEFORE syncFromSettings so that
+    // Initialize scripted algorithm loader BEFORE engine construction so that
     // user-defined algorithms are registered in the daemon registry before
     // the engine resolves the configured algorithm ID.
     m_scriptedAlgorithmLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(
@@ -509,26 +500,34 @@ bool Daemon::init()
             });
     m_scriptedAlgorithmLoader->scanAndRegister();
 
-    m_autotileEngine->syncFromSettings(m_settings.get());
-    m_autotileEngine->connectToSettings(m_settings.get());
+    // Create both placement engines and the mode router via factory.
+    // The factory returns concrete types; we grab raw pointers for adaptor
+    // wiring before moving into the base-class unique_ptr members.
+    auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
+                                 m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
+                                 m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
+    auto* autotileEngine = engines.autotile.get();
+    auto* snapEngine = engines.snap.get();
+    m_autotileEngine = std::move(engines.autotile);
+    m_snapEngine = std::move(engines.snap);
+    m_screenModeRouter = std::move(engines.router);
+
+    autotileEngine->syncFromSettings(m_settings.get());
+    autotileEngine->connectToSettings(m_settings.get());
 
     // Give the window drag adaptor access to the autotile engine for per-screen
-    // autotile checks (overlay suppression and snap rejection on autotile screens)
+    // autotile checks (overlay suppression and snap rejection on autotile screens).
+    // Uses the base-class pointer — WDA only needs isActiveOnScreen().
     m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
-
-    // Initialize SnapEngine for manual zone-based snapping
-    m_snapEngine =
-        std::make_unique<SnapEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_zoneDetector.get(),
-                                     m_settings.get(), m_virtualDesktopManager.get(), this);
 
     // SnapEngine creates its own SnapState internally (symmetric with
     // AutotileEngine/TilingState). WTS references it for zone queries.
-    m_windowTrackingAdaptor->service()->setSnapState(m_snapEngine->snapState());
-    m_windowTrackingAdaptor->service()->setSnapEngine(m_snapEngine.get());
+    m_windowTrackingAdaptor->service()->setSnapState(snapEngine->snapState());
+    m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
-    m_snapEngine->setPersistenceDelegate(
+    snapEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
             if (wta)
                 wta->saveState();
@@ -539,7 +538,7 @@ bool Daemon::init()
         });
 
     // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection).
-    m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
+    m_windowTrackingAdaptor->setEngines(snapEngine, autotileEngine);
 
     // Wire SnapEngine's back-reference to the window tracking adaptor.
     // SnapEngine's navigation methods (focusInDirection, moveFocusedInDirection, …)
@@ -549,26 +548,21 @@ bool Daemon::init()
     // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
     // clearPreTileGeometry). A future refactor should move that state onto
     // SnapEngine or WindowTrackingService and retire the back-reference.
-    m_snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
+    snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Clear stale autotile-floated flag when a window is snapped. A window
     // dragged from an autotile VS to a snap VS retains its autotileFloated
     // marker; without this, a subsequent mode change on the autotile VS
     // incorrectly processes the already-snapped window as autotile-managed.
     // Wired here (daemon) because engines must not know about each other.
-    connect(m_snapEngine.get(), &SnapEngine::windowSnapStateChanged, this,
+    connect(snapEngine, &SnapEngine::windowSnapStateChanged, this,
             [this](const QString& windowId, const WindowStateEntry&) {
                 if (m_autotileEngine) {
-                    m_autotileEngine->clearAutotileFloated(windowId);
+                    m_autotileEngine->clearModeSpecificFloatMarker(windowId);
                 }
             });
 
-    // Central routing table: single source of truth for "which engine owns
-    // screen X". Every window-lifecycle / resnap / restore entry point in the
-    // daemon and its adaptors consults this instead of scattering
-    // isAutotileScreen() checks at each call site.
-    m_screenModeRouter =
-        std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
+    // ScreenModeRouter was created by createEngines() above; wire it to WTA.
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
     // m_virtualScreenStore is constructed in the initializer list (it's a
@@ -583,7 +577,7 @@ bool Daemon::init()
     // — the autotile window orders are embedded in WTA's save cycle via the serialization
     // delegates below. The engine-level delegates exist to satisfy the IPlacementEngine interface.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
-    m_autotileEngine->setPersistenceDelegate(
+    autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
             if (wta)
                 wta->saveState();
@@ -592,33 +586,33 @@ bool Daemon::init()
             if (wta)
                 wta->loadState();
         });
-    m_autotileEngine->setIsWindowFloatingFn([wta = QPointer(m_windowTrackingAdaptor)](const QString& windowId) -> bool {
+    autotileEngine->setIsWindowFloatingFn([wta = QPointer(m_windowTrackingAdaptor)](const QString& windowId) -> bool {
         return wta && wta->service() && wta->service()->isWindowFloating(windowId);
     });
 
     // Wire window order serialization delegates so WTA includes autotile window
     // orders in its save/load cycle (analogous to WindowZoneAssignmentsFull for snap mode)
     m_windowTrackingAdaptor->setTilingStateDelegates(
-        [engine = QPointer(m_autotileEngine.get())]() -> QJsonArray {
+        [engine = QPointer(autotileEngine)]() -> QJsonArray {
             return engine ? engine->serializeWindowOrders() : QJsonArray{};
         },
-        [engine = QPointer(m_autotileEngine.get())](const QJsonArray& orders) {
+        [engine = QPointer(autotileEngine)](const QJsonArray& orders) {
             if (engine)
                 engine->deserializeWindowOrders(orders);
         });
 
     m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
-        [engine = QPointer(m_autotileEngine.get())]() -> QJsonObject {
+        [engine = QPointer(autotileEngine)]() -> QJsonObject {
             return engine ? engine->serializePendingRestores() : QJsonObject{};
         },
-        [engine = QPointer(m_autotileEngine.get())](const QJsonObject& obj) {
+        [engine = QPointer(autotileEngine)](const QJsonObject& obj) {
             if (engine)
                 engine->deserializePendingRestores(obj);
         });
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count).
     // Narrower dirty mask than the default DirtyAll — only the two autotile-owned
-    // fields can change as a result of a tilingChanged signal, so the next save
+    // fields can change as a result of a placementChanged signal, so the next save
     // rewrites just those keys rather than the whole window-tracking blob.
     //
     // markDirty() emits WindowTrackingService::stateChanged, which is wired to
@@ -626,25 +620,25 @@ bool Daemon::init()
     // that connection is what actually kicks the debounced save timer. If the
     // stateChanged hookup ever gets severed, autotile state will silently
     // stop persisting; add an explicit scheduleSaveState() call here if so.
-    connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged, m_windowTrackingAdaptor, [this]() {
-        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-            m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
-                                                          | WindowTrackingService::DirtyAutotilePending);
-        }
-    });
+    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor,
+            [this]() {
+                if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+                    m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
+                                                                  | WindowTrackingService::DirtyAutotilePending);
+                }
+            });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
-    m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, m_settings.get(), this);
+    m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
-    m_autotileAdaptor =
-        new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
+    m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
     // it borrows are destroyed.
     m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
-                                          m_layoutManager.get(), m_autotileEngine.get(), m_screenManager.get(), this);
+                                          m_layoutManager.get(), autotileEngine, m_screenManager.get(), this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all
@@ -690,7 +684,7 @@ bool Daemon::init()
             // screens whose layout didn't change (prevents flicker on unrelated VS).
             m_suppressResnapOsd = osdEntries.size();
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
-            m_snapEngine->resnapToNewLayout();
+            m_snapAdaptor->resnapToNewLayout();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked
             for (const auto& osd : std::as_const(osdEntries)) {
@@ -855,7 +849,7 @@ void Daemon::stop()
     // Autotile tiling state is now included in WTA's saveStateOnShutdown() above
     // via the tiling state serialization delegates. No separate save needed.
     //
-    // Do NOT call setAutotileScreens({}) here — it emits windowsReleasedFromTiling
+    // Do NOT call setAutotileScreens({}) here — it emits windowsReleased
     // which clears WTS floating state and restarts the save timer, potentially
     // overwriting the correct WTS state saved above. The engine is destroyed
     // immediately after, so cleanup is unnecessary.

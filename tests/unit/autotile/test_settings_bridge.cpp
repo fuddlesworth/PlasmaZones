@@ -105,10 +105,10 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         // Calling with nullptr should not crash and should not emit
-        engine.syncFromSettings(nullptr);
+        engine.syncFromSettings(static_cast<Settings*>(nullptr));
 
         QCOMPARE(tilingSpy.count(), 0);
     }
@@ -592,7 +592,7 @@ private Q_SLOTS:
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         // Rapidly change config values — these should NOT trigger retile on their own
         engine.config()->innerGap = 5;

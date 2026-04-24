@@ -39,7 +39,7 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 200, 100);
         QCoreApplication::processEvents();
 
@@ -57,7 +57,7 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 100, 50);
         QCoreApplication::processEvents();
 
@@ -102,7 +102,7 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 0, 0);
         QCoreApplication::processEvents();
 

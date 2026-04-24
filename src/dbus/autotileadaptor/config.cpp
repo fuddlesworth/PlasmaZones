@@ -186,7 +186,7 @@ void AutotileAdaptor::increaseMasterRatio(double delta)
     }
     qCDebug(lcDbusAutotile) << "increaseMasterRatio: delta=" << delta;
     // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
-    // tilingChanged signal is emitted by engine after retile.
+    // placementChanged signal is emitted by engine after retile.
     m_engine->increaseMasterRatio(delta);
 }
 
@@ -202,7 +202,7 @@ void AutotileAdaptor::decreaseMasterRatio(double delta)
     }
     qCDebug(lcDbusAutotile) << "decreaseMasterRatio: delta=" << delta;
     // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
-    // tilingChanged signal is emitted by engine after retile.
+    // placementChanged signal is emitted by engine after retile.
     m_engine->decreaseMasterRatio(delta);
 }
 
@@ -213,7 +213,7 @@ void AutotileAdaptor::increaseMasterCount()
     }
     qCDebug(lcDbusAutotile) << "increaseMasterCount";
     // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
-    // tilingChanged signal is emitted by engine after retile.
+    // placementChanged signal is emitted by engine after retile.
     m_engine->increaseMasterCount();
 }
 
@@ -224,7 +224,7 @@ void AutotileAdaptor::decreaseMasterCount()
     }
     qCDebug(lcDbusAutotile) << "decreaseMasterCount";
     // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
-    // tilingChanged signal is emitted by engine after retile.
+    // placementChanged signal is emitted by engine after retile.
     m_engine->decreaseMasterCount();
 }
 

@@ -12,7 +12,7 @@
 #include "../core/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 
 #include <QDBusConnection>
 #include <QFutureWatcher>
@@ -24,7 +24,8 @@
 namespace PlasmaZones {
 
 ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
-                               PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
+                               PhosphorZones::LayoutRegistry* layoutManager,
+                               PhosphorEngineApi::IPlacementEngine* autotileEngine,
                                Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
@@ -74,7 +75,7 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
     }
 
     // Determine current mode and toggle
-    bool isAutotile = m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId);
+    bool isAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
     int newMode = isAutotile ? 0 : 1; // 0=Snapping, 1=Autotile
 
     // Use the LayoutAdaptor's assignment system to toggle mode
@@ -133,7 +134,7 @@ QString ControlAdaptor::getFullState()
         QJsonObject autotile;
         autotile[QLatin1String("enabled")] = m_autotileEngine->isEnabled();
         QJsonArray screens;
-        for (const QString& s : m_autotileEngine->autotileScreens()) {
+        for (const QString& s : m_autotileEngine->activeScreens()) {
             screens.append(s);
         }
         autotile[QLatin1String("screens")] = screens;
