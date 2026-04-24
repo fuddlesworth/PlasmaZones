@@ -10,9 +10,11 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Page-scoped bounds + color-import actions live on the sub-controller.
+    readonly property var settingsBridge: settingsController.snappingAppearancePage
     readonly property int opacitySliderMax: 100
-    readonly property int borderWidthMax: settingsController.borderWidthMax
-    readonly property int borderRadiusMax: settingsController.borderRadiusMax
+    readonly property int borderWidthMax: root.settingsBridge.borderWidthMax
+    readonly property int borderRadiusMax: root.settingsBridge.borderRadiusMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -127,7 +129,7 @@ Flickable {
                             Button {
                                 text: i18n("From pywal")
                                 icon.name: "color-management"
-                                onClicked: settingsController.loadColorsFromPywal()
+                                onClicked: root.settingsBridge.loadColorsFromPywal()
                             }
 
                             Button {
@@ -240,7 +242,7 @@ Flickable {
                         description: i18n("Thickness of zone borders in pixels")
 
                         SettingsSpinBox {
-                            from: settingsController.borderWidthMin
+                            from: root.settingsBridge.borderWidthMin
                             to: root.borderWidthMax
                             value: appSettings.borderWidth
                             onValueModified: (value) => {
@@ -258,7 +260,7 @@ Flickable {
                         description: i18n("Corner rounding of zone borders in pixels")
 
                         SettingsSpinBox {
-                            from: settingsController.borderRadiusMin
+                            from: root.settingsBridge.borderRadiusMin
                             to: root.borderRadiusMax
                             value: appSettings.borderRadius
                             onValueModified: (value) => {
@@ -428,7 +430,7 @@ Flickable {
         title: i18n("Import Colors from File")
         nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: settingsController.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+        onAccepted: root.settingsBridge.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
     }
 
     Kirigami.PromptDialog {
@@ -453,7 +455,7 @@ Flickable {
             colorImportHideTimer.restart();
         }
 
-        target: settingsController
+        target: root.settingsBridge
     }
 
 }

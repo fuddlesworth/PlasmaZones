@@ -7,6 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../constants.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -576,7 +577,7 @@ void WindowTrackingService::onLayoutChanged()
     {
         QVector<ResnapEntry> newBuffer;
 
-        QHash<QString, int> globalZoneIdToPosition = buildZonePositionMap(prevLayout);
+        QHash<QString, int> globalZoneIdToPosition = PhosphorZones::LayoutUtils::buildZonePositionMap(prevLayout);
         int globalPrevZoneCount = prevLayout->zones().size();
 
         // Cache per-screen position maps for screens with per-screen layouts
@@ -608,7 +609,8 @@ void WindowTrackingService::onLayoutChanged()
                 if (screenLayout && screenLayout != prevLayout) {
                     auto cacheIt = perLayoutPositionMaps.constFind(screenLayout);
                     if (cacheIt == perLayoutPositionMaps.constEnd()) {
-                        cacheIt = perLayoutPositionMaps.insert(screenLayout, buildZonePositionMap(screenLayout));
+                        cacheIt = perLayoutPositionMaps.insert(
+                            screenLayout, PhosphorZones::LayoutUtils::buildZonePositionMap(screenLayout));
                     }
                     posMap = &cacheIt.value();
                     prevZoneCount = screenLayout->zones().size();

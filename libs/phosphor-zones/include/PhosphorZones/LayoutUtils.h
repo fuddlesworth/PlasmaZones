@@ -5,6 +5,7 @@
 
 #include <phosphorzones_export.h>
 #include <QFlags>
+#include <QHash>
 #include <QJsonObject>
 #include <QList>
 #include <QRectF>
@@ -12,6 +13,7 @@
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QVector>
 
 namespace PhosphorZones {
 
@@ -86,6 +88,9 @@ PHOSPHORZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields 
  * whole layout as a single map without going through LayoutPreview.
  */
 PHOSPHORZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
+
+PHOSPHORZONES_EXPORT void sortZonesByNumber(QVector<Zone*>& zones);
+PHOSPHORZONES_EXPORT QHash<QString, int> buildZonePositionMap(Layout* layout);
 
 } // namespace LayoutUtils
 

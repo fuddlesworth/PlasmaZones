@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorProtocol/WireTypes.h>
 
 #include <QString>
@@ -24,7 +25,6 @@ using PhosphorProtocol::SwapTargetResult;
 
 class ISettings;
 
-class WindowTrackingService;
 class ZoneDetectionAdaptor;
 
 /**
@@ -76,8 +76,9 @@ public:
      * @param zoneDetector       adjacent/first-in-direction query helper (non-owning)
      * @param feedback           OSD feedback callback; may be empty (suppresses feedback)
      */
-    SnapNavigationTargetResolver(WindowTrackingService* service, PhosphorZones::LayoutRegistry* layoutManager,
-                                 ZoneDetectionAdaptor* zoneDetector, FeedbackFn feedback);
+    SnapNavigationTargetResolver(PhosphorEngineApi::IWindowTrackingService* service,
+                                 PhosphorZones::LayoutRegistry* layoutManager, ZoneDetectionAdaptor* zoneDetector,
+                                 FeedbackFn feedback);
 
     /// Late setter for the zone detector — it is wired after adaptor
     /// construction, so we allow nullptr at construction time and bind
@@ -112,7 +113,7 @@ private:
         }
     }
 
-    WindowTrackingService* m_service = nullptr;
+    PhosphorEngineApi::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     ZoneDetectionAdaptor* m_zoneDetector = nullptr;
     FeedbackFn m_feedback;

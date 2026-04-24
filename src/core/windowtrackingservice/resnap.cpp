@@ -7,6 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
@@ -43,7 +44,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // Build a global zoneId → (layoutId, position) map from all layouts
     QHash<QString, int> globalZoneIdToPosition;
     for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-        QHash<QString, int> layoutMap = buildZonePositionMap(layout);
+        QHash<QString, int> layoutMap = PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
         for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
             globalZoneIdToPosition[it.key()] = it.value();
         }

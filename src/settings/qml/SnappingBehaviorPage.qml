@@ -9,8 +9,12 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
+    // references stay direct since those are Settings Q_PROPERTYs the
+    // sub-controller doesn't wrap.
+    readonly property var settingsBridge: settingsController.snappingBehaviorPage
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int thresholdMax: settingsController.adjacentThresholdMax
+    readonly property int thresholdMax: root.settingsBridge.adjacentThresholdMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -45,10 +49,10 @@ Flickable {
                         SettingsSwitch {
                             id: alwaysActivateSwitch
 
-                            checked: settingsController.alwaysActivateOnDrag
+                            checked: root.settingsBridge.alwaysActivateOnDrag
                             accessibleName: i18n("Activate on every window drag")
                             onToggled: function(newValue) {
-                                settingsController.alwaysActivateOnDrag = newValue;
+                                root.settingsBridge.alwaysActivateOnDrag = newValue;
                             }
                         }
 
@@ -69,11 +73,11 @@ Flickable {
                             width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: settingsController.dragActivationTriggers
-                            defaultTriggers: settingsController.defaultDragActivationTriggers
+                            triggers: root.settingsBridge.dragActivationTriggers
+                            defaultTriggers: root.settingsBridge.defaultDragActivationTriggers
                             tooltipEnabled: false
                             onTriggersModified: (triggers) => {
-                                settingsController.dragActivationTriggers = triggers;
+                                root.settingsBridge.dragActivationTriggers = triggers;
                             }
                         }
 
@@ -134,11 +138,11 @@ Flickable {
                             width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: settingsController.zoneSpanTriggers
-                            defaultTriggers: settingsController.defaultZoneSpanTriggers
+                            triggers: root.settingsBridge.zoneSpanTriggers
+                            defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
                             tooltipEnabled: false
                             onTriggersModified: (triggers) => {
-                                settingsController.zoneSpanTriggers = triggers;
+                                root.settingsBridge.zoneSpanTriggers = triggers;
                             }
                         }
 
@@ -152,7 +156,7 @@ Flickable {
                         description: i18n("Distance from zone edge for multi-zone selection")
 
                         SettingsSpinBox {
-                            from: settingsController.adjacentThresholdMin
+                            from: root.settingsBridge.adjacentThresholdMin
                             to: root.thresholdMax
                             value: appSettings.adjacentThreshold
                             onValueModified: (value) => {
@@ -219,11 +223,11 @@ Flickable {
                             width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: settingsController.snapAssistTriggers
-                            defaultTriggers: settingsController.defaultSnapAssistTriggers
+                            triggers: root.settingsBridge.snapAssistTriggers
+                            defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers
                             tooltipEnabled: false
                             onTriggersModified: (triggers) => {
-                                settingsController.snapAssistTriggers = triggers;
+                                root.settingsBridge.snapAssistTriggers = triggers;
                             }
                         }
 

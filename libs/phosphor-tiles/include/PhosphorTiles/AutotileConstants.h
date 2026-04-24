@@ -158,4 +158,14 @@ using AutotileJsonValues::OverflowFloat;
 using AutotileJsonValues::OverflowUnlimited;
 } // namespace AutotileJsonKeys
 
+enum class AutotileOverflowBehavior {
+    Float = 0,
+    Unlimited = 1
+};
+
+enum class AutotileDragBehavior {
+    Float = 0,
+    Reorder = 1
+};
+
 } // namespace PhosphorTiles

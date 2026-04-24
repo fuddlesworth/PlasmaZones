@@ -416,8 +416,8 @@ ColumnLayout {
 
         SettingsSlider {
             enabled: easingRoot.animationsEnabled
-            from: settingsController.animationDurationMin
-            to: settingsController.animationDurationMax
+            from: settingsController.generalPage.animationDurationMin
+            to: settingsController.generalPage.animationDurationMax
             stepSize: 10
             value: easingRoot.appSettings.animationDuration
             valueSuffix: " ms"
@@ -457,8 +457,8 @@ ColumnLayout {
 
         SettingsSlider {
             enabled: easingRoot.animationsEnabled
-            from: settingsController.animationStaggerIntervalMin
-            to: settingsController.animationStaggerIntervalMax
+            from: settingsController.generalPage.animationStaggerIntervalMin
+            to: settingsController.generalPage.animationStaggerIntervalMax
             stepSize: 10
             value: easingRoot.appSettings.animationStaggerInterval
             valueSuffix: " ms"
@@ -480,8 +480,8 @@ ColumnLayout {
 
         SettingsSpinBox {
             enabled: easingRoot.animationsEnabled
-            from: settingsController.animationMinDistanceMin
-            to: settingsController.animationMinDistanceMax
+            from: settingsController.generalPage.animationMinDistanceMin
+            to: settingsController.generalPage.animationMinDistanceMax
             stepSize: 5
             value: easingRoot.appSettings.animationMinDistance
             onValueModified: (value) => {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/types.h"
 #include <PhosphorProtocol/WireTypes.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
@@ -18,7 +19,6 @@ using PhosphorProtocol::SnapConfirmationList;
 using PhosphorProtocol::UnfloatRestoreResult;
 using PhosphorProtocol::WindowGeometryList;
 
-struct SnapResult;
 class SnapEngine;
 class ScreenModeRouter;
 class WindowTrackingAdaptor;

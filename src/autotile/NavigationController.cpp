@@ -9,7 +9,6 @@
 #include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 #include <PhosphorScreens/Manager.h>
-#include "core/utils.h"
 
 #include <QScreen>
 #include <algorithm>

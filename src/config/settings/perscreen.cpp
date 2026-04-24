@@ -72,37 +72,36 @@ void applyPerScreenOverrides(ZoneSelectorConfig& config, const QVariantMap& over
     }
 }
 
-constexpr const char* kPerScreenKeys[] = {
-    ZoneSelectorConfigKey::Position,          ZoneSelectorConfigKey::LayoutMode,
-    ZoneSelectorConfigKey::SizeMode,          ZoneSelectorConfigKey::MaxRows,
-    ZoneSelectorConfigKey::PreviewWidth,      ZoneSelectorConfigKey::PreviewHeight,
-    ZoneSelectorConfigKey::PreviewLockAspect, ZoneSelectorConfigKey::GridColumns,
-    ZoneSelectorConfigKey::TriggerDistance,
+const QLatin1String kPerScreenKeys[] = {
+    QLatin1String(ZoneSelectorConfigKey::Position),          QLatin1String(ZoneSelectorConfigKey::LayoutMode),
+    QLatin1String(ZoneSelectorConfigKey::SizeMode),          QLatin1String(ZoneSelectorConfigKey::MaxRows),
+    QLatin1String(ZoneSelectorConfigKey::PreviewWidth),      QLatin1String(ZoneSelectorConfigKey::PreviewHeight),
+    QLatin1String(ZoneSelectorConfigKey::PreviewLockAspect), QLatin1String(ZoneSelectorConfigKey::GridColumns),
+    QLatin1String(ZoneSelectorConfigKey::TriggerDistance),
 };
 
-// Per-screen override key strings — defined in PerScreenAutotileKey (settings_interfaces.h).
-constexpr const char* kPerScreenAutotileKeys[] = {
-    PerScreenAutotileKey::Algorithm,
-    PerScreenAutotileKey::SplitRatio,
-    PerScreenAutotileKey::SplitRatioStep,
-    PerScreenAutotileKey::MasterCount,
-    PerScreenAutotileKey::InnerGap,
-    PerScreenAutotileKey::OuterGap,
-    PerScreenAutotileKey::UsePerSideOuterGap,
-    PerScreenAutotileKey::OuterGapTop,
-    PerScreenAutotileKey::OuterGapBottom,
-    PerScreenAutotileKey::OuterGapLeft,
-    PerScreenAutotileKey::OuterGapRight,
-    PerScreenAutotileKey::FocusNewWindows,
-    PerScreenAutotileKey::SmartGaps,
-    PerScreenAutotileKey::MaxWindows,
-    PerScreenAutotileKey::InsertPosition,
-    PerScreenAutotileKey::FocusFollowsMouse,
-    PerScreenAutotileKey::RespectMinimumSize,
-    PerScreenAutotileKey::HideTitleBars,
-    PerScreenAutotileKey::AnimationsEnabled,
-    PerScreenAutotileKey::AnimationDuration,
-    PerScreenAutotileKey::AnimationEasingCurve,
+const QLatin1String kPerScreenAutotileKeys[] = {
+    QLatin1String(PerScreenAutotileKey::Algorithm),
+    QLatin1String(PerScreenAutotileKey::SplitRatio),
+    QLatin1String(PerScreenAutotileKey::SplitRatioStep),
+    QLatin1String(PerScreenAutotileKey::MasterCount),
+    QLatin1String(PerScreenAutotileKey::InnerGap),
+    QLatin1String(PerScreenAutotileKey::OuterGap),
+    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap),
+    QLatin1String(PerScreenAutotileKey::OuterGapTop),
+    QLatin1String(PerScreenAutotileKey::OuterGapBottom),
+    QLatin1String(PerScreenAutotileKey::OuterGapLeft),
+    QLatin1String(PerScreenAutotileKey::OuterGapRight),
+    QLatin1String(PerScreenAutotileKey::FocusNewWindows),
+    QLatin1String(PerScreenAutotileKey::SmartGaps),
+    QLatin1String(PerScreenAutotileKey::MaxWindows),
+    QLatin1String(PerScreenAutotileKey::InsertPosition),
+    QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
+    QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
+    QLatin1String(PerScreenAutotileKey::HideTitleBars),
+    QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+    QLatin1String(PerScreenAutotileKey::AnimationDuration),
+    QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -189,8 +188,7 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
     return QVariant(group.readInt(key, 0));
 }
 
-// Per-screen snapping override keys — defined in PerScreenSnappingKey (settings_interfaces.h).
-constexpr const char* kPerScreenSnappingKeys[] = {
+const QLatin1String kPerScreenSnappingKeys[] = {
     PerScreenSnappingKey::SnapAssistEnabled,           PerScreenSnappingKey::ZoneSelectorEnabled,
     PerScreenSnappingKey::ZoneSelectorTriggerDistance, PerScreenSnappingKey::ZoneSelectorPosition,
     PerScreenSnappingKey::ZoneSelectorLayoutMode,      PerScreenSnappingKey::ZoneSelectorSizeMode,
@@ -201,24 +199,24 @@ constexpr const char* kPerScreenSnappingKeys[] = {
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == QLatin1String(K::SnapAssistEnabled) || key == QLatin1String(K::ZoneSelectorEnabled))
+    if (key == K::SnapAssistEnabled || key == K::ZoneSelectorEnabled)
         return QVariant(value.toBool());
-    if (key == QLatin1String(K::ZoneSelectorTriggerDistance))
+    if (key == K::ZoneSelectorTriggerDistance)
         return QVariant(
             qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
-    if (key == QLatin1String(K::ZoneSelectorPosition)) {
+    if (key == K::ZoneSelectorPosition) {
         int v = value.toInt();
         return (v >= 0 && v <= 8) ? QVariant(v) : QVariant();
     }
-    if (key == QLatin1String(K::ZoneSelectorLayoutMode))
+    if (key == K::ZoneSelectorLayoutMode)
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    if (key == QLatin1String(K::ZoneSelectorSizeMode))
+    if (key == K::ZoneSelectorSizeMode)
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorSizeMode::Manual)));
-    if (key == QLatin1String(K::ZoneSelectorMaxRows))
+    if (key == K::ZoneSelectorMaxRows)
         return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
-    if (key == QLatin1String(K::ZoneSelectorPreviewWidth))
+    if (key == K::ZoneSelectorPreviewWidth)
         return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
-    if (key == QLatin1String(K::ZoneSelectorPreviewHeight))
+    if (key == K::ZoneSelectorPreviewHeight)
         return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
     return QVariant();
 }
@@ -226,9 +224,9 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
 QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == QLatin1String(K::SnapAssistEnabled))
+    if (key == K::SnapAssistEnabled)
         return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
-    if (key == QLatin1String(K::ZoneSelectorEnabled))
+    if (key == K::ZoneSelectorEnabled)
         return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     return QVariant(group.readInt(key, 0));
 }
@@ -303,7 +301,7 @@ using PerScreenReadFn = QVariant (*)(PhosphorConfig::IGroup&, const QString&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
 void loadPerScreenGroup(PhosphorConfig::IBackend* backend, const QStringList& allGroups, const QString& prefix,
-                        const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
+                        const QLatin1String* keys, size_t keyCount, PerScreenReadFn readEntry,
                         PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
     dest.clear();
@@ -317,8 +315,7 @@ void loadPerScreenGroup(PhosphorConfig::IBackend* backend, const QStringList& al
         auto screenGroup = backend->group(groupName);
         QVariantMap overrides;
         for (size_t i = 0; i < keyCount; ++i) {
-            const char* key = keys[i];
-            QString keyStr = QString::fromLatin1(key);
+            const QString keyStr(keys[i]);
             if (screenGroup->hasKey(keyStr)) {
                 QVariant raw = readEntry(*screenGroup, keyStr);
                 QVariant validated = validate(keyStr, raw);

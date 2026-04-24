@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <PhosphorEngineApi/JsonKeys.h>
+#include <PhosphorEngineApi/PerScreenKeys.h>
+
 #include <QColor>
 #include <QLatin1String>
 #include <QMetaType>
@@ -151,11 +154,12 @@ inline constexpr QLatin1String RefreshRate{"refreshRate"};
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 
-// PhosphorZones::Zone assignment serialization keys
-inline constexpr QLatin1String WindowId{"windowId"};
-inline constexpr QLatin1String SourceZoneId{"sourceZoneId"};
-inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
-inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
+// PhosphorZones::Zone assignment serialization keys — authoritative definitions
+// live in PhosphorEngineApi::JsonKeys (LGPL); imported here for daemon callers.
+using PhosphorEngineApi::JsonKeys::SourceZoneId;
+using PhosphorEngineApi::JsonKeys::TargetZoneId;
+using PhosphorEngineApi::JsonKeys::TargetZoneIds;
+using PhosphorEngineApi::JsonKeys::WindowId;
 
 // Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
@@ -168,33 +172,7 @@ inline constexpr QLatin1String Region{"region"};
 inline constexpr QLatin1String Screens{"screens"};
 }
 
-/**
- * @brief Per-screen override key names (PascalCase — distinct from camelCase JSON keys)
- *
- * These are the keys used in PerScreenConfigResolver's override map and in
- * NavigationController's shortcut handlers. They match the key names written
- * by the per-screen config system in perscreen.cpp (with the "Autotile" prefix
- * stripped during lookup).
- */
-namespace PerScreenKeys {
-inline constexpr QLatin1String SplitRatio{"SplitRatio"};
-inline constexpr QLatin1String SplitRatioStep{"SplitRatioStep"};
-inline constexpr QLatin1String MasterCount{"MasterCount"};
-inline constexpr QLatin1String Algorithm{"Algorithm"};
-inline constexpr QLatin1String MaxWindows{"MaxWindows"};
-inline constexpr QLatin1String InnerGap{"InnerGap"};
-inline constexpr QLatin1String OuterGap{"OuterGap"};
-inline constexpr QLatin1String UsePerSideOuterGap{"UsePerSideOuterGap"};
-inline constexpr QLatin1String FocusNewWindows{"FocusNewWindows"};
-inline constexpr QLatin1String SmartGaps{"SmartGaps"};
-inline constexpr QLatin1String InsertPosition{"InsertPosition"};
-inline constexpr QLatin1String FocusFollowsMouse{"FocusFollowsMouse"};
-inline constexpr QLatin1String RespectMinimumSize{"RespectMinimumSize"};
-inline constexpr QLatin1String HideTitleBars{"HideTitleBars"};
-inline constexpr QLatin1String AnimationsEnabled{"AnimationsEnabled"};
-inline constexpr QLatin1String AnimationDuration{"AnimationDuration"};
-inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
-}
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 /**
  * @brief Synthetic zone ID prefix used by the zone selector overlay

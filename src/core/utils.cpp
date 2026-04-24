@@ -19,30 +19,7 @@ namespace Utils {
 
 bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId)
 {
-    if (storedScreenId.isEmpty() || physicalScreenId.isEmpty()) {
-        return false;
-    }
-    // A virtual ID passed as the physical filter is a misuse — the function
-    // is "stored belongs to PHYSICAL screen X". Return false rather than
-    // silently mis-matching.
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
-        return false;
-    }
-
-    // Stored ID is virtual: extract its physical parent and compare via
-    // screensMatch so connector-name ↔ EDID-ID equivalence is honored. A
-    // raw `==` would miss legitimate matches when one side is a connector
-    // name (e.g. "DP-2") and the other an EDID-based ID (e.g.
-    // "Dell:U2722D:115107"); both forms can appear in stored window state
-    // depending on which code path produced the ID.
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreenId)) {
-        return Phosphor::Screens::ScreenIdentity::screensMatch(
-            PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreenId), physicalScreenId);
-    }
-
-    // Stored ID is physical (or a connector name): defer to screensMatch
-    // which handles connector-name ↔ screen-ID equivalence via QScreen lookup.
-    return Phosphor::Screens::ScreenIdentity::screensMatch(storedScreenId, physicalScreenId);
+    return Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(storedScreenId, physicalScreenId);
 }
 
 void warnDuplicateScreenIds()
