@@ -41,6 +41,7 @@ class ScriptedAlgorithmLoader;
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
+#include "stagingservice.h"
 #include "tilingalgorithmcontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
@@ -666,49 +667,16 @@ private:
     QTimer m_runningWindowsTimeout;
     static constexpr int RunningWindowsTimeoutMs = 3000;
 
-    // Staged assignment changes (applied on save, discarded on load/reset)
-    struct StagedAssignment
-    {
-        QString screenId;
-        int virtualDesktop = 0;
-        QString activityId;
-        // Snapping — nullopt means not staged (use D-Bus), empty string means cleared
-        std::optional<QString> snappingLayoutId;
-        // Tiling — nullopt means not staged, empty string means cleared
-        std::optional<QString> tilingAlgorithmId;
-        // Explicit mode — when set, flush uses setAssignmentEntry (atomic mode+layout)
-        std::optional<int> stagedMode;
-        // Full clear overrides individual fields
-        bool fullCleared = false;
-    };
-    QHash<QString, StagedAssignment> m_stagedAssignments;
-
-    // Staged quick layout slot changes (flushed on Apply via D-Bus)
-    QHash<int, QString> m_stagedQuickSlots;
-    // Staged tiling quick layout slot changes (flushed on Apply to config)
-    QHash<int, QString> m_stagedTilingQuickSlots;
-
-    // Staged virtual screen configurations (physicalScreenId → staged screens; empty list = remove)
-    QHash<QString, QVariantList> m_stagedVirtualScreenConfigs;
+    // All staged (not-yet-saved) state owned by StagingService — assignments,
+    // virtual screen configs, quick layout slots. Flushed by save() in a
+    // specific order (persistence → Settings::save → D-Bus). Ordering
+    // (m_stagedSnappingOrder / m_stagedTilingOrder below) stays here because
+    // it couples to per-page NOTIFY signals the service isn't a QObject.
+    StagingService m_staging;
 
     // Staged ordering changes (flushed to m_settings on save)
     std::optional<QStringList> m_stagedSnappingOrder;
     std::optional<QStringList> m_stagedTilingOrder;
-
-    static QString assignmentCacheKey(const QString& screen, int desktop, const QString& activity);
-    StagedAssignment& stagedEntry(const QString& screen, int desktop, const QString& activity);
-    const StagedAssignment* stagedEntryConst(const QString& screen, int desktop, const QString& activity) const;
-    void flushStagedAssignments();
-
-    // Staged mutation helpers (shared logic for Q_INVOKABLE assignment methods)
-    void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-    void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-    void stageFullClear(const QString& screen, int desktop, const QString& activity);
-    void stageTilingClear(const QString& screen, int desktop, const QString& activity);
-
-    // Staged getter helpers — return true if handled (result set), false to fall through to D-Bus
-    bool stagedSnappingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
-    bool stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
 };
 
 } // namespace PlasmaZones

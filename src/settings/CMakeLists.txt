@@ -35,6 +35,8 @@ set(plasmazones_settings_SRCS
     # Service / utility modules extracted from SettingsController.
     kzonesimporter.h
     kzonesimporter.cpp
+    stagingservice.h
+    stagingservice.cpp
     settingslaunchcontroller.h
     settingslaunchcontroller.cpp
     settingsappadaptor.h
