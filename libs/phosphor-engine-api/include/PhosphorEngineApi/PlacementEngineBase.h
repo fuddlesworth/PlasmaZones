@@ -85,6 +85,13 @@ Q_SIGNALS:
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     void activateWindowRequested(const QString& windowId);
 
+    /// Emitted to sync floating state without restoring geometry.
+    /// Passive state-sync: engine-internal divergence correction.
+    void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
+
+    /// Emitted when overflow windows are batch-floated during applyTiling.
+    void windowsBatchFloated(const QStringList& windowIds, const QString& screenId);
+
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
     QHash<QString, WindowState> m_windowStates;

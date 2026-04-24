@@ -166,7 +166,7 @@ WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
 SnapEngine* WindowTrackingAdaptor::snapEngine() const
 {
-    return m_snapEngine;
+    return qobject_cast<SnapEngine*>(m_snapEngine.data());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -176,7 +176,8 @@ SnapEngine* WindowTrackingAdaptor::snapEngine() const
 // This method only wires cross-engine references and the shared OSD path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine)
+void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
+                                       PhosphorEngineApi::PlacementEngineBase* autotileEngine)
 {
     // Disconnect previous autotile engine nav feedback (the only signal connected here)
     if (m_autotileEngine) {
@@ -192,12 +193,16 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
     // When clearing (nullptr, nullptr), we also clear stale cross-references
     // to prevent dangling pointer access.
     // ═══════════════════════════════════════════════════════════════════════════
-    if (m_snapEngine) {
-        m_snapEngine->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
-        m_snapEngine->setAutotileEngine(m_autotileEngine);
+    if (auto* snap = qobject_cast<SnapEngine*>(snapEngine)) {
+        snap->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
+        if (auto* autotile = qobject_cast<AutotileEngine*>(autotileEngine)) {
+            snap->setAutotileEngine(autotile);
+        }
 
-        connect(m_snapEngine, &SnapEngine::windowSnapStateChanged, this, &WindowTrackingAdaptor::windowStateChanged);
-        connect(m_snapEngine, &SnapEngine::windowFloatingClearedForSnap, this,
+        // Snap-specific signal: carries WindowStateEntry which is snap-mode-only.
+        // Connected via qobject_cast since the member type is PlacementEngineBase.
+        connect(snap, &SnapEngine::windowSnapStateChanged, this, &WindowTrackingAdaptor::windowStateChanged);
+        connect(snap, &SnapEngine::windowFloatingClearedForSnap, this,
                 [this](const QString& windowId, const QString& screenId) {
                     Q_EMIT windowFloatingChanged(windowId, false, screenId);
                 });

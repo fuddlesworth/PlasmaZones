@@ -559,7 +559,7 @@ bool Daemon::init()
     connect(m_snapEngine.get(), &SnapEngine::windowSnapStateChanged, this,
             [this](const QString& windowId, const WindowStateEntry&) {
                 if (m_autotileEngine) {
-                    m_autotileEngine->clearAutotileFloated(windowId);
+                    m_autotileEngine->clearModeSpecificFloatMarker(windowId);
                 }
             });
 

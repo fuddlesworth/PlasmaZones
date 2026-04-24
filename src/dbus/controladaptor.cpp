@@ -133,7 +133,7 @@ QString ControlAdaptor::getFullState()
         QJsonObject autotile;
         autotile[QLatin1String("enabled")] = m_autotileEngine->isEnabled();
         QJsonArray screens;
-        for (const QString& s : m_autotileEngine->autotileScreens()) {
+        for (const QString& s : m_autotileEngine->activeScreens()) {
             screens.append(s);
         }
         autotile[QLatin1String("screens")] = screens;

@@ -201,7 +201,7 @@ public:
      * immediate free-floating-size restore when a tiled window is picked up.
      * Reads m_windowToStateKey which is authoritative.
      */
-    bool isWindowTracked(const QString& windowId) const
+    bool isWindowTracked(const QString& windowId) const override
     {
         return m_windowToStateKey.contains(windowId);
     }
@@ -217,6 +217,38 @@ public:
 
     // IPlacementEngine
     bool isActiveOnScreen(const QString& screenId) const override;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IPlacementEngine — generic screen/window management overrides
+    //
+    // Each override delegates to the concrete autotile method below it.
+    // AutotileAdaptor continues to call the concrete methods directly.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    QSet<QString> activeScreens() const override
+    {
+        return autotileScreens();
+    }
+    void setActiveScreens(const QSet<QString>& screens) override
+    {
+        setAutotileScreens(screens);
+    }
+    QStringList managedWindowOrder(const QString& screenId) const override
+    {
+        return tiledWindowOrder(screenId);
+    }
+    bool isModeSpecificFloated(const QString& windowId) const override
+    {
+        return isAutotileFloated(windowId);
+    }
+    void clearModeSpecificFloatMarker(const QString& windowId) override
+    {
+        clearAutotileFloated(windowId);
+    }
+    bool isWindowManaged(const QString& windowId) const override
+    {
+        return isWindowTiled(windowId);
+    }
 
     /**
      * @brief Get the set of screens currently using autotile
@@ -473,10 +505,10 @@ public:
      */
     void syncFromSettings(Settings* settings);
 
-    // Per-screen config — forwarded to PerScreenConfigResolver
-    void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides);
-    void clearPerScreenConfig(const QString& screenId);
-    QVariantMap perScreenOverrides(const QString& screenId) const;
+    // Per-screen config — forwarded to PerScreenConfigResolver (IPlacementEngine overrides)
+    void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
+    void clearPerScreenConfig(const QString& screenId) override;
+    QVariantMap perScreenOverrides(const QString& screenId) const override;
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
     void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
@@ -792,7 +824,7 @@ public:
      * @param screenId Screen to set initial order for
      * @param windowIds Window IDs in desired order (zone-number ascending)
      */
-    void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds);
+    void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
 
     /**
      * @brief Clear saved floating state for windows that are actively zone-snapped.
@@ -802,7 +834,7 @@ public:
      *
      * @param windowIds Windows to remove from the saved floating set
      */
-    void clearSavedFloatingForWindows(const QStringList& windowIds);
+    void clearSavedFloatingForWindows(const QStringList& windowIds) override;
 
     /**
      * @brief Clear ALL saved floating state (used when autotile is disabled globally)
@@ -901,7 +933,7 @@ public:
      *
      * @return true if the window is tiled on the screen and preview was started.
      */
-    bool beginDragInsertPreview(const QString& windowId, const QString& screenId);
+    bool beginDragInsertPreview(const QString& windowId, const QString& screenId) override;
 
     /**
      * @brief Update the target insert index for the active drag preview.
@@ -919,12 +951,12 @@ public:
      * geometry is applied (KWin is finishing the interactive move and will
      * accept the geometry set).
      */
-    void commitDragInsertPreview();
+    void commitDragInsertPreview() override;
 
     /**
      * @brief Cancel the active drag-insert preview, restoring the original order.
      */
-    void cancelDragInsertPreview();
+    void cancelDragInsertPreview() override;
 
     /**
      * @brief Compute the insert index for a cursor position on an autotile screen.
@@ -945,7 +977,7 @@ public:
     /**
      * @brief Query whether a drag-insert preview is currently active.
      */
-    bool hasDragInsertPreview() const
+    bool hasDragInsertPreview() const override
     {
         return m_dragInsertPreview.has_value();
     }
@@ -961,7 +993,7 @@ public:
     /**
      * @brief Get the target screen ID of the active drag-insert preview, or empty.
      */
-    QString dragInsertPreviewScreenId() const
+    QString dragInsertPreviewScreenId() const override
     {
         return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
     }
@@ -1014,35 +1046,13 @@ Q_SIGNALS:
      * are inherited from PlacementEngineBase.
      */
 
-    /**
-     * @brief Emitted to sync WTS floating state without restoring geometry
-     *
-     * Passive state-sync semantics: used when the engine's internal
-     * PhosphorTiles::TilingState::isFloating diverges from WindowTrackingService's view
-     * (e.g. a newly-inserted window carries stale snap-mode float state).
-     * The downstream handler updates WTS bookkeeping but must NOT call
-     * applyGeometryForFloat — the window already has a valid position
-     * (e.g. the drop point of a snap→autotile drag) and teleporting it
-     * to the stored pre-tile rect would resize and jump it off the drop
-     * location.
-     *
-     * @param windowId Window whose floating state is being synced
-     * @param floating True if the engine's state says the window should be floating
-     * @param screenId Screen where the window is
-     */
-    void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
-
-    /**
-     * @brief Emitted when overflow windows are batch-floated during applyTiling
-     *
-     * Replaces per-window windowFloatingChanged for overflow. The daemon handler
-     * updates WTS state directly (no D-Bus signals) since the effect processes
-     * float entries from the windowsTileRequested batch.
-     *
-     * @param windowIds Overflow window IDs that were just floated
-     * @param screenId Screen where tiling occurred
-     */
-    void windowsBatchFloated(const QStringList& windowIds, const QString& screenId);
+    // windowFloatingStateSynced and windowsBatchFloated are inherited from
+    // PlacementEngineBase. Autotile-specific documentation: windowFloatingStateSynced
+    // is emitted when the engine's TilingState::isFloating diverges from WTS's view
+    // (e.g. a newly-inserted window carries stale snap-mode float state). The
+    // downstream handler updates WTS bookkeeping without geometry restore.
+    // windowsBatchFloated is emitted when overflow windows are batch-floated
+    // during applyTiling; the daemon handler updates WTS state directly.
 
     /**
      * @brief Emitted when windows are tiled to new geometries (batch)

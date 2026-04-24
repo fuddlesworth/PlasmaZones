@@ -306,7 +306,7 @@ private:
      * @brief Recompute which screens use autotile from layout assignments
      *
      * Reads all screen assignments via assignmentIdForScreen(), computes
-     * which screens have autotile IDs, calls setAutotileScreens() on engine.
+     * which screens have autotile IDs, calls setActiveScreens() on engine.
      */
     void updateAutotileScreens();
 

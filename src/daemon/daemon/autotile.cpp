@@ -69,26 +69,26 @@ void Daemon::updateAutotileScreens()
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
     // restores the same window positions. Without this, only the settingsChanged path
     // (handleAutotileDisabled) captured orders — layout cycling lost them.
-    const QSet<QString>& currentAutotileScreens = m_autotileEngine->autotileScreens();
+    const QSet<QString> currentAutotileScreens = m_autotileEngine->activeScreens();
     const QSet<QString> removedScreens = currentAutotileScreens - autotileScreens;
     for (const QString& screenId : removedScreens) {
-        QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
+        QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         if (!order.isEmpty()) {
             m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
 
     // Seed window order for screens ENTERING autotile from saved state.
-    // Must happen before setAutotileScreens() which retiles added screens.
+    // Must happen before setActiveScreens() which retiles added screens.
     const QSet<QString> addedScreens = autotileScreens - currentAutotileScreens;
     for (const QString& screenId : addedScreens) {
         seedAutotileOrderForScreen(screenId);
     }
 
-    // Apply per-screen overrides BEFORE setAutotileScreens so that newly added
+    // Apply per-screen overrides BEFORE setActiveScreens so that newly added
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
-    // tilingStateForScreen(), which setAutotileScreens reuses for added screens.
+    // tilingStateForScreen(), which setActiveScreens reuses for added screens.
     if (m_settings) {
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
@@ -153,16 +153,16 @@ void Daemon::updateAutotileScreens()
         }
     }
 
-    // setAutotileScreens creates TilingStates for newly added screens (reusing
+    // setActiveScreens creates TilingStates for newly added screens (reusing
     // any already created by applyPerScreenConfig above) and retiles them.
     // Because per-screen overrides are set first, retileAfterOperation inside
-    // setAutotileScreens uses effectiveAlgorithm() with the correct per-screen algo.
-    const bool setChanged = (m_autotileEngine->autotileScreens() != autotileScreens);
-    m_autotileEngine->setAutotileScreens(autotileScreens);
+    // setActiveScreens uses effectiveAlgorithm() with the correct per-screen algo.
+    const bool setChanged = (m_autotileEngine->activeScreens() != autotileScreens);
+    m_autotileEngine->setActiveScreens(autotileScreens);
 
     // When the autotile set didn't change (e.g., VS inherited autotile from
     // the physical screen's cascade before the explicit assignment was written),
-    // setAutotileScreens early-returns without retiling. Force a retile for
+    // setActiveScreens early-returns without retiling. Force a retile for
     // screens that are in the set so mode-swap toggles always take effect.
     if (!setChanged) {
         for (const QString& screenId : autotileScreens) {
@@ -338,8 +338,8 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
     }
     const int desktop = currentDesktop();
     const QString activity = currentActivity();
-    for (const QString& screenId : m_autotileEngine->autotileScreens()) {
-        QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
+    for (const QString& screenId : m_autotileEngine->activeScreens()) {
+        QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         if (!order.isEmpty()) {
             orders[TilingStateKey{screenId, desktop, activity}] = order;
         }
@@ -432,7 +432,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
-        if (m_autotileEngine->isAutotileFloated(fid)) {
+        if (m_autotileEngine->isModeSpecificFloated(fid)) {
             continue;
         }
         // When scoped to a screen, only save windows on that screen.

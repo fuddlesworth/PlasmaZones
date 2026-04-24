@@ -75,14 +75,14 @@ void Daemon::initializeAutotile()
         // a handler that updates WTS bookkeeping without calling
         // applyGeometryForFloat — the window already has a valid position and
         // must not be teleported to a stored pre-tile rect.
-        connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingStateSynced, this,
+        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowFloatingStateSynced, this,
                 &Daemon::syncAutotileFloatStatePassive);
 
         // Batch overflow float handler: overflow windows are included in the
         // windowsTileRequested D-Bus signal with "floating" flag, so the effect
         // handles geometry restore directly. Here we only update daemon-side
         // WTS state without emitting per-window D-Bus signals.
-        connect(m_autotileEngine.get(), &AutotileEngine::windowsBatchFloated, this,
+        connect(m_autotileEngine.get(), &PhosphorEngineApi::PlacementEngineBase::windowsBatchFloated, this,
                 &Daemon::syncAutotileBatchFloatState);
 
         // Per-mode float state: when autotile releases windows back to snap mode:
@@ -91,7 +91,7 @@ void Daemon::initializeAutotile()
         //    in m_savedFloatingWindows for restoration on re-entry.
         // 2. Restore snap-mode floats that were saved when entering autotile —
         //    snap floats persist across autotile sessions.
-        // Must check isAutotileFloated BEFORE clearing the marker.
+        // Must check isModeSpecificFloated BEFORE clearing the marker.
         connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling, this,
                 [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
                     if (m_windowTrackingAdaptor) {
@@ -113,16 +113,16 @@ void Daemon::initializeAutotile()
                                 continue;
                             }
                             // Clear autotile-originated floats (they don't persist into snap mode)
-                            bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
+                            bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
                             if (wasAutotileFloated) {
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, false);
                             }
-                            m_autotileEngine->clearAutotileFloated(windowId);
+                            m_autotileEngine->clearModeSpecificFloatMarker(windowId);
                             // Restore snap-mode floats that were saved when entering autotile.
                             // Float state is set immediately (lightweight cache update), but
                             // geometry restore is deferred to the batched resnap signal to
                             // avoid individual D-Bus signals queuing behind the resnap.
-                            if (m_snapEngine->restoreSnapFloating(windowId)) {
+                            if (m_snapEngine->restoreSavedModeFloat(windowId)) {
                                 qCInfo(lcDaemon) << "windowsReleasedFromTiling: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
                                 QString screen = wts->screenAssignments().value(windowId);
@@ -579,7 +579,7 @@ void Daemon::connectOverlaySignals()
                     m_autotileEngine->windowClosed(windowId);
                     // Clear autotile-floated marker immediately — windowClosed removes
                     // the window from the engine but doesn't clear the WTS flag.
-                    m_autotileEngine->clearAutotileFloated(windowId);
+                    m_autotileEngine->clearModeSpecificFloatMarker(windowId);
                 }
             }
             QRect geometry;
@@ -681,13 +681,13 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
             // If the window was snap-mode-floated (not autotile-floated)
             // and autotile is clearing it, save for snap-mode restoration.
             bool wasFloating = wts->isWindowFloating(windowId);
-            bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
+            bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
             if (wasFloating && !wasAutotileFloated) {
                 m_snapEngine->saveSnapFloating(windowId);
                 qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(autotile clearing stale snap-float)";
             }
             m_windowTrackingAdaptor->setWindowFloating(windowId, false);
-            m_autotileEngine->clearAutotileFloated(windowId);
+            m_autotileEngine->clearModeSpecificFloatMarker(windowId);
         }
     }
     // NOTE: Do NOT call unsnapForFloat() here — it destroys the window's
@@ -736,13 +736,13 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         }
     } else {
         bool wasFloating = wts->isWindowFloating(windowId);
-        bool wasAutotileFloated = m_autotileEngine->isAutotileFloated(windowId);
+        bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
         if (wasFloating && !wasAutotileFloated) {
             m_snapEngine->saveSnapFloating(windowId);
             qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(passive sync clearing stale snap-float)";
         }
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
-        m_autotileEngine->clearAutotileFloated(windowId);
+        m_autotileEngine->clearModeSpecificFloatMarker(windowId);
     }
     // Deliberately no applyGeometryForFloat and no navigation OSD — this is
     // a silent sync of engine↔WTS state, not a user-visible float action.
