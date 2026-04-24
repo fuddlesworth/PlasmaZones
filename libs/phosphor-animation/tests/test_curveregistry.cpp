@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/Spring.h>
 
+#include <QJsonObject>
 #include <QTest>
 
 using PhosphorAnimation::Curve;
@@ -235,6 +236,175 @@ private Q_SLOTS:
         QVERIFY(types.contains(QStringLiteral("bezier")));
         QVERIFY(types.contains(QStringLiteral("spring")));
         QVERIFY(types.contains(QStringLiteral("elastic-out")));
+    }
+
+    // ─── Owner-tagged partitioning ───
+
+    /// Two independent owners register factories under DIFFERENT
+    /// typeIds. `unregisterByOwner(ownerA)` must remove only ownerA's
+    /// entries — ownerB's factory stays resolvable. Without owner
+    /// partitioning, a single `CurveLoader` destroying itself would have
+    /// been forced to unregister per-key, which is wrong when another
+    /// registrant shares a key.
+    void testUnregisterByOwnerLeavesOtherOwnerIntact()
+    {
+        CurveRegistry reg;
+        const QString ownerA = QStringLiteral("test-owner-a");
+        const QString ownerB = QStringLiteral("test-owner-b");
+        const QString idA = QStringLiteral("test-curve-a");
+        const QString idB = QStringLiteral("test-curve-b");
+
+        auto makeLinear = []() {
+            Easing e;
+            e.x1 = 0.0;
+            e.y1 = 0.0;
+            e.x2 = 1.0;
+            e.y2 = 1.0;
+            return std::make_shared<Easing>(e);
+        };
+
+        reg.registerFactory(
+            idA,
+            [makeLinear](const QString&, const QString&) {
+                return makeLinear();
+            },
+            ownerA);
+        reg.registerFactory(
+            idB,
+            [makeLinear](const QString&, const QString&) {
+                return makeLinear();
+            },
+            ownerB);
+
+        QVERIFY(reg.has(idA));
+        QVERIFY(reg.has(idB));
+
+        const int removed = reg.unregisterByOwner(ownerA);
+        QCOMPARE(removed, 1);
+        QVERIFY(!reg.has(idA));
+        QVERIFY2(reg.has(idB), "unregisterByOwner must not evict another owner's factory");
+        QVERIFY(reg.tryCreate(idB) != nullptr);
+    }
+
+    /// Two owners register OVERLAPPING typeIds (ownerB's registration
+    /// replaces ownerA's). When ownerA later tries to clean up by
+    /// owner, the entry is already tagged with ownerB, so it survives.
+    /// ownerB's own tear-down does evict.
+    void testUnregisterByOwnerDoesNotEvictReplacedRegistration()
+    {
+        CurveRegistry reg;
+        const QString ownerA = QStringLiteral("test-owner-a");
+        const QString ownerB = QStringLiteral("test-owner-b");
+        const QString sharedId = QStringLiteral("test-shared-curve");
+
+        reg.registerFactory(
+            sharedId,
+            [](const QString&, const QString&) {
+                return std::make_shared<Easing>();
+            },
+            ownerA);
+        reg.registerFactory(
+            sharedId,
+            [](const QString&, const QString&) {
+                return std::make_shared<Easing>();
+            },
+            ownerB);
+
+        QVERIFY(reg.has(sharedId));
+
+        const int removed = reg.unregisterByOwner(ownerA);
+        QCOMPARE(removed, 0);
+        QVERIFY2(reg.has(sharedId), "unregisterByOwner must only remove entries currently tagged with the owner");
+
+        QCOMPARE(reg.unregisterByOwner(ownerB), 1);
+        QVERIFY(!reg.has(sharedId));
+    }
+
+    /// Empty owner tag is a no-op (never "match every untagged built-in
+    /// and wipe the registry"). Guardrail against accidental empty-
+    /// string defaults in caller code.
+    void testUnregisterByOwnerEmptyTagIsNoOp()
+    {
+        CurveRegistry reg;
+        const int before = reg.knownTypes().size();
+        QCOMPARE(reg.unregisterByOwner(QString()), 0);
+        QCOMPARE(reg.knownTypes().size(), before);
+        QVERIFY(reg.has(QStringLiteral("spring")));
+        QVERIFY(reg.has(QStringLiteral("bezier")));
+    }
+
+    /// `tryCreateFromJson` round-trips each built-in typeId from a
+    /// parameters object. Mirrors `CurveLoader::Sink::parseFile`
+    /// after the loader stopped duplicating the schema.
+    void testTryCreateFromJsonBuiltins()
+    {
+        CurveRegistry reg;
+
+        QJsonObject springParams;
+        springParams.insert(QLatin1String("omega"), 14.0);
+        springParams.insert(QLatin1String("zeta"), 0.6);
+        auto spring = reg.tryCreateFromJson(QStringLiteral("spring"), springParams);
+        QVERIFY(spring != nullptr);
+        QCOMPARE(spring->typeId(), QStringLiteral("spring"));
+
+        QJsonObject bezierParams;
+        bezierParams.insert(QLatin1String("x1"), 0.25);
+        bezierParams.insert(QLatin1String("y1"), 0.75);
+        bezierParams.insert(QLatin1String("x2"), 0.75);
+        bezierParams.insert(QLatin1String("y2"), 0.25);
+        auto bezier = reg.tryCreateFromJson(QStringLiteral("cubic-bezier"), bezierParams);
+        QVERIFY(bezier != nullptr);
+        QCOMPARE(bezier->typeId(), QStringLiteral("bezier"));
+
+        QJsonObject elasticParams;
+        elasticParams.insert(QLatin1String("amplitude"), 1.2);
+        elasticParams.insert(QLatin1String("period"), 0.4);
+        auto elastic = reg.tryCreateFromJson(QStringLiteral("elastic-out"), elasticParams);
+        QVERIFY(elastic != nullptr);
+        QCOMPARE(elastic->typeId(), QStringLiteral("elastic-out"));
+    }
+
+    /// Validation failures from the built-in JSON factories surface
+    /// as `nullptr` — same contract as `tryCreate` for a bad spec.
+    /// The loader relies on this return value to skip the file.
+    void testTryCreateFromJsonValidationRejects()
+    {
+        CurveRegistry reg;
+
+        QJsonObject badSpring;
+        badSpring.insert(QLatin1String("omega"), -5.0);
+        badSpring.insert(QLatin1String("zeta"), 0.8);
+        QVERIFY(reg.tryCreateFromJson(QStringLiteral("spring"), badSpring) == nullptr);
+
+        QJsonObject badBezier;
+        badBezier.insert(QLatin1String("x1"), 1.5);
+        badBezier.insert(QLatin1String("y1"), 0.75);
+        badBezier.insert(QLatin1String("x2"), 0.5);
+        badBezier.insert(QLatin1String("y2"), 0.5);
+        QVERIFY(reg.tryCreateFromJson(QStringLiteral("cubic-bezier"), badBezier) == nullptr);
+    }
+
+    /// Unknown typeId → nullptr (no JSON factory registered).
+    void testTryCreateFromJsonUnknownReturnsNull()
+    {
+        CurveRegistry reg;
+        QVERIFY(reg.tryCreateFromJson(QStringLiteral("not-a-real-curve"), QJsonObject{}) == nullptr);
+    }
+
+    /// A third-party curve registered via the untagged
+    /// `registerFactory(typeId, factory)` overload has NO JsonFactory
+    /// and is unreachable through `tryCreateFromJson` — the loader
+    /// logs a skip. Exercises the null-JsonFactory branch of
+    /// `tryCreateFromJson`.
+    void testTryCreateFromJsonIgnoresStringOnlyFactory()
+    {
+        CurveRegistry reg;
+        const QString id = QStringLiteral("test-string-only");
+        reg.registerFactory(id, [](const QString&, const QString&) {
+            return std::make_shared<Easing>();
+        });
+        QVERIFY(reg.tryCreate(id) != nullptr);
+        QVERIFY(reg.tryCreateFromJson(id, QJsonObject{}) == nullptr);
     }
 };
 

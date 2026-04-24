@@ -182,6 +182,22 @@ public:
     /// on the CI filesystem.
     void setMaxEntriesForTest(int cap);
 
+    /// Test-only: introspection of the ancestor-watch bookkeeping used
+    /// by `attachWatcherForDir` when a target directory does not yet
+    /// exist. Returns the actually-watched ancestor for `target`, or an
+    /// empty string if no such ancestor watch is recorded.
+    ///
+    /// Exposed for regression-test coverage of the promotion path; not
+    /// intended as a runtime API. Production code must not depend on
+    /// the contents of this map.
+    QString watchedAncestorForTest(const QString& target) const;
+
+    /// Test-only: returns true if `path` is currently in the internal
+    /// parent-watch set. Paired with `watchedAncestorForTest` for the
+    /// promotion regression test, which must verify that the actually-
+    /// watched ancestor is removed from the set after promotion.
+    bool hasParentWatchForTest(const QString& path) const;
+
 Q_SIGNALS:
     /**
      * @brief Fired after every rescan, coalesced by the 50 ms debounce.
@@ -207,6 +223,17 @@ private:
     QHash<QString, Entry> m_entries; ///< key → tracked entry
     QFileSystemWatcher* m_watcher = nullptr;
     QSet<QString> m_watchedParents; ///< parents watched for dir-creation
+    /// Back-reference from a configured target directory whose own path
+    /// does not yet exist to the specific ancestor we climbed to and
+    /// installed a watch on. Needed because `attachWatcherForDir` may
+    /// watch a non-immediate ancestor (the climb skips over missing
+    /// intermediaries), and on promotion — when the target later
+    /// materialises — the immediate parent may still not exist, so
+    /// removing `info.absolutePath()` from `m_watchedParents` would
+    /// miss the actually-watched ancestor and leak the watch for the
+    /// loader's lifetime. Canonicalised with `QDir::cleanPath` on both
+    /// key and value so symlinked or trailing-slash duplicates collapse.
+    QHash<QString, QString> m_parentWatchFor;
     /// Individual files currently in the watcher's file set. Needed
     /// because editors that write in place (no atomic rename) do NOT
     /// fire `directoryChanged`; only `fileChanged` catches them. Must
@@ -215,6 +242,19 @@ private:
     QSet<QString> m_watchedFiles;
     QTimer m_debounceTimer;
     bool m_liveReloadEnabled = false;
+    /// True while `rescanAll` is actively running. `requestRescan` set
+    /// while this is true records the request in
+    /// `m_rescanRequestedWhileRunning` instead of starting the debounce
+    /// timer, so the follow-up rescan fires after the current one
+    /// completes. Without this, a watcher event delivered during a
+    /// running rescan can be lost — the timer is already idle and the
+    /// rescan has already captured the pre-event filesystem state.
+    bool m_rescanInProgress = false;
+    /// Set from `requestRescan` when it's invoked while
+    /// `m_rescanInProgress` is true. Checked at the end of `rescanAll`
+    /// and, if set, starts the debounce timer to pick up the missed
+    /// event.
+    bool m_rescanRequestedWhileRunning = false;
     /// Effective per-rescan entry cap — initialised from `kMaxEntries`
     /// at construction; tests override via `setMaxEntriesForTest`.
     int m_maxEntries = kMaxEntries;

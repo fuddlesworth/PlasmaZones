@@ -326,6 +326,68 @@ private Q_SLOTS:
         QVERIFY(p.minDistance.has_value());
         QCOMPARE(*p.minDistance, 0);
     }
+
+    /// `QJsonValue::toInt(default)` returns `default` verbatim when
+    /// the value is a JSON Number-with-fractional-zero like `5.0`,
+    /// so a file written by a non-C++ serializer that emits the
+    /// integer as a double silently fell back to the library
+    /// default. The fix routes through `toDouble()` + `qRound()`.
+    /// Regression guard: a JSON double `5.0` must produce
+    /// `minDistance = 5`, not the library default.
+    void testFromJsonMinDistanceAcceptsWholeDouble()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), 5.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY2(p.minDistance.has_value(),
+                 "minDistance 5.0 must engage the optional (double silent-fallback regression)");
+        QCOMPARE(*p.minDistance, 5);
+    }
+
+    /// A non-string `presetName` (e.g. `"presetName": 42`) must NOT
+    /// engage the optional with an empty string. Previously
+    /// `toString()` on a non-string QJsonValue returned "" and the
+    /// optional ended up engaged-empty — semantically distinct from
+    /// "unset" (engaged-empty means "explicit empty override") and
+    /// so a malformed JSON silently mutated to an explicit override.
+    /// Fix: guard on `isString()` before assigning.
+    void testFromJsonRejectsNonStringPresetName()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("presetName"), 42);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY2(!p.presetName.has_value(),
+                 "non-string presetName must NOT engage the optional (not even with empty string)");
+
+        // Cross-check: boolean and object values also don't engage.
+        QJsonObject objBool;
+        objBool.insert(QLatin1String("presetName"), true);
+        QVERIFY(!Profile::fromJson(objBool, CurveRegistry{}).presetName.has_value());
+
+        QJsonObject objObj;
+        objObj.insert(QLatin1String("presetName"), QJsonObject{});
+        QVERIFY(!Profile::fromJson(objObj, CurveRegistry{}).presetName.has_value());
+    }
+
+    /// Sanity: a genuine string `presetName` DOES still engage the
+    /// optional — guards against a regression where the new
+    /// `isString()` check is over-tightened.
+    void testFromJsonAcceptsStringPresetName()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("presetName"), QStringLiteral("My Preset"));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.presetName.has_value());
+        QCOMPARE(*p.presetName, QStringLiteral("My Preset"));
+
+        // Empty string is also accepted — it's the documented
+        // engaged-empty override semantic.
+        QJsonObject objEmpty;
+        objEmpty.insert(QLatin1String("presetName"), QString());
+        const Profile pEmpty = Profile::fromJson(objEmpty, CurveRegistry{});
+        QVERIFY(pEmpty.presetName.has_value());
+        QVERIFY(pEmpty.presetName->isEmpty());
+    }
 };
 
 QTEST_MAIN(TestProfile)

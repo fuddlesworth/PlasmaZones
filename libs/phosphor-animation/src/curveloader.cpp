@@ -9,13 +9,14 @@
 #include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
 #include <PhosphorJsonLoader/ParsedEntry.h>
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
-#include <QStandardPaths>
+#include <QUuid>
 
 #include <algorithm>
 
@@ -23,6 +24,16 @@ namespace PhosphorAnimation {
 
 namespace {
 Q_LOGGING_CATEGORY(lcCurveLoader, "phosphoranimation.curveloader")
+
+/// Generate a unique-per-instance owner tag. UUIDs are never reused
+/// within a process, so sequential loaders (tests, plugin reloads,
+/// embedded shells) never inherit authority over a prior loader's
+/// unclaimed registry entries — even when a new loader reuses the
+/// same heap slot. Prefixed `"curveloader:"` for debug clarity.
+QString makeCurveLoaderOwnerTag()
+{
+    return QStringLiteral("curveloader:") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+}
 } // namespace
 
 /**
@@ -45,12 +56,14 @@ public:
         QString wireFormat;
     };
 
-    explicit Sink(CurveRegistry& reg)
+    Sink(CurveRegistry& reg, QString owner)
         : registry(&reg)
+        , ownerTag(std::move(owner))
     {
     }
 
     CurveRegistry* registry; ///< pinned at ctor — no per-call mutation
+    QString ownerTag; ///< stable per-instance tag for partitioned factory ownership
     QHash<QString, CurveLoader::Entry> entries; ///< name → entry (for entries() introspection)
     /// Wire-format snapshot per successfully committed key, used by
     /// commitBatch to skip re-registration of keys whose parsed curve
@@ -127,87 +140,30 @@ public:
         }
         const QJsonObject params = obj.value(QLatin1String("parameters")).toObject();
 
-        // Build the wire-format string from the typeId + parameters and
-        // route through CurveRegistry. Decision V: no new curve classes
-        // through JSON, just parameter tuning on existing types.
+        // Delegate parameter-shape validation to the CurveRegistry's
+        // JsonFactory for `typeId`. Keeps the registry as the sole
+        // schema authority — third-party curves that registered a JSON
+        // factory become JSON-loadable automatically, and the built-in
+        // spring / cubic-bezier / elastic / bounce shapes live in
+        // exactly one place (curveregistry.cpp's registerBuiltins).
         //
-        // Each branch validates its own parameter ranges before
-        // delegating to `tryCreate`. Validation at the library boundary
-        // catches negative stiffness / period / amplitude /
-        // out-of-unit-range bezier control points up front, giving the
-        // author a clear "value X is out of range" message instead of
-        // the opaque "CurveRegistry could not build" downstream warning
-        // that a bad parameter would otherwise produce via
-        // `tryCreate`'s generic parser.
-        const auto reject = [&](const QString& field, auto value, const QString& constraint) {
-            qCWarning(lcCurveLoader).nospace() << "Skipping " << filePath << ": " << typeId << " parameter '" << field
-                                               << "' = " << value << " — " << constraint;
-        };
-        QString wireFormat;
-        if (typeId == QLatin1String("spring")) {
-            const qreal omega = params.value(QLatin1String("omega")).toDouble(12.0);
-            const qreal zeta = params.value(QLatin1String("zeta")).toDouble(0.8);
-            if (!(omega > 0.0)) {
-                reject(QStringLiteral("omega"), omega, QStringLiteral("must be > 0 (angular frequency)"));
-                return std::nullopt;
-            }
-            if (zeta < 0.0) {
-                reject(QStringLiteral("zeta"), zeta, QStringLiteral("must be >= 0 (damping ratio)"));
-                return std::nullopt;
-            }
-            wireFormat = QStringLiteral("spring:%1,%2").arg(omega).arg(zeta);
-        } else if (typeId == QLatin1String("cubic-bezier")) {
-            const qreal x1 = params.value(QLatin1String("x1")).toDouble(0.33);
-            const qreal y1 = params.value(QLatin1String("y1")).toDouble(1.0);
-            const qreal x2 = params.value(QLatin1String("x2")).toDouble(0.68);
-            const qreal y2 = params.value(QLatin1String("y2")).toDouble(1.0);
-            // Cubic Bezier control points: x must stay in [0,1] (CSS
-            // spec + QEasingCurve constraint). y can legitimately exceed
-            // the unit range — that's how overshoot curves work — so we
-            // deliberately DO NOT bound y1/y2.
-            if (x1 < 0.0 || x1 > 1.0) {
-                reject(QStringLiteral("x1"), x1, QStringLiteral("must be in [0, 1] (control-point x)"));
-                return std::nullopt;
-            }
-            if (x2 < 0.0 || x2 > 1.0) {
-                reject(QStringLiteral("x2"), x2, QStringLiteral("must be in [0, 1] (control-point x)"));
-                return std::nullopt;
-            }
-            wireFormat = QStringLiteral("%1,%2,%3,%4").arg(x1).arg(y1).arg(x2).arg(y2);
-        } else if (typeId.startsWith(QLatin1String("elastic-"))) {
-            const qreal amplitude = params.value(QLatin1String("amplitude")).toDouble(1.0);
-            const qreal period = params.value(QLatin1String("period")).toDouble(0.3);
-            if (!(amplitude > 0.0)) {
-                reject(QStringLiteral("amplitude"), amplitude, QStringLiteral("must be > 0"));
-                return std::nullopt;
-            }
-            if (!(period > 0.0)) {
-                reject(QStringLiteral("period"), period, QStringLiteral("must be > 0"));
-                return std::nullopt;
-            }
-            wireFormat = QStringLiteral("%1:%2,%3").arg(typeId).arg(amplitude).arg(period);
-        } else if (typeId.startsWith(QLatin1String("bounce-"))) {
-            const qreal amplitude = params.value(QLatin1String("amplitude")).toDouble(1.0);
-            const int bounces = params.value(QLatin1String("bounces")).toInt(3);
-            if (!(amplitude > 0.0)) {
-                reject(QStringLiteral("amplitude"), amplitude, QStringLiteral("must be > 0"));
-                return std::nullopt;
-            }
-            if (bounces < 1) {
-                reject(QStringLiteral("bounces"), bounces, QStringLiteral("must be >= 1"));
-                return std::nullopt;
-            }
-            wireFormat = QStringLiteral("%1:%2,%3").arg(typeId).arg(amplitude).arg(bounces);
-        } else {
-            qCWarning(lcCurveLoader) << "Skipping" << filePath << ": unknown typeId" << typeId;
+        // A null return means either:
+        //   - unknown typeId (no factory registered), or
+        //   - known typeId whose JSON factory rejected the parameters
+        //     (validation failure — factory emits its own qCWarning).
+        auto curve = registry->tryCreateFromJson(typeId, params);
+        if (!curve) {
+            qCWarning(lcCurveLoader) << "Skipping" << filePath << ": typeId" << typeId
+                                     << "unknown or parameters rejected (see curve registry log)";
             return std::nullopt;
         }
 
-        auto curve = registry->tryCreate(wireFormat);
-        if (!curve) {
-            qCWarning(lcCurveLoader) << "Skipping" << filePath << ": CurveRegistry could not build" << wireFormat;
-            return std::nullopt;
-        }
+        // Capture the canonical wire-format via `curve->toString()` for
+        // commitBatch's unchanged-content diff. `toString()` is the
+        // Curve-contract canonical form, so two parses of the same JSON
+        // file produce the same wire string — the diff stays stable
+        // across reloads even if the JSON factory internals change.
+        const QString wireFormat = curve->toString();
 
         Payload payload{obj.value(QLatin1String("displayName")).toString(), std::move(curve), wireFormat};
 
@@ -234,7 +190,9 @@ public:
         // Purge entries whose backing files are no longer on disk.
         // CurveRegistry::registerFactory is replace-semantic, so a
         // future registration can re-use the key — but the current
-        // caller wants the key fully unregistered until then.
+        // caller wants the key fully unregistered until then. We own
+        // each factory under `ownerTag`, so calling `unregisterFactory`
+        // here only evicts entries we ourselves registered.
         //
         // Gate `lastBatchChanged` on the actual snapshot delete: a
         // removedKeys entry whose key never made it into our snapshot
@@ -280,9 +238,17 @@ public:
                 // name and builds a non-null curve, but check
                 // defensively so future refactors can't silently lose
                 // registrations.
-                registry->registerFactory(p.key, [curve](const QString&, const QString&) {
-                    return curve;
-                });
+                //
+                // Pass the owner tag so the dtor's
+                // `unregisterByOwner(ownerTag)` only evicts what we
+                // installed, preserving other loaders' and direct
+                // `registerFactory` callers' entries.
+                registry->registerFactory(
+                    p.key,
+                    [curve](const QString&, const QString&) {
+                        return curve;
+                    },
+                    ownerTag);
                 if (!registry->has(p.key)) {
                     qCWarning(lcCurveLoader) << "commitBatch: registerFactory silently rejected" << p.key;
                     continue;
@@ -303,7 +269,7 @@ public:
 
 CurveLoader::CurveLoader(CurveRegistry& registry, QObject* parent)
     : QObject(parent)
-    , m_sink(std::make_unique<Sink>(registry))
+    , m_sink(std::make_unique<Sink>(registry, makeCurveLoaderOwnerTag()))
     , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(*m_sink))
 {
     // Gate `curvesChanged` on the per-batch change flag. DirectoryLoader
@@ -322,23 +288,18 @@ CurveLoader::CurveLoader(CurveRegistry& registry, QObject* parent)
 
 CurveLoader::~CurveLoader()
 {
-    // Unregister every factory this loader registered so a process
-    // hosting multiple sequential loaders (tests, plugin reloads,
-    // embedded shells) doesn't accumulate ghost factories in the
-    // borrowed CurveRegistry. Mirrors `ProfileLoader::~ProfileLoader`,
-    // which issues a `clearOwner(ownerTag)` against PhosphorProfileRegistry
-    // for the same reason.
+    // Bulk-remove every factory this loader registered under its owner
+    // tag — mirrors `ProfileLoader::~ProfileLoader` issuing
+    // `clearOwner(ownerTag)` against PhosphorProfileRegistry.
     //
-    // CurveRegistry has no owner partitioning (factories are a flat
-    // typeId→Factory map), so we iterate the loader's own tracked set
-    // and unregister each entry by name. Keys the loader never
-    // successfully registered (parse errors, builtin collisions) are
-    // not in `entries`, so we won't spuriously evict a consumer's
-    // direct `registerFactory` call that happens to share a name.
-    if (m_sink && m_sink->registry) {
-        for (auto it = m_sink->entries.constBegin(); it != m_sink->entries.constEnd(); ++it) {
-            m_sink->registry->unregisterFactory(it.key());
-        }
+    // Owner-tagged partitioning means another `CurveLoader` (or any
+    // direct `registerFactory` caller with a different tag) that
+    // happens to share a typeId is preserved — the previous per-key
+    // unregister loop would have evicted the other registrant's entry
+    // silently. Each removal emits an info log line in CurveRegistry
+    // so rollback is observable in traces.
+    if (m_sink && m_sink->registry && !m_sink->ownerTag.isEmpty()) {
+        m_sink->registry->unregisterByOwner(m_sink->ownerTag);
     }
 }
 
@@ -354,21 +315,30 @@ int CurveLoader::loadFromDirectories(const QStringList& directories, LiveReload 
 
 int CurveLoader::loadLibraryBuiltins(LiveReload liveReload)
 {
-    // Discover the library's own bundled pack via QStandardPaths against
-    // the phosphor-animation org/app. Today the library ships no built-in
-    // JSON curves (the spring/cubic-bezier factories registered at runtime
-    // cover the full surface); the lookup stays in place so future
-    // curve packs can drop in without an API change here.
+    // Use the install-prefix directory baked in at build time via
+    // PHOSPHORANIMATION_INSTALL_DATADIR. Namespacing under the library's
+    // own `phosphor-animation/curves` subdir means a consumer's
+    // user-local `~/.local/share/<consumer>/curves` pack is NEVER
+    // accidentally pulled into the library's built-in load (the old
+    // XDG-based `locateAll(GenericDataLocation,
+    // "phosphor-animation/curves", ...)` had the reverse property —
+    // a user placing files under `~/.local/share/phosphor-animation/
+    // curves` would silently shadow the library's immutable pack).
     //
-    // Intentionally NOT namespacing under a consumer string — this is
-    // the library's OWN pack, consumer-agnostic by construction.
-    const QStringList dirs =
-        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("phosphor-animation/curves"),
-                                  QStandardPaths::LocateDirectory);
-    if (dirs.isEmpty()) {
+    // When the macro is absent (e.g. a sub-project build that did not
+    // propagate the datadir), fall back to a no-op — the caller's
+    // consumer-namespaced directories are still loaded via the
+    // `loadFromDirectory[ies]` entry points.
+#ifdef PHOSPHORANIMATION_INSTALL_DATADIR
+    const QString dir = QStringLiteral(PHOSPHORANIMATION_INSTALL_DATADIR "/curves");
+    if (!QDir(dir).exists()) {
         return 0;
     }
-    return loadFromDirectories(dirs, liveReload);
+    return loadFromDirectory(dir, liveReload);
+#else
+    Q_UNUSED(liveReload);
+    return 0;
+#endif
 }
 
 void CurveLoader::requestRescan()
@@ -379,6 +349,11 @@ void CurveLoader::requestRescan()
 int CurveLoader::registeredCount() const
 {
     return m_loader->registeredCount();
+}
+
+QString CurveLoader::ownerTag() const
+{
+    return m_sink ? m_sink->ownerTag : QString();
 }
 
 QList<CurveLoader::Entry> CurveLoader::entries() const

@@ -138,7 +138,14 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         }
     }
     if (obj.contains(QLatin1String(JsonFieldMinDistance))) {
-        const int raw = obj.value(QLatin1String(JsonFieldMinDistance)).toInt(DefaultMinDistance);
+        // `QJsonValue::toInt(default)` returns the default verbatim when
+        // the underlying value is a JSON double (even for whole-number-
+        // valued doubles like `5.0`), so a file written by a non-C++
+        // serializer that emitted the integer as a JSON Number would
+        // silently fall back to the library default. Route through
+        // toDouble() and round to int so `5.0` and `5` both produce 5.
+        const qreal rawDouble = obj.value(QLatin1String(JsonFieldMinDistance)).toDouble(DefaultMinDistance);
+        const int raw = qRound(rawDouble);
         // Negative minDistance would make the distance-skip check
         // trivially true for every animation (no real distance is
         // less than a negative threshold), effectively disabling the
@@ -193,7 +200,22 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         }
     }
     if (obj.contains(QLatin1String(JsonFieldPresetName))) {
-        p.presetName = obj.value(QLatin1String(JsonFieldPresetName)).toString();
+        // `toString()` on a non-string QJsonValue returns an empty
+        // QString, which — when assigned to `p.presetName` — engages
+        // the optional with an empty value. That's semantically
+        // distinct from "unset" (engaged-empty means "explicit empty
+        // override"; unset means "inherit from parent"), so a JSON
+        // file with `"presetName": 42` would silently become
+        // `presetName = ""` instead of leaving the optional
+        // disengaged. Guard on `isString()` so only genuine strings
+        // engage the optional.
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldPresetName));
+        if (v.isString()) {
+            p.presetName = v.toString();
+        } else {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
+        }
     }
 
     return p;

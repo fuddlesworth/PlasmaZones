@@ -137,10 +137,16 @@ void PhosphorAnimatedValueBase::handleWindowDestroying()
     // Must complete BEFORE the QtQuickClock goes away because the
     // AnimatedValue::MotionSpec captured `clock` as a raw pointer.
     cancel();
-    // m_window will auto-null via QPointer right after the destroyed
-    // signal finishes dispatching — emit windowChanged now so QML
-    // bindings observing `window` see the transition from the still-
-    // alive QPointer to null in one event-loop turn.
+    // Ordering requirement: clear the QPointer BEFORE emitting
+    // windowChanged. The relative order of Qt's `destroyed`-signal
+    // dispatch and QPointer's auto-clear is undefined — a reader in
+    // `onWindowChanged` that inspects `window()` must see null, not a
+    // stale non-null pointer that happens to still dereference
+    // because the QObject destruction hasn't finished unwinding yet.
+    // Explicit clear here guarantees observers get the same "window
+    // is gone" view regardless of which signal-dispatch ordering Qt
+    // chose this run.
+    m_window.clear();
     Q_EMIT windowChanged();
 }
 

@@ -87,9 +87,22 @@ struct AnimatedValueSnapshot
  * name()` means the helper can be instantiated from a free scope —
  * it does not need to live inside the derived class's member
  * context.
+ *
+ * @param emitValueChanged When `false`, the `valueChanged` signal is
+ *                         suppressed. Used by `finishImpl` — the
+ *                         spec's `onValueChanged` callback (installed
+ *                         by `makeStartSpec`) already fires
+ *                         `valueChanged` from inside
+ *                         `AnimatedValue::finish`, so this helper's
+ *                         snapshot-diff emit would double-count the
+ *                         terminal-value transition. `startImpl` /
+ *                         `retargetImpl` / `cancelImpl` all keep
+ *                         the default (true) because no callback
+ *                         fires for their initial / cancel transitions.
  */
 template<typename Derived, typename T>
-void emitChangedSignals(Derived* self, const AnimatedValue<T>& av, const AnimatedValueSnapshot<T>& prev)
+void emitChangedSignals(Derived* self, const AnimatedValue<T>& av, const AnimatedValueSnapshot<T>& prev,
+                        bool emitValueChanged = true)
 {
     if (av.from() != prev.from) {
         Q_EMIT self->fromChanged();
@@ -97,7 +110,7 @@ void emitChangedSignals(Derived* self, const AnimatedValue<T>& av, const Animate
     if (av.to() != prev.to) {
         Q_EMIT self->toChanged();
     }
-    if (av.value() != prev.value) {
+    if (emitValueChanged && av.value() != prev.value) {
         Q_EMIT self->valueChanged();
     }
     if (av.isAnimating() != prev.animating) {
@@ -185,13 +198,28 @@ void cancelImpl(Derived* self, AnimatedValue<T>& av)
 
 /**
  * @brief Shared body of each wrapper's `finish()`.
+ *
+ * `AnimatedValue::finish()` fires the spec's `onValueChanged`
+ * callback (which in turn emits `self->valueChanged()`) and then
+ * `onComplete` (which emits `animatingChanged` + `completeChanged`).
+ * The snapshot-diff path below therefore skips `valueChanged` —
+ * re-emitting from the diff would produce a spurious double-tick for
+ * the terminal-value transition. `animatingChanged` and
+ * `completeChanged` are ALSO emitted by the spec callback, but
+ * re-emitting them from the snapshot-diff is harmless because those
+ * are boolean-edge signals and QML bindings are idempotent on
+ * repeated same-value notifications; we keep the diff emits for them
+ * so the signal still fires when `finish()` is called on an already-
+ * completed animation (idempotent no-op path — the callback never
+ * fires because the early return in `AnimatedValue::finish()` bypasses
+ * both callbacks).
  */
 template<typename Derived, typename T>
 void finishImpl(Derived* self, AnimatedValue<T>& av)
 {
     const auto prev = AnimatedValueSnapshot<T>::capture(av);
     av.finish();
-    emitChangedSignals(self, av, prev);
+    emitChangedSignals(self, av, prev, /*emitValueChanged=*/false);
 }
 
 } // namespace PhosphorAnimation::detail

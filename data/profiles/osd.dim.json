@@ -1,4 +1,5 @@
 {
   "name": "osd.dim",
-  "duration": 300
+  "duration": 300,
+  "curve": "widget-out"
 }

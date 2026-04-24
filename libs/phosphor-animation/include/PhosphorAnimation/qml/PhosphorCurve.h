@@ -94,6 +94,20 @@ public:
     /// `fromString` returns a null-handle PhosphorCurve.
     static void setDefaultRegistry(CurveRegistry* registry);
 
+    /// Read-only view of the process-wide default CurveRegistry pointer
+    /// installed via `setDefaultRegistry`. Returns nullptr when no
+    /// registry has been published yet. Used by `PhosphorProfile::
+    /// fromJson` to route parse requests through the same user-curve-
+    /// aware registry that `fromString` consults — without this
+    /// shared accessor, `fromJson` would see only built-ins via its
+    /// function-local static registry and user-authored curves
+    /// registered by `CurveLoader::setDefaultRegistry` would silently
+    /// fail to resolve.
+    static CurveRegistry* defaultRegistry()
+    {
+        return s_registry.load(std::memory_order_relaxed);
+    }
+
     // ─── Factory helpers ───
 
     /// Parse via `CurveRegistry` — handles every curve type the

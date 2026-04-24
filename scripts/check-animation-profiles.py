@@ -33,17 +33,19 @@ The script also treats `data/profiles/` as authoritative: a profile
 string with no corresponding file fails the build, even if it is
 registered at runtime by a plugin-authored `PhosphorProfileRegistry::
 registerProfile` call. Projects with plugin-registered profiles need
-to either ship a placeholder JSON or extend `QML_DIRS` / the regex to
-scope the check away from those sites.
+to either ship a placeholder JSON or extend the scan scope / the
+regex to scope the check away from those sites.
 
 Treat the checker as a lint, not a proof of correctness.
 
 Usage:
-    check-animation-profiles.py <source-root>
+    check-animation-profiles.py <source-root> [--exclude-dir DIR]...
+                                              [--qml-dir DIR]...
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -61,17 +63,43 @@ from pathlib import Path
 # "missing data/profiles/<word>profile.json" build failure. CamelCase
 # names like `colorProfile:` are already safe (the `P` breaks the
 # lowercase substring match), but lowercase variants are not.
+#
+# Two regexes: the "valid" form requires at least one profile-name
+# character so it can be validated against shipped files; the "empty"
+# form catches `profile: ""` (or single-quoted equivalent) which is
+# always a mistake — a no-op Behavior whose intended animation name
+# was never filled in.
 PROFILE_RE = re.compile(r"""(?<![A-Za-z0-9_])profile\s*:\s*["']([a-zA-Z0-9_.\-]+)["']""")
+PROFILE_EMPTY_RE = re.compile(r"""(?<![A-Za-z0-9_])profile\s*:\s*(""|'')""")
 
-# Directories holding QML files that use PhosphorMotionAnimation. Keep
-# the scan scope small so we don't wander into third-party imports or
-# build artifacts.
-QML_DIRS = [
-    Path("src/ui"),
-    Path("src/editor/qml"),
-    Path("src/settings/qml"),
-    Path("src/shared"),
-]
+# Default QML source roots — used when the caller doesn't pass any
+# explicit --qml-dir arguments. Auto-discovery walks `src/**/*.qml`
+# under the source root so a new QML module dropped under `src/…`
+# doesn't require editing this file just to get lint coverage.
+DEFAULT_QML_ROOTS = [Path("src")]
+
+# Directories we always skip during the walk — build artifacts, VCS
+# metadata, and cached third-party imports. Extended via
+# `--exclude-dir` on the command line.
+DEFAULT_EXCLUDE_DIRS = frozenset({"build", ".git", ".cache", "node_modules"})
+
+# Import marker — a file without `import org.phosphor.animation` (or
+# the sub-module form) is very unlikely to be using
+# PhosphorMotionAnimation. The context anchor below uses this to avoid
+# false positives from unrelated `ListElement { profile: "x" }` sites
+# in non-animation QML modules.
+ANIMATION_IMPORT_RE = re.compile(r"^\s*import\s+org\.phosphor\.animation(?:\s|$)", re.MULTILINE)
+
+# Context anchor — `profile:` references that appear within a
+# PhosphorMotionAnimation block are always relevant. The regex is a
+# deliberately simple "nearest preceding PhosphorMotionAnimation {"
+# check: full brace-balanced parsing would require a real QML parser,
+# but for the patterns this codebase actually emits (single-line
+# Behavior → PhosphorMotionAnimation { ... } blocks, no nesting of
+# PhosphorMotionAnimation inside another PhosphorMotionAnimation) the
+# "is the nearest preceding open brace owned by PhosphorMotionAnimation"
+# heuristic is exact.
+PHOSPHOR_MOTION_BLOCK_RE = re.compile(r"\bPhosphorMotionAnimation\s*\{")
 
 # Built-in curve typeIds recognised by CurveRegistry without a
 # data/curves/ entry. Kept in sync with curveregistry.cpp's
@@ -95,29 +123,237 @@ BARE_BEZIER_RE = re.compile(
 )
 
 
-def check_qml_profile_references(
-    root: Path, shipped_profiles: set[str]
-) -> dict[str, list[tuple[Path, int]]]:
-    missing: dict[str, list[tuple[Path, int]]] = {}
-    for rel in QML_DIRS:
-        base = root / rel
+def strip_comments(text: str) -> str:
+    """Remove `//` line comments and `/* ... */` block comments from QML.
+
+    A simple state machine — no regex games, because block comments
+    can span multiple lines and a line comment inside a string
+    literal is not a comment. We track:
+
+      - whether we're inside a double- or single-quoted string;
+      - whether we're inside a `/* */` block comment;
+      - whether we're inside a `//` line comment (terminated by LF).
+
+    Comment spans are replaced with a SPACE (not removed) so that
+    line numbers and column offsets are preserved in the return value
+    — the `finditer` caller below reports line numbers in diagnostics
+    and would otherwise point at the wrong line in a file with block
+    comments.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    in_line_comment = False
+    in_block_comment = False
+    in_string: str | None = None  # either None, '"', or "'"
+
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+
+        if in_line_comment:
+            # Line comment ends at '\n' — emit the newline, stay on
+            # line boundary for the next iteration.
+            if c == "\n":
+                in_line_comment = False
+                out.append("\n")
+            else:
+                # Preserve the character's column space with a space;
+                # keep tabs as tabs so any leading-whitespace
+                # diagnostics remain accurate.
+                out.append(" " if c != "\t" else "\t")
+            i += 1
+            continue
+
+        if in_block_comment:
+            if c == "*" and nxt == "/":
+                in_block_comment = False
+                out.append("  ")
+                i += 2
+                continue
+            out.append("\n" if c == "\n" else " " if c != "\t" else "\t")
+            i += 1
+            continue
+
+        if in_string is not None:
+            # Inside string literal — just pass the character through.
+            # Handle escape sequences so a `\"` inside a string doesn't
+            # prematurely close the string.
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if c == in_string:
+                in_string = None
+            i += 1
+            continue
+
+        # Not inside string or comment.
+        if c == "/" and nxt == "/":
+            in_line_comment = True
+            out.append("  ")
+            i += 2
+            continue
+        if c == "/" and nxt == "*":
+            in_block_comment = True
+            out.append("  ")
+            i += 2
+            continue
+        if c == '"' or c == "'":
+            in_string = c
+            out.append(c)
+            i += 1
+            continue
+
+        out.append(c)
+        i += 1
+
+    return "".join(out)
+
+
+def find_motion_animation_spans(text: str) -> list[tuple[int, int]]:
+    """Return [(start, end), ...] offsets of each top-level
+    PhosphorMotionAnimation { ... } block.
+
+    Scans for the opening `PhosphorMotionAnimation {` and walks the
+    brace-balanced region to its matching close brace. Strings and
+    comments were already stripped by `strip_comments`, so a simple
+    depth counter is sufficient.
+    """
+    spans: list[tuple[int, int]] = []
+    for open_match in PHOSPHOR_MOTION_BLOCK_RE.finditer(text):
+        start = open_match.end() - 1  # points at the '{'
+        depth = 1
+        i = start + 1
+        n = len(text)
+        while i < n and depth > 0:
+            c = text[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    spans.append((open_match.start(), i + 1))
+                    break
+            i += 1
+        else:
+            # Unterminated block — take whatever we've got. Treat as
+            # running to EOF so any `profile:` binding below the open
+            # still counts towards the check.
+            spans.append((open_match.start(), n))
+    return spans
+
+
+def offset_in_spans(offset: int, spans: list[tuple[int, int]]) -> bool:
+    for s, e in spans:
+        if s <= offset < e:
+            return True
+    return False
+
+
+def iter_qml_files(root: Path, qml_dirs: list[Path], exclude_dirs: set[str]):
+    """Yield absolute paths to QML files under the configured roots.
+
+    If `qml_dirs` contains absolute paths, use them as given. Relative
+    paths are resolved against `root`. Directories under an excluded
+    name (anywhere in the path) are pruned.
+    """
+    seen: set[Path] = set()
+    for rel in qml_dirs:
+        base = rel if rel.is_absolute() else (root / rel)
         if not base.is_dir():
             continue
         for qml in base.rglob("*.qml"):
-            try:
-                text = qml.read_text(encoding="utf-8", errors="replace")
-            except OSError as e:
-                print(f"warning: cannot read {qml}: {e}", file=sys.stderr)
+            # Prune anywhere along the path — rglob doesn't let us
+            # skip dirs mid-walk cheaply, so we filter post-hoc.
+            if any(part in exclude_dirs for part in qml.parts):
                 continue
-            for idx, line in enumerate(text.splitlines(), start=1):
-                for match in PROFILE_RE.finditer(line):
-                    name = match.group(1)
-                    if name in shipped_profiles:
-                        continue
-                    missing.setdefault(name, []).append(
-                        (qml.relative_to(root), idx)
-                    )
-    return missing
+            resolved = qml.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            yield qml
+
+
+class QmlProfileDiagnostic:
+    __slots__ = ("kind", "name", "path", "line")
+
+    def __init__(self, kind: str, name: str, path: Path, line: int) -> None:
+        self.kind = kind
+        self.name = name
+        self.path = path
+        self.line = line
+
+
+def check_qml_profile_references(
+    root: Path,
+    shipped_profiles: set[str],
+    qml_dirs: list[Path],
+    exclude_dirs: set[str],
+) -> tuple[dict[str, list[tuple[Path, int]]], list[QmlProfileDiagnostic]]:
+    """Scan QML files for `profile:` bindings.
+
+    Returns `(missing, diagnostics)` where:
+      - `missing` is the per-name index of unresolved profile
+        references (same shape as before).
+      - `diagnostics` is a flat list of additional findings — currently
+        just empty-string profile bindings (`profile: ""`), which are
+        always a mistake and reported distinctly from missing-file
+        errors.
+
+    The scan uses:
+      1. Comment-stripped text (so `// profile: "x"` doesn't false-
+         positive).
+      2. A context anchor — `profile:` is only reported if either the
+         binding falls inside a `PhosphorMotionAnimation { ... }` block
+         OR the file has `import org.phosphor.animation`. This lets
+         non-animation QML use `profile:` for unrelated ListElement
+         fields without tripping the linter.
+    """
+    missing: dict[str, list[tuple[Path, int]]] = {}
+    diagnostics: list[QmlProfileDiagnostic] = []
+    for qml in iter_qml_files(root, qml_dirs, exclude_dirs):
+        try:
+            raw = qml.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            print(f"warning: cannot read {qml}: {e}", file=sys.stderr)
+            continue
+
+        text = strip_comments(raw)
+        motion_spans = find_motion_animation_spans(text)
+        has_import = bool(ANIMATION_IMPORT_RE.search(text))
+
+        def _reportable(offset: int) -> bool:
+            # A `profile:` match is reportable when it's inside a
+            # PhosphorMotionAnimation block, OR when the file imports
+            # org.phosphor.animation (the latter catches cases where
+            # the binding is passed through a property alias or set
+            # imperatively on a PhosphorMotionAnimation instance).
+            return offset_in_spans(offset, motion_spans) or has_import
+
+        rel: Path
+        try:
+            rel = qml.relative_to(root)
+        except ValueError:
+            rel = qml
+        for match in PROFILE_RE.finditer(text):
+            if not _reportable(match.start()):
+                continue
+            name = match.group(1)
+            if name in shipped_profiles:
+                continue
+            # Compute the 1-based line number from the offset.
+            line = text.count("\n", 0, match.start()) + 1
+            missing.setdefault(name, []).append((rel, line))
+
+        for match in PROFILE_EMPTY_RE.finditer(text):
+            if not _reportable(match.start()):
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            diagnostics.append(QmlProfileDiagnostic("empty-profile", "", rel, line))
+
+    return missing, diagnostics
 
 
 def curve_reference_resolves(spec: str, shipped_curves: set[str]) -> bool:
@@ -170,11 +406,33 @@ def check_profile_curve_references(
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print("usage: check-animation-profiles.py <source-root>", file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser(
+        prog="check-animation-profiles.py",
+        description="PhosphorAnimation shipped-data integrity check.",
+    )
+    parser.add_argument("source_root", type=Path, help="Repository root to scan.")
+    parser.add_argument(
+        "--qml-dir",
+        dest="qml_dirs",
+        action="append",
+        default=None,
+        type=Path,
+        help=(
+            "Explicit QML source root (relative to source-root or absolute). "
+            "May be passed multiple times. If omitted, auto-discovers under "
+            "src/."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-dir",
+        dest="exclude_dirs",
+        action="append",
+        default=[],
+        help="Additional directory basename to skip during QML walk.",
+    )
+    args = parser.parse_args(argv[1:])
 
-    root = Path(argv[1]).resolve()
+    root = args.source_root.resolve()
     profiles_dir = root / "data" / "profiles"
     curves_dir = root / "data" / "curves"
 
@@ -187,10 +445,15 @@ def main(argv: list[str]) -> int:
         {p.stem for p in curves_dir.glob("*.json")} if curves_dir.is_dir() else set()
     )
 
+    qml_dirs: list[Path] = args.qml_dirs if args.qml_dirs else list(DEFAULT_QML_ROOTS)
+    exclude_dirs: set[str] = set(DEFAULT_EXCLUDE_DIRS) | set(args.exclude_dirs)
+
     rc = 0
 
-    # Check 1: QML → profiles
-    missing = check_qml_profile_references(root, shipped_profiles)
+    # Check 1: QML → profiles (plus empty-string diagnostics).
+    missing, diagnostics = check_qml_profile_references(
+        root, shipped_profiles, qml_dirs, exclude_dirs
+    )
     if missing:
         rc = 1
         print(
@@ -208,6 +471,16 @@ def main(argv: list[str]) -> int:
             "of the shipped names.",
             file=sys.stderr,
         )
+
+    if diagnostics:
+        rc = 1
+        print(
+            "\nerror: QML contains `profile: \"\"` (empty-string) binding(s) — "
+            "a no-op Behavior whose animation name was never filled in:\n",
+            file=sys.stderr,
+        )
+        for diag in diagnostics:
+            print(f"  {diag.path}:{diag.line}", file=sys.stderr)
 
     # Check 2: profile.curve → built-in or data/curves/
     broken_curve_refs = check_profile_curve_references(profiles_dir, shipped_curves)

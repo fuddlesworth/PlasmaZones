@@ -1,0 +1,5 @@
+{
+  "_note": "Snappy color-follows-drag-state tint. Distinct from widget.tint (300ms general tint) and cursor.drag (cursor-position animations) — this profile is for color bindings that should react immediately to a drag/press toggle. Inherits duration/curve shape from cursor.drag (50ms, library-default curve) but carries widget-color semantics in its name.",
+  "name": "widget.tintDrag",
+  "duration": 50
+}

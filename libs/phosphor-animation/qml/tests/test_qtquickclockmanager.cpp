@@ -96,6 +96,62 @@ private Q_SLOTS:
         QVERIFY(clock);
         QCOMPARE(clock->epochIdentity(), IMotionClock::steadyClockEpoch());
     }
+
+    /// Regression: `clockFor` used to ignore the `emplace` return value,
+    /// which silently leaked a constructed QtQuickClock (+ its
+    /// `beforeRendering` subscription) if a concurrent caller beat us
+    /// to the insert. The fix routes through `try_emplace` so the
+    /// losing caller's clock is deterministically torn down and the
+    /// winner's pointer is returned.
+    ///
+    /// A true concurrent-insert race on GUI-owned windows is hard to
+    /// provoke under the thread-ownership assert, so this test exercises
+    /// the same invariant through a different path: a single-thread
+    /// call must ALWAYS return the same IMotionClock* for the same
+    /// window regardless of how many calls are made. Combined with
+    /// `entryCount()` staying at 1, we pin that the insert path is
+    /// idempotent at the pointer-identity level. This is the
+    /// observable shape of "the fix works" at the public API.
+    void testClockForReturnsSamePointerAcrossManyCalls()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        IMotionClock* first = QtQuickClockManager::instance().clockFor(window.get());
+        QVERIFY(first);
+
+        // A few hundred iterations: if the fix regressed and the
+        // loser-path leaked fresh clocks, entryCount would still read
+        // 1 (the map has the same key) but the returned pointer would
+        // eventually differ from `first` under a threaded racecondition.
+        // Even on a single thread, we pin the simple invariant.
+        for (int i = 0; i < 100; ++i) {
+            IMotionClock* again = QtQuickClockManager::instance().clockFor(window.get());
+            QCOMPARE(again, first);
+        }
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+    }
+
+    /// `clockFor` after a `releaseClockFor` teardown must construct a
+    /// fresh clock, not hand out a dangling pointer from the evicted
+    /// entry. Covers the address-reuse path where Qt recycles the
+    /// raw `QQuickWindow*` and also the lookup-miss-after-eviction
+    /// path the `try_emplace` fix preserves.
+    void testClockForAfterReleaseReconstructs()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        IMotionClock* first = QtQuickClockManager::instance().clockFor(window.get());
+        QVERIFY(first);
+
+        QtQuickClockManager::instance().releaseClockFor(window.get());
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 0);
+
+        // Re-request — must construct a new clock. We can't
+        // meaningfully compare pointers (allocator may coincidentally
+        // reuse the address), but we CAN assert that entryCount went
+        // back to 1 and the returned pointer is non-null.
+        IMotionClock* second = QtQuickClockManager::instance().clockFor(window.get());
+        QVERIFY(second);
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+    }
 };
 
 QTEST_MAIN(TestQtQuickClockManager)

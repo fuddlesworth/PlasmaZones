@@ -181,20 +181,19 @@ Daemon::Daemon(QObject* parent)
     // (one literal typo away from silently breaking preview-cache reuse).
     m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 
-    // Wire the daemon-owned CurveRegistry into the QML static helper
-    // so every QML callsite that resolves curve wire-format strings
-    // uses the same per-process registry. Settings already received
-    // the registry through its constructor; the null-out in ~Daemon
-    // below prevents the static from dangling across process-lifetime
-    // Daemon reconstruction (e.g. in tests).
-    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
-
     // Wire Settings::animationProfile into PhosphorProfileRegistry so
     // QML `PhosphorMotionAnimation { profile: … }` resolves to the
     // user's active animation settings and live-updates on edit.
     // Also populates the registry from user-authored JSON files under
     // the `plasmazones/` XDG namespace (consumer-agnostic loader
     // delegates directory walking to phosphor-jsonloader).
+    //
+    // setupAnimationProfiles() also wires the daemon-owned
+    // CurveRegistry into PhosphorCurve's QML static helper. Publication
+    // of the static registry pointer is deferred into that function so
+    // every QML observer sees the curves-loaded and profiles-loaded
+    // states land together, rather than the static going live against
+    // an empty registry for the brief window before loaders run.
     setupAnimationProfiles();
 }
 
@@ -208,7 +207,14 @@ Daemon::Daemon(QObject* parent)
 // Keeping this list in a file-scope array lets us add another
 // settings-backed path (e.g., a second slider for snap-specific
 // feel) without touching the publish loop.
-static constexpr auto kSettingsDrivenProfilePaths = std::array{
+//
+// `static const` rather than `constexpr`: the array stores pointers to
+// `ProfilePaths::Global`, a non-`constexpr` QString. `constexpr` on a
+// non-`constexpr` pointee compiles but misrepresents the guarantee — the
+// pointer is a runtime address, not a constant expression. `static const`
+// matches the actual lifetime (initialised-on-first-use global storage)
+// without the misleading label.
+static const auto kSettingsDrivenProfilePaths = std::array{
     &PhosphorAnimation::ProfilePaths::Global,
 };
 
@@ -321,12 +327,36 @@ void Daemon::setupAnimationProfiles()
     //     animationProfileChanged signal fires.
     //   - ProfileLoader rescans — user added/removed a JSON file, which
     //     flips the hasProfile() check for some paths.
+    //   - CurveLoader rescans — a curve JSON referenced by the
+    //     settings-driven Global profile changed on disk. Settings
+    //     ::animationProfile() reparses the stored blob through
+    //     CurveRegistry on every call (no cache), so republishing
+    //     re-resolves the curve against the fresh registry state.
+    //     Without this wire, a curve edit is only visible to profiles
+    //     loaded from JSON (via the curveLoader→profileLoader rescan
+    //     above), NOT to the settings-fanout path — the Global slider's
+    //     curve reference would silently go stale until the next
+    //     Settings edit.
     connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
         publishActiveAnimationProfile();
     });
     connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
         publishActiveAnimationProfile();
     });
+    connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
+        publishActiveAnimationProfile();
+    });
+
+    // Wire the daemon-owned CurveRegistry into the QML static helper so
+    // every QML callsite that resolves curve wire-format strings uses
+    // the same per-process registry. Moved from the Daemon ctor into
+    // this function (between signal wiring and the initial scans) so
+    // publication of the static and population of the registry land
+    // together from QML's perspective — the static never goes live
+    // against an empty registry for the brief window before loaders
+    // run. The null-out in stop() prevents the static from dangling
+    // across process-lifetime Daemon reconstruction (e.g. in tests).
+    PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
 
     // Initial scans — order is curves-before-profiles so profile files
     // referencing user-authored curve names resolve on first parse
@@ -1043,14 +1073,30 @@ void Daemon::stop()
     // dereferences freed memory.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
 
-    // Tear down the process-global PhosphorProfileRegistry state this
-    // Daemon populated so a later Daemon reconstruction (tests, or a
+    // Tear down the process-global PhosphorProfileRegistry entries this
+    // Daemon published so a later Daemon reconstruction (tests, or a
     // live reconfigure that tears down and rebuilds the daemon in
-    // place) starts from an empty registry. The ProfileLoader's dtor
-    // already issues a targeted clearOwner() for its tagged entries;
-    // this full clear() also covers the settings-fan-out direct
-    // entries published by publishActiveAnimationProfile.
-    PhosphorAnimation::PhosphorProfileRegistry::instance().clear();
+    // place) starts from a registry owning none of our entries. Mirrors
+    // the narrow-clear policy in `setupAnimationProfiles()` — a
+    // wholesale `clear()` would also evict any other consumer's
+    // entries if they happened to register before us.
+    //
+    // The two partitions we publish under:
+    //
+    //   - Settings-driven direct entries (`Global`, …): registered by
+    //     `publishActiveAnimationProfile` under the direct-owner tag.
+    //     Unregister each path here.
+    //   - Loader-owned user-JSON entries (tagged
+    //     "plasmazones-user-profiles"): the `ProfileLoader` destructor
+    //     issues its own `clearOwner(ownerTag)` when m_profileLoader's
+    //     unique_ptr resets during member destruction, so no explicit
+    //     clearOwner call is needed here.
+    {
+        auto& profileRegistry = PhosphorAnimation::PhosphorProfileRegistry::instance();
+        for (const QString* path : kSettingsDrivenProfilePaths) {
+            profileRegistry.unregisterProfile(*path);
+        }
+    }
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();

@@ -10,12 +10,12 @@
 #include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
 #include <PhosphorJsonLoader/ParsedEntry.h>
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
-#include <QStandardPaths>
 #include <QUuid>
 
 #include <algorithm>
@@ -228,13 +228,30 @@ int ProfileLoader::loadFromDirectories(const QStringList& directories, LiveReloa
 
 int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
 {
-    const QStringList dirs =
-        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("phosphor-animation/profiles"),
-                                  QStandardPaths::LocateDirectory);
-    if (dirs.isEmpty()) {
+    // Use the install-prefix directory baked in at build time via
+    // PHOSPHORANIMATION_INSTALL_DATADIR. Namespacing under the library's
+    // own `phosphor-animation/profiles` subdir means a consumer's
+    // user-local `~/.local/share/<consumer>/profiles` pack is NEVER
+    // accidentally pulled into the library's built-in load — the old
+    // XDG-based `locateAll(GenericDataLocation, ...)` had the reverse
+    // property where a user placing files under
+    // `~/.local/share/phosphor-animation/profiles` would silently
+    // shadow the library's immutable pack.
+    //
+    // When the macro is absent (sub-project builds that did not
+    // propagate the datadir), fall back to a no-op — the caller's
+    // consumer-namespaced directories are still loaded via the
+    // `loadFromDirectory[ies]` entry points.
+#ifdef PHOSPHORANIMATION_INSTALL_DATADIR
+    const QString dir = QStringLiteral(PHOSPHORANIMATION_INSTALL_DATADIR "/profiles");
+    if (!QDir(dir).exists()) {
         return 0;
     }
-    return loadFromDirectories(dirs, liveReload);
+    return loadFromDirectory(dir, liveReload);
+#else
+    Q_UNUSED(liveReload);
+    return 0;
+#endif
 }
 
 QString ProfileLoader::ownerTag() const

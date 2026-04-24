@@ -883,6 +883,213 @@ private Q_SLOTS:
         QCOMPARE(settings.animationEasingCurve(), userSpec);
         QCOMPARE(settings.animationDuration(), 275);
     }
+
+    // =========================================================================
+    // PR #344 senior review: aggregate setter semantics
+    // =========================================================================
+    //
+    // The aggregate `setAnimationProfile(const Profile&)` setter is the
+    // other path to writing the Profile blob (complementing the per-field
+    // setters). Four properties the byte-level equality rewrite must
+    // preserve:
+    //   1. No-op when the incoming Profile serialises to the same blob
+    //      (zero signal emissions, zero disk writes).
+    //   2. Changing only one field emits the aggregate signal + that
+    //      field's signal, but NOT the other per-field signals.
+    //   3. Unknown disk fields (plugin-authored extensions, future
+    //      schema keys) survive a call to `setAnimationProfile` — the
+    //      setter must MERGE into the stored object, not replace it.
+    //   4. A round-trip where the blob on disk references an unresolved
+    //      curve (plugin curve not yet registered): `animationProfile()`
+    //      returns a Profile with a null curve, and calling
+    //      `setAnimationProfile` with that Profile must NOT rewrite the
+    //      blob — the caller wasn't trying to change anything.
+
+    /// Calling `setAnimationProfile(p)` twice with the same Profile must
+    /// fire zero signals on the second call.
+    void testAnimationProfile_setSameProfileNoSignal()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        // Build a Profile via the per-field setters so the resulting
+        // blob is populated with real values (a default-constructed
+        // Profile serialises to `{}` which is a legitimate "same as
+        // before" blob but masks the byte-compare logic).
+        settings.setAnimationDuration(275);
+        settings.setAnimationMinDistance(7);
+        settings.setAnimationSequenceMode(1);
+        settings.setAnimationStaggerInterval(42);
+
+        const PhosphorAnimation::Profile p = settings.animationProfile();
+
+        // First aggregate-setter call may or may not change state — it
+        // is the SECOND identical call that must be the no-op.
+        settings.setAnimationProfile(p);
+
+        QSignalSpy profileSpy(&settings, &Settings::animationProfileChanged);
+        QSignalSpy durationSpy(&settings, &Settings::animationDurationChanged);
+        QSignalSpy curveSpy(&settings, &Settings::animationEasingCurveChanged);
+        QSignalSpy minDistSpy(&settings, &Settings::animationMinDistanceChanged);
+        QSignalSpy seqModeSpy(&settings, &Settings::animationSequenceModeChanged);
+        QSignalSpy staggerSpy(&settings, &Settings::animationStaggerIntervalChanged);
+        QSignalSpy settingsSpy(&settings, &Settings::settingsChanged);
+
+        settings.setAnimationProfile(p);
+
+        QCOMPARE(profileSpy.count(), 0);
+        QCOMPARE(durationSpy.count(), 0);
+        QCOMPARE(curveSpy.count(), 0);
+        QCOMPARE(minDistSpy.count(), 0);
+        QCOMPARE(seqModeSpy.count(), 0);
+        QCOMPARE(staggerSpy.count(), 0);
+        QCOMPARE(settingsSpy.count(), 0);
+    }
+
+    /// `setAnimationProfile` with a Profile that differs ONLY in Duration
+    /// must fire `animationProfileChanged` + `animationDurationChanged`
+    /// and NOT the other per-field signals.
+    void testAnimationProfile_setDurationOnlyEmitsSpecificSignals()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        // Seed a concrete Profile via per-field setters so we have a
+        // known baseline to diff against.
+        settings.setAnimationDuration(275);
+        settings.setAnimationMinDistance(7);
+        settings.setAnimationSequenceMode(1);
+        settings.setAnimationStaggerInterval(42);
+
+        // Capture the baseline, then construct a Profile identical
+        // EXCEPT for duration.
+        PhosphorAnimation::Profile p = settings.animationProfile();
+        p.duration = 400.0;
+
+        QSignalSpy profileSpy(&settings, &Settings::animationProfileChanged);
+        QSignalSpy durationSpy(&settings, &Settings::animationDurationChanged);
+        QSignalSpy curveSpy(&settings, &Settings::animationEasingCurveChanged);
+        QSignalSpy minDistSpy(&settings, &Settings::animationMinDistanceChanged);
+        QSignalSpy seqModeSpy(&settings, &Settings::animationSequenceModeChanged);
+        QSignalSpy staggerSpy(&settings, &Settings::animationStaggerIntervalChanged);
+
+        settings.setAnimationProfile(p);
+
+        QCOMPARE(profileSpy.count(), 1);
+        QCOMPARE(durationSpy.count(), 1);
+        // The other per-field signals must NOT fire — they describe
+        // semantic observables that did not change.
+        QCOMPARE(curveSpy.count(), 0);
+        QCOMPARE(minDistSpy.count(), 0);
+        QCOMPARE(seqModeSpy.count(), 0);
+        QCOMPARE(staggerSpy.count(), 0);
+    }
+
+    /// Unknown fields on disk (future schema extensions, plugin-authored
+    /// custom Profile keys) must survive a call to `setAnimationProfile`.
+    /// The aggregate setter merges into the stored blob rather than
+    /// replacing it — matches the per-field setters' merge semantics.
+    void testAnimationProfile_preservesUnknownDiskFields()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed the disk with a blob containing BOTH a known field
+        // (duration=200) and an unknown field (_pluginField).
+        {
+            QJsonObject seedBlob;
+            seedBlob.insert(QLatin1String("duration"), 200);
+            seedBlob.insert(QLatin1String("_pluginField"), QLatin1String("custom"));
+            const QString seedString = QString::fromUtf8(QJsonDocument(seedBlob).toJson(QJsonDocument::Compact));
+
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            animations->writeString(ConfigDefaults::animationProfileKey(), seedString);
+            animations.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        // Build an incoming Profile with a different duration; the
+        // unknown field must survive.
+        PhosphorAnimation::Profile p;
+        p.duration = 300.0;
+        settings.setAnimationProfile(p);
+        settings.save();
+
+        // Read disk directly — we want to see the stored bytes, not
+        // what `Profile::fromJson` chooses to surface.
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto animations = backend->group(ConfigDefaults::animationsGroup());
+        const QString blobString = animations->readString(ConfigDefaults::animationProfileKey());
+        QVERIFY(!blobString.isEmpty());
+        const QJsonObject blob = QJsonDocument::fromJson(blobString.toUtf8()).object();
+
+        QCOMPARE(blob.value(QLatin1String("duration")).toInt(), 300);
+        QVERIFY2(blob.contains(QLatin1String("_pluginField")),
+                 "setAnimationProfile wiped the unknown '_pluginField' — aggregate setter must merge, not replace");
+        QCOMPARE(blob.value(QLatin1String("_pluginField")).toString(), QStringLiteral("custom"));
+    }
+
+    /// Disk blob contains an unresolved curve reference (plugin curve
+    /// that hasn't been registered yet in this process). Calling
+    /// `setAnimationProfile` with the Profile produced by the round-trip
+    /// of that same blob must NOT rewrite the blob — the caller wasn't
+    /// trying to change anything. Before the byte-compare fix, the
+    /// semantic `Profile::operator==` check would compare two null
+    /// curves as equal and short-circuit (data-loss hazard); or — if
+    /// flipped to write-through on any inequality — fire on every call
+    /// (signal storm).
+    void testAnimationProfile_unresolvedCurveBlobSameNotWritten()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed disk with a blob whose curve field references a curve
+        // name that no registered factory in this process knows about.
+        // Build via `QJsonDocument::toJson(Compact)` so the on-disk
+        // byte-string matches the shape the setter emits when it
+        // re-serialises (QJsonObject sorts keys alphabetically) — the
+        // byte-compare short-circuit relies on round-trip stability.
+        {
+            QJsonObject seed;
+            seed.insert(QLatin1String("duration"), 275);
+            seed.insert(QLatin1String("curve"), QLatin1String("nonexistent-plugin-curve"));
+            seed.insert(QLatin1String("minDistance"), 7);
+            const QString seedBlob = QString::fromUtf8(QJsonDocument(seed).toJson(QJsonDocument::Compact));
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            animations->writeString(ConfigDefaults::animationProfileKey(), seedBlob);
+            animations.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        // Round-trip: read the Profile via the getter, then write it
+        // back unchanged. The getter resolves the curve through
+        // CurveRegistry::tryCreate — which fails for the unknown name
+        // and leaves `curve == nullptr` on the resulting Profile.
+        // Writing that Profile back must not mutate the on-disk bytes:
+        // the merge overlays only the fields the incoming Profile
+        // emitted, and the null curve is NOT emitted — the stored
+        // raw curve string is untouched.
+        const PhosphorAnimation::Profile p = settings.animationProfile();
+
+        QSignalSpy profileSpy(&settings, &Settings::animationProfileChanged);
+        settings.setAnimationProfile(p);
+
+        // Zero signals — merged bytes match disk bytes.
+        QCOMPARE(profileSpy.count(), 0);
+
+        // And the unresolved curve string is still on disk.
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto animations = backend->group(ConfigDefaults::animationsGroup());
+        const QString readBack = animations->readString(ConfigDefaults::animationProfileKey());
+        const QJsonObject readObj = QJsonDocument::fromJson(readBack.toUtf8()).object();
+        QCOMPARE(readObj.value(QLatin1String("curve")).toString(), QStringLiteral("nonexistent-plugin-curve"));
+        QCOMPARE(readObj.value(QLatin1String("duration")).toInt(), 275);
+        QCOMPARE(readObj.value(QLatin1String("minDistance")).toInt(), 7);
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

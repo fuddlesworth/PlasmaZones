@@ -155,11 +155,29 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 endif()
 
+# Ensure GNUInstallDirs is included so CMAKE_INSTALL_FULL_DATADIR is
+# defined for the datadir compile-definition below. KDE projects
+# already include GNUInstallDirs transitively, but we guard it here so
+# a standalone build also resolves the absolute data path.
+if(NOT DEFINED CMAKE_INSTALL_FULL_DATADIR)
+    include(GNUInstallDirs)
+endif()
+
 target_include_directories(PhosphorAnimation
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+)
+
+# Expose the install-prefix data directory to the sources. CurveLoader
+# and ProfileLoader use this in `loadLibraryBuiltins` so a consumer's
+# user-local `~/.local/share/<consumer>/curves` pack never accidentally
+# shadows the library's built-in pack (the previous XDG-based lookup
+# had the reverse property). The value resolves to the absolute
+# installed path such as `/usr/share/phosphor-animation`.
+target_compile_definitions(PhosphorAnimation PRIVATE
+    "PHOSPHORANIMATION_INSTALL_DATADIR=\"${CMAKE_INSTALL_FULL_DATADIR}/phosphor-animation\""
 )
 
 target_compile_features(PhosphorAnimation PUBLIC cxx_std_20)

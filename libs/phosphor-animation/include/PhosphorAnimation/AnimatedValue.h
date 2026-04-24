@@ -634,6 +634,46 @@ public:
     }
 
     /**
+     * @brief Copy the clock + callbacks from a sibling AnimatedValue's
+     *        MotionSpec, leaving the profile alone.
+     *
+     * Companion to `seedFrom` for wrappers that keep parallel per-Space
+     * AnimatedValue instances and need the target instance to remain
+     * retarget-able after a space flip. Without this, `seedFrom` carries
+     * over the visible endpoints but the target instance's
+     * `m_spec.clock` is still null — `retarget()` silently rejects
+     * (`if (!m_spec.clock) return false;`) because it never ran through
+     * `start()` on its own.
+     *
+     * Copies:
+     *   - `clock` — the driver for future advance() ticks.
+     *   - `onValueChanged` / `onComplete` — wrapper-installed emit
+     *     shims, identical across sibling instances (they re-emit on
+     *     the same `this`).
+     *   - `retargetPolicy` — the caller's chosen default.
+     *
+     * Does NOT copy `profile` — profile belongs to the next `start()`
+     * call and varies per segment. Preserving the wrapper's
+     * `PhosphorProfile` write-path (setProfile → next start picks it
+     * up) is the intent.
+     *
+     * Precondition: `*this` must be idle (not animating). A live
+     * segment's captured spec must not be overwritten from the outside;
+     * this mirrors `seedFrom`'s idle-only contract.
+     */
+    template<ColorSpace OtherSpace>
+    void seedSpecFrom(const AnimatedValue<T, OtherSpace>& other)
+    {
+        if (m_isAnimating) {
+            return;
+        }
+        m_spec.clock = other.m_spec.clock;
+        m_spec.onValueChanged = other.m_spec.onValueChanged;
+        m_spec.onComplete = other.m_spec.onComplete;
+        m_spec.retargetPolicy = other.m_spec.retargetPolicy;
+    }
+
+    /**
      * @brief Force the animation to its target value immediately.
      *
      * Snaps `value()` to target, marks complete, and fires both

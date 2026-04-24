@@ -1106,6 +1106,125 @@ private Q_SLOTS:
             QVERIFY(doc.object().isEmpty());
         }
     }
+
+    // =========================================================================
+    // PR #344 senior review: partial customization + clamping + forward-compat
+    // =========================================================================
+
+    /// A v1 config with ONLY `AnimationDuration=200` (no curve, no
+    /// minDistance, etc.) migrates to a v2 Profile blob that contains
+    /// ONLY the duration field — the other fields are absent, so
+    /// `Profile::fromJson` leaves them unset and `effective*` substitutes
+    /// library defaults. The migration must NOT fabricate defaults for
+    /// unset v1 keys.
+    void testV1AnimationMigration_partialCustomization()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=200\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY2(!profileString.isEmpty(),
+                 "Migration did not produce a Profile blob for a single-field v1 customisation");
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+
+        // The only set field is duration; every other Profile field must
+        // be absent from the blob.
+        QCOMPARE(profile.value(QStringLiteral("duration")).toInt(-1), 200);
+        QVERIFY(!profile.contains(QStringLiteral("curve")));
+        QVERIFY(!profile.contains(QStringLiteral("minDistance")));
+        QVERIFY(!profile.contains(QStringLiteral("sequenceMode")));
+        QVERIFY(!profile.contains(QStringLiteral("staggerInterval")));
+    }
+
+    /// v1 values outside the defined Min/Max range must be clamped to
+    /// the range during migration. A v1 config with, say, a negative
+    /// duration silently gets rejected by `Profile::fromJson` at load
+    /// time — producing a broken-looking UI (user's saved custom value
+    /// silently reverts to library default) plus a noisy warning on
+    /// every daemon start. Clamping at migration time keeps the user's
+    /// intent as close as the range allows and avoids the warnings.
+    ///
+    /// SequenceMode is a closed enum — out-of-range values snap to the
+    /// project default (ConfigDefaults::animationSequenceMode()) rather
+    /// than the nearest bound, to avoid silently aliasing e.g. 999 onto
+    /// a semantically-unrelated mode.
+    void testV1AnimationMigration_clampsOutOfRange()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationDuration=-50\n"
+                                    "AnimationMinDistance=-10\n"
+                                    "AnimationSequenceMode=999\n"
+                                    "AnimationStaggerInterval=600000\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY(!profileString.isEmpty());
+        const QJsonObject profile = QJsonDocument::fromJson(profileString.toUtf8()).object();
+
+        // Duration: below-min → clamp to min.
+        const int durationStored = profile.value(QStringLiteral("duration")).toInt(-1);
+        QVERIFY2(durationStored >= ConfigDefaults::animationDurationMin(),
+                 qPrintable(QStringLiteral("Duration stored=%1 but Min=%2")
+                                .arg(durationStored)
+                                .arg(ConfigDefaults::animationDurationMin())));
+        QVERIFY(durationStored <= ConfigDefaults::animationDurationMax());
+        QCOMPARE(durationStored, ConfigDefaults::animationDurationMin());
+
+        // MinDistance: below-min → clamp to min (0 by project default).
+        const int minDistanceStored = profile.value(QStringLiteral("minDistance")).toInt(-1);
+        QCOMPARE(minDistanceStored, ConfigDefaults::animationMinDistanceMin());
+
+        // SequenceMode: 999 is outside the enum range → snap to default.
+        const int seqModeStored = profile.value(QStringLiteral("sequenceMode")).toInt(-1);
+        QCOMPARE(seqModeStored, ConfigDefaults::animationSequenceMode());
+
+        // StaggerInterval: above-max → clamp to max.
+        const int staggerStored = profile.value(QStringLiteral("staggerInterval")).toInt(-1);
+        QCOMPARE(staggerStored, ConfigDefaults::animationStaggerIntervalMax());
+    }
+
+    /// A config stamped with a version GREATER than the current
+    /// ConfigSchemaVersion must not trigger any downgrade logic — the
+    /// migration runner short-circuits and leaves the blob untouched.
+    /// Guards against a newer client writing the file and an older
+    /// client destroying or rewriting unknown-future-schema fields.
+    void testMigrationForwardCompat_versionGreaterThanTarget()
+    {
+        IsolatedConfigGuard guard;
+
+        // Build a config stamped with a version well above the current
+        // schema. Include a handful of arbitrary keys that aren't in
+        // any known schema — if the migration runner fires, it will
+        // leave fingerprints on the output by either reshuffling or
+        // dropping these keys.
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 999;
+        root[QStringLiteral("SomeFutureGroup")] = QJsonObject{
+            {QStringLiteral("FutureKey"), QStringLiteral("future-value")},
+        };
+        root[QStringLiteral("UnrelatedKey")] = 42;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJsonConfig(ConfigDefaults::configFilePath());
+        // No migration ran — every field (including the version stamp)
+        // is preserved byte-for-byte.
+        QCOMPARE(after, root);
+    }
 };
 
 QTEST_MAIN(TestConfigMigration)

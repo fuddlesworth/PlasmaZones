@@ -60,7 +60,10 @@ using LiveReload = PhosphorJsonLoader::LiveReload;
  * - `typeId` — required. Must match an existing `CurveRegistry`
  *   factory (`"spring"`, `"cubic-bezier"`, `"elastic-in"`, etc.). No
  *   new curve classes can be defined through JSON (decision V).
- * - `parameters` — object whose shape depends on `typeId`.
+ * - `parameters` — object whose shape depends on `typeId`. Parameter
+ *   validation is delegated to the registered `JsonFactory` so the
+ *   registry owns the schema; third-party curve types that register
+ *   a JSON factory become loadable here automatically.
  *
  * ## Collision / live reload
  *
@@ -70,6 +73,24 @@ using LiveReload = PhosphorJsonLoader::LiveReload;
  * debounce, including parent-directory watching when the target
  * doesn't exist yet. Deleted files are purged from `CurveRegistry`
  * via `unregisterFactory`.
+ *
+ * ## Owner partitioning
+ *
+ * Each `CurveLoader` computes a per-instance UUID owner tag at
+ * construction (`ownerTag()`) and passes it through every
+ * `registerFactory` call it makes. The dtor issues a single
+ * `CurveRegistry::unregisterByOwner(tag)` — two `CurveLoader` instances
+ * that register overlapping `typeId`s into the same registry tear down
+ * cleanly without either evicting the other's factories. Mirrors
+ * `ProfileLoader::ownerTag`.
+ *
+ * ## Thread safety
+ *
+ * Public methods (`entries()`, `loadFromDirectory`, `requestRescan`,
+ * `registeredCount`, …) must be called from the thread that owns this
+ * QObject (typically the GUI thread). `curvesChanged` fires on that
+ * same thread. `CurveRegistry` itself is thread-safe via its internal
+ * mutex, but the loader's tracked-entries bookkeeping is not.
  */
 class PHOSPHORANIMATION_EXPORT CurveLoader : public QObject
 {
@@ -92,8 +113,10 @@ public:
     /// Scan multiple directories in order.
     int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
 
-    /// Load curves bundled at the library's install-relative
-    /// `data/curves/`. Returns zero when no bundled curves ship.
+    /// Load curves bundled at the library's install-prefix
+    /// `phosphor-animation/curves/` data directory (path baked in at
+    /// build time via `PHOSPHORANIMATION_INSTALL_DATADIR`). Returns
+    /// zero when the install tree has no bundled curves.
     /// Accepts an explicit LiveReload policy — callers that want the
     /// library pack to hot-reload (consumer shipping a curve pack as
     /// part of a plugin) pass `LiveReload::On`. Defaults to `Off`
@@ -105,6 +128,11 @@ public:
 
     /// Count of currently-registered curves under this loader's management.
     int registeredCount() const;
+
+    /// Owner tag used for every registered factory. Exposed for tests
+    /// and introspection; in production, derive nothing from this.
+    /// Mirrors `ProfileLoader::ownerTag`.
+    QString ownerTag() const;
 
     /// Tests / debug — access the tracked entries.
     struct Entry

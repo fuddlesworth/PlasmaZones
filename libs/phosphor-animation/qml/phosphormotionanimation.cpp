@@ -8,7 +8,9 @@
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
+#include <QCoreApplication>
 #include <QEasingCurve>
+#include <QEvent>
 #include <QLoggingCategory>
 #include <QPointF>
 
@@ -62,7 +64,21 @@ PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
 
 PhosphorMotionAnimation::~PhosphorMotionAnimation()
 {
+    // Disconnect registry signals FIRST so no new queued lambdas land
+    // after we flush. A concurrent `PhosphorProfileRegistry` emit could
+    // otherwise post a QMetaCallEvent onto our event queue between the
+    // flush and the base dtor, and that event would fire
+    // `applyResolvedProfile` into a half-destroyed `this`.
     disconnectRegistrySignal();
+    // Drain any queued lambdas posted by earlier registry emits that
+    // haven't yet been delivered. `rebindToRegistryPath` installs the
+    // two signal connections as `Qt::QueuedConnection`, so a
+    // registerProfile / reloadAll fired off-thread (or from the GUI
+    // thread with pending events) queues a QMetaCallEvent targeting
+    // us. Without this flush, the base dtor runs, `this` is torn down,
+    // and the next event-loop turn dispatches a queued call into
+    // already-freed storage — UAF on `m_boundPath` / `applyResolvedProfile`.
+    QCoreApplication::removePostedEvents(this, QEvent::MetaCall);
 }
 
 QVariant PhosphorMotionAnimation::profile() const
@@ -279,6 +295,13 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
             }
             auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
             applyResolvedProfile(resolved.value_or(Profile{}));
+            // Match the direct-setter semantics at setProfile() — a
+            // QML author with `onProfileChanged: …` expects to see the
+            // signal fire when the bound profile is reloaded live.
+            // Without this emit, `PhosphorProfileRegistry::registerProfile`
+            // is silently rebinding the easing / duration while QML
+            // observers see no change event.
+            Q_EMIT profileChanged();
         },
         Qt::QueuedConnection);
     m_registryReloadedConnection = connect(
@@ -286,6 +309,11 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
         [this]() {
             auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
             applyResolvedProfile(resolved.value_or(Profile{}));
+            // Same rationale as above — reloadAll / clear must surface
+            // as a profileChanged to QML observers, otherwise a wholesale
+            // registry wipe silently rebinds animations to library
+            // defaults with no QML-visible signal.
+            Q_EMIT profileChanged();
         },
         Qt::QueuedConnection);
 }

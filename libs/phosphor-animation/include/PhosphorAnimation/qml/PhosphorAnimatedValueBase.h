@@ -70,7 +70,29 @@ public:
     QQuickWindow* window() const;
     void setWindow(QQuickWindow* w);
 
+    /// Currently-bound profile. Defaults to a default-constructed
+    /// `PhosphorProfile` (library defaults — OutCubic at 150 ms).
     PhosphorProfile profile() const;
+
+    /// Set the profile used for the NEXT `start()` call.
+    ///
+    /// ## Semantics on in-flight animations
+    ///
+    /// Writing `profile` does NOT retroactively update a currently-
+    /// running animation — the `MotionSpec` captured in the underlying
+    /// `AnimatedValue<T>` at `start()` time is immutable for the life
+    /// of that segment. A running animation continues with the profile
+    /// active at its start; the newly-set profile applies to the next
+    /// `start()` call (and any subsequent `retarget()` inherits from
+    /// that). This matches `QQuickPropertyAnimation::easing` semantics,
+    /// where changing the easing curve mid-animation has no effect on
+    /// the running animation.
+    ///
+    /// Consumers that want a profile change to take effect immediately
+    /// must `retarget(currentValue)` (or `cancel()` + `start(from, to)`)
+    /// after the `setProfile` call to force a new segment with the new
+    /// profile. The signal `profileChanged` fires on every effective
+    /// profile change so QML authors can react.
     void setProfile(const PhosphorProfile& p);
 
     /// Subclass hook — returns the T-specific `AnimatedValue::isAnimating`.

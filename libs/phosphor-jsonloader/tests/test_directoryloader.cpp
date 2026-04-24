@@ -5,12 +5,14 @@
 #include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 using namespace PhosphorJsonLoader;
 
@@ -62,6 +64,34 @@ public:
     QStringList lastRemoved;
     QList<ParsedEntry> lastCurrent;
     QHash<QString, std::string> registry;
+};
+
+/// Regression-test sink for the requestRescan-during-rescanAll race.
+/// Fires a single `requestRescan()` from inside its first commitBatch
+/// — mimicking a watcher event delivered during the scan. Declared at
+/// file scope rather than inside the test function so it has external
+/// linkage (avoids the anonymous-namespace `-Wsubobject-linkage`
+/// warning on gcc).
+class RacyRecordingSink : public RecordingSink
+{
+public:
+    DirectoryLoader* loader = nullptr;
+    bool reentered = false;
+    void commitBatch(const QStringList& removedKeys, const QList<ParsedEntry>& currentEntries) override
+    {
+        RecordingSink::commitBatch(removedKeys, currentEntries);
+        if (!reentered && loader) {
+            reentered = true;
+            // Defer via a singleShot(0) so the request is delivered
+            // on the SAME event-loop pass but after the current
+            // rescanAll stack frame finishes — matching the real-
+            // world case where a watcher signal arrives during our
+            // rescan and the slot fires on the next spin.
+            QTimer::singleShot(0, [this]() {
+                loader->requestRescan();
+            });
+        }
+    }
 };
 
 void writeJson(const QString& path, const QString& name, const QString& value)
@@ -181,6 +211,49 @@ private Q_SLOTS:
         QCOMPARE(entries.first().systemSourcePath, systemDir.filePath(QStringLiteral("x.json")));
     }
 
+    /// Regression guard for the collision-purge path. A user-override
+    /// file shadows a system file; when the user copy is deleted, the
+    /// next rescan must re-parse the system file fresh and clear the
+    /// shadow metadata on the tracked entry.
+    void testCollision_userDeletedRestoresSystem()
+    {
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid() && userDir.isValid());
+
+        const QString systemPath = systemDir.filePath(QStringLiteral("x.json"));
+        const QString userPath = userDir.filePath(QStringLiteral("x.json"));
+        writeJson(systemPath, QStringLiteral("shared"), QStringLiteral("from-system"));
+        writeJson(userPath, QStringLiteral("shared"), QStringLiteral("from-user"));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.loadFromDirectories({systemDir.path(), userDir.path()}, LiveReload::Off);
+
+        // Sanity — user wins, shadow metadata points at the system file.
+        QCOMPARE(sink.registry.value(QStringLiteral("shared")), std::string("from-user"));
+        {
+            const auto entries = loader.entries();
+            QCOMPARE(entries.size(), 1);
+            QCOMPARE(entries.first().sourcePath, userPath);
+            QCOMPARE(entries.first().systemSourcePath, systemPath);
+        }
+
+        // Delete the user copy; explicit rescan. The tracked entry
+        // should now point at the system file and carry no shadow
+        // metadata (there's nothing left to shadow).
+        QVERIFY(QFile::remove(userPath));
+        loader.requestRescan();
+        QTRY_COMPARE(sink.commitCount, 2);
+
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("shared")), std::string("from-system"));
+        const auto entries = loader.entries();
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries.first().sourcePath, systemPath);
+        QVERIFY(entries.first().systemSourcePath.isEmpty());
+    }
+
     // ── Live reload + file watcher ──────────────────────────────────────
 
     void testLiveReload_detectsNewFile()
@@ -276,6 +349,121 @@ private Q_SLOTS:
         // fires AND the explicit rescan didn't succeed, the test
         // would have already failed above.
         Q_UNUSED(watcherFired);
+    }
+
+    /// Regression guard for the grandparent-watch leak. When the
+    /// target directory's immediate parent does not exist yet either,
+    /// `attachWatcherForDir` climbs up and watches a further-up
+    /// ancestor. On promotion (target now exists) the loader must
+    /// remove the ACTUALLY-watched ancestor, not `info.absolutePath()`
+    /// which would miss the climbed path entirely and leak the watch.
+    void testAttachWatcher_promotionRemovesCorrectAncestor()
+    {
+        // Use QTemporaryDir as a safe root so we never touch the real
+        // $HOME / GenericDataLocation. The tree has missing
+        // intermediaries: <tmp>/a/b/c/profiles — only <tmp> exists
+        // initially, so the climb must land on <tmp>.
+        const QString root = m_tmp->path();
+        const QString target = root + QStringLiteral("/a/b/c/profiles");
+        QVERIFY(!QDir(target).exists());
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        loader.loadFromDirectory(target, LiveReload::On);
+
+        // The climbed ancestor is recorded in the back-reference map.
+        // It must be a genuine ancestor of the target — we don't
+        // assume it equals `root` exactly, because filesystem-specific
+        // canonicalisation may land on /tmp or its resolved path.
+        const QString watchedAncestor = loader.watchedAncestorForTest(target);
+        QVERIFY2(!watchedAncestor.isEmpty(),
+                 qPrintable(QStringLiteral("expected a recorded ancestor for target %1").arg(target)));
+        QVERIFY(loader.hasParentWatchForTest(watchedAncestor));
+        // Verify the ancestor is an actual ancestor of the target
+        // (target path starts with ancestor + "/"). cleanPath
+        // normalisation on the target side.
+        const QString cleanedTarget = QDir::cleanPath(target);
+        QVERIFY2(
+            cleanedTarget.startsWith(watchedAncestor + QLatin1Char('/')),
+            qPrintable(QStringLiteral("ancestor %1 is not a prefix of target %2").arg(watchedAncestor, cleanedTarget)));
+
+        // Materialise the full tree, then promote. After promotion the
+        // actually-watched ancestor must be removed from the parent
+        // watch set AND the back-reference map must no longer hold an
+        // entry for this target.
+        QVERIFY(QDir(root).mkpath(QStringLiteral("a/b/c/profiles")));
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        loader.requestRescan();
+        QVERIFY(spy.wait(1000));
+
+        QVERIFY2(
+            !loader.hasParentWatchForTest(watchedAncestor),
+            qPrintable(QStringLiteral("ancestor %1 still in parent watch set after promotion").arg(watchedAncestor)));
+        QVERIFY2(loader.watchedAncestorForTest(target).isEmpty(),
+                 qPrintable(QStringLiteral("back-reference for %1 still present after promotion").arg(target)));
+    }
+
+    /// Regression guard for the bounded-climb path. A pathological
+    /// symlink loop must not cause `attachWatcherForDir` to spin —
+    /// the climb is capped at 32 iterations AND canonicalPath()
+    /// collapses the loop first. Either defence is enough; this test
+    /// verifies the composite terminates quickly.
+    void testAttachWatcher_symlinkLoopTerminates()
+    {
+        // Build a/b with b being a symlink back to a. On Linux,
+        // QDir::exists() on any sub-path follows the link, so the
+        // climb terminates in finite time via canonicalPath() loop
+        // collapse plus the 32-level climb cap.
+        const QString root = m_tmp->path();
+        QVERIFY(QDir(root).mkdir(QStringLiteral("loop-a")));
+        const QString loopA = root + QStringLiteral("/loop-a");
+        // Create symlink loop-a/loop-b -> loop-a
+        const QString loopBLink = loopA + QStringLiteral("/loop-b");
+        QVERIFY(QFile::link(loopA, loopBLink));
+
+        const QString target = loopA + QStringLiteral("/loop-b/nonexistent/profiles");
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+
+        // A 2-second wall-clock cap is generous — canonicalPath()
+        // resolution on a symlink loop terminates in microseconds on
+        // any real filesystem. If this hangs it's the 32-level bounded
+        // climb catching a defence-in-depth failure (logged warning).
+        QElapsedTimer timer;
+        timer.start();
+        loader.loadFromDirectory(target, LiveReload::On);
+        QVERIFY2(
+            timer.elapsed() < 2000,
+            qPrintable(QStringLiteral("loadFromDirectory took %1 ms — climb did not terminate").arg(timer.elapsed())));
+    }
+
+    // ── Debounce race: rescan requested while rescan running ────────────
+
+    /// Regression guard for the requestRescan-during-rescanAll race.
+    /// A requestRescan call delivered from within the sink's
+    /// commitBatch (simulating a watcher event that fires during the
+    /// scan, or any re-entry through a signal connection) must cause
+    /// a follow-up rescan. Without the guard, the debounce timer is
+    /// idle during rescanAll and the nested start() is a no-op — the
+    /// event is silently dropped.
+    void testRescanRace_requestDuringRescan()
+    {
+        writeJson(m_tmp->filePath(QStringLiteral("a.json")), QStringLiteral("alpha"), QStringLiteral("v1"));
+
+        RacyRecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        sink.loader = &loader;
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+
+        // The initial load ran one rescan (commitCount == 1). The
+        // singleShot(0) scheduled inside that commit must schedule a
+        // second rescan after the debounce. If the race guard is
+        // missing, commitCount stays at 1 and QTRY_COMPARE times out.
+        QTRY_COMPARE_WITH_TIMEOUT(sink.commitCount, 2, 1000);
     }
 
     // ── Oversized-file guard ────────────────────────────────────────────

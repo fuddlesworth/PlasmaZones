@@ -657,6 +657,25 @@ static PhosphorAnimation::CurveRegistry& fallbackCurveRegistry()
     return s_registry;
 }
 
+namespace {
+/// Read the Profile JSON blob and return it as a mutable object.
+/// Malformed / absent blob returns an empty object — callers that then
+/// write back produce a minimal blob containing only the patched field.
+QJsonObject readProfileObject(const PhosphorConfig::Store& store)
+{
+    const QString json = store.read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    return doc.isObject() ? doc.object() : QJsonObject{};
+}
+
+/// Serialise @p obj and write it to the Profile blob key.
+void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
+{
+    const QString after = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    store.write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
+}
+} // namespace
+
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
     // Parse the stored JSON string through Profile::fromJson. Malformed
@@ -676,42 +695,76 @@ PhosphorAnimation::Profile Settings::animationProfile() const
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
-    // Compare semantically via `Profile::operator==` rather than through
-    // serialised-JSON string equality. Two reasons:
-    //   1. `QJsonDocument(Compact)` orders keys in hash-bucket order,
-    //      which matches within a Qt version but not across upgrades
-    //      (and decisively not across different code paths that
-    //      construct the blob in different key orders — e.g. the v1→v2
-    //      migration produces a different ordering than Profile::toJson).
-    //   2. `Profile::operator==` is the project-canonical equality for
-    //      this type — curve comparison goes through the virtual
-    //      `Curve::equals()` hook, so polymorphic curve identity /
-    //      parameter equivalence is correctly handled.
-    // With string-compare, the first setAnimationProfile after a
-    // migration takes the "changed" branch and fires every dependent
-    // signal even when the resolved Profile is identical, producing a
-    // visible signal storm across ~30 Hz slider-drag sessions.
-    const PhosphorAnimation::Profile prev = animationProfile();
-    if (profile == prev) {
+    // Equality is a BYTE comparison against the current disk blob, not a
+    // semantic `Profile::operator==` check. The semantic comparison hits
+    // two traps in practice:
+    //
+    //   1. `Profile::fromJson` resolves the curve field through the
+    //      runtime `CurveRegistry`. Plugin-registered curves that aren't
+    //      loaded yet produce a null curve pointer, so two blobs that
+    //      reference different unresolved curves still compare equal
+    //      (both have null curves) — silently data-losing a user's
+    //      curve choice when the plugin arrives later.
+    //   2. Inversely, when the blob round-trips cleanly the new Profile
+    //      may differ slightly (e.g. `effective*` defaults vs unset
+    //      optionals) and the semantic `operator==` returns `false` even
+    //      though the on-disk bytes would be unchanged — firing a
+    //      signal storm every call.
+    //
+    // Byte-comparing the serialised form of the merged blob sidesteps
+    // both: the only thing that fires signals is a real change to what
+    // gets written to disk.
+    //
+    // Per-field signal emission still goes through the parsed prev /
+    // new Profiles because each `xxxChanged` signal describes an
+    // observable semantic field, not a blob identity. A blob-identity
+    // change with identical effective fields (e.g. curve precision
+    // canonicalisation) correctly fires `animationProfileChanged`
+    // without fanning out to the per-field signals.
+    const QString currentBytes =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+
+    // Merge: start from the stored blob and overlay every field the
+    // incoming Profile emitted. `Profile::toJson` only emits set-optional
+    // fields and a non-null curve — unset optionals are absent from the
+    // output. Those absent fields leave the corresponding on-disk key
+    // untouched, matching the partial-update semantics of the per-field
+    // setters: a caller that wants to "clear" a field sets it explicitly
+    // via a per-field setter or by constructing a Profile with the
+    // intended value, not by leaving it unset.
+    //
+    // The loop is additive only (no removes) so unknown on-disk keys —
+    // future schema extensions, third-party plugin fields — survive
+    // intact. Asymmetric removal would wipe them on the first aggregate
+    // setter call, and contradict the per-field setters' merge semantics.
+    QJsonObject merged = readProfileObject(*m_store);
+    const QJsonObject incoming = profile.toJson();
+    for (auto it = incoming.constBegin(); it != incoming.constEnd(); ++it) {
+        merged.insert(it.key(), it.value());
+    }
+
+    const QString newBytes = QString::fromUtf8(QJsonDocument(merged).toJson(QJsonDocument::Compact));
+    if (newBytes == currentBytes) {
+        // Nothing to write — skip both the store write and every signal.
+        // Guards the slider-drag-at-30-Hz signal-storm case: a value
+        // that serialises to the same bytes must not wake any observer.
         return;
     }
 
     // Snapshot per-field effective values BEFORE the write so we can
-    // emit per-field signals only for fields that actually changed.
-    // Without this, a slider drag that only changes `duration` still
-    // wakes every QML binding observing `animationEasingCurve`,
-    // `animationMinDistance`, `animationSequenceMode`, and
-    // `animationStaggerInterval` — at ~30 Hz that's a lot of wasted
-    // re-evaluation. The project rule "only emit when value actually
-    // changed" applies at the per-field granularity here.
+    // emit per-field signals only for fields whose semantic observable
+    // actually changed. Parses the PREVIOUS disk bytes through the same
+    // registry the runtime uses, matching the invariant that per-field
+    // `xxxChanged` signals describe what `animationDuration()` (etc.)
+    // will return before vs. after the write.
+    const PhosphorAnimation::Profile prev = animationProfile();
     const int prevDuration = qRound(prev.effectiveDuration());
     const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
     const int prevMinDistance = prev.effectiveMinDistance();
     const int prevSequenceMode = static_cast<int>(prev.effectiveSequenceMode());
     const int prevStaggerInterval = prev.effectiveStaggerInterval();
 
-    const QString after = QString::fromUtf8(QJsonDocument(profile.toJson()).toJson(QJsonDocument::Compact));
-    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
+    writeProfileObject(*m_store, merged);
 
     // Aggregate first — consumers that want to observe the Profile
     // atomically (the daemon's fan-out hook) get one signal per call.
@@ -753,25 +806,6 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 //
 // Hot path: settings-UI slider drag ~30 Hz. Per call: one read + one JSON
 // parse + one field-insert + one serialise + one store write. Acceptable.
-
-namespace {
-/// Read the Profile JSON blob and return it as a mutable object.
-/// Malformed / absent blob returns an empty object — callers that then
-/// write back produce a minimal blob containing only the patched field.
-QJsonObject readProfileObject(const PhosphorConfig::Store& store)
-{
-    const QString json = store.read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    return doc.isObject() ? doc.object() : QJsonObject{};
-}
-
-/// Serialise @p obj and write it to the Profile blob key.
-void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
-{
-    const QString after = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    store.write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
-}
-} // namespace
 
 int Settings::animationDuration() const
 {

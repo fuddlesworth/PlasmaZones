@@ -708,10 +708,19 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // (which would bloat the daemon-startup dependency graph for a
     // transient code path). Sharing the constants guarantees that a
     // Profile field rename touches producer and migration together.
+    // Every clampable field goes through `qBound` against the
+    // ConfigDefaults Min/Max accessors. A v1 config with, say,
+    // `AnimationDuration=-50` or `AnimationStaggerInterval=600000` would
+    // otherwise land in the v2 blob verbatim — and `Profile::fromJson`
+    // rejects out-of-range values at load time with a warning, so the
+    // user silently loses their customisation AND the log gets noisy.
+    // Clamping at migration time prevents both: the stored value is
+    // always in-range, and `Profile::fromJson` accepts it cleanly.
     QJsonObject profile;
     if (v1Animations.contains(QLatin1String("AnimationDuration"))) {
-        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] =
-            v1Animations.value(QLatin1String("AnimationDuration")).toDouble();
+        const int raw = v1Animations.value(QLatin1String("AnimationDuration")).toInt();
+        const int clamped = qBound(ConfigDefaults::animationDurationMin(), raw, ConfigDefaults::animationDurationMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] = clamped;
     }
     if (v1Animations.contains(QLatin1String("AnimationEasingCurve"))) {
         // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
@@ -744,16 +753,29 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         }
     }
     if (v1Animations.contains(QLatin1String("AnimationMinDistance"))) {
-        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] =
-            v1Animations.value(QLatin1String("AnimationMinDistance")).toInt();
+        const int raw = v1Animations.value(QLatin1String("AnimationMinDistance")).toInt();
+        const int clamped =
+            qBound(ConfigDefaults::animationMinDistanceMin(), raw, ConfigDefaults::animationMinDistanceMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] = clamped;
     }
     if (v1Animations.contains(QLatin1String("AnimationSequenceMode"))) {
-        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] =
-            v1Animations.value(QLatin1String("AnimationSequenceMode")).toInt();
+        // SequenceMode is a closed enum (AllAtOnce=0, Stagger=1 as of v2).
+        // Out-of-range values snap to the project default rather than
+        // clamping to the nearest bound — clamping would silently alias
+        // e.g. 999 onto Stagger, which is semantically different from
+        // "the user's setting is meaningless, use the default".
+        const int raw = v1Animations.value(QLatin1String("AnimationSequenceMode")).toInt();
+        const int resolved =
+            (raw >= ConfigDefaults::animationSequenceModeMin() && raw <= ConfigDefaults::animationSequenceModeMax())
+            ? raw
+            : ConfigDefaults::animationSequenceMode();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] = resolved;
     }
     if (v1Animations.contains(QLatin1String("AnimationStaggerInterval"))) {
-        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] =
-            v1Animations.value(QLatin1String("AnimationStaggerInterval")).toInt();
+        const int raw = v1Animations.value(QLatin1String("AnimationStaggerInterval")).toInt();
+        const int clamped =
+            qBound(ConfigDefaults::animationStaggerIntervalMin(), raw, ConfigDefaults::animationStaggerIntervalMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
     }
     if (!profile.isEmpty()) {
         // Stored as a JSON-encoded string under the animation-profile

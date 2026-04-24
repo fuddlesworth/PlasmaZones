@@ -151,11 +151,22 @@ public:
 
     /// Parse from a JSON object. Missing keys become unset fields
     /// (read back as library defaults via `effective*`).
-    /// Uses a function-local static CurveRegistry for builtins.
+    ///
+    /// Uses the process-wide `CurveRegistry` installed via
+    /// `PhosphorCurve::setDefaultRegistry` when available so
+    /// user-authored curves registered by `CurveLoader` are visible
+    /// to this parse path. Falls back to a function-local static
+    /// registry (built-ins only) when no default registry has been
+    /// installed — this covers startup-before-composition-root and
+    /// test harness paths where the daemon hasn't published a
+    /// user-curve-aware registry yet. Consulting the published
+    /// registry first matches the convention used by
+    /// `PhosphorCurve::fromString`.
     Q_INVOKABLE static PhosphorProfile fromJson(const QJsonObject& obj)
     {
         static CurveRegistry sFallback;
-        return PhosphorProfile(Profile::fromJson(obj, sFallback));
+        CurveRegistry* registry = PhosphorCurve::defaultRegistry();
+        return PhosphorProfile(Profile::fromJson(obj, registry ? *registry : sFallback));
     }
 
     // ─── Equality ───

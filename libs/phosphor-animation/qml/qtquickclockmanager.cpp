@@ -120,13 +120,48 @@ IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)
         auto clock = std::make_unique<QtQuickClock>(window);
         rawClock = clock.get();
 
-        Entry entry{QPointer<QQuickWindow>(window), std::move(clock), {}};
-        // The destroyedConnection field is left default-constructed
-        // here; we populate it below (outside the lock) so the
-        // QObject::connect call does not nest Qt's internal locks
-        // under m_mutex.
-        m_entries.emplace(window, std::move(entry));
-        justCreated = true;
+        // `try_emplace(key, args...)` is the race-safe variant of
+        // `emplace`: if the key is already present it does NOT move
+        // from `args`, so the local `clock` stays alive and owned by
+        // us on the collision path. That lets us deterministically
+        // tear down the just-constructed QtQuickClock (which has
+        // already subscribed to `beforeRendering` in its ctor) rather
+        // than leaking the subscription when a concurrent inserter
+        // beat us to this key between the find() above and here.
+        //
+        // Capture the return value — ignoring it was the pre-fix bug:
+        // two concurrent callers that both saw the initial find()
+        // miss would each construct a QtQuickClock, and the loser's
+        // clock + beforeRendering connection would leak. The thread-
+        // ownership assert above should serialise GUI-thread callers,
+        // but Qt's internal `destroyed`-signal dispatch (which evicts
+        // entries) can also race this section, so defensive handling
+        // is cheaper than the UAF surface.
+        auto [insertedIt, inserted] =
+            m_entries.try_emplace(window, Entry{QPointer<QQuickWindow>(window), std::move(clock), {}});
+        if (!inserted) {
+            // Race lost: another inserter already has this key. Our
+            // local `clock` is still owned by us because try_emplace
+            // does not move from args on collision. Let the local
+            // unique_ptr's scope-exit destruction run — QtQuickClock's
+            // dtor disconnects from `beforeRendering` so the losing
+            // clock leaves no stray subscription. Return the winner's
+            // clock pointer so every caller sees the same
+            // `IMotionClock*` for this window.
+            //
+            // Because try_emplace didn't move the Entry argument, our
+            // local `clock` inside that temporary Entry was also not
+            // consumed — but the temporary Entry itself is destroyed at
+            // the end of this full-expression, which destroys its
+            // unique_ptr and disconnects the subscription. `justCreated`
+            // stays false so the post-lock connect() block does not
+            // install a destroyed-hook for an entry that is already
+            // wired on the winning insertion.
+            rawClock = insertedIt->second.clock.get();
+            justCreated = false;
+        } else {
+            justCreated = true;
+        }
     }
 
     if (justCreated) {

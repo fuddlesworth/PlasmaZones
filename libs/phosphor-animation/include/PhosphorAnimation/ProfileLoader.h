@@ -67,6 +67,15 @@ class PhosphorProfileRegistry;
  * UIs deep-copy into the user's active profile rather than referencing
  * the preset live. This loader does not implement preset → active
  * linking.
+ *
+ * ## Thread safety
+ *
+ * Public methods (`entries()`, `hasPath()`, `loadFromDirectory`,
+ * `requestRescan`, `registeredCount`, …) must be called from the thread
+ * that owns this QObject (typically the GUI thread). `profilesChanged`
+ * fires on that same thread. `PhosphorProfileRegistry` itself is
+ * thread-safe via its own mutex; this loader's tracked-entries
+ * bookkeeping is not.
  */
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
 {

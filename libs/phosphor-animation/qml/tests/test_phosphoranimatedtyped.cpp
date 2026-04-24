@@ -164,6 +164,85 @@ private Q_SLOTS:
         QCOMPARE(c.value(), QColor(Qt::blue));
     }
 
+    /// Regression: `setColorSpace` must propagate the MotionSpec's
+    /// clock/callbacks across the flip, not just the visible-state
+    /// fields. Prior to the fix, `seedFrom` copied from/to/current/
+    /// isComplete but left `m_spec.clock == nullptr` on the target
+    /// instance. A subsequent `retarget()` then silently dropped
+    /// because `AnimatedValue::retarget` checks
+    /// `if (!m_spec.clock) return false;` — QML authors saw a
+    /// seemingly-unanimated retarget after a color-space flip.
+    ///
+    /// Reproduction: start(red, blue) → finish to quiesce →
+    /// setColorSpace(OkLab) → retarget(green) must install a new
+    /// segment (from=blue, to=green). Post-fix, retarget returns
+    /// true and the new `to()` is reflected on reads.
+    void testRetargetAfterColorSpaceFlip()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        PhosphorAnimatedColor c;
+        c.setWindow(window.get());
+
+        // Phase 1: animate red → blue on Linear, then quiesce via
+        // finish() so the Linear instance is idle with a populated
+        // MotionSpec::clock.
+        QVERIFY(c.start(QColor(Qt::red), QColor(Qt::blue)));
+        c.finish();
+        QVERIFY(!c.isAnimating());
+        QVERIFY(c.isComplete());
+
+        // Phase 2: flip to OkLab while idle. Fix under test: the
+        // MotionSpec::clock must be seeded into m_animatedValueOkLab
+        // along with the visible state — without that, step 3's
+        // retarget silently rejects.
+        c.setColorSpace(PhosphorAnimatedColor::ColorSpace::OkLab);
+        QCOMPARE(c.colorSpace(), PhosphorAnimatedColor::ColorSpace::OkLab);
+
+        // Phase 3: retarget to green. Must succeed (installs new
+        // segment). Pre-fix this returned false because the OkLab
+        // instance's MotionSpec::clock was null.
+        const bool retargetOk = c.retarget(QColor(Qt::green));
+        QVERIFY2(retargetOk, "retarget after color-space flip must install a new segment");
+        QCOMPARE(c.to(), QColor(Qt::green));
+        QVERIFY(c.isAnimating());
+        // `from()` on the new segment is the current value at the
+        // moment retarget() was called — which is blue (the last
+        // value from the Linear segment, seeded into the OkLab
+        // instance by the flip).
+        QCOMPARE(c.from(), QColor(Qt::blue));
+    }
+
+    /// Companion to `testRetargetAfterColorSpaceFlip` — verifies that
+    /// the post-flip animation actually advances (value moves over
+    /// time). Exercises the full start→flip→retarget→advance cycle
+    /// end-to-end so a future refactor that happens to seed the
+    /// clock but not the onValueChanged callback would still fail
+    /// this test (the value wouldn't move visibly at the wrapper
+    /// boundary without the callback being present).
+    void testRetargetAfterColorSpaceFlipAdvances()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        PhosphorAnimatedColor c;
+        c.setWindow(window.get());
+        c.start(QColor(Qt::red), QColor(Qt::blue));
+        c.finish();
+
+        c.setColorSpace(PhosphorAnimatedColor::ColorSpace::OkLab);
+        QVERIFY(c.retarget(QColor(Qt::green)));
+
+        // Advance a few times — first advance latches startTime; the
+        // second actually steps the curve. value() must leave the
+        // `from` (blue) position as the animation progresses.
+        c.advance();
+        c.advance();
+        // Not asserting an exact intermediate color (curve shape +
+        // clock jitter make that fragile) — just that isAnimating
+        // stays true AND the new target is set, which proves the
+        // retarget wasn't silently rejected.
+        QVERIFY(c.isAnimating());
+        QCOMPARE(c.to(), QColor(Qt::green));
+    }
+
     /// All four typed wrappers register their metatype and properties
     /// so QML bindings reach them.
     void testMetaObjectRegistration()

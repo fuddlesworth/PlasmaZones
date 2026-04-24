@@ -13,6 +13,8 @@
 #include <QTest>
 #include <QTextStream>
 
+#include <memory>
+
 using namespace PhosphorAnimation;
 
 class TestCurveLoader : public QObject
@@ -275,6 +277,57 @@ private Q_SLOTS:
 
         QVERIFY2(!m_registry.has(QStringLiteral("ephemeral")),
                  "CurveLoader dtor must unregister factories it installed — see M1 fix");
+    }
+
+    /// Two CurveLoader instances that register OVERLAPPING curve names
+    /// into the same registry. The second loader to register wins
+    /// (the registry is replace-semantic). When the first loader
+    /// destructs, its `unregisterByOwner(ownerTag)` MUST NOT evict the
+    /// second loader's entry — the second loader now owns the key
+    /// under a different partition tag.
+    ///
+    /// Before owner-tagged partitioning, the first loader's dtor
+    /// iterated its tracked set and called `unregisterFactory(key)`
+    /// on every key — including the shared one, silently wiping the
+    /// second loader's registration. This guard pins the fix.
+    void testOverlappingLoadersDoNotClobberEachOther()
+    {
+        QTemporaryDir dirA;
+        QTemporaryDir dirB;
+        QVERIFY(dirA.isValid() && dirB.isValid());
+
+        writeFile(dirA.filePath(QStringLiteral("shared-name.json")), QStringLiteral(R"({
+            "name": "shared-name",
+            "typeId": "spring",
+            "parameters": { "omega": 10.0, "zeta": 0.9 }
+        })"));
+        writeFile(dirB.filePath(QStringLiteral("shared-name.json")), QStringLiteral(R"({
+            "name": "shared-name",
+            "typeId": "spring",
+            "parameters": { "omega": 20.0, "zeta": 0.3 }
+        })"));
+
+        auto loaderA = std::make_unique<CurveLoader>(m_registry);
+        QCOMPARE(loaderA->loadFromDirectory(dirA.path()), 1);
+
+        CurveLoader loaderB(m_registry);
+        QCOMPARE(loaderB.loadFromDirectory(dirB.path()), 1);
+
+        // loaderB's registration replaced loaderA's — the registry
+        // now owns the key under loaderB's ownerTag.
+        QVERIFY(m_registry.has(QStringLiteral("shared-name")));
+        QVERIFY2(loaderA->ownerTag() != loaderB.ownerTag(),
+                 "precondition: distinct CurveLoader instances must produce distinct owner tags");
+
+        // Destroy loaderA — its `unregisterByOwner(ownerA)` must NOT
+        // evict the key, since the key is now tagged with ownerB.
+        loaderA.reset();
+
+        QVERIFY2(m_registry.has(QStringLiteral("shared-name")),
+                 "loaderA's dtor must not evict loaderB's factory for the shared key");
+        auto curve = m_registry.create(QStringLiteral("shared-name"));
+        QVERIFY(curve != nullptr);
+        QCOMPARE(curve->typeId(), QStringLiteral("spring"));
     }
 };
 

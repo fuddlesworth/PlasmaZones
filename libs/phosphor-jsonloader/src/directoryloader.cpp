@@ -118,6 +118,17 @@ int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveRel
 
 void DirectoryLoader::requestRescan()
 {
+    // A rescan may already be running on this thread (sink's commitBatch
+    // or a nested slot re-entered us via a signal). Starting the
+    // debounce timer here would be a no-op — the timer is idle while
+    // rescanAll is executing — and the event that triggered this call
+    // would be silently dropped because the rescan has already captured
+    // the pre-event filesystem state. Defer to the end of rescanAll,
+    // which checks the flag and re-arms the timer for a follow-up scan.
+    if (m_rescanInProgress) {
+        m_rescanRequestedWhileRunning = true;
+        return;
+    }
     // Safe to call unconditionally — the single-shot timer coalesces
     // back-to-back calls into one rescanAll() on timeout.
     m_debounceTimer.start();
@@ -131,6 +142,20 @@ void DirectoryLoader::setDebounceIntervalForTest(int ms)
 void DirectoryLoader::setMaxEntriesForTest(int cap)
 {
     m_maxEntries = cap;
+}
+
+QString DirectoryLoader::watchedAncestorForTest(const QString& target) const
+{
+    // Canonicalise the lookup key to match the insertion key used by
+    // `attachWatcherForDir`, otherwise trailing-slash differences
+    // between the caller's test path and the loader's internal form
+    // would cause the accessor to spuriously return an empty string.
+    return m_parentWatchFor.value(QDir::cleanPath(target));
+}
+
+bool DirectoryLoader::hasParentWatchForTest(const QString& path) const
+{
+    return m_watchedParents.contains(QDir::cleanPath(path));
 }
 
 int DirectoryLoader::registeredCount() const
@@ -149,6 +174,17 @@ QList<DirectoryLoader::Entry> DirectoryLoader::entries() const
 
 void DirectoryLoader::rescanAll()
 {
+    // Race guard — any `requestRescan` call delivered during this scan
+    // (e.g. from within the sink's `commitBatch`, or from a watcher
+    // event that fires while we're iterating the filesystem) is
+    // captured in `m_rescanRequestedWhileRunning` and replayed at the
+    // end of this function. Without it, the single-shot debounce timer
+    // is idle while this slot runs, so any `m_debounceTimer.start()`
+    // call from inside the nested stack is a no-op and the observed
+    // state can go stale until the next external event.
+    m_rescanInProgress = true;
+    m_rescanRequestedWhileRunning = false;
+
     // If live-reload is enabled, the watcher needs a chance to promote
     // any parent-watched target that just materialised. Do this before
     // the scan so a dir created between the last rescan and this one
@@ -328,6 +364,18 @@ void DirectoryLoader::rescanAll()
     }
 
     Q_EMIT entriesChanged();
+
+    // Race-guard replay — clear the flag FIRST so a nested slot
+    // connected to `entriesChanged` or triggered via the timer re-entry
+    // below still gets the guarded requestRescan() path on this stack
+    // frame (rather than racing on a half-cleared flag). We then
+    // re-arm the debounce timer to pick up any event that landed
+    // during the scan.
+    m_rescanInProgress = false;
+    if (m_rescanRequestedWhileRunning) {
+        m_rescanRequestedWhileRunning = false;
+        m_debounceTimer.start();
+    }
 }
 
 void DirectoryLoader::syncFileWatches()
@@ -394,34 +442,49 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
     if (!m_watcher) {
         return;
     }
+    // Canonicalise the target key: `m_parentWatchFor` is keyed by the
+    // target's canonical-path form so symlinked / trailing-slash
+    // duplicates (e.g. the same dir registered as both
+    // `/a/b/profiles/` and `/a/b/profiles`) hash to the same bucket.
+    const QString targetKey = QDir::cleanPath(directory);
     const QFileInfo info(directory);
     if (info.exists() && info.isDir()) {
-        // Target exists — watch it directly. If we were watching the
-        // parent as a proxy, we can stop (direct watch is strictly
+        // Target exists — watch it directly. If we were watching an
+        // ancestor as a proxy, we can stop (direct watch is strictly
         // better and avoids duplicate rescan events when a sibling
         // file elsewhere in the parent changes).
         if (!m_watcher->directories().contains(directory)) {
             m_watcher->addPath(directory);
         }
-        const QString parent = info.absolutePath();
-        if (m_watchedParents.contains(parent)) {
-            // Only remove the parent watch if no OTHER configured
-            // directory still relies on it (multiple missing-sibling
-            // dirs can share a parent).
-            bool parentStillNeeded = false;
-            for (const QString& other : m_directories) {
-                if (other == directory) {
-                    continue;
+        // Promotion cleanup — look up the ancestor WE actually watched
+        // for this target. A prior `attachWatcherForDir` invocation may
+        // have climbed past the immediate parent (because the parent
+        // didn't exist either at the time) and installed the watch on
+        // a grandparent / further ancestor. Removing `info.absolutePath()`
+        // here would miss that case and leak the ancestor watch for the
+        // loader's lifetime, firing a rescan for every unrelated file
+        // event in that tree.
+        const auto watchedAncestorIt = m_parentWatchFor.constFind(targetKey);
+        if (watchedAncestorIt != m_parentWatchFor.constEnd()) {
+            const QString watchedAncestor = watchedAncestorIt.value();
+            m_parentWatchFor.erase(watchedAncestorIt);
+            if (m_watchedParents.contains(watchedAncestor)) {
+                // Only remove the ancestor watch if no OTHER configured
+                // target still relies on it (multiple missing-sibling
+                // targets can share one climbed ancestor). Iterate the
+                // remaining `m_parentWatchFor` values — that map tracks
+                // exactly which other targets still need this ancestor.
+                bool ancestorStillNeeded = false;
+                for (auto it = m_parentWatchFor.constBegin(); it != m_parentWatchFor.constEnd(); ++it) {
+                    if (it.value() == watchedAncestor) {
+                        ancestorStillNeeded = true;
+                        break;
+                    }
                 }
-                const QFileInfo otherInfo(other);
-                if (!otherInfo.exists() && otherInfo.absolutePath() == parent) {
-                    parentStillNeeded = true;
-                    break;
+                if (!ancestorStillNeeded) {
+                    m_watcher->removePath(watchedAncestor);
+                    m_watchedParents.remove(watchedAncestor);
                 }
-            }
-            if (!parentStillNeeded) {
-                m_watcher->removePath(parent);
-                m_watchedParents.remove(parent);
             }
         }
     } else {
@@ -446,7 +509,15 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         // canonicalPath() returns empty on unresolvable chains, which
         // the first guard below catches.
         QString ancestor = info.canonicalPath();
-        if (ancestor.isEmpty()) {
+        // On Linux, `canonicalPath()` on a non-existent target returns
+        // the platform-dependent degenerate form `"."` (current dir)
+        // rather than an empty string when no ancestor in the chain
+        // exists. Treat both forms as "no canonical resolution" —
+        // otherwise the climb below terminates immediately on
+        // `QDir(".").exists()` (the cwd trivially exists) and we end
+        // up installing a watcher on the process's current directory,
+        // which is both incorrect and a serious foot-gun.
+        if (ancestor.isEmpty() || ancestor == QLatin1String(".")) {
             // Target path has no canonical form (doesn't exist and
             // neither does any ancestor). Fall back to the textual
             // absolute path — the climb still terminates because we
@@ -476,6 +547,14 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         if (ancestor.isEmpty() || !QDir(ancestor).exists()) {
             return;
         }
+        // Canonicalise the ancestor path — cleanPath collapses trailing
+        // slashes and "/./" segments so the parent-set equality check
+        // doesn't duplicate the same ancestor under two spellings. We
+        // don't call canonicalPath() here to preserve symlink identity
+        // at the ancestor level (callers may have deliberately pointed
+        // at a symlinked location) — cleanPath is the right level of
+        // normalisation.
+        ancestor = QDir::cleanPath(ancestor);
         if (isForbiddenWatchRoot(ancestor)) {
             qCDebug(lcLoader) << "Refusing to watch forbidden ancestor" << ancestor << "for target" << directory
                               << "— call requestRescan() after creating the directory tree.";
@@ -487,6 +566,13 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
             }
             m_watchedParents.insert(ancestor);
         }
+        // Record the per-target ancestor back-reference — the promotion
+        // branch above uses this to find the ACTUALLY-watched ancestor
+        // (may be the grandparent or further up). Re-inserting is
+        // idempotent: the same target path is guaranteed to resolve to
+        // the same ancestor on repeated calls while the filesystem is
+        // steady.
+        m_parentWatchFor.insert(targetKey, ancestor);
     }
 }
 

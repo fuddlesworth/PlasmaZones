@@ -385,6 +385,77 @@ private Q_SLOTS:
         QCOMPARE(qRound(a.resolvedProfile().duration.value()), 500);
     }
 
+    // ─── Live-rebind signal coverage ───
+
+    /// Regression: live-rebind must emit `profileChanged` so QML
+    /// observers with `onProfileChanged: …` see the rebind. Prior to
+    /// the fix, the queued lambdas wired from `profileChanged(path)`
+    /// and `profilesReloaded()` updated the resolved profile silently
+    /// — QML authors would see their onProfileChanged handler run on
+    /// the initial setProfile but never again on live reloads.
+    ///
+    /// Same queued-connection caveat as `testProfilePathLiveRebinds`
+    /// — use `QTRY_COMPARE` to spin the event loop so the queued
+    /// connection fires before we read the spy count.
+    void testLiveRebindEmitsProfileChanged()
+    {
+        // Initial profile registration + setProfile. One direct-setter
+        // profileChanged emit fires here.
+        Profile initial;
+        initial.duration = 100.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("live"), initial);
+
+        PhosphorMotionAnimation a;
+        a.setProfile(QStringLiteral("live"));
+        QCOMPARE(a.duration(), 100);
+
+        // Attach spy AFTER the initial setProfile so we only count the
+        // live-rebind emit. The fix under test is that the queued
+        // lambda (connected via Qt::QueuedConnection inside
+        // rebindToRegistryPath) MUST emit profileChanged after it
+        // re-resolves and installs the new profile — without this
+        // emit, the spy stays at zero and QML observers never see the
+        // update.
+        QSignalSpy spy(&a, &PhosphorMotionAnimation::profileChanged);
+        QCOMPARE(spy.count(), 0);
+
+        // Re-register with different params — registry emits
+        // profileChanged(path), our queued lambda fires.
+        Profile updated;
+        updated.duration = 500.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("live"), updated);
+        QTRY_COMPARE(a.duration(), 500);
+        QVERIFY2(spy.count() >= 1, "profileChanged must fire when the bound profile is live-reloaded");
+    }
+
+    /// Companion: `profilesReloaded` bulk-signal path must also emit
+    /// `profileChanged`. Covers the `reloadAll` / `clear` paths that
+    /// `PhosphorProfileRegistry` fires for wholesale mutation.
+    void testReloadEmitsProfileChanged()
+    {
+        Profile initial;
+        initial.duration = 100.0;
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("bulk"), initial);
+
+        PhosphorMotionAnimation a;
+        a.setProfile(QStringLiteral("bulk"));
+
+        QSignalSpy spy(&a, &PhosphorMotionAnimation::profileChanged);
+        QCOMPARE(spy.count(), 0);
+
+        // reloadAll fires profilesReloaded — the bulk-signal path
+        // our queued lambda wires to. The lambda must emit
+        // profileChanged.
+        QHash<QString, Profile> all;
+        Profile updated;
+        updated.duration = 600.0;
+        all.insert(QStringLiteral("bulk"), updated);
+        PhosphorProfileRegistry::instance().reloadAll(all);
+
+        QTRY_COMPARE(a.duration(), 600);
+        QVERIFY2(spy.count() >= 1, "profileChanged must fire on reloadAll / profilesReloaded-triggered rebinds");
+    }
+
     // ─── Meta ───
 
     void testMetaObjectProperties()
