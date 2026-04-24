@@ -67,9 +67,10 @@ public:
     QJsonObject serializeBaseState() const;
     void deserializeBaseState(const QJsonObject& state);
 
+    ~PlacementEngineBase() override;
+
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
-    ~PlacementEngineBase() override;
 
     virtual void onWindowClaimed(const QString& windowId) = 0;
     virtual void onWindowReleased(const QString& windowId) = 0;

@@ -17,7 +17,7 @@
 #include "../core/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 
 namespace Phosphor::Screens {
 class PlasmaPanelSource;
@@ -53,11 +53,9 @@ class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
-class AutotileEngine;
 class ScreenModeRouter;
 class SettingsConfigStore;
 class SnapAdaptor;
-class SnapEngine;
 class WindowRegistry;
 class ShaderRegistry;
 } // namespace PlasmaZones
@@ -465,9 +463,9 @@ private:
     // m_layoutManager — see the DECLARATION ORDER INVARIANT comment there.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
-    // Window engines
-    std::unique_ptr<AutotileEngine> m_autotileEngine;
-    std::unique_ptr<SnapEngine> m_snapEngine;
+    // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
+    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
+    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
     /// dispatch paths. Owns no state of its own — just delegates to the

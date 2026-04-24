@@ -15,7 +15,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QTimer>
@@ -96,7 +96,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Release on an autotile screen: do not snap to manual overlay zone.
     // The autotile engine manages window placement on these screens; allowing a
     // manual drag-snap would conflict with the engine's layout.
-    if (useOverlayZone && releaseScreen && m_autotileEngine && m_autotileEngine->isAutotileScreen(releaseScreenId)) {
+    if (useOverlayZone && releaseScreen && m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
         useOverlayZone = false;
     }
 

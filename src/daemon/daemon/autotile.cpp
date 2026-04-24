@@ -17,6 +17,7 @@
 #include "../../core/windowtrackingservice.h"
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -118,7 +119,7 @@ void Daemon::updateAutotileScreens()
                 // effectiveMaxWindows() has identical fallback logic (step 2) that
                 // dynamically derives the correct MaxWindows at retile time even
                 // without a per-screen override. The override here is an optimization.
-                const QString globalAlgo = m_autotileEngine->algorithm();
+                const QString globalAlgo = m_autotileEngine->algorithmId();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
                     auto* screenAlgoPtr = m_algorithmRegistry.get()->algorithm(screenAlgo);
                     auto* globalAlgoPtr = m_algorithmRegistry.get()->algorithm(globalAlgo);
@@ -131,7 +132,8 @@ void Daemon::updateAutotileScreens()
                         // autotileMaxWindows()) — during cycling, settings may
                         // be stale if updateAutotileScreens runs before
                         // setAlgorithm syncs settings via QSignalBlocker.
-                        const int runtimeMaxWindows = m_autotileEngine->config()->maxWindows;
+                        auto* concreteEngine = qobject_cast<AutotileEngine*>(m_autotileEngine.get());
+                        const int runtimeMaxWindows = concreteEngine ? concreteEngine->config()->maxWindows : 0;
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
                             overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
                         }
@@ -255,7 +257,7 @@ void Daemon::handleAutotileDisabled()
     // Clear saved snap-floats — we're fully back in snap mode, so the
     // save/restore mechanism is no longer needed until next autotile entry.
     if (m_snapEngine) {
-        m_snapEngine->clearSavedSnapFloating();
+        m_snapEngine->clearSavedModeFloating();
     }
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleased clears floating state before windows are resnapped.
@@ -444,7 +446,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
                 continue;
             }
         }
-        m_snapEngine->saveSnapFloating(fid);
+        m_snapEngine->saveModeFloat(fid);
         qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
     }
 }

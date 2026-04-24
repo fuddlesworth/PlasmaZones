@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include "version.h"
 #include "../config/configdefaults.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -51,7 +51,7 @@ QString SupportReport::redactHomePath(const QString& input)
 
 SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
                                                        PhosphorZones::LayoutRegistry* layoutManager,
-                                                       AutotileEngine* autotileEngine)
+                                                       PhosphorEngineApi::IPlacementEngine* autotileEngine)
 {
     Snapshot snap;
 
@@ -89,7 +89,7 @@ SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::Screen
     if (autotileEngine) {
         snap.hasAutotileEngine = true;
         snap.autotileEnabled = autotileEngine->isEnabled();
-        const auto screens = autotileEngine->autotileScreens();
+        const auto screens = autotileEngine->activeScreens();
         snap.autotileScreens = QStringList(screens.begin(), screens.end());
     }
 
@@ -326,8 +326,8 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
 }
 
 QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager,
-                                PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
-                                int sinceMinutes)
+                                PhosphorZones::LayoutRegistry* layoutManager,
+                                PhosphorEngineApi::IPlacementEngine* autotileEngine, int sinceMinutes)
 {
     return generateFromSnapshot(collectSnapshot(screenManager, layoutManager, autotileEngine), sinceMinutes);
 }

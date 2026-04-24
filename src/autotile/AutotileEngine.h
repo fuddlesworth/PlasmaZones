@@ -23,7 +23,6 @@
 #include "OverflowManager.h"
 #include "core/utils.h"
 
-#include <QHashFunctions>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones {
@@ -35,28 +34,7 @@ namespace PlasmaZones {
 
 using NavigationContext = PhosphorEngineApi::NavigationContext;
 
-/**
- * @brief Composite key for per-desktop/activity PhosphorTiles::TilingState lookup
- *
- * desktop=1 (matching m_currentDesktop default) and empty activity represent
- * the initial desktop/activity context. Always uses explicit desktop numbers.
- */
-struct TilingStateKey
-{
-    QString screenId;
-    int desktop = 1;
-    QString activity;
-
-    bool operator==(const TilingStateKey& other) const
-    {
-        return screenId == other.screenId && desktop == other.desktop && activity == other.activity;
-    }
-};
-
-inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
-{
-    return qHashMulti(seed, key.screenId, key.desktop, key.activity);
-}
+// TilingStateKey is defined in core/types.h (shared between engine and daemon).
 
 /**
  * @brief Saved position for a window removed from autotile, keyed by appId.
@@ -214,7 +192,7 @@ public:
      * window should enter the drag-insert preview (tiled windows reorder;
      * floating / untracked windows drag free and float on drop as before).
      */
-    bool isWindowTiled(const QString& windowId) const;
+    bool isWindowTiled(const QString& windowId) const override;
 
     // IPlacementEngine
     bool isActiveOnScreen(const QString& screenId) const override;
@@ -466,7 +444,7 @@ public:
      * toggleWindowFloat/setWindowFloat calls can find and manage it.
      * No-op if the window is already tracked or the screen isn't autotile.
      */
-    void adoptWindowAsFloating(const QString& windowId, const QString& screenId);
+    void adoptWindowAsFloating(const QString& windowId, const QString& screenId) override;
 
     /**
      * @brief Serialize per-context autotile window orders to JSON
@@ -953,7 +931,7 @@ public:
      * to [0, tiledWindowCount()-1]) and retiles. No-op if the index hasn't
      * changed from the last update.
      */
-    void updateDragInsertPreview(int insertIndex);
+    void updateDragInsertPreview(int insertIndex) override;
 
     /**
      * @brief Commit the active drag-insert preview.
@@ -983,7 +961,7 @@ public:
      * preventing an oscillating shuffle where moving to a neighbour slot
      * immediately re-matches under the cursor every dragMoved tick.
      */
-    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const;
+    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
 
     /**
      * @brief Query whether a drag-insert preview is currently active.

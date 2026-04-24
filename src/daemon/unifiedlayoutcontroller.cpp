@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "unifiedlayoutcontroller.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -17,7 +17,7 @@ namespace PlasmaZones {
 UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
                                                  Phosphor::Screens::ScreenManager* screenManager,
                                                  PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                                                 AutotileEngine* autotileEngine, QObject* parent)
+                                                 PhosphorEngineApi::IPlacementEngine* autotileEngine, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)

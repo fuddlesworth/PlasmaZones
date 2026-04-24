@@ -23,7 +23,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "../../dbus/windowdragadaptor.h"
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "../../snap/SnapEngine.h"
@@ -292,7 +292,8 @@ void Daemon::initializeAutotile()
             // to share the same screen, producing wrong results.
             // Windows that were autotile-only (never zone-snapped) get their
             // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
-            if (applied && wasAutotile && m_snapEngine) {
+            auto* concreteSnap = qobject_cast<SnapEngine*>(m_snapEngine.get());
+            if (applied && wasAutotile && concreteSnap) {
                 // Build exclusion set: windows that fit into the target layout's zones
                 // will be zone-snapped by the resnap D-Bus signal. Without excluding them,
                 // restoreAutotileOnlyGeometries sends float-geometry D-Bus calls that
@@ -341,7 +342,7 @@ void Daemon::initializeAutotile()
                         resnappedWindows.insert(windowOrder.at(i));
                     }
                     QVector<ZoneAssignmentEntry> entries =
-                        m_snapEngine->calculateResnapEntriesFromAutotileOrder(windowOrder, resnapScreenId);
+                        concreteSnap->calculateResnapEntriesFromAutotileOrder(windowOrder, resnapScreenId);
                     allResnapEntries.append(entries);
                 }
                 // Batch float-restore entries into the resnap signal:
@@ -356,7 +357,7 @@ void Daemon::initializeAutotile()
                 allResnapEntries.append(restoreEntries);
 
                 // Emit ONE batched signal (suppresses one OSD regardless of screen count)
-                m_snapEngine->emitBatchedResnap(allResnapEntries);
+                concreteSnap->emitBatchedResnap(allResnapEntries);
                 m_suppressResnapOsd = allResnapEntries.isEmpty() ? 0 : 1;
             }
         });
@@ -498,7 +499,7 @@ void Daemon::connectLayoutSignals()
                 // first toggle to autotile has perceptible lag because the daemon can't
                 // process incoming tiling requests until the OSD handler returns.
                 if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_autotileEngine && m_overlayService) {
-                    QString algorithmId = m_autotileEngine->algorithm();
+                    QString algorithmId = m_autotileEngine->algorithmId();
                     QString screenId = m_unifiedLayoutController->currentScreenName();
                     showAlgorithmOsdDeferred(algorithmId, algorithmName, screenId);
                 }
@@ -670,7 +671,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
         WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (floating) {
             m_windowTrackingAdaptor->setWindowFloating(windowId, true);
-            m_autotileEngine->markAutotileFloated(windowId);
+            m_autotileEngine->markModeSpecificFloated(windowId);
             // Clear stale snap-mode pre-float state ONLY when the pre-float data
             // is for the SAME screen (autotile re-float on the same screen).
             // When the window crosses from a snap VS (e.g. vs:0) to an autotile VS
@@ -686,7 +687,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
             bool wasFloating = wts->isWindowFloating(windowId);
             bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
             if (wasFloating && !wasAutotileFloated) {
-                m_snapEngine->saveSnapFloating(windowId);
+                m_snapEngine->saveModeFloat(windowId);
                 qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(autotile clearing stale snap-float)";
             }
             m_windowTrackingAdaptor->setWindowFloating(windowId, false);
@@ -730,7 +731,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
-        m_autotileEngine->markAutotileFloated(windowId);
+        m_autotileEngine->markModeSpecificFloated(windowId);
         // Mirror syncAutotileFloatState's cross-VS pre-float preservation so
         // zone-restore on return to the snap VS still works.
         const QString preFloatScreen = wts->preFloatScreen(windowId);
@@ -741,7 +742,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         bool wasFloating = wts->isWindowFloating(windowId);
         bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
         if (wasFloating && !wasAutotileFloated) {
-            m_snapEngine->saveSnapFloating(windowId);
+            m_snapEngine->saveModeFloat(windowId);
             qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(passive sync clearing stale snap-float)";
         }
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
@@ -763,7 +764,7 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         // signal which the effect doesn't need (it already processed
         // the float from the windowsTileRequested batch).
         wts->setWindowFloating(windowId, true);
-        m_autotileEngine->markAutotileFloated(windowId);
+        m_autotileEngine->markModeSpecificFloated(windowId);
         // Same cross-VS preservation logic as the single-window handler
         const QString preFloatScreen = wts->preFloatScreen(windowId);
         if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {

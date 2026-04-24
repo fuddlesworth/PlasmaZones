@@ -12,14 +12,14 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorZones/ZoneDetector.h>
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngineApi/IPlacementState.h>
 #include "../../dbus/windowtrackingadaptor.h"
 #include "helpers.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorTiles/TilingState.h>
 #include "../config/settings.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -232,7 +232,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                PhosphorTiles::TilingState* state = m_autotileEngine->tilingStateForScreen(screenId);
+                const auto* state = m_autotileEngine->stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                     masterCount = state->masterCount();

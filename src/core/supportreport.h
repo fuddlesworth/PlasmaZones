@@ -17,9 +17,11 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
-namespace PlasmaZones {
+namespace PhosphorEngineApi {
+class IPlacementEngine;
+}
 
-class AutotileEngine;
+namespace PlasmaZones {
 
 /**
  * @brief Generates a redacted support report for bug reports and discussions
@@ -74,7 +76,8 @@ public:
      * @brief Collect a thread-safe snapshot from QObject pointers (main thread only)
      */
     static Snapshot collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
-                                    PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine);
+                                    PhosphorZones::LayoutRegistry* layoutManager,
+                                    PhosphorEngineApi::IPlacementEngine* autotileEngine);
 
     /**
      * @brief Generate a report from a pre-collected snapshot (thread-safe)
@@ -100,8 +103,8 @@ public:
      * @return Markdown-formatted support report
      */
     static QString generate(Phosphor::Screens::ScreenManager* screenManager,
-                            PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
-                            int sinceMinutes = 30);
+                            PhosphorZones::LayoutRegistry* layoutManager,
+                            PhosphorEngineApi::IPlacementEngine* autotileEngine, int sinceMinutes = 30);
 
     /**
      * @brief Redact home directory paths from a string

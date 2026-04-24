@@ -8,6 +8,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QPoint>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -225,6 +226,37 @@ public:
     {
         Q_UNUSED(windowId)
         return false;
+    }
+
+    /// Whether the window is actively tiled (engine-owned, non-floating).
+    /// Distinct from isWindowTracked (which includes floating windows).
+    virtual bool isWindowTiled(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
+
+    /// Adopt an untracked window as floating on this engine's screen.
+    /// Used when a window is dragged from one engine's screen to another.
+    virtual void adoptWindowAsFloating(const QString& windowId, const QString& screenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(screenId)
+    }
+
+    /// Compute the insert index for a cursor position on a managed screen.
+    /// Returns -1 if the screen has no active state.
+    virtual int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        return -1;
+    }
+
+    /// Update the target insert index for an active drag-insert preview.
+    virtual void updateDragInsertPreview(int insertIndex)
+    {
+        Q_UNUSED(insertIndex)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
