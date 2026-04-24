@@ -13,7 +13,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "core/interfaces.h"
+#include "core/isettings.h"
 #include "core/logging.h"
 #include <QGuiApplication>
 #include <QScreen>

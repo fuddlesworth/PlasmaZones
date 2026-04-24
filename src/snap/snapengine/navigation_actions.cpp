@@ -27,7 +27,7 @@
 #include <PhosphorZones/SnapState.h>
 
 #include "../../config/settings.h"
-#include "../../core/interfaces.h"
+#include "../../core/isettings.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/logging.h"

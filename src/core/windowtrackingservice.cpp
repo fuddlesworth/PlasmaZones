@@ -10,6 +10,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "virtualdesktopmanager.h"
 #include "utils.h"
 #include "logging.h"
@@ -434,25 +435,12 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 
 void WindowTrackingService::sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones)
 {
-    std::stable_sort(zones.begin(), zones.end(), [](PhosphorZones::Zone* a, PhosphorZones::Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber())
-            return a->zoneNumber() < b->zoneNumber();
-        return a->id() < b->id();
-    });
+    PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
 }
 
 QHash<QString, int> WindowTrackingService::buildZonePositionMap(PhosphorZones::Layout* layout)
 {
-    QHash<QString, int> map;
-    if (!layout) {
-        return map;
-    }
-    QVector<PhosphorZones::Zone*> zones = layout->zones();
-    sortZonesByNumber(zones);
-    for (int i = 0; i < zones.size(); ++i) {
-        map[zones[i]->id().toString()] = i + 1;
-    }
-    return map;
+    return PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

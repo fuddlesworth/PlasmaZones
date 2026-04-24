@@ -4,7 +4,7 @@
 #include "../SnapEngine.h"
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/AssignmentEntry.h>
-#include "core/interfaces.h"
+#include "core/isettings.h"
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
