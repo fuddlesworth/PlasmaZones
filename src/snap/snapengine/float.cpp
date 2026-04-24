@@ -6,8 +6,6 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/logging.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowtrackingservice.h"
 
 namespace PlasmaZones {
 

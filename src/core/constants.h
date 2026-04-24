@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorEngineApi/PerScreenKeys.h>
+
 #include <QColor>
 #include <QLatin1String>
 #include <QMetaType>
@@ -168,33 +170,7 @@ inline constexpr QLatin1String Region{"region"};
 inline constexpr QLatin1String Screens{"screens"};
 }
 
-/**
- * @brief Per-screen override key names (PascalCase — distinct from camelCase JSON keys)
- *
- * These are the keys used in PerScreenConfigResolver's override map and in
- * NavigationController's shortcut handlers. They match the key names written
- * by the per-screen config system in perscreen.cpp (with the "Autotile" prefix
- * stripped during lookup).
- */
-namespace PerScreenKeys {
-inline constexpr QLatin1String SplitRatio{"SplitRatio"};
-inline constexpr QLatin1String SplitRatioStep{"SplitRatioStep"};
-inline constexpr QLatin1String MasterCount{"MasterCount"};
-inline constexpr QLatin1String Algorithm{"Algorithm"};
-inline constexpr QLatin1String MaxWindows{"MaxWindows"};
-inline constexpr QLatin1String InnerGap{"InnerGap"};
-inline constexpr QLatin1String OuterGap{"OuterGap"};
-inline constexpr QLatin1String UsePerSideOuterGap{"UsePerSideOuterGap"};
-inline constexpr QLatin1String FocusNewWindows{"FocusNewWindows"};
-inline constexpr QLatin1String SmartGaps{"SmartGaps"};
-inline constexpr QLatin1String InsertPosition{"InsertPosition"};
-inline constexpr QLatin1String FocusFollowsMouse{"FocusFollowsMouse"};
-inline constexpr QLatin1String RespectMinimumSize{"RespectMinimumSize"};
-inline constexpr QLatin1String HideTitleBars{"HideTitleBars"};
-inline constexpr QLatin1String AnimationsEnabled{"AnimationsEnabled"};
-inline constexpr QLatin1String AnimationDuration{"AnimationDuration"};
-inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
-}
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 /**
  * @brief Synthetic zone ID prefix used by the zone selector overlay

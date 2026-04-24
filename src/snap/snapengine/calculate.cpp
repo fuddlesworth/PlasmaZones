@@ -13,11 +13,8 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "core/interfaces.h"
+#include "core/isettings.h"
 #include "core/logging.h"
-#include "core/utils.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowtrackingservice.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
@@ -62,8 +59,8 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
 
         // Validate that the target screen exists. Use Phosphor::Screens::ScreenManager::resolvePhysicalScreen
         // which properly handles virtual screen IDs (resolving to backing QScreen*).
-        QScreen* screen = (screenManager ? screenManager->physicalQScreenFor(effectiveScreen)
-                                         : Utils::findScreenAtPosition(QPoint(0, 0)));
+        QScreen* screen =
+            (screenManager ? screenManager->physicalQScreenFor(effectiveScreen) : QGuiApplication::primaryScreen());
         if (!screen) {
             qCInfo(lcCore) << "App rule: screen" << effectiveScreen << "not found for" << windowClass
                            << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
@@ -130,7 +127,7 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
     if (screenManager) {
         screenIds = screenManager->effectiveScreenIds();
     } else {
-        const auto screens = Utils::allScreens();
+        const auto screens = QGuiApplication::screens();
         for (auto* s : screens) {
             screenIds.append(Phosphor::Screens::ScreenIdentity::identifierFor(s));
         }

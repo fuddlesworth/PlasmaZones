@@ -13,13 +13,11 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "core/constants.h"
 #include "core/geometryutils.h"
-#include "core/interfaces.h"
+#include "core/isettings.h"
 #include "core/logging.h"
-#include "core/utils.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowtrackingservice.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
@@ -72,7 +70,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         }
 
         QVector<PhosphorZones::Zone*> newZones = newLayout->zones();
-        WindowTrackingService::sortZonesByNumber(newZones);
+        PhosphorZones::LayoutUtils::sortZonesByNumber(newZones);
         const int newZoneCount = newZones.size();
 
         for (const ResnapEntry* entry : screenIt.value()) {
@@ -166,7 +164,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             // virtual children — belongsToPhysicalScreen handles both cases.
             const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
                 ? Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)
-                : Utils::belongsToPhysicalScreen(screenId, screenFilter);
+                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
             if (!match) {
                 continue;
             }
@@ -203,7 +201,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
                 return true;
             return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
                 ? Phosphor::Screens::ScreenIdentity::screensMatch(screen, screenFilter)
-                : Utils::belongsToPhysicalScreen(screen, screenFilter);
+                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
         };
         for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
             QString screen = screenAssignments.value(it.key());
@@ -233,7 +231,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
     }
 
     QVector<PhosphorZones::Zone*> zones = layout->zones();
-    WindowTrackingService::sortZonesByNumber(zones);
+    PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
 
     const int zoneCount = zones.size();
     const int windowCount = autotileWindowOrder.size();
@@ -355,7 +353,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
     }
 
     QVector<PhosphorZones::Zone*> zones = layout->zones();
-    WindowTrackingService::sortZonesByNumber(zones);
+    PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
 
     // Filter occupancy by the current virtual desktop so windows parked on other
     // desktops don't make zones appear occupied on the current-desktop batch snap.
@@ -364,8 +362,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
 
     // Resolve physical screen for zone geometry calculation
     auto* screenManager = m_windowTracker->screenManager();
-    QScreen* screen =
-        (screenManager ? screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+    QScreen* screen = (screenManager ? screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
     if (!screen) {
         return result;
     }
@@ -445,7 +442,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
 
         // Get zones sorted by zone number
         QVector<PhosphorZones::Zone*> zones = layout->zones();
-        WindowTrackingService::sortZonesByNumber(zones);
+        PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
 
         // Build zone ID -> index map (with and without braces for format-agnostic matching)
         QHash<QString, int> zoneIdToIndex;
@@ -487,7 +484,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         // Resolve physical screen for zone geometry calculation
         auto* screenManager = m_windowTracker->screenManager();
         QScreen* screen =
-            (screenManager ? screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+            (screenManager ? screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
         if (!screen) {
             continue;
         }

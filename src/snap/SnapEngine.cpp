@@ -7,8 +7,6 @@
 #include "dbus/snapnavigationtargets.h"
 #include "dbus/windowtrackingadaptor.h"
 #include "dbus/zonedetectionadaptor.h"
-#include "core/virtualdesktopmanager.h"
-#include "core/windowtrackingservice.h"
 #include "core/logging.h"
 
 namespace PlasmaZones {
@@ -17,9 +15,10 @@ namespace PlasmaZones {
 // tests deliberately pass nullptr to construct an engine with minimal parents
 // for testing peripheral classes (adaptors, bridges) — every method that
 // dereferences a dependency guards it locally. Do not Q_ASSERT here.
-SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
-                       PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                       QObject* parent)
+SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
+                       PhosphorEngineApi::IWindowTrackingService* windowTracker,
+                       PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                       PhosphorEngineApi::IVirtualDesktopManager* vdm, QObject* parent)
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)

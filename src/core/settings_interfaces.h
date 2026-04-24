@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "enums.h"
+#include <PhosphorEngineApi/IGeometrySettings.h>
 #include <QString>
 #include <QStringList>
 #include <QSet>
@@ -82,10 +83,16 @@ inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 } // namespace PerScreenAutotileKey
 
-/**
- * Per-screen snapping override key constants.
- */
 namespace PerScreenSnappingKey {
+
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGap;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapBottom;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapLeft;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapRight;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapTop;
+using PhosphorEngineApi::PerScreenSnappingKey::UsePerSideOuterGap;
+using PhosphorEngineApi::PerScreenSnappingKey::ZonePadding;
+
 inline constexpr const char SnapAssistEnabled[] = "SnapAssistEnabled";
 inline constexpr const char ZoneSelectorEnabled[] = "ZoneSelectorEnabled";
 inline constexpr const char ZoneSelectorTriggerDistance[] = "ZoneSelectorTriggerDistance";
@@ -95,14 +102,6 @@ inline constexpr const char ZoneSelectorSizeMode[] = "ZoneSelectorSizeMode";
 inline constexpr const char ZoneSelectorMaxRows[] = "ZoneSelectorMaxRows";
 inline constexpr const char ZoneSelectorPreviewWidth[] = "ZoneSelectorPreviewWidth";
 inline constexpr const char ZoneSelectorPreviewHeight[] = "ZoneSelectorPreviewHeight";
-// Geometry override keys
-inline constexpr const char ZonePadding[] = "ZonePadding";
-inline constexpr const char OuterGap[] = "OuterGap";
-inline constexpr const char UsePerSideOuterGap[] = "UsePerSideOuterGap";
-inline constexpr const char OuterGapTop[] = "OuterGapTop";
-inline constexpr const char OuterGapBottom[] = "OuterGapBottom";
-inline constexpr const char OuterGapLeft[] = "OuterGapLeft";
-inline constexpr const char OuterGapRight[] = "OuterGapRight";
 } // namespace PerScreenSnappingKey
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -231,24 +230,17 @@ public:
  * - Settings: values are clamped to [0, INT_MAX]; -1 is not valid (global config always has a value)
  * - PhosphorZones::Layout: -1 sentinel means "use global setting"; >= 0 is a per-layout override
  */
-class PLASMAZONES_EXPORT IZoneGeometrySettings
+class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngineApi::IGeometrySettings
 {
 public:
-    virtual ~IZoneGeometrySettings() = default;
+    ~IZoneGeometrySettings() override = default;
 
-    virtual int zonePadding() const = 0;
     virtual void setZonePadding(int padding) = 0;
-    virtual int outerGap() const = 0;
     virtual void setOuterGap(int gap) = 0;
-    virtual bool usePerSideOuterGap() const = 0;
     virtual void setUsePerSideOuterGap(bool enabled) = 0;
-    virtual int outerGapTop() const = 0;
     virtual void setOuterGapTop(int gap) = 0;
-    virtual int outerGapBottom() const = 0;
     virtual void setOuterGapBottom(int gap) = 0;
-    virtual int outerGapLeft() const = 0;
     virtual void setOuterGapLeft(int gap) = 0;
-    virtual int outerGapRight() const = 0;
     virtual void setOuterGapRight(int gap) = 0;
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
@@ -258,9 +250,6 @@ public:
     virtual void setMinimumZoneSizePx(int size) = 0;
     virtual int minimumZoneDisplaySizePx() const = 0;
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
-    // Per-screen snapping overrides are declared on ISettings alongside the
-    // autotile / zone-selector per-screen APIs so all three share one home.
-    // See PlasmaZones::ISettings in core/interfaces.h.
 };
 
 /**

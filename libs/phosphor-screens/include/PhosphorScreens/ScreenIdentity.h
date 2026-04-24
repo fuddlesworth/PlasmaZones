@@ -165,6 +165,13 @@ PHOSPHORSCREENS_EXPORT QString nameForId(const QString& screenId);
  */
 PHOSPHORSCREENS_EXPORT bool screensMatch(const QString& a, const QString& b);
 
+/// Whether @p storedScreenId belongs to the physical screen @p physicalScreenId.
+/// Handles virtual screen IDs: if stored is virtual, extracts its physical parent
+/// and compares via screensMatch() so connector-name / EDID-ID equivalence is
+/// honored (e.g. "DP-2" vs "Dell:U2722D:115107"). If physicalScreenId is itself
+/// virtual, returns false (misuse — the function is "stored belongs to PHYSICAL X").
+PHOSPHORSCREENS_EXPORT bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId);
+
 } // namespace ScreenIdentity
 
 } // namespace Phosphor::Screens

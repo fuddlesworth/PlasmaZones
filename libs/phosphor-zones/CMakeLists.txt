@@ -97,6 +97,7 @@ set(phosphorzones_SRCS
     src/layoutregistry_assignments.cpp
     src/layoutregistry_persistence.cpp
     src/snapstate.cpp
+    src/geometryutils.cpp
 )
 
 add_library(PhosphorZones SHARED

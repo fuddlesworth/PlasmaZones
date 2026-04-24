@@ -432,28 +432,8 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 // Shared Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones)
-{
-    std::stable_sort(zones.begin(), zones.end(), [](PhosphorZones::Zone* a, PhosphorZones::Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber())
-            return a->zoneNumber() < b->zoneNumber();
-        return a->id() < b->id();
-    });
-}
-
-QHash<QString, int> WindowTrackingService::buildZonePositionMap(PhosphorZones::Layout* layout)
-{
-    QHash<QString, int> map;
-    if (!layout) {
-        return map;
-    }
-    QVector<PhosphorZones::Zone*> zones = layout->zones();
-    sortZonesByNumber(zones);
-    for (int i = 0; i < zones.size(); ++i) {
-        map[zones[i]->id().toString()] = i + 1;
-    }
-    return map;
-}
+// sortZonesByNumber / buildZonePositionMap removed — callers should use
+// PhosphorZones::LayoutUtils directly.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Out-of-line accessors delegating to SnapState

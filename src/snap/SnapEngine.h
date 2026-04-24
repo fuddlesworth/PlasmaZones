@@ -5,6 +5,8 @@
 
 #include "plasmazones_export.h"
 #include "core/types.h"
+#include <PhosphorEngineApi/IVirtualDesktopManager.h>
+#include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
@@ -37,9 +39,7 @@ class AutotileEngine;
 class ISettings;
 
 class SnapNavigationTargetResolver;
-class VirtualDesktopManager;
 class WindowTrackingAdaptor;
-class WindowTrackingService;
 class ZoneDetectionAdaptor;
 
 /**
@@ -61,9 +61,10 @@ class PLASMAZONES_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineB
     Q_OBJECT
 
 public:
-    explicit SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
-                        QObject* parent = nullptr);
+    explicit SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
+                        PhosphorEngineApi::IWindowTrackingService* windowTracker,
+                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                        PhosphorEngineApi::IVirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~SnapEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -453,11 +454,11 @@ private:
                         SnapIntent intent);
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    WindowTrackingService* m_windowTracker = nullptr;
+    PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     ISettings* m_settings = nullptr;
-    VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<AutotileEngine> m_autotileEngine;
     QPointer<ZoneDetectionAdaptor> m_zoneDetectionAdaptor;
     // Back-reference to WindowTrackingAdaptor for state SnapEngine reads
