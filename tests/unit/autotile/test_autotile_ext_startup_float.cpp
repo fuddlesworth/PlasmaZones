@@ -60,7 +60,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         engine.windowOpened(QStringLiteral("win1"), screen);
         engine.windowOpened(QStringLiteral("win2"), screen);
@@ -84,7 +84,7 @@ private Q_SLOTS:
         engine.tilingStateForScreen(screen);
         engine.setInitialWindowOrder(screen, order);
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         engine.setAutotileScreens({screen});
         QCoreApplication::processEvents();

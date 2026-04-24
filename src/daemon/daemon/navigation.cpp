@@ -16,9 +16,8 @@
 #include "../../dbus/snapadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "../../snap/SnapEngine.h"
 #include "../modetracker.h"
 #include <QScreen>
 
@@ -56,7 +55,7 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
     if (m_screenModeRouter) {
         return m_screenModeRouter->isAutotileMode(screenId);
     }
-    return m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId);
+    return m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

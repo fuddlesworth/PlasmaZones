@@ -38,15 +38,18 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::Scre
     // Connect engine signals to D-Bus signals
     connect(m_engine, &AutotileEngine::enabledChanged, this, &AutotileAdaptor::enabledChanged);
     connect(m_engine, &AutotileEngine::autotileScreensChanged, this, &AutotileAdaptor::autotileScreensChanged);
-    connect(m_engine, &AutotileEngine::algorithmChanged, this, &AutotileAdaptor::algorithmChanged);
-    connect(m_engine, &AutotileEngine::tilingChanged, this, &AutotileAdaptor::tilingChanged);
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged, this,
+            &AutotileAdaptor::algorithmChanged);
+    // Internal signal is placementChanged (engine-generic); D-Bus name stays tilingChanged
+    // for backward compatibility with existing KWin effect / third-party consumers.
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, this, &AutotileAdaptor::tilingChanged);
     connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::activateWindowRequested, this,
             &AutotileAdaptor::focusWindowRequested);
     // The in-process engine signal has a 2nd QSet<QString> argument for
     // daemon-side bookkeeping; strip it before forwarding over D-Bus since
     // QSet is not a D-Bus-marshallable type.
-    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this,
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::windowsReleased, this,
             [this](const QStringList& windowIds, const QSet<QString>& /*releasedScreenIds*/) {
                 Q_EMIT windowsReleasedFromTiling(windowIds);
             });

@@ -5,7 +5,9 @@
 
 #include "plasmazones_export.h"
 #include <PhosphorEngineApi/NavigationContext.h>
+#include <QHashFunctions>
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QRect>
@@ -13,6 +15,29 @@
 namespace PlasmaZones {
 
 using NavigationContext = PhosphorEngineApi::NavigationContext;
+
+/**
+ * @brief Composite key for per-desktop/activity tiling state lookup
+ *
+ * desktop=1 (matching m_currentDesktop default) and empty activity represent
+ * the initial desktop/activity context. Always uses explicit desktop numbers.
+ */
+struct TilingStateKey
+{
+    QString screenId;
+    int desktop = 1;
+    QString activity;
+
+    bool operator==(const TilingStateKey& other) const
+    {
+        return screenId == other.screenId && desktop == other.desktop && activity == other.activity;
+    }
+};
+
+inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
+{
+    return qHashMulti(seed, key.screenId, key.desktop, key.activity);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared Types - Parameter Objects for Complex Method Signatures

@@ -22,7 +22,7 @@ using namespace PlasmaZones;
  * These tests run WITHOUT a Phosphor::Screens::ScreenManager (nullptr), which means the
  * pre-validation gate in retileScreen is skipped. The retry mechanism is
  * tested indirectly via the public API surface. recalculateLayout's bool
- * return is tested via observable side effects (tilingChanged emission).
+ * return is tested via observable side effects (placementChanged emission).
  */
 class TestAutotileEngineRetry : public QObject
 {
@@ -48,10 +48,10 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QCoreApplication::processEvents(); // drain queued retile from setAutotileScreens
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.retile(QString());
 
-        // Empty string retiles all autotile screens — tilingChanged fires once
+        // Empty string retiles all autotile screens — placementChanged fires once
         QCOMPARE(tilingSpy.count(), 1);
     }
 
@@ -79,7 +79,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // Unfloat — should clear cached min-size
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.unfloatWindow(windowId);
         QCoreApplication::processEvents();
 
@@ -110,7 +110,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // Report same min-size — should be a no-op (cache still has 200x100)
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 200, 100);
         QCoreApplication::processEvents();
 
@@ -159,11 +159,11 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QCoreApplication::processEvents(); // drain queued retile from setAutotileScreens
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.retile(screenName);
 
         // No windows → recalculateLayout returns true (empty layout) →
-        // applyTiling runs → tilingChanged emits
+        // applyTiling runs → placementChanged emits
         QCOMPARE(tilingSpy.count(), 1);
     }
 
@@ -180,7 +180,7 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         QCoreApplication::processEvents(); // drain queued retile from setAutotileScreens
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.retile(QStringLiteral("UnknownScreen"));
 
         QCOMPARE(tilingSpy.count(), 0);

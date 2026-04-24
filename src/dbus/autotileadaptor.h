@@ -343,7 +343,7 @@ Q_SIGNALS:
      * to their pre-autotile geometry or leave them at their current position.
      *
      * NOTE: This is the D-Bus-facing signal and carries only @p windowIds —
-     * the in-process `AutotileEngine::windowsReleasedFromTiling` signal
+     * the in-process `PlacementEngineBase::windowsReleased` signal
      * additionally carries a `QSet<QString>` of released screen IDs for
      * internal daemon wiring. QSet is not marshallable over D-Bus, so the
      * adaptor strips that second argument before forwarding.

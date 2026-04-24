@@ -384,6 +384,7 @@ set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/vulkan_support.cpp
     daemon/daemon.cpp
+    daemon/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/navigation.cpp

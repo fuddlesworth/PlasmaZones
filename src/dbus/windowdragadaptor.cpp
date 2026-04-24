@@ -23,7 +23,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/constants.h"
 #include "../config/settings.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

@@ -16,13 +16,14 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/settings_interfaces.h"
 #include "../../core/logging.h"
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QTimer>
 
 namespace PlasmaZones {
 
-DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const AutotileEngine* autotileEngine,
+DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings,
+                                                const PhosphorEngineApi::IPlacementEngine* autotileEngine,
                                                 const QString& windowId, const QString& screenId, int curDesktop,
                                                 const QString& curActivity)
 {
@@ -50,7 +51,7 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     //    window within its stack on drop instead. Clear immediateFloatOnStart
     //    so both the effect fast path and its async reply handler skip the
     //    handleDragToFloat call.
-    if (autotileEngine && !screenId.isEmpty() && autotileEngine->isAutotileScreen(screenId)) {
+    if (autotileEngine && !screenId.isEmpty() && autotileEngine->isActiveOnScreen(screenId)) {
         policy.bypassReason = DragBypassReason::AutotileScreen;
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
         const bool reorderMode = settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;

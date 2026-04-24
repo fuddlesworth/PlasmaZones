@@ -67,9 +67,11 @@ public:
     QJsonObject serializeBaseState() const;
     void deserializeBaseState(const QJsonObject& state);
 
+    // Public dtor required for unique_ptr<PlacementEngineBase> in Daemon.
+    ~PlacementEngineBase() override;
+
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
-    ~PlacementEngineBase() override;
 
     virtual void onWindowClaimed(const QString& windowId) = 0;
     virtual void onWindowReleased(const QString& windowId) = 0;
@@ -84,6 +86,22 @@ Q_SIGNALS:
                             const QString& targetId, const QString& screenId);
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     void activateWindowRequested(const QString& windowId);
+
+    /// Emitted to sync floating state without restoring geometry.
+    /// Passive state-sync: engine-internal divergence correction.
+    void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
+
+    /// Emitted when overflow windows are batch-floated during applyTiling.
+    void windowsBatchFloated(const QStringList& windowIds, const QString& screenId);
+
+    /// Emitted when the active tiling algorithm changes.
+    void algorithmChanged(const QString& algorithmId);
+
+    /// Emitted when the placement layout changes for a screen.
+    void placementChanged(const QString& screenId);
+
+    /// Emitted when windows are released from engine management.
+    void windowsReleased(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
