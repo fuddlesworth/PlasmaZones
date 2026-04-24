@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Central controller for the standalone settings application.
-// Manages page navigation, layout CRUD (via D-Bus), screen info,
-// editor config, and owns the shared Settings instance.
+// Manages page navigation, layout CRUD (via D-Bus), screen info, and owns
+// the shared Settings instance. Per-page Q_PROPERTY surfaces are split out
+// into page-scoped sub-controllers (EditorPageController, …) hung off this
+// class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 
 #pragma once
 
@@ -17,7 +19,6 @@
 #include "../core/enums.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
-#include "../core/modifierutils.h"
 
 namespace PhosphorTiles {
 class AlgorithmRegistry;
@@ -33,6 +34,18 @@ class ScriptedAlgorithmLoader;
 #include <QTimer>
 #include <memory>
 #include <optional>
+
+#include "algorithmservice.h"
+#include "editorpagecontroller.h"
+#include "generalpagecontroller.h"
+#include "snappingappearancecontroller.h"
+#include "snappingbehaviorcontroller.h"
+#include "snappingeffectscontroller.h"
+#include "snappingzoneselectorcontroller.h"
+#include "stagingservice.h"
+#include "tilingalgorithmcontroller.h"
+#include "tilingappearancecontroller.h"
+#include "tilingbehaviorcontroller.h"
 
 namespace PlasmaZones {
 
@@ -61,94 +74,19 @@ class SettingsController : public QObject
     // Screen management
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
 
-    // Editor settings
-    Q_PROPERTY(QString editorDuplicateShortcut READ editorDuplicateShortcut WRITE setEditorDuplicateShortcut NOTIFY
-                   editorDuplicateShortcutChanged)
-    Q_PROPERTY(QString editorSplitHorizontalShortcut READ editorSplitHorizontalShortcut WRITE
-                   setEditorSplitHorizontalShortcut NOTIFY editorSplitHorizontalShortcutChanged)
-    Q_PROPERTY(QString editorSplitVerticalShortcut READ editorSplitVerticalShortcut WRITE setEditorSplitVerticalShortcut
-                   NOTIFY editorSplitVerticalShortcutChanged)
-    Q_PROPERTY(
-        QString editorFillShortcut READ editorFillShortcut WRITE setEditorFillShortcut NOTIFY editorFillShortcutChanged)
-    Q_PROPERTY(bool editorGridSnappingEnabled READ editorGridSnappingEnabled WRITE setEditorGridSnappingEnabled NOTIFY
-                   editorGridSnappingEnabledChanged)
-    Q_PROPERTY(bool editorEdgeSnappingEnabled READ editorEdgeSnappingEnabled WRITE setEditorEdgeSnappingEnabled NOTIFY
-                   editorEdgeSnappingEnabledChanged)
-    Q_PROPERTY(qreal editorSnapIntervalX READ editorSnapIntervalX WRITE setEditorSnapIntervalX NOTIFY
-                   editorSnapIntervalXChanged)
-    Q_PROPERTY(int editorSnapOverrideModifier READ editorSnapOverrideModifier WRITE setEditorSnapOverrideModifier NOTIFY
-                   editorSnapOverrideModifierChanged)
-    Q_PROPERTY(bool fillOnDropEnabled READ fillOnDropEnabled WRITE setFillOnDropEnabled NOTIFY fillOnDropEnabledChanged)
-    Q_PROPERTY(
-        int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
-    Q_PROPERTY(qreal editorSnapIntervalY READ editorSnapIntervalY WRITE setEditorSnapIntervalY NOTIFY
-                   editorSnapIntervalYChanged)
+    // Editor page — properties live on EditorPageController, exposed here as a
+    // child QObject so QML reads `settingsController.editorPage.duplicateShortcut`.
+    Q_PROPERTY(EditorPageController* editorPage READ editorPage CONSTANT)
 
-    // Trigger configuration
-    Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
-                   alwaysActivateOnDragChanged)
-    Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
-                   dragActivationTriggersChanged)
-    Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
-    Q_PROPERTY(
-        QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
-    Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
-    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
-                   snapAssistTriggersChanged)
-    Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
-    Q_PROPERTY(bool alwaysReinsertIntoStack READ alwaysReinsertIntoStack WRITE setAlwaysReinsertIntoStack NOTIFY
-                   alwaysReinsertIntoStackChanged)
-    Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
-                   setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
-    Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
-
-    // Rendering backend info
-    Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
-    Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
-    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
-
-    // Cava detection
-    Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
-
-    // Settings bounds (single source of truth from ConfigDefaults)
-    Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
-    Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
-    Q_PROPERTY(int gapMax READ gapMax CONSTANT)
-    Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorTriggerDistanceMin READ zoneSelectorTriggerDistanceMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorTriggerDistanceMax READ zoneSelectorTriggerDistanceMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewWidthMin READ zoneSelectorPreviewWidthMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewWidthMax READ zoneSelectorPreviewWidthMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewHeightMin READ zoneSelectorPreviewHeightMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorPreviewHeightMax READ zoneSelectorPreviewHeightMax CONSTANT)
-    Q_PROPERTY(int zoneSelectorGridColumnsMax READ zoneSelectorGridColumnsMax CONSTANT)
-    Q_PROPERTY(int shaderFrameRateMin READ shaderFrameRateMin CONSTANT)
-    Q_PROPERTY(int shaderFrameRateMax READ shaderFrameRateMax CONSTANT)
-    Q_PROPERTY(int audioSpectrumBarCountMin READ audioSpectrumBarCountMin CONSTANT)
-    Q_PROPERTY(int audioSpectrumBarCountMax READ audioSpectrumBarCountMax CONSTANT)
-    Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
-    Q_PROPERTY(int autotileBorderWidthMax READ autotileBorderWidthMax CONSTANT)
-    Q_PROPERTY(int autotileBorderRadiusMax READ autotileBorderRadiusMax CONSTANT)
-    Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
-    Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
-    Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
-    Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
-    Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
-    Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
-    Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
-    Q_PROPERTY(int gapMin READ gapMin CONSTANT)
-    Q_PROPERTY(int adjacentThresholdMin READ adjacentThresholdMin CONSTANT)
-    Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
-    Q_PROPERTY(int autotileBorderWidthMin READ autotileBorderWidthMin CONSTANT)
-    Q_PROPERTY(int autotileBorderRadiusMin READ autotileBorderRadiusMin CONSTANT)
-    Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
-    Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
-    Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
-    Q_PROPERTY(qreal autotileSplitRatioStepMin READ autotileSplitRatioStepMin CONSTANT)
-    Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
-    Q_PROPERTY(int animationMinDistanceMin READ animationMinDistanceMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorGridColumnsMin READ zoneSelectorGridColumnsMin CONSTANT)
-    Q_PROPERTY(int zoneSelectorMaxRowsMin READ zoneSelectorMaxRowsMin CONSTANT)
+    // Snapping/Tiling behavior pages — trigger surfaces moved to per-page controllers.
+    Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
+    Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
+    Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
+    Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
+    Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
+    Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
+    Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
+    Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -229,6 +167,11 @@ public:
     }
     Q_INVOKABLE void markWhatsNewSeen();
 
+private:
+    /// Highest entry version in m_whatsNewEntries, or empty if no entries.
+    QString latestWhatsNewVersion() const;
+
+public:
     // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
@@ -400,230 +343,43 @@ public:
     Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
                                        int mode);
 
-    // ── Editor settings (delegated to Settings class) ─────────────────────
-    QString editorDuplicateShortcut() const;
-    QString editorSplitHorizontalShortcut() const;
-    QString editorSplitVerticalShortcut() const;
-    QString editorFillShortcut() const;
-    bool editorGridSnappingEnabled() const;
-    bool editorEdgeSnappingEnabled() const;
-    qreal editorSnapIntervalX() const;
-    qreal editorSnapIntervalY() const;
-    int editorSnapOverrideModifier() const;
-    bool fillOnDropEnabled() const;
-    int fillOnDropModifier() const;
-
-    void setEditorDuplicateShortcut(const QString& shortcut);
-    void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    void setEditorSplitVerticalShortcut(const QString& shortcut);
-    void setEditorFillShortcut(const QString& shortcut);
-    void setEditorGridSnappingEnabled(bool enabled);
-    void setEditorEdgeSnappingEnabled(bool enabled);
-    void setEditorSnapIntervalX(qreal interval);
-    void setEditorSnapIntervalY(qreal interval);
-    void setEditorSnapOverrideModifier(int mod);
-    void setFillOnDropEnabled(bool enabled);
-    void setFillOnDropModifier(int mod);
-
-    Q_INVOKABLE void resetEditorDefaults();
-
-    // ── Trigger configuration ────────────────────────────────────────────────
-    bool alwaysActivateOnDrag() const;
-    bool alwaysReinsertIntoStack() const;
-    QVariantList dragActivationTriggers() const;
-    QVariantList defaultDragActivationTriggers() const;
-    QVariantList zoneSpanTriggers() const;
-    QVariantList defaultZoneSpanTriggers() const;
-    QVariantList snapAssistTriggers() const;
-    QVariantList defaultSnapAssistTriggers() const;
-    QVariantList autotileDragInsertTriggers() const;
-    QVariantList defaultAutotileDragInsertTriggers() const;
-
-    void setAlwaysActivateOnDrag(bool enabled);
-    void setAlwaysReinsertIntoStack(bool enabled);
-    void setDragActivationTriggers(const QVariantList& triggers);
-    void setZoneSpanTriggers(const QVariantList& triggers);
-    void setSnapAssistTriggers(const QVariantList& triggers);
-    void setAutotileDragInsertTriggers(const QVariantList& triggers);
-
-    // ── Rendering backend ─────────────────────────────────────────────────────
-    QStringList renderingBackendOptions() const
+    // ── Page sub-controllers ─────────────────────────────────────────────
+    EditorPageController* editorPage() const
     {
-        return PlasmaZones::ConfigDefaults::renderingBackendOptions();
+        return m_editorPage;
     }
-
-    QStringList renderingBackendDisplayNames() const
+    SnappingBehaviorController* snappingBehaviorPage() const
     {
-        return m_renderingBackendDisplayNames;
+        return m_snappingBehaviorPage;
     }
-
-    // Backend value at settings app launch — survives page recreation so the
-    // "restart required" InlineMessage stays visible after navigating away and back.
-    QString startupRenderingBackend() const
+    TilingBehaviorController* tilingBehaviorPage() const
     {
-        return m_startupRenderingBackend;
+        return m_tilingBehaviorPage;
     }
-
-    // ── Cava detection ───────────────────────────────────────────────────────
-    bool cavaAvailable() const;
-
-    // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
-    int borderWidthMax() const
+    SnappingZoneSelectorController* snappingZoneSelectorPage() const
     {
-        return ConfigDefaults::borderWidthMax();
+        return m_snappingZoneSelectorPage;
     }
-    int borderRadiusMax() const
+    SnappingAppearanceController* snappingAppearancePage() const
     {
-        return ConfigDefaults::borderRadiusMax();
+        return m_snappingAppearancePage;
     }
-    int gapMax() const
+    SnappingEffectsController* snappingEffectsPage() const
     {
-        return ConfigDefaults::outerGapMax();
-    } // Shared max for padding + outer gaps
-    int adjacentThresholdMax() const
-    {
-        return ConfigDefaults::adjacentThresholdMax();
+        return m_snappingEffectsPage;
     }
-    int zoneSelectorTriggerDistanceMin() const
+    TilingAppearanceController* tilingAppearancePage() const
     {
-        return ConfigDefaults::triggerDistanceMin();
+        return m_tilingAppearancePage;
     }
-    int zoneSelectorTriggerDistanceMax() const
+    TilingAlgorithmController* tilingAlgorithmPage() const
     {
-        return ConfigDefaults::triggerDistanceMax();
+        return m_tilingAlgorithmPage.get();
     }
-    int zoneSelectorPreviewWidthMin() const
+    GeneralPageController* generalPage() const
     {
-        return ConfigDefaults::previewWidthMin();
+        return m_generalPage;
     }
-    int zoneSelectorPreviewWidthMax() const
-    {
-        return ConfigDefaults::previewWidthMax();
-    }
-    int zoneSelectorPreviewHeightMin() const
-    {
-        return ConfigDefaults::previewHeightMin();
-    }
-    int zoneSelectorPreviewHeightMax() const
-    {
-        return ConfigDefaults::previewHeightMax();
-    }
-    int zoneSelectorGridColumnsMax() const
-    {
-        return ConfigDefaults::gridColumnsMax();
-    }
-    int shaderFrameRateMin() const
-    {
-        return ConfigDefaults::shaderFrameRateMin();
-    }
-    int shaderFrameRateMax() const
-    {
-        return ConfigDefaults::shaderFrameRateMax();
-    }
-    int audioSpectrumBarCountMin() const
-    {
-        return ConfigDefaults::audioSpectrumBarCountMin();
-    }
-    int audioSpectrumBarCountMax() const
-    {
-        return ConfigDefaults::audioSpectrumBarCountMax();
-    }
-    int autotileGapMax() const
-    {
-        return ConfigDefaults::autotileOuterGapMax();
-    } // Shared max for inner + outer gaps
-    int autotileBorderWidthMax() const
-    {
-        return ConfigDefaults::autotileBorderWidthMax();
-    }
-    int autotileBorderRadiusMax() const
-    {
-        return ConfigDefaults::autotileBorderRadiusMax();
-    }
-    int animationDurationMin() const
-    {
-        return ConfigDefaults::animationDurationMin();
-    }
-    int animationDurationMax() const
-    {
-        return ConfigDefaults::animationDurationMax();
-    }
-    int animationMinDistanceMax() const
-    {
-        return ConfigDefaults::animationMinDistanceMax();
-    }
-    int animationStaggerIntervalMin() const
-    {
-        return ConfigDefaults::animationStaggerIntervalMin();
-    }
-    int animationStaggerIntervalMax() const
-    {
-        return ConfigDefaults::animationStaggerIntervalMax();
-    }
-    int borderWidthMin() const
-    {
-        return ConfigDefaults::borderWidthMin();
-    }
-    int borderRadiusMin() const
-    {
-        return ConfigDefaults::borderRadiusMin();
-    }
-    int gapMin() const
-    {
-        return ConfigDefaults::outerGapMin();
-    }
-    int adjacentThresholdMin() const
-    {
-        return ConfigDefaults::adjacentThresholdMin();
-    }
-    int autotileGapMin() const
-    {
-        return ConfigDefaults::autotileOuterGapMin();
-    }
-    int autotileBorderWidthMin() const
-    {
-        return ConfigDefaults::autotileBorderWidthMin();
-    }
-    int autotileBorderRadiusMin() const
-    {
-        return ConfigDefaults::autotileBorderRadiusMin();
-    }
-    int autotileMaxWindowsMin() const
-    {
-        return ConfigDefaults::autotileMaxWindowsMin();
-    }
-    int autotileMasterCountMin() const
-    {
-        return ConfigDefaults::autotileMasterCountMin();
-    }
-    qreal autotileSplitRatioMin() const
-    {
-        return ConfigDefaults::autotileSplitRatioMin();
-    }
-    qreal autotileSplitRatioStepMin() const
-    {
-        return ConfigDefaults::autotileSplitRatioStepMin();
-    }
-    qreal autotileSplitRatioStepMax() const
-    {
-        return ConfigDefaults::autotileSplitRatioStepMax();
-    }
-    int animationMinDistanceMin() const
-    {
-        return ConfigDefaults::animationMinDistanceMin();
-    }
-    int zoneSelectorGridColumnsMin() const
-    {
-        return ConfigDefaults::gridColumnsMin();
-    }
-    int zoneSelectorMaxRowsMin() const
-    {
-        return ConfigDefaults::maxRowsMin();
-    }
-
-    // ── Color import ─────────────────────────────────────────────────────────
-    Q_INVOKABLE void loadColorsFromPywal();
-    Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
 
     // ── Running window picker (async flow) ──────────────────────────────────
     //
@@ -689,30 +445,8 @@ public:
     Q_INVOKABLE bool duplicateAlgorithm(const QString& algorithmId);
     Q_INVOKABLE bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
 
-    /**
-     * @brief Get current custom param values for an algorithm, merged with defaults
-     *
-     * Returns a list of {name, type, value, defaultValue, description, minValue, maxValue, enumOptions}
-     * maps. The "value" field is the currently saved value, falling back to the declared default.
-     *
-     * @param algorithmId Algorithm to query
-     * @return List of param value maps, or empty if no custom params declared
-     */
-    Q_INVOKABLE QVariantList customParamsForAlgorithm(const QString& algorithmId) const;
-
-    /**
-     * @brief Set a custom parameter value for an algorithm
-     *
-     * Saves the value into autotilePerAlgorithmSettings (staged — applied
-     * on save, like all other settings). The value is coerced and validated
-     * against the algorithm's @param declaration: numbers are clamped to
-     * [min, max], bools are coerced, enums are checked against the options list.
-     *
-     * @param algorithmId Algorithm to configure
-     * @param paramName Parameter name (must match a declared @param)
-     * @param value New value (coerced to the declared type)
-     */
-    Q_INVOKABLE void setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value);
+    // NOTE: customParamsForAlgorithm / setCustomParam / customParamChanged
+    // have moved to TilingAlgorithmController.
 
     // ── Per-screen autotile overrides ────────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
@@ -759,7 +493,6 @@ Q_SIGNALS:
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();
-    void customParamChanged(const QString& algorithmId, const QString& paramName);
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
@@ -772,18 +505,6 @@ Q_SIGNALS:
     void activitiesChanged();
     void screenLayoutChanged();
     void quickLayoutSlotsChanged();
-
-    // Trigger signals
-    void alwaysActivateOnDragChanged();
-    void alwaysReinsertIntoStackChanged();
-    void dragActivationTriggersChanged();
-    void zoneSpanTriggersChanged();
-    void snapAssistTriggersChanged();
-    void autotileDragInsertTriggersChanged();
-
-    // Color import signals
-    void colorImportError(const QString& error);
-    void colorImportSuccess();
 
     /**
      * @brief Fresh running-windows list has arrived from the daemon.
@@ -817,19 +538,6 @@ Q_SIGNALS:
     void stagedSnappingOrderChanged();
     void stagedTilingOrderChanged();
 
-    // Editor signals
-    void editorDuplicateShortcutChanged();
-    void editorSplitHorizontalShortcutChanged();
-    void editorSplitVerticalShortcutChanged();
-    void editorFillShortcutChanged();
-    void editorGridSnappingEnabledChanged();
-    void editorEdgeSnappingEnabledChanged();
-    void editorSnapIntervalXChanged();
-    void editorSnapIntervalYChanged();
-    void editorSnapOverrideModifierChanged();
-    void fillOnDropEnabledChanged();
-    void fillOnDropModifierChanged();
-
 private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
@@ -854,29 +562,29 @@ private Q_SLOTS:
     void onRunningWindowsAvailable(const QString& json);
 
 private:
-    /// Resolve saved custom params for the given algorithm from per-algorithm settings
-    QVariantMap savedCustomParams(const QString& algorithmId) const;
-
-    QString scriptedFilePath(const QString& algorithmId) const;
-    void watchForAlgorithmRegistration(const QString& expectedId);
-    void cancelAlgorithmWatcher(const QString& expectedId);
-
-    QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
-
     void setNeedsSave(bool needs);
     void refreshVirtualDesktops();
     void refreshActivities();
 
     void saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules);
-    int importKZonesLayouts(const QJsonArray& kzonesArray);
-
-    static QVariantList convertTriggersForQml(const QVariantList& triggers);
-    static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+    /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
+    /// settings page each. Parented to `this`, so Qt handles cleanup via
+    /// ~QObject AFTER the member destructors below have run. Any
+    /// sub-controller that borrows a unique_ptr member (e.g., the algorithm
+    /// registry for TilingAlgorithmController) must instead be declared as
+    /// a `std::unique_ptr<>` AFTER the borrowed member — see
+    /// m_tilingAlgorithmPage below.
+    EditorPageController* m_editorPage = nullptr;
+    SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
+    TilingBehaviorController* m_tilingBehaviorPage = nullptr;
+    SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
+    SnappingAppearanceController* m_snappingAppearancePage = nullptr;
+    SnappingEffectsController* m_snappingEffectsPage = nullptr;
+    TilingAppearanceController* m_tilingAppearancePage = nullptr;
+    GeneralPageController* m_generalPage = nullptr;
 
-    QStringList m_renderingBackendDisplayNames;
-    QString m_startupRenderingBackend;
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;
@@ -934,6 +642,24 @@ private:
     /// unregisterAlgorithm on a freed registry.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptLoader;
 
+    /// Algorithm registry / loader surface — owns the scripted-algorithm
+    /// lifecycle helpers (availableAlgorithms, import/export/duplicate/
+    /// delete, createNewAlgorithm, etc.). Borrows the registry + loader
+    /// above via raw pointers, so this unique_ptr MUST be declared AFTER
+    /// them; reverse-order destruction tears the service down (which
+    /// disconnects its watchers on the registry) BEFORE m_scriptLoader
+    /// and m_localAlgorithmRegistry reset.
+    std::unique_ptr<AlgorithmService> m_algorithmService;
+
+    /// Tiling→Algorithm page sub-controller. Declared as unique_ptr (not
+    /// parented to `this`) and placed AFTER m_localAlgorithmRegistry so
+    /// reverse-order destruction runs ~TilingAlgorithmController BEFORE
+    /// the registry unique_ptr resets — the controller holds a raw pointer
+    /// to the registry. Parenting to `this` would defer destruction to
+    /// ~QObject, which runs AFTER these member unique_ptrs have already
+    /// released their borrowed targets.
+    std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
+
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so
     /// @c ZonesLayoutSource::previewFromLayout gets a populated
@@ -963,49 +689,17 @@ private:
     QTimer m_runningWindowsTimeout;
     static constexpr int RunningWindowsTimeoutMs = 3000;
 
-    // Staged assignment changes (applied on save, discarded on load/reset)
-    struct StagedAssignment
-    {
-        QString screenId;
-        int virtualDesktop = 0;
-        QString activityId;
-        // Snapping — nullopt means not staged (use D-Bus), empty string means cleared
-        std::optional<QString> snappingLayoutId;
-        // Tiling — nullopt means not staged, empty string means cleared
-        std::optional<QString> tilingAlgorithmId;
-        // Explicit mode — when set, flush uses setAssignmentEntry (atomic mode+layout)
-        std::optional<int> stagedMode;
-        // Full clear overrides individual fields
-        bool fullCleared = false;
-    };
-    QHash<QString, StagedAssignment> m_stagedAssignments;
-
-    // Staged quick layout slot changes (flushed on Apply via D-Bus)
-    QHash<int, QString> m_stagedQuickSlots;
-    // Staged tiling quick layout slot changes (flushed on Apply to config)
-    QHash<int, QString> m_stagedTilingQuickSlots;
-
-    // Staged virtual screen configurations (physicalScreenId → staged screens; empty list = remove)
-    QHash<QString, QVariantList> m_stagedVirtualScreenConfigs;
+    // All staged (not-yet-saved) state owned by StagingService — assignments,
+    // virtual screen configs, quick layout slots. Flushed by save() in a
+    // specific order (persistence → Settings::save → D-Bus). Ordering
+    // (m_stagedSnappingOrder / m_stagedTilingOrder below) stays here because
+    // it couples to per-page NOTIFY signals, and the service isn't a QObject
+    // so it can't emit them itself.
+    StagingService m_staging;
 
     // Staged ordering changes (flushed to m_settings on save)
     std::optional<QStringList> m_stagedSnappingOrder;
     std::optional<QStringList> m_stagedTilingOrder;
-
-    static QString assignmentCacheKey(const QString& screen, int desktop, const QString& activity);
-    StagedAssignment& stagedEntry(const QString& screen, int desktop, const QString& activity);
-    const StagedAssignment* stagedEntryConst(const QString& screen, int desktop, const QString& activity) const;
-    void flushStagedAssignments();
-
-    // Staged mutation helpers (shared logic for Q_INVOKABLE assignment methods)
-    void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-    void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-    void stageFullClear(const QString& screen, int desktop, const QString& activity);
-    void stageTilingClear(const QString& screen, int desktop, const QString& activity);
-
-    // Staged getter helpers — return true if handled (result set), false to fall through to D-Bus
-    bool stagedSnappingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
-    bool stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
 };
 
 } // namespace PlasmaZones

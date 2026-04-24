@@ -9,6 +9,9 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
+    // references stay direct (those are Settings Q_PROPERTYs not wrapped here).
+    readonly property var settingsBridge: settingsController.tilingBehaviorPage
     readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
 
     contentHeight: content.implicitHeight
@@ -38,10 +41,10 @@ Flickable {
                     SettingsSwitch {
                         id: alwaysReinsertSwitch
 
-                        checked: settingsController.alwaysReinsertIntoStack
+                        checked: root.settingsBridge.alwaysReinsertIntoStack
                         accessibleName: i18n("Always re-insert into stack on drag")
                         onToggled: function(newValue) {
-                            settingsController.alwaysReinsertIntoStack = newValue;
+                            root.settingsBridge.alwaysReinsertIntoStack = newValue;
                         }
                     }
 
@@ -60,11 +63,11 @@ Flickable {
                         width: root.triggerPreferredWidth
                         allowMultiple: true
                         acceptMode: acceptModeAll
-                        triggers: settingsController.autotileDragInsertTriggers
-                        defaultTriggers: settingsController.defaultAutotileDragInsertTriggers
+                        triggers: root.settingsBridge.autotileDragInsertTriggers
+                        defaultTriggers: root.settingsBridge.defaultAutotileDragInsertTriggers
                         tooltipEnabled: false
                         onTriggersModified: (triggers) => {
-                            settingsController.autotileDragInsertTriggers = triggers;
+                            root.settingsBridge.autotileDragInsertTriggers = triggers;
                         }
                     }
 

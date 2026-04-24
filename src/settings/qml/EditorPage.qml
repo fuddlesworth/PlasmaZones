@@ -9,8 +9,9 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    // Bridge: combine Settings (appSettings) with SettingsController editor properties
-    readonly property var settingsBridge: settingsController
+    // Page-scoped Q_PROPERTY surface for the Editor page lives on the
+    // sub-controller; SettingsController exposes it as a child QObject.
+    readonly property var settingsBridge: settingsController.editorPage
     // Inline constants (from monolith Constants object)
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
@@ -48,10 +49,10 @@ Flickable {
                         ShortcutCaptureField {
                             id: editorDuplicateShortcutField
 
-                            keySequence: settingsController.editorDuplicateShortcut
+                            keySequence: root.settingsBridge.duplicateShortcut
                             placeholderText: "Ctrl+D"
                             onKeySequenceModified: (seq) => {
-                                settingsController.editorDuplicateShortcut = seq;
+                                root.settingsBridge.duplicateShortcut = seq;
                             }
                         }
 
@@ -67,10 +68,10 @@ Flickable {
                         ShortcutCaptureField {
                             id: editorSplitHorizontalShortcutField
 
-                            keySequence: settingsController.editorSplitHorizontalShortcut
+                            keySequence: root.settingsBridge.splitHorizontalShortcut
                             placeholderText: "Ctrl+Shift+H"
                             onKeySequenceModified: (seq) => {
-                                settingsController.editorSplitHorizontalShortcut = seq;
+                                root.settingsBridge.splitHorizontalShortcut = seq;
                             }
                         }
 
@@ -86,10 +87,10 @@ Flickable {
                         ShortcutCaptureField {
                             id: editorSplitVerticalShortcutField
 
-                            keySequence: settingsController.editorSplitVerticalShortcut
+                            keySequence: root.settingsBridge.splitVerticalShortcut
                             placeholderText: "Ctrl+Alt+V"
                             onKeySequenceModified: (seq) => {
-                                settingsController.editorSplitVerticalShortcut = seq;
+                                root.settingsBridge.splitVerticalShortcut = seq;
                             }
                         }
 
@@ -105,10 +106,10 @@ Flickable {
                         ShortcutCaptureField {
                             id: editorFillShortcutField
 
-                            keySequence: settingsController.editorFillShortcut
+                            keySequence: root.settingsBridge.fillShortcut
                             placeholderText: "Ctrl+Shift+F"
                             onKeySequenceModified: (seq) => {
-                                settingsController.editorFillShortcut = seq;
+                                root.settingsBridge.fillShortcut = seq;
                             }
                         }
 
@@ -124,7 +125,7 @@ Flickable {
                         Button {
                             text: i18n("Reset to defaults")
                             icon.name: "edit-reset"
-                            onClicked: settingsController.resetEditorDefaults()
+                            onClicked: root.settingsBridge.resetDefaults()
                         }
 
                     }
@@ -158,10 +159,10 @@ Flickable {
                         description: i18n("Snap zones to a grid while dragging or resizing")
 
                         SettingsSwitch {
-                            checked: settingsController.editorGridSnappingEnabled
+                            checked: root.settingsBridge.gridSnappingEnabled
                             accessibleName: i18n("Enable grid snapping")
                             onToggled: function(newValue) {
-                                settingsController.editorGridSnappingEnabled = newValue;
+                                root.settingsBridge.gridSnappingEnabled = newValue;
                             }
                         }
 
@@ -175,10 +176,10 @@ Flickable {
                         description: i18n("Snap zones to edges of neighboring zones")
 
                         SettingsSwitch {
-                            checked: settingsController.editorEdgeSnappingEnabled
+                            checked: root.settingsBridge.edgeSnappingEnabled
                             accessibleName: i18n("Enable edge snapping")
                             onToggled: function(newValue) {
-                                settingsController.editorEdgeSnappingEnabled = newValue;
+                                root.settingsBridge.edgeSnappingEnabled = newValue;
                             }
                         }
 
@@ -198,12 +199,12 @@ Flickable {
                             from: 0.01
                             to: 0.5
                             stepSize: 0.01
-                            value: settingsController.editorSnapIntervalX
+                            value: root.settingsBridge.snapIntervalX
                             formatValue: function(v) {
                                 return Math.round(v * 100) + "%";
                             }
                             onMoved: (value) => {
-                                return settingsController.editorSnapIntervalX = value;
+                                return root.settingsBridge.snapIntervalX = value;
                             }
                         }
 
@@ -222,12 +223,12 @@ Flickable {
                             from: 0.01
                             to: 0.5
                             stepSize: 0.01
-                            value: settingsController.editorSnapIntervalY
+                            value: root.settingsBridge.snapIntervalY
                             formatValue: function(v) {
                                 return Math.round(v * 100) + "%";
                             }
                             onMoved: (value) => {
-                                return settingsController.editorSnapIntervalY = value;
+                                return root.settingsBridge.snapIntervalY = value;
                             }
                         }
 
@@ -242,9 +243,9 @@ Flickable {
                         description: i18n("Hold this key to temporarily bypass snap behavior")
 
                         ModifierComboBox {
-                            modifierValue: root.settingsBridge.editorSnapOverrideModifier
+                            modifierValue: root.settingsBridge.snapOverrideModifier
                             onModifierSelected: (value) => {
-                                root.settingsBridge.editorSnapOverrideModifier = value;
+                                root.settingsBridge.snapOverrideModifier = value;
                             }
                         }
 
@@ -298,45 +299,45 @@ Flickable {
 
     }
 
-    // Keep inputs in sync with settingsController properties
+    // Keep inputs in sync with editorPage sub-controller properties
     Connections {
-        function onEditorDuplicateShortcutChanged() {
+        function onDuplicateShortcutChanged() {
             if (!editorDuplicateShortcutField.capturing)
-                editorDuplicateShortcutField.keySequence = settingsController.editorDuplicateShortcut;
+                editorDuplicateShortcutField.keySequence = root.settingsBridge.duplicateShortcut;
 
         }
 
-        function onEditorSplitHorizontalShortcutChanged() {
+        function onSplitHorizontalShortcutChanged() {
             if (!editorSplitHorizontalShortcutField.capturing)
-                editorSplitHorizontalShortcutField.keySequence = settingsController.editorSplitHorizontalShortcut;
+                editorSplitHorizontalShortcutField.keySequence = root.settingsBridge.splitHorizontalShortcut;
 
         }
 
-        function onEditorSplitVerticalShortcutChanged() {
+        function onSplitVerticalShortcutChanged() {
             if (!editorSplitVerticalShortcutField.capturing)
-                editorSplitVerticalShortcutField.keySequence = settingsController.editorSplitVerticalShortcut;
+                editorSplitVerticalShortcutField.keySequence = root.settingsBridge.splitVerticalShortcut;
 
         }
 
-        function onEditorFillShortcutChanged() {
+        function onFillShortcutChanged() {
             if (!editorFillShortcutField.capturing)
-                editorFillShortcutField.keySequence = settingsController.editorFillShortcut;
+                editorFillShortcutField.keySequence = root.settingsBridge.fillShortcut;
 
         }
 
-        function onEditorSnapIntervalXChanged() {
+        function onSnapIntervalXChanged() {
             if (!snapIntervalXSlider.slider.pressed)
-                snapIntervalXSlider.value = settingsController.editorSnapIntervalX;
+                snapIntervalXSlider.value = root.settingsBridge.snapIntervalX;
 
         }
 
-        function onEditorSnapIntervalYChanged() {
+        function onSnapIntervalYChanged() {
             if (!snapIntervalYSlider.slider.pressed)
-                snapIntervalYSlider.value = settingsController.editorSnapIntervalY;
+                snapIntervalYSlider.value = root.settingsBridge.snapIntervalY;
 
         }
 
-        target: settingsController
+        target: root.settingsBridge
     }
 
 }

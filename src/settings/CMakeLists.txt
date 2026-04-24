@@ -9,6 +9,38 @@ set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h
     settingscontroller.cpp
+    # Per-page sub-controllers — hang off SettingsController as child QObjects,
+    # exposing the Q_PROPERTY surface for a single settings page each.
+    editorpagecontroller.h
+    editorpagecontroller.cpp
+    generalpagecontroller.h
+    generalpagecontroller.cpp
+    snappingappearancecontroller.h
+    snappingappearancecontroller.cpp
+    snappingbehaviorcontroller.h
+    snappingbehaviorcontroller.cpp
+    snappingeffectscontroller.h
+    snappingeffectscontroller.cpp
+    snappingzoneselectorcontroller.h
+    snappingzoneselectorcontroller.cpp
+    tilingalgorithmcontroller.h
+    tilingalgorithmcontroller.cpp
+    tilingappearancecontroller.h
+    tilingappearancecontroller.cpp
+    tilingbehaviorcontroller.h
+    tilingbehaviorcontroller.cpp
+    # Shared helpers used by multiple sub-controllers.
+    triggerutils.h
+    triggerutils.cpp
+    virtualscreenutils.h
+    virtualscreenutils.cpp
+    # Service / utility modules extracted from SettingsController.
+    kzonesimporter.h
+    kzonesimporter.cpp
+    stagingservice.h
+    stagingservice.cpp
+    algorithmservice.h
+    algorithmservice.cpp
     settingslaunchcontroller.h
     settingslaunchcontroller.cpp
     settingsappadaptor.h

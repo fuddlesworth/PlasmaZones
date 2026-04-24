@@ -9,18 +9,21 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    readonly property int paddingMax: settingsController.gapMax
+    // Page-scoped bounds live on the sub-controller; Settings-backed live
+    // values stay on `appSettings`.
+    readonly property var settingsBridge: settingsController.snappingZoneSelectorPage
+    readonly property int paddingMax: root.settingsBridge.gapMax
     // Zone selector constants (consumed by ZoneSelectorSection via constants property)
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
-    readonly property int zoneSelectorTriggerMax: settingsController.zoneSelectorTriggerDistanceMax
-    readonly property int zoneSelectorPreviewWidthMin: settingsController.zoneSelectorPreviewWidthMin
-    readonly property int zoneSelectorPreviewWidthMax: settingsController.zoneSelectorPreviewWidthMax
-    readonly property int zoneSelectorPreviewHeightMin: settingsController.zoneSelectorPreviewHeightMin
-    readonly property int zoneSelectorPreviewHeightMax: settingsController.zoneSelectorPreviewHeightMax
-    readonly property int zoneSelectorGridColumnsMax: settingsController.zoneSelectorGridColumnsMax
-    readonly property int zoneSelectorTriggerMin: settingsController.zoneSelectorTriggerDistanceMin
-    readonly property int zoneSelectorGridColumnsMin: settingsController.zoneSelectorGridColumnsMin
-    readonly property int zoneSelectorMaxRowsMin: settingsController.zoneSelectorMaxRowsMin
+    readonly property int zoneSelectorTriggerMax: root.settingsBridge.triggerDistanceMax
+    readonly property int zoneSelectorPreviewWidthMin: root.settingsBridge.previewWidthMin
+    readonly property int zoneSelectorPreviewWidthMax: root.settingsBridge.previewWidthMax
+    readonly property int zoneSelectorPreviewHeightMin: root.settingsBridge.previewHeightMin
+    readonly property int zoneSelectorPreviewHeightMax: root.settingsBridge.previewHeightMax
+    readonly property int zoneSelectorGridColumnsMax: root.settingsBridge.gridColumnsMax
+    readonly property int zoneSelectorTriggerMin: root.settingsBridge.triggerDistanceMin
+    readonly property int zoneSelectorGridColumnsMin: root.settingsBridge.gridColumnsMin
+    readonly property int zoneSelectorMaxRowsMin: root.settingsBridge.maxRowsMin
     readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
     // Per-screen snapping gap/padding helper
     property alias selectedSnappingScreenName: snappingHelper.selectedScreenName
@@ -99,7 +102,7 @@ Flickable {
                         description: i18n("Space between tiled windows")
 
                         SettingsSpinBox {
-                            from: settingsController.gapMin
+                            from: root.settingsBridge.gapMin
                             to: root.paddingMax
                             value: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
                             onValueModified: (value) => {
