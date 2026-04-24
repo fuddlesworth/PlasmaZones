@@ -22,7 +22,6 @@
 #include <optional>
 
 #include "OverflowManager.h"
-#include "core/utils.h"
 
 #include <PhosphorScreens/ScreenIdentity.h>
 

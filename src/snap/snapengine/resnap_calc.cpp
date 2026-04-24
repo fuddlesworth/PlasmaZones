@@ -18,7 +18,6 @@
 #include "core/geometryutils.h"
 #include "core/interfaces.h"
 #include "core/logging.h"
-#include "core/utils.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
@@ -165,7 +164,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             // virtual children — belongsToPhysicalScreen handles both cases.
             const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
                 ? Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)
-                : Utils::belongsToPhysicalScreen(screenId, screenFilter);
+                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
             if (!match) {
                 continue;
             }
@@ -202,7 +201,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
                 return true;
             return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
                 ? Phosphor::Screens::ScreenIdentity::screensMatch(screen, screenFilter)
-                : Utils::belongsToPhysicalScreen(screen, screenFilter);
+                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
         };
         for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
             QString screen = screenAssignments.value(it.key());
@@ -363,8 +362,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
 
     // Resolve physical screen for zone geometry calculation
     auto* screenManager = m_windowTracker->screenManager();
-    QScreen* screen =
-        (screenManager ? screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+    QScreen* screen = (screenManager ? screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
     if (!screen) {
         return result;
     }
@@ -486,7 +484,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         // Resolve physical screen for zone geometry calculation
         auto* screenManager = m_windowTracker->screenManager();
         QScreen* screen =
-            (screenManager ? screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
+            (screenManager ? screenManager->physicalQScreenFor(screenId) : QGuiApplication::primaryScreen());
         if (!screen) {
             continue;
         }

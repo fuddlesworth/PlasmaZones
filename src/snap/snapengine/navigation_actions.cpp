@@ -32,11 +32,11 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/logging.h"
 #include <PhosphorScreens/Manager.h>
-#include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../../dbus/snapnavigationtargets.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

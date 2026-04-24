@@ -5,9 +5,9 @@
 #include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "core/interfaces.h"
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
-#include "core/utils.h"
 
 namespace PlasmaZones {
 

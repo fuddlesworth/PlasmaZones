@@ -16,7 +16,6 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include "core/geometryutils.h"
-#include "core/utils.h"
 #include "AutotileConfig.h"
 #include "NavigationController.h"
 #include "PerScreenConfigResolver.h"
@@ -31,6 +30,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/windowregistry.h"
@@ -2397,7 +2397,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         if (qscreen) {
             const QRect geom = qscreen->geometry();
             screenInfo.portrait = geom.height() > geom.width();
-            screenInfo.aspectRatio = Utils::screenAspectRatio(qscreen);
+            screenInfo.aspectRatio = geom.height() > 0 ? static_cast<qreal>(geom.width()) / geom.height() : 0.0;
         } else if (m_screenManager) {
             // Virtual screen IDs have no QScreen — use Phosphor::Screens::ScreenManager geometry
             const QRect geom = m_screenManager->screenGeometry(screenId);
