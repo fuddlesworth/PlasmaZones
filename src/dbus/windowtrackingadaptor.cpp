@@ -166,7 +166,7 @@ WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
 SnapEngine* WindowTrackingAdaptor::snapEngine() const
 {
-    return qobject_cast<SnapEngine*>(m_snapEngine.data());
+    return m_cachedSnapEngine;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -186,6 +186,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
+    m_cachedSnapEngine = qobject_cast<SnapEngine*>(snapEngine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for

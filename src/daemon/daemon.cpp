@@ -501,21 +501,16 @@ bool Daemon::init()
     m_scriptedAlgorithmLoader->scanAndRegister();
 
     // Create both placement engines and the mode router via factory.
-    // The factory is the ONE translation unit with concrete engine includes.
+    // The factory returns concrete types; we grab raw pointers for adaptor
+    // wiring before moving into the base-class unique_ptr members.
     auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
                                  m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
                                  m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
+    auto* autotileEngine = engines.autotile.get();
+    auto* snapEngine = engines.snap.get();
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
-
-    // Concrete engine pointers for adaptor construction and engine-specific wiring.
-    // The daemon is the integration layer that knows concrete types; all subsequent
-    // code paths (signals.cpp, autotile.cpp, etc.) use the base-class pointers.
-    auto* autotileEngine = qobject_cast<AutotileEngine*>(m_autotileEngine.get());
-    auto* snapEngine = qobject_cast<SnapEngine*>(m_snapEngine.get());
-    Q_ASSERT(autotileEngine);
-    Q_ASSERT(snapEngine);
 
     autotileEngine->syncFromSettings(m_settings.get());
     autotileEngine->connectToSettings(m_settings.get());

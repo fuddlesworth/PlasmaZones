@@ -40,6 +40,8 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::Scre
     connect(m_engine, &AutotileEngine::autotileScreensChanged, this, &AutotileAdaptor::autotileScreensChanged);
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged, this,
             &AutotileAdaptor::algorithmChanged);
+    // Internal signal is placementChanged (engine-generic); D-Bus name stays tilingChanged
+    // for backward compatibility with existing KWin effect / third-party consumers.
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, this, &AutotileAdaptor::tilingChanged);
     connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::activateWindowRequested, this,

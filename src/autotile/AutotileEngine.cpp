@@ -46,6 +46,18 @@ namespace {
 // m_pendingInitialOrders from leaking state indefinitely.
 constexpr int PendingOrderTimeoutMs = 10000;
 
+template<typename T>
+T* checkedCast(QObject* obj, const char* context)
+{
+    if (!obj)
+        return nullptr;
+    auto* concrete = qobject_cast<T*>(obj);
+    if (!concrete) {
+        qCWarning(lcAutotile) << context << ": QObject is not the expected type — skipping";
+    }
+    return concrete;
+}
+
 } // namespace
 
 AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
@@ -1079,21 +1091,17 @@ void AutotileEngine::connectToSettings(Settings* settings)
 
 void AutotileEngine::syncFromSettings(QObject* settings)
 {
-    auto* concrete = qobject_cast<Settings*>(settings);
-    if (settings && !concrete) {
-        qCWarning(lcAutotile) << "syncFromSettings: QObject is not a Settings instance — skipping";
+    auto* concrete = checkedCast<Settings>(settings, "syncFromSettings");
+    if (settings && !concrete)
         return;
-    }
     syncFromSettings(concrete);
 }
 
 void AutotileEngine::connectToSettings(QObject* settings)
 {
-    auto* concrete = qobject_cast<Settings*>(settings);
-    if (settings && !concrete) {
-        qCWarning(lcAutotile) << "connectToSettings: QObject is not a Settings instance — skipping";
+    auto* concrete = checkedCast<Settings>(settings, "connectToSettings");
+    if (settings && !concrete)
         return;
-    }
     connectToSettings(concrete);
 }
 
@@ -3224,11 +3232,9 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
-    auto* concrete = qobject_cast<WindowRegistry*>(registry);
-    if (registry && !concrete) {
-        qCWarning(lcAutotile) << "setWindowRegistry: QObject is not a WindowRegistry — skipping";
+    auto* concrete = checkedCast<WindowRegistry>(registry, "setWindowRegistry");
+    if (registry && !concrete)
         return;
-    }
     setWindowRegistry(concrete);
 }
 

@@ -22,6 +22,12 @@ namespace PhosphorEngineApi {
 
 /// Unified placement engine interface.
 ///
+/// NOTE: This interface carries methods for both snap and autotile engines.
+/// Methods documented as engine-specific (e.g., master operations) are no-ops
+/// on engines that don't implement them. A future pass may split this into
+/// focused facets (IScreenManagement, IMasterOperations, IDragPreview, etc.)
+/// once a third engine arrives and the real seams become clearer.
+///
 /// Both snap-mode (manual zone layouts) and autotile-mode (automatic
 /// tiling algorithms) implement this so the daemon can dispatch all
 /// window lifecycle events and user navigation intents through a single
@@ -185,6 +191,7 @@ public:
         Q_UNUSED(windowId)
         return false;
     }
+    /// Remove saved floating state for the given windows (per-window, not bulk clear).
     virtual void clearSavedFloatingForWindows(const QStringList& windowIds)
     {
         Q_UNUSED(windowIds)
@@ -336,8 +343,9 @@ public:
         Q_UNUSED(screenId)
         return 0.05;
     }
-    /// Runtime max-windows limit. Returns -1 (unlimited) by default;
+    /// Runtime max-windows limit. Returns -1 (unlimited sentinel) by default;
     /// engines that enforce a cap override with the actual value.
+    /// Callers must treat -1 as "no limit" — never use as a divisor.
     virtual int runtimeMaxWindows() const
     {
         return -1;

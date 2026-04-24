@@ -7,10 +7,6 @@
 
 class QObject;
 
-namespace PhosphorEngineApi {
-class PlacementEngineBase;
-}
-
 namespace PhosphorZones {
 class LayoutRegistry;
 class IZoneDetector;
@@ -26,8 +22,10 @@ class ITileAlgorithmRegistry;
 
 namespace PlasmaZones {
 
+class AutotileEngine;
 class ISettings;
 class ScreenModeRouter;
+class SnapEngine;
 class VirtualDesktopManager;
 class WindowRegistry;
 class WindowTrackingService;
@@ -35,33 +33,30 @@ class WindowTrackingService;
 /**
  * @brief Grouped result of createEngines().
  *
- * Holds the two placement engines and the mode router. The caller
- * (Daemon) takes ownership via std::unique_ptr move semantics and
- * is responsible for all subsequent signal wiring and persistence
- * delegate setup.
+ * Returns concrete engine types so the daemon can wire adaptor construction
+ * and engine-specific setup without immediately downcasting. The daemon
+ * stores these as PlacementEngineBase* members for all subsequent code paths.
  */
 struct EngineSet
 {
-    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> autotile;
-    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> snap;
+    std::unique_ptr<AutotileEngine> autotile;
+    std::unique_ptr<SnapEngine> snap;
     std::unique_ptr<ScreenModeRouter> router;
 };
 
 /**
  * @brief Create both placement engines and the mode router.
  *
- * Concrete engine headers are included here and in daemon.cpp (for
- * adaptor construction); all other consumers use abstract pointers.
+ * Concrete engine headers are included in the .cpp — the factory header
+ * only forward-declares them. The caller (Daemon) must wire persistence
+ * delegates, signal connections, and adaptor setup after receiving the
+ * returned EngineSet.
  *
- * Pointer-type guide:
+ * Pointer-type guide (for the daemon and its consumers):
  * - PlacementEngineBase* — when you need QObject signal connections
  *   (e.g. UnifiedLayoutController, WindowTrackingAdaptor).
  * - IPlacementEngine* — when you only call interface methods, no
  *   signals (e.g. ControlAdaptor, WindowDragAdaptor, SupportReport).
- *
- * The engines are constructed with their mandatory dependencies. The
- * caller must wire persistence delegates, signal connections, and
- * adaptor setup after receiving the returned EngineSet.
  *
  * @param layoutManager   Layout registry (borrowed, must outlive engines)
  * @param windowTracker   Window tracking service (borrowed)

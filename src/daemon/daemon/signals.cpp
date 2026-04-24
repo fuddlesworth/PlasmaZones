@@ -293,6 +293,9 @@ void Daemon::initializeAutotile()
             // Windows that were autotile-only (never zone-snapped) get their
             // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
             auto* concreteSnap = qobject_cast<SnapEngine*>(m_snapEngine.get());
+            if (applied && wasAutotile && !concreteSnap && m_snapEngine) {
+                qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
+            }
             if (applied && wasAutotile && concreteSnap) {
                 // Build exclusion set: windows that fit into the target layout's zones
                 // will be zone-snapped by the resnap D-Bus signal. Without excluding them,
