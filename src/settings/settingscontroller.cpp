@@ -15,6 +15,7 @@
 #include "tilingbehaviorcontroller.h"
 #include "../config/configbackends.h"
 
+#include "virtualscreenutils.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
@@ -93,24 +94,6 @@ static void sortMergedLayoutList(QVariantList& list)
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
-
-namespace {
-
-/// Convert a QVariantMap (from QML virtual screen editor) to a Phosphor::Screens::VirtualScreenDef.
-/// Used by both the save path (staging → KConfig) and the D-Bus apply path.
-Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map,
-                                                                 const QString& physicalScreenId, int index)
-{
-    Phosphor::Screens::VirtualScreenDef def;
-    def.physicalScreenId = physicalScreenId;
-    def.index = index;
-    def.displayName = map.value(QStringLiteral("displayName")).toString();
-    def.region = QRectF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble(),
-                        map.value(QStringLiteral("width")).toDouble(), map.value(QStringLiteral("height")).toDouble());
-    def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, index);
-    return def;
-}
-} // anonymous namespace
 
 SettingsController::~SettingsController() = default;
 
@@ -301,11 +284,15 @@ SettingsController::SettingsController(QObject* parent)
 
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
     // custom-parameter CRUD surface. Borrows the algorithm registry this
-    // controller already owns; the registry outlives the sub-controller
-    // thanks to member destruction order (QObject children go first, then
-    // the registry unique_ptr resets).
-    m_tilingAlgorithmPage = new TilingAlgorithmController(&m_settings, m_localAlgorithmRegistry.get(), this);
-    connect(m_tilingAlgorithmPage, &TilingAlgorithmController::changed, this,
+    // controller already owns; declared as a unique_ptr AFTER
+    // m_localAlgorithmRegistry so reverse-order member destruction tears
+    // the sub-controller down BEFORE the registry resets. Parenting to
+    // `this` would defer destruction to ~QObject, which runs AFTER the
+    // registry unique_ptr — leaving the controller's raw m_registry pointer
+    // briefly dangling.
+    m_tilingAlgorithmPage =
+        std::make_unique<TilingAlgorithmController>(&m_settings, m_localAlgorithmRegistry.get(), nullptr);
+    connect(m_tilingAlgorithmPage.get(), &TilingAlgorithmController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
     // General page sub-controller — owns rendering-backend picker data and
@@ -582,12 +569,20 @@ void SettingsController::save()
                                QStringLiteral("setSaveBatchMode"), {false});
     }
 
-    // Safe to clear immediately: notifyReload() is synchronous, so the daemon
-    // has already processed the reload and emitted settingsChanged before we
-    // reach this line. No deferred reset needed.
-    m_saving = false;
-
+    // Defer `m_saving = false` to the next event-loop tick. Although
+    // notifyReload() is synchronous at the D-Bus level, the daemon's
+    // reply-time emission of its own settingsChanged broadcast is a
+    // separate D-Bus message that lands in this process's connection
+    // queue and is dispatched only when control returns to the event
+    // loop. Clearing m_saving immediately exposes a narrow race where
+    // onExternalSettingsChanged() fires with m_saving=false and triggers
+    // a spurious load() that reverts just-saved assignments. Posting the
+    // reset through singleShot(0) drains those queued signals first, so
+    // onExternalSettingsChanged() sees m_saving=true and returns early.
     setNeedsSave(false);
+    QTimer::singleShot(0, this, [this]() {
+        m_saving = false;
+    });
 }
 
 void SettingsController::defaults()
@@ -1882,7 +1877,8 @@ bool SettingsController::importAlgorithm(const QString& filePath)
 
 QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
 {
-    return AlgorithmService::algorithmIdFromLayoutId(layoutId);
+    return PhosphorLayout::LayoutId::isAutotile(layoutId) ? PhosphorLayout::LayoutId::extractAlgorithmId(layoutId)
+                                                          : layoutId;
 }
 
 void SettingsController::openAlgorithm(const QString& algorithmId)
@@ -2151,7 +2147,8 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
 
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
-        Phosphor::Screens::VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+        Phosphor::Screens::VirtualScreenDef def =
+            VirtualScreenUtils::variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         if (!def.isValid()) {
             qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
                                 << "region:" << def.region;

@@ -5,6 +5,7 @@
 
 #include "../config/configdefaults.h"
 #include "../config/settings.h"
+#include "../pz_i18n.h"
 
 #include <QDir>
 #include <QFile>
@@ -42,8 +43,9 @@ void SnappingAppearanceController::loadColorsFromPywal()
 {
     const QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
     if (!QFile::exists(pywalPath)) {
-        Q_EMIT colorImportError(
-            tr("Pywal colors not found. Run 'wal' to generate colors first.\n\nExpected file: %1").arg(pywalPath));
+        Q_EMIT colorImportError(PzI18n::tr("Pywal colors not found. Run 'wal' to generate colors first.\n\n"
+                                           "Expected file: %1")
+                                    .arg(pywalPath));
         return;
     }
 

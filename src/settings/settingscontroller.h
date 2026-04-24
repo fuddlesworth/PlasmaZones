@@ -369,7 +369,7 @@ public:
     }
     TilingAlgorithmController* tilingAlgorithmPage() const
     {
-        return m_tilingAlgorithmPage;
+        return m_tilingAlgorithmPage.get();
     }
     GeneralPageController* generalPage() const
     {
@@ -565,7 +565,12 @@ private:
 
     Settings m_settings;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
-    /// settings page each. Parented to `this`, so Qt handles cleanup.
+    /// settings page each. Parented to `this`, so Qt handles cleanup via
+    /// ~QObject AFTER the member destructors below have run. Any
+    /// sub-controller that borrows a unique_ptr member (e.g., the algorithm
+    /// registry for TilingAlgorithmController) must instead be declared as
+    /// a `std::unique_ptr<>` AFTER the borrowed member — see
+    /// m_tilingAlgorithmPage below.
     EditorPageController* m_editorPage = nullptr;
     SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
     TilingBehaviorController* m_tilingBehaviorPage = nullptr;
@@ -573,7 +578,6 @@ private:
     SnappingAppearanceController* m_snappingAppearancePage = nullptr;
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
-    TilingAlgorithmController* m_tilingAlgorithmPage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
 
     DaemonController m_daemonController;
@@ -641,6 +645,15 @@ private:
     /// disconnects its watchers on the registry) BEFORE m_scriptLoader
     /// and m_localAlgorithmRegistry reset.
     std::unique_ptr<AlgorithmService> m_algorithmService;
+
+    /// Tiling→Algorithm page sub-controller. Declared as unique_ptr (not
+    /// parented to `this`) and placed AFTER m_localAlgorithmRegistry so
+    /// reverse-order destruction runs ~TilingAlgorithmController BEFORE
+    /// the registry unique_ptr resets — the controller holds a raw pointer
+    /// to the registry. Parenting to `this` would defer destruction to
+    /// ~QObject, which runs AFTER these member unique_ptrs have already
+    /// released their borrowed targets.
+    std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so

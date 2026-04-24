@@ -32,6 +32,8 @@ set(plasmazones_settings_SRCS
     # Shared helpers used by multiple sub-controllers.
     triggerutils.h
     triggerutils.cpp
+    virtualscreenutils.h
+    virtualscreenutils.cpp
     # Service / utility modules extracted from SettingsController.
     kzonesimporter.h
     kzonesimporter.cpp

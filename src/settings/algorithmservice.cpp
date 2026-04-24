@@ -89,10 +89,8 @@ AlgorithmService::~AlgorithmService()
     // keeps the window between here and ~unique_ptr closed so any in-flight
     // watcher signal queued mid-destruction cannot fire into a
     // half-destructed service.
-    for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
-        const auto& connPtr = it.value();
-        if (connPtr && *connPtr)
-            disconnect(*connPtr);
+    for (auto it = m_algorithmWatchers.cbegin(); it != m_algorithmWatchers.cend(); ++it) {
+        disconnect(it.value());
     }
     m_algorithmWatchers.clear();
 }
@@ -235,12 +233,6 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     return ok;
 }
 
-QString AlgorithmService::algorithmIdFromLayoutId(const QString& layoutId)
-{
-    return PhosphorLayout::LayoutId::isAutotile(layoutId) ? PhosphorLayout::LayoutId::extractAlgorithmId(layoutId)
-                                                          : layoutId;
-}
-
 QString AlgorithmService::scriptedFilePath(const QString& algorithmId) const
 {
     if (algorithmId.isEmpty())
@@ -262,9 +254,7 @@ void AlgorithmService::cancelAlgorithmWatcher(const QString& expectedId)
 {
     auto it = m_algorithmWatchers.find(expectedId);
     if (it != m_algorithmWatchers.end()) {
-        const auto& connPtr = it.value();
-        if (connPtr && *connPtr)
-            disconnect(*connPtr);
+        disconnect(it.value());
         m_algorithmWatchers.erase(it);
     }
 }
@@ -274,34 +264,32 @@ void AlgorithmService::watchForAlgorithmRegistration(const QString& expectedId)
     // Cancel any existing watcher for this ID to prevent stacking
     cancelAlgorithmWatcher(expectedId);
 
-    auto* registry = m_registry;
-    auto conn = std::make_shared<QMetaObject::Connection>();
-    m_algorithmWatchers[expectedId] = conn;
-    *conn = connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
-                    [this, expectedId](const QString& registeredId) {
-                        if (registeredId == expectedId) {
-                            auto it = m_algorithmWatchers.find(expectedId);
-                            if (it != m_algorithmWatchers.end()) {
-                                disconnect(*it.value());
-                                m_algorithmWatchers.erase(it);
-                            }
-                            Q_EMIT algorithmCreated(expectedId);
-                        }
-                    });
+    m_algorithmWatchers.insert(expectedId,
+                               connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
+                                       [this, expectedId](const QString& registeredId) {
+                                           if (registeredId != expectedId) {
+                                               return;
+                                           }
+                                           auto it = m_algorithmWatchers.find(expectedId);
+                                           if (it != m_algorithmWatchers.end()) {
+                                               disconnect(it.value());
+                                               m_algorithmWatchers.erase(it);
+                                           }
+                                           Q_EMIT algorithmCreated(expectedId);
+                                       }));
     // The context object (this) ensures the lambda is not invoked if AlgorithmService
     // is destroyed before the timer fires — QTimer::singleShot with a context guarantees this.
     QTimer::singleShot(10000, this, [this, expectedId]() {
         auto it = m_algorithmWatchers.find(expectedId);
-        if (it != m_algorithmWatchers.end()) {
-            const auto& connPtr = it.value();
-            if (connPtr && *connPtr)
-                disconnect(*connPtr);
-            m_algorithmWatchers.erase(it);
-            qCWarning(PlasmaZones::lcCore) << "Algorithm registration timed out for:" << expectedId;
-            Q_EMIT algorithmOperationFailed(
-                PzI18n::tr("Algorithm was created but not picked up by the registry. "
-                           "Try refreshing or restarting the application."));
+        if (it == m_algorithmWatchers.end()) {
+            return;
         }
+        disconnect(it.value());
+        m_algorithmWatchers.erase(it);
+        qCWarning(PlasmaZones::lcCore) << "Algorithm registration timed out for:" << expectedId;
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Algorithm was created but not picked up by the registry. "
+                       "Try refreshing or restarting the application."));
     });
 }
 
@@ -512,30 +500,46 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
         return false;
     }
 
-    // Write to a temp file first, then rename — if copy fails the existing file is preserved
+    // Atomic-ish replace: copy source → tmp, move existing dest → backup,
+    // rename tmp → dest, delete backup on success. On any failure along
+    // the way, restore the backup so the user's pre-existing file is never
+    // lost. QFile::rename fails if dest exists, so we can't skip the
+    // backup step on POSIX like POSIX rename(2) would.
     const QString tmpPath = destPath + QStringLiteral(".tmp");
-    if (QFile::exists(tmpPath))
-        QFile::remove(tmpPath);
+    const QString backupPath = destPath + QStringLiteral(".bak");
+    QFile::remove(tmpPath);
+    QFile::remove(backupPath);
+
     if (!QFile::copy(sourcePath, tmpPath)) {
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not copy algorithm file for export."));
         return false;
     }
-    if (QFile::exists(destPath)) {
-        if (!QFile::remove(destPath)) {
-            QFile::remove(tmpPath);
-            Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not replace existing file at export destination."));
-            return false;
-        }
+
+    const bool destExisted = QFile::exists(destPath);
+    if (destExisted && !QFile::rename(destPath, backupPath)) {
+        QFile::remove(tmpPath);
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not replace existing file at export destination."));
+        return false;
     }
+
     if (!QFile::rename(tmpPath, destPath)) {
-        // rename() fails across filesystems — fall back to copy+remove
+        // rename() fails across filesystems — fall back to copy+remove.
         if (!QFile::copy(tmpPath, destPath)) {
+            // Restore the original file so the caller's dest is never lost.
+            if (destExisted) {
+                QFile::rename(backupPath, destPath);
+            }
             QFile::remove(tmpPath);
             Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not write to export destination."));
             return false;
         }
-        if (!QFile::remove(tmpPath))
+        if (!QFile::remove(tmpPath)) {
             qCWarning(PlasmaZones::lcCore) << "Failed to clean up temporary export file:" << tmpPath;
+        }
+    }
+
+    if (destExisted) {
+        QFile::remove(backupPath);
     }
     return true;
 }

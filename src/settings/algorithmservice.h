@@ -9,8 +9,6 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <memory>
-
 namespace PhosphorTiles {
 class AlgorithmRegistry;
 class ScriptedAlgorithmLoader;
@@ -60,7 +58,6 @@ public:
     // ── Filesystem CRUD ─────────────────────────────────────────────────
     void openAlgorithmsFolder();
     bool importAlgorithm(const QString& filePath);
-    static QString algorithmIdFromLayoutId(const QString& layoutId);
     void openAlgorithm(const QString& algorithmId);
     void openLayoutFile(const QString& layoutId);
     bool deleteAlgorithm(const QString& algorithmId);
@@ -83,7 +80,7 @@ private:
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;
     PhosphorTiles::ScriptedAlgorithmLoader* m_loader = nullptr;
 
-    QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
+    QHash<QString, QMetaObject::Connection> m_algorithmWatchers;
 };
 
 } // namespace PlasmaZones

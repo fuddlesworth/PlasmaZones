@@ -4,10 +4,10 @@
 #include "stagingservice.h"
 
 #include "dbusutils.h"
+#include "virtualscreenutils.h"
 #include "../config/settings.h"
 #include "../core/logging.h"
 
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -20,30 +20,11 @@
 #include <QJsonObject>
 #include <QLatin1String>
 #include <QLoggingCategory>
-#include <QRectF>
 #include <QStringLiteral>
 
 namespace PlasmaZones {
 
 namespace {
-
-/// Convert a QVariantMap (from QML) to a VirtualScreenDef. Duplicated
-/// from SettingsController's anonymous namespace because the staging
-/// service flushes VS configs independently. Renamed to avoid ODR
-/// collision with SettingsController's identical helper under unity
-/// builds (both land in PlasmaZones::<anon> after concatenation).
-Phosphor::Screens::VirtualScreenDef stagingVariantMapToVirtualScreenDef(const QVariantMap& map,
-                                                                        const QString& physicalScreenId, int index)
-{
-    Phosphor::Screens::VirtualScreenDef def;
-    def.physicalScreenId = physicalScreenId;
-    def.index = index;
-    def.displayName = map.value(QStringLiteral("displayName")).toString();
-    def.region = QRectF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble(),
-                        map.value(QStringLiteral("width")).toDouble(), map.value(QStringLiteral("height")).toDouble());
-    def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, index);
-    return def;
-}
 
 /// Emit a D-Bus setVirtualScreenConfig for @p physicalScreenId carrying @p screens.
 /// Empty list ≡ remove the config.
@@ -55,7 +36,7 @@ void pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVar
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
         Phosphor::Screens::VirtualScreenDef def =
-            stagingVariantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+            VirtualScreenUtils::variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         if (!def.isValid()) {
             qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
                                 << "region:" << def.region;
@@ -150,6 +131,11 @@ void StagingService::stageFullClear(const QString& screen, int desktop, const QS
 void StagingService::stageTilingClear(const QString& screen, int desktop, const QString& activity)
 {
     auto& e = assignmentEntry(screen, desktop, activity);
+    // Clearing tiling reverts to snapping mode — drop any previously staged
+    // explicit mode so the flush takes the "tiling clear" branch
+    // (setAssignmentEntry with mode=0) rather than sending the stale
+    // Overview-page mode back to the daemon with an empty algorithm id.
+    e.stagedMode = std::nullopt;
     e.tilingAlgorithmId = QString(); // empty = cleared
 }
 
@@ -326,7 +312,7 @@ void StagingService::flushVirtualScreensToSettings(Settings& settings)
         if (!it.value().isEmpty()) {
             for (int i = 0; i < it.value().size(); ++i) {
                 const Phosphor::Screens::VirtualScreenDef def =
-                    stagingVariantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
+                    VirtualScreenUtils::variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
                 if (!def.isValid()) {
                     qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i
                                         << "region:" << def.region;

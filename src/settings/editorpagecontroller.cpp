@@ -18,53 +18,25 @@ EditorPageController::EditorPageController(Settings* settings, QObject* parent)
 
     // Forward each Settings NOTIFY to the local Q_PROPERTY NOTIFY + the
     // generic `changed()` signal. The shared Settings instance is the source
-    // of truth; the sub-controller is a pure facade. Using lambdas (not the
-    // signal-to-signal connect shorthand) because we need to emit two signals
-    // per change.
-    connect(m_settings, &Settings::editorDuplicateShortcutChanged, this, [this]() {
-        Q_EMIT duplicateShortcutChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorSplitHorizontalShortcutChanged, this, [this]() {
-        Q_EMIT splitHorizontalShortcutChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorSplitVerticalShortcutChanged, this, [this]() {
-        Q_EMIT splitVerticalShortcutChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorFillShortcutChanged, this, [this]() {
-        Q_EMIT fillShortcutChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorGridSnappingEnabledChanged, this, [this]() {
-        Q_EMIT gridSnappingEnabledChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorEdgeSnappingEnabledChanged, this, [this]() {
-        Q_EMIT edgeSnappingEnabledChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorSnapIntervalXChanged, this, [this]() {
-        Q_EMIT snapIntervalXChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorSnapIntervalYChanged, this, [this]() {
-        Q_EMIT snapIntervalYChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::editorSnapOverrideModifierChanged, this, [this]() {
-        Q_EMIT snapOverrideModifierChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::fillOnDropEnabledChanged, this, [this]() {
-        Q_EMIT fillOnDropEnabledChanged();
-        Q_EMIT changed();
-    });
-    connect(m_settings, &Settings::fillOnDropModifierChanged, this, [this]() {
-        Q_EMIT fillOnDropModifierChanged();
-        Q_EMIT changed();
-    });
+    // of truth; the sub-controller is a pure facade. Each forward re-emits
+    // two signals per change, so signal-to-signal connect() isn't sufficient.
+    const auto forward = [this](auto settingsSignal, auto mySignal) {
+        connect(m_settings, settingsSignal, this, [this, mySignal]() {
+            Q_EMIT(this->*mySignal)();
+            Q_EMIT changed();
+        });
+    };
+    forward(&Settings::editorDuplicateShortcutChanged, &EditorPageController::duplicateShortcutChanged);
+    forward(&Settings::editorSplitHorizontalShortcutChanged, &EditorPageController::splitHorizontalShortcutChanged);
+    forward(&Settings::editorSplitVerticalShortcutChanged, &EditorPageController::splitVerticalShortcutChanged);
+    forward(&Settings::editorFillShortcutChanged, &EditorPageController::fillShortcutChanged);
+    forward(&Settings::editorGridSnappingEnabledChanged, &EditorPageController::gridSnappingEnabledChanged);
+    forward(&Settings::editorEdgeSnappingEnabledChanged, &EditorPageController::edgeSnappingEnabledChanged);
+    forward(&Settings::editorSnapIntervalXChanged, &EditorPageController::snapIntervalXChanged);
+    forward(&Settings::editorSnapIntervalYChanged, &EditorPageController::snapIntervalYChanged);
+    forward(&Settings::editorSnapOverrideModifierChanged, &EditorPageController::snapOverrideModifierChanged);
+    forward(&Settings::fillOnDropEnabledChanged, &EditorPageController::fillOnDropEnabledChanged);
+    forward(&Settings::fillOnDropModifierChanged, &EditorPageController::fillOnDropModifierChanged);
 }
 
 QString EditorPageController::duplicateShortcut() const
@@ -165,10 +137,8 @@ void EditorPageController::resetDefaults()
     m_settings->setEditorFillShortcut(ConfigDefaults::editorFillShortcut());
     m_settings->setEditorGridSnappingEnabled(ConfigDefaults::editorGridSnappingEnabled());
     m_settings->setEditorEdgeSnappingEnabled(ConfigDefaults::editorEdgeSnappingEnabled());
-    // Historical reset values (0.05) differ from ConfigDefaults::editorSnapInterval() (0.1).
-    // Preserving the original behavior from the monolithic SettingsController::resetEditorDefaults().
-    m_settings->setEditorSnapIntervalX(0.05);
-    m_settings->setEditorSnapIntervalY(0.05);
+    m_settings->setEditorSnapIntervalX(ConfigDefaults::editorSnapInterval());
+    m_settings->setEditorSnapIntervalY(ConfigDefaults::editorSnapInterval());
     m_settings->setEditorSnapOverrideModifier(ConfigDefaults::editorSnapOverrideModifier());
     m_settings->setFillOnDropEnabled(ConfigDefaults::fillOnDropEnabled());
     m_settings->setFillOnDropModifier(ConfigDefaults::fillOnDropModifier());
