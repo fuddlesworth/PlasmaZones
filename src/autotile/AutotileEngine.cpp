@@ -1077,21 +1077,21 @@ void AutotileEngine::connectToSettings(Settings* settings)
     m_settingsBridge->connectToSettings(settings);
 }
 
-void AutotileEngine::syncFromSettings(ISettings* settings)
+void AutotileEngine::syncFromSettings(QObject* settings)
 {
     auto* concrete = qobject_cast<Settings*>(settings);
     if (settings && !concrete) {
-        qCWarning(lcAutotile) << "syncFromSettings: ISettings is not a Settings instance — skipping";
+        qCWarning(lcAutotile) << "syncFromSettings: QObject is not a Settings instance — skipping";
         return;
     }
     syncFromSettings(concrete);
 }
 
-void AutotileEngine::connectToSettings(ISettings* settings)
+void AutotileEngine::connectToSettings(QObject* settings)
 {
     auto* concrete = qobject_cast<Settings*>(settings);
     if (settings && !concrete) {
-        qCWarning(lcAutotile) << "connectToSettings: ISettings is not a Settings instance — skipping";
+        qCWarning(lcAutotile) << "connectToSettings: QObject is not a Settings instance — skipping";
         return;
     }
     connectToSettings(concrete);
@@ -3220,6 +3220,16 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
                     algo->setAppIdResolver(resolver);
                 }
             });
+}
+
+void AutotileEngine::setWindowRegistry(QObject* registry)
+{
+    auto* concrete = qobject_cast<WindowRegistry*>(registry);
+    if (registry && !concrete) {
+        qCWarning(lcAutotile) << "setWindowRegistry: QObject is not a WindowRegistry — skipping";
+        return;
+    }
+    setWindowRegistry(concrete);
 }
 
 QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)

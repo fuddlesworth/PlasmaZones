@@ -50,9 +50,14 @@ struct EngineSet
 /**
  * @brief Create both placement engines and the mode router.
  *
- * This is the ONE translation unit that includes the concrete engine
- * headers. Every other consumer should use IPlacementEngine* or
- * PlacementEngineBase*.
+ * Concrete engine headers are included here and in daemon.cpp (for
+ * adaptor construction); all other consumers use abstract pointers.
+ *
+ * Pointer-type guide:
+ * - PlacementEngineBase* — when you need QObject signal connections
+ *   (e.g. UnifiedLayoutController, WindowTrackingAdaptor).
+ * - IPlacementEngine* — when you only call interface methods, no
+ *   signals (e.g. ControlAdaptor, WindowDragAdaptor, SupportReport).
  *
  * The engines are constructed with their mandatory dependencies. The
  * caller must wire persistence delegates, signal connections, and

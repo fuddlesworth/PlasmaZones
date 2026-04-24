@@ -133,7 +133,8 @@ public:
      *
      * Must be set before start. Not owned.
      */
-    void setWindowRegistry(WindowRegistry* registry) override;
+    void setWindowRegistry(WindowRegistry* registry);
+    void setWindowRegistry(QObject* registry) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen autotile state (derived from layout assignments)
@@ -491,7 +492,7 @@ public:
      * @param settings Settings object to read from (not owned)
      */
     void syncFromSettings(Settings* settings);
-    void syncFromSettings(ISettings* settings) override;
+    void syncFromSettings(QObject* settings) override;
 
     // Per-screen config — forwarded to PerScreenConfigResolver (IPlacementEngine overrides)
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
@@ -522,7 +523,7 @@ public:
      * @param settings Settings object to connect to (not owned, must outlive engine)
      */
     void connectToSettings(Settings* settings);
-    void connectToSettings(ISettings* settings) override;
+    void connectToSettings(QObject* settings) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations

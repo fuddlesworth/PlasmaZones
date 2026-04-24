@@ -521,8 +521,9 @@ bool Daemon::init()
     autotileEngine->connectToSettings(m_settings.get());
 
     // Give the window drag adaptor access to the autotile engine for per-screen
-    // autotile checks (overlay suppression and snap rejection on autotile screens)
-    m_windowDragAdaptor->setAutotileEngine(autotileEngine);
+    // autotile checks (overlay suppression and snap rejection on autotile screens).
+    // Uses the base-class pointer — WDA only needs isActiveOnScreen().
+    m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
 
     // SnapEngine creates its own SnapState internally (symmetric with
     // AutotileEngine/TilingState). WTS references it for zone queries.

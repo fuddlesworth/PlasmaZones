@@ -16,10 +16,7 @@
 
 #include <functional>
 
-namespace PlasmaZones {
-class ISettings;
-class WindowRegistry;
-} // namespace PlasmaZones
+class QObject;
 
 namespace PhosphorEngineApi {
 
@@ -222,6 +219,12 @@ public:
         Q_UNUSED(windowId)
         return false;
     }
+    /// Whether the engine considers the window "managed" (eligible for
+    /// layout operations). Semantics are engine-specific:
+    /// - Autotile: equivalent to isWindowTiled (floating windows excluded).
+    /// - Snap: a window assigned to a zone (including floated-in-zone).
+    /// Callers that need a consistent cross-engine check for "engine owns
+    /// this window at all" should use isWindowTracked instead.
     virtual bool isWindowManaged(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -317,11 +320,14 @@ public:
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
 
-    virtual void syncFromSettings(PlasmaZones::ISettings* settings)
+    /// Sync tuning values from a settings object (QObject carrying ISettings).
+    /// Engines qobject_cast to their concrete settings type internally.
+    virtual void syncFromSettings(QObject* settings)
     {
         Q_UNUSED(settings)
     }
-    virtual void connectToSettings(PlasmaZones::ISettings* settings)
+    /// Connect live-update signals from a settings object.
+    virtual void connectToSettings(QObject* settings)
     {
         Q_UNUSED(settings)
     }
@@ -330,9 +336,11 @@ public:
         Q_UNUSED(screenId)
         return 0.05;
     }
+    /// Runtime max-windows limit. Returns -1 (unlimited) by default;
+    /// engines that enforce a cap override with the actual value.
     virtual int runtimeMaxWindows() const
     {
-        return 0;
+        return -1;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -392,7 +400,9 @@ public:
     // Init hooks
     // ═══════════════════════════════════════════════════════════════════════════
 
-    virtual void setWindowRegistry(PlasmaZones::WindowRegistry* registry)
+    /// Attach a window-class registry (QObject carrying WindowRegistry).
+    /// Engines qobject_cast to their concrete type internally.
+    virtual void setWindowRegistry(QObject* registry)
     {
         Q_UNUSED(registry)
     }

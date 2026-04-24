@@ -207,7 +207,10 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
                     Q_EMIT windowFloatingChanged(windowId, false, screenId);
                 });
     } else if (snapEngine) {
-        qCWarning(lcDbusWindow) << "setEngines: snapEngine is not a SnapEngine — snap-specific signals not connected";
+        // Snap-mode window state signals are critical for WTS correctness.
+        // A non-SnapEngine in the snap slot means state notifications are lost.
+        Q_ASSERT_X(false, "WindowTrackingAdaptor::setEngines",
+                   "snapEngine must be a SnapEngine — snap-specific signals not connected");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
