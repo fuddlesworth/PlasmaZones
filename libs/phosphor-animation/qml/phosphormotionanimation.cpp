@@ -20,44 +20,43 @@ namespace {
 Q_LOGGING_CATEGORY(lcMotion, "phosphoranimation.qml.motion")
 } // namespace
 
+namespace {
+// Run the defaultFallbackCurve() invariant check exactly once per
+// process, not once per PhosphorMotionAnimation instantiation. Every
+// `Behavior on X { PhosphorMotionAnimation { … } }` site in the shell's
+// 28+ migrated QML files would otherwise re-pay the dynamic_cast on
+// every scene instantiation. A Meyers-local static gives us the "fail
+// hard in release builds on a broken library" property with no per-
+// instance cost. The lambda body matches the original invariant: the
+// fallback MUST be a cubic-bezier Easing so the ctor fast-path in
+// applyResolvedEasing (single addCubicBezierSegment) stays below Qt
+// 6.11's ≥11-segment BezierSpline heap-corruption boundary.
+bool verifyDefaultFallbackCurveIsCubicBezier()
+{
+    const auto fallback = defaultFallbackCurve();
+    const auto* easing = dynamic_cast<const Easing*>(fallback.get());
+    if (!easing || easing->type != Easing::Type::CubicBezier) {
+        qFatal(
+            "PhosphorMotionAnimation: defaultFallbackCurve() must be a cubic-bezier Easing "
+            "for the ctor fast path — see invariant comment in PhosphorMotionAnimation.cpp");
+    }
+    return true;
+}
+} // namespace
+
 PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
     : QQuickPropertyAnimation(parent)
 {
+    // One-time invariant check (see verifyDefaultFallbackCurveIsCubicBezier
+    // above). The static-init guard runs the check on first instantiation
+    // only; `[[maybe_unused]]` silences the unused-variable warning since
+    // the returned bool is only held to anchor the static.
+    [[maybe_unused]] static const bool sVerified = verifyDefaultFallbackCurveIsCubicBezier();
+
     // Apply the default profile's easing and duration so a
     // PhosphorMotionAnimation with no profile set still animates
     // with the library-default OutCubic curve rather than Qt Quick's
     // default InOutQuad.
-    //
-    // INVARIANT: this constructor-time setEasing is only safe because
-    // `defaultFallbackCurve()` resolves to a single-segment cubic
-    // bezier (fast path at applyResolvedEasing's CubicBezier branch).
-    // That path calls addCubicBezierSegment exactly once and does not
-    // trip Qt 6.11's BezierSpline heap corruption (see
-    // kBezierSplineSegments docs in PhosphorMotionAnimation.h).
-    // Changing the default to a sampled/parametric curve requires
-    // moving this call to updateState(Running) or a similar deferred
-    // hook so the installed easing is built after the object is fully
-    // constructed and attached to its QML context.
-    //
-    // Enforcement: the fallback curve must be an Easing instance AND
-    // the fast-path branch in applyResolvedEasing keys on
-    // `Easing::Type::CubicBezier`. Tripping here would mean someone has
-    // changed defaultFallbackCurve() to a non-Easing or non-cubic type
-    // without updating this ctor — fail hard at startup so the
-    // regression can't ship silently.
-    //
-    // qFatal (not Q_ASSERT_X) so the check also trips in release builds
-    // — Q_ASSERT_X compiles out there, which is exactly the scenario
-    // the "can't ship silently" comment above warns about.
-    {
-        const auto fallback = defaultFallbackCurve();
-        const auto* easing = dynamic_cast<const Easing*>(fallback.get());
-        if (!easing || easing->type != Easing::Type::CubicBezier) {
-            qFatal(
-                "PhosphorMotionAnimation: defaultFallbackCurve() must be a cubic-bezier Easing "
-                "for the ctor fast path — see INVARIANT comment above");
-        }
-    }
     applyResolvedEasing();
 }
 
@@ -92,10 +91,17 @@ void PhosphorMotionAnimation::setDurationOverride(int ms)
         return;
     }
     m_durationOverride = ms;
-    // Re-apply so the override takes effect for the next tick. Curve
-    // stays the same — only the duration changes — but calling the
-    // full easing-install path keeps the single-source-of-truth shape.
-    applyResolvedEasing();
+    // Install the new effective duration directly. applyResolvedEasing()
+    // would also rebuild the BezierSpline approximation for parametric
+    // curves (Spring / Elastic / Bounce / user-authored), which is
+    // independent of the duration — a 30 Hz durationOverride slider drag
+    // bound to a spring profile would otherwise re-sample the curve
+    // kBezierSplineSegments × 2 control-point calls × 30 Hz per tick on
+    // every bound animation. Duration only feeds QQuickPropertyAnimation's
+    // timing machinery, not the easing curve shape, so the direct
+    // setDuration is both correct and cheaper.
+    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
+    QQuickPropertyAnimation::setDuration(durationMs);
     Q_EMIT durationOverrideChanged();
 }
 

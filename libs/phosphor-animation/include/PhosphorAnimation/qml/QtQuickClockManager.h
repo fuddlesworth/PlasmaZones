@@ -73,19 +73,52 @@ class QtQuickClock;
  *
  * The manager itself is a process-wide singleton (Meyers) kept alive
  * for the entire process lifetime. It holds `unique_ptr<QtQuickClock>`
- * values keyed on raw `QQuickWindow*`. When a window is destroyed,
- * Qt's internal teardown deletes the window first; the manager
- * discovers the stale key on its next `clockFor` call (via `QPointer`
- * null check) and evicts the entry. Process-exit cleanup runs the
- * manager's destructor which tears down every remaining clock.
+ * values keyed on raw `QQuickWindow*`. Eager eviction wires a
+ * `QQuickWindow::destroyed` lambda at `clockFor` time; the lambda
+ * drops the entry synchronously so a recycled `QQuickWindow*`
+ * address never re-hits a stale clock.
  *
- * A more eager teardown (subscribe to `QQuickWindow::destroyed` and
- * evict on signal) was considered and rejected for sub-commit 2 —
- * the lazy evict is sufficient given that stale entries consume
+ * ## Process-exit edge cases
+ *
+ * Meyers singletons unwind during static destruction in reverse
+ * construction order. Three hazards to be aware of:
+ *
+ *   1. **Dangling `destroyed` lambda.** Each `Entry` stores the
+ *      `QMetaObject::Connection` for its window's `destroyed` signal.
+ *      If a `QQuickWindow` somehow outlives this singleton (e.g., a
+ *      non-standard teardown where `QApplication` is destroyed AFTER
+ *      statics, or an embedded shell that leaks a window), the
+ *      destroyed signal would dispatch the DirectConnection lambda
+ *      into an already-destroyed `this`, UAF on `m_mutex`. The
+ *      destructor disconnects every stored connection under the lock
+ *      to close this path.
+ *
+ *   2. **`clockFor` racing static destruction.** If another static
+ *      destructor in the same process calls `clockFor()` while THIS
+ *      singleton is mid-destruction, the mutex in the call would
+ *      already be destroyed. There is no defence in code — the
+ *      standard C++ static-destruction contract assumes no such
+ *      reverse-order access. Consumers MUST NOT call `clockFor` from
+ *      static destructors. The singleton is safe only for call sites
+ *      reachable during normal (non-exit) execution.
+ *
+ *   3. **Meyers destruction vs. `QCoreApplication` lifetime.** The
+ *      common `main()` shape — `QApplication app(argc, argv); … ;
+ *      return app.exec();` — makes `QApplication` a stack local. Its
+ *      destructor runs BEFORE main()'s statics unwind, so every
+ *      QQuickWindow is gone before this singleton's destructor
+ *      executes. Under that contract the hardening in (1) is a no-op.
+ *      Embedded hosts that heap-allocate QApp or wire their own exit
+ *      path are the teardowns that actually exercise the disconnect
+ *      loop.
+ *
+ * A previous revision used a lazy-eviction-only design (no eager
+ * `destroyed` hook) on the theory that stale entries consume
  * negligible memory and the Phase-3 `reapAnimationsForClock` hook
- * handles the animation side at output/window teardown anyway. A
- * future sub-commit can wire the signal if profiling shows the
- * lazy path is a bottleneck.
+ * handles the animation side. That design was superseded once
+ * address-reuse (Qt recycling a raw `QQuickWindow*` for a fresh
+ * window) was identified as a ghost-entry hazard — the eager
+ * eviction closes it.
  */
 class PHOSPHORANIMATION_EXPORT QtQuickClockManager
 {

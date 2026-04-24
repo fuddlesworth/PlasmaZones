@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QStandardPaths>
+#include <QUuid>
 
 #include <algorithm>
 
@@ -175,19 +176,23 @@ public:
 
 namespace {
 /// Generate a unique-per-instance owner tag when the caller didn't
-/// specify one. The `%p` formatter yields a stable identifier for the
-/// process lifetime — enough to partition the registry without
-/// requiring the caller to invent a name.
-QString defaultOwnerTag(const void* self)
+/// specify one. Uses a fresh UUID rather than the object's `this`
+/// pointer — address reuse across sequential loader construction
+/// (RAII-scoped loaders in unit tests, plugin reloads that tear down
+/// and rebuild a loader at the same heap slot) would otherwise let the
+/// new loader briefly inherit authority over the prior loader's
+/// unclaimed partition entries before its first commitBatch runs.
+/// UUIDs are never reused within a process.
+QString defaultOwnerTag()
 {
-    return QStringLiteral("profileloader-0x%1").arg(reinterpret_cast<quintptr>(self), 0, 16);
+    return QStringLiteral("profileloader-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 } // namespace
 
 ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& curveRegistry, const QString& ownerTag,
                              QObject* parent)
     : QObject(parent)
-    , m_sink(std::make_unique<Sink>(registry, curveRegistry, ownerTag.isEmpty() ? defaultOwnerTag(this) : ownerTag))
+    , m_sink(std::make_unique<Sink>(registry, curveRegistry, ownerTag.isEmpty() ? defaultOwnerTag() : ownerTag))
     , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(*m_sink))
 {
     // Gate `profilesChanged` on the per-batch change flag — same

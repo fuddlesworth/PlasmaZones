@@ -60,12 +60,13 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // used when callers share one backend across Settings + PhosphorZones::LayoutRegistry
     // + other components, so the migration responsibility lives with them.
     //
-    // Wire the curve registry BEFORE load() so the initial property
-    // snapshot parses Profile blobs through the caller's registry and
-    // preserves `shared_ptr<const Curve>` identity end-to-end. Without
-    // this ordering, load() falls back to a local static registry and
-    // the first re-publish after setCurveRegistry() re-parses with
-    // different curve identities — defeating the shared-curve cache.
+    // The curve registry is taken at construction (before load()) so the
+    // initial property snapshot parses Profile blobs through the caller's
+    // registry and preserves `shared_ptr<const Curve>` identity end-to-end.
+    // There is deliberately no post-construction setter — a late-set
+    // registry would leave already-parsed Profile state referencing
+    // curves built through the fallback registry, defeating the shared-
+    // curve cache without any mechanism for the cached state to notice.
     //
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
@@ -81,16 +82,14 @@ Settings::Settings(QObject* parent)
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
     // That fallback is a process-static CurveRegistry — NOT the daemon's
-    // injected instance — so `shared_ptr<const Curve>` identity is NOT
+    // injected instance — so `shared_ptr<const Curve>` identity is not
     // preserved across the Settings ↔ daemon boundary when this ctor is
-    // used. The standalone settings app runs in a separate process, so
-    // that contract break is expected there; this warning makes the
-    // contract violation explicit for anyone constructing Settings
-    // without an injected registry (tests, one-off tools) who might
-    // otherwise assume curve-identity sharing.
-    qCWarning(lcConfig)
-        << "Settings constructed without explicit CurveRegistry — falling back to process-static instance; "
-           "curve shared_ptr identity will NOT be preserved across Settings/daemon boundary.";
+    // used. The standalone settings app and tests both communicate with
+    // the daemon via disk / D-Bus config round-trips where identity was
+    // never going to survive anyway, so this is the expected path.
+    // qCDebug rather than qCWarning to avoid log-spam on every test
+    // fixture and standalone-settings launch.
+    qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
 }
 
@@ -644,11 +643,6 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
 PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
-void Settings::setCurveRegistry(PhosphorAnimation::CurveRegistry* reg)
-{
-    m_curveRegistry = reg;
-}
-
 // Process-wide fallback registry for standalone Settings instances
 // constructed without an injected CurveRegistry (tests, settings-app
 // tools that don't share a registry with the daemon). Consolidated
@@ -745,12 +739,39 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 }
 
 // ─── Per-field projections over the Profile blob ───────────────────────────
-// Each setter reads the current Profile, mutates one field, writes back.
-// That's one read + one write + one serialise per setter call (hot path:
-// settings-UI slider drag, ~30 Hz). Acceptable overhead for the design-
-// cleanness win over maintaining a parallel cache. Getters are one read
-// + parse; Profile::fromJson is cheap enough that memoisation would be
-// premature optimisation.
+// Each setter patches ONE field in the stored JSON blob directly rather
+// than round-tripping through Profile::toJson. Round-tripping would drop
+// any unresolved raw curve spec preserved by `setAnimationEasingCurve` —
+// `animationProfile()` goes through `CurveRegistry::tryCreate`, which nulls
+// the curve pointer on resolution failure, and `Profile::toJson` then omits
+// the null field. Patching the raw JSON blob leaves every field the setter
+// isn't touching exactly where it was.
+//
+// Getters route through `animationProfile()` for anything that needs the
+// `effective*` defaulting, and read the blob directly for the curve field
+// (so unresolved specs round-trip through the getter/setter pair).
+//
+// Hot path: settings-UI slider drag ~30 Hz. Per call: one read + one JSON
+// parse + one field-insert + one serialise + one store write. Acceptable.
+
+namespace {
+/// Read the Profile JSON blob and return it as a mutable object.
+/// Malformed / absent blob returns an empty object — callers that then
+/// write back produce a minimal blob containing only the patched field.
+QJsonObject readProfileObject(const PhosphorConfig::Store& store)
+{
+    const QString json = store.read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    return doc.isObject() ? doc.object() : QJsonObject{};
+}
+
+/// Serialise @p obj and write it to the Profile blob key.
+void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
+{
+    const QString after = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    store.write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
+}
+} // namespace
 
 int Settings::animationDuration() const
 {
@@ -759,50 +780,69 @@ int Settings::animationDuration() const
 
 void Settings::setAnimationDuration(int duration)
 {
-    auto p = animationProfile();
     const int clamped =
         qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
-    if (qRound(p.effectiveDuration()) == clamped) {
+    if (animationDuration() == clamped) {
         return;
     }
-    p.duration = static_cast<qreal>(clamped);
-    setAnimationProfile(p);
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration), clamped);
+    writeProfileObject(*m_store, obj);
+    Q_EMIT animationDurationChanged();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
 }
 
 QString Settings::animationEasingCurve() const
 {
-    const auto p = animationProfile();
-    if (!p.curve) {
-        return ConfigDefaults::animationEasingCurve();
-    }
-    return p.curve->toString();
+    // Read the curve field directly from the Profile JSON blob so any
+    // wire-format string round-trips through the setter/getter — even
+    // unresolved specs (user plugin curve name not yet registered,
+    // hand-edited config with a typo). `animationProfile()` routes the
+    // curve through `CurveRegistry::tryCreate` which nulls the pointer
+    // on resolution failure; the raw string would then be lost on
+    // read-back. The runtime still gracefully falls back to the library
+    // default at animation time — persisting the raw string here just
+    // preserves the user's intent across restarts.
+    const QJsonObject obj = readProfileObject(*m_store);
+    const QString spec = obj.value(QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)).toString();
+    return spec.isEmpty() ? ConfigDefaults::animationEasingCurve() : spec;
 }
 
 void Settings::setAnimationEasingCurve(const QString& curve)
 {
-    auto p = animationProfile();
-    const QString currentWire = p.curve ? p.curve->toString() : ConfigDefaults::animationEasingCurve();
-    if (currentWire == curve) {
+    // Compare against the raw-stored wire string (same shape the getter
+    // returns) so no-op assignments short-circuit before any write.
+    if (animationEasingCurve() == curve) {
         return;
     }
+
+    // Resolution through the registry is informational only — it tunes
+    // the warning below and produces a canonical wire-form when the spec
+    // resolves. Either way, the blob keeps the caller's string intact so
+    // the user's edit round-trips cleanly through the Q_PROPERTY.
     PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
-    // Route through `tryCreate` (not `create`) so malformed specs
-    // surface as a diagnostic instead of silently collapsing to the
-    // default OutCubic. A typo like "sping:14,0.6" would otherwise be
-    // stored as the default curve without any feedback to the caller —
-    // the user loses their intended curve and has no way to tell why.
-    // On resolution failure we refuse the write and keep the previous
-    // curve, matching the getter/read contract (`animationProfile`
-    // falls back to defaults for unresolved wire strings rather than
-    // committing them).
     auto resolved = reg.tryCreate(curve);
-    if (!resolved) {
-        qCWarning(lcConfig) << "setAnimationEasingCurve: rejecting unresolved curve spec" << curve
-                            << "— keeping previous curve";
-        return;
+    QString toStore;
+    if (resolved) {
+        // Known curve — store the canonical wire-format so a later
+        // read-back matches what the runtime sees (prevents spurious
+        // config rewrites when a user-supplied alias like "0.25,1.0,..."
+        // resolves to a slightly-different-precision canonical form).
+        toStore = resolved->toString();
+    } else {
+        qCWarning(lcConfig) << "setAnimationEasingCurve: curve spec" << curve
+                            << "did not resolve — persisting raw (library default will apply at animation time)";
+        toStore = curve;
     }
-    p.curve = std::move(resolved);
-    setAnimationProfile(p);
+
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve), toStore);
+    writeProfileObject(*m_store, obj);
+
+    Q_EMIT animationEasingCurveChanged();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
 }
 
 int Settings::animationMinDistance() const
@@ -812,14 +852,17 @@ int Settings::animationMinDistance() const
 
 void Settings::setAnimationMinDistance(int distance)
 {
-    auto p = animationProfile();
     const int clamped =
         qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
-    if (p.effectiveMinDistance() == clamped) {
+    if (animationMinDistance() == clamped) {
         return;
     }
-    p.minDistance = clamped;
-    setAnimationProfile(p);
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance), clamped);
+    writeProfileObject(*m_store, obj);
+    Q_EMIT animationMinDistanceChanged();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
 }
 
 int Settings::animationSequenceMode() const
@@ -829,14 +872,17 @@ int Settings::animationSequenceMode() const
 
 void Settings::setAnimationSequenceMode(int mode)
 {
-    auto p = animationProfile();
     const int clamped =
         qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
-    if (static_cast<int>(p.effectiveSequenceMode()) == clamped) {
+    if (animationSequenceMode() == clamped) {
         return;
     }
-    p.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(clamped);
-    setAnimationProfile(p);
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode), clamped);
+    writeProfileObject(*m_store, obj);
+    Q_EMIT animationSequenceModeChanged();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
 }
 
 int Settings::animationStaggerInterval() const
@@ -846,14 +892,17 @@ int Settings::animationStaggerInterval() const
 
 void Settings::setAnimationStaggerInterval(int ms)
 {
-    auto p = animationProfile();
     const int clamped =
         qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
-    if (p.effectiveStaggerInterval() == clamped) {
+    if (animationStaggerInterval() == clamped) {
         return;
     }
-    p.staggerInterval = clamped;
-    setAnimationProfile(p);
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval), clamped);
+    writeProfileObject(*m_store, obj);
+    Q_EMIT animationStaggerIntervalChanged();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────

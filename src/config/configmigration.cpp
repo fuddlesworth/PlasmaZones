@@ -723,14 +723,25 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // always emits canonical wire form — causing a spurious config
         // rewrite on first post-migration interaction. Built-in curves
         // auto-register via the CurveRegistry constructor, so no
-        // explicit registerBuiltins() call is needed here. Unknown
-        // specs fall through as-is: `Profile::fromJson` on the consumer
-        // side will retry through its own (potentially extended)
-        // registry, and worst case returns a best-effort default.
+        // explicit registerBuiltins() call is needed here.
+        //
+        // Unknown specs (custom curve names from a v1 plugin that no
+        // longer exists, typos in hand-edited v1 configs) are DROPPED
+        // here rather than persisted. Persisting the raw string would
+        // make `Profile::fromJson` emit the "curve spec … did not
+        // resolve" warning on every daemon start forever; dropping the
+        // field lets the library-default OutCubic apply and silences
+        // the repeating diagnostic. The migration log below records
+        // the dropped spec so an operator investigating a silent
+        // curve change can find it.
         const QString v1Curve = v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
         PhosphorAnimation::CurveRegistry registry;
-        const auto resolved = registry.tryCreate(v1Curve);
-        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved ? resolved->toString() : v1Curve;
+        if (const auto resolved = registry.tryCreate(v1Curve)) {
+            profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved->toString();
+        } else {
+            qInfo("migrateV1ToV2: dropping unresolved v1 curve spec '%s' — library default (OutCubic) will apply",
+                  qPrintable(v1Curve));
+        }
     }
     if (v1Animations.contains(QLatin1String("AnimationMinDistance"))) {
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] =

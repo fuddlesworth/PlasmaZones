@@ -189,6 +189,36 @@ public:
     /// to outlive the returned Profile. The Profile captures a
     /// `shared_ptr` to the resolved curve, which owns its own backing
     /// state independent of the registry.
+    ///
+    /// ## Rejected field values (fall back to `DefaultX`)
+    ///
+    /// Values outside a sensible numeric range are rejected with a
+    /// one-shot `qCWarning` and the field is left unset — the
+    /// `effectiveX()` accessor then substitutes the library default.
+    /// The rejections are intentional, not bugs:
+    ///
+    ///   - `duration`: must be `std::isfinite(x) && 0 < x <= 1h`.
+    ///     NaN / infinity round to UB in the downstream
+    ///     `qRound → int` used by `QQuickPropertyAnimation::
+    ///     setDuration`. Non-positive values silently render as 0 ms
+    ///     (instant snap, no animation) — if that is the user's
+    ///     intent, setting `animationsEnabled = false` at the
+    ///     settings level is the documented on/off switch. Having
+    ///     zero-duration as a field-level opt-in would require
+    ///     threading "is animation entirely disabled?" through every
+    ///     consumer; rejection routes to the existing toggle.
+    ///   - `minDistance`: must be `>= 0`. Negative would make the
+    ///     skip check trivially true for every animation (no real
+    ///     distance is less than a negative threshold), silently
+    ///     disabling the minimum-distance skip everywhere.
+    ///   - `sequenceMode`: must be a defined enumerator. Unknown
+    ///     values (e.g. a newer client writing a value this build
+    ///     doesn't know) fall back rather than silently aliasing onto
+    ///     `AllAtOnce`.
+    ///   - `staggerInterval`: must be `>= 0` and `<= 1h`. Negative
+    ///     would make every cascade element fire with a scheduled
+    ///     start in the past; hour+ values would freeze any practical
+    ///     cascade.
     static Profile fromJson(const QJsonObject& obj, const CurveRegistry& registry);
 
     // ─────── Equality ───────

@@ -1098,12 +1098,15 @@ types (`PhosphorAnimatedColorLinear` / `PhosphorAnimatedColorOkLab`) —
 QML idiom prefers enum flags over type bifurcation, and a per-call
 space swap would otherwise require re-binding the property.
 
-**Q. `Behavior` carrier — `PhosphorMotionAnimation : QAbstractAnimation`.**
+**Q. `Behavior` carrier — `PhosphorMotionAnimation : QQuickPropertyAnimation`.**
 
 Qt's `Behavior` machinery only accepts `QAbstractAnimation` subclasses.
 The "attached type for Behavior" wording in the original Phase 4 draft
-is loose — the working shape is a first-class animation subclass that
-bridges Qt's `updateCurrentTime(int ms)` to `AnimatedValue<T>::advance()`:
+is loose. The sub-commit-4 implementation initially explored a
+`QVariantAnimation` base, but the QML `Behavior { ... }` property
+animator expects the `QQuickPropertyAnimation` shape (it installs
+`easing` + `duration` on the property-animation machinery directly
+and handles property write-backs internally). The shipping shape is:
 
 ```qml
 Behavior on opacity {
@@ -1111,11 +1114,21 @@ Behavior on opacity {
 }
 ```
 
-The subclass holds an `AnimatedValue<qreal>` internally, pulls the
-clock from `QtQuickClockManager`, and drives property writes via the
-QAbstractAnimation virtuals. The one-shot attached-property shape
-(`Behavior { PhosphorMotion.profile: ... }`) doesn't actually wire
-into Qt's animation evaluator and is rejected.
+`PhosphorMotionAnimation` subclasses `QQuickPropertyAnimation` and
+converts the Phase-3 curve into a `QEasingCurve::BezierSpline` at
+profile-resolution time, then installs it via `setEasing()`. Profile
+duration goes via `setDuration()`. Qt Quick's animation infrastructure
+handles all timing, interpolation, and property writes — no per-tick
+`interpolated()` override is needed.
+
+**Spring caveat:** `QQuickPropertyAnimation` is fundamentally
+fixed-duration. Stateful curves (`Spring`) that need real-time `dt`
+integration to preserve velocity across retargets fall back to their
+analytical step response — the visual shape is preserved but mid-
+animation velocity continuity is lost. Consumers that need true
+velocity-preserving spring retargets in QML should use
+`PhosphorAnimatedReal` (et al.) which drive `AnimatedValue<T>`
+directly via `QtQuickClockManager`.
 
 **R. Profile binding — QVariant accepting path string OR `PhosphorProfile` value.**
 
@@ -1367,9 +1380,12 @@ Q_SIGNALS:
    and QML reactive bindings need NOTIFY signals), `ColorSpace` runtime
    property on the color variant, unit tests.
 4. **`PhosphorMotionAnimation` + `PhosphorProfileRegistry` skeleton** —
-   `QVariantAnimation` subclass (Behavior-compatible), QVariant
-   `profile` property accepting path string or value, registry
-   live-resolution wiring.
+   `QQuickPropertyAnimation` subclass (Behavior-compatible; decision
+   Q originally proposed `QVariantAnimation` but the QML `Behavior`
+   wiring in Qt 6 expects the `QQuickPropertyAnimation` shape, which
+   installs `easing` + `duration` on the property-animation machinery
+   directly), QVariant `profile` property accepting path string or
+   value, registry live-resolution wiring.
 5. **`CurveLoader` + `ProfileLoader`** — consumer-agnostic loaders,
    XDG discovery helper for PlasmaZones daemon to call from its own
    namespace, live-reload opt-in, user-wins collision policy.

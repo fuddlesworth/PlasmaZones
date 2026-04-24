@@ -850,6 +850,39 @@ private Q_SLOTS:
         }
         QCOMPARE(secondBlob, firstBlob);
     }
+
+    /// An unresolved curve spec (user plugin curve not yet registered,
+    /// hand-edited typo) MUST round-trip through the setter/getter —
+    /// the caller's string is preserved verbatim rather than silently
+    /// reverting to the default. The runtime still gracefully falls
+    /// back to the library default at animation time; persisting the
+    /// raw string means the user's edit survives restarts and resolves
+    /// cleanly once a matching curve becomes available.
+    ///
+    /// Regression guard for the M3 review finding — the previous setter
+    /// rejected unresolved specs outright, which broke QML two-way
+    /// bindings (UI would show the user's pick, config on disk would
+    /// silently revert to the prior value).
+    void testAnimationEasingCurve_unresolvedSpecRoundTrips()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        // "some-plugin-curve" is not a built-in CurveRegistry typeId and
+        // is not in any file the default fallback registry knows about.
+        // Must still round-trip intact.
+        const QString userSpec = QStringLiteral("some-plugin-curve");
+        settings.setAnimationEasingCurve(userSpec);
+        QCOMPARE(settings.animationEasingCurve(), userSpec);
+
+        // Per-field mutation on a DIFFERENT field must not clobber the
+        // unresolved curve spec — the numeric setters patch the blob
+        // in place rather than round-tripping through Profile::toJson,
+        // which would otherwise drop the null-curve field.
+        settings.setAnimationDuration(275);
+        QCOMPARE(settings.animationEasingCurve(), userSpec);
+        QCOMPARE(settings.animationDuration(), 275);
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

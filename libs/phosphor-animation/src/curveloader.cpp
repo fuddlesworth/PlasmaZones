@@ -320,7 +320,27 @@ CurveLoader::CurveLoader(CurveRegistry& registry, QObject* parent)
     });
 }
 
-CurveLoader::~CurveLoader() = default;
+CurveLoader::~CurveLoader()
+{
+    // Unregister every factory this loader registered so a process
+    // hosting multiple sequential loaders (tests, plugin reloads,
+    // embedded shells) doesn't accumulate ghost factories in the
+    // borrowed CurveRegistry. Mirrors `ProfileLoader::~ProfileLoader`,
+    // which issues a `clearOwner(ownerTag)` against PhosphorProfileRegistry
+    // for the same reason.
+    //
+    // CurveRegistry has no owner partitioning (factories are a flat
+    // typeId→Factory map), so we iterate the loader's own tracked set
+    // and unregister each entry by name. Keys the loader never
+    // successfully registered (parse errors, builtin collisions) are
+    // not in `entries`, so we won't spuriously evict a consumer's
+    // direct `registerFactory` call that happens to share a name.
+    if (m_sink && m_sink->registry) {
+        for (auto it = m_sink->entries.constBegin(); it != m_sink->entries.constEnd(); ++it) {
+            m_sink->registry->unregisterFactory(it.key());
+        }
+    }
+}
 
 int CurveLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
 {

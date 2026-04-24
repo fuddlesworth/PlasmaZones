@@ -32,7 +32,7 @@ namespace PhosphorAnimation {
  * `PhosphorMotionAnimation` — a QML-instantiable type with no native
  * owner the consumer can inject into — has a stable anchor without
  * per-consumer dependency injection. Every QML element instantiated
- * through `import org.kde.phosphoranimation` must reach the same
+ * through `import org.phosphor.animation` must reach the same
  * registry instance the daemon populated, and QML has no ergonomic
  * hook for "pass this registry pointer through 15 layers of
  * declarative instantiation". The singleton is the simplest correct
@@ -127,6 +127,12 @@ public:
     ///     that want a catch-all for wholesale registry mutation listen
     ///     to `profilesReloaded` (which fires only from `clear` /
     ///     `reloadAll`).
+    ///   - `ownerReloaded(ownerTag)` fires exactly once AFTER the
+    ///     per-path signal storm, provided the call made any changes.
+    ///     Consumers that want to coalesce UI updates across a rescan
+    ///     (settings list views, preset pickers rendering tens of
+    ///     paths) latch on this instead of reacting to each per-path
+    ///     `profileChanged`.
     ///
     /// An empty @p ownerTag is rejected (Q_ASSERT) — that would alias
     /// with the direct-owner path and defeat the partitioning.
@@ -134,7 +140,9 @@ public:
 
     /// Remove every entry owned by @p ownerTag. Fires one
     /// `profileChanged(path)` for each removed path (same shape as
-    /// `reloadFromOwner`). Does NOT fire `profilesReloaded()`.
+    /// `reloadFromOwner`), followed by a single `ownerReloaded(ownerTag)`
+    /// at the end of the batch if anything was removed. Does NOT fire
+    /// `profilesReloaded()`.
     void clearOwner(const QString& ownerTag);
 
     /// Wholesale replace the entire registry contents with @p profiles
@@ -183,6 +191,18 @@ Q_SIGNALS:
     /// — they emit per-path `profileChanged(path)` for every change so
     /// consumers only wake for paths that actually moved.
     void profilesReloaded();
+
+    /// Fired at the end of a `reloadFromOwner` or `clearOwner` call
+    /// whenever the call produced at least one per-path change. Exactly
+    /// one emit per partitioned-reload batch, after every
+    /// `profileChanged(path)` this call produced. Intended for UI views
+    /// that want to coalesce per-path churn into one redraw rather than
+    /// reacting to every individual `profileChanged`.
+    ///
+    /// Does NOT fire from `registerProfile`, `unregisterProfile`,
+    /// `reloadAll`, or `clear` — those are not partitioned-reload
+    /// operations.
+    void ownerReloaded(const QString& ownerTag);
 
 private:
     PhosphorProfileRegistry();

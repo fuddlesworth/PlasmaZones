@@ -982,21 +982,26 @@ private Q_SLOTS:
         QVERIFY2(profileDoc.isObject(), "Animations/Profile must be a JSON object string");
         const QJsonObject profile = profileDoc.object();
 
-        // Every v1 value must be preserved through to the v2 blob.
-        // Note: curves are stored in their WIRE FORMAT — the migration
-        // runs the v1 curve string through CurveRegistry. If the
-        // registry resolves the input, `Curve::toString()` is stored
-        // (canonical form); otherwise the input string is stored
-        // verbatim. "easeOutCubic" is a friendly name the runtime
-        // CurveRegistry does not register a factory for — it falls
-        // through as-is, NOT canonicalised. That's intentional — the
-        // canonical round-trip happens on inputs CurveRegistry knows
-        // (bezier wire-form, spring:, elastic-*:, bounce-*:). The
-        // dedicated `testV1AnimationMigration_canonicalisesKnownCurve`
-        // test below exercises the canonicalisation path.
+        // Every v1 value MUST be preserved through to the v2 blob,
+        // EXCEPT for unresolved curve specs which are intentionally
+        // dropped (see the "curve" assertion below).
+        //
+        // Curves are stored in their WIRE FORMAT — the migration runs
+        // the v1 curve string through a stack-local CurveRegistry. If
+        // the registry resolves the input, `Curve::toString()` is
+        // stored (canonical form). If it does not resolve — as with
+        // the v1 friendly name "easeOutCubic", which the CurveRegistry
+        // has no factory for — the migration DROPS the field rather
+        // than writing it through verbatim. Persisting an unresolved
+        // spec would make `Profile::fromJson` emit the "curve spec …
+        // did not resolve" warning on every daemon start forever;
+        // dropping lets the library-default OutCubic apply silently
+        // and matches the "no backwards compat" spirit of decision S.
+        // The canonicalisation happy-path is exercised in
+        // `testV1AnimationMigration_canonicalisesKnownCurve` below.
         QCOMPARE(profile.value(QStringLiteral("duration")).toDouble(-1.0), 200.0);
-        const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
-        QVERIFY2(!storedCurve.isEmpty(), "Migrated curve field must be non-empty");
+        QVERIFY2(!profile.contains(QStringLiteral("curve")),
+                 "Unresolved v1 curve spec must be dropped, not written verbatim into the v2 blob");
         QCOMPARE(profile.value(QStringLiteral("minDistance")).toInt(-1), 10);
         QCOMPARE(profile.value(QStringLiteral("sequenceMode")).toInt(-1), 0);
         QCOMPARE(profile.value(QStringLiteral("staggerInterval")).toInt(-1), 25);

@@ -14,6 +14,30 @@ Runs as a CMake custom-command at build time. Exits non-zero on any
 typo so a missing data file fails the build rather than shipping and
 silently falling back to library defaults at runtime.
 
+## What this checker does NOT catch
+
+The `profile:` regex only matches QUOTED STRING LITERALS — e.g.
+`profile: "zone.highlight"`. It deliberately does not attempt to
+resolve QML expressions:
+
+  - `profile: condition ? "a" : "b"` — both branches silently skipped.
+  - `profile: "shell." + Theme.variant` — concatenated identifiers
+    skipped.
+  - `profile: somePropertyAlias` — property references skipped.
+  - `profile: Settings.primaryProfile` — property chains skipped.
+
+Resolving these would require a full QML AST / type system, which is
+well beyond the "CI tripwire for the 99% case" goal of this script.
+
+The script also treats `data/profiles/` as authoritative: a profile
+string with no corresponding file fails the build, even if it is
+registered at runtime by a plugin-authored `PhosphorProfileRegistry::
+registerProfile` call. Projects with plugin-registered profiles need
+to either ship a placeholder JSON or extend `QML_DIRS` / the regex to
+scope the check away from those sites.
+
+Treat the checker as a lint, not a proof of correctness.
+
 Usage:
     check-animation-profiles.py <source-root>
 """

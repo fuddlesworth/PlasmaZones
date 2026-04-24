@@ -242,6 +242,40 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         cleanupRegistry({QStringLiteral("stable")});
     }
+
+    /// Regression guard for the factory-leak-on-destruction bug: when a
+    /// CurveLoader goes out of scope, every factory it registered into
+    /// the borrowed CurveRegistry MUST be unregistered. Without this,
+    /// tests that construct multiple sequential loaders (or a plugin
+    /// host that tears down and rebuilds a loader) would accumulate
+    /// ghost factories capturing stale `shared_ptr<const Curve>`
+    /// instances — live but no longer tracked by any loader, and
+    /// impossible to evict without a manual sweep.
+    ///
+    /// This mirrors `ProfileLoader::~ProfileLoader`'s `clearOwner(tag)`
+    /// on PhosphorProfileRegistry, adapted to CurveRegistry's flat
+    /// typeId→Factory shape.
+    void testDestructorUnregistersFactories()
+    {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("ephemeral.json")), QStringLiteral(R"({
+            "name": "ephemeral",
+            "typeId": "spring",
+            "parameters": { "omega": 10.0, "zeta": 0.7 }
+        })"));
+
+        QVERIFY2(!m_registry.has(QStringLiteral("ephemeral")),
+                 "test precondition: registry must not already know the ephemeral key");
+
+        {
+            CurveLoader loader(m_registry);
+            QCOMPARE(loader.loadFromDirectory(dir.path()), 1);
+            QVERIFY(m_registry.has(QStringLiteral("ephemeral")));
+        } // loader goes out of scope here
+
+        QVERIFY2(!m_registry.has(QStringLiteral("ephemeral")),
+                 "CurveLoader dtor must unregister factories it installed — see M1 fix");
+    }
 };
 
 QTEST_MAIN(TestCurveLoader)

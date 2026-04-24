@@ -121,6 +121,50 @@ private Q_SLOTS:
         r.registerProfile(QStringLiteral("y"), Profile{});
         QCOMPARE(r.profileCount(), 2);
     }
+
+    /// `ownerReloaded(tag)` fires exactly once per partitioned-reload
+    /// batch, AFTER every per-path `profileChanged` signal. Consumers
+    /// that want to coalesce UI updates across a rescan use this as
+    /// the batch-boundary marker instead of reacting to each per-path
+    /// signal individually.
+    void testOwnerReloadedFiresOnceAfterPerPathBurst()
+    {
+        PhosphorProfileRegistry& r = PhosphorProfileRegistry::instance();
+        const QString tag = QStringLiteral("test-owner");
+
+        QHash<QString, Profile> initial;
+        initial.insert(QStringLiteral("a.one"), Profile{});
+        Profile withDuration;
+        withDuration.duration = 200.0;
+        initial.insert(QStringLiteral("a.two"), withDuration);
+
+        QSignalSpy changedSpy(&r, &PhosphorProfileRegistry::profileChanged);
+        QSignalSpy reloadedSpy(&r, &PhosphorProfileRegistry::ownerReloaded);
+        QSignalSpy bulkSpy(&r, &PhosphorProfileRegistry::profilesReloaded);
+
+        r.reloadFromOwner(tag, initial);
+
+        QCOMPARE(changedSpy.count(), 2); // one per path that changed
+        QCOMPARE(reloadedSpy.count(), 1); // one batch boundary signal
+        QCOMPARE(reloadedSpy.first().at(0).toString(), tag);
+        QCOMPARE(bulkSpy.count(), 0); // profilesReloaded is wholesale-only
+
+        // No-op reload (same content): zero signals — including ownerReloaded.
+        changedSpy.clear();
+        reloadedSpy.clear();
+        r.reloadFromOwner(tag, initial);
+        QCOMPARE(changedSpy.count(), 0);
+        QCOMPARE(reloadedSpy.count(), 0);
+
+        // clearOwner also fires ownerReloaded after the per-path removals.
+        r.reloadFromOwner(tag, initial); // seed
+        reloadedSpy.clear();
+        changedSpy.clear();
+        r.clearOwner(tag);
+        QCOMPARE(changedSpy.count(), 2); // one per removed path
+        QCOMPARE(reloadedSpy.count(), 1);
+        QCOMPARE(reloadedSpy.first().at(0).toString(), tag);
+    }
 };
 
 QTEST_MAIN(TestPhosphorProfileRegistry)

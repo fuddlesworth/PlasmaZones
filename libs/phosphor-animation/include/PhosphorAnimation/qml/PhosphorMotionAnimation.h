@@ -12,10 +12,36 @@
 #include <QtCore/QPointer>
 #include <QtCore/QVariant>
 #include <QtQml/qqmlregistration.h>
-// Private header — project depends on qt6-qtdeclarative-devel which
-// ships the private headers on Fedora (qt6-qtdeclarative-private-devel
-// is a separate package on some distros but is pulled in by -devel on
-// Fedora 42+).
+// Private Qt header — DELIBERATE dependency, not incidental. The
+// `QQuickPropertyAnimation` base class lives under `QtQuick/private/*`
+// upstream; no public alias exists. This is the same header every
+// `Behavior`-wired property-animation subclass in Qt Quick uses
+// internally, so its shape is far more stable than a typical private
+// header — but Qt does not guarantee source-compat across MINOR Qt
+// versions.
+//
+// Supported Qt range for this library:
+//   - Minimum:   Qt 6.5 (`QQuickPropertyAnimation` shape we rely on
+//                 has been stable since 6.5).
+//   - Tested:    Qt 6.9, 6.10, 6.11 (the segment cap at
+//                `kBezierSplineSegments` specifically guards 6.11;
+//                older versions don't heap-corrupt on the 11+
+//                segment boundary, but the cap is harmless there).
+//   - Known-bad: Qt 6.11.0-6.11.x pre-patch — `QQuickPropertyAnimation::
+//                setEasing` heap-corrupts on `QEasingCurve::BezierSpline`
+//                curves with >=11 segments. Workaround in-library; no
+//                fix required at the consumer site.
+//
+// Packaging notes: on Fedora, `qt6-qtdeclarative-devel` pulls the
+// private headers via `-devel`. On Debian/Ubuntu the headers live
+// under `qt6-declarative-private-dev`. Arch ships them in
+// `qt6-declarative`. Distributions that split out private headers
+// into a separate package (some openSUSE layouts) need the explicit
+// `-private-devel` install.
+//
+// When bumping the Qt minimum: re-verify the `setEasing` boundary
+// and update both `kBezierSplineSegments` and this comment if Qt's
+// behaviour changes.
 #include <QtQuick/private/qquickanimation_p.h>
 
 namespace PhosphorAnimation {

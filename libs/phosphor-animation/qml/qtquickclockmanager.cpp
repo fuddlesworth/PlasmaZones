@@ -12,7 +12,37 @@ namespace PhosphorAnimation {
 
 QtQuickClockManager::QtQuickClockManager() = default;
 
-QtQuickClockManager::~QtQuickClockManager() = default;
+QtQuickClockManager::~QtQuickClockManager()
+{
+    // Process-exit teardown hardening. Two hazards to handle:
+    //
+    //   1. Any `Entry::destroyedConnection` that is still live at this
+    //      point would — if its source window is later destroyed after
+    //      this singleton — fire the `releaseClockFor` lambda
+    //      (DirectConnection) through a `this` that is mid-destruction.
+    //      Disconnect explicitly under the lock so no later signal
+    //      dispatches can reach us.
+    //
+    //   2. `QtQuickClock::~QtQuickClock` unsubscribes from its window's
+    //      `beforeRendering`. That disconnect is safe against a
+    //      destroyed window (Qt auto-disconnects), but running it under
+    //      the lock serialises with any in-flight `clockFor` racing
+    //      from another static destructor. The `unique_ptr` reset
+    //      inside `m_entries.clear()` handles the delete order.
+    //
+    // At process exit with a well-behaved `QCoreApplication` teardown
+    // (QApp is a stack-scoped local in `main()`), every QQuickWindow
+    // is already gone by the time statics unwind — so these disconnects
+    // are typically no-ops. The cost of doing them is negligible and
+    // they catch the non-standard teardown paths (embedded shells,
+    // test harnesses manipulating the QApp lifetime directly) where
+    // the invariant does not hold.
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (auto& [_, entry] : m_entries) {
+        QObject::disconnect(entry.destroyedConnection);
+    }
+    m_entries.clear();
+}
 
 QtQuickClockManager& QtQuickClockManager::instance()
 {

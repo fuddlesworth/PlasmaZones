@@ -148,12 +148,20 @@ public:
     /// (or a mis-mounted filesystem returning runaway sizes). 1 MiB is
     /// far above any legitimate curve / profile / layout schema in this
     /// library's ecosystem.
-    ///
-    /// Note: no corresponding cap on *total* entry count. A directory
-    /// with tens of thousands of tiny JSON files would all be parsed on
-    /// the GUI thread at rescan time. Consumers with untrusted-input
-    /// concerns should enforce a count cap in their sink's `parseFile`.
     static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
+
+    /// Hard cap on entries parsed per rescan (summed across every
+    /// registered directory). At 10k entries a rescan has already burned
+    /// the 50 ms debounce budget many times over; a user (or malicious
+    /// same-user process) filling `~/.local/share/…/profiles/` with tiny
+    /// JSON files would otherwise block the GUI thread unboundedly on
+    /// every watch fire. Sinks are consulted in scan order so the first
+    /// 10k files (alphabetic within each dir) still register; excess is
+    /// skipped with a one-shot warning.
+    ///
+    /// Tests can override via `setMaxEntriesForTest` when exercising the
+    /// cap.
+    static constexpr int kMaxEntries = 10'000;
 
     /// Test-only: override the debounce interval (default 50 ms).
     ///
@@ -167,6 +175,12 @@ public:
     /// requirement for collapsing the 2-3 event save-temp-rename dance
     /// every editor performs.
     void setDebounceIntervalForTest(int ms);
+
+    /// Test-only: override the per-rescan entry cap (default
+    /// `kMaxEntries`). Lets the cap regression test trip the guard with
+    /// 3-digit file counts rather than having to materialise 10k files
+    /// on the CI filesystem.
+    void setMaxEntriesForTest(int cap);
 
 Q_SIGNALS:
     /**
@@ -201,6 +215,9 @@ private:
     QSet<QString> m_watchedFiles;
     QTimer m_debounceTimer;
     bool m_liveReloadEnabled = false;
+    /// Effective per-rescan entry cap — initialised from `kMaxEntries`
+    /// at construction; tests override via `setMaxEntriesForTest`.
+    int m_maxEntries = kMaxEntries;
 };
 
 } // namespace PhosphorJsonLoader

@@ -323,6 +323,42 @@ private Q_SLOTS:
         }
     }
 
+    /// Regression guard for the GUI-thread DoS — a directory sprayed
+    /// with too many JSON files must stop short at the configured cap
+    /// rather than parsing them all. Uses the test-only
+    /// `setMaxEntriesForTest` to trip the guard at a 3-digit file count
+    /// instead of the 10'000 production default (which would balloon
+    /// the CI filesystem footprint for no test value).
+    void testEntryCountCapShortCircuitsScan()
+    {
+        constexpr int kTestCap = 5;
+        const int totalFiles = kTestCap * 2; // more than the cap, deterministically
+
+        for (int i = 0; i < totalFiles; ++i) {
+            // Zero-padded names so alphabetic sort is deterministic and
+            // the surviving set is always the first kTestCap files.
+            writeJson(m_tmp->filePath(QStringLiteral("entry-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                      QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0')), QStringLiteral("v"));
+        }
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        const int n = loader.loadFromDirectory(m_tmp->path(), LiveReload::Off);
+
+        QCOMPARE(n, kTestCap);
+        QCOMPARE(loader.registeredCount(), kTestCap);
+        // First kTestCap (alphabetically) made it through, the rest were
+        // silently dropped — the aggregate qCWarning in the library
+        // surfaces the cap in the log once per trip.
+        for (int i = 0; i < kTestCap; ++i) {
+            QVERIFY(sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
+        }
+        for (int i = kTestCap; i < totalFiles; ++i) {
+            QVERIFY(!sink.registry.contains(QStringLiteral("k-%1").arg(i, 3, 10, QLatin1Char('0'))));
+        }
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
 };

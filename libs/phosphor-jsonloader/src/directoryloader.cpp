@@ -128,6 +128,11 @@ void DirectoryLoader::setDebounceIntervalForTest(int ms)
     m_debounceTimer.setInterval(ms);
 }
 
+void DirectoryLoader::setMaxEntriesForTest(int cap)
+{
+    m_maxEntries = cap;
+}
+
 int DirectoryLoader::registeredCount() const
 {
     return m_entries.size();
@@ -167,7 +172,15 @@ void DirectoryLoader::rescanAll()
     // overrides.
     QHash<QString, ParsedEntry> freshParsedByKey;
 
+    // Entry-count cap breaker: a rescan that hit `m_maxEntries` short-
+    // circuits the remaining scan. Logged once (on first trip) so the
+    // user sees the cap, not every file it decided to skip.
+    bool capTripped = false;
+
     for (const QString& directory : m_directories) {
+        if (capTripped) {
+            break;
+        }
         QDir dir(directory);
         if (!dir.exists()) {
             qCDebug(lcLoader) << "rescan: directory does not exist (yet?)" << directory;
@@ -196,6 +209,18 @@ void DirectoryLoader::rescanAll()
         QHash<QString, QString> keysInThisDir;
 
         for (const QString& file : files) {
+            // Entry-count DoS guard — paired with the per-file byte cap
+            // below. A directory sprayed with tens of thousands of empty
+            // `*.json` files would otherwise parse every one of them on
+            // the GUI thread on every watcher fire. The cap short-circuits
+            // the scan as soon as the tracked-entries count reaches the
+            // configured maximum; later files (alphabetically) are
+            // silently dropped with one aggregate warning below.
+            if (freshParsedByKey.size() >= m_maxEntries) {
+                capTripped = true;
+                break;
+            }
+
             const QString fullPath = dir.absoluteFilePath(file);
 
             // DoS / foot-gun guard: untrusted same-user files should not
@@ -254,6 +279,12 @@ void DirectoryLoader::rescanAll()
             // collision, consistent with `fresh`'s override semantics.
             freshParsedByKey.insert(key, std::move(*parsed));
         }
+    }
+
+    if (capTripped) {
+        qCWarning(lcLoader).nospace()
+            << "DirectoryLoader: reached entry cap (" << m_maxEntries
+            << ") — later files skipped to protect the GUI thread. Raise kMaxEntries or prune the watched directories.";
     }
 
     // Materialise the final parsed-entry list from the hash. Sorting
