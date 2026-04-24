@@ -9,7 +9,8 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    readonly property int gapMax: settingsController.autotileGapMax
+    readonly property var settingsBridge: settingsController.tilingAlgorithmPage
+    readonly property int gapMax: root.settingsBridge.autotileGapMax
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Per-screen override helper
@@ -57,7 +58,7 @@ Flickable {
         if (!root.algoSupportsCustomParams)
             return [];
 
-        return settingsController.customParamsForAlgorithm(root.selectedAlgorithm);
+        return root.settingsBridge.customParamsForAlgorithm(root.selectedAlgorithm);
     }
     // Whether the algorithm uses a center layout (ratio/count labels say "Center" instead of "Master").
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
@@ -141,7 +142,7 @@ Flickable {
         GapsSettingsCard {
             Layout.fillWidth: true
             gapMax: root.gapMax
-            gapMin: settingsController.autotileGapMin
+            gapMin: root.settingsBridge.autotileGapMin
             innerGapValue: root.settingValue("InnerGap", appSettings.autotileInnerGap)
             outerGapValue: root.settingValue("OuterGap", appSettings.autotileOuterGap)
             usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
@@ -287,7 +288,7 @@ Flickable {
                             // Extract algorithm ID from autotile: prefixed value
                             let selectedId = algorithmCombo.currentValue;
                             if (selectedId === "")
-                                selectedId = settingsController.defaultAutotileAlgorithm;
+                                selectedId = appSettings.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
                             root.writeSetting("Algorithm", selectedId, function(v) {
@@ -324,7 +325,7 @@ Flickable {
                         id: previewWindowSlider
 
                         Accessible.name: i18n("Maximum windows")
-                        from: settingsController.autotileMaxWindowsMin
+                        from: root.settingsBridge.autotileMaxWindowsMin
                         to: 12
                         stepSize: 1
                         value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
@@ -354,7 +355,7 @@ Flickable {
                         id: splitRatioSlider
 
                         Accessible.name: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
-                        from: settingsController.autotileSplitRatioMin
+                        from: root.settingsBridge.autotileSplitRatioMin
                         to: 0.9
                         stepSize: 0.05
                         value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
@@ -379,8 +380,8 @@ Flickable {
                         id: splitRatioStepSlider
 
                         Accessible.name: i18n("Ratio step size")
-                        from: settingsController.autotileSplitRatioStepMin
-                        to: settingsController.autotileSplitRatioStepMax
+                        from: root.settingsBridge.autotileSplitRatioStepMin
+                        to: root.settingsBridge.autotileSplitRatioStepMax
                         stepSize: 0.01
                         value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
                         formatValue: function(v) {
@@ -408,7 +409,7 @@ Flickable {
                         id: masterCountSlider
 
                         Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
-                        from: settingsController.autotileMasterCountMin
+                        from: root.settingsBridge.autotileMasterCountMin
                         to: 5
                         stepSize: 1
                         value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
@@ -482,7 +483,7 @@ Flickable {
                                     return Math.round(v).toString();
                                 }
                                 onMoved: (value) => {
-                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, value);
+                                    root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, value);
                                 }
                             }
 
@@ -492,7 +493,7 @@ Flickable {
                                 Accessible.name: paramLabel
                                 checked: paramValue === true
                                 onToggled: {
-                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
+                                    root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
                                 }
                             }
 
@@ -513,7 +514,7 @@ Flickable {
                                     // binding above, preventing it from snapping back to the
                                     // old value after the user makes a selection.
                                     currentIndex = enumCombo.currentIndex;
-                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
+                                    root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
                                 }
                             }
 

@@ -41,6 +41,7 @@ class ScriptedAlgorithmLoader;
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
+#include "tilingalgorithmcontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 
@@ -82,6 +83,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
+    Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
 
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
@@ -89,18 +91,13 @@ class SettingsController : public QObject
     Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
 
     // Settings bounds (single source of truth from ConfigDefaults)
-    Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
+    // Animation bounds remain here until a dedicated sub-controller lands
+    // for the page that owns them.
     Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
     Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
     Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
-    Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
-    Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
-    Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
-    Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
-    Q_PROPERTY(qreal autotileSplitRatioStepMin READ autotileSplitRatioStepMin CONSTANT)
-    Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
     Q_PROPERTY(int animationMinDistanceMin READ animationMinDistanceMin CONSTANT)
 
 public:
@@ -382,6 +379,10 @@ public:
     {
         return m_tilingAppearancePage;
     }
+    TilingAlgorithmController* tilingAlgorithmPage() const
+    {
+        return m_tilingAlgorithmPage;
+    }
 
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
@@ -401,12 +402,7 @@ public:
         return m_startupRenderingBackend;
     }
 
-    // ── Cava detection ───────────────────────────────────────────────────────
     // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
-    int autotileGapMax() const
-    {
-        return ConfigDefaults::autotileOuterGapMax();
-    } // Shared max for inner + outer gaps
     int animationDurationMin() const
     {
         return ConfigDefaults::animationDurationMin();
@@ -426,30 +422,6 @@ public:
     int animationStaggerIntervalMax() const
     {
         return ConfigDefaults::animationStaggerIntervalMax();
-    }
-    int autotileGapMin() const
-    {
-        return ConfigDefaults::autotileOuterGapMin();
-    }
-    int autotileMaxWindowsMin() const
-    {
-        return ConfigDefaults::autotileMaxWindowsMin();
-    }
-    int autotileMasterCountMin() const
-    {
-        return ConfigDefaults::autotileMasterCountMin();
-    }
-    qreal autotileSplitRatioMin() const
-    {
-        return ConfigDefaults::autotileSplitRatioMin();
-    }
-    qreal autotileSplitRatioStepMin() const
-    {
-        return ConfigDefaults::autotileSplitRatioStepMin();
-    }
-    qreal autotileSplitRatioStepMax() const
-    {
-        return ConfigDefaults::autotileSplitRatioStepMax();
     }
     int animationMinDistanceMin() const
     {
@@ -520,30 +492,8 @@ public:
     Q_INVOKABLE bool duplicateAlgorithm(const QString& algorithmId);
     Q_INVOKABLE bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
 
-    /**
-     * @brief Get current custom param values for an algorithm, merged with defaults
-     *
-     * Returns a list of {name, type, value, defaultValue, description, minValue, maxValue, enumOptions}
-     * maps. The "value" field is the currently saved value, falling back to the declared default.
-     *
-     * @param algorithmId Algorithm to query
-     * @return List of param value maps, or empty if no custom params declared
-     */
-    Q_INVOKABLE QVariantList customParamsForAlgorithm(const QString& algorithmId) const;
-
-    /**
-     * @brief Set a custom parameter value for an algorithm
-     *
-     * Saves the value into autotilePerAlgorithmSettings (staged — applied
-     * on save, like all other settings). The value is coerced and validated
-     * against the algorithm's @param declaration: numbers are clamped to
-     * [min, max], bools are coerced, enums are checked against the options list.
-     *
-     * @param algorithmId Algorithm to configure
-     * @param paramName Parameter name (must match a declared @param)
-     * @param value New value (coerced to the declared type)
-     */
-    Q_INVOKABLE void setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value);
+    // NOTE: customParamsForAlgorithm / setCustomParam / customParamChanged
+    // have moved to TilingAlgorithmController.
 
     // ── Per-screen autotile overrides ────────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
@@ -590,7 +540,6 @@ Q_SIGNALS:
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();
-    void customParamChanged(const QString& algorithmId, const QString& paramName);
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
@@ -660,9 +609,6 @@ private Q_SLOTS:
     void onRunningWindowsAvailable(const QString& json);
 
 private:
-    /// Resolve saved custom params for the given algorithm from per-algorithm settings
-    QVariantMap savedCustomParams(const QString& algorithmId) const;
-
     QString scriptedFilePath(const QString& algorithmId) const;
     void watchForAlgorithmRegistration(const QString& expectedId);
     void cancelAlgorithmWatcher(const QString& expectedId);
@@ -686,6 +632,7 @@ private:
     SnappingAppearanceController* m_snappingAppearancePage = nullptr;
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
+    TilingAlgorithmController* m_tilingAlgorithmPage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;

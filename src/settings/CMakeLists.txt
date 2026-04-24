@@ -21,6 +21,8 @@ set(plasmazones_settings_SRCS
     snappingeffectscontroller.cpp
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
+    tilingalgorithmcontroller.h
+    tilingalgorithmcontroller.cpp
     tilingappearancecontroller.h
     tilingappearancecontroller.cpp
     tilingbehaviorcontroller.h
