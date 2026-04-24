@@ -36,9 +36,10 @@ class ScriptedAlgorithmLoader;
 #include <memory>
 #include <optional>
 
-namespace PlasmaZones {
+#include "editorpagecontroller.h"
+#include "snappingbehaviorcontroller.h"
 
-class EditorPageController;
+namespace PlasmaZones {
 
 class SettingsController : public QObject
 {
@@ -69,18 +70,12 @@ class SettingsController : public QObject
     // child QObject so QML reads `settingsController.editorPage.duplicateShortcut`.
     Q_PROPERTY(EditorPageController* editorPage READ editorPage CONSTANT)
 
-    // Trigger configuration
-    Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
-                   alwaysActivateOnDragChanged)
-    Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
-                   dragActivationTriggersChanged)
-    Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
-    Q_PROPERTY(
-        QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
-    Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
-    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
-                   snapAssistTriggersChanged)
-    Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
+    // Snapping behavior page — drag-activation / zone-span / snap-assist
+    // trigger lists moved to SnappingBehaviorController.
+    Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
+
+    // Tiling behavior trigger configuration (still on SettingsController
+    // until the TilingBehaviorController slice lands).
     Q_PROPERTY(bool alwaysReinsertIntoStack READ alwaysReinsertIntoStack WRITE setAlwaysReinsertIntoStack NOTIFY
                    alwaysReinsertIntoStackChanged)
     Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
@@ -99,7 +94,6 @@ class SettingsController : public QObject
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
     Q_PROPERTY(int gapMax READ gapMax CONSTANT)
-    Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
     Q_PROPERTY(int zoneSelectorTriggerDistanceMin READ zoneSelectorTriggerDistanceMin CONSTANT)
     Q_PROPERTY(int zoneSelectorTriggerDistanceMax READ zoneSelectorTriggerDistanceMax CONSTANT)
     Q_PROPERTY(int zoneSelectorPreviewWidthMin READ zoneSelectorPreviewWidthMin CONSTANT)
@@ -122,7 +116,6 @@ class SettingsController : public QObject
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int gapMin READ gapMin CONSTANT)
-    Q_PROPERTY(int adjacentThresholdMin READ adjacentThresholdMin CONSTANT)
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
     Q_PROPERTY(int autotileBorderWidthMin READ autotileBorderWidthMin CONSTANT)
     Q_PROPERTY(int autotileBorderRadiusMin READ autotileBorderRadiusMin CONSTANT)
@@ -385,29 +378,23 @@ public:
     Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
                                        int mode);
 
-    // ── Editor page sub-controller ────────────────────────────────────────
+    // ── Page sub-controllers ─────────────────────────────────────────────
     EditorPageController* editorPage() const
     {
         return m_editorPage;
     }
+    SnappingBehaviorController* snappingBehaviorPage() const
+    {
+        return m_snappingBehaviorPage;
+    }
 
-    // ── Trigger configuration ────────────────────────────────────────────────
-    bool alwaysActivateOnDrag() const;
+    // ── Trigger configuration (tiling; snapping triggers moved to
+    //    SnappingBehaviorController). ─────────────────────────────────────
     bool alwaysReinsertIntoStack() const;
-    QVariantList dragActivationTriggers() const;
-    QVariantList defaultDragActivationTriggers() const;
-    QVariantList zoneSpanTriggers() const;
-    QVariantList defaultZoneSpanTriggers() const;
-    QVariantList snapAssistTriggers() const;
-    QVariantList defaultSnapAssistTriggers() const;
     QVariantList autotileDragInsertTriggers() const;
     QVariantList defaultAutotileDragInsertTriggers() const;
 
-    void setAlwaysActivateOnDrag(bool enabled);
     void setAlwaysReinsertIntoStack(bool enabled);
-    void setDragActivationTriggers(const QVariantList& triggers);
-    void setZoneSpanTriggers(const QVariantList& triggers);
-    void setSnapAssistTriggers(const QVariantList& triggers);
     void setAutotileDragInsertTriggers(const QVariantList& triggers);
 
     // ── Rendering backend ─────────────────────────────────────────────────────
@@ -444,10 +431,6 @@ public:
     {
         return ConfigDefaults::outerGapMax();
     } // Shared max for padding + outer gaps
-    int adjacentThresholdMax() const
-    {
-        return ConfigDefaults::adjacentThresholdMax();
-    }
     int zoneSelectorTriggerDistanceMin() const
     {
         return ConfigDefaults::triggerDistanceMin();
@@ -535,10 +518,6 @@ public:
     int gapMin() const
     {
         return ConfigDefaults::outerGapMin();
-    }
-    int adjacentThresholdMin() const
-    {
-        return ConfigDefaults::adjacentThresholdMin();
     }
     int autotileGapMin() const
     {
@@ -737,12 +716,9 @@ Q_SIGNALS:
     void screenLayoutChanged();
     void quickLayoutSlotsChanged();
 
-    // Trigger signals
-    void alwaysActivateOnDragChanged();
+    // Tiling-behavior trigger signals (snapping triggers moved to
+    // SnappingBehaviorController).
     void alwaysReinsertIntoStackChanged();
-    void dragActivationTriggersChanged();
-    void zoneSpanTriggersChanged();
-    void snapAssistTriggersChanged();
     void autotileDragInsertTriggersChanged();
 
     // Color import signals
@@ -821,13 +797,11 @@ private:
     void saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules);
     int importKZonesLayouts(const QJsonArray& kzonesArray);
 
-    static QVariantList convertTriggersForQml(const QVariantList& triggers);
-    static QVariantList convertTriggersForStorage(const QVariantList& triggers);
-
     Settings m_settings;
-    /// Per-page sub-controller: exposes the Q_PROPERTY surface for the
-    /// Editor settings page. Parented to `this`, so Qt handles cleanup.
+    /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
+    /// settings page each. Parented to `this`, so Qt handles cleanup.
     EditorPageController* m_editorPage = nullptr;
+    SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;

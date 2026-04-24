@@ -13,6 +13,11 @@ set(plasmazones_settings_SRCS
     # exposing the Q_PROPERTY surface for a single settings page each.
     editorpagecontroller.h
     editorpagecontroller.cpp
+    snappingbehaviorcontroller.h
+    snappingbehaviorcontroller.cpp
+    # Shared helpers used by multiple sub-controllers.
+    triggerutils.h
+    triggerutils.cpp
     settingslaunchcontroller.h
     settingslaunchcontroller.cpp
     settingsappadaptor.h

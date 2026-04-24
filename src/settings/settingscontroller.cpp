@@ -4,6 +4,8 @@
 #include "settingscontroller.h"
 
 #include "editorpagecontroller.h"
+#include "snappingbehaviorcontroller.h"
+#include "triggerutils.h"
 #include "../config/configbackends.h"
 
 #include "../common/layoutpreviewserialize.h"
@@ -297,6 +299,12 @@ SettingsController::SettingsController(QObject* parent)
     // NOTIFY to QML and emits changed() which drives dirty tracking here.
     m_editorPage = new EditorPageController(&m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
+
+    // Snapping→Behavior page sub-controller. Its underlying settings ARE
+    // Q_PROPERTY on Settings, so the meta-object loop above already wires
+    // them to onSettingsPropertyChanged(); the sub-controller only provides
+    // the QML-facing forwarders + storage/QML trigger-list conversion.
+    m_snappingBehaviorPage = new SnappingBehaviorController(&m_settings, this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -1844,164 +1852,29 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Trigger conversion helpers (same logic as KCMSnapping)
+// Tiling trigger getters/setters (snapping triggers moved to
+// SnappingBehaviorController). Conversion helpers live in triggerutils.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-QVariantList SettingsController::convertTriggersForQml(const QVariantList& triggers)
-{
-    QVariantList result;
-    for (const auto& t : triggers) {
-        auto map = t.toMap();
-        QVariantMap converted;
-        converted[ConfigDefaults::triggerModifierField()] =
-            ModifierUtils::dragModifierToBitmask(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
-        converted[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
-        result.append(converted);
-    }
-    return result;
-}
-
-QVariantList SettingsController::convertTriggersForStorage(const QVariantList& triggers)
-{
-    QVariantList result;
-    for (const auto& t : triggers) {
-        auto map = t.toMap();
-        QVariantMap stored;
-        stored[ConfigDefaults::triggerModifierField()] =
-            ModifierUtils::bitmaskToDragModifier(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
-        stored[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
-        result.append(stored);
-    }
-    return result;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Trigger getters
-// ═══════════════════════════════════════════════════════════════════════════════
-
-static bool hasAlwaysActiveTrigger(const QVariantList& triggers)
-{
-    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
-    for (const auto& t : triggers) {
-        if (t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt() == alwaysActive) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static QVariantList makeAlwaysActiveTriggerList()
-{
-    QVariantMap trigger;
-    trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
-    trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
-    return {trigger};
-}
-
-bool SettingsController::alwaysActivateOnDrag() const
-{
-    return hasAlwaysActiveTrigger(m_settings.dragActivationTriggers());
-}
 
 bool SettingsController::alwaysReinsertIntoStack() const
 {
-    return hasAlwaysActiveTrigger(m_settings.autotileDragInsertTriggers());
-}
-
-QVariantList SettingsController::dragActivationTriggers() const
-{
-    return convertTriggersForQml(m_settings.dragActivationTriggers());
-}
-
-QVariantList SettingsController::defaultDragActivationTriggers() const
-{
-    return convertTriggersForQml(ConfigDefaults::dragActivationTriggers());
-}
-
-QVariantList SettingsController::zoneSpanTriggers() const
-{
-    return convertTriggersForQml(m_settings.zoneSpanTriggers());
-}
-
-QVariantList SettingsController::defaultZoneSpanTriggers() const
-{
-    return convertTriggersForQml(ConfigDefaults::zoneSpanTriggers());
-}
-
-QVariantList SettingsController::snapAssistTriggers() const
-{
-    return convertTriggersForQml(m_settings.snapAssistTriggers());
-}
-
-QVariantList SettingsController::defaultSnapAssistTriggers() const
-{
-    return convertTriggersForQml(ConfigDefaults::snapAssistTriggers());
+    return TriggerUtils::hasAlwaysActiveTrigger(m_settings.autotileDragInsertTriggers());
 }
 
 QVariantList SettingsController::autotileDragInsertTriggers() const
 {
-    return convertTriggersForQml(m_settings.autotileDragInsertTriggers());
+    return TriggerUtils::convertTriggersForQml(m_settings.autotileDragInsertTriggers());
 }
 
 QVariantList SettingsController::defaultAutotileDragInsertTriggers() const
 {
-    return convertTriggersForQml(ConfigDefaults::autotileDragInsertTriggers());
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Trigger setters
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::setDragActivationTriggers(const QVariantList& triggers)
-{
-    const bool wasAlwaysActive = alwaysActivateOnDrag();
-    const QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings.dragActivationTriggers() != converted) {
-        m_settings.setDragActivationTriggers(converted);
-        Q_EMIT dragActivationTriggersChanged();
-        if (alwaysActivateOnDrag() != wasAlwaysActive) {
-            Q_EMIT alwaysActivateOnDragChanged();
-        }
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setAlwaysActivateOnDrag(bool enabled)
-{
-    if (alwaysActivateOnDrag() == enabled) {
-        return;
-    }
-    m_settings.setDragActivationTriggers(enabled ? makeAlwaysActiveTriggerList()
-                                                 : ConfigDefaults::dragActivationTriggers());
-    Q_EMIT alwaysActivateOnDragChanged();
-    Q_EMIT dragActivationTriggersChanged();
-    setNeedsSave(true);
-}
-
-void SettingsController::setZoneSpanTriggers(const QVariantList& triggers)
-{
-    const QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings.zoneSpanTriggers() != converted) {
-        m_settings.setZoneSpanTriggers(converted);
-        Q_EMIT zoneSpanTriggersChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setSnapAssistTriggers(const QVariantList& triggers)
-{
-    QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings.snapAssistTriggers() != converted) {
-        m_settings.setSnapAssistTriggers(converted);
-        Q_EMIT snapAssistTriggersChanged();
-        setNeedsSave(true);
-    }
+    return TriggerUtils::convertTriggersForQml(ConfigDefaults::autotileDragInsertTriggers());
 }
 
 void SettingsController::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
     const bool wasAlwaysActive = alwaysReinsertIntoStack();
-    const QVariantList converted = convertTriggersForStorage(triggers);
+    const QVariantList converted = TriggerUtils::convertTriggersForStorage(triggers);
     if (m_settings.autotileDragInsertTriggers() != converted) {
         m_settings.setAutotileDragInsertTriggers(converted);
         Q_EMIT autotileDragInsertTriggersChanged();
@@ -2017,7 +1890,7 @@ void SettingsController::setAlwaysReinsertIntoStack(bool enabled)
     if (alwaysReinsertIntoStack() == enabled) {
         return;
     }
-    m_settings.setAutotileDragInsertTriggers(enabled ? makeAlwaysActiveTriggerList()
+    m_settings.setAutotileDragInsertTriggers(enabled ? TriggerUtils::makeAlwaysActiveTriggerList()
                                                      : ConfigDefaults::autotileDragInsertTriggers());
     Q_EMIT alwaysReinsertIntoStackChanged();
     Q_EMIT autotileDragInsertTriggersChanged();
