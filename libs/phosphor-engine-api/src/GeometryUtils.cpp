@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngineApi/GeometryUtils.h>
+#include <PhosphorEngineApi/JsonKeys.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -137,10 +138,10 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
 QString rectToJson(const QRect& rect)
 {
     QJsonObject obj;
-    obj[QLatin1String("x")] = rect.x();
-    obj[QLatin1String("y")] = rect.y();
-    obj[QLatin1String("width")] = rect.width();
-    obj[QLatin1String("height")] = rect.height();
+    obj[JsonKeys::X] = rect.x();
+    obj[JsonKeys::Y] = rect.y();
+    obj[JsonKeys::Width] = rect.width();
+    obj[JsonKeys::Height] = rect.height();
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
@@ -152,19 +153,19 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
     QJsonArray array;
     for (const ZoneAssignmentEntry& entry : entries) {
         QJsonObject obj;
-        obj[QLatin1String("windowId")] = entry.windowId;
-        obj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
-        obj[QLatin1String("targetZoneId")] = entry.targetZoneId;
+        obj[JsonKeys::WindowId] = entry.windowId;
+        obj[JsonKeys::SourceZoneId] = entry.sourceZoneId;
+        obj[JsonKeys::TargetZoneId] = entry.targetZoneId;
         if (!entry.targetZoneIds.isEmpty()) {
             QJsonArray zoneIdsArr;
             for (const QString& zid : entry.targetZoneIds)
                 zoneIdsArr.append(zid);
-            obj[QLatin1String("targetZoneIds")] = zoneIdsArr;
+            obj[JsonKeys::TargetZoneIds] = zoneIdsArr;
         }
-        obj[QLatin1String("x")] = entry.targetGeometry.x();
-        obj[QLatin1String("y")] = entry.targetGeometry.y();
-        obj[QLatin1String("width")] = entry.targetGeometry.width();
-        obj[QLatin1String("height")] = entry.targetGeometry.height();
+        obj[JsonKeys::X] = entry.targetGeometry.x();
+        obj[JsonKeys::Y] = entry.targetGeometry.y();
+        obj[JsonKeys::Width] = entry.targetGeometry.width();
+        obj[JsonKeys::Height] = entry.targetGeometry.height();
         array.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));

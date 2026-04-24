@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngineApi/JsonKeys.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
 
 #include <QColor>
@@ -153,11 +154,12 @@ inline constexpr QLatin1String RefreshRate{"refreshRate"};
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 
-// PhosphorZones::Zone assignment serialization keys
-inline constexpr QLatin1String WindowId{"windowId"};
-inline constexpr QLatin1String SourceZoneId{"sourceZoneId"};
-inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
-inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
+// PhosphorZones::Zone assignment serialization keys — authoritative definitions
+// live in PhosphorEngineApi::JsonKeys (LGPL); imported here for daemon callers.
+using PhosphorEngineApi::JsonKeys::SourceZoneId;
+using PhosphorEngineApi::JsonKeys::TargetZoneId;
+using PhosphorEngineApi::JsonKeys::TargetZoneIds;
+using PhosphorEngineApi::JsonKeys::WindowId;
 
 // Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};

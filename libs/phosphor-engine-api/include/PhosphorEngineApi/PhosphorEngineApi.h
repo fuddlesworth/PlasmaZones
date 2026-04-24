@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngineApi/JsonKeys.h>
 #include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorEngineApi/IPlacementState.h>
 #include <PhosphorEngineApi/IVirtualDesktopManager.h>
