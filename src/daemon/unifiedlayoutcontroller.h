@@ -27,7 +27,7 @@ class LayoutRegistry;
 }
 
 namespace PhosphorEngineApi {
-class IPlacementEngine;
+class PlacementEngineBase;
 }
 
 namespace PlasmaZones {
@@ -71,7 +71,7 @@ public:
     explicit UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
                                      Phosphor::Screens::ScreenManager* screenManager,
                                      PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                                     PhosphorEngineApi::IPlacementEngine* autotileEngine = nullptr,
+                                     PhosphorEngineApi::PlacementEngineBase* autotileEngine = nullptr,
                                      QObject* parent = nullptr);
     ~UnifiedLayoutController() override;
 
@@ -238,7 +238,7 @@ private:
     QPointer<Settings> m_settings;
     QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
-    PhosphorEngineApi::IPlacementEngine* m_autotileEngine = nullptr; ///< Borrowed; daemon guarantees lifetime
+    QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine; ///< Auto-nulls if engine destroyed first
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
     QMetaObject::Connection m_autotileSourceConnection; ///< contentsChanged subscription on m_autotileLayoutSource
 

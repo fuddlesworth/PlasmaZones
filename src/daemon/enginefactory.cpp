@@ -16,24 +16,22 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrac
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                         WindowRegistry* windowRegistry, QObject* parent)
 {
-    EngineSet set;
-
     // --- AutotileEngine ---
-    set.autotile =
+    auto autotile =
         std::make_unique<AutotileEngine>(layoutManager, windowTracker, screenManager, algorithmRegistry, parent);
-    set.autotile->setWindowRegistry(windowRegistry);
+    autotile->setWindowRegistry(windowRegistry);
 
     // --- SnapEngine ---
-    set.snap = std::make_unique<SnapEngine>(layoutManager, windowTracker, zoneDetector, settings, vdm, parent);
+    auto snap = std::make_unique<SnapEngine>(layoutManager, windowTracker, zoneDetector, settings, vdm, parent);
 
     // Cross-wire: SnapEngine needs a reference to AutotileEngine for
     // isActiveOnScreen routing.
-    set.snap->setAutotileEngine(set.autotile.get());
+    snap->setAutotileEngine(autotile.get());
 
     // --- ScreenModeRouter ---
-    set.router = std::make_unique<ScreenModeRouter>(layoutManager, set.snap.get(), set.autotile.get());
+    auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get());
 
-    return set;
+    return EngineSet{std::move(autotile), std::move(snap), std::move(router)};
 }
 
 } // namespace PlasmaZones

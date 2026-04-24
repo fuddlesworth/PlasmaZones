@@ -18,8 +18,7 @@
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngineApi/PlacementEngineBase.h>
-#include "../../autotile/AutotileEngine.h"
-#include "../../autotile/AutotileConfig.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <QGuiApplication>
@@ -132,12 +131,7 @@ void Daemon::updateAutotileScreens()
                         // autotileMaxWindows()) — during cycling, settings may
                         // be stale if updateAutotileScreens runs before
                         // setAlgorithm syncs settings via QSignalBlocker.
-                        auto* concreteEngine = qobject_cast<AutotileEngine*>(m_autotileEngine.get());
-                        Q_ASSERT(concreteEngine);
-                        if (!concreteEngine) {
-                            continue;
-                        }
-                        const int runtimeMaxWindows = concreteEngine->config()->maxWindows;
+                        const int runtimeMaxWindows = m_autotileEngine->runtimeMaxWindows();
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
                             overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
                         }

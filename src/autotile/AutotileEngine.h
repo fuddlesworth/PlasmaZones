@@ -508,6 +508,7 @@ public:
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const override;
+    int runtimeMaxWindows() const override;
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 

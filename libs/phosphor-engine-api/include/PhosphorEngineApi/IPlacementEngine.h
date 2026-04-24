@@ -271,7 +271,7 @@ public:
     {
         Q_UNUSED(algorithmId)
     }
-    virtual bool isEnabled() const
+    virtual bool isEnabled() const noexcept
     {
         return false;
     }
@@ -329,6 +329,10 @@ public:
     {
         Q_UNUSED(screenId)
         return 0.05;
+    }
+    virtual int runtimeMaxWindows() const
+    {
+        return 0;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

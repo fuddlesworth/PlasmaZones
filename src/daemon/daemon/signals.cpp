@@ -111,7 +111,7 @@ void Daemon::initializeAutotile()
                                 // Window is on a different screen — do NOT touch its state.
                                 // It may be on another autotile screen (flag still valid) or
                                 // a snap screen (flag already cleared by assignWindowToZones).
-                                qCDebug(lcDaemon) << "windowsReleasedFromTiling: skipping" << windowId << "on screen"
+                                qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId << "on screen"
                                                   << windowScreen << "(not in released set)";
                                 continue;
                             }
@@ -126,7 +126,7 @@ void Daemon::initializeAutotile()
                             // geometry restore is deferred to the batched resnap signal to
                             // avoid individual D-Bus signals queuing behind the resnap.
                             if (m_snapEngine->restoreSavedModeFloat(windowId)) {
-                                qCInfo(lcDaemon) << "windowsReleasedFromTiling: restoring snap-float for" << windowId;
+                                qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
                                 QString screen = wts->screenAssignments().value(windowId);
                                 auto geo = wts->validatedUnmanagedGeometry(windowId, screen);
@@ -138,8 +138,8 @@ void Daemon::initializeAutotile()
                                     m_pendingSnapFloatRestores.append(entry);
                                 }
                             } else {
-                                qCDebug(lcDaemon) << "windowsReleasedFromTiling: no snap-float to restore for"
-                                                  << windowId << "wasAutotileFloated:" << wasAutotileFloated;
+                                qCDebug(lcDaemon) << "windowsReleased: no snap-float to restore for" << windowId
+                                                  << "wasAutotileFloated:" << wasAutotileFloated;
                             }
                         }
                     }
@@ -320,7 +320,7 @@ void Daemon::initializeAutotile()
                     const QStringList& fullOrder = it.value();
                     const QString& resnapScreenId = it.key().screenId;
 
-                    // Filter out floating windows — windowsReleasedFromTiling already
+                    // Filter out floating windows — windowsReleased already
                     // restored their snap-float state. Resnapping them would override
                     // the restored float with a zone snap.
                     // Also skip windows with no zone assignment (never snapped before
@@ -346,7 +346,7 @@ void Daemon::initializeAutotile()
                     allResnapEntries.append(entries);
                 }
                 // Batch float-restore entries into the resnap signal:
-                // 1. Snap-float restores (collected during windowsReleasedFromTiling)
+                // 1. Snap-float restores (collected during windowsReleased)
                 // 2. Autotile-only windows (never zone-snapped, need pre-tile geometry)
                 // This eliminates individual D-Bus signals that would queue behind
                 // the resnap, causing visible delay for floating/new windows.

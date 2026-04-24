@@ -1157,6 +1157,11 @@ qreal AutotileEngine::effectiveSplitRatioStep(const QString& screenId) const
     return m_configResolver->effectiveSplitRatioStep(screenId);
 }
 
+int AutotileEngine::runtimeMaxWindows() const
+{
+    return m_config->maxWindows;
+}
+
 QString AutotileEngine::effectiveAlgorithmId(const QString& screenId) const
 {
     return m_configResolver->effectiveAlgorithmId(screenId);

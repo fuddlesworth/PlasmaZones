@@ -7,6 +7,10 @@
 
 class QObject;
 
+namespace PhosphorEngineApi {
+class PlacementEngineBase;
+}
+
 namespace PhosphorZones {
 class LayoutRegistry;
 class IZoneDetector;
@@ -22,10 +26,8 @@ class ITileAlgorithmRegistry;
 
 namespace PlasmaZones {
 
-class AutotileEngine;
 class ISettings;
 class ScreenModeRouter;
-class SnapEngine;
 class VirtualDesktopManager;
 class WindowRegistry;
 class WindowTrackingService;
@@ -40,8 +42,8 @@ class WindowTrackingService;
  */
 struct EngineSet
 {
-    std::unique_ptr<AutotileEngine> autotile;
-    std::unique_ptr<SnapEngine> snap;
+    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> autotile;
+    std::unique_ptr<PhosphorEngineApi::PlacementEngineBase> snap;
     std::unique_ptr<ScreenModeRouter> router;
 };
 
