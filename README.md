@@ -109,89 +109,21 @@ The app is single-instance — launching it again while running raises the exist
 
 ## Troubleshooting
 
-### PlasmaZones not appearing in System Settings (KDE only)
+Daemon startup, verbose logging, KWin minimum-size rules, and the full support-report flow: **[Troubleshooting →](https://phosphor-works.github.io/plasmazones/troubleshooting/)**.
 
-Refresh the KDE service cache after installing from source:
-
-```bash
-kbuildsycoca6 --noincremental
-```
-
-Or log out and back in. The standalone settings app is always available:
-
-```bash
-plasmazones-settings
-```
-
-### Daemon not starting
-
-```bash
-# Check status
-systemctl --user status plasmazones.service
-
-# View logs
-journalctl --user -u plasmazones.service -f
-
-# Restart
-systemctl --user restart plasmazones.service
-```
-
-### Capturing verbose logs
-
-Run the daemon with `--debug` for verbose logging across all `plasmazones.*` categories, and `--log-file` to redirect output to a file instead of `journalctl`:
-
-```bash
-systemctl --user stop plasmazones.service
-plasmazonesd --debug --log-file /tmp/pz.log
-```
-
-### Zones not appearing when dragging
-
-1. Ensure the daemon is running: `systemctl --user status plasmazones.service`
-2. Check the drag modifier in settings (default: Alt)
-3. Verify you have at least one layout with zones
-4. Check whether the application is excluded in settings
-
-### Tiles not reaching their intended size
-
-Some apps enforce a minimum size that prevents tiles from meeting their target geometry. Create a KWin Window Rule:
-
-**System Settings → Window Management → Window Rules** → add a rule matching the window class, set **Minimum Size** to **Force** `0×0` under the **Size & Position** tab. This removes the constraint so PlasmaZones can tile the window at any size.
-
-### Generating a support report
-
-When filing a bug report, attach a support report archive. It collects your config, layouts, screen topology, and recent daemon logs with home paths redacted:
+When filing a bug, attach a support report:
 
 ```bash
 plasmazones-report
 ```
 
-The archive is saved to `/tmp` by default. Options:
-
-```bash
-plasmazones-report --since 60           # Last 60 minutes of logs (default: 30, max: 120)
-plasmazones-report --output ~/Desktop   # Save to a specific directory
-```
-
-You can also call the D-Bus method directly:
-
-```bash
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport 0
-```
+The archive lands in `/tmp` by default with home paths redacted, so it's safe to attach to a public issue.
 
 ---
 
 ## D-Bus API
 
-PlasmaZones exposes 10 D-Bus interfaces on `org.plasmazones` for scripting and integration — Autotile, Control, LayoutRegistry, Overlay, Screen, Settings, Shader, and more.
-
-```bash
-# Quick examples
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutRegistry.getLayoutList
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Overlay.showOverlay
-```
-
-Full API reference, scripting examples, and per-interface documentation: [D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API) on the wiki.
+13 interfaces on `org.plasmazones` for scripting and integration. Interface inventory, scripting recipes, and signal watching: **[D-Bus scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)**.
 
 ---
 
