@@ -39,6 +39,10 @@ namespace AutotileDefaults {
 constexpr qreal DefaultSplitRatio = 0.5; ///< 50/50 split when nothing else specified
 constexpr int DefaultMasterCount = 1; ///< Single master window
 constexpr int DefaultMaxWindows = 5; ///< Maximum tiled windows before overflow
+inline constexpr QLatin1String DefaultAlgorithmId{"bsp"}; ///< Default tiling algorithm
+constexpr qreal DefaultSplitRatioStep = 0.05;
+constexpr qreal MinSplitRatioStep = 0.01;
+constexpr qreal MaxSplitRatioStep = 0.25;
 
 constexpr qreal MinSplitRatio = 0.1;
 constexpr qreal MaxSplitRatio = 0.9;
@@ -144,6 +148,15 @@ inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 } // namespace AutotileJsonValues
+
+namespace WriteBackKeys {
+inline constexpr QLatin1String DefaultAutotileAlgorithm{"defaultAutotileAlgorithm"};
+inline constexpr QLatin1String AutotileSplitRatio{"autotileSplitRatio"};
+inline constexpr QLatin1String AutotileMasterCount{"autotileMasterCount"};
+inline constexpr QLatin1String AutotileMaxWindows{"autotileMaxWindows"};
+inline constexpr QLatin1String AutotilePerAlgorithmSettings{"autotilePerAlgorithmSettings"};
+inline constexpr QLatin1String ClearPerScreenAutotileSettings{"clearPerScreenAutotileSettings"};
+} // namespace WriteBackKeys
 
 /**
  * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`

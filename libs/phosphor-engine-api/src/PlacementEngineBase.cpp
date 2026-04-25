@@ -222,4 +222,13 @@ void PlacementEngineBase::deserializeBaseState(const QJsonObject& state)
     }
 }
 
+void PlacementEngineBase::setEngineSettings(QObject* settings)
+{
+    if (Q_UNLIKELY(!settings)) {
+        qWarning("PlacementEngineBase::setEngineSettings called with nullptr");
+        return;
+    }
+    m_engineSettings = settings;
+}
+
 } // namespace PhosphorEngineApi

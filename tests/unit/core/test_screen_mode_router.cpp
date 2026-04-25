@@ -54,7 +54,7 @@ private Q_SLOTS:
         // (which ScreenModeRouter doesn't actually call — it returns the
         // pointer so callers can dispatch). Matches test_snap_engine.cpp's
         // headless stub pattern.
-        m_snapEngine = new SnapEngine(nullptr, nullptr, nullptr, nullptr, nullptr);
+        m_snapEngine = new SnapEngine(nullptr, nullptr, nullptr, nullptr);
 
         // AutotileEngine with all-nullptr dependencies is explicitly
         // supported for headless tests — see the comment at the top of

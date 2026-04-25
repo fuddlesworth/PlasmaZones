@@ -9,9 +9,11 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QString>
+#include <QVariantMap>
 
 namespace PhosphorEngineApi {
 
@@ -67,6 +69,22 @@ public:
     QJsonObject serializeBaseState() const;
     void deserializeBaseState(const QJsonObject& state);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Settings — universal pattern for all engines
+    //
+    // The daemon calls setEngineSettings() once at startup with a QObject*
+    // that implements the engine's specific settings interface (e.g.
+    // IAutotileSettings, ISnapSettings). Engines qobject_cast at point of
+    // use to their interface type. No caching, no bridge, no signal wiring
+    // inside the engine — the daemon handles change signals externally.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void setEngineSettings(QObject* settings);
+    QObject* engineSettings() const
+    {
+        return m_engineSettings;
+    }
+
     // Public dtor required for unique_ptr<PlacementEngineBase> in Daemon.
     ~PlacementEngineBase() override;
 
@@ -103,9 +121,15 @@ Q_SIGNALS:
     /// Emitted when windows are released from engine management.
     void windowsReleased(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
+    /// Emitted when the engine wants to persist changed settings values.
+    /// The QVariantMap contains key-value pairs the daemon should write
+    /// to its settings store (e.g. {"autotileSplitRatio": 0.6}).
+    void settingsWriteBackRequested(const QVariantMap& values);
+
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
     QHash<QString, WindowState> m_windowStates;
+    QPointer<QObject> m_engineSettings;
 };
 
 } // namespace PhosphorEngineApi

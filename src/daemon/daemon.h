@@ -18,6 +18,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorTiles/AlgorithmPreviewParams.h>
 
 namespace Phosphor::Screens {
 class PlasmaPanelSource;
@@ -555,6 +556,10 @@ private:
     // first settingsChanged won't detect a spurious toggle.
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
+
+    QTimer m_previewNotifyTimer;
+    QTimer m_writeBackSaveTimer;
+    PhosphorTiles::AlgorithmPreviewParams m_preRetilePreviewParams;
 
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not
     // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
