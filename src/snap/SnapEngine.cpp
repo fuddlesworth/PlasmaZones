@@ -18,8 +18,8 @@ namespace PlasmaZones {
 // dereferences a dependency guards it locally. Do not Q_ASSERT here.
 SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
                        PhosphorEngineApi::IWindowTrackingService* windowTracker,
-                       PhosphorZones::IZoneDetector* zoneDetector,
-                       PhosphorEngineApi::IVirtualDesktopManager* vdm, QObject* parent)
+                       PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngineApi::IVirtualDesktopManager* vdm,
+                       QObject* parent)
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)

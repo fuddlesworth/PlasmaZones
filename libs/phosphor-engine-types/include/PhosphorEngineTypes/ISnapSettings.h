@@ -14,7 +14,7 @@ public:
 
     virtual QStringList excludedApplications() const = 0;
     virtual QStringList excludedWindowClasses() const = 0;
-    virtual int stickyWindowHandling() const = 0;
+    virtual int stickyWindowHandlingInt() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
 };

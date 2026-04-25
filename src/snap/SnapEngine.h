@@ -63,8 +63,8 @@ class PLASMAZONES_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineB
 public:
     explicit SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
                         PhosphorEngineApi::IWindowTrackingService* windowTracker,
-                        PhosphorZones::IZoneDetector* zoneDetector,
-                        PhosphorEngineApi::IVirtualDesktopManager* vdm, QObject* parent = nullptr);
+                        PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngineApi::IVirtualDesktopManager* vdm,
+                        QObject* parent = nullptr);
     ~SnapEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════

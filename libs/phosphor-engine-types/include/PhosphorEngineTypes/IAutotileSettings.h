@@ -45,10 +45,13 @@ public:
     virtual void setAutotileMaxWindows(int max) = 0;
 
     virtual int autotileInsertPositionInt() const = 0;
-    virtual int autotileOverflowBehavior() const = 0;
+    virtual int autotileOverflowBehaviorInt() const = 0;
+    virtual int autotileStickyWindowHandlingInt() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
     virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
+
+    virtual void clearPerScreenAutotileSettings(const QString& screenId) = 0;
 
     virtual void save() = 0;
 };

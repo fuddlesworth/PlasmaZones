@@ -5,6 +5,8 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorEngineTypes/IAutotileSettings.h>
+#include <PhosphorEngineTypes/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
@@ -28,7 +30,9 @@ namespace PlasmaZones {
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
-class PLASMAZONES_EXPORT Settings : public ISettings
+class PLASMAZONES_EXPORT Settings : public ISettings,
+                                    public PhosphorEngineApi::IAutotileSettings,
+                                    public PhosphorEngineApi::ISnapSettings
 {
     Q_OBJECT
 
@@ -422,6 +426,11 @@ public:
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
+
+    QObject* asQObject() override
+    {
+        return this;
+    }
 
     // No singleton - use dependency injection instead
 

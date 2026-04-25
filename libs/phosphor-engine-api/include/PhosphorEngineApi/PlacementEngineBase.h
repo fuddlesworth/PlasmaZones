@@ -80,7 +80,10 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     void setEngineSettings(QObject* settings);
-    QObject* engineSettings() const { return m_engineSettings; }
+    QObject* engineSettings() const
+    {
+        return m_engineSettings;
+    }
 
     // Public dtor required for unique_ptr<PlacementEngineBase> in Daemon.
     ~PlacementEngineBase() override;

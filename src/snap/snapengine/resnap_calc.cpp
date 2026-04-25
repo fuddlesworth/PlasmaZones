@@ -385,8 +385,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             break;
         }
 
-        QRect geo =
-            GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId, layout, snapSettings());
+        QRect geo = GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId, layout,
+                                                            snapSettings());
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
