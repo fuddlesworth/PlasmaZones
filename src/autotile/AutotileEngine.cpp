@@ -262,10 +262,10 @@ void AutotileEngine::connectSignals()
                     // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
                     // as virtual screen IDs are never reused after reconfiguration.
                     if (!orphanedVsIds.isEmpty()) {
-                        if (auto* settings = autotileSettings()) {
-                            for (const QString& orphanId : std::as_const(orphanedVsIds)) {
-                                settings->clearPerScreenAutotileSettings(orphanId);
-                            }
+                        for (const QString& orphanId : std::as_const(orphanedVsIds)) {
+                            QVariantMap wb;
+                            wb[QStringLiteral("clearPerScreenAutotileSettings")] = orphanId;
+                            Q_EMIT settingsWriteBackRequested(wb);
                         }
                     }
 
@@ -771,6 +771,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // prevents recursive corruption (daemon settingsChanged → syncFromSettings →
     // setAlgorithm with stale KCM algo).
     {
+        m_writeBackPending = true;
         QVariantMap wb;
         wb[QStringLiteral("defaultAutotileAlgorithm")] = newId;
         wb[QStringLiteral("autotileSplitRatio")] = m_config->splitRatio;
@@ -1109,7 +1110,9 @@ void AutotileEngine::refreshConfigFromSettings()
         }                                                                                                              \
     } while (0)
 
-    SYNC_FIELD(masterCount, autotileMasterCount);
+    if (!m_writeBackPending) {
+        SYNC_FIELD(masterCount, autotileMasterCount);
+    }
     SYNC_FIELD(innerGap, autotileInnerGap);
     SYNC_FIELD(outerGap, autotileOuterGap);
     SYNC_FIELD(usePerSideOuterGap, autotileUsePerSideOuterGap);
@@ -1123,7 +1126,7 @@ void AutotileEngine::refreshConfigFromSettings()
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
     SYNC_FIELD(maxWindows, autotileMaxWindows);
 
-    {
+    if (!m_writeBackPending) {
         const qreal newRatio = s->autotileSplitRatio();
         if (!qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + newRatio)) {
             m_config->splitRatio = newRatio;
@@ -1216,6 +1219,8 @@ void AutotileEngine::refreshConfigFromSettings()
         m_pendingRetileScreens.clear();
         retile();
     }
+
+    m_writeBackPending = false;
 
     qCInfo(lcAutotile) << "Settings: synced, algorithm=" << m_algorithmId
                        << "autotileScreens=" << m_autotileScreens.size();
@@ -1715,6 +1720,7 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
 
     // Write to Settings (signal-blocked) so syncFromSettings() won't revert
     {
+        m_writeBackPending = true;
         QVariantMap wb;
         wb[QStringLiteral("autotileSplitRatio")] = m_config->splitRatio;
         wb[QStringLiteral("autotileMasterCount")] = m_config->masterCount;

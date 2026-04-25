@@ -330,6 +330,22 @@ bool Daemon::init()
     // transitions are handled here to avoid redundant retile passes.
     m_prevSnappingEnabled = m_settings->snappingEnabled();
     m_prevAutotileEnabled = m_settings->autotileEnabled();
+    m_settingsRetileTimer.setSingleShot(true);
+    m_settingsRetileTimer.setInterval(100);
+    connect(&m_settingsRetileTimer, &QTimer::timeout, this, [this]() {
+        // Capture old preview params before sync to detect tiling parameter changes
+        const auto prevPreviewParams =
+            m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
+
+        if (m_autotileEngine) {
+            m_autotileEngine->refreshConfigFromSettings();
+        }
+
+        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != prevPreviewParams && m_layoutAdaptor) {
+            m_layoutAdaptor->notifyLayoutListChanged();
+        }
+    });
+
     connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
 
@@ -341,20 +357,7 @@ bool Daemon::init()
         m_prevSnappingEnabled = snappingNow;
         m_prevAutotileEnabled = autotileNow;
 
-        // Capture old preview params before sync to detect tiling parameter changes
-        const auto prevPreviewParams =
-            m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
-
-        // Sync engine config (idempotent — skips retile if nothing changed)
-        if (m_autotileEngine) {
-            m_autotileEngine->refreshConfigFromSettings();
-        }
-
-        // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
-        // notify layout list consumers to refetch with updated previews
-        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != prevPreviewParams && m_layoutAdaptor) {
-            m_layoutAdaptor->notifyLayoutListChanged();
-        }
+        m_settingsRetileTimer.start();
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
@@ -512,6 +515,14 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
+    m_writeBackSaveTimer.setSingleShot(true);
+    m_writeBackSaveTimer.setInterval(500);
+    connect(&m_writeBackSaveTimer, &QTimer::timeout, this, [this]() {
+        if (m_settings) {
+            m_settings->save();
+        }
+    });
+
     connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested, this,
             [this](const QVariantMap& values) {
                 if (!m_settings)
@@ -529,8 +540,12 @@ bool Daemon::init()
                         m_settings->setAutotileMaxWindows(it.value().toInt());
                     else if (key == QLatin1String("autotilePerAlgorithmSettings"))
                         m_settings->setAutotilePerAlgorithmSettings(it.value().toMap());
+                    else if (key == QLatin1String("clearPerScreenAutotileSettings"))
+                        m_settings->clearPerScreenAutotileSettings(it.value().toString());
+                    else
+                        qCWarning(lcDaemon) << "settingsWriteBack: unknown key" << key;
                 }
-                m_settings->save();
+                m_writeBackSaveTimer.start();
             });
 
     autotileEngine->refreshConfigFromSettings();

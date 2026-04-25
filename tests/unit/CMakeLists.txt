@@ -287,9 +287,6 @@ target_compile_definitions(test_per_screen_config PRIVATE "PZ_SOURCE_DIR=\"${PRO
 pz_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# autotile/ — Settings Bridge Tests (removed: SettingsBridge deleted, engine uses IAutotileSettings directly)
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # ui/ — Zone Shader Item Tests — need Qt6::Quick + plasmazones_rendering
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_zone_shader_item ui/test_zone_shader_item.cpp)

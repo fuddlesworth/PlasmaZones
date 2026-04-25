@@ -42,8 +42,6 @@ public:
     virtual int autotileStickyWindowHandlingInt() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
-
-    virtual void clearPerScreenAutotileSettings(const QString& screenId) = 0;
 };
 
 } // namespace PhosphorEngineApi

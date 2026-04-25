@@ -224,6 +224,7 @@ void PlacementEngineBase::deserializeBaseState(const QJsonObject& state)
 
 void PlacementEngineBase::setEngineSettings(QObject* settings)
 {
+    Q_ASSERT(settings);
     m_engineSettings = settings;
 }
 

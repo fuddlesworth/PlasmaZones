@@ -556,6 +556,9 @@ private:
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
 
+    QTimer m_settingsRetileTimer;
+    QTimer m_writeBackSaveTimer;
+
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not
     // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
     QThreadPool m_shaderBakePool;
