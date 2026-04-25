@@ -14,7 +14,6 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorZones/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorZones/ZoneHighlighter.h>

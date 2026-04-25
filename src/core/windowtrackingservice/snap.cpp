@@ -7,7 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/SnapState.h>
+#include "../../snap/SnapState.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../virtualdesktopmanager.h"

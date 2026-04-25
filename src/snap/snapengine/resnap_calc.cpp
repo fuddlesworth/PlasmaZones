@@ -5,7 +5,7 @@
 // Part of SnapEngine — split into its own translation unit for SRP.
 
 #include "../SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "../SnapState.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>

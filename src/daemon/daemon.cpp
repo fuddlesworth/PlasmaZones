@@ -59,7 +59,7 @@
 #include "../autotile/AutotileEngine.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "../snap/SnapState.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"

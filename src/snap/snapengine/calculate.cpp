@@ -6,7 +6,7 @@
 
 #include "../SnapEngine.h"
 #include <PhosphorZones/AssignmentEntry.h>
-#include <PhosphorZones/SnapState.h>
+#include "../SnapState.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>

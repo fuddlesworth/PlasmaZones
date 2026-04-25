@@ -132,7 +132,7 @@ target_link_libraries(PhosphorTiles
         Qt6::Core
         Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
-        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngineTypes::PhosphorEngineTypes
 )
 
 set_target_properties(PhosphorTiles PROPERTIES

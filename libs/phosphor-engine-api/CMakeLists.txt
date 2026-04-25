@@ -53,6 +53,8 @@ target_link_libraries(PhosphorEngineApi
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        PhosphorEngineTypes::PhosphorEngineTypes
+        PhosphorGeometry::PhosphorGeometry
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
