@@ -1286,6 +1286,7 @@ private:
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;
     QTimer m_writeBackGuardTimer;
+    QTimer m_settingsRetileTimer;
 
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;

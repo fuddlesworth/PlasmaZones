@@ -84,6 +84,15 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     m_writeBackGuardTimer.setSingleShot(true);
     m_writeBackGuardTimer.setInterval(500);
 
+    m_settingsRetileTimer.setSingleShot(true);
+    m_settingsRetileTimer.setInterval(100);
+    connect(&m_settingsRetileTimer, &QTimer::timeout, this, [this]() {
+        if (isEnabled()) {
+            m_pendingRetileScreens.clear();
+            retile();
+        }
+    });
+
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Fires on the next event loop
     // pass after both m_currentDesktop and m_currentActivity are updated.
@@ -1228,8 +1237,7 @@ void AutotileEngine::refreshConfigFromSettings()
     }
 
     if (configChanged && isEnabled()) {
-        m_pendingRetileScreens.clear();
-        retile();
+        m_settingsRetileTimer.start();
     }
 
     qCInfo(lcAutotile) << "Settings: synced, algorithm=" << m_algorithmId

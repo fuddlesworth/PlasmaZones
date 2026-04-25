@@ -287,6 +287,12 @@ target_compile_definitions(test_per_screen_config PRIVATE "PZ_SOURCE_DIR=\"${PRO
 pz_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ — Engine Settings Tests (replaces deleted test_settings_bridge)
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_engine_settings autotile/test_engine_settings.cpp)
+target_compile_definitions(test_engine_settings PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ui/ — Zone Shader Item Tests — need Qt6::Quick + plasmazones_rendering
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_zone_shader_item ui/test_zone_shader_item.cpp)

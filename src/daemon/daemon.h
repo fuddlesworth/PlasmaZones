@@ -557,7 +557,7 @@ private:
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
 
-    QTimer m_settingsRetileTimer;
+    QTimer m_previewNotifyTimer;
     QTimer m_writeBackSaveTimer;
     PhosphorTiles::AlgorithmPreviewParams m_preRetilePreviewParams;
 

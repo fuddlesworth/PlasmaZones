@@ -331,9 +331,9 @@ bool Daemon::init()
     // transitions are handled here to avoid redundant retile passes.
     m_prevSnappingEnabled = m_settings->snappingEnabled();
     m_prevAutotileEnabled = m_settings->autotileEnabled();
-    m_settingsRetileTimer.setSingleShot(true);
-    m_settingsRetileTimer.setInterval(100);
-    connect(&m_settingsRetileTimer, &QTimer::timeout, this, [this]() {
+    m_previewNotifyTimer.setSingleShot(true);
+    m_previewNotifyTimer.setInterval(100);
+    connect(&m_previewNotifyTimer, &QTimer::timeout, this, [this]() {
         if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != m_preRetilePreviewParams
             && m_layoutAdaptor) {
             m_layoutAdaptor->notifyLayoutListChanged();
@@ -358,7 +358,7 @@ bool Daemon::init()
         if (m_autotileEngine) {
             m_autotileEngine->refreshConfigFromSettings();
         }
-        m_settingsRetileTimer.start();
+        m_previewNotifyTimer.start();
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
