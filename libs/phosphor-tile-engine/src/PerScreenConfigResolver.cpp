@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "PerScreenConfigResolver.h"
-#include "AutotileEngine.h"
+#include <PhosphorTileEngine/PerScreenConfigResolver.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include "AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
-#include "core/logging.h"
+#include "tileenginelogging.h"
 
 namespace PlasmaZones {
 
@@ -85,7 +85,8 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         m_engine->scheduleRetileForScreen(screenId);
     }
 
-    qCDebug(lcAutotile) << "Applied per-screen config for" << screenId << "keys:" << overrides.keys();
+    qCDebug(PhosphorTileEngine::lcTileEngine)
+        << "Applied per-screen config for" << screenId << "keys:" << overrides.keys();
 }
 
 void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
@@ -105,7 +106,7 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
         m_engine->scheduleRetileForScreen(screenId);
     }
 
-    qCDebug(lcAutotile) << "Cleared per-screen config for" << screenId;
+    qCDebug(PhosphorTileEngine::lcTileEngine) << "Cleared per-screen config for" << screenId;
 }
 
 QVariantMap PerScreenConfigResolver::perScreenOverrides(const QString& screenId) const
@@ -124,8 +125,8 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
 {
     auto it = m_perScreenOverrides.find(screenId);
     if (it == m_perScreenOverrides.end()) {
-        qCWarning(lcAutotile) << "updatePerScreenOverride: no override map for screen" << screenId
-                              << "- cannot update key" << key;
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "updatePerScreenOverride: no override map for screen" << screenId << "- cannot update key" << key;
         return;
     }
     (*it)[key] = value;
@@ -257,8 +258,9 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
             // User explicitly customized global maxWindows — honor it
             return m_engine->config()->maxWindows;
         }
-        qCWarning(lcAutotile) << "effectiveMaxWindows: unknown per-screen algorithm" << screenAlgo << "for screen"
-                              << screenId << "- falling back to global maxWindows";
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "effectiveMaxWindows: unknown per-screen algorithm" << screenAlgo << "for screen" << screenId
+            << "- falling back to global maxWindows";
     }
 
     // 4. Same algorithm globally and per-screen — use the global setting

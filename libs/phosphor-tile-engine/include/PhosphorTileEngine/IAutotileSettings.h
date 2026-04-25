@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngineTypes/EngineTypes.h>
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
@@ -39,7 +40,7 @@ public:
 
     virtual int autotileInsertPositionInt() const = 0;
     virtual int autotileOverflowBehaviorInt() const = 0;
-    virtual int autotileStickyWindowHandlingInt() const = 0;
+    virtual PhosphorEngineApi::StickyWindowHandling autotileStickyWindowHandling() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
 };

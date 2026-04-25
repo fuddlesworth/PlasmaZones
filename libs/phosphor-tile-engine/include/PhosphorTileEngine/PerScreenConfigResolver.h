@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortileengine_export.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
 #include <QHash>
 #include <QString>
@@ -34,7 +34,7 @@ class AutotileEngine;
  * @see AutotileEngine for the owning engine
  * @see AutotileConfig for global configuration
  */
-class PLASMAZONES_EXPORT PerScreenConfigResolver
+class PHOSPHORTILEENGINE_EXPORT PerScreenConfigResolver
 {
 public:
     explicit PerScreenConfigResolver(AutotileEngine* engine);

@@ -5,7 +5,7 @@
 
 #include "configdefaults.h"
 #include "configmigration.h"
-#include "../autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include "../core/enums.h"
 
 #include <QtGlobal>

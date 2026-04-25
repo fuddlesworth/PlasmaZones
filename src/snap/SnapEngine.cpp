@@ -3,7 +3,7 @@
 
 #include "SnapEngine.h"
 #include "SnapState.h"
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "dbus/snapnavigationtargets.h"
 #include "dbus/windowtrackingadaptor.h"
 #include "dbus/zonedetectionadaptor.h"

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortileengine_export.h>
 #include <QString>
 #include <QStringList>
 #include <functional>
@@ -29,7 +29,7 @@ class AutotileEngine;
  *
  * @see AutotileEngine for the owning engine
  */
-class PLASMAZONES_EXPORT NavigationController
+class PHOSPHORTILEENGINE_EXPORT NavigationController
 {
 public:
     explicit NavigationController(AutotileEngine* engine);

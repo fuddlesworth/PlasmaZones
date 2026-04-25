@@ -163,17 +163,7 @@ set(plasmazones_core_SRCS
     # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
     # machinery live in libs/phosphor-tiles/. Consumers include canonical
     # <PhosphorTiles/...> headers directly; no forwarding shims remain.
-    autotile/AutotileConfig.cpp
-    autotile/AutotileConfig.h
-    autotile/AutotileEngine.cpp
-    autotile/AutotileEngine.h
-    autotile/PerScreenConfigResolver.cpp
-    autotile/PerScreenConfigResolver.h
-    autotile/NavigationController.cpp
-    autotile/NavigationController.h
-    autotile/OverflowManager.cpp
-    autotile/OverflowManager.h
-    # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
+    # AutotileEngine + supporting files moved to libs/phosphor-tile-engine/.
     snap/SnapState.cpp
     snap/SnapEngine.cpp
     snap/SnapEngine.h

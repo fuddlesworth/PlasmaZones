@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
 // Project headers
-#include "plasmazones_export.h"
+#include <phosphortileengine_export.h>
 
 // Qt headers
 #include <QHash>
@@ -32,7 +32,7 @@ namespace PlasmaZones {
  * that should be floated/unfloated and the caller performs the mutations
  * and signal emissions.
  */
-class PLASMAZONES_EXPORT OverflowManager
+class PHOSPHORTILEENGINE_EXPORT OverflowManager
 {
 public:
     /**

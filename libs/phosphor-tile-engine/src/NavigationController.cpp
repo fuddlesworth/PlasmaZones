@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "NavigationController.h"
-#include "AutotileEngine.h"
-#include "AutotileConfig.h"
+#include <PhosphorTileEngine/NavigationController.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
-#include "core/logging.h"
+#include "tileenginelogging.h"
 #include <PhosphorScreens/Manager.h>
 
 #include <QScreen>
@@ -113,7 +113,7 @@ void NavigationController::rotateWindowOrder(bool clockwise)
                                             QString(), screenId);
     }
 
-    qCInfo(lcAutotile) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
+    qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
 }
 
 void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action)

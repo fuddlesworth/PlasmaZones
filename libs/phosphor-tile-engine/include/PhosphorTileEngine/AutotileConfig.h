@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortileengine_export.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <QColor>
 #include <QHash>
@@ -77,7 +77,7 @@ struct AlgorithmSettings
  *       constants. Do not hand-mirror values here — keep the delegation chain
  *       intact so library and config defaults stay in lock-step.
  */
-struct PLASMAZONES_EXPORT AutotileConfig
+struct PHOSPHORTILEENGINE_EXPORT AutotileConfig
 {
     // ═══════════════════════════════════════════════════════════════════════
     // Algorithm Selection

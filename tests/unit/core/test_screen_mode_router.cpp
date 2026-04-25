@@ -21,7 +21,7 @@
 
 #include <QTest>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include "core/screenmoderouter.h"

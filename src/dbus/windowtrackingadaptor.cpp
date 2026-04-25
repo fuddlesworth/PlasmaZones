@@ -5,7 +5,7 @@
 #include "snapnavigationtargets.h"
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../snap/SnapEngine.h"
 #include "../config/configbackends.h"
 #include "../core/interfaces.h"

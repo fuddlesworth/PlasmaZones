@@ -3,8 +3,8 @@
 
 #include "../autotileadaptor.h"
 
-#include "autotile/AutotileConfig.h"
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "config/configdefaults.h"
 
 #include "core/constants.h"

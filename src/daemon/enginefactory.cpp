@@ -4,7 +4,7 @@
 #include "enginefactory.h"
 
 // Concrete engine includes — only this TU needs them.
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../snap/SnapEngine.h"
 #include "../core/screenmoderouter.h"
 

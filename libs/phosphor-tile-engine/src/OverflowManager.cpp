@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Project headers
-#include "OverflowManager.h"
+#include <PhosphorTileEngine/OverflowManager.h>
 
 // KDE/Qt logging
-#include "core/logging.h"
+#include "tileenginelogging.h"
 
 namespace PlasmaZones {
 
@@ -66,7 +66,7 @@ QStringList OverflowManager::applyOverflow(const QString& screenId, const QStrin
         if (!isOverflow(wid)) {
             markOverflow(wid, screenId);
             newlyOverflowed.append(wid);
-            qCInfo(lcAutotile) << "Overflow: tracking window" << wid << "on screen" << screenId;
+            qCInfo(PhosphorTileEngine::lcTileEngine) << "Overflow: tracking window" << wid << "on screen" << screenId;
         }
     }
     return newlyOverflowed;
@@ -112,7 +112,7 @@ QStringList OverflowManager::recoverIfRoom(const QString& screenId, int tiledCou
     for (const QString& wid : stale) {
         sit->remove(wid);
         m_windowToScreen.remove(wid);
-        qCDebug(lcAutotile) << "Overflow: purged stale entry" << wid << "on screen" << screenId;
+        qCDebug(PhosphorTileEngine::lcTileEngine) << "Overflow: purged stale entry" << wid << "on screen" << screenId;
     }
 
     // Return candidates up to available room — caller performs state mutations
@@ -124,7 +124,7 @@ QStringList OverflowManager::recoverIfRoom(const QString& screenId, int tiledCou
         sit->remove(wid);
         m_windowToScreen.remove(wid);
         toRecover.append(wid);
-        qCInfo(lcAutotile) << "Overflow: recovering window" << wid << "on screen" << screenId;
+        qCInfo(PhosphorTileEngine::lcTileEngine) << "Overflow: recovering window" << wid << "on screen" << screenId;
         --room;
     }
 

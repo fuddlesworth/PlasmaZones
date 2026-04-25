@@ -17,22 +17,55 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-# Currently INTERFACE (header-only: IAutotileSettings). Will become SHARED
-# when engine source files are moved from src/autotile/.
-add_library(PhosphorTileEngine INTERFACE)
+include(GenerateExportHeader)
+
+set(CMAKE_AUTOMOC ON)
+
+add_library(PhosphorTileEngine SHARED
+    include/PhosphorTileEngine/AutotileEngine.h
+    include/PhosphorTileEngine/AutotileConfig.h
+    include/PhosphorTileEngine/NavigationController.h
+    include/PhosphorTileEngine/OverflowManager.h
+    include/PhosphorTileEngine/PerScreenConfigResolver.h
+    include/PhosphorTileEngine/IAutotileSettings.h
+    src/AutotileEngine.cpp
+    src/AutotileConfig.cpp
+    src/NavigationController.cpp
+    src/OverflowManager.cpp
+    src/PerScreenConfigResolver.cpp
+    src/tileenginelogging.h
+    src/tileenginelogging.cpp
+)
 add_library(PhosphorTileEngine::PhosphorTileEngine ALIAS PhosphorTileEngine)
 
-target_include_directories(PhosphorTileEngine
-    INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+generate_export_header(PhosphorTileEngine
+    EXPORT_FILE_NAME phosphortileengine_export.h
+    EXPORT_MACRO_NAME PHOSPHORTILEENGINE_EXPORT
 )
 
-target_compile_features(PhosphorTileEngine INTERFACE cxx_std_20)
+target_include_directories(PhosphorTileEngine
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+)
+
+target_compile_features(PhosphorTileEngine PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorTileEngine
-    INTERFACE
+    PUBLIC
         Qt6::Core
+        PhosphorEngineApi::PhosphorEngineApi
+        PhosphorEngineTypes::PhosphorEngineTypes
+        PhosphorTiles::PhosphorTiles
+        PhosphorGeometry::PhosphorGeometry
+        PhosphorLayoutApi::PhosphorLayoutApi
+    PRIVATE
+        PhosphorScreens::PhosphorScreens
+        PhosphorIdentity::PhosphorIdentity
+        PhosphorZones::PhosphorZones
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

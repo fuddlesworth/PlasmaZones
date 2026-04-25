@@ -741,7 +741,7 @@ public:
     void setAutotileUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
-    int autotileStickyWindowHandlingInt() const override;
+    int autotileStickyWindowHandlingInt() const;
     void setAutotileStickyWindowHandlingInt(int handling);
     AutotileDragBehavior autotileDragBehavior() const override;
     void setAutotileDragBehavior(AutotileDragBehavior behavior) override;

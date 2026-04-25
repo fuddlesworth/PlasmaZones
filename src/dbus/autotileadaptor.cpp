@@ -5,7 +5,7 @@
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 
 #include "core/logging.h"

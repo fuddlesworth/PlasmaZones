@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortileengine_export.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorEngineTypes/EngineTypes.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
@@ -23,7 +23,7 @@
 #include <memory>
 #include <optional>
 
-#include "OverflowManager.h"
+#include <PhosphorTileEngine/OverflowManager.h>
 
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -73,7 +73,6 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 namespace PlasmaZones {
-class WindowRegistry;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
@@ -93,7 +92,7 @@ namespace PlasmaZones {
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
  */
-class PLASMAZONES_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEngineBase
+class PHOSPHORTILEENGINE_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEngineBase
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -131,7 +130,6 @@ public:
      *
      * Must be set before start. Not owned.
      */
-    void setWindowRegistry(WindowRegistry* registry);
     void setWindowRegistry(QObject* registry) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1281,7 +1279,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
-    WindowRegistry* m_windowRegistry = nullptr; ///< Shared registry for class lookups; not owned
+    QObject* m_windowRegistry = nullptr; ///< Shared registry (QObject*) for class lookups; not owned
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;

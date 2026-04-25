@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
-#include "core/logging.h"
+#include "tileenginelogging.h"
 #include <QRegularExpression>
 #include <QtMath>
 
@@ -41,7 +41,7 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
     return AutotileConfig::InsertPosition::End;
 }
 
-QString overflowBehaviorToString(AutotileOverflowBehavior behavior)
+QString overflowBehaviorToString(PhosphorTiles::AutotileOverflowBehavior behavior)
 {
     switch (behavior) {
     case PhosphorTiles::AutotileOverflowBehavior::Unlimited:
@@ -52,7 +52,7 @@ QString overflowBehaviorToString(AutotileOverflowBehavior behavior)
     }
 }
 
-AutotileOverflowBehavior stringToOverflowBehavior(const QString& str)
+PhosphorTiles::AutotileOverflowBehavior stringToOverflowBehavior(const QString& str)
 {
     if (str == OverflowUnlimited) {
         return PhosphorTiles::AutotileOverflowBehavior::Unlimited;
@@ -70,8 +70,9 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
     int count = 0;
     for (auto it = map.constBegin(); it != map.constEnd(); ++it, ++count) {
         if (count >= MaxEntries) {
-            qCWarning(lcAutotile) << "perAlgoFromVariantMap: max entries reached (" << MaxEntries
-                                  << "), dropping remaining" << (map.size() - MaxEntries) << "entries";
+            qCWarning(PhosphorTileEngine::lcTileEngine)
+                << "perAlgoFromVariantMap: max entries reached (" << MaxEntries << "), dropping remaining"
+                << (map.size() - MaxEntries) << "entries";
             break;
         }
         if (!validAlgoId.match(it.key()).hasMatch())

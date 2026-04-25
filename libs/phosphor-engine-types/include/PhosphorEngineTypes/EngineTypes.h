@@ -88,4 +88,10 @@ struct ZoneAssignmentEntry
     QString targetScreenId{};
 };
 
+enum class StickyWindowHandling {
+    TreatAsNormal = 0,
+    RestoreOnly = 1,
+    IgnoreAll = 2
+};
+
 } // namespace PhosphorEngineApi
