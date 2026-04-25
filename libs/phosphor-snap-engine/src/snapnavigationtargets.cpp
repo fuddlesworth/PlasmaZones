@@ -124,11 +124,11 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
                                                                       const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getMoveTargetForWindow - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getMoveTargetForWindow - empty window ID";
         return moveResult(false, QStringLiteral("invalid_window"), QString(), QRect(), QString(), screenId);
     }
     if (!checkDirection(direction)) {
-        qCWarning(lcDbusWindow) << "Cannot move - empty direction";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot move - empty direction";
         // Feedback and result carry the caller's screenId: a half-supplied
         // feedback (empty here, populated on the result) confuses OSD/telemetry
         // consumers that correlate the two.
@@ -211,11 +211,11 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
                                                                         const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getFocusTargetForWindow - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getFocusTargetForWindow - empty window ID";
         return focusResult(false, QStringLiteral("invalid_window"), QString(), QString(), QString(), screenId);
     }
     if (!checkDirection(direction)) {
-        qCWarning(lcDbusWindow) << "Cannot focus - empty direction";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot focus - empty direction";
         // Same feedback/result screenId consistency rule as getMoveTargetForWindow.
         emitFeedback(false, QStringLiteral("focus"), QStringLiteral("invalid_direction"), QString(), QString(),
                      screenId);
@@ -270,7 +270,7 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
 RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QString& windowId, const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getRestoreForWindow - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getRestoreForWindow - empty window ID";
         return {false, false, 0, 0, 0, 0};
     }
 
@@ -296,7 +296,7 @@ CycleTargetResult SnapNavigationTargetResolver::getCycleTargetForWindow(const QS
                                                                         const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getCycleTargetForWindow - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getCycleTargetForWindow - empty window ID";
         return cycleResult(false, QStringLiteral("invalid_window"), QString(), QString(), screenId);
     }
 
@@ -342,12 +342,12 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
     // On failure, windowId1 is returned empty so that a caller which forgets
     // to check `success` cannot accidentally act on the calling window.
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getSwapTargetForWindow - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSwapTargetForWindow - empty window ID";
         return swapResult(false, QStringLiteral("invalid_window"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
                           0, QString(), screenId, QString(), QString());
     }
     if (!checkDirection(direction)) {
-        qCWarning(lcDbusWindow) << "Cannot swap - empty direction";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot swap - empty direction";
         // Same feedback/result screenId consistency rule as getMoveTargetForWindow.
         emitFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(), QString(),
                      screenId);
@@ -418,7 +418,7 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
 MoveTargetResult SnapNavigationTargetResolver::getPushTargetForWindow(const QString& windowId, const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getPushTargetForWindow - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getPushTargetForWindow - empty window ID";
         return moveResult(false, QStringLiteral("invalid_window"), QString(), QRect(), QString(), screenId);
     }
 
@@ -442,7 +442,7 @@ MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const
                                                                            const QString& screenId)
 {
     if (!checkWindowId(windowId)) {
-        qCWarning(lcDbusWindow) << "Cannot getSnapToZoneByNumberTarget - empty window ID";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "Cannot getSnapToZoneByNumberTarget - empty window ID";
         return moveResult(false, QStringLiteral("invalid_window"), QString(), QRect(), QString(), screenId);
     }
 

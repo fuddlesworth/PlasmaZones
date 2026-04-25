@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
-#include "snapnavigationtargets.h"
+#include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
 #include <PhosphorTileEngine/AutotileEngine.h>

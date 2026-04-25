@@ -4,7 +4,7 @@
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
 #include "../snapadaptor.h"
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>

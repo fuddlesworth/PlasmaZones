@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QHashFunctions>
+#include <QLatin1StringView>
 #include <QList>
 #include <QRect>
 #include <QString>
@@ -93,5 +94,7 @@ enum class StickyWindowHandling {
     RestoreOnly = 1,
     IgnoreAll = 2
 };
+
+inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
 } // namespace PhosphorEngineApi
