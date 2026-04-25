@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QObject>
 #include <QStringList>
 
 namespace PhosphorEngineApi {
@@ -20,3 +21,5 @@ public:
 };
 
 } // namespace PhosphorEngineApi
+
+Q_DECLARE_INTERFACE(PhosphorEngineApi::ISnapSettings, "org.plasmazones.ISnapSettings")

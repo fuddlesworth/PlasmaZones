@@ -512,6 +512,27 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
+    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested, this,
+            [this](const QVariantMap& values) {
+                if (!m_settings)
+                    return;
+                const QSignalBlocker blocker(m_settings.get());
+                for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+                    const QString& key = it.key();
+                    if (key == QLatin1String("defaultAutotileAlgorithm"))
+                        m_settings->setDefaultAutotileAlgorithm(it.value().toString());
+                    else if (key == QLatin1String("autotileSplitRatio"))
+                        m_settings->setAutotileSplitRatio(it.value().toDouble());
+                    else if (key == QLatin1String("autotileMasterCount"))
+                        m_settings->setAutotileMasterCount(it.value().toInt());
+                    else if (key == QLatin1String("autotileMaxWindows"))
+                        m_settings->setAutotileMaxWindows(it.value().toInt());
+                    else if (key == QLatin1String("autotilePerAlgorithmSettings"))
+                        m_settings->setAutotilePerAlgorithmSettings(it.value().toMap());
+                }
+                m_settings->save();
+            });
+
     autotileEngine->refreshConfigFromSettings();
 
     // Give the window drag adaptor access to the autotile engine for per-screen

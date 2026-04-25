@@ -479,17 +479,8 @@ public:
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Apply all settings from Settings to internal config
-     *
-     * Copies all autotile-related settings from the Settings object to the
-     * internal AutotileConfig. Also sets the algorithm and enabled state.
-     * Call this once during initialization.
-     *
-     * @param settings Settings object to read from (not owned)
-     */
     PhosphorEngineApi::IAutotileSettings* autotileSettings() const;
-    void refreshConfigFromSettings();
+    void refreshConfigFromSettings() override;
 
     // Per-screen config — forwarded to PerScreenConfigResolver (IPlacementEngine overrides)
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
@@ -509,16 +500,6 @@ public:
     int runtimeMaxWindows() const override;
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
-
-    /**
-     * @brief Connect to Settings change signals for live updates
-     *
-     * Connects to all autotile-related Settings signals and updates the
-     * internal config when they change. Uses debouncing to coalesce rapid
-     * changes (e.g., slider adjustments) into a single retile operation.
-     *
-     * @param settings Settings object to connect to (not owned, must outlive engine)
-     */
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
@@ -1303,8 +1284,6 @@ private:
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;
-    QTimer m_settingsRetileTimer;
-    QTimer m_shortcutSaveTimer;
 
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;

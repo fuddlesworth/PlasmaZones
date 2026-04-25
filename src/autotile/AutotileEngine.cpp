@@ -19,6 +19,7 @@
 #include "AutotileConfig.h"
 #include "NavigationController.h"
 #include "PerScreenConfigResolver.h"
+#include <PhosphorTiles/AlgorithmPreviewParams.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
@@ -1085,7 +1086,7 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 
 PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
 {
-    return dynamic_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
+    return qobject_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
 }
 
 void AutotileEngine::refreshConfigFromSettings()
@@ -1094,25 +1095,130 @@ void AutotileEngine::refreshConfigFromSettings()
     if (!s) {
         return;
     }
-    m_config->masterCount = s->autotileMasterCount();
-    m_config->innerGap = s->autotileInnerGap();
-    m_config->outerGap = s->autotileOuterGap();
-    m_config->usePerSideOuterGap = s->autotileUsePerSideOuterGap();
-    m_config->outerGapTop = s->autotileOuterGapTop();
-    m_config->outerGapBottom = s->autotileOuterGapBottom();
-    m_config->outerGapLeft = s->autotileOuterGapLeft();
-    m_config->outerGapRight = s->autotileOuterGapRight();
-    m_config->focusNewWindows = s->autotileFocusNewWindows();
-    m_config->smartGaps = s->autotileSmartGaps();
-    m_config->focusFollowsMouse = s->autotileFocusFollowsMouse();
-    m_config->respectMinimumSize = s->autotileRespectMinimumSize();
-    m_config->maxWindows = s->autotileMaxWindows();
-    m_config->splitRatio = s->autotileSplitRatio();
-    m_config->splitRatioStep = s->autotileSplitRatioStep();
-    m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPositionInt());
-    m_config->overflowBehavior = static_cast<AutotileOverflowBehavior>(s->autotileOverflowBehaviorInt());
-    m_config->savedAlgorithmSettings = AutotileConfig::perAlgoFromVariantMap(s->autotilePerAlgorithmSettings());
+
+    bool configChanged = false;
+    const int oldMaxWindows = m_config->maxWindows;
+    const auto oldOverflow = m_config->overflowBehavior;
+
+#define SYNC_FIELD(field, getter)                                                                                      \
+    do {                                                                                                               \
+        auto newVal = s->getter();                                                                                     \
+        if (m_config->field != newVal) {                                                                               \
+            m_config->field = newVal;                                                                                  \
+            configChanged = true;                                                                                      \
+        }                                                                                                              \
+    } while (0)
+
+    SYNC_FIELD(masterCount, autotileMasterCount);
+    SYNC_FIELD(innerGap, autotileInnerGap);
+    SYNC_FIELD(outerGap, autotileOuterGap);
+    SYNC_FIELD(usePerSideOuterGap, autotileUsePerSideOuterGap);
+    SYNC_FIELD(outerGapTop, autotileOuterGapTop);
+    SYNC_FIELD(outerGapBottom, autotileOuterGapBottom);
+    SYNC_FIELD(outerGapLeft, autotileOuterGapLeft);
+    SYNC_FIELD(outerGapRight, autotileOuterGapRight);
+    SYNC_FIELD(focusNewWindows, autotileFocusNewWindows);
+    SYNC_FIELD(smartGaps, autotileSmartGaps);
+    SYNC_FIELD(focusFollowsMouse, autotileFocusFollowsMouse);
+    SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
+    SYNC_FIELD(maxWindows, autotileMaxWindows);
+
+    {
+        const qreal newRatio = s->autotileSplitRatio();
+        if (!qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + newRatio)) {
+            m_config->splitRatio = newRatio;
+            configChanged = true;
+        }
+    }
+    {
+        const qreal newStep = s->autotileSplitRatioStep();
+        if (!qFuzzyCompare(1.0 + m_config->splitRatioStep, 1.0 + newStep)) {
+            m_config->splitRatioStep = newStep;
+        }
+    }
+
+    {
+        auto newInsert = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPositionInt());
+        if (m_config->insertPosition != newInsert) {
+            m_config->insertPosition = newInsert;
+            configChanged = true;
+        }
+    }
+
+    {
+        auto newOverflow = static_cast<AutotileOverflowBehavior>(s->autotileOverflowBehaviorInt());
+        if (m_config->overflowBehavior != newOverflow) {
+            m_config->overflowBehavior = newOverflow;
+            configChanged = true;
+        }
+    }
+
+    {
+        const auto newSaved = AutotileConfig::perAlgoFromVariantMap(s->autotilePerAlgorithmSettings());
+        if (m_config->savedAlgorithmSettings != newSaved) {
+            m_config->savedAlgorithmSettings = newSaved;
+            configChanged = true;
+        }
+    }
+
+#undef SYNC_FIELD
+
+    const QString oldAlgorithmId = m_algorithmId;
     setAlgorithm(s->defaultAutotileAlgorithm());
+    if (m_algorithmId != oldAlgorithmId) {
+        configChanged = true;
+    }
+
+    if (m_algorithmId == oldAlgorithmId) {
+        auto savedIt = m_config->savedAlgorithmSettings.constFind(m_algorithmId);
+        if (savedIt != m_config->savedAlgorithmSettings.constEnd()) {
+            m_config->splitRatio = savedIt->splitRatio;
+            m_config->masterCount = savedIt->masterCount;
+        }
+    }
+
+    propagateGlobalSplitRatio();
+    propagateGlobalMasterCount();
+
+    // Float→Unlimited: backfill previously-overflowed floating windows
+    const bool overflowBackfilled = oldOverflow == AutotileOverflowBehavior::Float
+        && m_config->overflowBehavior == AutotileOverflowBehavior::Unlimited;
+    if (overflowBackfilled) {
+        backfillWindows();
+    }
+
+    if (m_config->maxWindows > oldMaxWindows && !overflowBackfilled) {
+        backfillWindows();
+    }
+
+    // Update preview params so algorithm previews in the KCM reflect current values
+    PhosphorTiles::AlgorithmPreviewParams previewParams;
+    previewParams.algorithmId = m_algorithmId;
+    previewParams.maxWindows = m_config->maxWindows;
+    previewParams.masterCount = m_config->masterCount;
+    previewParams.splitRatio = m_config->splitRatio;
+    for (auto it = m_config->savedAlgorithmSettings.constBegin(); it != m_config->savedAlgorithmSettings.constEnd();
+         ++it) {
+        QVariantMap entry{
+            {PhosphorTiles::AutotileJsonKeys::MasterCount, it.value().masterCount},
+            {PhosphorTiles::AutotileJsonKeys::SplitRatio, it.value().splitRatio},
+        };
+        if (!it.value().customParams.isEmpty()) {
+            entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
+        }
+        previewParams.savedAlgorithmSettings[it.key()] = entry;
+    }
+    if (auto* reg = algorithmRegistry()) {
+        reg->setPreviewParams(previewParams);
+    }
+
+    if (configChanged && isEnabled()) {
+        m_pendingRetileScreens.clear();
+        retile();
+    }
+
+    qCInfo(lcAutotile) << "Settings: synced, algorithm=" << m_algorithmId
+                       << "autotileScreens=" << m_autotileScreens.size();
 }
 
 void AutotileEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)

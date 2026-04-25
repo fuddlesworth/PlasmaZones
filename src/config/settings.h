@@ -35,6 +35,7 @@ class PLASMAZONES_EXPORT Settings : public ISettings,
                                     public PhosphorEngineApi::ISnapSettings
 {
     Q_OBJECT
+    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings PhosphorEngineApi::ISnapSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
@@ -426,11 +427,6 @@ public:
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
-
-    QObject* asQObject() override
-    {
-        return this;
-    }
 
     // No singleton - use dependency injection instead
 

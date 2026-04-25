@@ -3,10 +3,9 @@
 
 #pragma once
 
+#include <QObject>
 #include <QString>
 #include <QVariantMap>
-
-class QObject;
 
 namespace PhosphorEngineApi {
 
@@ -15,18 +14,13 @@ class IAutotileSettings
 public:
     virtual ~IAutotileSettings() = default;
 
-    virtual QObject* asQObject() = 0;
-
     virtual QString defaultAutotileAlgorithm() const = 0;
-    virtual void setDefaultAutotileAlgorithm(const QString& algorithm) = 0;
 
     virtual qreal autotileSplitRatio() const = 0;
-    virtual void setAutotileSplitRatio(qreal ratio) = 0;
 
     virtual qreal autotileSplitRatioStep() const = 0;
 
     virtual int autotileMasterCount() const = 0;
-    virtual void setAutotileMasterCount(int count) = 0;
 
     virtual int autotileInnerGap() const = 0;
     virtual int autotileOuterGap() const = 0;
@@ -42,18 +36,16 @@ public:
     virtual bool autotileRespectMinimumSize() const = 0;
 
     virtual int autotileMaxWindows() const = 0;
-    virtual void setAutotileMaxWindows(int max) = 0;
 
     virtual int autotileInsertPositionInt() const = 0;
     virtual int autotileOverflowBehaviorInt() const = 0;
     virtual int autotileStickyWindowHandlingInt() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
-    virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
 
     virtual void clearPerScreenAutotileSettings(const QString& screenId) = 0;
-
-    virtual void save() = 0;
 };
 
 } // namespace PhosphorEngineApi
+
+Q_DECLARE_INTERFACE(PhosphorEngineApi::IAutotileSettings, "org.plasmazones.IAutotileSettings")
