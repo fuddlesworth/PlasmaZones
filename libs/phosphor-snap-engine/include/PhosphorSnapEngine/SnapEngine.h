@@ -26,6 +26,15 @@ class SnapState;
 
 namespace PlasmaZones {
 
+using NavigationContext = PhosphorEngineApi::NavigationContext;
+using SnapResult = PhosphorEngineApi::SnapResult;
+using SnapIntent = PhosphorEngineApi::SnapIntent;
+using ZoneAssignmentEntry = PhosphorEngineApi::ZoneAssignmentEntry;
+using UnfloatResult = PhosphorEngineApi::UnfloatResult;
+using PendingRestore = PhosphorEngineApi::PendingRestore;
+using ResnapEntry = PhosphorEngineApi::ResnapEntry;
+using StickyWindowHandling = PhosphorEngineApi::StickyWindowHandling;
+
 using PhosphorProtocol::CycleTargetResult;
 using PhosphorProtocol::FocusTargetResult;
 using PhosphorProtocol::MoveTargetResult;
@@ -33,12 +42,11 @@ using PhosphorProtocol::RestoreTargetResult;
 using PhosphorProtocol::SnapAllResultEntry;
 using PhosphorProtocol::SnapAllResultList;
 using PhosphorProtocol::SwapTargetResult;
+using PhosphorProtocol::WindowGeometryEntry;
 using PhosphorProtocol::WindowGeometryList;
 using PhosphorProtocol::WindowStateEntry;
 
 class SnapNavigationTargetResolver;
-class WindowTrackingAdaptor;
-class ZoneDetectionAdaptor;
 
 /**
  * @brief Engine for manual zone-based window snapping
@@ -191,7 +199,7 @@ public:
      *
      * @param adaptor ZoneDetectionAdaptor instance (not owned, must outlive SnapEngine)
      */
-    void setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor);
+    void setZoneDetectionAdaptor(QObject* adaptor);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WindowTrackingAdaptor back-reference
@@ -217,7 +225,7 @@ public:
      * Must be set after construction and before any navigation method is
      * called. Not owned; must outlive SnapEngine.
      */
-    void setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor);
+    void setWindowTrackingAdaptor(QObject* adaptor);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation (moved out of WindowTrackingAdaptor)
@@ -459,14 +467,14 @@ private:
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     PhosphorEngineApi::IPlacementEngine* m_autotileEngine = nullptr;
-    QPointer<ZoneDetectionAdaptor> m_zoneDetectionAdaptor;
+    QPointer<QObject> m_zoneDetectionAdaptor;
     // Back-reference to WindowTrackingAdaptor for state SnapEngine reads
     // but doesn't own yet: the last-active-window / last-active-screen /
     // last-cursor-screen shadows populated via D-Bus windowActivated and
     // cursorScreenChanged slots, plus the frame-geometry shadow populated
     // via setFrameGeometry. Not owned. Remaining uses are all read-only
     // accessors — SnapEngine no longer routes BEHAVIOUR through WTA.
-    QPointer<WindowTrackingAdaptor> m_wta;
+    QPointer<QObject> m_wta;
     // Snap-mode navigation target resolver. Owned by SnapEngine — moved
     // here in Phase 5E from WindowTrackingAdaptor. Constructed lazily on
     // first navigation call (so the construction order isn't constrained

@@ -36,6 +36,7 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <QMetaObject>
 
 namespace PlasmaZones {
 
@@ -53,7 +54,7 @@ namespace {
 ///      rather than the one KWin happens to think the window is on.
 ///   2. An explicit @p preferredScreen from the NavigationContext.
 ///   3. The WTA cursor / last-active screen shadows.
-QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& windowId,
+QString resolveNavScreen(const QObject* wta, const QString& windowId,
                          PhosphorEngineApi::IWindowTrackingService* service, const QString& preferredScreen = QString())
 {
     if (service && !windowId.isEmpty()) {
@@ -82,9 +83,19 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
     if (!wta) {
         return QString();
     }
-    QString screen = wta->lastCursorScreenName();
+    QString screen = [&]() {
+        QString r;
+        if (wta)
+            QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastCursorScreenName", Q_RETURN_ARG(QString, r));
+        return r;
+    }();
     if (screen.isEmpty()) {
-        screen = wta->lastActiveScreenName();
+        screen = [&]() {
+            QString r;
+            if (wta)
+                QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastActiveScreenName", Q_RETURN_ARG(QString, r));
+            return r;
+        }();
     }
     return screen;
 }
@@ -92,22 +103,32 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
 /// Pick the effective window id: the explicit one from NavigationContext
 /// if set, otherwise the last-active shadow on WTA. Returns empty when
 /// neither is available — caller emits "no_window" feedback.
-QString effectiveWindowId(const NavigationContext& ctx, const WindowTrackingAdaptor* wta)
+QString effectiveWindowId(const NavigationContext& ctx, const QObject* wta)
 {
     if (!ctx.windowId.isEmpty()) {
         return ctx.windowId;
     }
-    return wta ? wta->lastActiveWindowId() : QString();
+    return [&]() {
+        QString r;
+        if (wta)
+            QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastActiveWindowId", Q_RETURN_ARG(QString, r));
+        return r;
+    }();
 }
 
 /// Pick the effective screen id: the explicit one from NavigationContext
 /// if set, otherwise the last-active screen shadow on WTA.
-QString effectiveScreenId(const NavigationContext& ctx, const WindowTrackingAdaptor* wta)
+QString effectiveScreenId(const NavigationContext& ctx, const QObject* wta)
 {
     if (!ctx.screenId.isEmpty()) {
         return ctx.screenId;
     }
-    return wta ? wta->lastActiveScreenName() : QString();
+    return [&]() {
+        QString r;
+        if (wta)
+            QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastActiveScreenName", Q_RETURN_ARG(QString, r));
+        return r;
+    }();
 }
 
 } // namespace
@@ -408,7 +429,12 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // still living on WTA. Reading it here is the last remaining behavior
     // coupling to the adaptor in this file.
     if (m_wta && m_snapState->isFloating(windowId)) {
-        const QRect geo = m_wta->frameGeometry(windowId);
+        const QRect geo = [&]() {
+            QRect r;
+            if (m_wta)
+                QMetaObject::invokeMethod(m_wta, "frameGeometry", Q_RETURN_ARG(QRect, r), Q_ARG(QString, windowId));
+            return r;
+        }();
         if (geo.isValid()) {
             storeUnmanagedGeometry(windowId, geo, screenId, /*overwrite=*/true);
         }
@@ -479,13 +505,17 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
     // cursor/active-window shadow on WTA — only used when none of the
     // built-in strategies (targetScreenId / geometry.center() /
     // QGuiApplication::screens()) yield a screen.
-    const QPointer<WindowTrackingAdaptor> wta = m_wta;
+    const QPointer<QObject> wta = m_wta;
     WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
         if (!wta) {
             return QString();
         }
-        const QString cursor = wta->lastCursorScreenName();
-        return cursor.isEmpty() ? wta->lastActiveScreenName() : cursor;
+        QString cursor;
+        QMetaObject::invokeMethod(wta.data(), "lastCursorScreenName", Q_RETURN_ARG(QString, cursor));
+        if (cursor.isEmpty()) {
+            QMetaObject::invokeMethod(wta.data(), "lastActiveScreenName", Q_RETURN_ARG(QString, cursor));
+        }
+        return cursor;
     });
     if (!geometries.isEmpty()) {
         Q_EMIT applyGeometriesBatch(geometries, QStringLiteral("rotate"));

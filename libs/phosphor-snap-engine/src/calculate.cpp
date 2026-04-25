@@ -36,7 +36,7 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {
         auto handling = s->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll) {
+        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }
     }
@@ -177,7 +177,8 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     // Check sticky window handling
     if (isSticky) {
         auto handling = s->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
+        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll
+            || handling == PhosphorEngineApi::StickyWindowHandling::RestoreOnly) {
             return SnapResult::noSnap();
         }
     }
@@ -240,7 +241,8 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     // Check sticky window handling (auto-assign is an auto-snap, not a restore)
     if (auto* s = snapSettings(); isSticky && s) {
         auto handling = s->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
+        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll
+            || handling == PhosphorEngineApi::StickyWindowHandling::RestoreOnly) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
                 << "snapToEmptyZone: window" << m_windowTracker->currentAppIdFor(windowId) << "sticky handling"
                 << static_cast<int>(handling);
@@ -293,7 +295,7 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {
         auto handling = s->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll) {
+        if (handling == PhosphorEngineApi::StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }
     }

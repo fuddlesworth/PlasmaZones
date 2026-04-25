@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngineTypes/EngineTypes.h>
+#include <QObject>
 #include <QStringList>
 
 namespace PhosphorEngineApi {

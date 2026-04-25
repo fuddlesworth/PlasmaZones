@@ -109,7 +109,7 @@ void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
     m_autotileEngine = engine;
 }
 
-void SnapEngine::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
+void SnapEngine::setZoneDetectionAdaptor(QObject* adaptor)
 {
     m_zoneDetectionAdaptor = adaptor;
     // Push the zone detector into the target resolver if it exists yet.
@@ -164,7 +164,7 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
     return m_targetResolver.get();
 }
 
-void SnapEngine::setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor)
+void SnapEngine::setWindowTrackingAdaptor(QObject* adaptor)
 {
     m_wta = adaptor;
 }

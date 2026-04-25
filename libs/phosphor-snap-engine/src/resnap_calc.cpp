@@ -390,8 +390,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             break;
         }
 
-        QRect geo = GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId, layout,
-                                                            snapSettings());
+        QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId,
+                                                                           layout, snapSettings());
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
@@ -503,8 +503,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
 
             PhosphorZones::Zone* sourceZone = zones[currentIdx];
             PhosphorZones::Zone* targetZone = zones[targetIdx];
-            QRect geo = GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId, layout,
-                                                                snapSettings());
+            QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen,
+                                                                               screenId, layout, snapSettings());
 
             if (geo.isValid()) {
                 ZoneAssignmentEntry entry;
