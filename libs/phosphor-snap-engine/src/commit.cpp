@@ -16,6 +16,10 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
 {
     Q_ASSERT(m_snapState);
     Q_ASSERT(!zoneIds.isEmpty());
+    if (Q_UNLIKELY(zoneIds.isEmpty())) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnapImpl: empty zoneIds for" << windowId;
+        return;
+    }
     const QString& primaryZoneId = zoneIds.first();
 
     if (m_windowTracker->clearFloatingForSnap(windowId)) {

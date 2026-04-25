@@ -15,8 +15,6 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
-#include <PhosphorEngineApi/IGeometrySettings.h>
-#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
@@ -392,10 +390,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             break;
         }
 
-        auto* geoSettings = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
-        int zonePadding = geoSettings ? geoSettings->zonePadding() : 8;
-        auto outerGaps = geoSettings ? ::PhosphorLayout::EdgeGaps::uniform(geoSettings->outerGap())
-                                     : ::PhosphorLayout::EdgeGaps::uniform(8);
+        auto [zonePadding, outerGaps] = resolveGapParams();
         QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId,
                                                                            layout, zonePadding, outerGaps);
 
@@ -509,9 +504,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
 
             PhosphorZones::Zone* sourceZone = zones[currentIdx];
             PhosphorZones::Zone* targetZone = zones[targetIdx];
-            auto* gs = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
-            int zp = gs ? gs->zonePadding() : 8;
-            auto og = gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap()) : ::PhosphorLayout::EdgeGaps::uniform(8);
+            auto [zp, og] = resolveGapParams();
             QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen,
                                                                                screenId, layout, zp, og);
 

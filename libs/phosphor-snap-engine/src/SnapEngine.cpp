@@ -5,6 +5,8 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
 #include "snapenginelogging.h"
 
 namespace PlasmaZones {
@@ -29,6 +31,16 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
 PhosphorEngineApi::ISnapSettings* SnapEngine::snapSettings() const
 {
     return dynamic_cast<PhosphorEngineApi::ISnapSettings*>(engineSettings());
+}
+
+SnapEngine::GapParams SnapEngine::resolveGapParams() const
+{
+    constexpr int DefaultGap = 8;
+    auto* gs = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
+    int zonePadding = gs ? gs->zonePadding() : DefaultGap;
+    auto outerGaps =
+        gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap()) : ::PhosphorLayout::EdgeGaps::uniform(DefaultGap);
+    return {zonePadding, outerGaps};
 }
 
 // Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the
@@ -106,7 +118,7 @@ int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 
 void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
 {
-    m_autotileEngine = engine;
+    m_autotileEngineObj = dynamic_cast<QObject*>(engine);
 }
 
 void SnapEngine::setZoneDetectionAdaptor(QObject* adaptor)
@@ -176,8 +188,8 @@ void SnapEngine::setWindowTrackingAdaptor(QObject* adaptor)
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 {
     // SnapEngine is active on any screen where AutotileEngine is NOT active
-    if (m_autotileEngine) {
-        return !m_autotileEngine->isActiveOnScreen(screenId);
+    if (auto* engine = dynamic_cast<PhosphorEngineApi::IPlacementEngine*>(m_autotileEngineObj.data())) {
+        return !engine->isActiveOnScreen(screenId);
     }
     return true; // No autotile engine → all screens use snapping
 }

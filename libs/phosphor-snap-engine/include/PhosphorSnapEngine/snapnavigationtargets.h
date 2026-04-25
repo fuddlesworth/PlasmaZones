@@ -80,9 +80,9 @@ public:
                                  PhosphorZones::LayoutRegistry* layoutManager, QObject* zoneDetector,
                                  FeedbackFn feedback);
 
-    /// Late setter for the zone detector — it is wired after adaptor
-    /// construction, so we allow nullptr at construction time and bind
-    /// the pointer when it becomes available.
+    /// Late setter for the zone detector — it may not be available at
+    /// construction time, so we allow nullptr and bind the pointer when
+    /// it becomes available.
     void setZoneDetector(QObject* zoneDetector);
 
     MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);

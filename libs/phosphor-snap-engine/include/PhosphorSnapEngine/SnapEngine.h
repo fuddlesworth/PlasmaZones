@@ -9,6 +9,7 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QPointer>
@@ -458,6 +459,13 @@ protected:
 private:
     PhosphorEngineApi::ISnapSettings* snapSettings() const;
 
+    struct GapParams
+    {
+        int zonePadding;
+        ::PhosphorLayout::EdgeGaps outerGaps;
+    };
+    GapParams resolveGapParams() const;
+
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         SnapIntent intent);
 
@@ -466,7 +474,7 @@ private:
     PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
-    PhosphorEngineApi::IPlacementEngine* m_autotileEngine = nullptr;
+    QPointer<QObject> m_autotileEngineObj;
     QPointer<QObject> m_zoneDetectionAdaptor;
     // Back-reference to WindowTrackingAdaptor for state SnapEngine reads
     // but doesn't own yet: the last-active-window / last-active-screen /

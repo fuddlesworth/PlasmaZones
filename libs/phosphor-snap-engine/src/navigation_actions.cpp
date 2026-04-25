@@ -49,8 +49,11 @@ namespace {
 QString invokeStringGetter(const QObject* obj, const char* method)
 {
     QString r;
-    if (obj)
-        QMetaObject::invokeMethod(const_cast<QObject*>(obj), method, Q_RETURN_ARG(QString, r));
+    if (obj) {
+        bool ok = QMetaObject::invokeMethod(const_cast<QObject*>(obj), method, Q_RETURN_ARG(QString, r));
+        if (Q_UNLIKELY(!ok))
+            qCWarning(PhosphorSnapEngine::lcSnapEngine) << "invokeStringGetter: method" << method << "failed on" << obj;
+    }
     return r;
 }
 
