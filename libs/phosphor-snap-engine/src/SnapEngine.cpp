@@ -7,6 +7,7 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngineApi/IGeometrySettings.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include "snapenginelogging.h"
 
 namespace PlasmaZones {
@@ -35,11 +36,10 @@ PhosphorEngineApi::ISnapSettings* SnapEngine::snapSettings() const
 
 SnapEngine::GapParams SnapEngine::resolveGapParams() const
 {
-    constexpr int DefaultGap = 8;
     auto* gs = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
-    int zonePadding = gs ? gs->zonePadding() : DefaultGap;
-    auto outerGaps =
-        gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap()) : ::PhosphorLayout::EdgeGaps::uniform(DefaultGap);
+    int zonePadding = gs ? gs->zonePadding() : PhosphorTiles::AutotileDefaults::DefaultInnerGap;
+    auto outerGaps = gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap())
+                        : ::PhosphorLayout::EdgeGaps::uniform(PhosphorTiles::AutotileDefaults::DefaultOuterGap);
     return {zonePadding, outerGaps};
 }
 
@@ -118,7 +118,10 @@ int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 
 void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
 {
-    m_autotileEngineObj = dynamic_cast<QObject*>(engine);
+    auto* obj = dynamic_cast<QObject*>(engine);
+    Q_ASSERT(!engine || obj);
+    m_autotileEngineObj = obj;
+    m_autotileEngineTyped = engine;
 }
 
 void SnapEngine::setZoneDetectionAdaptor(QObject* adaptor)
@@ -187,9 +190,10 @@ void SnapEngine::setWindowTrackingAdaptor(QObject* adaptor)
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 {
-    // SnapEngine is active on any screen where AutotileEngine is NOT active
-    if (auto* engine = dynamic_cast<PhosphorEngineApi::IPlacementEngine*>(m_autotileEngineObj.data())) {
-        return !engine->isActiveOnScreen(screenId);
+    // SnapEngine is active on any screen where AutotileEngine is NOT active.
+    // Guard via QPointer: if the QObject was destroyed, m_autotileEngineTyped is stale.
+    if (m_autotileEngineObj && m_autotileEngineTyped) {
+        return !m_autotileEngineTyped->isActiveOnScreen(screenId);
     }
     return true; // No autotile engine → all screens use snapping
 }

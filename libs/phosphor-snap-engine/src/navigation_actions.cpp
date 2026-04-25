@@ -46,11 +46,11 @@ namespace PlasmaZones {
 
 namespace {
 
-QString invokeStringGetter(const QObject* obj, const char* method)
+QString invokeStringGetter(QObject* obj, const char* method)
 {
     QString r;
     if (obj) {
-        bool ok = QMetaObject::invokeMethod(const_cast<QObject*>(obj), method, Q_RETURN_ARG(QString, r));
+        bool ok = QMetaObject::invokeMethod(obj, method, Q_RETURN_ARG(QString, r));
         if (Q_UNLIKELY(!ok))
             qCWarning(PhosphorSnapEngine::lcSnapEngine) << "invokeStringGetter: method" << method << "failed on" << obj;
     }
@@ -65,8 +65,8 @@ QString invokeStringGetter(const QObject* obj, const char* method)
 ///      rather than the one KWin happens to think the window is on.
 ///   2. An explicit @p preferredScreen from the NavigationContext.
 ///   3. The WTA cursor / last-active screen shadows.
-QString resolveNavScreen(const QObject* wta, const QString& windowId,
-                         PhosphorEngineApi::IWindowTrackingService* service, const QString& preferredScreen = QString())
+QString resolveNavScreen(QObject* wta, const QString& windowId, PhosphorEngineApi::IWindowTrackingService* service,
+                         const QString& preferredScreen = QString())
 {
     if (service && !windowId.isEmpty()) {
         const QString zoneId = service->zoneForWindow(windowId);
@@ -104,7 +104,7 @@ QString resolveNavScreen(const QObject* wta, const QString& windowId,
 /// Pick the effective window id: the explicit one from NavigationContext
 /// if set, otherwise the last-active shadow on WTA. Returns empty when
 /// neither is available — caller emits "no_window" feedback.
-QString effectiveWindowId(const NavigationContext& ctx, const QObject* wta)
+QString effectiveWindowId(const NavigationContext& ctx, QObject* wta)
 {
     if (!ctx.windowId.isEmpty()) {
         return ctx.windowId;
@@ -114,7 +114,7 @@ QString effectiveWindowId(const NavigationContext& ctx, const QObject* wta)
 
 /// Pick the effective screen id: the explicit one from NavigationContext
 /// if set, otherwise the last-active screen shadow on WTA.
-QString effectiveScreenId(const NavigationContext& ctx, const QObject* wta)
+QString effectiveScreenId(const NavigationContext& ctx, QObject* wta)
 {
     if (!ctx.screenId.isEmpty()) {
         return ctx.screenId;

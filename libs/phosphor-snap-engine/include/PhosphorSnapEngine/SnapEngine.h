@@ -475,6 +475,7 @@ private:
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<QObject> m_autotileEngineObj;
+    PhosphorEngineApi::IPlacementEngine* m_autotileEngineTyped = nullptr;
     QPointer<QObject> m_zoneDetectionAdaptor;
     // Back-reference to WindowTrackingAdaptor for state SnapEngine reads
     // but doesn't own yet: the last-active-window / last-active-screen /

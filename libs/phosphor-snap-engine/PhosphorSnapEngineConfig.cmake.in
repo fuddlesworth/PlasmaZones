@@ -10,6 +10,7 @@ find_dependency(PhosphorEngineApi)
 find_dependency(PhosphorEngineTypes)
 find_dependency(PhosphorZones)
 find_dependency(PhosphorGeometry)
+find_dependency(PhosphorLayoutApi)
 find_dependency(PhosphorProtocol)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorSnapEngineTargets.cmake")

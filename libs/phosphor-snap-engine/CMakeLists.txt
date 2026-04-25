@@ -61,10 +61,12 @@ target_link_libraries(PhosphorSnapEngine
         PhosphorEngineTypes::PhosphorEngineTypes
         PhosphorZones::PhosphorZones
         PhosphorGeometry::PhosphorGeometry
+        PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
     PRIVATE
         PhosphorScreens::PhosphorScreens
         PhosphorIdentity::PhosphorIdentity
+        PhosphorTiles::PhosphorTiles
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
