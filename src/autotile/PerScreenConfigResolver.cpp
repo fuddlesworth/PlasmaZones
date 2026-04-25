@@ -233,7 +233,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    (PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
     //    in recalculateLayout, making the clamp idempotent. Also opens
     //    onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
-    if (m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
+    if (m_engine->config()->overflowBehavior == PhosphorTiles::AutotileOverflowBehavior::Unlimited) {
         return PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel;
     }
 
@@ -266,8 +266,8 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) const
 {
     if (auto v = perScreenOverride(screenId, PerScreenKeys::SplitRatioStep))
-        return qBound(ConfigDefaults::autotileSplitRatioStepMin(), v->toDouble(),
-                      ConfigDefaults::autotileSplitRatioStepMax());
+        return qBound(PhosphorTiles::AutotileDefaults::MinSplitRatioStep, v->toDouble(),
+                      PhosphorTiles::AutotileDefaults::MaxSplitRatioStep);
     return m_engine->config()->splitRatioStep;
 }
 

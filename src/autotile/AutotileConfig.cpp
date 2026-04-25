@@ -44,9 +44,9 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
 QString overflowBehaviorToString(AutotileOverflowBehavior behavior)
 {
     switch (behavior) {
-    case AutotileOverflowBehavior::Unlimited:
+    case PhosphorTiles::AutotileOverflowBehavior::Unlimited:
         return OverflowUnlimited;
-    case AutotileOverflowBehavior::Float:
+    case PhosphorTiles::AutotileOverflowBehavior::Float:
     default:
         return OverflowFloat;
     }
@@ -55,9 +55,9 @@ QString overflowBehaviorToString(AutotileOverflowBehavior behavior)
 AutotileOverflowBehavior stringToOverflowBehavior(const QString& str)
 {
     if (str == OverflowUnlimited) {
-        return AutotileOverflowBehavior::Unlimited;
+        return PhosphorTiles::AutotileOverflowBehavior::Unlimited;
     }
-    return AutotileOverflowBehavior::Float;
+    return PhosphorTiles::AutotileOverflowBehavior::Float;
 }
 } // anonymous namespace
 
@@ -78,11 +78,13 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
             continue;
         const QVariantMap entry = it.value().toMap();
         const QVariant ratioVar = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio);
-        const qreal ratio = std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : ConfigDefaults::autotileSplitRatio(),
-                                       MinSplitRatio, MaxSplitRatio);
+        const qreal ratio =
+            std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : PhosphorTiles::AutotileDefaults::DefaultSplitRatio,
+                       MinSplitRatio, MaxSplitRatio);
         const QVariant mcVar = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount);
-        const int masterCount = std::clamp(mcVar.isValid() ? mcVar.toInt() : ConfigDefaults::autotileMasterCount(),
-                                           MinMasterCount, MaxMasterCount);
+        const int masterCount =
+            std::clamp(mcVar.isValid() ? mcVar.toInt() : PhosphorTiles::AutotileDefaults::DefaultMasterCount,
+                       MinMasterCount, MaxMasterCount);
         AlgorithmSettings settings{ratio, masterCount, {}};
         // Load custom params if present
         const QVariant customVar = entry.value(PhosphorTiles::AutotileJsonKeys::CustomParams);
@@ -170,8 +172,8 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
     }
     if (json.contains(SplitRatioStep)) {
         config.splitRatioStep = json[SplitRatioStep].toDouble(config.splitRatioStep);
-        config.splitRatioStep = std::clamp(config.splitRatioStep, ConfigDefaults::autotileSplitRatioStepMin(),
-                                           ConfigDefaults::autotileSplitRatioStepMax());
+        config.splitRatioStep = std::clamp(config.splitRatioStep, PhosphorTiles::AutotileDefaults::MinSplitRatioStep,
+                                           PhosphorTiles::AutotileDefaults::MaxSplitRatioStep);
     }
     if (json.contains(MasterCount)) {
         config.masterCount = json[MasterCount].toInt(config.masterCount);

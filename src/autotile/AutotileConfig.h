@@ -5,8 +5,6 @@
 
 #include "plasmazones_export.h"
 #include <PhosphorTiles/AutotileConstants.h>
-#include "config/configdefaults.h"
-#include "core/enums.h"
 #include <QColor>
 #include <QHash>
 #include <QJsonObject>
@@ -23,8 +21,8 @@ namespace PlasmaZones {
  */
 struct AlgorithmSettings
 {
-    qreal splitRatio = ConfigDefaults::autotileSplitRatio();
-    int masterCount = ConfigDefaults::autotileMasterCount();
+    qreal splitRatio = PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
+    int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     QVariantMap customParams; ///< Algorithm-declared custom parameter values
     bool operator==(const AlgorithmSettings& other) const
     {
@@ -74,7 +72,7 @@ struct AlgorithmSettings
  * This is a value type (not QObject) for easy copying and comparison.
  * It can be stored per-layout or as global defaults.
  *
- * @note Default values are sourced from `ConfigDefaults::autotile*()` accessors,
+ * @note Default values are sourced from `PhosphorTiles::AutotileDefaults::*` constants,
  *       which delegate to `PhosphorTiles::AutotileDefaults` for the algorithm
  *       constants. Do not hand-mirror values here — keep the delegation chain
  *       intact so library and config defaults stay in lock-step.
@@ -91,7 +89,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Common values: "master-stack", "bsp", "columns", "dwindle", "spiral", "monocle"
      * See PhosphorTiles::AlgorithmRegistry for available algorithms.
      */
-    QString algorithmId = ConfigDefaults::defaultAutotileAlgorithm();
+    QString algorithmId = PhosphorTiles::AutotileDefaults::DefaultAlgorithmId;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Master Area Settings
@@ -103,8 +101,8 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0.1 to 0.9
      * Default: 0.6 (60% master, 40% stack)
      */
-    qreal splitRatio = ConfigDefaults::autotileSplitRatio();
-    qreal splitRatioStep = ConfigDefaults::autotileSplitRatioStep();
+    qreal splitRatio = PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
+    qreal splitRatioStep = PhosphorTiles::AutotileDefaults::DefaultSplitRatioStep;
 
     /**
      * @brief Number of windows in master area
@@ -112,7 +110,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 5
      * Default: 1
      */
-    int masterCount = ConfigDefaults::autotileMasterCount();
+    int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
 
     /// Per-algorithm saved settings (split ratio + master count).
     /// Saved when switching away from an algorithm, restored when switching back.
@@ -134,7 +132,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int innerGap = ConfigDefaults::autotileInnerGap();
+    int innerGap = PhosphorTiles::AutotileDefaults::DefaultInnerGap;
 
     /**
      * @brief Gap from screen edges in pixels (uniform)
@@ -142,7 +140,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int outerGap = ConfigDefaults::autotileOuterGap();
+    int outerGap = PhosphorTiles::AutotileDefaults::DefaultOuterGap;
 
     /**
      * @brief Whether to use per-side outer gaps instead of uniform
@@ -152,10 +150,10 @@ struct PLASMAZONES_EXPORT AutotileConfig
     /**
      * @brief Per-side outer gap values (used when usePerSideOuterGap is true)
      */
-    int outerGapTop = ConfigDefaults::autotileOuterGapTop();
-    int outerGapBottom = ConfigDefaults::autotileOuterGapBottom();
-    int outerGapLeft = ConfigDefaults::autotileOuterGapLeft();
-    int outerGapRight = ConfigDefaults::autotileOuterGapRight();
+    int outerGapTop = PhosphorTiles::AutotileDefaults::DefaultOuterGap;
+    int outerGapBottom = PhosphorTiles::AutotileDefaults::DefaultOuterGap;
+    int outerGapLeft = PhosphorTiles::AutotileDefaults::DefaultOuterGap;
+    int outerGapRight = PhosphorTiles::AutotileDefaults::DefaultOuterGap;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Window Insertion Behavior
@@ -221,7 +219,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 12
      * Default: 6
      */
-    int maxWindows = ConfigDefaults::autotileMaxWindows();
+    int maxWindows = PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
 
     /**
      * @brief Overflow behavior when window count exceeds maxWindows
@@ -242,7 +240,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * paths flow through the AutotileOverflowBehavior C++ enum, so the
      * asymmetry is internal — but worth knowing before touching either side.
      */
-    AutotileOverflowBehavior overflowBehavior = AutotileOverflowBehavior::Float;
+    PhosphorTiles::AutotileOverflowBehavior overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Float;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

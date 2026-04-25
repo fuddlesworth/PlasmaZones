@@ -114,7 +114,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
 
         const int effective = engine.effectiveMaxWindows(screen);
         QCOMPARE(effective, PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel);
@@ -134,7 +134,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screenA, screenB});
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
 
         // Screen A clamps to 3 via per-screen override; screen B inherits Unlimited.
         QVariantMap overrides;
@@ -161,7 +161,7 @@ private Q_SLOTS:
         engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Float global, screen A clamps to 2, screen B falls through to global default.
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Float;
         QVariantMap overrides;
         overrides[QStringLiteral("MaxWindows")] = 2;
         engine.applyPerScreenConfig(screenA, overrides);

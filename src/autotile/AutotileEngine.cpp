@@ -759,7 +759,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->masterCount = it->masterCount;
         } else {
             m_config->splitRatio = algo->defaultSplitRatio();
-            m_config->masterCount = ConfigDefaults::autotileMasterCount();
+            m_config->masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
         }
     };
 
@@ -1205,8 +1205,8 @@ void AutotileEngine::refreshConfigFromSettings()
     propagateGlobalMasterCount();
 
     // Float→Unlimited: backfill previously-overflowed floating windows
-    const bool overflowBackfilled = oldOverflow == AutotileOverflowBehavior::Float
-        && m_config->overflowBehavior == AutotileOverflowBehavior::Unlimited;
+    const bool overflowBackfilled = oldOverflow == PhosphorTiles::AutotileOverflowBehavior::Float
+        && m_config->overflowBehavior == PhosphorTiles::AutotileOverflowBehavior::Unlimited;
     if (overflowBackfilled) {
         backfillWindows();
     }
