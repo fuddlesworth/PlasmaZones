@@ -336,6 +336,13 @@ add_subdirectory(libs/phosphor-engine-api)  # unified placement engine contracts
 
 # Source directories
 add_subdirectory(src)
+
+# Developer tools — opt-in via -DBUILD_TOOLS=ON.  Currently builds
+# plasmazones-shader-render (offscreen shader preview generator
+# used by the docs site).  Skipped by default so packagers don't
+# pick up CLI tools they didn't ask for.
+add_subdirectory(tools)
+
 option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)
 if(USE_KDE_FRAMEWORKS)
     if(BUILD_KWIN_EFFECT)
