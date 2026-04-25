@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
@@ -38,8 +39,8 @@ public:
 
     virtual int autotileMaxWindows() const = 0;
 
-    virtual int autotileInsertPositionInt() const = 0;
-    virtual int autotileOverflowBehaviorInt() const = 0;
+    virtual PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const = 0;
+    virtual PhosphorTiles::AutotileOverflowBehavior autotileOverflowBehavior() const = 0;
     virtual PhosphorEngineApi::StickyWindowHandling autotileStickyWindowHandling() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;

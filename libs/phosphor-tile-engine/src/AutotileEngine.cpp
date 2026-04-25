@@ -1176,7 +1176,7 @@ void AutotileEngine::refreshConfigFromSettings()
     }
 
     {
-        const auto newInsert = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPositionInt());
+        const auto newInsert = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPosition());
         if (m_config->insertPosition != newInsert) {
             m_config->insertPosition = newInsert;
             configChanged = true;
@@ -1184,7 +1184,7 @@ void AutotileEngine::refreshConfigFromSettings()
     }
 
     {
-        const auto newOverflow = static_cast<PhosphorTiles::AutotileOverflowBehavior>(s->autotileOverflowBehaviorInt());
+        const auto newOverflow = s->autotileOverflowBehavior();
         if (m_config->overflowBehavior != newOverflow) {
             m_config->overflowBehavior = newOverflow;
             configChanged = true;

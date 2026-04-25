@@ -675,14 +675,10 @@ public:
     int autotileMaxWindows() const override;
     void setAutotileMaxWindows(int count);
 
-    enum class AutotileInsertPosition {
-        End = 0,
-        AfterFocused = 1,
-        AsMaster = 2
-    };
-    AutotileInsertPosition autotileInsertPosition() const;
-    void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const override;
+    using AutotileInsertPosition = PhosphorTiles::AutotileInsertPosition;
+    PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const override;
+    void setAutotileInsertPosition(PhosphorTiles::AutotileInsertPosition position);
+    int autotileInsertPositionInt() const;
     void setAutotileInsertPositionInt(int position);
 
     QVariantList autotileDragInsertTriggers() const override;
@@ -752,7 +748,7 @@ public:
     void setAutotileDragBehaviorInt(int behavior);
     AutotileOverflowBehavior autotileOverflowBehavior() const override;
     void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) override;
-    int autotileOverflowBehaviorInt() const override;
+    int autotileOverflowBehaviorInt() const;
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;

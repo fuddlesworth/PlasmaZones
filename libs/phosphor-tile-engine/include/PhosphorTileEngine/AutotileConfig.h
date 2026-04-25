@@ -159,14 +159,7 @@ struct PHOSPHORTILEENGINE_EXPORT AutotileConfig
     // Window Insertion Behavior
     // ═══════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Where to insert new windows
-     */
-    enum class InsertPosition {
-        End, ///< Add to end of stack (default)
-        AfterFocused, ///< Insert after currently focused window
-        AsMaster ///< New window becomes master
-    };
+    using InsertPosition = PhosphorTiles::AutotileInsertPosition;
 
     InsertPosition insertPosition = InsertPosition::End;
 

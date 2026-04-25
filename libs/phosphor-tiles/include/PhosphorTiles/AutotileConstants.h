@@ -178,6 +178,12 @@ enum class AutotileOverflowBehavior {
     Unlimited = 1
 };
 
+enum class AutotileInsertPosition {
+    End = 0,
+    AfterFocused = 1,
+    AsMaster = 2
+};
+
 enum class AutotileDragBehavior {
     Float = 0,
     Reorder = 1
