@@ -8,18 +8,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QScreen>
 
 namespace PhosphorEngineApi {
 namespace GeometryUtils {
-
-QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen)
-{
-    if (!screen) {
-        return geometry;
-    }
-    return PhosphorGeometry::availableAreaToOverlayCoordinates(geometry, screen->geometry());
-}
 
 QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
 {

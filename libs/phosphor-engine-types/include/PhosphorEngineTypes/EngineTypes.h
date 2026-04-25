@@ -6,7 +6,6 @@
 #include <QHashFunctions>
 #include <QList>
 #include <QRect>
-#include <QSet>
 #include <QString>
 #include <QStringList>
 
