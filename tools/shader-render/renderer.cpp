@@ -13,9 +13,8 @@
 
 #include <QGuiApplication>
 #include <QImage>
-#include <QOffscreenSurface>
-#include <QOpenGLContext>
-#include <QQuickGraphicsDevice>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickRenderControl>
 #include <QQuickRenderTarget>
@@ -36,36 +35,64 @@ namespace {
 // ZoneShaderItem here pulls in too much of the daemon.  Instead we
 // subclass ShaderEffect with a minimal override that loads the
 // vertex shader onto the render node the first time it appears.
+//
+// Derived from QQuickItem via ShaderEffect; Q_OBJECT + a default
+// constructor make it QML-registerable so we can instantiate the
+// scene via a QQmlComponent rather than imperatively — matches the
+// scene-graph assembly the daemon's ZoneShaderItem uses.
 class RenderEffect : public PhosphorRendering::ShaderEffect
 {
+    Q_OBJECT
 public:
+    explicit RenderEffect(QQuickItem* parent = nullptr)
+        : PhosphorRendering::ShaderEffect(parent) {}
     explicit RenderEffect(QQuickItem* parent, const QString& vertPath)
-        : PhosphorRendering::ShaderEffect(parent), m_vertexShaderPath(vertPath)
+        : PhosphorRendering::ShaderEffect(parent), m_vertexShaderPath(vertPath) {}
+
+    void setVertexShaderPath(const QString& p) { m_vertexShaderPath = p; }
+
+    /// Set the zoneCount / highlightedCount values that zone-aware
+    /// shaders key off via common.glsl's `zoneCount` uniform.  The
+    /// daemon's ZoneShaderItem does this inside its own
+    /// updatePaintNode after syncing zone data.  Zero skips the
+    /// draw path in most shaders, so this MUST be set for zone
+    /// shaders to render anything.
+    void setZoneCounts(int total, int highlighted)
     {
+        m_zoneCountTotal = total;
+        m_zoneCountHighlighted = highlighted;
+        update();
     }
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override
     {
         QSGNode* node = PhosphorRendering::ShaderEffect::updatePaintNode(oldNode, data);
-        // Once the parent has (re-)created the render node, push our
-        // vertex shader in.  This mirrors what ZoneShaderItem does
-        // in its own updatePaintNode — vertex path → loadVertexShader.
-        if (node && !m_vertexLoaded && !m_vertexShaderPath.isEmpty()) {
-            auto* rhiNode = dynamic_cast<PhosphorRendering::ShaderNodeRhi*>(node);
-            if (rhiNode) {
+        if (!node) return node;
+        auto* rhiNode = dynamic_cast<PhosphorRendering::ShaderNodeRhi*>(node);
+        if (rhiNode) {
+            if (!m_vertexLoaded && !m_vertexShaderPath.isEmpty()) {
                 if (rhiNode->loadVertexShader(m_vertexShaderPath)) {
                     rhiNode->invalidateShader();
                     m_vertexLoaded = true;
                 }
             }
+            // Zone-aware shaders gate rendering on zoneCount > 0.
+            // ShaderEffect's base updatePaintNode doesn't push this
+            // through — the daemon's ZoneShaderItem pushes it via
+            // setAppField0/1 inside its own override.  Mirror that.
+            rhiNode->setAppField0(m_zoneCountTotal);
+            rhiNode->setAppField1(m_zoneCountHighlighted);
         }
         return node;
     }
 
+
 private:
     QString m_vertexShaderPath;
     bool m_vertexLoaded = false;
+    int m_zoneCountTotal = 0;
+    int m_zoneCountHighlighted = 0;
 };
 
 
@@ -172,67 +199,62 @@ int Renderer::render(const RenderOptions& opts)
 
     const QSize size = opts.resolution;
 
-    // ── Set up OpenGL context for an offscreen RHI ──────────────
-    // Don't force a profile or version — let the platform pick
-    // something compatible with its driver.  Setting CoreProfile
-    // 3.3 fails on NVIDIA Wayland's EGL path here.
-    QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
-    fmt.setDepthBufferSize(24);
-    fmt.setStencilBufferSize(8);
+    // Pick the RHI backend BEFORE the QQuickWindow is constructed.
+    // OpenGL is the most portable for headless use — NVIDIA /
+    // Mesa both provide working GL drivers under Wayland-less
+    // setups too via EGL / GBM.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGLRhi);
 
-    QOpenGLContext glContext;
-    glContext.setFormat(fmt);
-    if (!glContext.create()) {
-        std::cerr << "Renderer::render: QOpenGLContext::create() failed. "
-                     "Check that an OpenGL-capable session is available.\n";
+    auto control = std::make_unique<QQuickRenderControl>();
+    auto window = std::make_unique<QQuickWindow>(control.get());
+
+    window->setColor(Qt::transparent);
+    window->resize(size);
+    window->setGeometry(0, 0, size.width(), size.height());
+
+    // Initialize the render control first — this sets up Qt's
+    // internal RHI, scene graph, and render target allocation.
+    // After this, window->rhi() returns a valid pointer we use to
+    // build the texture we want the scene to paint into.
+    if (!control->initialize()) {
+        std::cerr << "Renderer::render: QQuickRenderControl::initialize() failed. "
+                     "Check that a GL-capable display session is available.\n";
         return 1;
     }
 
-    QOffscreenSurface offscreenSurface;
-    offscreenSurface.setFormat(glContext.format());
-    offscreenSurface.create();
-    if (!offscreenSurface.isValid()) {
-        std::cerr << "Renderer::render: offscreen surface isn't valid\n";
-        return 1;
-    }
-    if (!glContext.makeCurrent(&offscreenSurface)) {
-        std::cerr << "Renderer::render: makeCurrent on offscreen surface failed\n";
-        return 1;
-    }
-
-    // ── Build the QRhi on top of our own context ─────────────────
-    QRhiGles2InitParams rhiParams;
-    rhiParams.fallbackSurface = &offscreenSurface;
-    rhiParams.shareContext = &glContext;
-
-    std::unique_ptr<QRhi> rhi(QRhi::create(QRhi::OpenGLES2, &rhiParams));
+    QRhi* rhi = window->rhi();
     if (!rhi) {
-        std::cerr << "Renderer::render: QRhi::create(OpenGLES2) failed\n";
+        std::cerr << "Renderer::render: window->rhi() is null after initialize\n";
         return 1;
     }
 
-    // ── Offscreen render target: colour texture + render pass ───
+    // QQuickWindow scales logical item sizes by devicePixelRatio
+    // when rendering.  The texture (physical pixel size) has to
+    // match that or the scene graph renders at a tile size the
+    // wrong dimensions from what the RT expects.  Detect the
+    // window's DPR and size the texture accordingly; we downscale
+    // at readback time to hit the user's requested output size.
+    const qreal dpr = window->devicePixelRatio() > 0 ? window->devicePixelRatio() : 1.0;
+    const QSize physicalSize(static_cast<int>(std::ceil(size.width() * dpr)),
+                             static_cast<int>(std::ceil(size.height() * dpr)));
+
+    // ── Offscreen render target: texture + depth + render pass ──
     std::unique_ptr<QRhiTexture> colorTex(rhi->newTexture(
-        QRhiTexture::RGBA8, size, 1,
+        QRhiTexture::RGBA8, physicalSize, 1,
         QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     if (!colorTex->create()) {
         std::cerr << "Renderer::render: colour texture create() failed\n";
         return 1;
     }
-
-    // Depth/stencil for depthBuffer-enabled shaders.  Shaders that
-    // don't request it still get one — harmless.
     std::unique_ptr<QRhiRenderBuffer> dsBuf(rhi->newRenderBuffer(
-        QRhiRenderBuffer::DepthStencil, size, 1));
+        QRhiRenderBuffer::DepthStencil, physicalSize, 1));
     if (!dsBuf->create()) {
         std::cerr << "Renderer::render: depth buffer create() failed\n";
         return 1;
     }
-
     QRhiColorAttachment colorAtt(colorTex.get());
     QRhiTextureRenderTargetDescription rtDesc(colorAtt);
     rtDesc.setDepthStencilBuffer(dsBuf.get());
-
     std::unique_ptr<QRhiTextureRenderTarget> textureRT(
         rhi->newTextureRenderTarget(rtDesc));
     std::unique_ptr<QRhiRenderPassDescriptor> rpDesc(
@@ -242,48 +264,42 @@ int Renderer::render(const RenderOptions& opts)
         std::cerr << "Renderer::render: texture render target create() failed\n";
         return 1;
     }
-
-    // ── Quick window / render control ───────────────────────────
-    //
-    // Pick the RHI backend BEFORE the QQuickWindow is constructed.
-    // OpenGL matches the QRhi backend we built above; mixing them
-    // produces a silent failure in initialize().
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGLRhi);
-
-    auto control = std::make_unique<QQuickRenderControl>();
-    auto window = std::make_unique<QQuickWindow>(control.get());
-
-    // Hand the window our RHI + texture render target BEFORE
-    // initialize().  Otherwise initialize() tries to create its
-    // own RHI against a window surface that doesn't exist under
-    // this offscreen setup and fails.
-    window->setGraphicsDevice(QQuickGraphicsDevice::fromRhi(rhi.get()));
-    window->setRenderTarget(
-        QQuickRenderTarget::fromRhiRenderTarget(textureRT.get()));
-    window->setColor(Qt::transparent);
-    window->resize(size);
-    window->setGeometry(0, 0, size.width(), size.height());
-
-    if (!control->initialize()) {
-        std::cerr << "Renderer::render: QQuickRenderControl::initialize() failed\n";
-        return 1;
-    }
+    QQuickRenderTarget qrt = QQuickRenderTarget::fromRhiRenderTarget(textureRT.get());
+    qrt.setDevicePixelRatio(dpr);
+    window->setRenderTarget(qrt);
 
     // ── Build the scene ──────────────────────────────────────────
     using PhosphorRendering::ShaderEffect;
+
+    // Content item needs to inherit the window's pixel size
+    // explicitly under our offscreen setup — otherwise children
+    // anchored to it get 0x0 and the scene graph culls them.
+    window->contentItem()->setSize(QSizeF(size));
+
     auto* effect = new RenderEffect(window->contentItem(),
                                     opts.metadata.vertexShader);
     effect->setSize(QSizeF(size));
+    effect->setVisible(true);
     effect->setShaderIncludePaths(shaderIncludePaths());
 
+
     auto zoneExt = std::make_shared<PlasmaZones::ZoneUniformExtension>();
-    zoneExt->updateFromZones(toRuntimeZones(opts.zones));
+    const auto runtimeZones = toRuntimeZones(opts.zones);
+    zoneExt->updateFromZones(runtimeZones);
     effect->setUniformExtension(zoneExt);
+
+    // Push zone counts into appField0/appField1, which is where
+    // common.glsl maps `zoneCount` / `highlightedCount`.  Zone-
+    // aware shaders gate their entire draw path on zoneCount > 0
+    // — without this, they early-return vec4(0) before drawing.
+    int highlightedCount = 0;
+    for (const auto& z : runtimeZones) if (z.isHighlighted) ++highlightedCount;
+    effect->setZoneCounts(runtimeZones.size(), highlightedCount);
 
     seedShaderEffect(*effect, opts.metadata, size);
 
-    // Surface shader-load / compile status — the default stderr
-    // for a failed compile is silent unless we poll.
+    // Surface compile failures so a silent empty-frame loop isn't
+    // the first sign something went wrong.
     QObject::connect(effect, &ShaderEffect::statusChanged, [effect]() {
         if (effect->status() == ShaderEffect::Status::Error) {
             std::cerr << "shader error: "
@@ -291,12 +307,10 @@ int Renderer::render(const RenderOptions& opts)
         }
     });
 
-    // Warmup: the shader's loadFragmentShader call happens inside
-    // the first updatePaintNode, which runs during sync().  Do a
-    // couple of no-capture render cycles to move the status from
-    // Loading → Ready before the real frame loop starts.  Without
-    // this, frame 0 captures a blank clear-colour image because the
-    // shader hasn't finished compiling by the time we read back.
+    // Warmup: loadFragmentShader runs inside the first
+    // updatePaintNode (during sync()), so frame 0 would capture a
+    // still-compiling shader's clear-colour output.  Do a couple of
+    // no-capture render cycles to move status Loading → Ready.
     auto warmup = [&]() {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
         control->polishItems();
@@ -314,15 +328,11 @@ int Renderer::render(const RenderOptions& opts)
                   << static_cast<int>(effect->status()) << "). Continuing anyway.\n";
     }
 
-    std::cerr << "shader: " << opts.metadata.fragmentShader.toStdString() << "\n";
-    std::cerr << "zones:  " << opts.zones.size() << "\n";
-    std::cerr << "effect size: " << effect->width() << "x" << effect->height() << "\n";
-    std::cerr << "window size: " << window->width() << "x" << window->height() << "\n";
 
-    // Tint the clear colour so we can distinguish "shader rendered
-    // nothing" (card stays tinted) from "window didn't render at
-    // all" (readback is all zeros) when debugging.
-    window->setColor(QColor::fromRgbF(0.04f, 0.04f, 0.10f, 1.0f));
+    // Transparent clear so the shader's alpha channel passes through
+    // in the output (most shaders render semi-transparent content
+    // on top of the zone fills).
+    window->setColor(Qt::transparent);
 
     // ── Frame loop ───────────────────────────────────────────────
     QVector<float> spectrum;
@@ -349,40 +359,23 @@ int Renderer::render(const RenderOptions& opts)
         // always renders the prior value.
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
 
-        if (i == 0) {
-            std::cerr << "frame 0 effect status: " << static_cast<int>(effect->status()) << "\n";
-        }
-
         control->polishItems();
         control->beginFrame();
         control->sync();
         control->render();
 
-        // Submit a texture readback in this frame.  Completed on
-        // endFrame(), at which point readbackResult.data holds
-        // frame.width * frame.height * 4 bytes of RGBA.
         QRhiReadbackResult readbackResult;
         QRhiReadbackDescription readbackDesc(colorTex.get());
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         batch->readBackTexture(readbackDesc, &readbackResult);
-        // There's no direct "attach this batch to the frame" on
-        // render control, so rely on rhi::resourceUpdate via a
-        // separate submission.  QRhi defers the readback until the
-        // GPU catches up; endFrame() here flushes the render
-        // commands, and the readback commits on the next frame's
-        // batch submission.  To work synchronously in a one-shot
-        // loop, we immediately beginOffscreenFrame + submit the
-        // readback batch + endOffscreenFrame.
-        control->endFrame();
-
-        QRhiCommandBuffer* cb = nullptr;
-        if (rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess) {
-            std::cerr << "Renderer::render: beginOffscreenFrame failed on frame "
+        QRhiCommandBuffer* cb = control->commandBuffer();
+        if (!cb) {
+            std::cerr << "Renderer::render: control has no command buffer on frame "
                       << i << "\n";
             return 1;
         }
         cb->resourceUpdate(batch);
-        rhi->endOffscreenFrame();
+        control->endFrame();
 
         if (readbackResult.data.isEmpty()) {
             std::cerr << "Renderer::render: empty readback on frame " << i << "\n";
@@ -390,12 +383,14 @@ int Renderer::render(const RenderOptions& opts)
         }
 
         QImage frame(reinterpret_cast<const uchar*>(readbackResult.data.constData()),
-                     size.width(), size.height(),
-                     size.width() * 4,
+                     physicalSize.width(), physicalSize.height(),
+                     physicalSize.width() * 4,
                      QImage::Format_RGBA8888);
-        // GL textures are bottom-up; flip into a normal top-down
-        // image before handing to the sink.
-        const QImage out = flipVertical(frame);
+        const QImage flipped = flipVertical(frame);
+        QImage out = flipped;
+        if (flipped.size() != size) {
+            out = flipped.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        }
 
         if (!opts.sink->writeFrame(out)) {
             std::cerr << "Renderer::render: sink rejected frame " << i << "\n";
@@ -415,3 +410,5 @@ int Renderer::render(const RenderOptions& opts)
 }
 
 } // namespace PlasmaZones::ShaderRender
+
+#include "renderer.moc"
