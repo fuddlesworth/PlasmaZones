@@ -114,15 +114,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // against its CURRENT class, not a stale first-seen one. m_windowTracker
     // is non-null at runtime; production code never reaches this with a null
     // tracker.
-    if (m_settings && m_windowTracker) {
+    if (snapSettings() && m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        for (const QString& excluded : m_settings->excludedApplications()) {
+        for (const QString& excluded : snapSettings()->excludedApplications()) {
             if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
                 qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;
                 return SnapResult::noSnap();
             }
         }
-        for (const QString& excluded : m_settings->excludedWindowClasses()) {
+        for (const QString& excluded : snapSettings()->excludedWindowClasses()) {
             if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
                 qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by window class rule:" << excluded;
                 return SnapResult::noSnap();
@@ -151,7 +151,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // PendingRestore entry records the saved screen, and
     // calculateRestoreFromSession returns noSnap if that screen is now in
     // autotile mode (letting the autotile engine own it).
-    if (m_settings && m_settings->restoreWindowsToZonesOnLogin()) {
+    if (snapSettings() && snapSettings()->restoreWindowsToZonesOnLogin()) {
         SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky);
         if (result.shouldSnap) {
             m_windowTracker->consumePendingAssignment(windowId);

@@ -7,6 +7,7 @@
 #include "dbus/snapnavigationtargets.h"
 #include "dbus/windowtrackingadaptor.h"
 #include "dbus/zonedetectionadaptor.h"
+#include "core/isettings.h"
 #include "core/logging.h"
 
 namespace PlasmaZones {
@@ -17,16 +18,20 @@ namespace PlasmaZones {
 // dereferences a dependency guards it locally. Do not Q_ASSERT here.
 SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
                        PhosphorEngineApi::IWindowTrackingService* windowTracker,
-                       PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
+                       PhosphorZones::IZoneDetector* zoneDetector,
                        PhosphorEngineApi::IVirtualDesktopManager* vdm, QObject* parent)
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
     , m_snapState(new PhosphorZones::SnapState(QString(), this))
     , m_zoneDetector(zoneDetector)
-    , m_settings(settings)
     , m_virtualDesktopManager(vdm)
 {
+}
+
+ISettings* SnapEngine::snapSettings() const
+{
+    return qobject_cast<ISettings*>(engineSettings());
 }
 
 // Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the

@@ -22,7 +22,8 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrac
     autotile->setWindowRegistry(windowRegistry);
 
     // --- SnapEngine ---
-    auto snap = std::make_unique<SnapEngine>(layoutManager, windowTracker, zoneDetector, settings, vdm, parent);
+    auto snap = std::make_unique<SnapEngine>(layoutManager, windowTracker, zoneDetector, vdm, parent);
+    snap->setEngineSettings(settings);
 
     // Cross-wire: SnapEngine needs a reference to AutotileEngine for
     // isActiveOnScreen routing.

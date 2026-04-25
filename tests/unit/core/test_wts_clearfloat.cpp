@@ -134,7 +134,8 @@ private Q_SLOTS:
         m_settings = new StubSettingsClearFloat(nullptr);
         m_zoneDetector = new StubZoneDetectorClearFloat(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
-        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
+        m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
         m_service->setSnapEngine(m_engine);
 

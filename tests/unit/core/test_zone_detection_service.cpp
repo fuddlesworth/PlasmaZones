@@ -143,7 +143,8 @@ private Q_SLOTS:
         QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
             layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
         QScopedPointer<SnapEngine> engine(
-            new SnapEngine(layoutManager.data(), service.data(), detector.data(), settings.data(), nullptr, nullptr));
+            new SnapEngine(layoutManager.data(), service.data(), detector.data(), nullptr, nullptr));
+        engine->setEngineSettings(settings.data());
         service->setSnapState(engine->snapState());
         service->setSnapEngine(engine.data());
 

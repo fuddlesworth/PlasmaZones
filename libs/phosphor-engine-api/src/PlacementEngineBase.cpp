@@ -222,4 +222,9 @@ void PlacementEngineBase::deserializeBaseState(const QJsonObject& state)
     }
 }
 
+void PlacementEngineBase::setEngineSettings(QObject* settings)
+{
+    m_engineSettings = settings;
+}
+
 } // namespace PhosphorEngineApi
