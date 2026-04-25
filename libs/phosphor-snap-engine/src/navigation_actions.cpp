@@ -46,6 +46,14 @@ namespace PlasmaZones {
 
 namespace {
 
+QString invokeStringGetter(const QObject* obj, const char* method)
+{
+    QString r;
+    if (obj)
+        QMetaObject::invokeMethod(const_cast<QObject*>(obj), method, Q_RETURN_ARG(QString, r));
+    return r;
+}
+
 /// Resolve the screen to use for a navigation operation on @p windowId.
 ///
 /// Prefers (in order):
@@ -83,19 +91,9 @@ QString resolveNavScreen(const QObject* wta, const QString& windowId,
     if (!wta) {
         return QString();
     }
-    QString screen = [&]() {
-        QString r;
-        if (wta)
-            QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastCursorScreenName", Q_RETURN_ARG(QString, r));
-        return r;
-    }();
+    QString screen = invokeStringGetter(wta, "lastCursorScreenName");
     if (screen.isEmpty()) {
-        screen = [&]() {
-            QString r;
-            if (wta)
-                QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastActiveScreenName", Q_RETURN_ARG(QString, r));
-            return r;
-        }();
+        screen = invokeStringGetter(wta, "lastActiveScreenName");
     }
     return screen;
 }
@@ -108,12 +106,7 @@ QString effectiveWindowId(const NavigationContext& ctx, const QObject* wta)
     if (!ctx.windowId.isEmpty()) {
         return ctx.windowId;
     }
-    return [&]() {
-        QString r;
-        if (wta)
-            QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastActiveWindowId", Q_RETURN_ARG(QString, r));
-        return r;
-    }();
+    return invokeStringGetter(wta, "lastActiveWindowId");
 }
 
 /// Pick the effective screen id: the explicit one from NavigationContext
@@ -123,12 +116,7 @@ QString effectiveScreenId(const NavigationContext& ctx, const QObject* wta)
     if (!ctx.screenId.isEmpty()) {
         return ctx.screenId;
     }
-    return [&]() {
-        QString r;
-        if (wta)
-            QMetaObject::invokeMethod(const_cast<QObject*>(wta), "lastActiveScreenName", Q_RETURN_ARG(QString, r));
-        return r;
-    }();
+    return invokeStringGetter(wta, "lastActiveScreenName");
 }
 
 } // namespace
@@ -429,12 +417,8 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // still living on WTA. Reading it here is the last remaining behavior
     // coupling to the adaptor in this file.
     if (m_wta && m_snapState->isFloating(windowId)) {
-        const QRect geo = [&]() {
-            QRect r;
-            if (m_wta)
-                QMetaObject::invokeMethod(m_wta, "frameGeometry", Q_RETURN_ARG(QRect, r), Q_ARG(QString, windowId));
-            return r;
-        }();
+        QRect geo;
+        QMetaObject::invokeMethod(m_wta, "frameGeometry", Q_RETURN_ARG(QRect, geo), Q_ARG(QString, windowId));
         if (geo.isValid()) {
             storeUnmanagedGeometry(windowId, geo, screenId, /*overwrite=*/true);
         }
@@ -507,13 +491,9 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
     // QGuiApplication::screens()) yield a screen.
     const QPointer<QObject> wta = m_wta;
     WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
-        if (!wta) {
-            return QString();
-        }
-        QString cursor;
-        QMetaObject::invokeMethod(wta.data(), "lastCursorScreenName", Q_RETURN_ARG(QString, cursor));
+        QString cursor = invokeStringGetter(wta.data(), "lastCursorScreenName");
         if (cursor.isEmpty()) {
-            QMetaObject::invokeMethod(wta.data(), "lastActiveScreenName", Q_RETURN_ARG(QString, cursor));
+            cursor = invokeStringGetter(wta.data(), "lastActiveScreenName");
         }
         return cursor;
     });

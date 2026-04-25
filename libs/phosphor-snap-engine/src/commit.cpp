@@ -15,6 +15,7 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
                                 SnapIntent intent)
 {
     Q_ASSERT(m_snapState);
+    Q_ASSERT(!zoneIds.isEmpty());
     const QString& primaryZoneId = zoneIds.first();
 
     if (m_windowTracker->clearFloatingForSnap(windowId)) {
@@ -104,7 +105,7 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
     auto* mgr = m_windowTracker->screenManager();
 
     for (const auto& entry : entries) {
-        if (entry.targetZoneId == QLatin1String("__restore__")) {
+        if (entry.targetZoneId == PhosphorEngineApi::RestoreSentinel) {
             uncommitSnap(entry.windowId);
             clearUnmanagedGeometry(entry.windowId);
             continue;

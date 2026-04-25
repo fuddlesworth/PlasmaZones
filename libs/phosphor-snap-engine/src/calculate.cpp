@@ -57,8 +57,10 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
-        // Null-screenManager fallback is test/edge-case only; primaryScreen() may
-        // differ from the screen at (0,0) on multi-monitor setups.
+        if (!screenManager) {
+            qCWarning(PhosphorSnapEngine::lcSnapEngine)
+                << "App rule: no screen manager, falling back to primary screen for" << windowClass;
+        }
         QScreen* screen =
             (screenManager ? screenManager->physicalQScreenFor(effectiveScreen) : QGuiApplication::primaryScreen());
         if (!screen) {

@@ -48,7 +48,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             ZoneAssignmentEntry restoreEntry;
             restoreEntry.windowId = entry->windowId;
             restoreEntry.sourceZoneId = QString();
-            restoreEntry.targetZoneId = QString(PhosphorEngineApi::RestoreSentinel);
+            restoreEntry.targetZoneId = PhosphorEngineApi::RestoreSentinel;
             restoreEntry.targetGeometry = *preTile;
             result.append(restoreEntry);
         } else {
