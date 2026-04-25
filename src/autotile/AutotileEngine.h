@@ -8,7 +8,7 @@
 #include "core/types.h"
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
-#include <PhosphorEngineTypes/IAutotileSettings.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
 #include <QHash>
 #include <QJsonArray>
 #include <QObject>

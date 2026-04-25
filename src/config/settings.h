@@ -5,7 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
-#include <PhosphorEngineTypes/IAutotileSettings.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"

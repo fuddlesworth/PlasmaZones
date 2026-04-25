@@ -221,6 +221,7 @@ target_link_libraries(plasmazones_core
         plasmazones_compositor_common
         PhosphorConfig::PhosphorConfig
         PhosphorEngineApi::PhosphorEngineApi
+        PhosphorTileEngine::PhosphorTileEngine
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
