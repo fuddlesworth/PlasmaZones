@@ -29,7 +29,7 @@
 #include "core/windowtrackingservice.h"
 #include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/SnapState.h>
+#include "snap/SnapState.h"
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -138,7 +138,8 @@ private Q_SLOTS:
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
-        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
+        m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
         m_service->setSnapEngine(m_engine);
 

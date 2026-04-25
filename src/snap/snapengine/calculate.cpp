@@ -6,7 +6,7 @@
 
 #include "../SnapEngine.h"
 #include <PhosphorZones/AssignmentEntry.h>
-#include <PhosphorZones/SnapState.h>
+#include "../SnapState.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -34,8 +34,8 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
     }
 
     // Check sticky window handling
-    if (isSticky && m_settings) {
-        auto handling = m_settings->stickyWindowHandling();
+    if (auto* s = snapSettings(); isSticky && s) {
+        auto handling = s->stickyWindowHandling();
         if (handling == StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }
@@ -160,7 +160,8 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
                                                bool isSticky) const
 {
     // Check if feature is enabled
-    if (!m_settings || !m_settings->moveNewWindowsToLastZone()) {
+    auto* s = snapSettings();
+    if (!s || !s->moveNewWindowsToLastZone()) {
         return SnapResult::noSnap();
     }
 
@@ -172,8 +173,8 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     }
 
     // Check sticky window handling
-    if (isSticky && m_settings) {
-        auto handling = m_settings->stickyWindowHandling();
+    if (isSticky) {
+        auto handling = s->stickyWindowHandling();
         if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
             return SnapResult::noSnap();
         }
@@ -235,8 +236,8 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     // auto-snap; we clear floating state when we assign in snapToEmptyZone.
 
     // Check sticky window handling (auto-assign is an auto-snap, not a restore)
-    if (isSticky && m_settings) {
-        auto handling = m_settings->stickyWindowHandling();
+    if (auto* s = snapSettings(); isSticky && s) {
+        auto handling = s->stickyWindowHandling();
         if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
             qCDebug(lcCore) << "snapToEmptyZone: window" << m_windowTracker->currentAppIdFor(windowId)
                             << "sticky handling" << static_cast<int>(handling);
@@ -287,8 +288,8 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     }
 
     // Check sticky window handling
-    if (isSticky && m_settings) {
-        auto handling = m_settings->stickyWindowHandling();
+    if (auto* s = snapSettings(); isSticky && s) {
+        auto handling = s->stickyWindowHandling();
         if (handling == StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }

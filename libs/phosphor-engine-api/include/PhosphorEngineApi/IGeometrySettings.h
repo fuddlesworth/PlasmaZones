@@ -20,8 +20,6 @@ inline constexpr QLatin1String OuterGapLeft{"OuterGapLeft"};
 inline constexpr QLatin1String OuterGapRight{"OuterGapRight"};
 } // namespace PerScreenSnappingKey
 
-// Library-level fallback defaults. The app-level authority is ConfigDefaults (GPL);
-// these must be kept in sync manually since the LGPL library cannot depend on it.
 namespace GeometryDefaults {
 inline constexpr int ZonePadding = 8;
 inline constexpr int OuterGap = 8;

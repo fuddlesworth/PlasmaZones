@@ -21,7 +21,7 @@
 #include "core/windowtrackingservice.h"
 #include "snap/SnapEngine.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/SnapState.h>
+#include "snap/SnapState.h"
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include "core/utils.h"
@@ -143,7 +143,8 @@ private Q_SLOTS:
         QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
             layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
         QScopedPointer<SnapEngine> engine(
-            new SnapEngine(layoutManager.data(), service.data(), detector.data(), settings.data(), nullptr, nullptr));
+            new SnapEngine(layoutManager.data(), service.data(), detector.data(), nullptr, nullptr));
+        engine->setEngineSettings(settings.data());
         service->setSnapState(engine->snapState());
         service->setSnapEngine(engine.data());
 

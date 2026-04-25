@@ -321,6 +321,8 @@ add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (La
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
 add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline — needed by phosphor-screens
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
+add_subdirectory(libs/phosphor-engine-types) # engine value types + state contracts (IPlacementState, NavigationContext)
+add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size)
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
@@ -340,6 +342,13 @@ add_subdirectory(libs/phosphor-engine-api)  # unified placement engine contracts
 
 # Source directories
 add_subdirectory(src)
+
+# Developer tools — opt-in via -DBUILD_TOOLS=ON.  Currently builds
+# plasmazones-shader-render (offscreen shader preview generator
+# used by the docs site).  Skipped by default so packagers don't
+# pick up CLI tools they didn't ask for.
+add_subdirectory(tools)
+
 option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)
 if(USE_KDE_FRAMEWORKS)
     if(BUILD_KWIN_EFFECT)

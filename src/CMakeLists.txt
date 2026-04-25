@@ -171,11 +171,10 @@ set(plasmazones_core_SRCS
     autotile/PerScreenConfigResolver.h
     autotile/NavigationController.cpp
     autotile/NavigationController.h
-    autotile/SettingsBridge.cpp
-    autotile/SettingsBridge.h
     autotile/OverflowManager.cpp
     autotile/OverflowManager.h
     # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
+    snap/SnapState.cpp
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapengine/calculate.cpp
@@ -204,8 +203,6 @@ generate_export_header(plasmazones_core
 set_source_files_properties(
     config/configdefaults.cpp
     # Exclude from unity build to avoid forward-declaration conflicts
-    # between AutotileEngine.h (forward-declares Settings) and
-    # SettingsBridge.h (uses QPointer<Settings>, needs full definition)
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp

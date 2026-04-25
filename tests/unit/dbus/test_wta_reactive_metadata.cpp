@@ -32,7 +32,7 @@
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
 #include "snap/SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "snap/SnapState.h"
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
 
@@ -132,7 +132,8 @@ private Q_SLOTS:
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
         m_wta->setWindowRegistry(m_registry);
 
-        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, m_settings, nullptr, nullptr);
+        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, nullptr, nullptr);
+        m_snapEngine->setEngineSettings(m_settings);
         m_wta->service()->setSnapState(m_snapEngine->snapState());
         m_wta->service()->setSnapEngine(m_snapEngine);
         m_wta->setEngines(m_snapEngine, nullptr);

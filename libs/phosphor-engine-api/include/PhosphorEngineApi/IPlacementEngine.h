@@ -327,16 +327,13 @@ public:
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Sync tuning values from a settings object (QObject carrying ISettings).
-    /// Engines qobject_cast to their concrete settings type internally.
-    virtual void syncFromSettings(QObject* settings)
+    /// Re-read all tuning values from the engine's settings interface.
+    /// Called by the daemon after any settings change. Engines that cache
+    /// config values (e.g. AutotileEngine) override this to repopulate
+    /// their config struct. Engines that read on demand (e.g. SnapEngine)
+    /// leave this as a no-op.
+    virtual void refreshConfigFromSettings()
     {
-        Q_UNUSED(settings)
-    }
-    /// Connect live-update signals from a settings object.
-    virtual void connectToSettings(QObject* settings)
-    {
-        Q_UNUSED(settings)
     }
     virtual qreal effectiveSplitRatioStep(const QString& screenId) const
     {

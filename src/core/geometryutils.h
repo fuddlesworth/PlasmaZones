@@ -6,6 +6,7 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
+#include <PhosphorEngineApi/GeometryUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QRectF>
@@ -148,8 +149,8 @@ PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVect
 PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
                                            int innerGap = 0);
 
-using ::PhosphorZones::GeometryUtils::rectToJson;
-using ::PhosphorZones::GeometryUtils::serializeZoneAssignments;
+using ::PhosphorEngineApi::GeometryUtils::serializeZoneAssignments;
+using ::PhosphorGeometry::rectToJson;
 
 } // namespace GeometryUtils
 

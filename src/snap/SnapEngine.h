@@ -63,8 +63,8 @@ class PLASMAZONES_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineB
 public:
     explicit SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
                         PhosphorEngineApi::IWindowTrackingService* windowTracker,
-                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorEngineApi::IVirtualDesktopManager* vdm, QObject* parent = nullptr);
+                        PhosphorZones::IZoneDetector* zoneDetector, PhosphorEngineApi::IVirtualDesktopManager* vdm,
+                        QObject* parent = nullptr);
     ~SnapEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -450,6 +450,8 @@ protected:
     void onWindowUnfloated(const QString& windowId) override;
 
 private:
+    ISettings* snapSettings() const;
+
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         SnapIntent intent);
 
@@ -457,7 +459,6 @@ private:
     PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
-    ISettings* m_settings = nullptr;
     PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<AutotileEngine> m_autotileEngine;
     QPointer<ZoneDetectionAdaptor> m_zoneDetectionAdaptor;

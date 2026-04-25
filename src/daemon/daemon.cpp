@@ -30,6 +30,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
@@ -69,7 +70,7 @@
 #include "../autotile/AutotileEngine.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
-#include <PhosphorZones/SnapState.h>
+#include "../snap/SnapState.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
@@ -608,6 +609,15 @@ bool Daemon::init()
     // transitions are handled here to avoid redundant retile passes.
     m_prevSnappingEnabled = m_settings->snappingEnabled();
     m_prevAutotileEnabled = m_settings->autotileEnabled();
+    m_previewNotifyTimer.setSingleShot(true);
+    m_previewNotifyTimer.setInterval(100);
+    connect(&m_previewNotifyTimer, &QTimer::timeout, this, [this]() {
+        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != m_preRetilePreviewParams
+            && m_layoutAdaptor) {
+            m_layoutAdaptor->notifyLayoutListChanged();
+        }
+    });
+
     connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
 
@@ -619,20 +629,14 @@ bool Daemon::init()
         m_prevSnappingEnabled = snappingNow;
         m_prevAutotileEnabled = autotileNow;
 
-        // Capture old preview params before sync to detect tiling parameter changes
-        const auto prevPreviewParams =
+        // Sync config immediately so the engine never reads stale values.
+        // Only retile + preview notification are debounced (100ms timer).
+        m_preRetilePreviewParams =
             m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
-
-        // Sync engine config (idempotent — skips retile if nothing changed)
         if (m_autotileEngine) {
-            m_autotileEngine->syncFromSettings(m_settings.get());
+            m_autotileEngine->refreshConfigFromSettings();
         }
-
-        // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
-        // notify layout list consumers to refetch with updated previews
-        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != prevPreviewParams && m_layoutAdaptor) {
-            m_layoutAdaptor->notifyLayoutListChanged();
-        }
+        m_previewNotifyTimer.start();
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
@@ -790,8 +794,43 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
-    autotileEngine->syncFromSettings(m_settings.get());
-    autotileEngine->connectToSettings(m_settings.get());
+    m_writeBackSaveTimer.setSingleShot(true);
+    m_writeBackSaveTimer.setInterval(500);
+    connect(&m_writeBackSaveTimer, &QTimer::timeout, this, [this]() {
+        if (m_settings) {
+            m_settings->save();
+        }
+    });
+
+    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested, this,
+            [this](const QVariantMap& values) {
+                namespace WBK = PhosphorTiles::WriteBackKeys;
+                if (!m_settings)
+                    return;
+                const QSignalBlocker blocker(m_settings.get());
+                for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+                    const QString& key = it.key();
+                    if (key == WBK::DefaultAutotileAlgorithm)
+                        m_settings->setDefaultAutotileAlgorithm(it.value().toString());
+                    else if (key == WBK::AutotileSplitRatio)
+                        m_settings->setAutotileSplitRatio(it.value().toDouble());
+                    else if (key == WBK::AutotileMasterCount)
+                        m_settings->setAutotileMasterCount(it.value().toInt());
+                    else if (key == WBK::AutotileMaxWindows)
+                        m_settings->setAutotileMaxWindows(it.value().toInt());
+                    else if (key == WBK::AutotilePerAlgorithmSettings)
+                        m_settings->setAutotilePerAlgorithmSettings(it.value().toMap());
+                    else if (key == WBK::ClearPerScreenAutotileSettings) {
+                        const QStringList orphans = it.value().toStringList();
+                        for (const QString& orphanId : orphans)
+                            m_settings->clearPerScreenAutotileSettings(orphanId);
+                    } else
+                        qCWarning(lcDaemon) << "settingsWriteBack: unknown key" << key;
+                }
+                m_writeBackSaveTimer.start();
+            });
+
+    autotileEngine->refreshConfigFromSettings();
 
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens).
