@@ -1,16 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "snapnavigationtargets.h"
-#include "zonedetectionadaptor.h"
+#include <PhosphorSnapEngine/snapnavigationtargets.h>
 
-#include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "../core/logging.h"
+#include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
-#include "../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
+#include <QMetaObject>
 #include <PhosphorZones/Zone.h>
 
 #include <QRect>
@@ -174,7 +172,13 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
             return moveResult(false, QStringLiteral("no_zones"), QString(), QRect(), QString(), effectiveScreenId);
         }
     } else {
-        targetZoneId = m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+        targetZoneId = ([m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId)]() {
+            QString r;
+            if (m_zoneDetector)
+                QMetaObject::invokeMethod(m_zoneDetector, "getAdjacentZone", Q_RETURN_ARG(QString, r),
+                                          Q_ARG(QString, \1), Q_ARG(QString, \2), Q_ARG(QString, \3));
+            return r;
+        })();
         if (targetZoneId.isEmpty()) {
             emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
                          effectiveScreenId);
@@ -229,7 +233,13 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
         }
     }
 
-    QString targetZoneId = m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+    QString targetZoneId = ([m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId)]() {
+        QString r;
+        if (m_zoneDetector)
+            QMetaObject::invokeMethod(m_zoneDetector, "getAdjacentZone", Q_RETURN_ARG(QString, r), Q_ARG(QString, \1),
+                                      Q_ARG(QString, \2), Q_ARG(QString, \3));
+        return r;
+    })();
     if (targetZoneId.isEmpty()) {
         emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
                      effectiveScreenId);
@@ -357,7 +367,13 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
         }
     }
 
-    QString targetZoneId = m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+    QString targetZoneId = ([m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId)]() {
+        QString r;
+        if (m_zoneDetector)
+            QMetaObject::invokeMethod(m_zoneDetector, "getAdjacentZone", Q_RETURN_ARG(QString, r), Q_ARG(QString, \1),
+                                      Q_ARG(QString, \2), Q_ARG(QString, \3));
+        return r;
+    })();
     if (targetZoneId.isEmpty()) {
         emitFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
                      effectiveScreenId);

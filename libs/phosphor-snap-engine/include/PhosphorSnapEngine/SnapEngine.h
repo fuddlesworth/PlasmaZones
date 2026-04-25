@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
-#include "core/types.h"
+#include <phosphorsnapengine_export.h>
+#include <PhosphorEngineTypes/EngineTypes.h>
 #include <PhosphorEngineApi/IVirtualDesktopManager.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorProtocol/WireTypes.h>
@@ -35,9 +36,6 @@ using PhosphorProtocol::SwapTargetResult;
 using PhosphorProtocol::WindowGeometryList;
 using PhosphorProtocol::WindowStateEntry;
 
-class AutotileEngine;
-class ISettings;
-
 class SnapNavigationTargetResolver;
 class WindowTrackingAdaptor;
 class ZoneDetectionAdaptor;
@@ -56,7 +54,7 @@ class ZoneDetectionAdaptor;
  *
  * @see PhosphorEngineApi::IPlacementEngine, AutotileEngine, WindowTrackingService
  */
-class PLASMAZONES_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineBase
+class PHOSPHORSNAPENGINE_EXPORT SnapEngine : public PhosphorEngineApi::PlacementEngineBase
 {
     Q_OBJECT
 
@@ -177,7 +175,7 @@ public:
      *
      * @param engine AutotileEngine instance (not owned, must outlive SnapEngine)
      */
-    void setAutotileEngine(AutotileEngine* engine);
+    void setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine);
 
     PhosphorZones::SnapState* snapState() const
     {
@@ -450,7 +448,7 @@ protected:
     void onWindowUnfloated(const QString& windowId) override;
 
 private:
-    ISettings* snapSettings() const;
+    PhosphorEngineApi::ISnapSettings* snapSettings() const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         SnapIntent intent);
@@ -460,7 +458,7 @@ private:
     PhosphorZones::SnapState* m_snapState = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngineApi::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
-    QPointer<AutotileEngine> m_autotileEngine;
+    PhosphorEngineApi::IPlacementEngine* m_autotileEngine = nullptr;
     QPointer<ZoneDetectionAdaptor> m_zoneDetectionAdaptor;
     // Back-reference to WindowTrackingAdaptor for state SnapEngine reads
     // but doesn't own yet: the last-active-window / last-active-screen /

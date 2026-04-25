@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "../SnapEngine.h"
-#include "../SnapState.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include "core/logging.h"
+#include "snapenginelogging.h"
 
 namespace PlasmaZones {
 
@@ -51,7 +51,8 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
         screenId = m_lastActiveScreenId;
     }
     if (screenId.isEmpty()) {
-        qCDebug(lcCore) << "setWindowFloat: no screen context for" << windowId << "- using empty screenId";
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "setWindowFloat: no screen context for" << windowId << "- using empty screenId";
     }
 
     if (shouldFloat) {
@@ -63,7 +64,8 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
         if (!unfloatToZone(windowId, screenId)) {
             // No pre-float zone to restore to — keep the window floating rather than
             // leaving it in a limbo state (not floating, not snapped to any zone).
-            qCDebug(lcCore) << "setWindowFloat: cannot unfloat" << windowId << "- no pre-float zone, keeping floating";
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "setWindowFloat: cannot unfloat" << windowId << "- no pre-float zone, keeping floating";
             return;
         }
     }
@@ -106,12 +108,12 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
 {
     auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
-        qCInfo(lcCore) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
         Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
                                       false);
         return true;
     }
-    qCWarning(lcCore) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";
+    qCWarning(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";
     return false;
 }
 

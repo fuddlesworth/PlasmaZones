@@ -19,9 +19,9 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/windowtrackingservice.h"
-#include "snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include "core/utils.h"

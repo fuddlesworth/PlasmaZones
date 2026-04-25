@@ -10,7 +10,7 @@
 #include "../config/configdefaults.h"
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
-#include "../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>

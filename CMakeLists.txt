@@ -334,6 +334,7 @@ add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine,
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 add_subdirectory(libs/phosphor-engine-api)  # unified placement engine contracts (INTERFACE)
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
+add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 
 # Source directories
 add_subdirectory(src)

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphorsnapengine_export.h>
 #include <PhosphorEngineTypes/IPlacementState.h>
 
 #include <QHash>
@@ -28,7 +28,7 @@ namespace PhosphorZones {
 /// Both SnapState and TilingState implement PhosphorEngineApi::IPlacementState
 /// so the daemon's persistence layer and D-Bus adaptor can serialize state
 /// uniformly without branching on mode.
-class PLASMAZONES_EXPORT SnapState : public QObject, public PhosphorEngineApi::IPlacementState
+class PHOSPHORSNAPENGINE_EXPORT SnapState : public QObject, public PhosphorEngineApi::IPlacementState
 {
     Q_OBJECT
 

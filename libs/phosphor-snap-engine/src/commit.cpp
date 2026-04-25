@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "../SnapEngine.h"
-#include "../SnapState.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include "core/logging.h"
+#include "snapenginelogging.h"
 
 #include <QGuiApplication>
 #include <QScreen>
@@ -42,8 +42,9 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         m_windowTracker->updateLastUsedZone(primaryZoneId, screenId, windowClass, currentDesktop);
     }
 
-    qCInfo(lcCore) << "commitSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
-                   << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "commitSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
+        << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
 
     Q_EMIT windowSnapStateChanged(
         windowId,
@@ -53,7 +54,7 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
 void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)
 {
     if (windowId.isEmpty() || zoneId.isEmpty()) {
-        qCWarning(lcCore) << "commitSnap: empty windowId or zoneId";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnap: empty windowId or zoneId";
         return;
     }
     commitSnapImpl(windowId, QStringList{zoneId}, screenId, intent);
@@ -63,7 +64,7 @@ void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList&
                                      SnapIntent intent)
 {
     if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(lcCore) << "commitMultiZoneSnap: empty windowId or zoneIds";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitMultiZoneSnap: empty windowId or zoneIds";
         return;
     }
     commitSnapImpl(windowId, zoneIds, screenId, intent);
@@ -78,14 +79,14 @@ void SnapEngine::uncommitSnap(const QString& windowId)
 
     const QString previousZoneId = m_snapState->zoneForWindow(windowId);
     if (previousZoneId.isEmpty()) {
-        qCDebug(lcCore) << "uncommitSnap: window not in any zone:" << windowId;
+        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap: window not in any zone:" << windowId;
         return;
     }
 
     m_windowTracker->consumePendingAssignment(windowId);
     m_windowTracker->unassignWindow(windowId);
 
-    qCInfo(lcCore) << "uncommitSnap:" << windowId << "from zone" << previousZoneId;
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap:" << windowId << "from zone" << previousZoneId;
 
     Q_EMIT windowSnapStateChanged(
         windowId,

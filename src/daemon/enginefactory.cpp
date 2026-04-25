@@ -5,7 +5,7 @@
 
 // Concrete engine includes — only this TU needs them.
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include "../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../core/screenmoderouter.h"
 
 namespace PlasmaZones {

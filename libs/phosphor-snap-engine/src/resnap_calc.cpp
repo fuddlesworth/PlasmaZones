@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Resnap, rotation, and snap-all calculation methods (moved from WindowTrackingService).
 // Part of SnapEngine — split into its own translation unit for SRP.
 
-#include "../SnapEngine.h"
-#include "../SnapState.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -14,10 +14,10 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "core/constants.h"
-#include "core/geometryutils.h"
-#include "core/isettings.h"
-#include "core/logging.h"
+#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorZones/GeometryUtils.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
+#include "snapenginelogging.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
@@ -31,10 +31,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
     QVector<ZoneAssignmentEntry> result;
     const QVector<ResnapEntry> resnapBuffer = m_windowTracker->takeResnapBuffer();
     if (resnapBuffer.isEmpty()) {
-        qCDebug(lcCore) << "calculateResnapFromPreviousLayout: buffer is empty";
+        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "calculateResnapFromPreviousLayout: buffer is empty";
         return result;
     }
-    qCDebug(lcCore) << "calculateResnapFromPreviousLayout: buffer has" << resnapBuffer.size() << "entries";
+    qCDebug(PhosphorSnapEngine::lcSnapEngine)
+        << "calculateResnapFromPreviousLayout: buffer has" << resnapBuffer.size() << "entries";
 
     // Helper: create a "__restore__" entry that tells the KWin effect to move
     // the window back to its pre-tile geometry instead of snapping it to a zone.
@@ -49,8 +50,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             restoreEntry.targetGeometry = *preTile;
             result.append(restoreEntry);
         } else {
-            qCDebug(lcCore) << "No pre-tile geometry for excess window" << entry->windowId
-                            << "- window will remain at stale position";
+            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "No pre-tile geometry for excess window" << entry->windowId
+                                                      << "- window will remain at stale position";
         }
     };
 
@@ -191,11 +192,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
         result.append(entry);
     }
 
-    qCInfo(lcCore) << "Resnap from current assignments:" << result.size() << "windows"
-                   << "(total zone assignments:" << zoneAssignments.size() << ")"
-                   << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
-                                              : QStringLiteral("(screen: %1)").arg(screenFilter));
-    if (result.isEmpty() && !zoneAssignments.isEmpty() && lcCore().isDebugEnabled()) {
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "Resnap from current assignments:" << result.size() << "windows"
+        << "(total zone assignments:" << zoneAssignments.size() << ")"
+        << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
+                                   : QStringLiteral("(screen: %1)").arg(screenFilter));
+    if (result.isEmpty() && !zoneAssignments.isEmpty() && PhosphorSnapEngine::lcSnapEngine().isDebugEnabled()) {
         auto screenMatches = [&](const QString& screen) {
             if (screenFilter.isEmpty())
                 return true;
@@ -207,9 +209,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             QString screen = screenAssignments.value(it.key());
             bool floating = m_windowTracker->isWindowFloating(it.key());
             QRect geo = it.value().isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(it.value(), screen);
-            qCDebug(lcCore) << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen
-                            << "floating=" << floating << "geoValid=" << geo.isValid()
-                            << "screenMatch=" << screenMatches(screen);
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen << "floating=" << floating
+                << "geoValid=" << geo.isValid() << "screenMatch=" << screenMatches(screen);
         }
     }
     return result;
@@ -226,7 +228,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
 
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout || layout->zoneCount() == 0) {
-        qCWarning(lcCore) << "calculateResnapFromAutotileOrder: no layout for screen" << screenId;
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateResnapFromAutotileOrder: no layout for screen" << screenId;
         return result;
     }
 
@@ -239,9 +242,10 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
     // Cap at zoneCount: excess windows beyond available zones would stack on top of each
     // other with cycling. Instead, leave them unassigned (they stay where they are).
     if (windowCount > zoneCount) {
-        qCWarning(lcCore) << "calculateResnapFromAutotileOrder:" << windowCount << "windows but only" << zoneCount
-                          << "zones on screen" << screenId << "- excess" << (windowCount - zoneCount)
-                          << "windows will not be resnapped";
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateResnapFromAutotileOrder:" << windowCount << "windows but only" << zoneCount
+            << "zones on screen" << screenId << "- excess" << (windowCount - zoneCount)
+            << "windows will not be resnapped";
     }
 
     // Build a lookup from zone ID → zone pointer for original-zone restoration
@@ -338,7 +342,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
         }
     }
 
-    qCInfo(lcCore) << "Resnap from autotile order:" << result.size() << "windows for screen" << screenId;
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "Resnap from autotile order:" << result.size() << "windows for screen" << screenId;
     return result;
 }
 
@@ -476,8 +481,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             if (zoneIndex >= 0) {
                 windowZoneIndices.append({windowId, zoneIndex});
             } else {
-                qCDebug(lcCore) << "Window" << windowId << "has zone ID" << storedZoneId
-                                << "not found in layout for screen" << screenId << "- skipping rotation";
+                qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                    << "Window" << windowId << "has zone ID" << storedZoneId << "not found in layout for screen"
+                    << screenId << "- skipping rotation";
             }
         }
 

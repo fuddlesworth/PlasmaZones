@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphorsnapengine_export.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorProtocol/WireTypes.h>
 
@@ -57,7 +57,7 @@ class ZoneDetectionAdaptor;
  * router (ScreenModeRouter) has confirmed are in Snapping mode. The
  * resolver does not re-check mode — that's the dispatcher's job.
  */
-class PLASMAZONES_EXPORT SnapNavigationTargetResolver
+class PHOSPHORSNAPENGINE_EXPORT SnapNavigationTargetResolver
 {
 public:
     /// Callback shape matching WindowTrackingAdaptor::navigationFeedback.
@@ -77,13 +77,13 @@ public:
      * @param feedback           OSD feedback callback; may be empty (suppresses feedback)
      */
     SnapNavigationTargetResolver(PhosphorEngineApi::IWindowTrackingService* service,
-                                 PhosphorZones::LayoutRegistry* layoutManager, ZoneDetectionAdaptor* zoneDetector,
+                                 PhosphorZones::LayoutRegistry* layoutManager, QObject* zoneDetector,
                                  FeedbackFn feedback);
 
     /// Late setter for the zone detector — it is wired after adaptor
     /// construction, so we allow nullptr at construction time and bind
     /// the pointer when it becomes available.
-    void setZoneDetector(ZoneDetectionAdaptor* zoneDetector);
+    void setZoneDetector(QObject* zoneDetector);
 
     MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
 
@@ -115,7 +115,7 @@ private:
 
     PhosphorEngineApi::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    ZoneDetectionAdaptor* m_zoneDetector = nullptr;
+    QObject* m_zoneDetector = nullptr;
     FeedbackFn m_feedback;
 };
 

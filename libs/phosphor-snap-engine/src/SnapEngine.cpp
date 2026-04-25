@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "SnapEngine.h"
-#include "SnapState.h"
-#include <PhosphorTileEngine/AutotileEngine.h>
-#include "dbus/snapnavigationtargets.h"
-#include "dbus/windowtrackingadaptor.h"
-#include "dbus/zonedetectionadaptor.h"
-#include "core/isettings.h"
-#include "core/logging.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorSnapEngine/snapnavigationtargets.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
+#include "snapenginelogging.h"
 
 namespace PlasmaZones {
 
@@ -29,9 +26,9 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
 {
 }
 
-ISettings* SnapEngine::snapSettings() const
+PhosphorEngineApi::ISnapSettings* SnapEngine::snapSettings() const
 {
-    return qobject_cast<ISettings*>(engineSettings());
+    return dynamic_cast<PhosphorEngineApi::ISnapSettings*>(engineSettings());
 }
 
 // Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the
@@ -107,7 +104,7 @@ int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     return pruned;
 }
 
-void SnapEngine::setAutotileEngine(AutotileEngine* engine)
+void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
 {
     m_autotileEngine = engine;
 }
@@ -141,9 +138,9 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
         return m_targetResolver.get();
     }
     if (!m_windowTracker || !m_layoutManager) {
-        qCWarning(lcCore) << "ensureTargetResolver: missing deps "
-                          << "windowTracker=" << static_cast<void*>(m_windowTracker)
-                          << "layoutManager=" << static_cast<void*>(m_layoutManager);
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "ensureTargetResolver: missing deps "
+                                                    << "windowTracker=" << static_cast<void*>(m_windowTracker)
+                                                    << "layoutManager=" << static_cast<void*>(m_layoutManager);
         if (!action.isEmpty()) {
             // Surface a specific reason so the OSD doesn't silently swallow
             // the shortcut. engine_unavailable is the canonical tag for
@@ -180,7 +177,7 @@ bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 {
     // SnapEngine is active on any screen where AutotileEngine is NOT active
     if (m_autotileEngine) {
-        return !m_autotileEngine->isAutotileScreen(screenId);
+        return !m_autotileEngine->isActiveOnScreen(screenId);
     }
     return true; // No autotile engine → all screens use snapping
 }

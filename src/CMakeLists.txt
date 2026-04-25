@@ -132,8 +132,7 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
-    dbus/snapnavigationtargets.cpp
-    dbus/snapnavigationtargets.h
+    # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp
@@ -164,16 +163,7 @@ set(plasmazones_core_SRCS
     # machinery live in libs/phosphor-tiles/. Consumers include canonical
     # <PhosphorTiles/...> headers directly; no forwarding shims remain.
     # AutotileEngine + supporting files moved to libs/phosphor-tile-engine/.
-    snap/SnapState.cpp
-    snap/SnapEngine.cpp
-    snap/SnapEngine.h
-    snap/snapengine/calculate.cpp
-    snap/snapengine/commit.cpp
-    snap/snapengine/float.cpp
-    snap/snapengine/lifecycle.cpp
-    snap/snapengine/navigation.cpp
-    snap/snapengine/navigation_actions.cpp
-    snap/snapengine/resnap_calc.cpp
+    # SnapEngine + SnapState + supporting files moved to libs/phosphor-snap-engine/.
 )
 
 # Create core library
@@ -212,6 +202,7 @@ target_link_libraries(plasmazones_core
         PhosphorConfig::PhosphorConfig
         PhosphorEngineApi::PhosphorEngineApi
         PhosphorTileEngine::PhosphorTileEngine
+        PhosphorSnapEngine::PhosphorSnapEngine
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol

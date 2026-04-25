@@ -6,7 +6,7 @@
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include "../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/configbackends.h"
 #include "../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>

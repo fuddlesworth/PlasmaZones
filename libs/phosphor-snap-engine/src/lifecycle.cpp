@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "../SnapEngine.h"
-#include "../SnapState.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/AssignmentEntry.h>
-#include "core/isettings.h"
+#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "core/logging.h"
+#include "snapenginelogging.h"
 
 namespace PlasmaZones {
 
@@ -36,7 +36,8 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     // (with different UUIDs) don't incorrectly steal this window's zone.
     if (m_snapState->isWindowSnapped(windowId)) {
         m_windowTracker->consumePendingAssignment(windowId);
-        qCDebug(lcCore) << "SnapEngine::windowOpened: window" << windowId << "already snapped, skipping";
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapEngine::windowOpened: window" << windowId << "already snapped, skipping";
         return;
     }
 
@@ -65,8 +66,8 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     Q_EMIT applyGeometryRequested(windowId, result.geometry.x(), result.geometry.y(), result.geometry.width(),
                                   result.geometry.height(), result.zoneId, result.screenId, false);
 
-    qCInfo(lcCore) << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on"
-                   << result.screenId;
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on" << result.screenId;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -101,7 +102,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // app from incorrectly stealing this window's zone assignment.
     if (m_snapState->isWindowSnapped(windowId)) {
         m_windowTracker->consumePendingAssignment(windowId);
-        qCDebug(lcCore) << "resolveWindowRestore:" << windowId << "already has assignment, skipping";
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore:" << windowId << "already has assignment, skipping";
         return SnapResult::noSnap();
     }
 
@@ -119,13 +121,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         for (const QString& excluded : s->excludedApplications()) {
             if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-                qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;
+                qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;
                 return SnapResult::noSnap();
             }
         }
         for (const QString& excluded : s->excludedWindowClasses()) {
             if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
-                qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by window class rule:" << excluded;
+                qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveWindowRestore:" << windowId << "excluded by window class rule:" << excluded;
                 return SnapResult::noSnap();
             }
         }
@@ -133,7 +137,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // 0. Floating windows should not be auto-snapped — emit OSD feedback
     if (m_snapState->isFloating(windowId)) {
-        qCInfo(lcCore) << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
                                   screenId);
         return SnapResult::noSnap();
@@ -143,7 +148,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     {
         SnapResult result = calculateSnapToAppRule(windowId, screenId, sticky);
         if (result.shouldSnap) {
-            qCInfo(lcCore) << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
             return result;
         }
     }
@@ -156,8 +162,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         SnapResult result = calculateRestoreFromSession(windowId, screenId, sticky);
         if (result.shouldSnap) {
             m_windowTracker->consumePendingAssignment(windowId);
-            qCInfo(lcCore) << "resolveWindowRestore: persisted matched for" << windowId << "zone=" << result.zoneId
-                           << "screen=" << result.screenId;
+            qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: persisted matched for" << windowId
+                                                     << "zone=" << result.zoneId << "screen=" << result.screenId;
             return result;
         }
     }
@@ -171,8 +177,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         int dt = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
         if (m_layoutManager->modeForScreen(screenId, dt, m_layoutManager->currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
-            qCDebug(lcCore) << "resolveWindowRestore:" << windowId << "caller screen" << screenId
-                            << "is autotile — skipping empty/last zone fallbacks";
+            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "caller screen"
+                                                      << screenId << "is autotile — skipping empty/last zone fallbacks";
             return SnapResult::noSnap();
         }
     }
@@ -181,7 +187,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     {
         SnapResult result = calculateSnapToEmptyZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
-            qCInfo(lcCore) << "resolveWindowRestore: emptyZone matched for" << windowId << "zone=" << result.zoneId;
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "resolveWindowRestore: emptyZone matched for" << windowId << "zone=" << result.zoneId;
             return result;
         }
     }
@@ -190,7 +197,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     {
         SnapResult result = calculateSnapToLastZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
-            qCInfo(lcCore) << "resolveWindowRestore: lastZone matched for" << windowId << "zone=" << result.zoneId;
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "resolveWindowRestore: lastZone matched for" << windowId << "zone=" << result.zoneId;
             return result;
         }
     }
