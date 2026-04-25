@@ -123,6 +123,8 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/MotionSpec.h
     include/PhosphorAnimation/Interpolate.h
     include/PhosphorAnimation/AnimatedValue.h
+    include/PhosphorAnimation/AnimatedValue_geometric.h
+    include/PhosphorAnimation/AnimatedValue_lifecycle_extras.h
     include/PhosphorAnimation/Profile.h
     include/PhosphorAnimation/ProfilePaths.h
     include/PhosphorAnimation/ProfileTree.h
@@ -134,8 +136,19 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/ProfileLoader.h
 )
 
+# Implementation-detail headers consumed by curveloader.cpp / profileloader.cpp
+# (and any future BatchedSink-based loaders). Installed under a separate
+# `detail/` subdirectory so consumers grep'ing the public include surface
+# see only the top-level Phase-4 API; the detail headers are installed
+# because they are header-only templates that the .cpp sources include
+# directly (and any future out-of-tree loader would also include).
+set(phosphoranimation_detail_HDRS
+    include/PhosphorAnimation/detail/BatchedSink.h
+)
+
 add_library(PhosphorAnimation SHARED
     ${phosphoranimation_public_HDRS}
+    ${phosphoranimation_detail_HDRS}
     ${phosphoranimation_SRCS}
 )
 
@@ -243,6 +256,9 @@ install(TARGETS PhosphorAnimation
 
 install(FILES ${phosphoranimation_public_HDRS}
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation
+)
+install(FILES ${phosphoranimation_detail_HDRS}
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation/detail
 )
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorAnimation/phosphoranimation_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation

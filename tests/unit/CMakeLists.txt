@@ -221,6 +221,21 @@ target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazon
 add_test(NAME test_configmigration COMMAND test_configmigration)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# daemon/ — Daemon-level Integration Tests (animation profile publication, etc.)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Daemon-level publication contract: ProfileLoader registers user JSON
+# under its owner tag, Settings publishes to the registry's `Global`
+# path under the empty/direct owner, and a loader-side `Global.json`
+# collision is silently skipped (Phase 1b inversion: Settings wins on
+# settings-driven paths). Mirrors the daemon's setupAnimationProfiles
+# without constructing a real Daemon (which requires D-Bus + KWin
+# binding — out of scope for unit tests).
+add_executable(test_animation_profile_publication daemon/test_animation_profile_publication.cpp)
+target_link_libraries(test_animation_profile_publication
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorAnimation::PhosphorAnimation)
+add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_publication)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_layout_core core/test_layout_core.cpp)

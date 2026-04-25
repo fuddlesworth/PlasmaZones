@@ -5,15 +5,13 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/detail/BatchedSink.h>
 
 #include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorJsonLoader/JsonEnvelopeValidator.h>
 #include <PhosphorJsonLoader/ParsedEntry.h>
 
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QUuid>
@@ -26,151 +24,87 @@ namespace {
 Q_LOGGING_CATEGORY(lcProfileLoader, "phosphoranimation.profileloader")
 } // namespace
 
-class ProfileLoader::Sink : public PhosphorJsonLoader::IDirectoryLoaderSink
+class ProfileLoader::Sink : public detail::BatchedSink<Profile>
 {
 public:
     Sink(PhosphorProfileRegistry& reg, CurveRegistry& curveReg, QString owner)
-        : registry(&reg)
+        : detail::BatchedSink<Profile>(lcProfileLoader(), std::move(owner))
+        , registry(&reg)
         , curveRegistry(&curveReg)
-        , ownerTag(std::move(owner))
     {
     }
 
     PhosphorProfileRegistry* registry; ///< pinned at ctor
     CurveRegistry* curveRegistry; ///< pinned at ctor — used by parseFile
-    QString ownerTag; ///< stable per-instance tag for partitioned reload
     QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
-    /// Snapshot of the last-committed profiles by path, used by
-    /// commitBatch to decide whether the consumer-facing
-    /// `profilesChanged` signal should fire. Populated after every
-    /// commit; cleared on removedKeys. A rescan that produces an
-    /// identical set is a no-op and suppresses the signal.
-    QHash<QString, Profile> lastCommittedProfiles;
-    /// Set by commitBatch whenever the tracked profile set actually
-    /// changed (a path added / removed / or an existing path's Profile
-    /// value differs). Read by ProfileLoader's entriesChanged adapter
-    /// to decide whether to emit `profilesChanged`.
-    bool lastBatchChanged = false;
 
     std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
-        QFile file(filePath);
-        if (!file.open(QIODevice::ReadOnly)) {
-            qCWarning(lcProfileLoader) << "Skipping unreadable file" << filePath << ":" << file.errorString();
-            return std::nullopt;
-        }
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-        if (parseError.error != QJsonParseError::NoError) {
-            qCWarning(lcProfileLoader) << "Skipping malformed JSON" << filePath << ":" << parseError.errorString();
-            return std::nullopt;
-        }
-        if (!doc.isObject()) {
-            qCWarning(lcProfileLoader) << "Skipping non-object root JSON in" << filePath;
-            return std::nullopt;
-        }
-        QJsonObject obj = doc.object();
-        const QString path = obj.value(QLatin1String("name")).toString();
-        if (path.isEmpty()) {
-            qCWarning(lcProfileLoader) << "Skipping" << filePath << ": missing required 'name' field";
-            return std::nullopt;
-        }
-
-        // Reject mismatched filename / name. Users who copy an
-        // existing profile file and forget to rename the inner `name`
-        // would otherwise silently register under the original path
-        // (shadowing a system entry they had no intention to replace).
-        // Clear diagnostic naming both sides so the user can fix
-        // whichever side is wrong.
-        const QString basename = QFileInfo(filePath).completeBaseName();
-        if (path != basename) {
-            qCWarning(lcProfileLoader).nospace()
-                << "Skipping " << filePath << ": profile name '" << path << "' does not match filename '" << basename
-                << "' — rejecting to avoid silent shadowing";
+        // Common envelope checks (read, parse, root-is-object,
+        // non-empty `name`, name-matches-filename) live in the shared
+        // helper. The helper strips `name` from the returned root, so
+        // it can't leak into Profile::presetName — the two concepts
+        // are distinct (registry path vs. user-assigned preset label).
+        auto envelope = PhosphorJsonLoader::validateJsonEnvelope(filePath, lcProfileLoader());
+        if (!envelope) {
             return std::nullopt;
         }
 
         // Profile::fromJson reads the remaining fields (curve / duration /
-        // minDistance / sequenceMode / staggerInterval / presetName). We
-        // strip 'name' first so it doesn't leak into presetName — the two
-        // concepts are distinct (registry path vs. user-assigned preset
-        // label).
-        obj.remove(QLatin1String("name"));
-        const Profile profile = Profile::fromJson(obj, *curveRegistry);
+        // minDistance / sequenceMode / staggerInterval / presetName).
+        const Profile profile = Profile::fromJson(envelope->root, *curveRegistry);
 
         PhosphorJsonLoader::ParsedEntry parsed;
-        parsed.key = path;
+        parsed.key = envelope->name;
         parsed.sourcePath = filePath;
         parsed.payload = profile;
         return parsed;
     }
 
-    void commitBatch(const QStringList& removedKeys,
-                     const QList<PhosphorJsonLoader::ParsedEntry>& currentEntries) override
+protected:
+    /// Profile equality is the schema-level value comparison defined
+    /// by `Profile::operator==`. The diff suppresses no-op rescans
+    /// (re-parse of files whose contents didn't change) so the
+    /// consumer-facing `profilesChanged` signal mirrors actual change.
+    bool payloadEqual(const Profile& a, const Profile& b) const override
+    {
+        return a == b;
+    }
+
+    void commitToRegistry(const QStringList& removedKeys, const QHash<QString, Profile>& currentMap,
+                          const QStringList& changedOrAddedKeys) override
     {
         Q_ASSERT(registry);
-
-        // Reset the per-batch change flag. Any add / remove / value-diff
-        // below flips it to true, which gates the consumer-facing
-        // `profilesChanged` signal in ProfileLoader.
-        lastBatchChanged = false;
-
-        // Build the full replacement map from the current-entries list
-        // (the loader already applied user-wins-collision, so this
-        // map is the authoritative post-scan shape). Missing entries
-        // correspond to the removedKeys list — reloadFromOwner handles
-        // both additions and removals in one atomic swap, BUT crucially
-        // leaves entries owned by other sources (the daemon's
-        // settings-fanned profiles, another loader, etc.) untouched.
-        // Using reloadAll here would wipe those on every rescan.
-        QHash<QString, Profile> map;
-        map.reserve(currentEntries.size());
-        for (const auto& p : currentEntries) {
-            const Profile* profile = std::any_cast<Profile>(&p.payload);
-            if (!profile) {
-                qCWarning(lcProfileLoader) << "commitBatch: payload type-mismatch for" << p.key;
-                continue;
-            }
-            map.insert(p.key, *profile);
-        }
-
-        // Diff against the previous commit to decide whether the
-        // consumer signal fires. The registry's own reloadFromOwner
-        // is also diff-gated internally, but we need our own flag so
-        // the consumer's `profilesChanged` mirrors that behaviour —
-        // DirectoryLoader always fires entriesChanged on every rescan.
-        for (const QString& key : removedKeys) {
-            if (lastCommittedProfiles.remove(key) > 0) {
-                lastBatchChanged = true;
-            }
-        }
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            auto existingIt = lastCommittedProfiles.constFind(it.key());
-            if (existingIt == lastCommittedProfiles.constEnd() || !(*existingIt == it.value())) {
-                lastCommittedProfiles.insert(it.key(), it.value());
-                lastBatchChanged = true;
-            }
-        }
+        Q_UNUSED(removedKeys);
+        Q_UNUSED(changedOrAddedKeys);
 
         // Single reloadFromOwner → one profilesReloaded signal regardless
         // of how many files changed (decision W: coalesce multiple
         // filesystem events into one consumer-visible batch). The
         // partitioning ensures daemon-direct entries at other paths
-        // survive this rescan.
-        registry->reloadFromOwner(ownerTag, map);
+        // survive this rescan — `reloadFromOwner` only touches keys in
+        // this loader's owner partition, so the daemon's settings-fanned
+        // profiles, another loader's entries, etc. are left alone.
+        // Bulk-replace handles additions and removals atomically; the
+        // base's `removedKeys` and `changedOrAddedKeys` are redundant
+        // here and intentionally unused.
+        registry->reloadFromOwner(ownerTag(), currentMap);
+    }
 
-        // Mirror the loader's tracked set in our own Entry map for
-        // entries() introspection.
-        for (const QString& key : removedKeys) {
-            entries.remove(key);
-        }
-        for (const auto& p : currentEntries) {
-            ProfileLoader::Entry e;
-            e.path = p.key;
-            e.sourcePath = p.sourcePath;
-            e.systemSourcePath = p.systemSourcePath;
-            entries.insert(p.key, std::move(e));
-        }
+    void onTrackEntry(const QString& key, const Profile& payload, const QString& sourcePath,
+                      const QString& systemSourcePath) override
+    {
+        Q_UNUSED(payload);
+        ProfileLoader::Entry e;
+        e.path = key;
+        e.sourcePath = sourcePath;
+        e.systemSourcePath = systemSourcePath;
+        entries.insert(key, std::move(e));
+    }
+
+    void onUntrackEntry(const QString& key) override
+    {
+        entries.remove(key);
     }
 };
 
@@ -212,7 +146,7 @@ ProfileLoader::~ProfileLoader()
     // sequential loaders (tests, especially) doesn't accumulate ghosts
     // from destroyed loaders.
     if (m_sink && m_sink->registry) {
-        m_sink->registry->clearOwner(m_sink->ownerTag);
+        m_sink->registry->clearOwner(m_sink->ownerTag());
     }
 }
 
@@ -256,7 +190,7 @@ int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
 
 QString ProfileLoader::ownerTag() const
 {
-    return m_sink ? m_sink->ownerTag : QString();
+    return m_sink ? m_sink->ownerTag() : QString();
 }
 
 void ProfileLoader::requestRescan()

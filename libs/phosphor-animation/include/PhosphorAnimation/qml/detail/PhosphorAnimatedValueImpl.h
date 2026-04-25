@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/IMotionClock.h>
 #include <PhosphorAnimation/MotionSpec.h>
 
+#include <type_traits>
 #include <utility>
 
 namespace PhosphorAnimation::detail {
@@ -220,6 +221,106 @@ void finishImpl(Derived* self, AnimatedValue<T>& av)
     const auto prev = AnimatedValueSnapshot<T>::capture(av);
     av.finish();
     emitChangedSignals(self, av, prev, /*emitValueChanged=*/false);
+}
+
+/**
+ * @brief Snapshot of the wrapper-level (NOT AnimatedValue<T>-level)
+ *        observables, captured via the wrapper's own accessors.
+ *
+ * Built for the Color wrapper, whose accessors dispatch through an
+ * active-instance ternary across two `AnimatedValue<QColor, Space>`
+ * fields — the `AnimatedValueSnapshot<T>::capture` path does not
+ * apply because there is no single `AnimatedValue<T>` to snapshot.
+ * `runWithDiffEmit` (below) drives this snapshot-then-diff-emit
+ * pattern off the wrapper's `from()/to()/value()/isAnimating()/
+ * isComplete()` instead.
+ *
+ * Reused for `setColorSpace`'s flip path, `start`, `retarget`,
+ * `cancel`, and `finish` — all five sites previously hand-rolled the
+ * same five `prev*` locals + five conditional `Q_EMIT` blocks.
+ */
+template<typename T>
+struct WrapperStateSnapshot
+{
+    T from;
+    T to;
+    T value;
+    bool animating;
+    bool complete;
+};
+
+/**
+ * @brief Capture-mutate-diff-emit helper for wrappers whose accessors
+ *        cannot be expressed as a single `AnimatedValue<T>` (e.g.
+ *        the Color wrapper's per-space dispatch).
+ *
+ * 1. Snapshots `self->from()`, `self->to()`, `self->value()`,
+ *    `self->isAnimating()`, `self->isComplete()` BEFORE @p op runs.
+ * 2. Calls @p op (the user-supplied mutation — `start`, `retarget`,
+ *    `cancel`, `finish`, or the `setColorSpace` flip body).
+ * 3. Re-reads each accessor and emits the matching `*Changed()`
+ *    signal on @p self only for the fields that actually changed.
+ *
+ * @param emitValueChanged Mirrors `emitChangedSignals` — set to
+ *                         `false` from `finish` paths whose underlying
+ *                         core fires `onValueChanged` itself, to avoid
+ *                         the double-tick on the terminal-value
+ *                         transition.
+ *
+ * The helper is parameterised by `Self` rather than coupled to a
+ * particular wrapper class so a future per-mode wrapper (e.g. one
+ * that dispatches between two `AnimatedValue<T, ModeA>` and
+ * `AnimatedValue<T, ModeB>` instances on a different policy axis)
+ * can reuse the same snapshot/diff-emit machinery.
+ */
+template<typename Self, typename Op>
+auto runWithDiffEmit(Self* self, Op&& op, bool emitValueChanged = true)
+{
+    using ValueT = decltype(self->value());
+    const WrapperStateSnapshot<ValueT> prev{self->from(), self->to(), self->value(), self->isAnimating(),
+                                            self->isComplete()};
+
+    // op() may return void or a forwarded result (e.g. `bool` from
+    // AnimatedValue::start / retarget). The if-constexpr split keeps
+    // both shapes well-formed without forcing every call site to
+    // wrap a void op in a return-tagged lambda.
+    if constexpr (std::is_void_v<decltype(op())>) {
+        op();
+        if (self->from() != prev.from) {
+            Q_EMIT self->fromChanged();
+        }
+        if (self->to() != prev.to) {
+            Q_EMIT self->toChanged();
+        }
+        if (emitValueChanged && self->value() != prev.value) {
+            Q_EMIT self->valueChanged();
+        }
+        if (self->isAnimating() != prev.animating) {
+            Q_EMIT self->animatingChanged();
+        }
+        if (self->isComplete() != prev.complete) {
+            Q_EMIT self->completeChanged();
+        }
+        return;
+    } else {
+        auto result = op();
+        if (self->from() != prev.from) {
+            Q_EMIT self->fromChanged();
+        }
+        if (self->to() != prev.to) {
+            Q_EMIT self->toChanged();
+        }
+        if (emitValueChanged && self->value() != prev.value) {
+            Q_EMIT self->valueChanged();
+        }
+        if (self->isAnimating() != prev.animating) {
+            Q_EMIT self->animatingChanged();
+        }
+        if (self->isComplete() != prev.complete) {
+            Q_EMIT self->completeChanged();
+        }
+        return result;
+    }
 }
 
 } // namespace PhosphorAnimation::detail

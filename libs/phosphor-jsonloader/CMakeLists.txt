@@ -39,6 +39,7 @@ set(phosphorjsonloader_SRCS
 set(phosphorjsonloader_public_HDRS
     include/PhosphorJsonLoader/DirectoryLoader.h
     include/PhosphorJsonLoader/IDirectoryLoaderSink.h
+    include/PhosphorJsonLoader/JsonEnvelopeValidator.h
     include/PhosphorJsonLoader/ParsedEntry.h
 )
 

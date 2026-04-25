@@ -1194,6 +1194,78 @@ private Q_SLOTS:
         QCOMPARE(staggerStored, ConfigDefaults::animationStaggerIntervalMax());
     }
 
+    /// Regression guard for v2-already-stamped Animations idempotency.
+    /// A config already at the current schema version must not re-run
+    /// `migrateV1ToV2` — the per-field v1 keys are already gone and the
+    /// `Animations.Profile` blob is the canonical v2 shape. Re-running
+    /// the migration would either (a) stamp an empty Profile blob
+    /// (because no v1 keys are present) or (b) double-process the
+    /// existing blob (if a future bug routed it through the assembly
+    /// path). Either case corrupts the user's persisted profile.
+    ///
+    /// The contract under test: `ensureJsonConfig` on a v2-stamped
+    /// config containing a non-default `Animations.Profile` blob is a
+    /// pure no-op — the on-disk bytes are byte-identical before and
+    /// after.
+    void testV2AlreadyStamped_AnimationsBlobIdempotent()
+    {
+        IsolatedConfigGuard guard;
+
+        // Build a v2-stamped config with a non-default Animations.Profile
+        // blob. The blob shape mirrors what `ConfigDefaults::animationProfile`
+        // would produce — but with custom values so a re-processing path
+        // would silently overwrite them with defaults and fail the
+        // byte-identical comparison.
+        QJsonObject profileBlob;
+        profileBlob[QStringLiteral("duration")] = 275;
+        profileBlob[QStringLiteral("minDistance")] = 8;
+        profileBlob[QStringLiteral("sequenceMode")] = 1;
+        profileBlob[QStringLiteral("staggerInterval")] = 42;
+        profileBlob[QStringLiteral("curve")] = QStringLiteral("0.42,0.00,0.58,1.00");
+        const QString profileString = QString::fromUtf8(QJsonDocument(profileBlob).toJson(QJsonDocument::Compact));
+
+        QJsonObject animations;
+        animations[QStringLiteral("Enabled")] = true;
+        animations[QStringLiteral("Profile")] = profileString;
+
+        QJsonObject root;
+        root[QStringLiteral("_version")] = PlasmaZones::ConfigSchemaVersion;
+        root[QStringLiteral("Animations")] = animations;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        // Snapshot bytes BEFORE migration call.
+        QFile fileBefore(ConfigDefaults::configFilePath());
+        QVERIFY(fileBefore.open(QIODevice::ReadOnly));
+        const QByteArray beforeBytes = fileBefore.readAll();
+        fileBefore.close();
+        QVERIFY(!beforeBytes.isEmpty());
+
+        // Run ensureJsonConfig — already at current version, must be a
+        // pure no-op.
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Snapshot bytes AFTER migration call. Must be byte-identical.
+        QFile fileAfter(ConfigDefaults::configFilePath());
+        QVERIFY(fileAfter.open(QIODevice::ReadOnly));
+        const QByteArray afterBytes = fileAfter.readAll();
+        fileAfter.close();
+
+        QCOMPARE(afterBytes, beforeBytes);
+
+        // Belt-and-suspenders: parse and verify the Profile blob is
+        // byte-equal to what we wrote (no key reorder, no whitespace
+        // shuffle, no value coercion). The byte comparison above
+        // already pins this; the structured check makes a regression
+        // diff readable.
+        const QJsonObject afterRoot = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(afterRoot.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+        const QJsonObject afterAnimations = afterRoot.value(QStringLiteral("Animations")).toObject();
+        QCOMPARE(afterAnimations.value(QStringLiteral("Enabled")).toBool(), true);
+        QCOMPARE(afterAnimations.value(QStringLiteral("Profile")).toString(), profileString);
+    }
+
     /// A config stamped with a version GREATER than the current
     /// ConfigSchemaVersion must not trigger any downgrade logic — the
     /// migration runner short-circuits and leaves the blob untouched.

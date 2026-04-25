@@ -1025,6 +1025,43 @@ private:
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
 
+    // Patch one field of the Profile JSON blob and emit the canonical
+    // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
+    //
+    // Hot path: per-field setters fired by settings-UI sliders at ~30 Hz.
+    // The helper consolidates the 5 near-identical animation field setters
+    // (duration / easing-curve / min-distance / sequence-mode / stagger-
+    // interval) so the merge contract (read existing blob → insert one
+    // field → write back, preserving every other on-disk key) is in one
+    // place rather than copy-pasted five times.
+    //
+    // T must be comparable (`operator==`) and convertible to QJsonValue
+    // (the QJsonObject::insert overload set covers int / double / bool /
+    // QString / QJsonValue / QJsonArray / QJsonObject).
+    //
+    // - @p jsonFieldName     The Profile JSON key (raw `const char*` —
+    //                        wrapped via `QLatin1String` at the insert site
+    //                        to satisfy Qt6's deleted raw-string ctor).
+    // - @p currentValue      What the corresponding getter returns BEFORE
+    //                        the write — supplied by the caller because the
+    //                        getter shape varies per field (int via
+    //                        `effectiveDuration`, QString via raw blob
+    //                        read for the curve case, etc.). The no-op
+    //                        guard short-circuits when `currentValue ==
+    //                        newValue` so a slider drag at constant value
+    //                        wakes no observers.
+    // - @p newValue          The post-clamp / post-resolve value to insert.
+    //                        Pre-processing (clamping for numeric setters,
+    //                        registry resolution for the easing setter)
+    //                        stays at the call site — the helper is a pure
+    //                        merge primitive, not a validator.
+    // - @p fieldChangedSignal The per-field NOTIFY pointer. Fires alongside
+    //                         animationProfileChanged + settingsChanged on
+    //                         every successful write.
+    template<typename T>
+    void patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
+                           void (Settings::*fieldChangedSignal)());
+
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction

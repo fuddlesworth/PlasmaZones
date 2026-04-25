@@ -117,11 +117,26 @@ void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHa
         }
 
         // Paths in the new map — insert / replace, claiming ownership.
+        //
+        // Direct-owner (empty `existingOwner`) always wins: a loader
+        // rescan does NOT overwrite paths the daemon (or any other
+        // untagged caller) registered via `registerProfile(path,
+        // profile)`. Without this guard, the user's Settings-slider
+        // Global value would be silently clobbered every time their
+        // `Global.json` was rescanned, then re-claimed on the next
+        // `publishActiveAnimationProfile`, producing a flap. Settings
+        // is the live tuning surface; file-based profiles are for
+        // paths Settings does NOT publish to. A loader entry
+        // colliding with a direct-owned path is silently skipped.
         for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
             const QString& path = it.key();
             const Profile& p = it.value();
             auto existing = m_profiles.find(path);
             const QString existingOwner = m_owners.value(path);
+            if (existing != m_profiles.end() && existingOwner.isEmpty()) {
+                // Direct-owner has highest priority; loader steps aside.
+                continue;
+            }
             if (existing == m_profiles.end() || !(*existing == p) || existingOwner != ownerTag) {
                 m_profiles.insert(path, p);
                 m_owners.insert(path, ownerTag);

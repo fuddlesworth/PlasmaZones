@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/qml/PhosphorAnimatedColor.h>
 
 #include <PhosphorAnimation/MotionSpec.h>
+#include <PhosphorAnimation/qml/detail/PhosphorAnimatedValueImpl.h>
 
 #include <QLoggingCategory>
 
@@ -86,64 +87,58 @@ void PhosphorAnimatedColor::setColorSpace(ColorSpace space)
     }
     if (isAnimating()) {
         // Flipping space mid-animation would produce a visible
-        // chromatic-path jump. Refuse the write and warn: a silent
-        // ignore desyncs QML two-way bindings (a Slider bound to
-        // colorSpace that fires during a fade sees its write
-        // dropped and read-back reports the old value — user-visible
-        // drift with no diagnostic). Warn rather than debug so the
-        // caller sees the drop on the first occurrence.
+        // chromatic-path jump. Refuse the write and warn — silent
+        // ignore would desync any QML two-way binding (a Slider
+        // bound to colorSpace that fires during a fade sees its
+        // write dropped and read-back reports the old value, with
+        // no diagnostic). The test
+        // `testColorSpaceIgnoredWhileAnimating` pins the no-emit
+        // contract on the rejected path: a refused write must NOT
+        // fire `colorSpaceChanged`, otherwise observers think the
+        // flip succeeded.
         qCWarning(lcAnimatedColor) << "setColorSpace" << static_cast<int>(space)
                                    << "ignored while animating — flip requires a quiesced animation "
                                       "(call after isComplete(), or retarget to the same value to quiesce)";
         return;
     }
 
-    // Seed the target-space instance with the outgoing instance's
-    // idle state (from, to, current value, isComplete) so post-flip
-    // reads through from()/to()/value()/isComplete() stay continuous.
-    // Without this, start(red, blue) → wait idle → setColorSpace(OkLab)
-    // would jump value() to the OkLab instance's default-constructed
-    // QColor() — the two AnimatedValue<QColor, Space> instances are
-    // otherwise independent. `seedFrom` is a no-op if either side is
-    // animating; the isAnimating() guard above gates that case.
+    // Snapshot every reachable observable BEFORE the flip — including
+    // `isAnimating()` and `isComplete()` for completeness — so the
+    // diff-emit step fires only the per-property signals whose
+    // post-flip read diverges from the pre-flip read. Matches the
+    // project's "only emit when value actually changes" contract.
+    // `runWithDiffEmit` handles the snapshot, op, and per-field
+    // diff-emit. We then emit `colorSpaceChanged` LAST (outside the
+    // helper) so observers reading `value` from a `colorSpaceChanged`
+    // handler see the post-flip ground truth.
     //
-    // Snapshot prev-read values so we can emit fromChanged /
-    // toChanged / valueChanged only if the post-flip read differs
-    // from the pre-flip read — matches the project's "only emit
-    // when value actually changes" contract.
-    const QColor prevFrom = from();
-    const QColor prevTo = to();
-    const QColor prevValue = value();
+    // Seeding is the actual flip work:
+    //   `seedFrom` copies visible idle state (from/to/current/isComplete).
+    //   `seedSpecFrom` copies the MotionSpec's clock + callbacks —
+    //   required so `retarget()` on the target instance after the flip
+    //   is NOT silently rejected by `AnimatedValue::retarget`'s
+    //   `if (!m_spec.clock) return false;` guard. Without this, a flip
+    //   between `start()` and a subsequent `retarget()` would look like
+    //   the retarget call is a no-op at the wrapper boundary. Profile
+    //   is deliberately left alone — profile belongs to the NEXT
+    //   start(), not to the post-flip retarget continuation.
+    detail::runWithDiffEmit(this, [this, space]() {
+        if (space == ColorSpace::OkLab) {
+            m_animatedValueOkLab.seedFrom(m_animatedValueLinear);
+            m_animatedValueOkLab.seedSpecFrom(m_animatedValueLinear);
+        } else {
+            m_animatedValueLinear.seedFrom(m_animatedValueOkLab);
+            m_animatedValueLinear.seedSpecFrom(m_animatedValueOkLab);
+        }
+        m_activeSpace = space;
+    });
 
-    // `seedFrom` copies visible idle state (from/to/current/isComplete).
-    // `seedSpecFrom` copies the MotionSpec's clock + callbacks — required
-    // so `retarget()` on the target instance after the flip is NOT
-    // silently rejected by `AnimatedValue::retarget`'s
-    // `if (!m_spec.clock) return false;` guard. Without this, a flip
-    // between `start()` and a subsequent `retarget()` would look like
-    // the retarget call is a no-op at the wrapper boundary. Profile is
-    // deliberately left alone — profile belongs to the NEXT start(), not
-    // to the post-flip retarget continuation.
-    if (space == ColorSpace::OkLab) {
-        m_animatedValueOkLab.seedFrom(m_animatedValueLinear);
-        m_animatedValueOkLab.seedSpecFrom(m_animatedValueLinear);
-    } else {
-        m_animatedValueLinear.seedFrom(m_animatedValueOkLab);
-        m_animatedValueLinear.seedSpecFrom(m_animatedValueOkLab);
-    }
-
-    m_activeSpace = space;
+    // Emit the meta-state signal LAST so a QML binding reading
+    // `value` from a `colorSpaceChanged` handler always sees the
+    // post-flip ground truth. Reordering this above the
+    // runWithDiffEmit diff loop would invert the ordering contract
+    // the test enshrines.
     Q_EMIT colorSpaceChanged();
-
-    if (from() != prevFrom) {
-        Q_EMIT fromChanged();
-    }
-    if (to() != prevTo) {
-        Q_EMIT toChanged();
-    }
-    if (value() != prevValue) {
-        Q_EMIT valueChanged();
-    }
 }
 
 bool PhosphorAnimatedColor::start(const QColor& from, const QColor& to)
@@ -156,14 +151,9 @@ bool PhosphorAnimatedColor::startImpl(const QColor& from, const QColor& to, IMot
     if (!clock) {
         return false;
     }
-    // Check-before-emit via the dispatch accessors. Mirrors
-    // PhosphorAnimatedReal::startImpl.
-    const QColor prevFrom = this->from();
-    const QColor prevTo = this->to();
-    const QColor prevValue = this->value();
-    const bool prevAnimating = isAnimating();
-    const bool prevComplete = isComplete();
-
+    // Build the spec once; the active-instance dispatch below routes
+    // it to whichever AnimatedValue<QColor, Space> backs the current
+    // colorSpace. Per-tick callbacks emit the wrapper's own signals.
     MotionSpec<QColor> spec;
     spec.profile = profile().value();
     spec.clock = clock;
@@ -175,82 +165,54 @@ bool PhosphorAnimatedColor::startImpl(const QColor& from, const QColor& to, IMot
         Q_EMIT completeChanged();
     };
 
-    const bool ok = (m_activeSpace == ColorSpace::OkLab) ? m_animatedValueOkLab.start(from, to, std::move(spec))
-                                                         : m_animatedValueLinear.start(from, to, std::move(spec));
-
-    if (this->from() != prevFrom)
-        Q_EMIT fromChanged();
-    if (this->to() != prevTo)
-        Q_EMIT toChanged();
-    if (this->value() != prevValue)
-        Q_EMIT valueChanged();
-    if (isAnimating() != prevAnimating)
-        Q_EMIT animatingChanged();
-    if (isComplete() != prevComplete)
-        Q_EMIT completeChanged();
-    return ok;
+    return detail::runWithDiffEmit(this, [this, &from, &to, spec = std::move(spec)]() mutable {
+        return (m_activeSpace == ColorSpace::OkLab) ? m_animatedValueOkLab.start(from, to, std::move(spec))
+                                                    : m_animatedValueLinear.start(from, to, std::move(spec));
+    });
 }
 
 bool PhosphorAnimatedColor::retarget(const QColor& to)
 {
-    const QColor prevFrom = this->from();
-    const QColor prevTo = this->to();
-    const QColor prevValue = this->value();
-    const bool prevAnimating = isAnimating();
-    const bool prevComplete = isComplete();
-    const bool ok =
-        m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.retarget(to) : m_animatedValueLinear.retarget(to);
-    if (this->from() != prevFrom)
-        Q_EMIT fromChanged();
-    if (this->to() != prevTo)
-        Q_EMIT toChanged();
-    if (this->value() != prevValue)
-        Q_EMIT valueChanged();
-    if (isAnimating() != prevAnimating)
-        Q_EMIT animatingChanged();
-    if (isComplete() != prevComplete)
-        Q_EMIT completeChanged();
-    return ok;
+    return detail::runWithDiffEmit(this, [this, &to]() {
+        return m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.retarget(to)
+                                                  : m_animatedValueLinear.retarget(to);
+    });
 }
 
 void PhosphorAnimatedColor::cancel()
 {
-    const bool prevAnimating = isAnimating();
-    const bool prevComplete = isComplete();
-    if (m_activeSpace == ColorSpace::OkLab) {
-        m_animatedValueOkLab.cancel();
-    } else {
-        m_animatedValueLinear.cancel();
-    }
-    if (isAnimating() != prevAnimating)
-        Q_EMIT animatingChanged();
-    if (isComplete() != prevComplete)
-        Q_EMIT completeChanged();
+    detail::runWithDiffEmit(this, [this]() {
+        if (m_activeSpace == ColorSpace::OkLab) {
+            m_animatedValueOkLab.cancel();
+        } else {
+            m_animatedValueLinear.cancel();
+        }
+    });
 }
 
 void PhosphorAnimatedColor::finish()
 {
-    const bool prevAnimating = isAnimating();
-    const bool prevComplete = isComplete();
-    // NOTE: we do NOT capture or diff-emit `valueChanged` here.
     // `AnimatedValue::finish()` fires the spec's `onValueChanged`
-    // callback (installed in `startImpl` below) which already emits
-    // `valueChanged()` on `this` — diff-emitting here would double-
-    // tick the terminal-value transition. Kept animatingChanged /
-    // completeChanged as diff emits so the idempotent no-op path
-    // (finish on an already-complete AnimatedValue, where the internal
-    // callback doesn't fire) still produces the correct edge signals.
-    // Matches the `finishImpl` convention in
-    // PhosphorAnimatedValueImpl.h.
-    if (m_activeSpace == ColorSpace::OkLab) {
-        m_animatedValueOkLab.finish();
-    } else {
-        m_animatedValueLinear.finish();
-    }
-    if (isAnimating() != prevAnimating)
-        Q_EMIT animatingChanged();
-    if (isComplete() != prevComplete)
-        Q_EMIT completeChanged();
+    // callback (installed in `startImpl`) which already emits
+    // `valueChanged()` on `this`. Pass `emitValueChanged=false` to
+    // `runWithDiffEmit` so the snapshot-diff path does NOT re-emit
+    // `valueChanged` — that would double-tick the terminal-value
+    // transition. animatingChanged / completeChanged stay enabled
+    // because the idempotent no-op path (finish on an already-
+    // complete AnimatedValue, where the internal callback doesn't
+    // fire) still needs the correct edge signals — boolean-edge
+    // signals are idempotent for QML bindings on repeated
+    // same-value notifications.
+    detail::runWithDiffEmit(
+        this,
+        [this]() {
+            if (m_activeSpace == ColorSpace::OkLab) {
+                m_animatedValueOkLab.finish();
+            } else {
+                m_animatedValueLinear.finish();
+            }
+        },
+        /*emitValueChanged=*/false);
 }
 
 void PhosphorAnimatedColor::advance()

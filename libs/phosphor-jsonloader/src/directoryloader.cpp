@@ -83,17 +83,7 @@ DirectoryLoader::~DirectoryLoader() = default;
 
 int DirectoryLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
 {
-    if (!m_directories.contains(directory)) {
-        m_directories.append(directory);
-    }
-    if (liveReload == LiveReload::On) {
-        m_liveReloadEnabled = true;
-        installWatcherIfNeeded();
-        attachWatcherForDir(directory);
-    }
-
-    rescanAll();
-    return m_entries.size();
+    return loadFromDirectories(QStringList{directory}, liveReload);
 }
 
 int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload)
@@ -101,14 +91,19 @@ int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveRel
     // Register all directories first so the rescan sees the complete
     // scan order and applies user-wins collision in one pass (instead
     // of N passes each of which might emit its own batch).
+    //
+    // Canonicalise on insertion so two registrations of the same
+    // directory under different spellings (`/foo/bar/` vs `/foo/bar`)
+    // collapse to one entry.
     for (const QString& dir : directories) {
-        if (!m_directories.contains(dir)) {
-            m_directories.append(dir);
+        const QString canonical = QDir::cleanPath(dir);
+        if (!m_directories.contains(canonical)) {
+            m_directories.append(canonical);
         }
         if (liveReload == LiveReload::On) {
             m_liveReloadEnabled = true;
             installWatcherIfNeeded();
-            attachWatcherForDir(dir);
+            attachWatcherForDir(canonical);
         }
     }
 
@@ -195,25 +190,33 @@ void DirectoryLoader::rescanAll()
         }
     }
 
-    // Build the fresh set in scan order — later directories' entries
-    // override earlier on key collision. Track the shadowed source
-    // path so deleting the user copy restores the system path on a
-    // future rescan (the sink decides what to do with that metadata).
+    // Build the fresh set in REVERSE scan order — first-wins semantics.
+    //
+    // Callers register dirs system-first / user-last (per the public
+    // `loadFromDirectories` docstring); iterating in reverse lets the
+    // user dir claim its keys BEFORE the system dir is touched. A
+    // subsequent system file with a colliding key updates the
+    // already-claimed entry's `systemSourcePath` (records the shadowed
+    // file for restore-on-delete introspection) but does not overwrite
+    // the entry — so user-wins is preserved by construction.
+    //
+    // This matters for the entry-count cap: under the previous forward-
+    // iteration + overwrite model, a hostile-or-buggy system dir
+    // containing more than `m_maxEntries` files would trip the cap
+    // BEFORE the user dir was scanned, silently dropping every user
+    // override. Reverse-iteration drops *system* entries on cap-trip,
+    // never user overrides.
     QHash<QString, Entry> fresh;
-    // Parsed entries accumulated by key. Keyed rather than listed so
-    // overwrite on cross-directory user-wins is O(1). The final
-    // `freshParsed` list handed to the sink is rebuilt from this hash
-    // AFTER the scan loop — the previous implementation did an O(N)
-    // linear replace per file, which was O(N²) across a dir full of
-    // overrides.
+    // Parsed entries accumulated by key. Keyed for O(1) first-wins.
     QHash<QString, ParsedEntry> freshParsedByKey;
 
-    // Entry-count cap breaker: a rescan that hit `m_maxEntries` short-
-    // circuits the remaining scan. Logged once (on first trip) so the
-    // user sees the cap, not every file it decided to skip.
+    // Entry-count cap breaker: with reverse-iteration the surviving
+    // entries are the highest-priority (user-supplied) ones — system
+    // overflows get dropped first.
     bool capTripped = false;
 
-    for (const QString& directory : m_directories) {
+    for (auto dirIt = m_directories.crbegin(); dirIt != m_directories.crend(); ++dirIt) {
+        const QString& directory = *dirIt;
         if (capTripped) {
             break;
         }
@@ -295,14 +298,19 @@ void DirectoryLoader::rescanAll()
             }
             keysInThisDir.insert(foldedKey, fullPath);
 
-            // Cross-directory: user-wins layering. Record the previous
-            // source as the shadowed system path on the new entry, then
-            // overwrite. When the user copy is later deleted, the next
-            // rescan re-parses the system file fresh (no need to
-            // consult `systemSourcePath` at commit time — the field is
-            // introspection metadata, not a restore hook).
+            // Cross-directory: first-wins (we iterate user-first via
+            // the reverse loop above). If this key was already claimed
+            // by a higher-priority dir, the currently-scanned (lower-
+            // priority) file is shadowed — record its path on the
+            // already-tracked entry so introspection (settings UIs)
+            // can show "this profile shadows the system default at
+            // /...". The shadowed entry is NOT registered with the
+            // sink; only the highest-priority claim is.
             if (auto existing = fresh.find(key); existing != fresh.end()) {
-                parsed->systemSourcePath = existing->sourcePath;
+                if (existing->systemSourcePath.isEmpty()) {
+                    existing->systemSourcePath = parsed->sourcePath;
+                }
+                continue;
             }
 
             Entry trackedEntry;
@@ -311,9 +319,21 @@ void DirectoryLoader::rescanAll()
             trackedEntry.systemSourcePath = parsed->systemSourcePath;
             fresh.insert(key, trackedEntry);
 
-            // Keyed insert — later directory wins on cross-dir
-            // collision, consistent with `fresh`'s override semantics.
             freshParsedByKey.insert(key, std::move(*parsed));
+        }
+    }
+
+    // Second pass — for entries whose `fresh` record acquired a
+    // systemSourcePath during the reverse-scan (because a lower-
+    // priority dir contained a file shadowed by this entry), propagate
+    // that metadata onto the matching `ParsedEntry` so the sink sees
+    // it in commitBatch.
+    for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it) {
+        if (!it->systemSourcePath.isEmpty()) {
+            auto pIt = freshParsedByKey.find(it.key());
+            if (pIt != freshParsedByKey.end()) {
+                pIt->systemSourcePath = it->systemSourcePath;
+            }
         }
     }
 

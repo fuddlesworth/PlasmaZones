@@ -39,3 +39,15 @@ paq_add_test(paq_test_phosphoranimatedreal test_phosphoranimatedreal.cpp)
 paq_add_test(paq_test_phosphoranimatedtyped test_phosphoranimatedtyped.cpp)
 paq_add_test(paq_test_phosphorprofileregistry test_phosphorprofileregistry.cpp)
 paq_add_test(paq_test_phosphormotionanimation test_phosphormotionanimation.cpp)
+paq_add_test(paq_test_animatedvalue_realwindow test_animatedvalue_realwindow.cpp)
+paq_add_test(paq_test_motionanimation_behavior test_motionanimation_behavior.cpp)
+# The Behavior-site test loads `import org.phosphor.animation` from
+# QML, which requires the static QML module to be linked into the test
+# binary so the QmlEngine resolves the URI without external plugin
+# discovery (the SHARED plugin lives at install-time only).
+target_link_libraries(paq_test_motionanimation_behavior
+    PRIVATE PhosphorAnimation::PhosphorAnimationQml PhosphorAnimationQmlplugin Qt6::Qml)
+# Linking the auto-generated `PhosphorAnimationQmlplugin` static lib
+# alongside the backing PhosphorAnimationQml gives Q_IMPORT_PLUGIN in
+# the test source a real symbol to anchor — without it the linker
+# drops the qt_static_plugin_org_phosphor_animationPlugin definition.

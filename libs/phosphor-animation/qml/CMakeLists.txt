@@ -79,6 +79,7 @@ set(_phosphor_animation_qml_sources
     ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
     ../include/PhosphorAnimation/qml/PhosphorMotionAnimation.h
     ../include/PhosphorAnimation/qml/detail/PhosphorAnimatedValueImpl.h
+    ../include/PhosphorAnimation/qml/detail/PhosphorAnimatedTypeMacro.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -282,5 +283,6 @@ install(FILES
 
 install(FILES
         ../include/PhosphorAnimation/qml/detail/PhosphorAnimatedValueImpl.h
+        ../include/PhosphorAnimation/qml/detail/PhosphorAnimatedTypeMacro.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation/qml/detail
 )

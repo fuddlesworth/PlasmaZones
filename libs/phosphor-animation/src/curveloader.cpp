@@ -4,17 +4,17 @@
 #include <PhosphorAnimation/CurveLoader.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/detail/BatchedSink.h>
 
 #include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorJsonLoader/JsonEnvelopeValidator.h>
 #include <PhosphorJsonLoader/ParsedEntry.h>
 
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLatin1String>
 #include <QLoggingCategory>
 #include <QUuid>
 
@@ -36,90 +36,63 @@ QString makeCurveLoaderOwnerTag()
 }
 } // namespace
 
+namespace detail {
+/// Per-key payload shipped through the `ParsedEntry::payload` std::any.
+/// Free-standing (rather than nested in `Sink`) so it can name the
+/// `BatchedSink<CurvePayload>` template instantiation in `Sink`'s base-
+/// class clause without the C++ "incomplete enclosing class" issue.
+/// Lives in `detail` (external linkage) rather than the anonymous
+/// namespace so the compiler doesn't warn about
+/// `CurveLoader::Sink` having an internal-linkage base.
+struct CurvePayload
+{
+    QString displayName;
+    std::shared_ptr<const Curve> curve;
+    /// Captured wire-format string used to build `curve`. Persisted
+    /// through the payload so the BatchedSink can diff against the
+    /// previous commit and skip re-registering unchanged entries.
+    /// `Curve::toString()` is the canonical Curve serialization, so
+    /// two parses of the same JSON file produce the same wire string —
+    /// the diff stays stable across reloads even if the JSON factory
+    /// internals change.
+    QString wireFormat;
+};
+} // namespace detail
+
 /**
  * The curve-specific sink — knows the curve JSON schema, knows how to
  * turn it into a `shared_ptr<const Curve>`, and knows how to register /
  * unregister entries against `CurveRegistry`. The directory walk,
- * watching, and debounce live in `PhosphorJsonLoader::DirectoryLoader`.
+ * watching, and debounce live in `PhosphorJsonLoader::DirectoryLoader`;
+ * the diff / change-flag bookkeeping lives in `detail::BatchedSink`.
  */
-class CurveLoader::Sink : public PhosphorJsonLoader::IDirectoryLoaderSink
+class CurveLoader::Sink : public detail::BatchedSink<detail::CurvePayload>
 {
 public:
-    /// Per-key payload shipped through the `ParsedEntry::payload` std::any.
-    struct Payload
-    {
-        QString displayName;
-        std::shared_ptr<const Curve> curve;
-        /// Captured wire-format string used to build `curve`. Persisted
-        /// through the payload so `commitBatch` can diff against the
-        /// previous commit and skip re-registering unchanged entries.
-        QString wireFormat;
-    };
+    using Payload = detail::CurvePayload;
 
     Sink(CurveRegistry& reg, QString owner)
-        : registry(&reg)
-        , ownerTag(std::move(owner))
+        : detail::BatchedSink<Payload>(lcCurveLoader(), std::move(owner))
+        , registry(&reg)
     {
     }
 
     CurveRegistry* registry; ///< pinned at ctor — no per-call mutation
-    QString ownerTag; ///< stable per-instance tag for partitioned factory ownership
     QHash<QString, CurveLoader::Entry> entries; ///< name → entry (for entries() introspection)
-    /// Wire-format snapshot per successfully committed key, used by
-    /// commitBatch to skip re-registration of keys whose parsed curve
-    /// is byte-identical to the previous scan. Empty after teardown —
-    /// removedKeys are evicted here first so a later re-add produces
-    /// a miss and actually registers.
-    QHash<QString, QString> lastCommittedWireFormat;
-    /// Set by commitBatch whenever the tracked curve set changes —
-    /// either a key was removed, a new key was registered, or an
-    /// existing key's wire-format differs from the last commit. Read
-    /// by CurveLoader::onEntriesChanged to decide whether to emit
-    /// `curvesChanged`. Re-set to false before every commit; `false`
-    /// at end-of-batch means a no-op rescan (re-parse of files whose
-    /// contents didn't change) and the consumer signal is suppressed.
-    bool lastBatchChanged = false;
 
     std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
-        QFile file(filePath);
-        if (!file.open(QIODevice::ReadOnly)) {
-            qCWarning(lcCurveLoader) << "Skipping unreadable file" << filePath << ":" << file.errorString();
+        // Common envelope checks (read, parse, root-is-object,
+        // non-empty `name`, name-matches-filename) live in the shared
+        // helper. On success the helper hands back the parsed root with
+        // `name` removed, so the schema-specific code below only deals
+        // with curve-typed fields.
+        auto envelope = PhosphorJsonLoader::validateJsonEnvelope(filePath, lcCurveLoader());
+        if (!envelope) {
             return std::nullopt;
         }
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-        if (parseError.error != QJsonParseError::NoError) {
-            qCWarning(lcCurveLoader) << "Skipping malformed JSON" << filePath << ":" << parseError.errorString();
-            return std::nullopt;
-        }
-        if (!doc.isObject()) {
-            qCWarning(lcCurveLoader) << "Skipping non-object root JSON in" << filePath;
-            return std::nullopt;
-        }
-        const QJsonObject obj = doc.object();
-
-        const QString name = obj.value(QLatin1String("name")).toString();
-        if (name.isEmpty()) {
-            qCWarning(lcCurveLoader) << "Skipping" << filePath << ": missing required 'name' field";
-            return std::nullopt;
-        }
-
-        // The filename (without extension) is the user's ergonomic
-        // handle on the curve; the `name` field is what actually gets
-        // registered. If the two diverge — typically because the user
-        // copied `widget.fade.json → custom.json` and forgot to rename
-        // the inner field — the result is a curve that shadows the
-        // original under the inner-name key while the file on disk
-        // suggests a different identity. Reject up front with a clear
-        // diagnostic naming both sides.
-        const QString basename = QFileInfo(filePath).completeBaseName();
-        if (name != basename) {
-            qCWarning(lcCurveLoader).nospace()
-                << "Skipping " << filePath << ": curve name '" << name << "' does not match filename '" << basename
-                << "' — rejecting to avoid silent shadowing";
-            return std::nullopt;
-        }
+        const QJsonObject& obj = envelope->root;
+        const QString& name = envelope->name;
 
         // Reject user-authored files whose `name` collides with a
         // built-in typeId. CurveRegistry::registerFactory is
@@ -158,11 +131,6 @@ public:
             return std::nullopt;
         }
 
-        // Capture the canonical wire-format via `curve->toString()` for
-        // commitBatch's unchanged-content diff. `toString()` is the
-        // Curve-contract canonical form, so two parses of the same JSON
-        // file produce the same wire string — the diff stays stable
-        // across reloads even if the JSON factory internals change.
         const QString wireFormat = curve->toString();
 
         Payload payload{obj.value(QLatin1String("displayName")).toString(), std::move(curve), wireFormat};
@@ -174,96 +142,86 @@ public:
         return parsed;
     }
 
-    void commitBatch(const QStringList& removedKeys,
-                     const QList<PhosphorJsonLoader::ParsedEntry>& currentEntries) override
+protected:
+    /// Curve payloads are equal when their canonical wire-format
+    /// strings match. Comparing wire-formats (rather than the
+    /// `shared_ptr<const Curve>` target) means two reloads of the same
+    /// JSON file produce equal payloads — separately allocated curve
+    /// instances with identical parameters compare equal, which is the
+    /// behaviour the diff needs to suppress no-op re-registers.
+    bool payloadEqual(const Payload& a, const Payload& b) const override
+    {
+        return a.wireFormat == b.wireFormat;
+    }
+
+    void commitToRegistry(const QStringList& removedKeys, const QHash<QString, Payload>& currentMap,
+                          const QStringList& changedOrAddedKeys) override
     {
         if (!registry) {
-            qCWarning(lcCurveLoader) << "commitBatch: registry not set";
+            qCWarning(lcCurveLoader) << "commitToRegistry: registry not set";
             return;
         }
-
-        // Reset the per-batch "anything actually changed" flag. Any
-        // remove/add/content-change below flips it to true, which
-        // gates the consumer-facing `curvesChanged` signal.
-        lastBatchChanged = false;
 
         // Purge entries whose backing files are no longer on disk.
         // CurveRegistry::registerFactory is replace-semantic, so a
         // future registration can re-use the key — but the current
         // caller wants the key fully unregistered until then. We own
-        // each factory under `ownerTag`, so calling `unregisterFactory`
-        // here only evicts entries we ourselves registered.
-        //
-        // Gate `lastBatchChanged` on the actual snapshot delete: a
-        // removedKeys entry whose key never made it into our snapshot
-        // (parsed and rejected on a prior pass, then deleted from disk)
-        // produced no externally-visible registration, so deleting it
-        // doesn't change anything a consumer would see. Only count it as
-        // a batch-change if we genuinely lose tracked state.
+        // each factory under our `ownerTag`, so calling
+        // `unregisterFactory` here only evicts entries we ourselves
+        // registered.
         for (const QString& key : removedKeys) {
-            const bool hadEntry = entries.remove(key) > 0;
-            const bool hadWire = lastCommittedWireFormat.remove(key) > 0;
-            if (hadEntry || hadWire) {
-                registry->unregisterFactory(key);
-                lastBatchChanged = true;
-            }
+            registry->unregisterFactory(key);
         }
 
-        // Install the current set. Skip re-registering entries whose
-        // wire-format is byte-identical to the previous commit — the
-        // curve they'd produce is equivalent, and the extra mutex
-        // round-trip through CurveRegistry is pointless churn. Mirrors
-        // the shape of PhosphorProfileRegistry::reloadFromOwner, which
-        // has the same "only touch entries that actually changed"
-        // property.
-        for (const auto& p : currentEntries) {
-            const auto payload = std::any_cast<Payload>(&p.payload);
-            if (!payload) {
-                qCWarning(lcCurveLoader) << "commitBatch: payload type-mismatch for" << p.key;
-                continue;
+        // Re-register only the entries the BatchedSink flagged as
+        // changed-or-added. Skipping unchanged entries avoids a
+        // pointless mutex round-trip through CurveRegistry on every
+        // rescan (mirrors the shape of
+        // PhosphorProfileRegistry::reloadFromOwner's diff suppression).
+        for (const QString& key : changedOrAddedKeys) {
+            const auto it = currentMap.constFind(key);
+            if (it == currentMap.constEnd()) {
+                continue; // defensive: BatchedSink always pairs them
             }
-
-            const auto existingIt = lastCommittedWireFormat.constFind(p.key);
-            const bool unchanged = existingIt != lastCommittedWireFormat.constEnd()
-                && *existingIt == payload->wireFormat && entries.contains(p.key);
-            if (!unchanged) {
-                const auto curve = payload->curve;
-                // registerFactory returns true when it replaced an
-                // existing registration. That's expected on every
-                // content change — we log at debug only. A false
-                // return with a NEW key is also fine (fresh insert).
-                // The error case is registerFactory rejecting the
-                // input (empty typeId / null factory) — should never
-                // happen here since parseFile enforces a non-empty
-                // name and builds a non-null curve, but check
-                // defensively so future refactors can't silently lose
-                // registrations.
-                //
-                // Pass the owner tag so the dtor's
-                // `unregisterByOwner(ownerTag)` only evicts what we
-                // installed, preserving other loaders' and direct
-                // `registerFactory` callers' entries.
-                registry->registerFactory(
-                    p.key,
-                    [curve](const QString&, const QString&) {
-                        return curve;
-                    },
-                    ownerTag);
-                if (!registry->has(p.key)) {
-                    qCWarning(lcCurveLoader) << "commitBatch: registerFactory silently rejected" << p.key;
-                    continue;
-                }
-                lastCommittedWireFormat.insert(p.key, payload->wireFormat);
-                lastBatchChanged = true;
-            }
-
-            CurveLoader::Entry trackedEntry;
-            trackedEntry.name = p.key;
-            trackedEntry.displayName = payload->displayName;
-            trackedEntry.sourcePath = p.sourcePath;
-            trackedEntry.systemSourcePath = p.systemSourcePath;
-            entries.insert(p.key, std::move(trackedEntry));
+            const auto curve = it->curve;
+            // Trust parseFile's preconditions: `name` is non-empty
+            // (envelope-validator guard) and `curve` is non-null
+            // (tryCreateFromJson guard above). The previous post-
+            // register `has()` check was a race (concurrent
+            // `unregisterByOwner` on this loader's tag could erase the
+            // just-registered entry between the register and the
+            // has() lookup, producing a spurious warning + skipped
+            // wireFormat snapshot → forced re-registration on next
+            // rescan). Drop the check; the single source of truth is
+            // parseFile's preconditions. — Phase 1c fix preserved.
+            //
+            // Pass the owner tag so the dtor's
+            // `unregisterByOwner(ownerTag)` only evicts what we
+            // installed, preserving other loaders' and direct
+            // `registerFactory` callers' entries.
+            registry->registerFactory(
+                key,
+                [curve](const QString&, const QString&) {
+                    return curve;
+                },
+                ownerTag());
         }
+    }
+
+    void onTrackEntry(const QString& key, const Payload& payload, const QString& sourcePath,
+                      const QString& systemSourcePath) override
+    {
+        CurveLoader::Entry trackedEntry;
+        trackedEntry.name = key;
+        trackedEntry.displayName = payload.displayName;
+        trackedEntry.sourcePath = sourcePath;
+        trackedEntry.systemSourcePath = systemSourcePath;
+        entries.insert(key, std::move(trackedEntry));
+    }
+
+    void onUntrackEntry(const QString& key) override
+    {
+        entries.remove(key);
     }
 };
 
@@ -298,8 +256,8 @@ CurveLoader::~CurveLoader()
     // unregister loop would have evicted the other registrant's entry
     // silently. Each removal emits an info log line in CurveRegistry
     // so rollback is observable in traces.
-    if (m_sink && m_sink->registry && !m_sink->ownerTag.isEmpty()) {
-        m_sink->registry->unregisterByOwner(m_sink->ownerTag);
+    if (m_sink && m_sink->registry && !m_sink->ownerTag().isEmpty()) {
+        m_sink->registry->unregisterByOwner(m_sink->ownerTag());
     }
 }
 
@@ -353,7 +311,7 @@ int CurveLoader::registeredCount() const
 
 QString CurveLoader::ownerTag() const
 {
-    return m_sink ? m_sink->ownerTag : QString();
+    return m_sink ? m_sink->ownerTag() : QString();
 }
 
 QList<CurveLoader::Entry> CurveLoader::entries() const

@@ -806,6 +806,30 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 //
 // Hot path: settings-UI slider drag ~30 Hz. Per call: one read + one JSON
 // parse + one field-insert + one serialise + one store write. Acceptable.
+//
+// The shared merge primitive `patchProfileField` (declared in settings.h)
+// owns the read → guard → insert → write → emit-trio sequence so each
+// per-field setter is a one-liner over its type-specific pre-processing
+// (clamp for numerics, registry resolution for the curve string). The
+// helper is defined in this TU because it is consumed exclusively here;
+// keeping it private to settings.cpp keeps the .h surface compact.
+template<typename T>
+void Settings::patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
+                                 void (Settings::*fieldChangedSignal)())
+{
+    if (currentValue == newValue) {
+        // No-op guard — the setter contract requires that signals only
+        // fire when an observable changes. A slider drag at constant
+        // value wakes no observers.
+        return;
+    }
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(jsonFieldName), newValue);
+    writeProfileObject(*m_store, obj);
+    Q_EMIT(this->*fieldChangedSignal)();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
+}
 
 int Settings::animationDuration() const
 {
@@ -816,15 +840,8 @@ void Settings::setAnimationDuration(int duration)
 {
     const int clamped =
         qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
-    if (animationDuration() == clamped) {
-        return;
-    }
-    QJsonObject obj = readProfileObject(*m_store);
-    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration), clamped);
-    writeProfileObject(*m_store, obj);
-    Q_EMIT animationDurationChanged();
-    Q_EMIT animationProfileChanged();
-    Q_EMIT settingsChanged();
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldDuration, animationDuration(), clamped,
+                           &Settings::animationDurationChanged);
 }
 
 QString Settings::animationEasingCurve() const
@@ -845,6 +862,23 @@ QString Settings::animationEasingCurve() const
 
 void Settings::setAnimationEasingCurve(const QString& curve)
 {
+    // NOT routed through patchProfileField — the easing setter has a pre-
+    // resolution no-op-guard contract that the generic helper cannot
+    // express. Specifically: the original behaviour compares the raw
+    // CALLER string against the current stored string before resolution,
+    // so two consecutive `setAnimationEasingCurve("alias")` calls with
+    // the same alias short-circuit the second call regardless of
+    // canonicalisation. Routing through the helper would compare the
+    // post-resolution `toStore` against the current stored string — a
+    // strictly different no-op gate that would, in the alias-with-already-
+    // canonicalised-disk case, suppress signals the original would have
+    // fired. Preserving observable behaviour > sharing the merge code.
+    //
+    // The merge sequence (read → insert → write → emit-trio) IS
+    // duplicated relative to patchProfileField; that is intentional and
+    // documented here so a future "tidy this up" pass does not re-route
+    // through the helper without revisiting the no-op semantics first.
+
     // Compare against the raw-stored wire string (same shape the getter
     // returns) so no-op assignments short-circuit before any write.
     if (animationEasingCurve() == curve) {
@@ -888,15 +922,8 @@ void Settings::setAnimationMinDistance(int distance)
 {
     const int clamped =
         qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
-    if (animationMinDistance() == clamped) {
-        return;
-    }
-    QJsonObject obj = readProfileObject(*m_store);
-    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance), clamped);
-    writeProfileObject(*m_store, obj);
-    Q_EMIT animationMinDistanceChanged();
-    Q_EMIT animationProfileChanged();
-    Q_EMIT settingsChanged();
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldMinDistance, animationMinDistance(), clamped,
+                           &Settings::animationMinDistanceChanged);
 }
 
 int Settings::animationSequenceMode() const
@@ -908,15 +935,8 @@ void Settings::setAnimationSequenceMode(int mode)
 {
     const int clamped =
         qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
-    if (animationSequenceMode() == clamped) {
-        return;
-    }
-    QJsonObject obj = readProfileObject(*m_store);
-    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode), clamped);
-    writeProfileObject(*m_store, obj);
-    Q_EMIT animationSequenceModeChanged();
-    Q_EMIT animationProfileChanged();
-    Q_EMIT settingsChanged();
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldSequenceMode, animationSequenceMode(), clamped,
+                           &Settings::animationSequenceModeChanged);
 }
 
 int Settings::animationStaggerInterval() const
@@ -928,15 +948,8 @@ void Settings::setAnimationStaggerInterval(int ms)
 {
     const int clamped =
         qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
-    if (animationStaggerInterval() == clamped) {
-        return;
-    }
-    QJsonObject obj = readProfileObject(*m_store);
-    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval), clamped);
-    writeProfileObject(*m_store, obj);
-    Q_EMIT animationStaggerIntervalChanged();
-    Q_EMIT animationProfileChanged();
-    Q_EMIT settingsChanged();
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldStaggerInterval, animationStaggerInterval(), clamped,
+                           &Settings::animationStaggerIntervalChanged);
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────

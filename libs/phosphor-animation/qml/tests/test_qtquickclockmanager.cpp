@@ -152,6 +152,35 @@ private Q_SLOTS:
         QVERIFY(second);
         QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
     }
+
+    /// Regression guard for the eager-eviction-on-destroyed contract
+    /// (commit thread for `QtQuickClockManager`'s SingleShotConnection
+    /// + `releaseClockFor` lambda). When a QQuickWindow is destroyed,
+    /// the manager's `destroyed`-hook MUST fire synchronously on the
+    /// GUI thread and evict the map entry — otherwise:
+    ///   1. The entry leaks for the manager's lifetime (process-long).
+    ///   2. A subsequent `clockFor` for an address-reused QQuickWindow*
+    ///      would hand out a stale clock pointing at the dead window.
+    ///
+    /// The `destroyed` signal fires inside `~QObject` so we don't need
+    /// to spin the event loop — the eviction is direct-connection,
+    /// synchronous on the destroyer's thread (the GUI thread for any
+    /// QQuickWindow). Reading `entryCount()` immediately after the
+    /// `delete` (or `unique_ptr::reset()`) is the correct assertion.
+    void testWindowDestroyEvictsClock()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        IMotionClock* clock = QtQuickClockManager::instance().clockFor(window.get());
+        QVERIFY(clock);
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+
+        // Destroy the window — `~QObject` emits `destroyed`, which is
+        // wired to `releaseClockFor` via DirectConnection so the
+        // eviction runs synchronously on this stack frame.
+        window.reset();
+
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 0);
+    }
 };
 
 QTEST_MAIN(TestQtQuickClockManager)

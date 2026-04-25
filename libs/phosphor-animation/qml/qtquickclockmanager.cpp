@@ -185,12 +185,18 @@ IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)
         // the QPointer under the lock below; if it's null we evict
         // and return nullptr so the caller does not route animations
         // onto a dead clock.
+        // SingleShotConnection so a multi-fire is impossible by
+        // construction. The receiver is `window`, so Qt auto-
+        // disconnects on `~QObject` even without the SingleShot
+        // flag — the explicit single-shot semantic also stops a
+        // manual releaseClockFor (test teardown) from leaving a live
+        // connection that races against the dying window.
         auto connection = QObject::connect(
             window, &QObject::destroyed, window,
             [this, window](QObject*) {
                 releaseClockFor(window);
             },
-            Qt::DirectConnection);
+            Qt::ConnectionType(Qt::DirectConnection | Qt::SingleShotConnection));
 
         std::lock_guard<std::mutex> lock(m_mutex);
         if (auto it = m_entries.find(window); it != m_entries.end()) {
@@ -222,17 +228,32 @@ void QtQuickClockManager::releaseClockFor(QQuickWindow* window)
     if (!window) {
         return;
     }
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (auto it = m_entries.find(window); it != m_entries.end()) {
-        // Disconnect the destroyed hook before erasing — we may have
-        // been called FROM the destroyed signal (eager eviction) in
-        // which case the connection is already auto-disconnected by
-        // Qt, and the disconnect is a no-op. For the manual-release
-        // path (tests, explicit teardown), this prevents a stale
-        // lambda from firing later.
-        QObject::disconnect(it->second.destroyedConnection);
-        m_entries.erase(it);
+    // Two-phase teardown: move the unique_ptr<QtQuickClock> OUT of
+    // the map under the lock, then erase the map entry, then drop
+    // the lock and let the local unique_ptr destruct on scope exit.
+    // The `~QtQuickClock` call disconnects from `beforeRendering`,
+    // which takes Qt's per-QObject signal/slot lock — destructing
+    // the clock under `m_mutex` would invert the lock order from
+    // `clockFor`'s (Qt-lock then m_mutex) into (m_mutex then
+    // Qt-lock) and produce exactly the deadlock the rest of this
+    // class works to avoid.
+    std::unique_ptr<QtQuickClock> evictedClock;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (auto it = m_entries.find(window); it != m_entries.end()) {
+            // Disconnect the destroyed hook before erasing — we may
+            // have been called FROM the destroyed signal (eager
+            // eviction) in which case the connection is already
+            // auto-disconnected by Qt, and the disconnect is a
+            // no-op. For the manual-release path (tests, explicit
+            // teardown), this prevents a stale lambda from firing
+            // later.
+            QObject::disconnect(it->second.destroyedConnection);
+            evictedClock = std::move(it->second.clock);
+            m_entries.erase(it);
+        }
     }
+    // evictedClock destructs here, lock-free.
 }
 
 int QtQuickClockManager::entryCount() const

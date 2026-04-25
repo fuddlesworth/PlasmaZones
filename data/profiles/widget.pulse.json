@@ -1,0 +1,5 @@
+{
+  "name": "widget.pulse",
+  "duration": 1000,
+  "curve": "cubic-bezier:0.45,0.0,0.55,1.0"
+}

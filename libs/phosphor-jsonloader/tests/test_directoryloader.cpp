@@ -547,6 +547,180 @@ private Q_SLOTS:
         }
     }
 
+    /// Regression guard for the Phase-1g reverse-scan + first-wins fix.
+    /// A system directory that overflows the entry-count cap must NOT
+    /// drop the user dir's overrides. With forward-iteration the cap
+    /// would trip before the user dir was ever scanned, silently dropping
+    /// every user override. Reverse-iteration drops *system* overflow
+    /// first; user entries always survive. Also pin user-wins on
+    /// collision: a key that exists in BOTH dirs must resolve to the
+    /// user value, not the system value.
+    void testEntryCountCapPreservesUserWinsAcrossDirs()
+    {
+        constexpr int kTestCap = 5;
+
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid() && userDir.isValid());
+
+        // System dir holds (cap + 5) files. Names zero-padded so
+        // alphabetic ordering is deterministic on every platform.
+        const int systemTotal = kTestCap + 5;
+        for (int i = 0; i < systemTotal; ++i) {
+            writeJson(systemDir.filePath(QStringLiteral("sys-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                      QStringLiteral("sys-key-%1").arg(i, 3, 10, QLatin1Char('0')),
+                      QStringLiteral("from-system-%1").arg(i));
+        }
+        // One of the system files uses a key the user dir will collide
+        // with — pick a low-index name so it definitely isn't dropped
+        // by the cap on the system side. Index "001" sorts early.
+        writeJson(systemDir.filePath(QStringLiteral("sys-collide.json")), QStringLiteral("collide"),
+                  QStringLiteral("from-system"));
+
+        // User dir holds 3 files: two unique keys plus the colliding key.
+        writeJson(userDir.filePath(QStringLiteral("user-a.json")), QStringLiteral("user-only-a"),
+                  QStringLiteral("from-user-a"));
+        writeJson(userDir.filePath(QStringLiteral("user-b.json")), QStringLiteral("user-only-b"),
+                  QStringLiteral("from-user-b"));
+        writeJson(userDir.filePath(QStringLiteral("collide.json")), QStringLiteral("collide"),
+                  QStringLiteral("from-user"));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setMaxEntriesForTest(kTestCap);
+        // Caller order is system-first / user-last per the public
+        // contract; the loader iterates in reverse so user wins.
+        loader.loadFromDirectories({systemDir.path(), userDir.path()}, LiveReload::Off);
+
+        // Cap reached, but the THREE user files survived. They are the
+        // priority dir — production should iterate user-first (or use
+        // some equivalent ordering) so the cap drops system overflow
+        // rather than user overrides. The Phase-1g fix in the PR
+        // description claims this is the new behaviour; if this test
+        // fails, the fix did not land OR a regression undid it.
+        QVERIFY2(sink.registry.contains(QStringLiteral("user-only-a")),
+                 "user file 'user-only-a' was dropped — cap evicted user overrides");
+        QVERIFY2(sink.registry.contains(QStringLiteral("user-only-b")),
+                 "user file 'user-only-b' was dropped — cap evicted user overrides");
+
+        // Collision resolves to user content, not system.
+        QVERIFY(sink.registry.contains(QStringLiteral("collide")));
+        QCOMPARE(sink.registry.value(QStringLiteral("collide")), std::string("from-user"));
+
+        // Cap honoured at exactly kTestCap entries total (the 3 user
+        // files + 2 system files = 5).
+        QCOMPARE(loader.registeredCount(), kTestCap);
+    }
+
+    /// Regression guard for the shared-ancestor preservation on
+    /// promotion. Two missing-target sibling directories that climb to
+    /// the SAME ancestor must keep the parent watch alive while either
+    /// sibling still depends on it. Promoting one sibling to a direct
+    /// watch must not yank the parent watch out from under the other.
+    ///
+    /// Setup: both targets are under DIFFERENT immediate parents that
+    /// don't exist, so both climb to <tmp> as the only existing
+    /// ancestor. Materialising one's tree promotes JUST that one;
+    /// the other target's parent still doesn't exist so it still
+    /// climbs to <tmp> — the shared ancestor MUST survive the
+    /// promotion.
+    void testAttachWatcher_sharedAncestorPreservedAcrossPromotion()
+    {
+        const QString root = m_tmp->path();
+        // Distinct immediate-parent dirs so promoting one doesn't
+        // accidentally materialise the other's parent chain.
+        const QString targetA = root + QStringLiteral("/sibling-a/profiles");
+        const QString targetB = root + QStringLiteral("/sibling-b/themes");
+        QVERIFY(!QDir(targetA).exists());
+        QVERIFY(!QDir(targetB).exists());
+        QVERIFY(!QDir(root + QStringLiteral("/sibling-a")).exists());
+        QVERIFY(!QDir(root + QStringLiteral("/sibling-b")).exists());
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        loader.loadFromDirectories({targetA, targetB}, LiveReload::On);
+
+        // Both targets recorded the same ancestor (the tmp root,
+        // since neither sibling-* exists yet).
+        const QString ancestorA = loader.watchedAncestorForTest(targetA);
+        const QString ancestorB = loader.watchedAncestorForTest(targetB);
+        QVERIFY2(!ancestorA.isEmpty(), "target A has no recorded ancestor");
+        QVERIFY2(!ancestorB.isEmpty(), "target B has no recorded ancestor");
+        QCOMPARE(ancestorA, ancestorB);
+        QVERIFY(loader.hasParentWatchForTest(ancestorA));
+
+        // Materialise ONLY targetA's tree (sibling-a + sibling-a/profiles).
+        // sibling-b/ stays absent so targetB still depends on the
+        // common <tmp> ancestor.
+        QVERIFY(QDir(root).mkpath(QStringLiteral("sibling-a/profiles")));
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        loader.requestRescan();
+        QVERIFY(spy.wait(1000));
+
+        // targetA is now directly watched — its back-reference is gone.
+        QVERIFY2(loader.watchedAncestorForTest(targetA).isEmpty(),
+                 "back-reference for target A still present after promotion");
+
+        // targetB STILL has sibling-b/ missing → still climbs to the
+        // shared ancestor. The parent watch on the shared ancestor
+        // MUST survive targetA's promotion.
+        QVERIFY2(loader.hasParentWatchForTest(ancestorA),
+                 "shared ancestor was removed despite target B still depending on it");
+        QCOMPARE(loader.watchedAncestorForTest(targetB), ancestorA);
+    }
+
+    /// Regression guard for the m_watchedFiles re-arm on
+    /// atomic-rename save (most editors / QSaveFile). The watcher silently
+    /// drops the old inode after a rename-over; without an explicit
+    /// re-add on the new inode, the next file edit would never fire a
+    /// rescan and the consumer would see stale content.
+    void testAtomicRenameSaveDetected()
+    {
+        const QString target = m_tmp->filePath(QStringLiteral("doc.json"));
+        writeJson(target, QStringLiteral("doc"), QStringLiteral("v1"));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.setDebounceIntervalForTest(1);
+        loader.loadFromDirectory(m_tmp->path(), LiveReload::On);
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v1"));
+
+        // Editor-style atomic save: write to tmp, rename over target.
+        // The old inode is gone; the watcher (if it was watching by
+        // inode) loses the entry. The loader must re-arm the file watch
+        // on the new inode during the next rescan so subsequent edits
+        // fire entriesChanged.
+        const QString tmpPath = m_tmp->filePath(QStringLiteral("doc.json.tmp"));
+        writeJson(tmpPath, QStringLiteral("doc"), QStringLiteral("v2"));
+        QVERIFY2(QFile::remove(target), "could not remove pre-rename target");
+        QVERIFY2(QFile::rename(tmpPath, target), "atomic rename failed");
+
+        // Watcher on directory fires (mtime change), debounce expires,
+        // rescan picks up the new content. The directory-changed signal
+        // is the reliable trigger here — the per-file watch may have
+        // dropped silently.
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        QVERIFY(spy.wait(2000));
+
+        QCOMPARE(loader.registeredCount(), 1);
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v2"));
+
+        // Now do a SECOND edit — this exercises the re-armed file
+        // watch. If syncFileWatches did not re-add the new inode, this
+        // edit would still bounce off the now-dead watch and only fire
+        // via the directory-changed event (which would also work, so
+        // the assertion is on the post-condition: a single rescan must
+        // reflect the v3 content).
+        QVERIFY(QFile::remove(target));
+        writeJson(target, QStringLiteral("doc"), QStringLiteral("v3"));
+
+        QSignalSpy spy2(&loader, &DirectoryLoader::entriesChanged);
+        QVERIFY(spy2.wait(2000));
+        QCOMPARE(sink.registry.value(QStringLiteral("doc")), std::string("v3"));
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
 };
