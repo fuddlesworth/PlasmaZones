@@ -11,14 +11,20 @@
 
 #include <rhi/qrhi.h>
 
+#include <private/qquickitem_p.h>
+
 #include <QGuiApplication>
 #include <QImage>
+#include <QPainter>
+#include <QPainterPath>
+#include <QFont>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickRenderControl>
 #include <QQuickRenderTarget>
 #include <QQuickWindow>
+#include <private/qquickshadereffectsource_p.h>
 #include <QSGRendererInterface>
 #include <QStandardPaths>
 #include <QUrl>
@@ -29,6 +35,61 @@
 namespace PlasmaZones::ShaderRender {
 namespace {
 
+// Build the labels texture used at binding 1 (uZoneLabels).  Mirrors
+// the daemon's ZoneLabelTextureBuilder: zone number drawn at zone
+// centre, white fill with a dark stroke so glyphs are legible
+// regardless of the underlying shader colour.  Many shaders sample
+// uZoneLabels for halos / chromatic aberration / glyph fills — if
+// the binding is empty, those effects are silently absent.
+QImage buildLabelsImage(const QVector<Zone>& zones, const QSize& resolution)
+{
+    if (zones.isEmpty() || resolution.width() <= 0 || resolution.height() <= 0) {
+        QImage empty(1, 1, QImage::Format_RGBA8888);
+        empty.fill(Qt::transparent);
+        return empty;
+    }
+    QImage image(resolution, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    constexpr int kGridUnit = 8;
+    for (const auto& z : zones) {
+        const QRectF px(z.rect.x() * resolution.width(),
+                        z.rect.y() * resolution.height(),
+                        z.rect.width() * resolution.width(),
+                        z.rect.height() * resolution.height());
+        if (px.width() <= 0 || px.height() <= 0) continue;
+
+        const QString text = QString::number(z.zoneNumber);
+        const qreal fontPixelSize = qMax<qreal>(kGridUnit,
+            qMin(px.width(), px.height()) * 0.25);
+        QFont font;
+        font.setPixelSize(static_cast<int>(fontPixelSize));
+        font.setWeight(QFont::Bold);
+
+        QPainterPath path;
+        path.addText(0, 0, font, text);
+        const QRectF textBounds = path.boundingRect();
+        const QPointF center = px.center();
+        path.translate(center.x() - textBounds.center().x(),
+                       center.y() - textBounds.center().y());
+
+        const QPen outlinePen(QColor(0, 0, 0, 200), 2.0,
+                              Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        painter.setPen(outlinePen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(path);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255));
+        painter.drawPath(path);
+    }
+    painter.end();
+    return image.convertToFormat(QImage::Format_RGBA8888);
+}
+
 // ShaderEffect only loads the fragment shader from its shaderSource
 // URL.  Zone shaders ship a custom vertex shader too — the daemon's
 // ZoneShaderItem handles it inside updatePaintNode, but reusing
@@ -36,10 +97,13 @@ namespace {
 // subclass ShaderEffect with a minimal override that loads the
 // vertex shader onto the render node the first time it appears.
 //
-// Derived from QQuickItem via ShaderEffect; Q_OBJECT + a default
-// constructor make it QML-registerable so we can instantiate the
-// scene via a QQmlComponent rather than imperatively — matches the
-// scene-graph assembly the daemon's ZoneShaderItem uses.
+// In addition, the daemon's ZoneShaderNodeRhi binds a labels-texture
+// sampler at extra binding 1 (uZoneLabels).  Without that binding
+// every shader that samples uZoneLabels reads garbage on Vulkan —
+// and even on OpenGL the implementation defaults to 0, which makes
+// glow/chromatic-aberration/text effects silently absent.  We
+// reproduce the binding here using QRhi APIs against the base
+// ShaderNodeRhi created by ShaderEffect.
 class RenderEffect : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
@@ -64,6 +128,16 @@ public:
         update();
     }
 
+    /// Pre-rendered zone-numbers image bound to binding 1 as
+    /// uZoneLabels.  Owned by the item; the texture/sampler created
+    /// from it live as long as this RenderEffect.
+    void setLabelsImage(const QImage& image)
+    {
+        m_labelsImage = image.convertToFormat(QImage::Format_RGBA8888);
+        m_labelsDirty = true;
+        update();
+    }
+
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override
     {
@@ -83,16 +157,81 @@ protected:
             // setAppField0/1 inside its own override.  Mirror that.
             rhiNode->setAppField0(m_zoneCountTotal);
             rhiNode->setAppField1(m_zoneCountHighlighted);
+
+            // Bind/upload labels texture at extra binding 1 once
+            // the window's QRhi is reachable.  The daemon does this
+            // inside ZoneShaderNodeRhi::prepare() via setExtraBinding
+            // from a subclass; we drive it from here on the sync
+            // thread using the public API.
+            ensureLabelsBinding(rhiNode);
         }
         return node;
     }
 
 
 private:
+    void ensureLabelsBinding(PhosphorRendering::ShaderNodeRhi* rhiNode)
+    {
+        QQuickWindow* w = window();
+        if (!w) return;
+        QRhi* rhi = w->rhi();
+        if (!rhi) return;
+
+        const QSize target = m_labelsImage.size().isEmpty()
+            ? QSize(1, 1) : m_labelsImage.size();
+
+        if (!m_labelsTexture || m_labelsTexture->pixelSize() != target) {
+            m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, target));
+            if (!m_labelsTexture->create()) {
+                m_labelsTexture.reset();
+                return;
+            }
+            if (!m_labelsSampler) {
+                m_labelsSampler.reset(rhi->newSampler(
+                    QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                    QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+                if (!m_labelsSampler->create()) {
+                    m_labelsSampler.reset();
+                    return;
+                }
+            }
+            rhiNode->setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
+            m_labelsDirty = true;
+        }
+
+        if (m_labelsDirty) {
+            QImage src = m_labelsImage;
+            if (src.isNull() || src.size().isEmpty()) {
+                src = QImage(1, 1, QImage::Format_RGBA8888);
+                src.fill(Qt::transparent);
+            }
+            QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+            batch->uploadTexture(m_labelsTexture.get(), src);
+            // Defer commit to the node's command buffer at next prepare.
+            // Push via the render control's command buffer if available.
+            if (auto* cb = rhiNode->commandBuffer()) {
+                cb->resourceUpdate(batch);
+            } else {
+                // No command buffer yet — queue without a target;
+                // resource updates without a CB are released, so we
+                // wait for the next sync.  Re-flag dirty.
+                batch->release();
+                return;
+            }
+            m_labelsDirty = false;
+        }
+    }
+
+
     QString m_vertexShaderPath;
     bool m_vertexLoaded = false;
     int m_zoneCountTotal = 0;
     int m_zoneCountHighlighted = 0;
+
+    QImage m_labelsImage;
+    bool m_labelsDirty = false;
+    std::unique_ptr<QRhiTexture> m_labelsTexture;
+    std::unique_ptr<QRhiSampler> m_labelsSampler;
 };
 
 
@@ -282,19 +421,35 @@ int Renderer::render(const RenderOptions& opts)
     effect->setVisible(true);
     effect->setShaderIncludePaths(shaderIncludePaths());
 
+    // The QML wrapper enables layer.enabled on ZoneShaderItem so the
+    // shader renders to a private FBO.  Without this, the scene
+    // graph's batch renderer's pass-tracking state desyncs against
+    // the buffer passes the render node manages itself, and
+    // multipass shaders silently produce nothing.  Some single-pass
+    // shaders also rely on the FBO isolation (e.g. anything that
+    // expects a clean clear before the fragment runs).  Mirror the
+    // QML behaviour via QQuickItemPrivate.
+    {
+        auto* priv = QQuickItemPrivate::get(effect);
+        priv->layer()->setEnabled(true);
+        priv->layer()->setTextureMirroring(QQuickShaderEffectSource::NoMirroring);
+    }
+
 
     auto zoneExt = std::make_shared<PlasmaZones::ZoneUniformExtension>();
-    const auto runtimeZones = toRuntimeZones(opts.zones);
+    auto runtimeZones = toRuntimeZones(opts.zones);
     zoneExt->updateFromZones(runtimeZones);
     effect->setUniformExtension(zoneExt);
 
-    // Push zone counts into appField0/appField1, which is where
-    // common.glsl maps `zoneCount` / `highlightedCount`.  Zone-
-    // aware shaders gate their entire draw path on zoneCount > 0
-    // — without this, they early-return vec4(0) before drawing.
-    int highlightedCount = 0;
-    for (const auto& z : runtimeZones) if (z.isHighlighted) ++highlightedCount;
-    effect->setZoneCounts(runtimeZones.size(), highlightedCount);
+    // Initial zone counts.  highlightedCount and per-zone isHighlighted
+    // flags are updated inside the frame loop so the demo cycles the
+    // active zone — see the loop body for the cycling logic.
+    effect->setZoneCounts(runtimeZones.size(), 0);
+
+    // Pre-render the labels texture.  Many shaders sample
+    // uZoneLabels for halo/chroma/text effects — leaving binding 1
+    // empty makes those effects silently disappear.
+    effect->setLabelsImage(buildLabelsImage(opts.zones, size));
 
     seedShaderEffect(*effect, opts.metadata, size);
 
@@ -329,10 +484,14 @@ int Renderer::render(const RenderOptions& opts)
     }
 
 
-    // Transparent clear so the shader's alpha channel passes through
-    // in the output (most shaders render semi-transparent content
-    // on top of the zone fills).
-    window->setColor(Qt::transparent);
+    // Demo background: a subtle Plasma-Breeze-dark grey so the
+    // shaders' alpha channel reads as something other than the
+    // file viewer's checkerboard.  Most shaders render semi-
+    // transparent content; with a transparent clear the result
+    // looked black-on-black for non-vivid bands.  This colour was
+    // picked to be visibly NOT black without dominating the
+    // shader output.
+    window->setColor(QColor(QStringLiteral("#31363b")));
 
     // ── Frame loop ───────────────────────────────────────────────
     QVector<float> spectrum;
@@ -341,10 +500,47 @@ int Renderer::render(const RenderOptions& opts)
     const qreal frameInterval = 1.0 / opts.fps;
     qreal iTime = 0.0;
 
+    // Zone-highlight schedule:
+    //   slice 0:           every zone highlighted (the shader at
+    //                      full vivid intensity — this is the
+    //                      hero shot for static thumbnails)
+    //   slices 1..N:       highlight zone N-1 only (cycle)
+    //
+    // Splitting into N+1 equal slices means the all-highlighted
+    // intro and each individual zone get the same screen time —
+    // for a 15s 4-zone clip that's ~3s per slice.
+    const int numZones = runtimeZones.size();
+    const int slicesTotal = numZones + 1;
+    int lastSlice = -1;
+
     for (int i = 0; i < opts.frameCount; ++i) {
         effect->setIFrame(i);
         effect->setITime(iTime);
         effect->setITimeDelta(frameInterval);
+
+        if (numZones > 0) {
+            const int slice = std::min(
+                (i * slicesTotal) / std::max(opts.frameCount, 1),
+                slicesTotal - 1);
+            if (slice != lastSlice) {
+                int highlightedCount = 0;
+                if (slice == 0) {
+                    for (int z = 0; z < numZones; ++z) {
+                        runtimeZones[z].isHighlighted = true;
+                    }
+                    highlightedCount = numZones;
+                } else {
+                    const int activeZone = slice - 1;
+                    for (int z = 0; z < numZones; ++z) {
+                        runtimeZones[z].isHighlighted = (z == activeZone);
+                    }
+                    highlightedCount = 1;
+                }
+                zoneExt->updateFromZones(runtimeZones);
+                effect->setZoneCounts(numZones, highlightedCount);
+                lastSlice = slice;
+            }
+        }
 
         if (opts.audio) {
             opts.audio->fillFrame(i, opts.fps, spectrum);

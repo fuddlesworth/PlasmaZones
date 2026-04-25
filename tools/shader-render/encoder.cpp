@@ -81,10 +81,15 @@ public:
             QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
         };
         if (ext == QLatin1String("webm")) {
+            // CRF picked to keep grain at bay on the noisy/high-frequency
+            // shaders without bloating the simpler ones — VP9 with
+            // -b:v 0 makes CRF the sole quality target.  Tile/row
+            // multithreading speeds up encoding without affecting bits.
             args << QStringLiteral("-c:v") << QStringLiteral("libvpx-vp9")
-                 << QStringLiteral("-b:v") << QStringLiteral("600k")
-                 << QStringLiteral("-crf") << QStringLiteral("34")
-                 << QStringLiteral("-row-mt") << QStringLiteral("1");
+                 << QStringLiteral("-b:v") << QStringLiteral("0")
+                 << QStringLiteral("-crf") << QStringLiteral("28")
+                 << QStringLiteral("-row-mt") << QStringLiteral("1")
+                 << QStringLiteral("-deadline") << QStringLiteral("good");
         } else if (ext == QLatin1String("mp4")) {
             args << QStringLiteral("-c:v") << QStringLiteral("libx264")
                  << QStringLiteral("-crf") << QStringLiteral("23")

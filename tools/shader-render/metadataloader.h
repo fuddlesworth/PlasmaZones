@@ -47,15 +47,24 @@ struct ShaderMetadata
     QString bufferFilter = QStringLiteral("linear");
     QStringList bufferFilters;
 
-    // Default values seeded into the ShaderEffect:
-    //
-    //   customParams[0..7]  — vec4 array, x = float/int/bool slot value
-    //   customColors[0..15] — color array
-    //
-    // Slots are filled per the metadata "parameters" entries.  Anything
-    // unset stays at the ShaderEffect's "unset sentinel" (-1.0 vec4 /
-    // transparent black) so the shader can detect it.
-    std::array<QVector4D, 8> customParams = {};
+    // Default values seeded into the ShaderEffect.  Match
+    // ShaderEffect's internal init: customParams components are -1.0
+    // ("unset" sentinel) so the GLSL pattern
+    // `customParams[i].x >= 0.0 ? value : fallback` correctly takes
+    // the fallback path for slots the metadata doesn't define.
+    // Initializing to 0 (the std::array default) makes every unset
+    // parameter test as "set to zero" and silently overrides the
+    // shader's intended fallback.
+    std::array<QVector4D, 8> customParams = {{
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+    }};
     std::array<QColor, 16>   customColors = {};
 
     // For shaders that declare image-typed parameters; absolute paths.

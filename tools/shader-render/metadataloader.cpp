@@ -30,11 +30,27 @@ QString resolveRelative(const QString& metadataDir, const QString& maybeRelative
     return QDir(metadataDir).filePath(maybeRelative);
 }
 
+// PlasmaZones metadata uses a *flat* parameter slot index across all
+// 32 components (8 vec4 slots × 4 channels).  Map slot S to
+// customParams[S / 4].<x|y|z|w>:
+//   slot 0  → customParams[0].x   slot 1  → customParams[0].y
+//   slot 2  → customParams[0].z   slot 3  → customParams[0].w
+//   slot 4  → customParams[1].x   …       (etc up to slot 31)
+// Indexing the array directly with `slot` writes the wrong vec4 and
+// leaves the channel the shader actually reads at zero — that breaks
+// every multi-component shader (ring counts, rotation speeds, idle
+// animation, etc.) so they render in their dormant/empty state.
 void seedParam(std::array<QVector4D, 8>& slots, int slot, double x)
 {
-    if (slot < 0 || slot >= 8) return;
-    auto& v = slots[slot];
-    v.setX(static_cast<float>(x));
+    if (slot < 0 || slot >= 32) return;
+    const auto value = static_cast<float>(x);
+    auto& v = slots[slot / 4];
+    switch (slot % 4) {
+    case 0: v.setX(value); break;
+    case 1: v.setY(value); break;
+    case 2: v.setZ(value); break;
+    case 3: v.setW(value); break;
+    }
 }
 
 void seedColor(std::array<QColor, 16>& slots, int slot, const QColor& c)
