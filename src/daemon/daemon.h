@@ -18,6 +18,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorTiles/AlgorithmPreviewParams.h>
 
 namespace Phosphor::Screens {
 class PlasmaPanelSource;
@@ -558,6 +559,7 @@ private:
 
     QTimer m_settingsRetileTimer;
     QTimer m_writeBackSaveTimer;
+    PhosphorTiles::AlgorithmPreviewParams m_preRetilePreviewParams;
 
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not
     // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).

@@ -224,7 +224,10 @@ void PlacementEngineBase::deserializeBaseState(const QJsonObject& state)
 
 void PlacementEngineBase::setEngineSettings(QObject* settings)
 {
-    Q_ASSERT(settings);
+    if (Q_UNLIKELY(!settings)) {
+        qWarning("PlacementEngineBase::setEngineSettings called with nullptr");
+        return;
+    }
     m_engineSettings = settings;
 }
 

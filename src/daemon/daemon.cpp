@@ -20,6 +20,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
@@ -333,15 +334,8 @@ bool Daemon::init()
     m_settingsRetileTimer.setSingleShot(true);
     m_settingsRetileTimer.setInterval(100);
     connect(&m_settingsRetileTimer, &QTimer::timeout, this, [this]() {
-        // Capture old preview params before sync to detect tiling parameter changes
-        const auto prevPreviewParams =
-            m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
-
-        if (m_autotileEngine) {
-            m_autotileEngine->refreshConfigFromSettings();
-        }
-
-        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != prevPreviewParams && m_layoutAdaptor) {
+        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != m_preRetilePreviewParams
+            && m_layoutAdaptor) {
             m_layoutAdaptor->notifyLayoutListChanged();
         }
     });
@@ -357,6 +351,13 @@ bool Daemon::init()
         m_prevSnappingEnabled = snappingNow;
         m_prevAutotileEnabled = autotileNow;
 
+        // Sync config immediately so the engine never reads stale values.
+        // Only retile + preview notification are debounced (100ms timer).
+        m_preRetilePreviewParams =
+            m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
+        if (m_autotileEngine) {
+            m_autotileEngine->refreshConfigFromSettings();
+        }
         m_settingsRetileTimer.start();
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
@@ -525,24 +526,27 @@ bool Daemon::init()
 
     connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested, this,
             [this](const QVariantMap& values) {
+                namespace WBK = PhosphorTiles::WriteBackKeys;
                 if (!m_settings)
                     return;
                 const QSignalBlocker blocker(m_settings.get());
                 for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
                     const QString& key = it.key();
-                    if (key == QLatin1String("defaultAutotileAlgorithm"))
+                    if (key == WBK::DefaultAutotileAlgorithm)
                         m_settings->setDefaultAutotileAlgorithm(it.value().toString());
-                    else if (key == QLatin1String("autotileSplitRatio"))
+                    else if (key == WBK::AutotileSplitRatio)
                         m_settings->setAutotileSplitRatio(it.value().toDouble());
-                    else if (key == QLatin1String("autotileMasterCount"))
+                    else if (key == WBK::AutotileMasterCount)
                         m_settings->setAutotileMasterCount(it.value().toInt());
-                    else if (key == QLatin1String("autotileMaxWindows"))
+                    else if (key == WBK::AutotileMaxWindows)
                         m_settings->setAutotileMaxWindows(it.value().toInt());
-                    else if (key == QLatin1String("autotilePerAlgorithmSettings"))
+                    else if (key == WBK::AutotilePerAlgorithmSettings)
                         m_settings->setAutotilePerAlgorithmSettings(it.value().toMap());
-                    else if (key == QLatin1String("clearPerScreenAutotileSettings"))
-                        m_settings->clearPerScreenAutotileSettings(it.value().toString());
-                    else
+                    else if (key == WBK::ClearPerScreenAutotileSettings) {
+                        const QStringList orphans = it.value().toStringList();
+                        for (const QString& orphanId : orphans)
+                            m_settings->clearPerScreenAutotileSettings(orphanId);
+                    } else
                         qCWarning(lcDaemon) << "settingsWriteBack: unknown key" << key;
                 }
                 m_writeBackSaveTimer.start();

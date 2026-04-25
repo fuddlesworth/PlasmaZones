@@ -480,6 +480,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     PhosphorEngineApi::IAutotileSettings* autotileSettings() const;
+    QVariantMap buildTuningWriteBack() const;
     void refreshConfigFromSettings() override;
 
     // Per-screen config — forwarded to PerScreenConfigResolver (IPlacementEngine overrides)
@@ -1284,7 +1285,7 @@ private:
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;
-    bool m_writeBackPending = false;
+    QTimer m_writeBackGuardTimer;
 
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;

@@ -641,35 +641,35 @@ public:
     // Autotiling — PhosphorConfig::Store-backed.
     bool autotileEnabled() const;
     void setAutotileEnabled(bool enabled);
-    QString defaultAutotileAlgorithm() const;
+    QString defaultAutotileAlgorithm() const override;
     void setDefaultAutotileAlgorithm(const QString& algorithm);
-    qreal autotileSplitRatio() const;
+    qreal autotileSplitRatio() const override;
     void setAutotileSplitRatio(qreal ratio);
-    qreal autotileSplitRatioStep() const;
+    qreal autotileSplitRatioStep() const override;
     void setAutotileSplitRatioStep(qreal step);
-    int autotileMasterCount() const;
+    int autotileMasterCount() const override;
     void setAutotileMasterCount(int count);
-    QVariantMap autotilePerAlgorithmSettings() const;
+    QVariantMap autotilePerAlgorithmSettings() const override;
     void setAutotilePerAlgorithmSettings(const QVariantMap& settings);
-    int autotileInnerGap() const;
+    int autotileInnerGap() const override;
     void setAutotileInnerGap(int gap);
-    int autotileOuterGap() const;
+    int autotileOuterGap() const override;
     void setAutotileOuterGap(int gap);
-    bool autotileUsePerSideOuterGap() const;
+    bool autotileUsePerSideOuterGap() const override;
     void setAutotileUsePerSideOuterGap(bool enabled);
-    int autotileOuterGapTop() const;
+    int autotileOuterGapTop() const override;
     void setAutotileOuterGapTop(int gap);
-    int autotileOuterGapBottom() const;
+    int autotileOuterGapBottom() const override;
     void setAutotileOuterGapBottom(int gap);
-    int autotileOuterGapLeft() const;
+    int autotileOuterGapLeft() const override;
     void setAutotileOuterGapLeft(int gap);
-    int autotileOuterGapRight() const;
+    int autotileOuterGapRight() const override;
     void setAutotileOuterGapRight(int gap);
-    bool autotileFocusNewWindows() const;
+    bool autotileFocusNewWindows() const override;
     void setAutotileFocusNewWindows(bool focus);
-    bool autotileSmartGaps() const;
+    bool autotileSmartGaps() const override;
     void setAutotileSmartGaps(bool smart);
-    int autotileMaxWindows() const;
+    int autotileMaxWindows() const override;
     void setAutotileMaxWindows(int count);
 
     enum class AutotileInsertPosition {
@@ -679,7 +679,7 @@ public:
     };
     AutotileInsertPosition autotileInsertPosition() const;
     void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const;
+    int autotileInsertPositionInt() const override;
     void setAutotileInsertPositionInt(int position);
 
     QVariantList autotileDragInsertTriggers() const override;
@@ -723,7 +723,7 @@ public:
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
-    bool autotileRespectMinimumSize() const;
+    bool autotileRespectMinimumSize() const override;
     void setAutotileRespectMinimumSize(bool respect);
     bool autotileHideTitleBars() const override;
     void setAutotileHideTitleBars(bool hide) override;
@@ -741,7 +741,7 @@ public:
     void setAutotileUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
-    int autotileStickyWindowHandlingInt() const;
+    int autotileStickyWindowHandlingInt() const override;
     void setAutotileStickyWindowHandlingInt(int handling);
     AutotileDragBehavior autotileDragBehavior() const override;
     void setAutotileDragBehavior(AutotileDragBehavior behavior) override;
@@ -749,7 +749,7 @@ public:
     void setAutotileDragBehaviorInt(int behavior);
     AutotileOverflowBehavior autotileOverflowBehavior() const override;
     void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) override;
-    int autotileOverflowBehaviorInt() const;
+    int autotileOverflowBehaviorInt() const override;
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;

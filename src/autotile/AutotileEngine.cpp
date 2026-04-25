@@ -77,6 +77,13 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     // sub-controllers) — every method that dereferences a dependency guards
     // it locally. Do not Q_ASSERT here.
 
+    // Guard timer: while active, refreshConfigFromSettings() skips overwriting
+    // splitRatio/masterCount with Settings values. Mirrors the old SettingsBridge
+    // m_shortcutSaveTimer — restarts on each write-back so rapid shortcut presses
+    // keep the guard alive until the burst settles.
+    m_writeBackGuardTimer.setSingleShot(true);
+    m_writeBackGuardTimer.setInterval(500);
+
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Fires on the next event loop
     // pass after both m_currentDesktop and m_currentActivity are updated.
@@ -211,83 +218,82 @@ void AutotileEngine::connectSignals()
 
         // Virtual screen reconfiguration — retile new virtual screens and
         // clean up orphaned PhosphorTiles::TilingState entries for virtual screens that no longer exist.
-        connect(m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
-                [this](const QString& physicalScreenId) {
-                    const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
-                    const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
+        connect(
+            m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+            [this](const QString& physicalScreenId) {
+                const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+                const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
 
-                    // Find and release orphaned virtual screen states for this physical screen
-                    QStringList releasedWindows;
-                    QSet<QString> orphanedVsIds;
-                    QMutableHashIterator<TilingStateKey, PhosphorTiles::TilingState*> it(m_screenStates);
-                    while (it.hasNext()) {
-                        it.next();
-                        const QString& sid = it.key().screenId;
-                        if (!PhosphorIdentity::VirtualScreenId::isVirtual(sid)) {
-                            continue;
-                        }
-                        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
-                            continue;
-                        }
-                        if (newVsSet.contains(sid)) {
-                            continue;
-                        }
-                        // This virtual screen no longer exists — release its windows.
-                        // Save user-floated windows (excluding overflow) so they stay
-                        // floating if autotile is re-enabled on a new VS config — mirrors
-                        // the preservation logic in setAutotileScreens.
-                        orphanedVsIds.insert(sid);
-                        QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
-                        const QStringList floated = it.value()->floatingWindows();
-                        for (const QString& fid : floated) {
-                            if (!screenOverflow.contains(fid)) {
-                                m_savedFloatingWindows[it.key()].insert(fid);
-                            }
-                        }
-                        releasedWindows.append(it.value()->tiledWindows());
-                        releasedWindows.append(floated);
-                        m_pendingInitialOrders.remove(sid);
-                        m_pendingOrderGeneration.remove(sid);
-                        it.value()->deleteLater();
-                        it.remove();
+                // Find and release orphaned virtual screen states for this physical screen
+                QStringList releasedWindows;
+                QSet<QString> orphanedVsIds;
+                QMutableHashIterator<TilingStateKey, PhosphorTiles::TilingState*> it(m_screenStates);
+                while (it.hasNext()) {
+                    it.next();
+                    const QString& sid = it.key().screenId;
+                    if (!PhosphorIdentity::VirtualScreenId::isVirtual(sid)) {
+                        continue;
                     }
-                    for (const QString& windowId : std::as_const(releasedWindows)) {
-                        m_windowToStateKey.remove(windowId);
+                    if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
+                        continue;
                     }
-                    if (!releasedWindows.isEmpty()) {
-                        Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
+                    if (newVsSet.contains(sid)) {
+                        continue;
                     }
+                    // This virtual screen no longer exists — release its windows.
+                    // Save user-floated windows (excluding overflow) so they stay
+                    // floating if autotile is re-enabled on a new VS config — mirrors
+                    // the preservation logic in setAutotileScreens.
+                    orphanedVsIds.insert(sid);
+                    QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
+                    const QStringList floated = it.value()->floatingWindows();
+                    for (const QString& fid : floated) {
+                        if (!screenOverflow.contains(fid)) {
+                            m_savedFloatingWindows[it.key()].insert(fid);
+                        }
+                    }
+                    releasedWindows.append(it.value()->tiledWindows());
+                    releasedWindows.append(floated);
+                    m_pendingInitialOrders.remove(sid);
+                    m_pendingOrderGeneration.remove(sid);
+                    it.value()->deleteLater();
+                    it.remove();
+                }
+                for (const QString& windowId : std::as_const(releasedWindows)) {
+                    m_windowToStateKey.remove(windowId);
+                }
+                if (!releasedWindows.isEmpty()) {
+                    Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
+                }
 
-                    // Clean up per-screen autotile settings for removed virtual screens.
-                    // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
-                    // as virtual screen IDs are never reused after reconfiguration.
-                    if (!orphanedVsIds.isEmpty()) {
-                        for (const QString& orphanId : std::as_const(orphanedVsIds)) {
-                            QVariantMap wb;
-                            wb[QStringLiteral("clearPerScreenAutotileSettings")] = orphanId;
-                            Q_EMIT settingsWriteBackRequested(wb);
-                        }
-                    }
+                // Clean up per-screen autotile settings for removed virtual screens.
+                // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
+                // as virtual screen IDs are never reused after reconfiguration.
+                if (!orphanedVsIds.isEmpty()) {
+                    QVariantMap wb;
+                    QStringList orphanList(orphanedVsIds.constBegin(), orphanedVsIds.constEnd());
+                    wb[PhosphorTiles::WriteBackKeys::ClearPerScreenAutotileSettings] = QVariant::fromValue(orphanList);
+                    Q_EMIT settingsWriteBackRequested(wb);
+                }
 
-                    // Clean up desktop overrides for removed virtual screens on this physical screen.
-                    // Use newVsSet (freshly-computed from Phosphor::Screens::ScreenManager) rather than
-                    // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
-                    auto overrideIt = m_screenDesktopOverride.begin();
-                    while (overrideIt != m_screenDesktopOverride.end()) {
-                        if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
-                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key())
-                                == physicalScreenId
-                            && !newVsSet.contains(overrideIt.key()))
-                            overrideIt = m_screenDesktopOverride.erase(overrideIt);
-                        else
-                            ++overrideIt;
-                    }
+                // Clean up desktop overrides for removed virtual screens on this physical screen.
+                // Use newVsSet (freshly-computed from Phosphor::Screens::ScreenManager) rather than
+                // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
+                auto overrideIt = m_screenDesktopOverride.begin();
+                while (overrideIt != m_screenDesktopOverride.end()) {
+                    if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
+                        && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key()) == physicalScreenId
+                        && !newVsSet.contains(overrideIt.key()))
+                        overrideIt = m_screenDesktopOverride.erase(overrideIt);
+                    else
+                        ++overrideIt;
+                }
 
-                    // Retile the new virtual screens
-                    for (const QString& vsId : newVsIds) {
-                        onScreenGeometryChanged(vsId);
-                    }
-                });
+                // Retile the new virtual screens
+                for (const QString& vsId : newVsIds) {
+                    onScreenGeometryChanged(vsId);
+                }
+            });
 
         // Regions-only changes (VS swap/rotate/boundary resize) — skip the
         // orphan cleanup (no VSs removed/added) and just retile each VS with
@@ -771,15 +777,11 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // prevents recursive corruption (daemon settingsChanged → syncFromSettings →
     // setAlgorithm with stale KCM algo).
     {
-        m_writeBackPending = true;
-        QVariantMap wb;
-        wb[QStringLiteral("defaultAutotileAlgorithm")] = newId;
-        wb[QStringLiteral("autotileSplitRatio")] = m_config->splitRatio;
-        wb[QStringLiteral("autotileMasterCount")] = m_config->masterCount;
-        wb[QStringLiteral("autotilePerAlgorithmSettings")] =
-            AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
+        m_writeBackGuardTimer.start();
+        QVariantMap wb = buildTuningWriteBack();
+        wb[PhosphorTiles::WriteBackKeys::DefaultAutotileAlgorithm] = newId;
         if (m_config->maxWindows != oldMaxWindows) {
-            wb[QStringLiteral("autotileMaxWindows")] = m_config->maxWindows;
+            wb[PhosphorTiles::WriteBackKeys::AutotileMaxWindows] = m_config->maxWindows;
         }
         Q_EMIT settingsWriteBackRequested(wb);
     }
@@ -1090,6 +1092,16 @@ PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
     return qobject_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
 }
 
+QVariantMap AutotileEngine::buildTuningWriteBack() const
+{
+    QVariantMap wb;
+    wb[PhosphorTiles::WriteBackKeys::AutotileSplitRatio] = m_config->splitRatio;
+    wb[PhosphorTiles::WriteBackKeys::AutotileMasterCount] = m_config->masterCount;
+    wb[PhosphorTiles::WriteBackKeys::AutotilePerAlgorithmSettings] =
+        AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
+    return wb;
+}
+
 void AutotileEngine::refreshConfigFromSettings()
 {
     auto* s = autotileSettings();
@@ -1110,7 +1122,7 @@ void AutotileEngine::refreshConfigFromSettings()
         }                                                                                                              \
     } while (0)
 
-    if (!m_writeBackPending) {
+    if (!m_writeBackGuardTimer.isActive()) {
         SYNC_FIELD(masterCount, autotileMasterCount);
     }
     SYNC_FIELD(innerGap, autotileInnerGap);
@@ -1126,7 +1138,7 @@ void AutotileEngine::refreshConfigFromSettings()
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
     SYNC_FIELD(maxWindows, autotileMaxWindows);
 
-    if (!m_writeBackPending) {
+    if (!m_writeBackGuardTimer.isActive()) {
         const qreal newRatio = s->autotileSplitRatio();
         if (!qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + newRatio)) {
             m_config->splitRatio = newRatio;
@@ -1141,7 +1153,7 @@ void AutotileEngine::refreshConfigFromSettings()
     }
 
     {
-        auto newInsert = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPositionInt());
+        const auto newInsert = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPositionInt());
         if (m_config->insertPosition != newInsert) {
             m_config->insertPosition = newInsert;
             configChanged = true;
@@ -1149,7 +1161,7 @@ void AutotileEngine::refreshConfigFromSettings()
     }
 
     {
-        auto newOverflow = static_cast<AutotileOverflowBehavior>(s->autotileOverflowBehaviorInt());
+        const auto newOverflow = static_cast<AutotileOverflowBehavior>(s->autotileOverflowBehaviorInt());
         if (m_config->overflowBehavior != newOverflow) {
             m_config->overflowBehavior = newOverflow;
             configChanged = true;
@@ -1219,8 +1231,6 @@ void AutotileEngine::refreshConfigFromSettings()
         m_pendingRetileScreens.clear();
         retile();
     }
-
-    m_writeBackPending = false;
 
     qCInfo(lcAutotile) << "Settings: synced, algorithm=" << m_algorithmId
                        << "autotileScreens=" << m_autotileScreens.size();
@@ -1718,15 +1728,10 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
         entry.masterCount = m_config->masterCount;
     }
 
-    // Write to Settings (signal-blocked) so syncFromSettings() won't revert
+    // Write to Settings (signal-blocked) so refreshConfigFromSettings() won't revert
     {
-        m_writeBackPending = true;
-        QVariantMap wb;
-        wb[QStringLiteral("autotileSplitRatio")] = m_config->splitRatio;
-        wb[QStringLiteral("autotileMasterCount")] = m_config->masterCount;
-        wb[QStringLiteral("autotilePerAlgorithmSettings")] =
-            AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
-        Q_EMIT settingsWriteBackRequested(wb);
+        m_writeBackGuardTimer.start();
+        Q_EMIT settingsWriteBackRequested(buildTuningWriteBack());
     }
 }
 
@@ -3167,12 +3172,12 @@ bool AutotileEngine::shouldTileWindow(const QString& rawWindowId) const
     // RestoreOnly: sticky windows are not auto-managed (autotiling is active management).
     // TreatAsNormal: sticky windows are tiled like any other window.
     if (m_windowTracker && m_windowTracker->isWindowSticky(windowId)) {
-        auto* settings = autotileSettings();
-        if (settings) {
-            auto handling = settings->autotileStickyWindowHandlingInt();
-            if (handling == static_cast<int>(StickyWindowHandling::IgnoreAll)
-                || handling == static_cast<int>(StickyWindowHandling::RestoreOnly)) {
-                qCDebug(lcAutotile) << "Window" << windowId << "is sticky, handling=" << handling << ", skipping tile";
+        auto* s = autotileSettings();
+        if (s) {
+            const auto handling = static_cast<StickyWindowHandling>(s->autotileStickyWindowHandlingInt());
+            if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
+                qCDebug(lcAutotile) << "Window" << windowId << "is sticky, handling=" << static_cast<int>(handling)
+                                    << ", skipping tile";
                 return false;
             }
         }
