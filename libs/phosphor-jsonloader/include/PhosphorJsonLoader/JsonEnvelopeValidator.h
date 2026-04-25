@@ -68,6 +68,20 @@ struct JsonEnvelope
  */
 inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath, const QLoggingCategory& category)
 {
+    // 1 MiB is generous for any realistic Phosphor JSON envelope (curve
+    // packs, profile packs). A larger file is either a typo-pointed
+    // symlink at a multi-MB asset or a hand-crafted DoS — `readAll()`
+    // would otherwise pull the whole thing into memory before the JSON
+    // parser had a chance to reject it.
+    constexpr qint64 kMaxFileSize = 1 * 1024 * 1024;
+
+    QFileInfo info(filePath);
+    if (info.exists() && info.size() > kMaxFileSize) {
+        qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << info.size() << " exceeds limit "
+                                      << kMaxFileSize;
+        return std::nullopt;
+    }
+
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(category) << "Skipping unreadable file" << filePath << ":" << file.errorString();

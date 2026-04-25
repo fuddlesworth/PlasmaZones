@@ -8,7 +8,10 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QString>
+#include <QtCore/QtGlobal>
 #include <QtQml/qqmlregistration.h>
+
+#include <cmath>
 
 namespace PhosphorAnimation {
 
@@ -69,17 +72,24 @@ public:
     {
     }
 
-    /// Access the underlying value-type for core-library consumers.
+    /// Read-only access to the underlying value. The non-const overload
+    /// was deliberately removed: a mutable handle from QML let scripts
+    /// bypass the setter clamps below by writing directly into the
+    /// underlying `Easing` fields. Core-library mutators construct a
+    /// fresh `Easing` and assign through the implicit-conversion ctor.
     const Easing& value() const
-    {
-        return m_value;
-    }
-    Easing& value()
     {
         return m_value;
     }
 
     // ─── Property delegates ───
+    //
+    // Setters mirror the bounds enforced by `Easing::fromString`'s
+    // qBound clamps: x ∈ [0, 1], y ∈ [-1, 2], amplitude ∈ [0.5, 3],
+    // period ∈ [0.1, 1], bounces ∈ [1, 8]. NaN/inf are silently
+    // dropped (the previous value is preserved). Direct field writes
+    // would otherwise let a settings UI sneak pathological values past
+    // the parse-path clamp.
 
     Type type() const
     {
@@ -96,7 +106,10 @@ public:
     }
     void setX1(qreal v)
     {
-        m_value.x1 = v;
+        if (!std::isfinite(v)) {
+            return;
+        }
+        m_value.x1 = qBound(0.0, v, 1.0);
     }
     qreal y1() const
     {
@@ -104,7 +117,10 @@ public:
     }
     void setY1(qreal v)
     {
-        m_value.y1 = v;
+        if (!std::isfinite(v)) {
+            return;
+        }
+        m_value.y1 = qBound(-1.0, v, 2.0);
     }
     qreal x2() const
     {
@@ -112,7 +128,10 @@ public:
     }
     void setX2(qreal v)
     {
-        m_value.x2 = v;
+        if (!std::isfinite(v)) {
+            return;
+        }
+        m_value.x2 = qBound(0.0, v, 1.0);
     }
     qreal y2() const
     {
@@ -120,7 +139,10 @@ public:
     }
     void setY2(qreal v)
     {
-        m_value.y2 = v;
+        if (!std::isfinite(v)) {
+            return;
+        }
+        m_value.y2 = qBound(-1.0, v, 2.0);
     }
 
     qreal amplitude() const
@@ -129,7 +151,10 @@ public:
     }
     void setAmplitude(qreal v)
     {
-        m_value.amplitude = v;
+        if (!std::isfinite(v)) {
+            return;
+        }
+        m_value.amplitude = qBound(0.5, v, 3.0);
     }
     qreal period() const
     {
@@ -137,7 +162,10 @@ public:
     }
     void setPeriod(qreal v)
     {
-        m_value.period = v;
+        if (!std::isfinite(v)) {
+            return;
+        }
+        m_value.period = qBound(0.1, v, 1.0);
     }
     int bounces() const
     {
@@ -145,7 +173,7 @@ public:
     }
     void setBounces(int v)
     {
-        m_value.bounces = v;
+        m_value.bounces = qBound(1, v, 8);
     }
 
     // ─── Serialization ───

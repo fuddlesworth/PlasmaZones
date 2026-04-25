@@ -218,6 +218,15 @@ static const auto kSettingsDrivenProfilePaths = std::array{
     &PhosphorAnimation::ProfilePaths::Global,
 };
 
+/// Owner tag used to partition every profile registered by the daemon's
+/// ProfileLoader (user-authored JSON files under
+/// `~/.local/share/plasmazones/profiles/`). Lives in the registry's
+/// partitioned-ownership map so a `clearOwner` call on this tag wipes
+/// only the user-JSON partition without touching settings-driven entries
+/// (which are owned by the empty/direct tag) or any other consumer's
+/// registrations.
+static constexpr QLatin1StringView kPlasmaZonesUserProfilesOwnerTag{"plasmazones-user-profiles"};
+
 void Daemon::setupAnimationProfiles()
 {
     using namespace PhosphorAnimation;
@@ -238,7 +247,7 @@ void Daemon::setupAnimationProfiles()
     // in production today but the narrower scope is the correct
     // contract for a shared registry.
     auto& registry = PhosphorProfileRegistry::instance();
-    registry.clearOwner(QStringLiteral("plasmazones-user-profiles"));
+    registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
     for (const QString* path : kSettingsDrivenProfilePaths) {
         registry.unregisterProfile(*path);
     }
@@ -291,14 +300,14 @@ void Daemon::setupAnimationProfiles()
     //
     // ProfileLoader is bound to PhosphorProfileRegistry with a
     // PlasmaZones-specific owner tag. Entries it registers are tagged
-    // "plasmazones-user-profiles" in the registry's partitioned-ownership
+    // `kPlasmaZonesUserProfilesOwnerTag` in the registry's partitioned-ownership
     // map, so a rescan replaces ONLY the user's JSON-backed profiles;
     // the daemon's settings-fanned profiles registered below via
     // `publishActiveAnimationProfile` are owned by the empty/direct
     // tag and survive untouched.
     m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
     m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(), m_curveRegistry,
-                                                      QStringLiteral("plasmazones-user-profiles"), nullptr);
+                                                      kPlasmaZonesUserProfilesOwnerTag, nullptr);
 
     // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
     // whose `curve` spec references a user-authored curve name that
@@ -337,14 +346,29 @@ void Daemon::setupAnimationProfiles()
     //     above), NOT to the settings-fanout path — the Global slider's
     //     curve reference would silently go stale until the next
     //     Settings edit.
-    connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
+    // All three signals route through `requestAnimationProfilePublish`
+    // — a coalescing trampoline that collapses every fan-in within the
+    // same event-loop tick into exactly one `publishActiveAnimationProfile`
+    // call. The settings-slider drag on its own fires the aggregate at
+    // ~30 Hz, and a curve-pack edit can fire `curvesChanged` then
+    // `profilesChanged` (via the `curveLoader → profileLoader` rescan
+    // wire) within the same tick — without coalescing, the publish
+    // path's Settings parse + curve resolve runs three times per tick
+    // for one user action.
+    m_animationPublishTimer.setSingleShot(true);
+    m_animationPublishTimer.setInterval(0);
+    connect(&m_animationPublishTimer, &QTimer::timeout, this, [this]() {
+        m_animationPublishPending = false;
         publishActiveAnimationProfile();
+    });
+    connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
+        requestAnimationProfilePublish();
     });
     connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
-        publishActiveAnimationProfile();
+        requestAnimationProfilePublish();
     });
     connect(m_curveLoader.get(), &CurveLoader::curvesChanged, this, [this]() {
-        publishActiveAnimationProfile();
+        requestAnimationProfilePublish();
     });
 
     // Wire the daemon-owned CurveRegistry into the QML static helper so
@@ -377,6 +401,17 @@ void Daemon::setupAnimationProfiles()
     // Partitioned-ownership in the registry ensures the loader's
     // user-files entries are not wiped by this direct-owner publish.
     publishActiveAnimationProfile();
+}
+
+void Daemon::requestAnimationProfilePublish()
+{
+    // Idempotent — if the trampoline is already pending, additional
+    // signals in the same tick are absorbed for free.
+    if (m_animationPublishPending) {
+        return;
+    }
+    m_animationPublishPending = true;
+    m_animationPublishTimer.start();
 }
 
 void Daemon::publishActiveAnimationProfile()
@@ -1087,16 +1122,38 @@ void Daemon::stop()
     //     `publishActiveAnimationProfile` under the direct-owner tag.
     //     Unregister each path here.
     //   - Loader-owned user-JSON entries (tagged
-    //     "plasmazones-user-profiles"): the `ProfileLoader` destructor
-    //     issues its own `clearOwner(ownerTag)` when m_profileLoader's
-    //     unique_ptr resets during member destruction, so no explicit
-    //     clearOwner call is needed here.
+    //     `kPlasmaZonesUserProfilesOwnerTag`): we explicitly reset
+    //     `m_profileLoader` and `m_curveLoader` here so the loader
+    //     destructors run NOW (issuing their own `clearOwner(ownerTag)`
+    //     and tearing down the QFileSystemWatchers) rather than at
+    //     `~Daemon` body where they'd fire path-change signals into a
+    //     half-destroyed object during member destruction order.
     {
         auto& profileRegistry = PhosphorAnimation::PhosphorProfileRegistry::instance();
         for (const QString* path : kSettingsDrivenProfilePaths) {
             profileRegistry.unregisterProfile(*path);
         }
     }
+
+    // Stop the publish coalescing trampoline before resetting the
+    // loaders — the timer is a member QTimer, so its `timeout` slot
+    // would otherwise still fire on the next event-loop tick after
+    // m_settings (its data source) has been destroyed.
+    m_animationPublishTimer.stop();
+    m_animationPublishPending = false;
+
+    // Reset the loaders explicitly so the QFileSystemWatcher inside
+    // each is torn down NOW, before any other shutdown step has a
+    // chance to spin the event loop. Without this, the unique_ptrs
+    // would only destruct at the end of the ~Daemon body, leaving a
+    // window where stale path-change signals could fire into a
+    // half-destroyed object — visible in tests that re-construct the
+    // daemon, and theoretically observable in production on a
+    // configure-reload cycle. ProfileLoader's destructor issues its
+    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
+    // process-global PhosphorProfileRegistry shed those entries here.
+    m_profileLoader.reset();
+    m_curveLoader.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();

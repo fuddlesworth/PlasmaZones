@@ -1,6 +1,0 @@
-{
-  "_note": "Smooth layout/margin adjustments for containers whose anchors or insets change at runtime. Distinct from widget.reorder (items moving within a list) and widget.fade (opacity-only) — this profile is for physical motion of layout geometry. Material-style standard ease-in-out bezier.",
-  "name": "widget.layoutResize",
-  "duration": 250,
-  "curve": "0.4,0.0,0.2,1.0"
-}

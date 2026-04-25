@@ -12,7 +12,9 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSet>
+#include <QtMath>
 
+#include <cmath>
 #include <vector>
 
 namespace PhosphorAnimation {
@@ -56,17 +58,31 @@ namespace {
 // here keeps the registry as the sole schema authority — third-party
 // curves can register a `JsonFactory` and become JSON-loadable through
 // the loader automatically.
+//
+// Sane upper bounds for built-in curve parameters. The downstream
+// C++ ctors (Spring::fromString, Easing::fromString) already qBound
+// to a tighter sub-range; the validator's job here is to reject
+// pathological JSON (NaN/inf, multi-million amplitude typos) before
+// the parser silently substitutes a library default, so the user gets
+// an actionable warning. Bounds are deliberately ~5× past the ctor
+// clamp so well-meaning but out-of-range values still flow through to
+// the ctor's silent clamp instead of being rejected here.
+constexpr qreal kMaxOmega = 1000.0; // Spring ctor clamps to [0.1, 200]
+constexpr qreal kMaxZeta = 100.0; // Spring ctor clamps to [0, 10]
+constexpr qreal kMaxAmplitude = 1000.0; // Easing ctor clamps elastic to [0.5, 3], bounce > 0
+constexpr qreal kMaxPeriod = 1000.0; // Easing ctor clamps elastic to [0.1, 1]
+constexpr int kMaxBounces = 1000; // Easing ctor clamps to [1, 8]
 
 bool validateSpringParams(const QJsonObject& params, qreal& omega, qreal& zeta)
 {
     omega = params.value(QLatin1String("omega")).toDouble(12.0);
     zeta = params.value(QLatin1String("zeta")).toDouble(0.8);
-    if (!(omega > 0.0)) {
-        qCWarning(lcCurveRegistry) << "spring omega must be > 0, got" << omega;
+    if (!std::isfinite(omega) || omega <= 0.0 || omega > kMaxOmega) {
+        qCWarning(lcCurveRegistry) << "spring omega must be finite and in (0," << kMaxOmega << "], got" << omega;
         return false;
     }
-    if (zeta < 0.0) {
-        qCWarning(lcCurveRegistry) << "spring zeta must be >= 0, got" << zeta;
+    if (!std::isfinite(zeta) || zeta < 0.0 || zeta > kMaxZeta) {
+        qCWarning(lcCurveRegistry) << "spring zeta must be finite and in [0," << kMaxZeta << "], got" << zeta;
         return false;
     }
     return true;
@@ -80,14 +96,25 @@ bool validateCubicBezierParams(const QJsonObject& params, qreal& x1, qreal& y1, 
     y2 = params.value(QLatin1String("y2")).toDouble(1.0);
     // Cubic Bezier control points: x must stay in [0,1] (CSS spec +
     // QEasingCurve constraint). y can legitimately exceed the unit
-    // range — that's how overshoot curves work — so we deliberately
-    // DO NOT bound y1/y2.
-    if (x1 < 0.0 || x1 > 1.0) {
-        qCWarning(lcCurveRegistry) << "cubic-bezier x1 must be in [0, 1], got" << x1;
+    // range — that's how overshoot curves work — so y1/y2 are bounded
+    // to the same [-1, 2] range as the parse-path clamp in
+    // Easing::fromString. NaN/inf are rejected for both axes — the
+    // downstream evaluator has no defined behaviour on non-finite
+    // control points and would either UB or render visible glitches.
+    if (!std::isfinite(x1) || x1 < 0.0 || x1 > 1.0) {
+        qCWarning(lcCurveRegistry) << "cubic-bezier x1 must be finite and in [0, 1], got" << x1;
         return false;
     }
-    if (x2 < 0.0 || x2 > 1.0) {
-        qCWarning(lcCurveRegistry) << "cubic-bezier x2 must be in [0, 1], got" << x2;
+    if (!std::isfinite(x2) || x2 < 0.0 || x2 > 1.0) {
+        qCWarning(lcCurveRegistry) << "cubic-bezier x2 must be finite and in [0, 1], got" << x2;
+        return false;
+    }
+    if (!std::isfinite(y1) || y1 < -1.0 || y1 > 2.0) {
+        qCWarning(lcCurveRegistry) << "cubic-bezier y1 must be finite and in [-1, 2], got" << y1;
+        return false;
+    }
+    if (!std::isfinite(y2) || y2 < -1.0 || y2 > 2.0) {
+        qCWarning(lcCurveRegistry) << "cubic-bezier y2 must be finite and in [-1, 2], got" << y2;
         return false;
     }
     return true;
@@ -97,12 +124,13 @@ bool validateElasticParams(const QJsonObject& params, qreal& amplitude, qreal& p
 {
     amplitude = params.value(QLatin1String("amplitude")).toDouble(1.0);
     period = params.value(QLatin1String("period")).toDouble(0.3);
-    if (!(amplitude > 0.0)) {
-        qCWarning(lcCurveRegistry) << "elastic amplitude must be > 0, got" << amplitude;
+    if (!std::isfinite(amplitude) || amplitude <= 0.0 || amplitude > kMaxAmplitude) {
+        qCWarning(lcCurveRegistry) << "elastic amplitude must be finite and in (0," << kMaxAmplitude << "], got"
+                                   << amplitude;
         return false;
     }
-    if (!(period > 0.0)) {
-        qCWarning(lcCurveRegistry) << "elastic period must be > 0, got" << period;
+    if (!std::isfinite(period) || period <= 0.0 || period > kMaxPeriod) {
+        qCWarning(lcCurveRegistry) << "elastic period must be finite and in (0," << kMaxPeriod << "], got" << period;
         return false;
     }
     return true;
@@ -111,15 +139,22 @@ bool validateElasticParams(const QJsonObject& params, qreal& amplitude, qreal& p
 bool validateBounceParams(const QJsonObject& params, qreal& amplitude, int& bounces)
 {
     amplitude = params.value(QLatin1String("amplitude")).toDouble(1.0);
-    bounces = params.value(QLatin1String("bounces")).toInt(3);
-    if (!(amplitude > 0.0)) {
-        qCWarning(lcCurveRegistry) << "bounce amplitude must be > 0, got" << amplitude;
+    // toDouble + qRound (not toInt) so a JSON Number written as `3.0`
+    // by a non-C++ serializer round-trips as 3 instead of falling back
+    // to the toInt(default) = 3 path. Matches the qRound-on-toDouble
+    // pattern used for minDistance / staggerInterval in profile.cpp.
+    const qreal bouncesRaw = params.value(QLatin1String("bounces")).toDouble(3.0);
+    if (!std::isfinite(amplitude) || amplitude <= 0.0 || amplitude > kMaxAmplitude) {
+        qCWarning(lcCurveRegistry) << "bounce amplitude must be finite and in (0," << kMaxAmplitude << "], got"
+                                   << amplitude;
         return false;
     }
-    if (bounces < 1) {
-        qCWarning(lcCurveRegistry) << "bounce bounces must be >= 1, got" << bounces;
+    if (!std::isfinite(bouncesRaw) || bouncesRaw < 1.0 || bouncesRaw > static_cast<qreal>(kMaxBounces)) {
+        qCWarning(lcCurveRegistry) << "bounce bounces must be finite and in [1," << kMaxBounces << "], got"
+                                   << bouncesRaw;
         return false;
     }
+    bounces = qRound(bouncesRaw);
     return true;
 }
 
@@ -329,9 +364,20 @@ struct ParsedSpec
     QString params;
 };
 
+// A canonical built-in spec ("elastic-in-out:1.000,0.300") is ~24
+// chars. 512 is generous (covers any plausible third-party typeId
+// with several params) while still rejecting hand-crafted multi-MB
+// strings whose only purpose is to burn CPU through indexOf/count.
+constexpr int kMaxSpecLength = 512;
+
 ParsedSpec parseSpec(const QString& spec)
 {
     ParsedSpec out;
+    if (spec.size() > kMaxSpecLength) {
+        qCWarning(lcCurveRegistry).nospace()
+            << "parseSpec: rejecting curve spec of length " << spec.size() << " (max " << kMaxSpecLength << ")";
+        return out;
+    }
     const int colonIdx = spec.indexOf(QLatin1Char(':'));
     if (colonIdx < 0) {
         // Either the bare cubic-bezier wire format ("x1,y1,x2,y2"), or

@@ -78,6 +78,16 @@ public:
     static constexpr SequenceMode DefaultSequenceMode = SequenceMode::AllAtOnce;
     static constexpr int DefaultStaggerInterval = 30;
 
+    // ─────── Sanity bounds for setters / parsers ───────
+    //
+    // Upper bound for an animation duration. A QQuickPropertyAnimation
+    // takes `int ms`; anything more than an hour is clearly malformed
+    // input and the downstream qRound() into int would otherwise risk
+    // overflow. Shared between `Profile::fromJson` (rejects above) and
+    // the QML `PhosphorProfile` setters (clamp to <= this).
+    static constexpr qreal MaxDurationMs = 60.0 * 60.0 * 1000.0;
+    static constexpr int MaxStaggerIntervalMs = 60 * 60 * 1000;
+
     Profile() = default;
 
     Profile(const Profile&) = default;

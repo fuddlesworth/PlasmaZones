@@ -191,9 +191,21 @@ private:
     void setupAnimationProfiles();
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
-    /// `setupAnimationProfiles()` at startup and on every
-    /// `animationProfileChanged` signal.
+    /// `setupAnimationProfiles()` at startup and from the coalescing
+    /// trampoline `requestAnimationProfilePublish` on every
+    /// `animationProfileChanged` / `profilesChanged` /
+    /// `curvesChanged` signal.
     void publishActiveAnimationProfile();
+    /// Schedule a coalesced publish on the next event-loop tick. The
+    /// settings-slider drag fires `animationProfileChanged` at ~30 Hz,
+    /// and a curve-pack edit can fire `curvesChanged` and
+    /// `profilesChanged` back-to-back in the same tick. Funnelling
+    /// through a single-shot 0-ms timer collapses every signal in the
+    /// current event-loop iteration into one publish call. The
+    /// registry's value-equality guard would already make duplicate
+    /// publishes free, but the publish itself does a Settings parse
+    /// + curve resolve which is not free during a slider drag.
+    void requestAnimationProfilePublish();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation handlers — single code path per operation (DRY/SOLID)
@@ -532,6 +544,14 @@ private:
     /// as long as the loader.
     std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
     std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
+
+    /// Coalescing trampoline for the publish path — see
+    /// `requestAnimationProfilePublish`. Single-shot, parented to the
+    /// daemon so destruction is automatic; only its `pending` flag is
+    /// used (the timeout slot fires at 0 ms regardless of when the
+    /// trampoline was first armed during the current event-loop tick).
+    QTimer m_animationPublishTimer;
+    bool m_animationPublishPending = false;
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;

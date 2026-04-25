@@ -433,6 +433,18 @@ void moveKey(const QJsonObject& src, const QString& srcKey, QJsonObject& dst, co
 
 void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 {
+    // Defense-in-depth idempotency guard. The PhosphorConfig::MigrationRunner
+    // already gates this function on `version == 1`, and `ensureJsonConfig`
+    // bails early when the on-disk version is >= ConfigSchemaVersion. But
+    // a direct caller (test harness, future tooling) that hands us a v2 doc
+    // would otherwise read the v2 `Animations` group as if it were v1,
+    // remove it, fail to find any v1 keys inside, and end up writing back
+    // an empty animations group — silently nuking the user's Profile blob.
+    // Bail out before touching the document.
+    if (root.value(ConfigKeys::versionKey()).toInt(0) >= 2) {
+        return;
+    }
+
     // ── Read all v1 groups (using ConfigKeys v1 accessors) ────────────────
     const QJsonObject v1Activation = root.value(ConfigKeys::v1ActivationGroup()).toObject();
     const QJsonObject v1Display = root.value(ConfigKeys::v1DisplayGroup()).toObject();
@@ -693,13 +705,15 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // orthogonal bool. Preserve v1 users' customisation by composing the
     // Profile blob inline here rather than dropping the fields.
     //
-    // v2-side key strings go through ConfigDefaults / Profile constants
-    // (per CLAUDE.md rule: no inline QStringLiteral for config keys) so
-    // a schema rename touches one accessor, not this migration. v1-side
-    // keys stay as literals — they are the stable v1 shape by
-    // definition and will never be renamed.
+    // Both sides go through accessors: v2 via ConfigDefaults / Profile
+    // constants (per CLAUDE.md rule: no inline QStringLiteral for config
+    // keys) so a schema rename touches one accessor, and v1 via
+    // ConfigKeys::v1Animation*Key() so the migration is unambiguous about
+    // "reading legacy field" — the v1 shape is stable by definition but
+    // having a single source of truth keeps `grep "AnimationDuration"`
+    // returning one accessor declaration instead of N call-sites.
     QJsonObject animations;
-    moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, ConfigDefaults::enabledKey());
+    moveKey(v1Animations, ConfigKeys::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
 
     // Assemble Profile fields from the v1 keys (if present). We build
     // the JSON shape directly using Profile's public field-name
@@ -717,12 +731,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // Clamping at migration time prevents both: the stored value is
     // always in-range, and `Profile::fromJson` accepts it cleanly.
     QJsonObject profile;
-    if (v1Animations.contains(QLatin1String("AnimationDuration"))) {
-        const int raw = v1Animations.value(QLatin1String("AnimationDuration")).toInt();
+    if (v1Animations.contains(ConfigKeys::v1AnimationDurationKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationDurationKey()).toInt();
         const int clamped = qBound(ConfigDefaults::animationDurationMin(), raw, ConfigDefaults::animationDurationMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] = clamped;
     }
-    if (v1Animations.contains(QLatin1String("AnimationEasingCurve"))) {
+    if (v1Animations.contains(ConfigKeys::v1AnimationEasingCurveKey())) {
         // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
         // stack-local CurveRegistry so we store the canonical wire form
         // (e.g. "0.33,1.00,0.68,1.00") in the Profile blob. Without this
@@ -743,7 +757,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // the repeating diagnostic. The migration log below records
         // the dropped spec so an operator investigating a silent
         // curve change can find it.
-        const QString v1Curve = v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
+        const QString v1Curve = v1Animations.value(ConfigKeys::v1AnimationEasingCurveKey()).toString();
         PhosphorAnimation::CurveRegistry registry;
         if (const auto resolved = registry.tryCreate(v1Curve)) {
             profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved->toString();
@@ -752,27 +766,27 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                   qPrintable(v1Curve));
         }
     }
-    if (v1Animations.contains(QLatin1String("AnimationMinDistance"))) {
-        const int raw = v1Animations.value(QLatin1String("AnimationMinDistance")).toInt();
+    if (v1Animations.contains(ConfigKeys::v1AnimationMinDistanceKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationMinDistanceKey()).toInt();
         const int clamped =
             qBound(ConfigDefaults::animationMinDistanceMin(), raw, ConfigDefaults::animationMinDistanceMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] = clamped;
     }
-    if (v1Animations.contains(QLatin1String("AnimationSequenceMode"))) {
+    if (v1Animations.contains(ConfigKeys::v1AnimationSequenceModeKey())) {
         // SequenceMode is a closed enum (AllAtOnce=0, Stagger=1 as of v2).
         // Out-of-range values snap to the project default rather than
         // clamping to the nearest bound — clamping would silently alias
         // e.g. 999 onto Stagger, which is semantically different from
         // "the user's setting is meaningless, use the default".
-        const int raw = v1Animations.value(QLatin1String("AnimationSequenceMode")).toInt();
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationSequenceModeKey()).toInt();
         const int resolved =
             (raw >= ConfigDefaults::animationSequenceModeMin() && raw <= ConfigDefaults::animationSequenceModeMax())
             ? raw
             : ConfigDefaults::animationSequenceMode();
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] = resolved;
     }
-    if (v1Animations.contains(QLatin1String("AnimationStaggerInterval"))) {
-        const int raw = v1Animations.value(QLatin1String("AnimationStaggerInterval")).toInt();
+    if (v1Animations.contains(ConfigKeys::v1AnimationStaggerIntervalKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationStaggerIntervalKey()).toInt();
         const int clamped =
             qBound(ConfigDefaults::animationStaggerIntervalMin(), raw, ConfigDefaults::animationStaggerIntervalMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;

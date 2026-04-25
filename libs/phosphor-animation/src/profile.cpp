@@ -38,10 +38,6 @@ bool shouldWarnUnknownSequenceMode(int raw)
     return true;
 }
 
-// Upper bound for a sane animation duration. A QQuickPropertyAnimation
-// takes `int ms`; anything more than an hour is clearly malformed JSON
-// and the downstream qRound() into int would otherwise risk overflow.
-constexpr qreal kMaxDurationMs = 60.0 * 60.0 * 1000.0; // 1 hour
 }
 
 Profile Profile::withDefaults() const
@@ -129,10 +125,10 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // overflow the int conversion. Leaving the field unset makes
         // `effectiveDuration()` substitute the library default, which
         // is the correct fallback for garbage input.
-        if (!std::isfinite(raw) || raw <= 0.0 || raw > kMaxDurationMs) {
+        if (!std::isfinite(raw) || raw <= 0.0 || raw > Profile::MaxDurationMs) {
             qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: rejecting duration " << raw << " (expected 0 < duration <= " << kMaxDurationMs
-                << " ms) — library default will apply";
+                << "Profile::fromJson: rejecting duration " << raw
+                << " (expected 0 < duration <= " << Profile::MaxDurationMs << " ms) — library default will apply";
         } else {
             p.duration = raw;
         }
@@ -159,7 +155,12 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         }
     }
     if (obj.contains(QLatin1String(JsonFieldSequenceMode))) {
-        const int raw = obj.value(QLatin1String(JsonFieldSequenceMode)).toInt(static_cast<int>(DefaultSequenceMode));
+        // toDouble + qRound (not toInt): handles `0.0` from non-C++
+        // serializers without falling back to the toInt(default) path.
+        // Same rationale as minDistance / staggerInterval.
+        const qreal rawDouble =
+            obj.value(QLatin1String(JsonFieldSequenceMode)).toDouble(static_cast<int>(DefaultSequenceMode));
+        const int raw = std::isfinite(rawDouble) ? qRound(rawDouble) : static_cast<int>(DefaultSequenceMode);
         // Map valid enumerators; anything else falls back to the library
         // default. This is NOT forward-compat with future enumerators
         // written by a newer client — those would silently land on
@@ -182,21 +183,23 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         }
     }
     if (obj.contains(QLatin1String(JsonFieldStaggerInterval))) {
-        const int raw = obj.value(QLatin1String(JsonFieldStaggerInterval)).toInt(DefaultStaggerInterval);
-        // Negative stagger would make every cascade element fire
-        // immediately (its scheduled-start would already be in the
-        // past), erasing the cascade visual. An hour-plus stagger would
-        // freeze the cascade for any practical animation. Same shape
-        // and rationale as the duration / minDistance / sequenceMode
-        // validators above — leaving the field unset routes
-        // `effectiveStaggerInterval()` to the library default.
-        constexpr int kMaxStaggerMs = 60 * 60 * 1000; // 1 hour
-        if (raw < 0 || raw > kMaxStaggerMs) {
+        // toDouble + qRound (not toInt): a JSON Number written as `30.0`
+        // by a non-C++ serializer round-trips as 30 instead of falling
+        // back to the toInt(default) path. Same shape as minDistance.
+        const qreal rawDouble = obj.value(QLatin1String(JsonFieldStaggerInterval)).toDouble(DefaultStaggerInterval);
+        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
+            // Negative stagger would make every cascade element fire
+            // immediately (its scheduled-start would already be in the
+            // past), erasing the cascade visual. An hour-plus stagger
+            // would freeze the cascade for any practical animation.
+            // Same shape and rationale as the duration / minDistance /
+            // sequenceMode validators above — leaving the field unset
+            // routes `effectiveStaggerInterval()` to the library default.
             qCWarning(lcProfile).nospace()
-                << "Profile::fromJson: rejecting staggerInterval " << raw
-                << " (expected 0 <= staggerInterval <= " << kMaxStaggerMs << " ms) — library default will apply";
+                << "Profile::fromJson: rejecting staggerInterval " << rawDouble
+                << " (expected 0 <= staggerInterval <= " << MaxStaggerIntervalMs << " ms) — library default will apply";
         } else {
-            p.staggerInterval = raw;
+            p.staggerInterval = qRound(rawDouble);
         }
     }
     if (obj.contains(QLatin1String(JsonFieldPresetName))) {

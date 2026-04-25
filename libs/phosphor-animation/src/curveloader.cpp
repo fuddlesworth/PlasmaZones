@@ -29,10 +29,12 @@ Q_LOGGING_CATEGORY(lcCurveLoader, "phosphoranimation.curveloader")
 /// within a process, so sequential loaders (tests, plugin reloads,
 /// embedded shells) never inherit authority over a prior loader's
 /// unclaimed registry entries — even when a new loader reuses the
-/// same heap slot. Prefixed `"curveloader:"` for debug clarity.
+/// same heap slot. Prefixed `"curveloader-"` for debug clarity (matches
+/// the `"profileloader-"` separator used by `ProfileLoader`; a colon
+/// is fragile in serialised contexts like log filters and dbus paths).
 QString makeCurveLoaderOwnerTag()
 {
-    return QStringLiteral("curveloader:") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return QStringLiteral("curveloader-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 } // namespace
 

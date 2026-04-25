@@ -528,6 +528,17 @@ public:
     PZ_CONFIG_GROUP(v1AutotilingGroup, "Autotiling")
     PZ_CONFIG_GROUP(v1AutotileShortcutsGroup, "AutotileShortcuts")
     PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations") // = v2 animationsGroup
+    // v1 animation per-field keys — Phase-4 migration packs these into the
+    // v2 `Profile` JSON blob (see configmigration.cpp::migrateV1ToV2).
+    // The accessors exist solely so migration code is unambiguous about
+    // "reading legacy field" vs "reading new blob"; production reads after
+    // migration go through `Profile::JsonField*` constants.
+    PZ_CONFIG_KEY(v1AnimationsEnabledKey, "AnimationsEnabled")
+    PZ_CONFIG_KEY(v1AnimationDurationKey, "AnimationDuration")
+    PZ_CONFIG_KEY(v1AnimationEasingCurveKey, "AnimationEasingCurve")
+    PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
+    PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
+    PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
     PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
     PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
     PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup

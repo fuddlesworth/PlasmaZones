@@ -11,7 +11,10 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QObject>
 #include <QtCore/QString>
+#include <QtCore/QtMath>
 #include <QtQml/qqmlregistration.h>
+
+#include <cmath>
 
 namespace PhosphorAnimation {
 
@@ -74,16 +77,24 @@ public:
     {
     }
 
+    /// Read-only access to the underlying value. The non-const overload
+    /// was deliberately removed: a mutable handle from QML let scripts
+    /// bypass the setter clamps below by writing directly into the
+    /// engaged-optional fields. Core-library mutators construct a fresh
+    /// Profile and assign through the implicit-conversion ctor instead.
     const Profile& value() const
-    {
-        return m_value;
-    }
-    Profile& value()
     {
         return m_value;
     }
 
     // ─── Property delegates ───
+    //
+    // Setters mirror the validation in `Profile::fromJson`: NaN/inf
+    // and out-of-range values are silently rejected (the field stays
+    // unset, so `effective*()` substitutes the library default).
+    // QML scripts that pass garbage get the same fault-tolerant
+    // behaviour as a malformed profile JSON file rather than landing
+    // pathological values into a QQuickPropertyAnimation downstream.
 
     PhosphorCurve curve() const
     {
@@ -100,6 +111,10 @@ public:
     }
     void setDuration(qreal ms)
     {
+        if (!std::isfinite(ms) || ms <= 0.0 || ms > Profile::MaxDurationMs) {
+            m_value.duration.reset();
+            return;
+        }
         m_value.duration = ms;
     }
 
@@ -109,6 +124,10 @@ public:
     }
     void setMinDistance(int px)
     {
+        if (px < 0) {
+            m_value.minDistance.reset();
+            return;
+        }
         m_value.minDistance = px;
     }
 
@@ -127,6 +146,10 @@ public:
     }
     void setStaggerInterval(int ms)
     {
+        if (ms < 0 || ms > Profile::MaxStaggerIntervalMs) {
+            m_value.staggerInterval.reset();
+            return;
+        }
         m_value.staggerInterval = ms;
     }
 

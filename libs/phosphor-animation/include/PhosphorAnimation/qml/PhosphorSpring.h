@@ -45,11 +45,12 @@ public:
     {
     }
 
+    /// Read-only access to the underlying value. The non-const overload
+    /// was deliberately removed: a mutable handle from QML let scripts
+    /// bypass the setter clamps in `setOmega` / `setZeta` by writing
+    /// directly into the underlying `Spring` fields. Core-library
+    /// mutators construct a fresh `Spring` and assign.
     const Spring& value() const
-    {
-        return m_value;
-    }
-    Spring& value()
     {
         return m_value;
     }
