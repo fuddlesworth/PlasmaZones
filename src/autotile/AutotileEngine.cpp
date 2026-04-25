@@ -15,7 +15,7 @@
 #include "AutotileEngine.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include "core/geometryutils.h"
+#include <PhosphorGeometry/GeometryUtils.h>
 #include "AutotileConfig.h"
 #include "NavigationController.h"
 #include "PerScreenConfigResolver.h"
@@ -23,7 +23,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -36,6 +36,8 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 namespace {
 // Safety timeout for pending initial window orders that never arrive via D-Bus.
@@ -2739,7 +2741,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         const int threshold =
             effectiveInnerGap(screenId) + qMax(PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx, 12);
         const QVector<QRect> preEnforceZones = zones;
-        GeometryUtils::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
+        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
         if (Q_UNLIKELY(lcAutotile().isDebugEnabled()) && zones != preEnforceZones) {
             qCDebug(lcAutotile) << "enforceWindowMinSizes: zones adjusted"
                                 << "before=" << preEnforceZones << "after=" << zones;

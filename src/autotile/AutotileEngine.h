@@ -4,8 +4,9 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "core/constants.h"
-#include "core/types.h"
+#include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
@@ -34,8 +35,8 @@ class LayoutRegistry;
 namespace PlasmaZones {
 
 using NavigationContext = PhosphorEngineApi::NavigationContext;
-
-// TilingStateKey is defined in core/types.h (shared between engine and daemon).
+using TilingStateKey = PhosphorEngineApi::TilingStateKey;
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 /**
  * @brief Saved position for a window removed from autotile, keyed by appId.

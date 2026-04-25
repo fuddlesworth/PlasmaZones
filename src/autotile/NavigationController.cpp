@@ -5,7 +5,7 @@
 #include "AutotileEngine.h"
 #include "AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 #include <PhosphorScreens/Manager.h>
@@ -15,6 +15,8 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 NavigationController::NavigationController(AutotileEngine* engine)
     : m_engine(engine)

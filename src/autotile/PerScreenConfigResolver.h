@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "core/constants.h"
+#include <PhosphorEngineApi/PerScreenKeys.h>
 #include <QHash>
 #include <QString>
 #include <QVariantMap>
@@ -15,6 +15,8 @@ class TilingAlgorithm;
 }
 
 namespace PlasmaZones {
+
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 class AutotileConfig;
 class AutotileEngine;

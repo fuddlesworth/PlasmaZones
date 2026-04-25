@@ -8,11 +8,13 @@
 #include "AutotileConfig.h"
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
+#include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 
 namespace PlasmaZones {
+
+namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 PerScreenConfigResolver::PerScreenConfigResolver(AutotileEngine* engine)
     : m_engine(engine)
