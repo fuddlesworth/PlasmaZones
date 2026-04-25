@@ -14,6 +14,15 @@ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Quick
 )
 
+# QRhi lives in QtGui's "rhi/" tree which is still a
+# partially-private header set in Qt 6.11 (public API, versioned
+# include path only exposed via GuiPrivate).  We need it to drive
+# the offscreen QQuickRenderControl path — no public alternative.
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
+    GuiPrivate
+    QuickPrivate
+)
+
 set(shader_render_SRCS
     main.cpp
     renderer.h
@@ -33,8 +42,10 @@ add_executable(plasmazones-shader-render ${shader_render_SRCS})
 target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::Core
     Qt6::Gui
+    Qt6::GuiPrivate
     Qt6::Qml
     Qt6::Quick
+    Qt6::QuickPrivate
     PhosphorRendering
     PhosphorShell
 )

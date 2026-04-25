@@ -10,15 +10,11 @@
 // so the output is the same as what shows up under a real layer-
 // shell overlay — just sized and framed however the docs need.
 //
-// Usage:
+// Usage example:
 //
-//   plasmazones-shader-render \
-//       --shader neon-city \
-//       --layout master-stack \
-//       --resolution 1920x1080 \
-//       --frames 150 \
-//       --fps 30 \
-//       --out /tmp/neon-city.webm
+//   plasmazones-shader-render --shader neon-city --layout master-stack
+//                             --resolution 1920x1080 --frames 150 --fps 30
+//                             --out /tmp/neon-city.webm
 //
 // See README.md for the full flag reference.
 
@@ -99,12 +95,15 @@ QString defaultLayoutDir()
 
 int main(int argc, char* argv[])
 {
-    // Force the offscreen QPA platform plugin so we never need a
-    // display.  Honors a user override if they really want X11/
-    // Wayland for debugging.
-    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-    }
+    // No forced QT_QPA_PLATFORM — the offscreen platform plugin
+    // doesn't provide an RHI-compatible surface, so
+    // QQuickRenderControl::initialize() fails under it.  Run under
+    // the ambient session instead (Wayland, X11, or a headless
+    // platform like minimal/eglfs-kms that the user sets via
+    // environment).  The QQuickWindow we create is never shown,
+    // so an interactive session isn't bothered.  For CI support,
+    // future work is to set up an offscreen QRhi texture target
+    // explicitly via QQuickRenderTarget::fromRhiRenderTarget().
 
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("plasmazones-shader-render"));
