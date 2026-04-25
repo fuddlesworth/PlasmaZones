@@ -347,7 +347,7 @@ bool Daemon::init()
 
         // Sync engine config (idempotent — skips retile if nothing changed)
         if (m_autotileEngine) {
-            m_autotileEngine->syncFromSettings(m_settings.get());
+            m_autotileEngine->refreshConfigFromSettings();
         }
 
         // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
@@ -512,8 +512,7 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
-    autotileEngine->syncFromSettings(m_settings.get());
-    autotileEngine->connectToSettings(m_settings.get());
+    autotileEngine->refreshConfigFromSettings();
 
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens).

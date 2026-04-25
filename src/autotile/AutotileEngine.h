@@ -8,6 +8,7 @@
 #include "core/types.h"
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorEngineTypes/IAutotileSettings.h>
 #include <QHash>
 #include <QJsonArray>
 #include <QObject>
@@ -71,9 +72,6 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 namespace PlasmaZones {
-class ISettings;
-class Settings;
-class SettingsBridge;
 class WindowRegistry;
 } // namespace PlasmaZones
 
@@ -102,7 +100,6 @@ class PLASMAZONES_EXPORT AutotileEngine : public PhosphorEngineApi::PlacementEng
 
     friend class NavigationController;
     friend class PerScreenConfigResolver;
-    friend class SettingsBridge;
 
 public:
     explicit AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
@@ -491,8 +488,8 @@ public:
      *
      * @param settings Settings object to read from (not owned)
      */
-    void syncFromSettings(Settings* settings);
-    void syncFromSettings(QObject* settings) override;
+    PhosphorEngineApi::IAutotileSettings* autotileSettings() const;
+    void refreshConfigFromSettings();
 
     // Per-screen config — forwarded to PerScreenConfigResolver (IPlacementEngine overrides)
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
@@ -522,8 +519,6 @@ public:
      *
      * @param settings Settings object to connect to (not owned, must outlive engine)
      */
-    void connectToSettings(Settings* settings);
-    void connectToSettings(QObject* settings) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
@@ -1308,7 +1303,8 @@ private:
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;
-    std::unique_ptr<SettingsBridge> m_settingsBridge;
+    QTimer m_settingsRetileTimer;
+    QTimer m_shortcutSaveTimer;
 
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;

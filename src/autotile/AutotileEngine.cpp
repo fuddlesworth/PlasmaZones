@@ -19,10 +19,7 @@
 #include "AutotileConfig.h"
 #include "NavigationController.h"
 #include "PerScreenConfigResolver.h"
-#include "SettingsBridge.h"
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "config/settings.h"
-#include "core/isettings.h"
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
@@ -71,7 +68,6 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     , m_config(std::make_unique<AutotileConfig>())
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
-    , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId())
 {
     // In production (Daemon::start) all three dependencies are non-null.
@@ -265,7 +261,7 @@ void AutotileEngine::connectSignals()
                     // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
                     // as virtual screen IDs are never reused after reconfiguration.
                     if (!orphanedVsIds.isEmpty()) {
-                        if (Settings* settings = m_settingsBridge->settings()) {
+                        if (auto* settings = autotileSettings()) {
                             for (const QString& orphanId : std::as_const(orphanedVsIds)) {
                                 settings->clearPerScreenAutotileSettings(orphanId);
                             }
@@ -773,7 +769,18 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // the engine's runtime state and the Settings object. Signal-blocked write
     // prevents recursive corruption (daemon settingsChanged → syncFromSettings →
     // setAlgorithm with stale KCM algo).
-    m_settingsBridge->syncAlgorithmToSettings(newId, m_config->splitRatio, m_config->maxWindows, oldMaxWindows);
+    {
+        QVariantMap wb;
+        wb[QStringLiteral("defaultAutotileAlgorithm")] = newId;
+        wb[QStringLiteral("autotileSplitRatio")] = m_config->splitRatio;
+        wb[QStringLiteral("autotileMasterCount")] = m_config->masterCount;
+        wb[QStringLiteral("autotilePerAlgorithmSettings")] =
+            AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
+        if (m_config->maxWindows != oldMaxWindows) {
+            wb[QStringLiteral("autotileMaxWindows")] = m_config->maxWindows;
+        }
+        Q_EMIT settingsWriteBackRequested(wb);
+    }
 
     m_algorithmEverSet = true;
     m_algorithmId = newId;
@@ -1076,30 +1083,36 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::syncFromSettings(Settings* settings)
+PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
 {
-    m_settingsBridge->syncFromSettings(settings);
+    return dynamic_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
 }
 
-void AutotileEngine::connectToSettings(Settings* settings)
+void AutotileEngine::refreshConfigFromSettings()
 {
-    m_settingsBridge->connectToSettings(settings);
-}
-
-void AutotileEngine::syncFromSettings(QObject* settings)
-{
-    auto* concrete = checkedCast<Settings>(settings, "syncFromSettings");
-    if (settings && !concrete)
+    auto* s = autotileSettings();
+    if (!s) {
         return;
-    syncFromSettings(concrete);
-}
-
-void AutotileEngine::connectToSettings(QObject* settings)
-{
-    auto* concrete = checkedCast<Settings>(settings, "connectToSettings");
-    if (settings && !concrete)
-        return;
-    connectToSettings(concrete);
+    }
+    m_config->masterCount = s->autotileMasterCount();
+    m_config->innerGap = s->autotileInnerGap();
+    m_config->outerGap = s->autotileOuterGap();
+    m_config->usePerSideOuterGap = s->autotileUsePerSideOuterGap();
+    m_config->outerGapTop = s->autotileOuterGapTop();
+    m_config->outerGapBottom = s->autotileOuterGapBottom();
+    m_config->outerGapLeft = s->autotileOuterGapLeft();
+    m_config->outerGapRight = s->autotileOuterGapRight();
+    m_config->focusNewWindows = s->autotileFocusNewWindows();
+    m_config->smartGaps = s->autotileSmartGaps();
+    m_config->focusFollowsMouse = s->autotileFocusFollowsMouse();
+    m_config->respectMinimumSize = s->autotileRespectMinimumSize();
+    m_config->maxWindows = s->autotileMaxWindows();
+    m_config->splitRatio = s->autotileSplitRatio();
+    m_config->splitRatioStep = s->autotileSplitRatioStep();
+    m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(s->autotileInsertPositionInt());
+    m_config->overflowBehavior = static_cast<AutotileOverflowBehavior>(s->autotileOverflowBehaviorInt());
+    m_config->savedAlgorithmSettings = AutotileConfig::perAlgoFromVariantMap(s->autotilePerAlgorithmSettings());
+    setAlgorithm(s->defaultAutotileAlgorithm());
 }
 
 void AutotileEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
@@ -1197,22 +1210,146 @@ void AutotileEngine::loadState()
 
 QJsonArray AutotileEngine::serializeWindowOrders() const
 {
-    return m_settingsBridge->serializeWindowOrders();
+    QJsonArray entries;
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        const PhosphorTiles::TilingState* state = it.value();
+        if (!state || state->windowCount() == 0)
+            continue;
+        const TilingStateKey& key = it.key();
+        const QStringList& order = state->windowOrder();
+        if (order.isEmpty())
+            continue;
+        QJsonObject entry;
+        entry[QLatin1String("screen")] = key.screenId;
+        entry[QLatin1String("desktop")] = key.desktop;
+        entry[QLatin1String("activity")] = key.activity;
+        QJsonArray orderArray;
+        for (const QString& wid : order)
+            orderArray.append(wid);
+        entry[QLatin1String("windowOrder")] = orderArray;
+        const QStringList floating = state->floatingWindows();
+        if (!floating.isEmpty()) {
+            QJsonArray floatArray;
+            for (const QString& wid : floating)
+                floatArray.append(wid);
+            entry[QLatin1String("floatingWindows")] = floatArray;
+        }
+        entries.append(entry);
+    }
+    return entries;
 }
 
 void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
 {
-    m_settingsBridge->deserializeWindowOrders(orders);
+    if (orders.isEmpty()) {
+        qCDebug(lcAutotile) << "No saved autotile window orders to restore";
+        return;
+    }
+    int restoredCount = 0;
+    QSet<QString> processedKeys;
+    for (const QJsonValue& val : orders) {
+        const QJsonObject entry = val.toObject();
+        if (entry.contains(QLatin1String("_type")))
+            continue;
+        const QString screenId = entry[QLatin1String("screen")].toString();
+        if (screenId.isEmpty())
+            continue;
+        const int desktop = entry[QLatin1String("desktop")].toInt(0);
+        const QString activity = entry[QLatin1String("activity")].toString();
+        TilingStateKey loadKey;
+        loadKey.screenId = screenId;
+        loadKey.desktop = (desktop > 0) ? desktop : m_currentDesktop;
+        loadKey.activity = !activity.isEmpty() ? activity : m_currentActivity;
+        const QString compositeKey =
+            QStringLiteral("%1/%2/%3").arg(loadKey.screenId).arg(loadKey.desktop).arg(loadKey.activity);
+        if (processedKeys.contains(compositeKey))
+            continue;
+        processedKeys.insert(compositeKey);
+        const QJsonArray orderArray = entry[QLatin1String("windowOrder")].toArray();
+        QStringList windowOrder;
+        if (!orderArray.isEmpty()) {
+            windowOrder.reserve(orderArray.size());
+            for (const QJsonValue& wid : orderArray) {
+                const QString id = wid.toString();
+                if (!id.isEmpty())
+                    windowOrder.append(id);
+            }
+        }
+        if (!windowOrder.isEmpty()) {
+            m_savedWindowOrders[loadKey] = windowOrder;
+            const bool isCurrentContext = loadKey.desktop == m_currentDesktop
+                && (loadKey.activity.isEmpty() || loadKey.activity == m_currentActivity);
+            if (isCurrentContext) {
+                m_pendingInitialOrders[screenId] = windowOrder;
+                ++restoredCount;
+            }
+        }
+        const QJsonArray floatArray = entry[QLatin1String("floatingWindows")].toArray();
+        if (!floatArray.isEmpty()) {
+            QSet<QString> floatingSet;
+            for (const QJsonValue& wid : floatArray) {
+                const QString id = wid.toString();
+                if (!id.isEmpty())
+                    floatingSet.insert(id);
+            }
+            if (!floatingSet.isEmpty())
+                m_savedFloatingWindows[loadKey] = floatingSet;
+        }
+    }
+    qCInfo(lcAutotile) << "Autotile window orders: restored" << restoredCount << "screens";
 }
 
 QJsonObject AutotileEngine::serializePendingRestores() const
 {
-    return m_settingsBridge->serializePendingRestores();
+    QJsonObject queuesObj;
+    for (auto it = m_pendingAutotileRestores.constBegin(); it != m_pendingAutotileRestores.constEnd(); ++it) {
+        QJsonArray queueArray;
+        for (const PendingAutotileRestore& restore : it.value()) {
+            QJsonObject restoreObj;
+            restoreObj[QLatin1String("position")] = restore.position;
+            restoreObj[QLatin1String("screen")] = restore.context.screenId;
+            restoreObj[QLatin1String("desktop")] = restore.context.desktop;
+            restoreObj[QLatin1String("activity")] = restore.context.activity;
+            restoreObj[QLatin1String("wasFloating")] = restore.wasFloating;
+            queueArray.append(restoreObj);
+        }
+        queuesObj[it.key()] = queueArray;
+    }
+    return queuesObj;
 }
 
-void AutotileEngine::deserializePendingRestores(const QJsonObject& obj)
+void AutotileEngine::deserializePendingRestores(const QJsonObject& queuesObj)
 {
-    m_settingsBridge->deserializePendingRestores(obj);
+    if (queuesObj.isEmpty())
+        return;
+    int restoredEntries = 0;
+    for (auto it = queuesObj.constBegin(); it != queuesObj.constEnd(); ++it) {
+        const QString appId = it.key();
+        if (appId.isEmpty() || appId.contains(QLatin1Char('|')))
+            continue;
+        const QJsonArray queueArray = it.value().toArray();
+        QList<PendingAutotileRestore> restoreList;
+        for (const QJsonValue& restoreVal : queueArray) {
+            const QJsonObject restoreObj = restoreVal.toObject();
+            const int pos = restoreObj[QLatin1String("position")].toInt(-1);
+            const QString screenId = restoreObj[QLatin1String("screen")].toString();
+            if (pos < 0 || screenId.isEmpty())
+                continue;
+            TilingStateKey ctx;
+            ctx.screenId = screenId;
+            ctx.desktop = qMax(1, restoreObj[QLatin1String("desktop")].toInt(1));
+            ctx.activity = restoreObj[QLatin1String("activity")].toString();
+            restoreList.append(
+                PendingAutotileRestore(pos, std::move(ctx), restoreObj[QLatin1String("wasFloating")].toBool(false)));
+            if (restoreList.size() >= MaxPendingRestoresPerApp)
+                break;
+        }
+        if (!restoreList.isEmpty()) {
+            m_pendingAutotileRestores[appId] = restoreList;
+            restoredEntries += restoreList.size();
+        }
+    }
+    qCInfo(lcAutotile) << "Autotile pending restores: loaded" << restoredEntries << "entries";
 }
 
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
@@ -1471,8 +1608,13 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
     }
 
     // Write to Settings (signal-blocked) so syncFromSettings() won't revert
-    if (m_settingsBridge) {
-        m_settingsBridge->syncShortcutAdjustment(m_config->splitRatio, m_config->masterCount);
+    {
+        QVariantMap wb;
+        wb[QStringLiteral("autotileSplitRatio")] = m_config->splitRatio;
+        wb[QStringLiteral("autotileMasterCount")] = m_config->masterCount;
+        wb[QStringLiteral("autotilePerAlgorithmSettings")] =
+            AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
+        Q_EMIT settingsWriteBackRequested(wb);
     }
 }
 
@@ -2913,12 +3055,12 @@ bool AutotileEngine::shouldTileWindow(const QString& rawWindowId) const
     // RestoreOnly: sticky windows are not auto-managed (autotiling is active management).
     // TreatAsNormal: sticky windows are tiled like any other window.
     if (m_windowTracker && m_windowTracker->isWindowSticky(windowId)) {
-        Settings* settings = m_settingsBridge ? m_settingsBridge->settings() : nullptr;
+        auto* settings = autotileSettings();
         if (settings) {
-            auto handling = settings->autotileStickyWindowHandling();
-            if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
-                qCDebug(lcAutotile) << "Window" << windowId << "is sticky, handling=" << static_cast<int>(handling)
-                                    << ", skipping tile";
+            auto handling = settings->autotileStickyWindowHandlingInt();
+            if (handling == static_cast<int>(StickyWindowHandling::IgnoreAll)
+                || handling == static_cast<int>(StickyWindowHandling::RestoreOnly)) {
+                qCDebug(lcAutotile) << "Window" << windowId << "is sticky, handling=" << handling << ", skipping tile";
                 return false;
             }
         }
