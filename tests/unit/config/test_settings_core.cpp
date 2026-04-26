@@ -662,6 +662,39 @@ private Q_SLOTS:
         QCOMPARE(reloaded.autotileEnabled(), true);
         QCOMPARE(reloaded.animationDuration(), 500);
     }
+
+    /**
+     * Global "Auto-assign for all layouts" master toggle (#370): defaults to
+     * false to preserve per-layout-only behavior on upgrade, the setter emits
+     * the specific NOTIFY signal once per real change, and the value
+     * round-trips through save/reload via the WindowHandling group.
+     */
+    void testAutoAssignAllLayouts_defaultSetterRoundtrip()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.autoAssignAllLayouts(), false);
+
+        QSignalSpy specificSpy(&settings, &Settings::autoAssignAllLayoutsChanged);
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(specificSpy.isValid());
+        QVERIFY(generalSpy.isValid());
+
+        settings.setAutoAssignAllLayouts(true);
+        QCOMPARE(settings.autoAssignAllLayouts(), true);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+
+        // Idempotent: same value must not re-emit
+        settings.setAutoAssignAllLayouts(true);
+        QCOMPARE(specificSpy.count(), 1);
+
+        settings.save();
+
+        Settings reloaded;
+        QCOMPARE(reloaded.autoAssignAllLayouts(), true);
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

@@ -172,7 +172,10 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
                      PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass()));
     writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(PhosphorZones::LayoutCategory::Manual));
-    writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
+    // Effective auto-assign reflects what actually happens at snap time
+    // (per-layout flag OR'd with the global "all layouts" master toggle, #370).
+    const bool globalAuto = m_settings && m_settings->autoAssignAllLayouts();
+    writeQmlProperty(window, QStringLiteral("autoAssign"), globalAuto || layout->autoAssign());
     writeAutotileMetadata(window, false, false);
     writeQmlProperty(window, QStringLiteral("zones"),
                      layout->zones().isEmpty()

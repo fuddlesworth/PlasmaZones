@@ -45,6 +45,9 @@ Window {
     property var zones: []
     // Layout category: 0=Manual (matches LayoutCategory in C++)
     property int category: 0
+    // The C++ overlay writer already folds the global "Auto-assign for all
+    // layouts" master toggle (#370) into this value, so this is the effective
+    // rather than per-layout state.
     property bool autoAssign: false
     // Autotile algorithm metadata
     property bool showMasterDot: false
