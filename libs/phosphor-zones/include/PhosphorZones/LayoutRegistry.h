@@ -140,39 +140,38 @@ public:
 
     /**
      * @brief Inject a callback that returns the user-configured default
-     * assignment entry for screens with no explicit cascade hit.
+     * autotile algorithm id (or empty if autotile is not the user's
+     * active default).
      *
-     * The library's cascade resolves (screen, desktop, activity) via
-     * stored assignments. When *every* fallback misses (for example, a
-     * brand-new virtual desktop the user never explicitly configured),
-     * @ref assignmentEntryForScreen / @ref assignmentIdForScreen /
-     * @ref layoutForScreen consult this provider as the final step.
+     * Symmetric to @ref setDefaultLayoutIdProvider, completing the
+     * level-1 (global) tier of the assignment hierarchy:
+     *   1. global default — snap layout id AND autotile algorithm id
+     *   2. monitor-level assignment
+     *   3. virtual-desktop-level assignment
      *
-     * Composition roots are expected to synthesize the entry from the
-     * settings layer — typically @c snappingEnabled / @c autotileEnabled
-     * plus the configured default snap layout id and default autotile
-     * algorithm. Callbacks should return a default-constructed entry
-     * when the user has not configured a runtime mode; the registry
-     * additionally guards against partial entries by gating the synth
-     * on the same acceptance rule the cascade visitors use
-     * (@c activeLayoutId() non-empty for entry/id queries; @c Snapping
-     * mode with a resolvable layout for @ref layoutForScreen).
+     * On cascade-miss, @ref assignmentIdForScreen and
+     * @ref assignmentEntryForScreen consult the snap provider first,
+     * then the autotile provider; the first non-empty return wins.
+     * Providers are pass-throughs from the composition root's settings
+     * layer — each is expected to return empty when its mode is
+     * disabled in settings, which means "autotile-only" users see
+     * autotile as the natural cascade fallback (snap provider returns
+     * empty → autotile wins) without any mode-priority logic in the
+     * composition root. @ref layoutForScreen ignores the autotile
+     * provider (it returns a snap @ref Layout*, which has no autotile
+     * counterpart) and falls back to @ref defaultLayout as before.
      *
      * Invoked on every cascade-miss with no caching, so providers can
      * re-read settings cheaply per call. Pass an empty function to
-     * disable, restoring pre-368 cascade behaviour (no synthesized
-     * fallback).
-     *
-     * Callers that need to inspect the user's *stored* state without
-     * the synth fallback (e.g. KCM readbacks that round-trip through
-     * persistence) should gate their query with @ref hasExplicitAssignment.
+     * disable.
      *
      * Thread-safety: the provider is read on every cascade query and
      * swapped via this setter without synchronization; both must run
      * on the same thread (the LayoutRegistry's owner thread, typically
-     * the main Qt thread).
+     * the main Qt thread). The same applies to
+     * @ref setDefaultLayoutIdProvider.
      */
-    void setDefaultAssignmentEntryProvider(std::function<AssignmentEntry()> provider);
+    void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
     // ─── Assignments (per-context routing) ────────────────────────────────
 
@@ -214,20 +213,24 @@ public:
     /// Raw assignment id for a (screen, desktop, activity) context.
     /// Returns the stored string (manual-layout UUID or
     /// @c "autotile:<algorithmId>") without resolving to a @ref Layout*.
-    /// Empty if no explicit assignment AND no synthesized default from
-    /// @ref setDefaultAssignmentEntryProvider applies. Callers that
-    /// need to distinguish "stored" from "synthesized fallback" must
-    /// pair this with @ref hasExplicitAssignment.
+    /// On cascade-miss, falls through to the level-1 global defaults
+    /// (snap provider first, then autotile provider; see
+    /// @ref setDefaultLayoutIdProvider /
+    /// @ref setDefaultAutotileAlgorithmProvider). Empty when every
+    /// cascade level misses AND both providers return empty. Callers
+    /// that need to distinguish "stored" from "synthesized fallback"
+    /// must pair this with @ref hasExplicitAssignment.
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                   const QString& activity = QString()) const;
 
     /// Full entry for a (screen, desktop, activity) context (same
-    /// cascade as @ref layoutForScreen). When every cascade level
-    /// misses, the entry returned by @ref setDefaultAssignmentEntryProvider
-    /// is surfaced (gated on the same acceptance rule the cascade
-    /// visitors use); a default-constructed entry otherwise. Callers
-    /// that need raw stored state without the synth fallback must gate
-    /// with @ref hasExplicitAssignment.
+    /// cascade as @ref layoutForScreen). On cascade-miss, synthesizes
+    /// from the level-1 global defaults — snap provider first, then
+    /// autotile provider — using the same precedence as
+    /// @ref assignmentIdForScreen; a default-constructed entry when
+    /// neither provider returns a value. Callers that need raw stored
+    /// state without the synth fallback must gate with
+    /// @ref hasExplicitAssignment.
     AssignmentEntry assignmentEntryForScreen(const QString& screenId, int virtualDesktop = 0,
                                              const QString& activity = QString()) const;
 
@@ -335,14 +338,21 @@ private:
     void saveAllAutotileOverrides(const QJsonObject& all);
     Layout* resolveConfiguredDefault() const;
 
+    /// Resolve the level-1 global default into an AssignmentEntry on
+    /// cascade-miss. Snap provider takes precedence — autotile only
+    /// wins when the snap provider returns empty (which composition
+    /// roots typically do by gating on @c snappingEnabled). Returns a
+    /// default-constructed (invalid) entry when neither provider has
+    /// a value.
+    AssignmentEntry resolveDefaultAssignmentEntry() const;
+
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
-    /// Empty = provider disabled; cascade returns no entry when every fallback misses.
-    /// When set, the provider's return value is the final cascade step for
-    /// @ref assignmentEntryForScreen / @ref assignmentIdForScreen /
-    /// @ref layoutForScreen — synthesizing a settings-derived default for
-    /// contexts the user never explicitly configured (e.g. brand-new
-    /// virtual desktops).
-    std::function<AssignmentEntry()> m_defaultAssignmentEntryProvider;
+    /// Empty = provider disabled. Returns the user's default autotile
+    /// algorithm id when autotile is the active mode; returns empty
+    /// when autotile is disabled (composition root's responsibility).
+    /// Symmetric to @c m_defaultLayoutIdProvider; together they form
+    /// the level-1 cascade tier.
+    std::function<QString()> m_defaultAutotileAlgorithmProvider;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of m_ownedBackend.get(); always non-null
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") — drives locateAll discovery

@@ -179,23 +179,12 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
     if (result)
         return *result;
 
-    // No explicit assignment in the cascade. Consult the settings-derived
-    // default entry next — when the user has configured a snap default
-    // (snapping mode + non-empty snappingLayout) it should take effect on
-    // brand-new contexts (e.g. fresh virtual desktops). Autotile-default
-    // entries don't resolve to a Layout* and are surfaced via the autotile
-    // engine's per-screen activation path instead.
-    if (m_defaultAssignmentEntryProvider) {
-        const AssignmentEntry def = m_defaultAssignmentEntryProvider();
-        if (def.mode == AssignmentEntry::Snapping && !def.snappingLayout.isEmpty()) {
-            if (PhosphorZones::Layout* layout = layoutById(QUuid::fromString(def.snappingLayout))) {
-                return layout;
-            }
-        }
-    }
-
-    // Final fallback: registry-wide default (provider callback first,
-    // then first layout by defaultOrder).
+    // No explicit assignment in the cascade — defer to the registry-wide
+    // default (snap provider via defaultLayout(), then first layout by
+    // defaultOrder). layoutForScreen returns a snap Layout* and has no
+    // autotile counterpart; autotile-mode resolution is the autotile
+    // engine's job, driven by assignmentIdForScreen returning an
+    // "autotile:<algo>" id from the level-1 cascade.
     return defaultLayout();
 }
 
@@ -221,21 +210,14 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
     if (result) {
         return *result;
     }
-    // No stored entry in the cascade — fall through to the settings-derived
+    // No stored entry in the cascade — fall through to the level-1 global
     // default so callers (autotile engine activation, OSD, KCM) see the
     // user's intended mode for contexts that were never explicitly
-    // configured. The provider returns a default-constructed entry when
-    // the user has no runtime mode configured, in which case
-    // activeLayoutId() yields an empty string and we keep the historical
-    // "no assignment" return value.
-    if (m_defaultAssignmentEntryProvider) {
-        const AssignmentEntry def = m_defaultAssignmentEntryProvider();
-        const QString id = def.activeLayoutId();
-        if (!id.isEmpty()) {
-            return id;
-        }
-    }
-    return QString();
+    // configured. resolveDefaultAssignmentEntry handles the snap-then-
+    // autotile precedence; if neither provider has a value we return the
+    // historical empty string ("no assignment").
+    const AssignmentEntry def = resolveDefaultAssignmentEntry();
+    return def.activeLayoutId();
 }
 
 AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
@@ -258,25 +240,13 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
     if (result) {
         return *result;
     }
-    // Cascade miss — surface the settings-derived default entry so callers
-    // that branch on mode (autotile engine activation, OSD, KCM "current
-    // mode" displays) see what the user has configured globally instead
-    // of a default-constructed Snapping entry with no layout id.
-    //
-    // Gate on the same acceptance rule the in-cascade visitor above
-    // uses (activeLayoutId() non-empty) so the three cascade views
-    // (entry / id / layout) agree: a partial provider entry — e.g.
-    // {Snapping, snappingLayout=""} when the user has snap enabled but
-    // no defaultLayoutId set — is treated as "no entry", matching
-    // assignmentIdForScreen's behaviour and preserving pre-368 callers
-    // that expect a default-constructed return.
-    if (m_defaultAssignmentEntryProvider) {
-        const AssignmentEntry def = m_defaultAssignmentEntryProvider();
-        if (!def.activeLayoutId().isEmpty()) {
-            return def;
-        }
-    }
-    return AssignmentEntry{};
+    // Cascade miss — synthesize from the level-1 global default so
+    // callers that branch on mode (autotile engine activation, OSD,
+    // KCM "current mode" displays) see the user's intended mode for
+    // contexts that were never explicitly configured. The helper
+    // returns a default-constructed entry when neither provider has a
+    // value, matching pre-368 behaviour.
+    return resolveDefaultAssignmentEntry();
 }
 
 AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int virtualDesktop,

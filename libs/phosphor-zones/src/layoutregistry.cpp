@@ -56,9 +56,38 @@ void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provide
     m_defaultLayoutIdProvider = std::move(provider);
 }
 
-void LayoutRegistry::setDefaultAssignmentEntryProvider(std::function<AssignmentEntry()> provider)
+void LayoutRegistry::setDefaultAutotileAlgorithmProvider(std::function<QString()> provider)
 {
-    m_defaultAssignmentEntryProvider = std::move(provider);
+    m_defaultAutotileAlgorithmProvider = std::move(provider);
+}
+
+AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
+{
+    // Level-1 global default: snap takes precedence, autotile follows.
+    // Each provider is expected to return empty when its mode is not
+    // the user's active default (composition roots gate on
+    // snappingEnabled / autotileEnabled), so "snap disabled +
+    // autotile enabled" naturally resolves to autotile here without
+    // any mode-priority logic in the daemon.
+    if (m_defaultLayoutIdProvider) {
+        const QString id = m_defaultLayoutIdProvider();
+        if (!id.isEmpty()) {
+            AssignmentEntry e;
+            e.mode = AssignmentEntry::Snapping;
+            e.snappingLayout = id;
+            return e;
+        }
+    }
+    if (m_defaultAutotileAlgorithmProvider) {
+        const QString algo = m_defaultAutotileAlgorithmProvider();
+        if (!algo.isEmpty()) {
+            AssignmentEntry e;
+            e.mode = AssignmentEntry::Autotile;
+            e.tilingAlgorithm = algo;
+            return e;
+        }
+    }
+    return AssignmentEntry{};
 }
 
 void LayoutRegistry::setLayoutDirectory(const QString& directory)

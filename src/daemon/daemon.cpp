@@ -238,48 +238,31 @@ bool Daemon::init()
         scheduleWarmForShader(info);
     }
 
-    // PhosphorZones::LayoutRegistry now takes a free-function provider rather than an
-    // ISettings pointer — keeps the lib-side class out of project-side
-    // interface knowledge. Settings is owned by `this` (daemon) and
-    // outlives the layout manager (declared earlier in daemon.h), so
-    // the captured pointer is safe.
+    // Wire the level-1 (global) cascade tier as two pass-through
+    // providers — snap default layout id and autotile default algorithm
+    // id — symmetric in shape and each gated on its own enabled flag.
+    // The library decides precedence (snap > autotile when both are
+    // non-empty); the daemon does not arbitrate mode here. When
+    // snappingEnabled is false the snap provider returns empty, so
+    // the cascade naturally resolves autotile defaults for unassigned
+    // contexts (fixes #368 without baking engine specifics into the
+    // composition root).
+    //
+    // Settings is owned by `this` (daemon) and outlives the layout
+    // manager (declared earlier in daemon.h), so the captured pointer
+    // is safe; null-checks defend against the destructor path that
+    // clears these via stop() before m_settings is reset.
     m_layoutManager->setDefaultLayoutIdProvider([this]() {
+        if (!m_settings || !m_settings->snappingEnabled()) {
+            return QString();
+        }
         return m_settings->defaultLayoutId();
     });
-
-    // Synthesize a settings-derived default AssignmentEntry for the
-    // cascade. The lib falls through to this when a (screen, desktop,
-    // activity) tuple has no stored entry — most importantly, brand-new
-    // virtual desktops the user never explicitly configured. Without
-    // this hook a fresh desktop has no mode assignment at all: the
-    // autotile engine never activates on it (issue #368) and the OSD
-    // shows a snap-only fallback even when the user has configured
-    // autotile as their global mode.
-    //
-    // Mode priority: snap > autotile > none.
-    //   - snapping enabled                      → snap, default layout id
-    //   - snapping disabled + autotile enabled  → autotile, default algorithm
-    //   - both disabled                         → default-constructed entry
-    //                                             (cascade reports "no entry",
-    //                                             matching pre-368 behaviour)
-    // Snap takes priority when both are enabled because snap is the
-    // historical default mode — autotile only wins when the user has
-    // explicitly turned snapping off.
-    m_layoutManager->setDefaultAssignmentEntryProvider([this]() {
-        PhosphorZones::AssignmentEntry entry;
-        if (!m_settings) {
-            return entry;
+    m_layoutManager->setDefaultAutotileAlgorithmProvider([this]() {
+        if (!m_settings || !m_settings->autotileEnabled()) {
+            return QString();
         }
-        const bool snap = m_settings->snappingEnabled();
-        const bool autotile = m_settings->autotileEnabled();
-        if (snap) {
-            entry.mode = PhosphorZones::AssignmentEntry::Snapping;
-            entry.snappingLayout = m_settings->defaultLayoutId();
-        } else if (autotile) {
-            entry.mode = PhosphorZones::AssignmentEntry::Autotile;
-            entry.tilingAlgorithm = m_settings->defaultAutotileAlgorithm();
-        }
-        return entry;
+        return m_settings->defaultAutotileAlgorithm();
     });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
@@ -985,7 +968,7 @@ void Daemon::stop()
     // fan-out during qDeleteAll(m_layouts)) stay safe.
     if (m_layoutManager) {
         m_layoutManager->setDefaultLayoutIdProvider({});
-        m_layoutManager->setDefaultAssignmentEntryProvider({});
+        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
     }
 
     m_running = false;
