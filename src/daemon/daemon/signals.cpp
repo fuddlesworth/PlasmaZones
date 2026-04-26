@@ -159,10 +159,14 @@ void Daemon::initializeAutotile()
             // Feature gate happens below, after the current mode is known,
             // so we can check the flag for the TARGET mode (not just autotile).
 
-            // Resolve focused screen
-            const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+            // Mode toggle is screen-targeted, not window-targeted: route off the
+            // cursor's screen, not the focused window's. Otherwise pressing the
+            // toggle while looking at vs:0 with a focused window on vs:1 silently
+            // flips vs:1 — exactly the "tried to swap modes for VS0 but VS1 was
+            // changing" symptom seen in production logs.
+            const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
             if (screenId.isEmpty()) {
-                qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveShortcutScreenId";
+                qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveCursorScreenId";
                 return;
             }
             int desktop = currentDesktop();
