@@ -125,6 +125,14 @@ public:
     ///      and non-empty).
     ///   2. The first registered layout (by @c defaultOrder).
     ///   3. nullptr if no layouts are registered.
+    ///
+    /// @note Snap-only fallback. Unlike @ref assignmentIdForScreen and
+    /// @ref assignmentEntryForScreen — which on cascade-miss consult
+    /// both the snap and autotile level-1 providers — this method only
+    /// consults the snap provider, because @ref Layout has no autotile
+    /// counterpart. Autotile-mode resolution is the autotile engine's
+    /// job, driven by @ref assignmentIdForScreen returning an
+    /// @c "autotile:<algo>" id from the level-1 cascade.
     Layout* defaultLayout() const;
 
     /**
@@ -137,6 +145,41 @@ public:
      * settings on each call. Pass an empty function to disable.
      */
     void setDefaultLayoutIdProvider(std::function<QString()> provider);
+
+    /**
+     * @brief Inject a callback that returns the user-configured default
+     * autotile algorithm id (or empty if autotile is not the user's
+     * active default).
+     *
+     * Symmetric to @ref setDefaultLayoutIdProvider, completing the
+     * level-1 (global) tier of the assignment hierarchy:
+     *   1. global default — snap layout id AND autotile algorithm id
+     *   2. monitor-level assignment
+     *   3. virtual-desktop-level assignment
+     *
+     * On cascade-miss, @ref assignmentIdForScreen and
+     * @ref assignmentEntryForScreen consult the snap provider first,
+     * then the autotile provider; the first non-empty return wins.
+     * Providers are pass-throughs from the composition root's settings
+     * layer — each is expected to return empty when its mode is
+     * disabled in settings, which means "autotile-only" users see
+     * autotile as the natural cascade fallback (snap provider returns
+     * empty → autotile wins) without any mode-priority logic in the
+     * composition root. @ref layoutForScreen ignores the autotile
+     * provider (it returns a snap @ref Layout*, which has no autotile
+     * counterpart) and falls back to @ref defaultLayout as before.
+     *
+     * Invoked on every cascade-miss with no caching, so providers can
+     * re-read settings cheaply per call. Pass an empty function to
+     * disable.
+     *
+     * Thread-safety: the provider is read on every cascade query and
+     * swapped via this setter without synchronization; both must run
+     * on the same thread (the LayoutRegistry's owner thread, typically
+     * the main Qt thread). The same applies to
+     * @ref setDefaultLayoutIdProvider.
+     */
+    void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
     // ─── Assignments (per-context routing) ────────────────────────────────
 
@@ -178,12 +221,33 @@ public:
     /// Raw assignment id for a (screen, desktop, activity) context.
     /// Returns the stored string (manual-layout UUID or
     /// @c "autotile:<algorithmId>") without resolving to a @ref Layout*.
-    /// Empty if no explicit assignment.
+    /// On cascade-miss, falls through to the level-1 global defaults
+    /// (snap provider first, then autotile provider; see
+    /// @ref setDefaultLayoutIdProvider /
+    /// @ref setDefaultAutotileAlgorithmProvider). Empty when every
+    /// cascade level misses AND both providers return empty. Callers
+    /// that need to distinguish "stored" from "synthesized fallback"
+    /// must pair this with @ref hasExplicitAssignment.
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                   const QString& activity = QString()) const;
 
-    /// Full entry for a (screen, desktop, activity) context (same
-    /// cascade as @ref layoutForScreen).
+    /// Full entry for a (screen, desktop, activity) context. Shares
+    /// the per-context cascade with @ref layoutForScreen up through
+    /// level-2 (per-screen base entry), but the two diverge at level-1
+    /// (global defaults): on cascade-miss this method synthesizes from
+    /// BOTH providers — snap provider first, then autotile provider —
+    /// using the same precedence as @ref assignmentIdForScreen, while
+    /// @ref layoutForScreen consults only the snap provider via
+    /// @ref defaultLayout. This means a caller mixing both APIs may
+    /// see @c entry.mode == @c Autotile with @ref layoutForScreen
+    /// returning a snap @ref Layout* (the historical pre-368 fallback
+    /// shape, preserved so the autotile engine's
+    /// @ref assignmentIdForScreen-driven activation path remains
+    /// mode-aware while the snap engine's
+    /// @ref layoutForScreen-driven path stays @ref Layout*-typed).
+    /// Returns a default-constructed entry when neither provider
+    /// returns a value. Callers that need raw stored state without
+    /// the synth fallback must gate with @ref hasExplicitAssignment.
     AssignmentEntry assignmentEntryForScreen(const QString& screenId, int virtualDesktop = 0,
                                              const QString& activity = QString()) const;
 
@@ -291,7 +355,21 @@ private:
     void saveAllAutotileOverrides(const QJsonObject& all);
     Layout* resolveConfiguredDefault() const;
 
+    /// Resolve the level-1 global default into an AssignmentEntry on
+    /// cascade-miss. Snap provider takes precedence — autotile only
+    /// wins when the snap provider returns empty (which composition
+    /// roots typically do by gating on @c snappingEnabled). Returns a
+    /// default-constructed (invalid) entry when neither provider has
+    /// a value.
+    AssignmentEntry resolveDefaultAssignmentEntry() const;
+
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
+    /// Empty = provider disabled. Returns the user's default autotile
+    /// algorithm id when autotile is the active mode; returns empty
+    /// when autotile is disabled (composition root's responsibility).
+    /// Symmetric to @c m_defaultLayoutIdProvider; together they form
+    /// the level-1 cascade tier.
+    std::function<QString()> m_defaultAutotileAlgorithmProvider;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of m_ownedBackend.get(); always non-null
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") — drives locateAll discovery

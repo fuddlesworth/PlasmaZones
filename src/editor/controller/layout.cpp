@@ -506,18 +506,14 @@ void EditorController::loadLayout(const QString& layoutId)
         QDBusInterface iface{QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
                              QString(PhosphorProtocol::Service::Interface::LayoutRegistry)};
         if (iface.isValid()) {
-            // Screen IDs (stable EDID-based identifiers)
-            QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
+            // Screen IDs (stable EDID-based identifiers).
+            // getAllScreenAssignments only emits screens with stored
+            // entries — use the dedicated enumeration method so freshly-
+            // configured systems with no per-screen assignments still
+            // populate the editor's screen list.
+            QDBusReply<QStringList> screensReply = iface.call(QStringLiteral("getAvailableScreenIds"));
             if (screensReply.isValid()) {
-                const QJsonObject screensObj = QJsonDocument::fromJson(screensReply.value().toUtf8()).object();
-                for (auto it = screensObj.begin(); it != screensObj.end(); ++it) {
-                    // Prefer the screenId field if present, fall back to connector name key
-                    QString screenId = it.value().toObject().value(QStringLiteral("screenId")).toString();
-                    if (screenId.isEmpty()) {
-                        screenId = it.key();
-                    }
-                    m_availableScreenIds.append(screenId);
-                }
+                m_availableScreenIds = screensReply.value();
             }
 
             // Virtual desktops

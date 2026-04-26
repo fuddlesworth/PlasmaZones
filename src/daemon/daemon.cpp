@@ -238,13 +238,39 @@ bool Daemon::init()
         scheduleWarmForShader(info);
     }
 
-    // PhosphorZones::LayoutRegistry now takes a free-function provider rather than an
-    // ISettings pointer — keeps the lib-side class out of project-side
-    // interface knowledge. Settings is owned by `this` (daemon) and
-    // outlives the layout manager (declared earlier in daemon.h), so
-    // the captured pointer is safe.
+    // Wire the level-1 (global) cascade tier as two pass-through
+    // providers — snap default layout id and autotile default algorithm
+    // id — symmetric in shape and each gated on its own enabled flag.
+    // The library decides precedence (snap > autotile when both are
+    // non-empty); the daemon does not arbitrate mode here. When
+    // snappingEnabled is false the snap provider returns empty, so
+    // the cascade naturally resolves autotile defaults for unassigned
+    // contexts (fixes #368 without baking engine specifics into the
+    // composition root).
+    //
+    // Lifetime: m_settings is declared AFTER m_layoutManager in
+    // daemon.h, so reverse-order member destruction tears m_settings
+    // down FIRST. The lambdas capture `this` and dereference m_settings,
+    // so any cascade query during member-destruction would UAF without
+    // the explicit teardown in stop() (which clears both providers
+    // before any unique_ptr member runs its destructor) plus the null
+    // checks below as a belt-and-suspenders guard against future
+    // refactors that reset m_settings explicitly. NOTE: snap with
+    // defaultLayoutId="" silently falls through to the autotile branch
+    // — see test_layoutmanager_assignment.cpp
+    // testLevel1Default_snapEnabledEmptyId_autotileEnabled_autotileWins
+    // for the pinned behaviour.
     m_layoutManager->setDefaultLayoutIdProvider([this]() {
+        if (!m_settings || !m_settings->snappingEnabled()) {
+            return QString();
+        }
         return m_settings->defaultLayoutId();
+    });
+    m_layoutManager->setDefaultAutotileAlgorithmProvider([this]() {
+        if (!m_settings || !m_settings->autotileEnabled()) {
+            return QString();
+        }
+        return m_settings->defaultAutotileAlgorithm();
     });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
@@ -950,6 +976,7 @@ void Daemon::stop()
     // fan-out during qDeleteAll(m_layouts)) stay safe.
     if (m_layoutManager) {
         m_layoutManager->setDefaultLayoutIdProvider({});
+        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
     }
 
     m_running = false;

@@ -129,6 +129,11 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
 }
 
+QStringList LayoutAdaptor::getAvailableScreenIds()
+{
+    return m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList();
+}
+
 QString LayoutAdaptor::getAllScreenAssignments()
 {
     QJsonObject root;
@@ -139,7 +144,56 @@ QString LayoutAdaptor::getAllScreenAssignments()
     const QStringList screenIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& screenId : std::as_const(screenIds)) {
-        // Derive connector name for the JSON key (KCM compatibility)
+        // Walk the screen's stored entries first; only allocate JSON +
+        // resolve the connector key if at least one is present. Screen
+        // enumeration moved to getAvailableScreenIds(), so this method
+        // can stay narrowly scoped to *stored* assignment state without
+        // emitting empty objects for unconfigured screens.
+        QJsonObject screenObj;
+        bool hasAnyStored = false;
+
+        // Per-screen base entry — only emit when explicitly stored.
+        // assignmentEntryForScreen would happily synthesize the user's
+        // global default here (per-368 fallback), but this JSON is the
+        // KCM's view of *stored* state and may be round-tripped back
+        // through SetAllScreenAssignments on save. Persisting the
+        // synthesized default would shadow future global-default
+        // changes and defeat the "synthesized fallback only" intent.
+        if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
+            hasAnyStored = true;
+            auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
+            QString effectiveId = entry.activeLayoutId();
+            if (!effectiveId.isEmpty()) {
+                screenObj[QLatin1String("default")] = effectiveId;
+            }
+            // Expose both fields so the KCM can populate snapping AND tiling assignments
+            if (!entry.snappingLayout.isEmpty()) {
+                screenObj[QLatin1String("snappingLayout")] = entry.snappingLayout;
+            }
+            if (!entry.tilingAlgorithm.isEmpty()) {
+                screenObj[QLatin1String("tilingAlgorithm")] = entry.tilingAlgorithm;
+            }
+            screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+        }
+
+        // Per-desktop entries (desktop > 0) — only include explicitly assigned
+        // desktops, not inherited base defaults.  Without this guard every
+        // desktop row in the KCM would show the display default redundantly.
+        for (int desktop = 1; desktop <= desktopCount; ++desktop) {
+            if (m_layoutManager->hasExplicitAssignment(screenId, desktop, QString())) {
+                QString desktopId = m_layoutManager->assignmentIdForScreen(screenId, desktop, QString());
+                if (!desktopId.isEmpty()) {
+                    hasAnyStored = true;
+                    screenObj[QString::number(desktop)] = desktopId;
+                }
+            }
+        }
+
+        if (!hasAnyStored) {
+            continue;
+        }
+
+        // Derive connector name for the JSON key (KCM compatibility).
         // Virtual screens use their full ID directly (e.g., "physId/vs:0");
         // physical screens use the QScreen connector name for KCM parity.
         QString connectorName;
@@ -149,42 +203,8 @@ QString LayoutAdaptor::getAllScreenAssignments()
             QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
             connectorName = physScreen ? physScreen->name() : screenId;
         }
-        QJsonObject screenObj;
-
-        // Explicit assignment entry with mode, snappingLayout, tilingAlgorithm
-        auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
-        QString effectiveId = entry.activeLayoutId();
-        if (!effectiveId.isEmpty()) {
-            screenObj[QLatin1String("default")] = effectiveId;
-        }
-
-        // Expose both fields so the KCM can populate snapping AND tiling assignments
-        if (!entry.snappingLayout.isEmpty()) {
-            screenObj[QLatin1String("snappingLayout")] = entry.snappingLayout;
-        }
-        if (!entry.tilingAlgorithm.isEmpty()) {
-            screenObj[QLatin1String("tilingAlgorithm")] = entry.tilingAlgorithm;
-        }
-        screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
-
-        // Per-desktop entries (desktop > 0) — only include explicitly assigned
-        // desktops, not inherited base defaults.  Without this guard every
-        // desktop row in the KCM would show the display default redundantly.
-        for (int desktop = 1; desktop <= desktopCount; ++desktop) {
-            if (m_layoutManager->hasExplicitAssignment(screenId, desktop, QString())) {
-                QString desktopId = m_layoutManager->assignmentIdForScreen(screenId, desktop, QString());
-                if (!desktopId.isEmpty()) {
-                    screenObj[QString::number(desktop)] = desktopId;
-                }
-            }
-        }
-
-        if (!screenObj.isEmpty()) {
-            // Key by connector name for KCM compatibility (D-Bus boundary translates on save)
-            // Include screenId inside the object for consumers that need it
-            screenObj[QLatin1String("screenId")] = screenId;
-            root[connectorName] = screenObj;
-        }
+        screenObj[QLatin1String("screenId")] = screenId;
+        root[connectorName] = screenObj;
     }
 
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
