@@ -15,13 +15,15 @@
 #include <QSet>
 #include <QThread>
 
+#include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ProfileLoader.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/qml/PhosphorCurve.h>
 
 #include <array>
-#include <PhosphorAnimation/ProfilePaths.h>
 
 #include "overlayservice.h"
 #include "modetracker.h"

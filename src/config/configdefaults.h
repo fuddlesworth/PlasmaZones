@@ -18,9 +18,11 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/Profile.h>
 #include <PhosphorTiles/AutotileConstants.h>
+
+namespace PhosphorAnimation {
+class CurveRegistry;
+}
 
 namespace PlasmaZones {
 

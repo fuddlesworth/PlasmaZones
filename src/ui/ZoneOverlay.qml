@@ -276,7 +276,7 @@ Window {
                     properties: "opacity"
                     from: 0.3
                     to: 0
-                    profile: "zone.highlight"
+                    profile: "zone.flash"
                 }
 
             }

@@ -24,10 +24,13 @@ namespace Phosphor::Screens {
 class PlasmaPanelSource;
 }
 
-#include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorConfig/IBackend.h>
+
+namespace PhosphorAnimation {
+class CurveLoader;
+class ProfileLoader;
+}
 
 namespace PhosphorZones {
 class Layout;

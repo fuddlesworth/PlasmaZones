@@ -205,8 +205,15 @@ QtQuickClock::SignalAdapter::~SignalAdapter()
     // nanoseconds. `std::this_thread::yield()` is a polite backoff
     // that lets the OS scheduler hand the CPU to the render thread
     // if the two share a core.
+    constexpr int kMaxYieldIterations = 100000;
+    int iters = 0;
     while (m_slotDepth.load(std::memory_order_acquire) > 0) {
         std::this_thread::yield();
+        if (++iters > kMaxYieldIterations) {
+            qWarning("QtQuickClock::~SignalAdapter: render-thread slot join timed out after %d yields",
+                     kMaxYieldIterations);
+            break;
+        }
     }
     // After the join, no slot can be running and no future slot will
     // dispatch (both the detached flag and the disconnect ensure
