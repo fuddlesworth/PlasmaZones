@@ -5,7 +5,7 @@
 #include <QTest>
 
 // Project headers
-#include "autotile/OverflowManager.h"
+#include <PhosphorTileEngine/OverflowManager.h>
 
 using namespace PlasmaZones;
 

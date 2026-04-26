@@ -33,7 +33,7 @@
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"

@@ -4,10 +4,10 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 

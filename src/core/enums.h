@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngineTypes/EngineTypes.h>
 #include <PhosphorTiles/AutotileConstants.h>
 
 namespace PlasmaZones {
@@ -64,14 +65,7 @@ enum class ZoneSelectorSizeMode {
     Manual = 1 ///< Use explicit previewWidth/previewHeight settings
 };
 
-/**
- * @brief Sticky window handling options
- */
-enum class StickyWindowHandling {
-    TreatAsNormal = 0, ///< Sticky windows follow per-desktop behavior
-    RestoreOnly = 1, ///< Allow restore, disable auto-snap
-    IgnoreAll = 2 ///< Disable restore and auto-snap
-};
+using StickyWindowHandling = PhosphorEngineApi::StickyWindowHandling;
 
 /**
  * @brief OSD style options for layout switch notifications

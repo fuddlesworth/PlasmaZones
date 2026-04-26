@@ -26,7 +26,7 @@
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>

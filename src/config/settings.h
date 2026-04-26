@@ -7,7 +7,8 @@
 #include "../core/constants.h"
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorEngineTypes/IAutotileSettings.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
@@ -31,10 +32,12 @@ namespace PlasmaZones {
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
-class PLASMAZONES_EXPORT Settings : public ISettings, public PhosphorEngineApi::IAutotileSettings
+class PLASMAZONES_EXPORT Settings : public ISettings,
+                                    public PhosphorEngineApi::IAutotileSettings,
+                                    public PhosphorEngineApi::ISnapSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings)
+    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings PhosphorEngineApi::ISnapSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
@@ -682,14 +685,10 @@ public:
     int autotileMaxWindows() const override;
     void setAutotileMaxWindows(int count);
 
-    enum class AutotileInsertPosition {
-        End = 0,
-        AfterFocused = 1,
-        AsMaster = 2
-    };
-    AutotileInsertPosition autotileInsertPosition() const;
-    void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const override;
+    using AutotileInsertPosition = PhosphorTiles::AutotileInsertPosition;
+    PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const override;
+    void setAutotileInsertPosition(PhosphorTiles::AutotileInsertPosition position);
+    int autotileInsertPositionInt() const;
     void setAutotileInsertPositionInt(int position);
 
     QVariantList autotileDragInsertTriggers() const override;
@@ -762,7 +761,7 @@ public:
     void setAutotileUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
-    int autotileStickyWindowHandlingInt() const override;
+    int autotileStickyWindowHandlingInt() const;
     void setAutotileStickyWindowHandlingInt(int handling);
     AutotileDragBehavior autotileDragBehavior() const override;
     void setAutotileDragBehavior(AutotileDragBehavior behavior) override;
@@ -770,7 +769,7 @@ public:
     void setAutotileDragBehaviorInt(int behavior);
     AutotileOverflowBehavior autotileOverflowBehavior() const override;
     void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) override;
-    int autotileOverflowBehaviorInt() const override;
+    int autotileOverflowBehaviorInt() const;
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;

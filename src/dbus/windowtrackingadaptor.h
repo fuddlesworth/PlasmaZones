@@ -75,7 +75,7 @@ public:
      * The KWin effect has reliable screen info on both X11 and Wayland.
      * Use this as a fallback when cursor screen is unavailable.
      */
-    QString lastActiveScreenName() const
+    Q_INVOKABLE QString lastActiveScreenName() const
     {
         return m_lastActiveScreenId;
     }
@@ -87,7 +87,7 @@ public:
      * This is the primary source for shortcut screen detection on Wayland,
      * since QCursor::pos() is unreliable for background daemons.
      */
-    QString lastCursorScreenName() const
+    Q_INVOKABLE QString lastCursorScreenName() const
     {
         return m_lastCursorScreenId;
     }
@@ -95,7 +95,7 @@ public:
     /**
      * @brief Get the last activated window's ID
      */
-    QString lastActiveWindowId() const
+    Q_INVOKABLE QString lastActiveWindowId() const
     {
         return m_lastActiveWindowId;
     }
@@ -316,7 +316,7 @@ public Q_SLOTS:
      * Returns an invalid QRect if the window has not pushed a geometry yet.
      * Used by daemon-local shortcut handlers.
      */
-    QRect frameGeometry(const QString& windowId) const;
+    Q_INVOKABLE QRect frameGeometry(const QString& windowId) const;
 
     /**
      * Update cursor screen when cursor crosses to a different monitor

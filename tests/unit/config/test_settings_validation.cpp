@@ -211,7 +211,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.autotileOverflowBehavior(), AutotileOverflowBehavior::Float);
+        QCOMPARE(settings.autotileOverflowBehavior(), PhosphorTiles::AutotileOverflowBehavior::Float);
     }
 
     void testAutotileOverflowBehavior_validUnlimitedValueLoadsCorrectly()
@@ -222,13 +222,13 @@ private Q_SLOTS:
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto tilingBehavior = backend->group(ConfigDefaults::tilingBehaviorGroup());
             tilingBehavior->writeInt(ConfigDefaults::overflowBehaviorKey(),
-                                     static_cast<int>(AutotileOverflowBehavior::Unlimited));
+                                     static_cast<int>(PhosphorTiles::AutotileOverflowBehavior::Unlimited));
             tilingBehavior.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.autotileOverflowBehavior(), AutotileOverflowBehavior::Unlimited);
+        QCOMPARE(settings.autotileOverflowBehavior(), PhosphorTiles::AutotileOverflowBehavior::Unlimited);
     }
 };
 

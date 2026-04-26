@@ -5,9 +5,9 @@
 #include <QSignalSpy>
 #include <QTimer>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
-#include "autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
@@ -411,7 +411,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Float;
 
         engine.windowOpened(QStringLiteral("win1"), screen);
         engine.windowOpened(QStringLiteral("win2"), screen);
@@ -424,12 +424,12 @@ private Q_SLOTS:
 
         Settings settings;
         settings.setAutotileMaxWindows(2);
-        settings.setAutotileOverflowBehavior(AutotileOverflowBehavior::Unlimited);
+        settings.setAutotileOverflowBehavior(PhosphorTiles::AutotileOverflowBehavior::Unlimited);
         engine.setEngineSettings(&settings);
         engine.refreshConfigFromSettings();
         QCoreApplication::processEvents();
 
-        QCOMPARE(engine.config()->overflowBehavior, AutotileOverflowBehavior::Unlimited);
+        QCOMPARE(engine.config()->overflowBehavior, PhosphorTiles::AutotileOverflowBehavior::Unlimited);
         QCOMPARE(state->tiledWindowCount(), 3);
     }
 
@@ -439,7 +439,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Float;
 
         engine.windowOpened(QStringLiteral("win1"), screen);
         engine.windowOpened(QStringLiteral("win2"), screen);
@@ -452,13 +452,13 @@ private Q_SLOTS:
 
         Settings settings;
         settings.setAutotileMaxWindows(4);
-        settings.setAutotileOverflowBehavior(AutotileOverflowBehavior::Unlimited);
+        settings.setAutotileOverflowBehavior(PhosphorTiles::AutotileOverflowBehavior::Unlimited);
         engine.setEngineSettings(&settings);
         engine.refreshConfigFromSettings();
         QCoreApplication::processEvents();
 
         QCOMPARE(state->tiledWindowCount(), 3);
-        QCOMPARE(engine.config()->overflowBehavior, AutotileOverflowBehavior::Unlimited);
+        QCOMPARE(engine.config()->overflowBehavior, PhosphorTiles::AutotileOverflowBehavior::Unlimited);
         QCOMPARE(engine.config()->maxWindows, 4);
     }
 

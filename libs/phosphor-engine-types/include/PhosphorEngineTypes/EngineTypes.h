@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QHashFunctions>
+#include <QLatin1StringView>
 #include <QList>
 #include <QRect>
 #include <QString>
@@ -87,5 +88,13 @@ struct ZoneAssignmentEntry
     QRect targetGeometry{};
     QString targetScreenId{};
 };
+
+enum class StickyWindowHandling {
+    TreatAsNormal = 0,
+    RestoreOnly = 1,
+    IgnoreAll = 2
+};
+
+inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
 } // namespace PhosphorEngineApi

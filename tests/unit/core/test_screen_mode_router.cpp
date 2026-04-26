@@ -21,12 +21,12 @@
 
 #include <QTest>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include "core/screenmoderouter.h"
 #include "../helpers/AutotileTestHelpers.h"
-#include "snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 
 using namespace PlasmaZones;
 

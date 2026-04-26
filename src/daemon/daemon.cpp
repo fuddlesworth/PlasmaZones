@@ -67,10 +67,10 @@
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "enginefactory.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include "../snap/SnapEngine.h"
-#include "../snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"

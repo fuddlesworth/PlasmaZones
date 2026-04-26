@@ -4,9 +4,9 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
-#include "autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
@@ -114,7 +114,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
 
         const int effective = engine.effectiveMaxWindows(screen);
         QCOMPARE(effective, PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel);
@@ -134,7 +134,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screenA, screenB});
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
 
         // Screen A clamps to 3 via per-screen override; screen B inherits Unlimited.
         QVariantMap overrides;
@@ -161,7 +161,7 @@ private Q_SLOTS:
         engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Float global, screen A clamps to 2, screen B falls through to global default.
-        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+        engine.config()->overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Float;
         QVariantMap overrides;
         overrides[QStringLiteral("MaxWindows")] = 2;
         engine.applyPerScreenConfig(screenA, overrides);

@@ -18,7 +18,7 @@
 
 #include <PhosphorProtocol/WireTypes.h>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
 #include "dbus/autotileadaptor.h"

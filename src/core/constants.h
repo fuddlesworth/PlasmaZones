@@ -5,6 +5,7 @@
 
 #include <PhosphorEngineApi/JsonKeys.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
+#include <PhosphorEngineTypes/EngineTypes.h>
 
 #include <QColor>
 #include <QLatin1String>
@@ -190,7 +191,7 @@ inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
  * sentinel instead of a real zone UUID to signal that the window should be
  * restored to its original (pre-tiling) geometry rather than snapped to a zone.
  */
-inline constexpr QLatin1StringView RestoreSentinel("__restore__");
+inline constexpr auto& RestoreSentinel = PhosphorEngineApi::RestoreSentinel;
 
 /**
  * @brief D-Bus identity constants for PlasmaZones sub-applications
