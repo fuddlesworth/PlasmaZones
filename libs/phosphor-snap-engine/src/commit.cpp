@@ -9,7 +9,13 @@
 #include <QGuiApplication>
 #include <QScreen>
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::SnapIntent;
+using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorProtocol::WindowGeometryEntry;
+using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
 
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 SnapIntent intent)
@@ -108,10 +114,20 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
 
     auto* mgr = m_windowTracker->screenManager();
 
+    // Resolve and remember per-entry screenId in a single pass so the geometry
+    // payload below can carry it to the compositor. Without this, the wire
+    // entry is built from entry.targetGeometry alone and the compositor must
+    // re-derive the screen via geometry.center() against its (possibly stale)
+    // m_virtualScreenDefs — which races with VS swap/rotate and produces
+    // spurious cross-VS unsnap events.
+    QVector<QString> resolvedScreens;
+    resolvedScreens.reserve(entries.size());
+
     for (const auto& entry : entries) {
         if (entry.targetZoneId == PhosphorEngineApi::RestoreSentinel) {
             uncommitSnap(entry.windowId);
             clearUnmanagedGeometry(entry.windowId);
+            resolvedScreens.append(QString());
             continue;
         }
 
@@ -137,13 +153,20 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
         } else {
             commitSnap(entry.windowId, entry.targetZoneId, screenId, intent);
         }
+        resolvedScreens.append(screenId);
     }
 
     geometries.reserve(entries.size());
-    for (const auto& entry : entries) {
-        geometries.append(WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry));
+    for (int i = 0; i < entries.size(); ++i) {
+        const auto& entry = entries[i];
+        // Restore sentinels carry their pre-tile geometry and get applied like
+        // any other entry — but with empty screenId, since the window is being
+        // returned to free-floating state and no tracked-screen seeding should
+        // override the compositor's geometry-based resolution for it.
+        geometries.append(
+            WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry, resolvedScreens.value(i)));
     }
     return geometries;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

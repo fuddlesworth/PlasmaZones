@@ -34,8 +34,10 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
+using NavigationContext = PhosphorEngineApi::NavigationContext;
+using TilingStateKey = PhosphorEngineApi::TilingStateKey;
 namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
 namespace {
@@ -84,6 +86,7 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     // keep the guard alive until the burst settles.
     m_writeBackGuardTimer.setSingleShot(true);
     m_writeBackGuardTimer.setInterval(500);
+    connect(&m_writeBackGuardTimer, &QTimer::timeout, this, &AutotileEngine::settingsPersistRequested);
 
     m_settingsRetileTimer.setSingleShot(true);
     m_settingsRetileTimer.setInterval(100);
@@ -229,82 +232,85 @@ void AutotileEngine::connectSignals()
 
         // Virtual screen reconfiguration — retile new virtual screens and
         // clean up orphaned PhosphorTiles::TilingState entries for virtual screens that no longer exist.
-        connect(
-            m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
-            [this](const QString& physicalScreenId) {
-                const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
-                const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
+        connect(m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+                [this](const QString& physicalScreenId) {
+                    const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+                    const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
 
-                // Find and release orphaned virtual screen states for this physical screen
-                QStringList releasedWindows;
-                QSet<QString> orphanedVsIds;
-                QMutableHashIterator<TilingStateKey, PhosphorTiles::TilingState*> it(m_screenStates);
-                while (it.hasNext()) {
-                    it.next();
-                    const QString& sid = it.key().screenId;
-                    if (!PhosphorIdentity::VirtualScreenId::isVirtual(sid)) {
-                        continue;
-                    }
-                    if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
-                        continue;
-                    }
-                    if (newVsSet.contains(sid)) {
-                        continue;
-                    }
-                    // This virtual screen no longer exists — release its windows.
-                    // Save user-floated windows (excluding overflow) so they stay
-                    // floating if autotile is re-enabled on a new VS config — mirrors
-                    // the preservation logic in setAutotileScreens.
-                    orphanedVsIds.insert(sid);
-                    QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
-                    const QStringList floated = it.value()->floatingWindows();
-                    for (const QString& fid : floated) {
-                        if (!screenOverflow.contains(fid)) {
-                            m_savedFloatingWindows[it.key()].insert(fid);
+                    // Find and release orphaned virtual screen states for this physical screen
+                    QStringList releasedWindows;
+                    QSet<QString> orphanedVsIds;
+                    QMutableHashIterator<TilingStateKey, PhosphorTiles::TilingState*> it(m_screenStates);
+                    while (it.hasNext()) {
+                        it.next();
+                        const QString& sid = it.key().screenId;
+                        if (!PhosphorIdentity::VirtualScreenId::isVirtual(sid)) {
+                            continue;
                         }
+                        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
+                            continue;
+                        }
+                        if (newVsSet.contains(sid)) {
+                            continue;
+                        }
+                        // This virtual screen no longer exists — release its windows.
+                        // Save user-floated windows (excluding overflow) so they stay
+                        // floating if autotile is re-enabled on a new VS config — mirrors
+                        // the preservation logic in setAutotileScreens.
+                        orphanedVsIds.insert(sid);
+                        QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
+                        const QStringList floated = it.value()->floatingWindows();
+                        for (const QString& fid : floated) {
+                            if (!screenOverflow.contains(fid)) {
+                                m_savedFloatingWindows[it.key()].insert(fid);
+                            }
+                        }
+                        releasedWindows.append(it.value()->tiledWindows());
+                        releasedWindows.append(floated);
+                        m_pendingInitialOrders.remove(sid);
+                        m_pendingOrderGeneration.remove(sid);
+                        m_strictInitialOrderScreens.remove(sid);
+                        it.value()->deleteLater();
+                        it.remove();
                     }
-                    releasedWindows.append(it.value()->tiledWindows());
-                    releasedWindows.append(floated);
-                    m_pendingInitialOrders.remove(sid);
-                    m_pendingOrderGeneration.remove(sid);
-                    it.value()->deleteLater();
-                    it.remove();
-                }
-                for (const QString& windowId : std::as_const(releasedWindows)) {
-                    m_windowToStateKey.remove(windowId);
-                }
-                if (!releasedWindows.isEmpty()) {
-                    Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
-                }
+                    for (const QString& windowId : std::as_const(releasedWindows)) {
+                        m_windowToStateKey.remove(windowId);
+                    }
+                    if (!releasedWindows.isEmpty()) {
+                        Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
+                    }
 
-                // Clean up per-screen autotile settings for removed virtual screens.
-                // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
-                // as virtual screen IDs are never reused after reconfiguration.
-                if (!orphanedVsIds.isEmpty()) {
-                    QVariantMap wb;
-                    QStringList orphanList(orphanedVsIds.constBegin(), orphanedVsIds.constEnd());
-                    wb[PhosphorTiles::WriteBackKeys::ClearPerScreenAutotileSettings] = QVariant::fromValue(orphanList);
-                    Q_EMIT settingsWriteBackRequested(wb);
-                }
+                    // Clean up per-screen autotile settings for removed virtual screens.
+                    // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
+                    // as virtual screen IDs are never reused after reconfiguration.
+                    if (!orphanedVsIds.isEmpty()) {
+                        const QSignalBlocker blocker(engineSettings());
+                        if (auto* s = autotileSettings()) {
+                            for (const QString& orphanId : orphanedVsIds)
+                                s->clearPerScreenAutotileSettings(orphanId);
+                        }
+                        Q_EMIT settingsPersistRequested();
+                    }
 
-                // Clean up desktop overrides for removed virtual screens on this physical screen.
-                // Use newVsSet (freshly-computed from Phosphor::Screens::ScreenManager) rather than
-                // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
-                auto overrideIt = m_screenDesktopOverride.begin();
-                while (overrideIt != m_screenDesktopOverride.end()) {
-                    if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
-                        && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key()) == physicalScreenId
-                        && !newVsSet.contains(overrideIt.key()))
-                        overrideIt = m_screenDesktopOverride.erase(overrideIt);
-                    else
-                        ++overrideIt;
-                }
+                    // Clean up desktop overrides for removed virtual screens on this physical screen.
+                    // Use newVsSet (freshly-computed from Phosphor::Screens::ScreenManager) rather than
+                    // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
+                    auto overrideIt = m_screenDesktopOverride.begin();
+                    while (overrideIt != m_screenDesktopOverride.end()) {
+                        if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
+                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key())
+                                == physicalScreenId
+                            && !newVsSet.contains(overrideIt.key()))
+                            overrideIt = m_screenDesktopOverride.erase(overrideIt);
+                        else
+                            ++overrideIt;
+                    }
 
-                // Retile the new virtual screens
-                for (const QString& vsId : newVsIds) {
-                    onScreenGeometryChanged(vsId);
-                }
-            });
+                    // Retile the new virtual screens
+                    for (const QString& vsId : newVsIds) {
+                        onScreenGeometryChanged(vsId);
+                    }
+                });
 
         // Regions-only changes (VS swap/rotate/boundary resize) — skip the
         // orphan cleanup (no VSs removed/added) and just retile each VS with
@@ -570,15 +576,20 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // on another desktop, e.g., panel added/removed). The effect-side borderless
         // re-application handles the visual state; the retile ensures positions match
         // the current screen geometry.
-        if (m_pendingInitialOrders.contains(screenId)) {
-            // Pending initial order exists — the windows are already known (seeded
-            // from zone-ordered window list during mode toggle). Consume the order
-            // now and insert windows into the PhosphorTiles::TilingState so the retile has something
-            // to work with.  Previously we skipped the retile here expecting the
-            // KWin effect to re-send windowOpened D-Bus calls, but during a per-screen
-            // mode toggle the windows are already open — they never arrive via D-Bus.
+        // Only consume the pending order eagerly for STRICT entries (mode
+        // transition seeded by setInitialWindowOrder — windows are already
+        // open in KWin and need to be added to the autotile state with the
+        // computed order, since they won't arrive via windowOpened again).
+        // Advisory entries (from deserializeWindowOrders / promoteSavedWindowOrders)
+        // describe historical positions for windows that aren't open yet —
+        // pre-seeding the state would create ghost entries the user can't
+        // close, and would also override the user's insertPosition preference
+        // when the windows actually do open. Leave the advisory order in
+        // pendingInitialOrders for insertWindow() to consult on arrival.
+        if (m_pendingInitialOrders.contains(screenId) && m_strictInitialOrderScreens.contains(screenId)) {
             const QStringList order = m_pendingInitialOrders.take(screenId);
             m_pendingOrderGeneration.remove(screenId);
+            m_strictInitialOrderScreens.remove(screenId);
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey key = currentKeyForScreen(screenId);
@@ -642,6 +653,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         m_configResolver->removeOverridesForScreen(key.screenId);
         m_pendingInitialOrders.remove(key.screenId);
         m_pendingOrderGeneration.remove(key.screenId);
+        m_strictInitialOrderScreens.remove(key.screenId);
         it.value()->deleteLater();
         it.remove();
     }
@@ -796,12 +808,13 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // setAlgorithm with stale KCM algo).
     {
         m_writeBackGuardTimer.start();
-        QVariantMap wb = buildTuningWriteBack();
-        wb[PhosphorTiles::WriteBackKeys::DefaultAutotileAlgorithm] = newId;
-        if (m_config->maxWindows != oldMaxWindows) {
-            wb[PhosphorTiles::WriteBackKeys::AutotileMaxWindows] = m_config->maxWindows;
+        const QSignalBlocker blocker(engineSettings());
+        writeBackTuning();
+        if (auto* s = autotileSettings()) {
+            s->setDefaultAutotileAlgorithm(newId);
+            if (m_config->maxWindows != oldMaxWindows)
+                s->setAutotileMaxWindows(m_config->maxWindows);
         }
-        Q_EMIT settingsWriteBackRequested(wb);
     }
 
     m_algorithmEverSet = true;
@@ -1046,6 +1059,10 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
             << "setInitialWindowOrder: overwriting existing pending order for" << screenId;
     }
     m_pendingInitialOrders[screenId] = windowIds;
+    // Mode-transition seeding is strict: the daemon explicitly computed an
+    // order it wants preserved (zone order from the previous mode). Even if
+    // windows arrive in a different sequence, the saved positions win.
+    m_strictInitialOrderScreens.insert(screenId);
     uint64_t gen = ++m_pendingOrderGeneration[screenId];
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Pre-seeded window order for screen=" << screenId << "windows=" << windowIds;
@@ -1058,6 +1075,7 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
         }
         if (m_pendingInitialOrders.remove(screenId)) {
             m_pendingOrderGeneration.remove(screenId);
+            m_strictInitialOrderScreens.remove(screenId);
             qCWarning(PhosphorTileEngine::lcTileEngine)
                 << "Pending initial order for screen" << screenId << "timed out after" << PendingOrderTimeoutMs
                 << "ms - cleaning up stale entry";
@@ -1115,14 +1133,18 @@ PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
     return qobject_cast<PhosphorEngineApi::IAutotileSettings*>(engineSettings());
 }
 
-QVariantMap AutotileEngine::buildTuningWriteBack() const
+void AutotileEngine::writeBackTuning()
 {
-    QVariantMap wb;
-    wb[PhosphorTiles::WriteBackKeys::AutotileSplitRatio] = m_config->splitRatio;
-    wb[PhosphorTiles::WriteBackKeys::AutotileMasterCount] = m_config->masterCount;
-    wb[PhosphorTiles::WriteBackKeys::AutotilePerAlgorithmSettings] =
-        AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
-    return wb;
+    auto* settings = engineSettings();
+    if (!settings) {
+        return;
+    }
+    const QSignalBlocker blocker(settings);
+    if (auto* s = autotileSettings()) {
+        s->setAutotileSplitRatio(m_config->splitRatio);
+        s->setAutotileMasterCount(m_config->masterCount);
+        s->setAutotilePerAlgorithmSettings(AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings));
+    }
 }
 
 void AutotileEngine::refreshConfigFromSettings()
@@ -1751,10 +1773,9 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
         entry.masterCount = m_config->masterCount;
     }
 
-    // Write to Settings (signal-blocked) so refreshConfigFromSettings() won't revert
     {
         m_writeBackGuardTimer.start();
-        Q_EMIT settingsWriteBackRequested(buildTuningWriteBack());
+        writeBackTuning();
     }
 }
 
@@ -1888,29 +1909,23 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
     }
 
     if (!state) {
-        // Window not tracked by autotile — if it's floating (daemon-side) on an autotile
-        // screen, adopt it into the tiling layout. This handles the flow:
-        // float on snap screen → move to autotile screen → toggle float to tile.
-        // The windowFloating flag is checked via the callback to avoid coupling to WTS.
-        if (isAutotileScreen(screenId) && m_isWindowFloatingFn && m_isWindowFloatingFn(windowId)) {
-            state = tilingStateForScreen(screenId);
-            if (state && !state->containsWindow(windowId)) {
-                state->addWindow(windowId);
-                state->setFloating(windowId, true);
-                m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
-                resolvedScreen = screenId;
-                qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "toggleWindowFloat: adopted floating window" << windowId << "into autotile on" << screenId;
-                // Fall through to performToggleFloat which will unfloat it
-            }
-        }
-        if (!state) {
-            qCWarning(PhosphorTileEngine::lcTileEngine)
-                << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
-            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
-                                      QString(), screenId);
-            return;
-        }
+        // Window not tracked by autotile. The opportunistic "is this a
+        // floating window I should adopt?" branch that used to live here
+        // was the second-order accomplice in a class of cross-engine
+        // misroute bugs: if the daemon's lastActiveScreen pointed at an
+        // autotile screen while the window actually lived on a snap screen
+        // (because snap had cleared its tracking on float), this branch
+        // would silently grab the floating window and tile it on the wrong
+        // screen.
+        //
+        // Cross-engine handoff now goes through the explicit
+        // handoffReceive/handoffRelease contract orchestrated by the daemon
+        // — this path is purely "no-op when the window isn't ours".
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
+                                  QString(), screenId);
+        return;
     }
 
     performToggleFloat(state, windowId, resolvedScreen);
@@ -1929,23 +1944,80 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenId);
 }
 
-void AutotileEngine::adoptWindowAsFloating(const QString& windowId, const QString& screenId)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cross-engine handoff (see IPlacementEngine.h for contract)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::handoffReceive(const HandoffContext& ctx)
 {
-    if (windowId.isEmpty() || screenId.isEmpty() || !isAutotileScreen(screenId)) {
+    if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty() || !isAutotileScreen(ctx.toScreenId)) {
         return;
     }
-    // Already tracked — nothing to adopt
-    if (m_windowToStateKey.contains(windowId)) {
+    qCInfo(PhosphorTileEngine::lcTileEngine)
+        << "AutotileEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId << "from" << ctx.fromEngineId
+        << "wasFloating=" << ctx.wasFloating;
+
+    const QString windowId = canonicalizeWindowId(ctx.windowId);
+
+    PhosphorTiles::TilingState* state = tilingStateForScreen(ctx.toScreenId);
+    if (!state) {
         return;
     }
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
-    if (!state || state->containsWindow(windowId)) {
+
+    // Already tracked on the destination screen — nothing to adopt; the float
+    // toggle path is what the caller probably wants instead.
+    const auto destKey = currentKeyForScreen(ctx.toScreenId);
+    const auto trackedKeyIt = m_windowToStateKey.constFind(windowId);
+    if (trackedKeyIt != m_windowToStateKey.constEnd() && trackedKeyIt.value() == destKey
+        && state->containsWindow(windowId)) {
         return;
     }
+    // Already tracked but on a DIFFERENT autotile state (cross-screen
+    // handoff inside the same engine, or stale tracking after an aborted
+    // prior handoff). Release the previous state first to avoid orphaning
+    // the entry — handoffRelease is the correct primitive for "drop
+    // tracking without mutating geometry" within this engine too.
+    if (trackedKeyIt != m_windowToStateKey.constEnd() && trackedKeyIt.value() != destKey) {
+        handoffRelease(windowId);
+    }
+
     state->addWindow(windowId);
-    state->setFloating(windowId, true);
-    m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
-    qCInfo(PhosphorTileEngine::lcTileEngine) << "adoptWindowAsFloating:" << windowId << "on" << screenId;
+    // Autotile-engine policy on receive: a window arriving as "floating in
+    // the source" stays floating here too — drag-from-snap typically falls
+    // into this branch, and the user's drop position is where they want it.
+    // A non-floating arrival gets tiled (the layout engine picks the slot)
+    // — drag-from-another-autotile-screen typically falls here.
+    state->setFloating(windowId, ctx.wasFloating);
+    m_windowToStateKey[windowId] = currentKeyForScreen(ctx.toScreenId);
+
+    // Trigger a retile so a non-floating arrival actually lands in a tile;
+    // floating arrivals retile too because their displacement may free a
+    // slot for the remaining tiled set.
+    retileAfterOperation(ctx.toScreenId, true);
+}
+
+void AutotileEngine::handoffRelease(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    const QString canonical = canonicalizeWindowId(windowId);
+    qCInfo(PhosphorTileEngine::lcTileEngine) << "AutotileEngine::handoffRelease:" << canonical;
+
+    auto it = m_windowToStateKey.constFind(canonical);
+    if (it == m_windowToStateKey.constEnd()) {
+        return; // Not ours; nothing to release.
+    }
+    const auto key = it.value();
+    auto stateIt = m_screenStates.find(key);
+    if (stateIt != m_screenStates.end() && stateIt.value()) {
+        // Tracking-only release: drop from layout, drop from floating set.
+        // No retile of the rest is requested here — the orchestrator will
+        // call receiveWindow on the destination engine which (if also
+        // autotile) will retile its own state.
+        stateIt.value()->removeWindow(canonical);
+    }
+    m_windowToStateKey.remove(canonical);
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat)
@@ -2436,10 +2508,31 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     ++insertAt;
                 }
             }
-            state->addWindow(windowId, insertAt);
-            inserted = true;
-            qCDebug(PhosphorTileEngine::lcTileEngine)
-                << "Inserted pre-seeded window" << windowId << "at position=" << insertAt << "desired=" << desiredPos;
+            // Strict ordering (mode transition via setInitialWindowOrder):
+            // the daemon pre-computed an order it intentionally wants preserved
+            // even if windows arrive out of sequence. Insert at the saved
+            // position regardless of whether it pushes existing windows.
+            //
+            // Advisory ordering (cross-session restore via deserializeWindowOrders
+            // / promoteSavedWindowOrders): the saved order is yesterday's
+            // workspace layout. Honor it only when it appends at the current
+            // tail; if it would push existing windows around, the user opened
+            // windows out of the saved sequence and expects their insertPosition
+            // setting ("After existing" / "After focused" / "As main window")
+            // to apply to new arrivals.
+            const bool strict = m_strictInitialOrderScreens.contains(screenId);
+            if (strict || insertAt >= state->windowCount()) {
+                state->addWindow(windowId, insertAt);
+                inserted = true;
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "Inserted pre-seeded window" << windowId << "at position=" << insertAt
+                    << "desired=" << desiredPos << (strict ? "(strict)" : "(advisory)");
+            } else {
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "Advisory pre-seeded window" << windowId << "at desired=" << desiredPos
+                    << "would push existing windows (insertAt=" << insertAt << " < windowCount=" << state->windowCount()
+                    << ") — falling back to insertPosition";
+            }
         }
         // Clean up pending order when all pre-seeded windows have been inserted (or closed)
         if (inserted) {
@@ -2604,6 +2697,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
         pit.value().removeAll(windowId);
         if (pit.value().isEmpty()) {
             m_pendingOrderGeneration.remove(pit.key());
+            m_strictInitialOrderScreens.remove(pit.key());
             pit = m_pendingInitialOrders.erase(pit);
         } else {
             const QString screen = pit.key();
@@ -3602,6 +3696,7 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
     qCDebug(PhosphorTileEngine::lcTileEngine) << "All pre-seeded windows resolved for screen" << screenId;
     m_pendingInitialOrders.erase(pit);
     m_pendingOrderGeneration.remove(screenId);
+    m_strictInitialOrderScreens.remove(screenId);
     return true;
 }
 
@@ -3708,27 +3803,31 @@ void AutotileEngine::setFocusNewWindows(bool enabled)
 // concrete AutotileEngine method with the right parameters.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& ctx)
 {
-    focusInDirection(direction, QStringLiteral("focus"));
+    // Daemon-authoritative windowId overrides the per-state focusedWindow()
+    // tracker, which can drift when focus moves through floating, snapped, or
+    // never-tracked windows that don't update it (same root cause as the
+    // toggleFocusedFloat fix).
+    m_navigation->focusInDirection(direction, QStringLiteral("focus"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     // In autotile, "move in direction" is implemented as swap-with-neighbour
     // in the tiling order — the only way to move is to trade places with
     // the neighbour. OSD label "move" keeps the user-facing wording.
-    swapFocusedInDirection(direction, QStringLiteral("move"));
+    m_navigation->swapFocusedInDirection(direction, QStringLiteral("move"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
-    swapFocusedInDirection(direction, QStringLiteral("swap"));
+    m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& /*ctx*/)
+void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)
 {
-    moveFocusedToPosition(position);
+    m_navigation->moveFocusedToPosition(position, canonicalizeForLookup(ctx.windowId));
 }
 
 void AutotileEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
@@ -3748,15 +3847,29 @@ void AutotileEngine::snapAllWindows(const NavigationContext& ctx)
     retile(ctx.screenId);
 }
 
-void AutotileEngine::toggleFocusedFloat(const NavigationContext& /*ctx*/)
+void AutotileEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
+    // Prefer the daemon-provided windowId from KWin's authoritative focus
+    // tracking. The legacy toggleFocusedWindowFloat() uses state->focusedWindow()
+    // which is updated only when KWin emits windowActivated for an
+    // autotile-tracked window — focus moves through floating, snapped, or
+    // never-tracked windows leave it stale, and the next float shortcut then
+    // toggles the wrong window.
+    //
+    // Fall back to the legacy "find a focused state" lookup only when ctx
+    // doesn't carry a windowId (some test paths and direct invocations).
+    if (!ctx.windowId.isEmpty()) {
+        const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
+        toggleWindowFloat(ctx.windowId, screenId);
+        return;
+    }
     toggleFocusedWindowFloat();
 }
 
-void AutotileEngine::cycleFocus(bool forward, const NavigationContext& /*ctx*/)
+void AutotileEngine::cycleFocus(bool forward, const NavigationContext& ctx)
 {
     const QString dir = forward ? QStringLiteral("right") : QStringLiteral("left");
-    focusInDirection(dir, QStringLiteral("cycle"));
+    m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId));
 }
 
 void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
@@ -3766,10 +3879,17 @@ void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
     // becomes a harmless press in autotile mode.
 }
 
-void AutotileEngine::restoreFocusedWindow(const NavigationContext& /*ctx*/)
+void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 {
     // "Restore" in autotile means pulling the focused window out of the
     // tiling layout — toggling its float state achieves exactly that.
+    // Same daemon-authoritative routing as toggleFocusedFloat: prefer
+    // ctx.windowId over the engine's per-state focusedWindow() tracker.
+    if (!ctx.windowId.isEmpty()) {
+        const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
+        toggleWindowFloat(ctx.windowId, screenId);
+        return;
+    }
     toggleFocusedWindowFloat();
 }
 
@@ -3791,4 +3911,4 @@ const PhosphorEngineApi::IPlacementState* AutotileEngine::stateForScreen(const Q
     return m_screenStates.value(key, nullptr);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

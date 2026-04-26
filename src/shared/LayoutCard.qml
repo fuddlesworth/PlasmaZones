@@ -30,7 +30,6 @@ Item {
     property real previewHeight
     // Feature toggles
     property bool showCardBackground: false
-    property bool showIndicatorBar: false
     // ZonePreview passthrough
     property bool interactive: false
     property int selectedZoneIndex: -1
@@ -225,40 +224,6 @@ Item {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: root.shortAnimationDuration
-                }
-
-            }
-
-        }
-
-        // Left accent bar (zone selector mode)
-        Rectangle {
-            id: indicatorBar
-
-            visible: root.showIndicatorBar
-            anchors.left: previewBackground.left
-            anchors.top: previewBackground.top
-            anchors.bottom: previewBackground.bottom
-            anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
-            anchors.topMargin: Kirigami.Units.smallSpacing
-            anchors.bottomMargin: Kirigami.Units.smallSpacing
-            width: root.isActive ? Kirigami.Units.smallSpacing : 0
-            radius: Math.round(Kirigami.Units.smallSpacing / 2)
-            color: Kirigami.Theme.highlightColor
-            opacity: root.isActive ? 1 : 0
-
-            Behavior on width {
-                PhosphorMotionAnimation {
-                    profile: "widget.hover"
-                    durationOverride: root.animationDuration
-                }
-
-            }
-
-            Behavior on opacity {
-                PhosphorMotionAnimation {
-                    profile: "widget.hover"
-                    durationOverride: root.animationDuration
                 }
 
             }

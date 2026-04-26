@@ -2558,6 +2558,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
+        QString screenId; ///< daemon-authoritative target screen (empty = no override)
     };
     QVector<PendingApply> pending;
 
@@ -2591,6 +2592,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         PendingApply p;
         p.window = QPointer<KWin::EffectWindow>(window);
         p.geometry = entry.toRect();
+        p.screenId = entry.screenId;
         pending.append(p);
     }
 
@@ -2616,8 +2618,25 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         pending.size(),
         [this, pending](int i) {
             const auto& p = pending[i];
-            if (p.window) {
-                applySnapGeometry(p.window, p.geometry);
+            if (!p.window) {
+                return;
+            }
+            applySnapGeometry(p.window, p.geometry);
+            // Seed the tracked-screen cache from the daemon's authoritative
+            // answer for this batch. Without this, the windowFrameGeometryChanged
+            // handler at line ~920 would re-derive the screen from the new
+            // center against m_virtualScreenDefs — which races with VS
+            // swap/rotate (the boundary cache lags behind the daemon's move
+            // and a stale interpretation would fire a spurious cross-VS
+            // unsnap). The daemon already knows the canonical target screen,
+            // so trust it.
+            //
+            // Empty screenId means the daemon didn't supply an authoritative
+            // answer (e.g. autotile float-restore path) — fall through to the
+            // existing geometry-based behavior in that case.
+            if (!p.screenId.isEmpty()) {
+                m_trackedScreenPerWindow[p.window] = p.screenId;
+                m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
         },
         [this, savedStack, action]() {
@@ -3735,8 +3754,8 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
         return;
     }
     WindowBorder& wb = it.value();
-    if (wb.clippedSurface) {
-        wb.clippedSurface->setBorderRadius(wb.savedSurfaceRadius);
+    if (wb.clippedContainer) {
+        wb.clippedContainer->setBorderRadius(wb.savedContainerRadius);
     }
     // QPointer: item may already be null if Qt parent-child ownership destroyed it
     delete wb.item.data();
@@ -3793,13 +3812,54 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     WindowBorder wb;
     wb.item = new KWin::OutlinedBorderItem(innerRect, outline, windowItem);
 
-    // For borderless windows, clip the SurfaceItem corners to match the border radius.
-    if (br > 0 && m_autotileHandler->isBorderlessWindow(windowId)) {
-        KWin::SurfaceItem* surface = windowItem->surfaceItem();
-        if (surface) {
-            wb.savedSurfaceRadius = surface->borderRadius();
-            surface->setBorderRadius(KWin::BorderRadius(br));
-            wb.clippedSurface = surface;
+    // Clip the window contents so they don't poke past the rounded outline
+    // at the corners (dark pixels leaking past the border).
+    //
+    // Geometry: KWin's BorderOutline takes `radius` as the INNER curve
+    // radius (verified against src/scene/outlinedborderitem.cpp:buildQuads —
+    // the corner quad is sized `thickness + radius`, with the arc going
+    // from the inner straight-edge meeting points at distance `radius` from
+    // the corner-quad center). The outer curve is concentric and has
+    // radius `radius + thickness`.
+    //
+    // We pass `br` as BorderOutline.radius and `bw` as thickness, so:
+    //   - Outline's INNER curve: radius `br`, located at innerRect edges
+    //     `(bw, bw)–(w-bw, h-bw)`.
+    //   - Outline's OUTER curve: radius `br + bw`, at the frame edges
+    //     `(0, 0)–(w, h)`.
+    //
+    // Clip on `windowContainer()`, NOT on the SurfaceItem directly:
+    //   - WindowItem::m_windowContainer is the parent Item that holds the
+    //     surface + decoration. Its rect is the FULL frame (0, 0, w, h) —
+    //     identical to the outline's outer rect.
+    //   - SurfaceItem::rect() is the client buffer extent, which can be
+    //     SMALLER than the frame for SSD windows (decoration adds margin)
+    //     or have a non-zero offset within the windowContainer.
+    //   - Item::setBorderRadius rounds the item's OWN rect corners, so a
+    //     clip on the surface anchors at surface-local origin — wrong for
+    //     SSD windows where surface != frame.
+    //   - The borderRadius propagates via cornerStack to descendants, so
+    //     clipping the windowContainer applies the same RoundedCorners
+    //     shader trait to the SurfaceItem render branch but anchored at
+    //     the frame corners (where the outline lives), regardless of
+    //     surface buffer size or offset.
+    //
+    // Don't go through Window::setBorderRadius — that triggers KDecoration3
+    // active-state outline machinery on focused windows, drawing an extra
+    // inset outline that looks visually different from the inactive border.
+    //
+    // Apply universally when bw > 0: SSD windows we made borderless (their
+    // surface IS the content area), CSD windows we left alone (GTK/Electron
+    // — hasDecoration returned false so the borderless path skipped them),
+    // and any other tiled window whose squared corners would peek past the
+    // rounded outline.
+    if (bw > 0) {
+        KWin::Item* container = windowItem->windowContainer();
+        if (container) {
+            const int containerRadius = br + bw;
+            wb.savedContainerRadius = container->borderRadius();
+            container->setBorderRadius(KWin::BorderRadius(containerRadius));
+            wb.clippedContainer = container;
         }
     }
 

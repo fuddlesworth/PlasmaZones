@@ -525,7 +525,6 @@ Window {
                                 previewWidth: root.indicatorWidth
                                 previewHeight: root.indicatorHeight
                                 // Zone selector features
-                                showIndicatorBar: true
                                 showCardBackground: true
                                 interactive: !(root.locked && !indicator.isActive)
                                 selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1

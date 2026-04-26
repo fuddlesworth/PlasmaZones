@@ -25,6 +25,7 @@
 #include <QJsonObject>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 class TestEngineSettings : public QObject
@@ -227,8 +228,10 @@ private Q_SLOTS:
         engine.deserializeWindowOrders(multiDesktopData);
 
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
+        // Open in saved order — advisory positions are honored when arrival
+        // sequence matches the saved sequence.
         engine.windowOpened(QStringLiteral("win1"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
@@ -241,6 +244,13 @@ private Q_SLOTS:
 
     void testDeserializeWindowOrders_multiDesktop_promotesOnSwitch()
     {
+        // Saved order is ADVISORY for the deserialize/promote path (cross-session
+        // restore). When windows arrive in saved order, the saved positions are
+        // honored; when they arrive out of saved order, insertPosition takes
+        // over so the user's "After existing" preference applies to new
+        // windows. Strict ordering is reserved for setInitialWindowOrder
+        // (mode-transition seeding by the daemon — see
+        // testSetInitialWindowOrder_* in test_autotile_engine_master.cpp).
         QJsonArray multiDesktopData;
         multiDesktopData.append(
             buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
@@ -254,8 +264,9 @@ private Q_SLOTS:
         engine.setCurrentDesktop(2);
         QCoreApplication::processEvents();
 
-        engine.windowOpened(QStringLiteral("win4"), QStringLiteral("eDP-1"), 0, 0);
+        // Open in saved order: positions are honored.
         engine.windowOpened(QStringLiteral("win3"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("win4"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
@@ -264,6 +275,38 @@ private Q_SLOTS:
         QCOMPARE(order.size(), 2);
         QCOMPARE(order.at(0), QStringLiteral("win3"));
         QCOMPARE(order.at(1), QStringLiteral("win4"));
+    }
+
+    void testDeserializeWindowOrders_outOfOrderArrival_fallsBackToInsertPosition()
+    {
+        // Regression pin for the bug where opening windows out of saved order
+        // (e.g., previous session was [vesktop, ghostty] but the user opens
+        // ghostty first then vesktop today) would force vesktop to position 0,
+        // ignoring the user's "After existing" insertPosition preference.
+        // The advisory path now appends out-of-order arrivals via insertPosition.
+        QJsonArray data;
+        data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("vesktop"), QStringLiteral("ghostty")}));
+
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.deserializeWindowOrders(data);
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        QCoreApplication::processEvents();
+
+        // Open ghostty first (saved position 1), then vesktop (saved position 0).
+        // With the advisory path: ghostty inserted at 0 (no earlier saved
+        // entries in state, appends at tail). Then vesktop's saved position 0
+        // would push ghostty — falls through to insertPosition (default End)
+        // and appends.
+        engine.windowOpened(QStringLiteral("ghostty"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("vesktop"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("ghostty"));
+        QCOMPARE(order.at(1), QStringLiteral("vesktop"));
     }
 
     void testDeserializeWindowOrders_floatingRestoresAllContexts()
@@ -524,8 +567,10 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        engine.windowOpened(QStringLiteral("winB2"), QStringLiteral("eDP-1"), 0, 0);
+        // Open in saved order — advisory positions are honored when arrival
+        // sequence matches the saved sequence.
         engine.windowOpened(QStringLiteral("winB1"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("winB2"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
@@ -570,8 +615,10 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        engine.windowOpened(QStringLiteral("winA2"), QStringLiteral("eDP-1"), 0, 0);
+        // Open in saved order — advisory positions are honored when arrival
+        // sequence matches the saved sequence.
         engine.windowOpened(QStringLiteral("winA1"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("winA2"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
@@ -619,8 +666,10 @@ private Q_SLOTS:
         engine2.deserializeWindowOrders(doc.array());
 
         engine2.setAutotileScreens({QStringLiteral("eDP-1")});
-        engine2.windowOpened(QStringLiteral("konsole|{uuid2}"), QStringLiteral("eDP-1"), 0, 0);
+        // Open in saved order — advisory positions are honored when arrival
+        // sequence matches the saved sequence.
         engine2.windowOpened(QStringLiteral("firefox|{uuid1}"), QStringLiteral("eDP-1"), 0, 0);
+        engine2.windowOpened(QStringLiteral("konsole|{uuid2}"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
         PhosphorTiles::TilingState* state2 = engine2.tilingStateForScreen(QStringLiteral("eDP-1"));
@@ -652,13 +701,11 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
         QCoreApplication::processEvents();
 
-        QSignalSpy writeBackSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested);
+        const qreal ratioBefore = settings.autotileSplitRatio();
         engine.windowFocused(QStringLiteral("win1"), screen);
         engine.increaseMasterRatio(0.1);
 
-        QVERIFY(writeBackSpy.count() > 0);
-        const QVariantMap wb = writeBackSpy.last().at(0).toMap();
-        QVERIFY(wb.contains(QLatin1String("autotileSplitRatio")));
+        QVERIFY(settings.autotileSplitRatio() != ratioBefore);
     }
 };
 

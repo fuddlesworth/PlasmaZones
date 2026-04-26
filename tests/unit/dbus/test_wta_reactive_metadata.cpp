@@ -40,6 +40,7 @@
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // ─────────────────────────────────────────────────────────────────────────

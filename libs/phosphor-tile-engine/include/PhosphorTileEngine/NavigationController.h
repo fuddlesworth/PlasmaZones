@@ -12,7 +12,7 @@ namespace PhosphorTiles {
 class TilingState;
 }
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 class AutotileEngine;
 
@@ -48,9 +48,15 @@ public:
 
     void swapFocusedWithMaster();
     void rotateWindowOrder(bool clockwise);
-    void swapFocusedInDirection(const QString& direction, const QString& action);
-    void focusInDirection(const QString& direction, const QString& action);
-    void moveFocusedToPosition(int position);
+    /// `explicitWindowId` (when non-empty) overrides the state's internal
+    /// focusedWindow() for the operation. The IPlacementEngine virtual-method
+    /// overrides on AutotileEngine pass `ctx.windowId` here so navigation
+    /// follows the daemon's authoritative focus tracking even when the
+    /// engine's per-state focusedWindow tracker is stale.
+    void swapFocusedInDirection(const QString& direction, const QString& action,
+                                const QString& explicitWindowId = QString());
+    void focusInDirection(const QString& direction, const QString& action, const QString& explicitWindowId = QString());
+    void moveFocusedToPosition(int position, const QString& explicitWindowId = QString());
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Split ratio adjustment
@@ -90,9 +96,15 @@ private:
     void emitFocusRequestAtIndex(int indexOffset, bool useFirst = false);
 
     /**
-     * @brief Helper to get tiled windows and state for focus operations
+     * @brief Helper to get tiled windows and state for focus operations.
+     *
+     * When `explicitWindowId` is non-empty, locate the state that contains
+     * that window first — the daemon may know the true focused window even
+     * when the engine's per-state focusedWindow() tracker is stale. Falls
+     * through to the focused-screen lookup if the window isn't in any state.
      */
-    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState);
+    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
+                                             const QString& explicitWindowId = QString());
 
     /**
      * @brief Helper to apply an operation to all screen states
@@ -102,4 +114,4 @@ private:
     AutotileEngine* m_engine = nullptr;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

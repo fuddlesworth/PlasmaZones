@@ -18,7 +18,8 @@
 
 namespace PlasmaZones {
 
-AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::ScreenManager* screenManager,
+AutotileAdaptor::AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
+                                 Phosphor::Screens::ScreenManager* screenManager,
                                  PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
@@ -36,14 +37,15 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::Scre
     }
 
     // Connect engine signals to D-Bus signals
-    connect(m_engine, &AutotileEngine::enabledChanged, this, &AutotileAdaptor::enabledChanged);
-    connect(m_engine, &AutotileEngine::autotileScreensChanged, this, &AutotileAdaptor::autotileScreensChanged);
+    connect(m_engine, &PhosphorTileEngine::AutotileEngine::enabledChanged, this, &AutotileAdaptor::enabledChanged);
+    connect(m_engine, &PhosphorTileEngine::AutotileEngine::autotileScreensChanged, this,
+            &AutotileAdaptor::autotileScreensChanged);
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged, this,
             &AutotileAdaptor::algorithmChanged);
     // Internal signal is placementChanged (engine-generic); D-Bus name stays tilingChanged
     // for backward compatibility with existing KWin effect / third-party consumers.
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, this, &AutotileAdaptor::tilingChanged);
-    connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
+    connect(m_engine, &PhosphorTileEngine::AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
     connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::activateWindowRequested, this,
             &AutotileAdaptor::focusWindowRequested);
     // The in-process engine signal has a 2nd QSet<QString> argument for

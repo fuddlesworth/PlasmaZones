@@ -14,6 +14,7 @@
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Tests for the drag-insert preview state machine on AutotileEngine.

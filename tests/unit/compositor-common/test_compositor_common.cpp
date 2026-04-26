@@ -67,11 +67,12 @@ private Q_SLOTS:
     void testWindowGeometryEntryRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
-        PhosphorProtocol::WindowGeometryEntry entry{QStringLiteral("firefox|42"), 100, 200, 800, 600};
+        PhosphorProtocol::WindowGeometryEntry entry{QStringLiteral("firefox|42"), 100, 200, 800, 600,
+                                                    QStringLiteral("DP-1/vs:0")};
 
-        // Verify D-Bus signature: (siiii) = struct of string + 4 ints
+        // Verify D-Bus signature: (siiiis) = struct of string + 4 ints + screenId string
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiii)"));
+        QCOMPARE(sig, QStringLiteral("(siiiis)"));
 
         // Verify metatype is registered (needed for QVariant D-Bus transport)
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowGeometryEntry>();
@@ -83,6 +84,7 @@ private Q_SLOTS:
         QCOMPARE(entry.y, 200);
         QCOMPARE(entry.width, 800);
         QCOMPARE(entry.height, 600);
+        QCOMPARE(entry.screenId, QStringLiteral("DP-1/vs:0"));
 
         // Verify default construction
         PhosphorProtocol::WindowGeometryEntry defaultEntry;
@@ -91,6 +93,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.y, 0);
         QCOMPARE(defaultEntry.width, 0);
         QCOMPARE(defaultEntry.height, 0);
+        QVERIFY(defaultEntry.screenId.isEmpty());
     }
 
     // =================================================================

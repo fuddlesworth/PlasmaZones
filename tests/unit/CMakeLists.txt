@@ -138,6 +138,8 @@ target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
 pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)
+target_compile_definitions(test_autotile_handoff PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 # Producer-side validator guard — ensures the JSON emitted by
 # AutotileEngine::applyTiling round-trips through TileRequestEntry
 # parsing and passes validationError(). Would have caught PR #326 C1.

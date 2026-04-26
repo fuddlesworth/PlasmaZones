@@ -36,6 +36,7 @@
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 using StubSettingsMigration = StubSettings;
@@ -57,7 +58,7 @@ private Q_SLOTS:
         m_settings = new StubSettingsMigration(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
-        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
@@ -396,7 +397,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsMigration* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
+    PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     WindowTrackingService* m_service = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

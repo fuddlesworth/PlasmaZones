@@ -137,7 +137,8 @@ QVariant canonicalTriggerList(const QVariant& v)
 /// @c perAlgoToVariantMap(perAlgoFromVariantMap(x)) == perAlgoToVariantMap(perAlgoFromVariantMap(it)).
 QVariant sanitizePerAlgorithmSettings(const QVariant& v)
 {
-    return QVariant(AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(v.toMap())));
+    return QVariant(PhosphorTileEngine::AutotileConfig::perAlgoToVariantMap(
+        PhosphorTileEngine::AutotileConfig::perAlgoFromVariantMap(v.toMap())));
 }
 } // namespace
 

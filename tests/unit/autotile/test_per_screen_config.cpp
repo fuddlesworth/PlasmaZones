@@ -15,6 +15,7 @@
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Unit tests for PerScreenConfigResolver

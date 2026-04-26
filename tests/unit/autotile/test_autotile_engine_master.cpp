@@ -19,6 +19,7 @@
 #include <QJsonObject>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief AutotileEngine tests for master ratio/count adjustments,

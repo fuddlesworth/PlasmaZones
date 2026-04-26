@@ -5,7 +5,7 @@
 
 #include <QJsonArray>
 
-namespace PhosphorZones {
+namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)
     : QObject(parent)
@@ -184,14 +184,21 @@ void SnapState::assignWindowToZones(const QString& windowId, const QStringList& 
 
 SnapState::UnassignResult SnapState::unassignWindow(const QString& windowId)
 {
+    return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/false);
+}
+
+SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& windowId, bool preserveScreenAndDesktop)
+{
     UnassignResult result;
     QStringList previousZones = m_windowZoneAssignments.value(windowId);
     if (!m_windowZoneAssignments.remove(windowId)) {
         return result;
     }
     result.wasAssigned = true;
-    m_windowScreenAssignments.remove(windowId);
-    m_windowDesktopAssignments.remove(windowId);
+    if (!preserveScreenAndDesktop) {
+        m_windowScreenAssignments.remove(windowId);
+        m_windowDesktopAssignments.remove(windowId);
+    }
     if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
         m_lastUsedZoneId.clear();
         m_lastUsedScreenId.clear();
@@ -273,6 +280,30 @@ void SnapState::setFloating(const QString& windowId, bool floating)
     }
 }
 
+void SnapState::setFloatingOnScreen(const QString& windowId, const QString& screenId, int virtualDesktop)
+{
+    if (windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    bool changed = false;
+    if (!m_floatingWindows.contains(windowId)) {
+        m_floatingWindows.insert(windowId);
+        changed = true;
+    }
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT floatingChanged(windowId, true);
+        Q_EMIT stateChanged();
+    }
+}
+
 SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
 {
     const auto zones = zonesForWindow(windowId);
@@ -283,7 +314,17 @@ SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
             m_preFloatScreenAssignments[windowId] = screen;
         }
     }
-    return unassignWindow(windowId);
+
+    // Float-from-snap clears the zone assignment but PRESERVES the screen
+    // (and desktop) assignment. The window is still on that screen — it's
+    // just floating instead of snapped to a zone. Erasing the screen
+    // assignment leaves the daemon's "what screen does this window live on"
+    // lookups (e.g. lastActiveScreenName) with no answer for a window that
+    // unambiguously lives on a known screen, and routing then falls through
+    // to a stale cached value — for the float toggle, that misroutes the
+    // unfloat to whichever engine the cache points at (e.g. autotile on the
+    // source VS) instead of the snap engine that owns this screen.
+    return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/true);
 }
 
 QString SnapState::preFloatScreen(const QString& windowId) const
@@ -648,4 +689,4 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
     return state;
 }
 
-} // namespace PhosphorZones
+} // namespace PhosphorSnapEngine

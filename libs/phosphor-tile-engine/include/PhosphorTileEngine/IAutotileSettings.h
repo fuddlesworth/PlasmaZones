@@ -44,6 +44,13 @@ public:
     virtual PhosphorEngineApi::StickyWindowHandling autotileStickyWindowHandling() const = 0;
 
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
+
+    virtual void setDefaultAutotileAlgorithm(const QString& algorithmId) = 0;
+    virtual void setAutotileSplitRatio(qreal ratio) = 0;
+    virtual void setAutotileMasterCount(int count) = 0;
+    virtual void setAutotileMaxWindows(int max) = 0;
+    virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
+    virtual void clearPerScreenAutotileSettings(const QString& screenId) = 0;
 };
 
 } // namespace PhosphorEngineApi

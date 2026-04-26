@@ -9,7 +9,11 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::PendingRestore;
+using PhosphorEngineApi::SnapIntent;
+using PhosphorEngineApi::SnapResult;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // windowOpened — delegates to resolveWindowRestore() and applies the result
@@ -206,4 +210,4 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     return SnapResult::noSnap();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine
