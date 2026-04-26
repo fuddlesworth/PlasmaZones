@@ -210,15 +210,27 @@ void SnapEngine::handoffRelease(const QString& windowId)
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId;
 
-    // Tracking-only release: drop the zone/screen/desktop entries so the
-    // receiving engine sees a clean slate, but do NOT mutate geometry.
-    // pre-float / pre-tile captures are intentionally preserved — the receive
-    // side may consult them via the HandoffContext for size restoration.
+    // Tracking-only release: drop snap-engine-private state directly without
+    // routing through WindowTrackingService. WTS is the shared coordination
+    // layer that BOTH engines react to via signals — calling its
+    // unassignWindow / setWindowFloating from here would propagate state
+    // changes back into the autotile engine that just took ownership,
+    // causing it to drop the freshly-adopted window mid-handoff (the
+    // drag-insert-from-snap-to-autotile bug).
+    //
+    // The daemon orchestrator owns the shared WTS-side floating-flag
+    // transitions during a cross-engine handoff (see Daemon::
+    // syncAutotileFloatStatePassive); this method only clears what's
+    // private to the snap engine.
+    //
+    // pre-float / pre-tile captures are intentionally preserved — the
+    // receive side may consult them via the HandoffContext for size
+    // restoration on a future handoff back.
     if (m_snapState->isWindowSnapped(windowId)) {
-        m_windowTracker->unassignWindow(windowId);
+        m_snapState->unassignWindow(windowId);
     }
     if (m_snapState->isFloating(windowId)) {
-        m_windowTracker->setWindowFloating(windowId, false);
+        m_snapState->setFloating(windowId, false);
     }
 }
 
