@@ -88,6 +88,14 @@ public:
     void saveState() override;
     void loadState() override;
 
+    // Cross-engine handoff
+    QString engineId() const override
+    {
+        return QStringLiteral("snap");
+    }
+    void handoffReceive(const HandoffContext& ctx) override;
+    void handoffRelease(const QString& windowId) override;
+
     /**
      * @brief Resnap windows from previous layout to current layout after layout switch
      *

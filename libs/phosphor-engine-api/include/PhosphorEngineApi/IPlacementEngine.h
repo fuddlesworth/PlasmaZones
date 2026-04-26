@@ -246,12 +246,89 @@ public:
         return false;
     }
 
-    /// Adopt an untracked window as floating on this engine's screen.
-    /// Used when a window is dragged from one engine's screen to another.
-    virtual void adoptWindowAsFloating(const QString& windowId, const QString& screenId)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Cross-engine handoff
+    //
+    // When a window crosses screens whose owning engines differ (e.g. a snap
+    // screen → an autotile screen, via drag drop), ownership has to transfer
+    // between two engines. Without an explicit contract, each engine makes
+    // local guesses (autotile's "is this a floating window I should adopt?"
+    // branch, snap's "do I know this window?" early-return) and the daemon
+    // misroutes user intents during the transition window.
+    //
+    // The handoff is a two-step transaction the daemon orchestrates:
+    //   1. fromEngine->handoffRelease(windowId)
+    //   2. toEngine->handoffReceive(ctx)
+    //
+    // Each engine's release is a tracking-only clear (no geometry mutation —
+    // the receiving engine places the window). Each engine's receive applies
+    // its own placement policy (autotile picks an insert slot or floats;
+    // snap picks the nearest zone or floats) using the context fields.
+    //
+    // Engines that don't currently distinguish ownership across screens can
+    // leave both as no-ops; the defaults are safe.
+    //
+    // The verbs are prefixed `handoff*` to keep them distinct from
+    // PlacementEngineBase::releaseWindow (which is part of the base FSM
+    // lifecycle and means "this window is no longer engine-managed at all"
+    // — a different concept from "transferring ownership to another engine").
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Context for a cross-engine window handoff. Populated by the daemon
+    /// from the source engine's state and the drop event before invoking
+    /// handoffReceive on the destination engine.
+    struct HandoffContext
+    {
+        QString windowId;
+        QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "")
+        QString toScreenId; ///< destination screen (must be owned by `to` engine)
+        QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
+        QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
+        QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
+        bool wasFloating = false; ///< window was floating in source engine
+    };
+
+    /// Receive ownership of a window from another engine.
+    ///
+    /// Implementations should:
+    /// - Add the window to their own tracking (per-screen/per-state).
+    /// - Decide placement (snap to zone / tile / float) using the context
+    ///   and engine-local policy. Drag drops typically place at dropPos;
+    ///   non-drag handoffs (cross-engine focus changes, programmatic moves)
+    ///   typically respect wasFloating + sourceGeometry.
+    /// - Emit any `windowFloatingChanged` / placement signals their normal
+    ///   placement paths emit, so downstream state stays consistent.
+    ///
+    /// Default is a no-op so engines that don't yet implement the handoff
+    /// don't reject the call — the orchestrator falls back to its legacy path.
+    virtual void handoffReceive(const HandoffContext& ctx)
+    {
+        Q_UNUSED(ctx)
+    }
+
+    /// Release ownership of a window WITHOUT modifying its geometry.
+    ///
+    /// Implementations should:
+    /// - Remove the window from per-screen/per-state tracking.
+    /// - Clear zone assignments (if any) WITHOUT triggering a resnap of
+    ///   neighbours — that's the receiving engine's job once it places the
+    ///   window in its layout.
+    /// - Preserve any pre-tile / pre-float captured geometry that should
+    ///   survive the cross-engine move (the receiving engine may consult
+    ///   it via the HandoffContext for size preservation).
+    ///
+    /// Default is a no-op for the same reason as handoffReceive.
+    virtual void handoffRelease(const QString& windowId)
     {
         Q_UNUSED(windowId)
-        Q_UNUSED(screenId)
+    }
+
+    /// Stable engine identity for HandoffContext.fromEngineId. Conventional
+    /// values: "snap" / "autotile". Empty string means "unidentified" and
+    /// disables receive-side reasoning that depends on the source mode.
+    virtual QString engineId() const
+    {
+        return {};
     }
 
     /// Compute the insert index for a cursor position on a managed screen.

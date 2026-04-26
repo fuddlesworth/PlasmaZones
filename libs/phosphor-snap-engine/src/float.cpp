@@ -159,4 +159,67 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     return result;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cross-engine handoff (see IPlacementEngine.h for contract)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapEngine::handoffReceive(const HandoffContext& ctx)
+{
+    if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty()) {
+        return;
+    }
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId
+                                             << "from" << ctx.fromEngineId << "wasFloating=" << ctx.wasFloating;
+
+    // Snap-engine policy on receive:
+    //  - If the source had a snap zone (sourceZoneIds non-empty) AND this
+    //    engine knows that zone in the destination screen's layout, restore
+    //    the snap. Useful for same-mode cross-screen moves where the layouts
+    //    happen to share a zone id.
+    //  - Otherwise, treat as floating on the destination screen — preserves
+    //    the user's geometry (sourceGeometry) and lets them drop-snap or use
+    //    the float toggle to land in a zone explicitly. This intentionally
+    //    matches the "drop on snap screen with no zone hit" behaviour rather
+    //    than auto-snapping to a guessed zone.
+    if (!ctx.sourceZoneIds.isEmpty()) {
+        QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
+        if (zoneGeo.isValid()) {
+            if (ctx.sourceZoneIds.size() > 1) {
+                commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
+            } else {
+                commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);
+            }
+            Q_EMIT applyGeometryRequested(ctx.windowId, zoneGeo.x(), zoneGeo.y(), zoneGeo.width(), zoneGeo.height(),
+                                          QString(), ctx.toScreenId, false);
+            return;
+        }
+    }
+
+    // Floating placement: keep the snap state in sync (so future float toggles
+    // route back to this engine via lastActiveScreenName's screenAssignment
+    // lookup) but don't apply geometry here — the dropping caller already
+    // committed the position.
+    m_windowTracker->setWindowFloating(ctx.windowId, true);
+    Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
+}
+
+void SnapEngine::handoffRelease(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId;
+
+    // Tracking-only release: drop the zone/screen/desktop entries so the
+    // receiving engine sees a clean slate, but do NOT mutate geometry.
+    // pre-float / pre-tile captures are intentionally preserved — the receive
+    // side may consult them via the HandoffContext for size restoration.
+    if (m_snapState->isWindowSnapped(windowId)) {
+        m_windowTracker->unassignWindow(windowId);
+    }
+    if (m_snapState->isFloating(windowId)) {
+        m_windowTracker->setWindowFloating(windowId, false);
+    }
+}
+
 } // namespace PlasmaZones

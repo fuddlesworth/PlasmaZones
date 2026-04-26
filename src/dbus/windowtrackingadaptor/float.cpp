@@ -13,6 +13,7 @@
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 
 namespace PlasmaZones {
@@ -158,11 +159,22 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
 
     // Route to the correct engine based on screen mode
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
-        // If the window isn't tracked by autotile yet (e.g., dragged from a snap screen),
-        // adopt it as floating before setting state. Virtual dispatch handles the
-        // engine-specific logic (AutotileEngine overrides; SnapEngine no-ops).
-        if (floating) {
-            m_autotileEngine->adoptWindowAsFloating(windowId, screenId);
+        // If the window isn't tracked by autotile yet (e.g., dragged from a snap
+        // screen), hand off ownership via the explicit cross-engine contract.
+        // SnapEngine::handoffRelease drops its tracking;
+        // AutotileEngine::handoffReceive adds the window to the destination
+        // state with the requested floating disposition. Virtual dispatch
+        // handles each engine's policy.
+        if (floating && !m_autotileEngine->isWindowTracked(windowId)) {
+            PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+            ctx.windowId = windowId;
+            ctx.toScreenId = screenId;
+            ctx.fromEngineId = m_snapEngine ? m_snapEngine->engineId() : QString();
+            ctx.wasFloating = true;
+            if (m_snapEngine) {
+                m_snapEngine->handoffRelease(windowId);
+            }
+            m_autotileEngine->handoffReceive(ctx);
         }
         m_autotileEngine->setWindowFloat(windowId, floating);
     } else if (m_snapEngine) {

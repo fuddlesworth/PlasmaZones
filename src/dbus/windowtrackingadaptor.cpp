@@ -515,6 +515,24 @@ QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
     return m_frameGeometry.value(windowId);
 }
 
+QString WindowTrackingAdaptor::lastActiveScreenName() const
+{
+    // Prefer the active window's live screen assignment over the cached
+    // m_lastActiveScreenId. KWin only fires windowActivated on focus
+    // changes, so a window dragged/snapped to a different VS without
+    // losing focus leaves the cache pointing at the source screen — and
+    // the shortcut router would then dispatch (e.g. float, navigate) to
+    // the wrong engine. Reading the screenAssignment closes that gap
+    // without depending on the effect to re-fire windowActivated.
+    if (!m_lastActiveWindowId.isEmpty() && m_service) {
+        const QString tracked = m_service->screenAssignments().value(m_lastActiveWindowId);
+        if (!tracked.isEmpty()) {
+            return tracked;
+        }
+    }
+    return m_lastActiveScreenId;
+}
+
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {

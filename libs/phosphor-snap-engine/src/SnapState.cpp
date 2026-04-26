@@ -283,7 +283,32 @@ SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
             m_preFloatScreenAssignments[windowId] = screen;
         }
     }
-    return unassignWindow(windowId);
+
+    // Float-from-snap clears the zone assignment but PRESERVES the screen
+    // (and desktop) assignment. The window is still on that screen — it's
+    // just floating instead of snapped to a zone. Erasing the screen
+    // assignment leaves the daemon's "what screen does this window live on"
+    // lookups (e.g. lastActiveScreenName) with no answer for a window that
+    // unambiguously lives on a known screen, and routing then falls through
+    // to a stale cached value — for the float toggle, that misroutes the
+    // unfloat to whichever engine the cache points at (e.g. autotile on the
+    // source VS) instead of the snap engine that owns this screen.
+    UnassignResult result;
+    QStringList previousZones = m_windowZoneAssignments.value(windowId);
+    if (!m_windowZoneAssignments.remove(windowId)) {
+        return result;
+    }
+    result.wasAssigned = true;
+    if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
+        m_lastUsedZoneId.clear();
+        m_lastUsedScreenId.clear();
+        m_lastUsedZoneClass.clear();
+        m_lastUsedDesktop = 0;
+        result.lastUsedZoneCleared = true;
+    }
+    Q_EMIT windowUnassigned(windowId);
+    Q_EMIT stateChanged();
+    return result;
 }
 
 QString SnapState::preFloatScreen(const QString& windowId) const
