@@ -246,6 +246,41 @@ bool Daemon::init()
     m_layoutManager->setDefaultLayoutIdProvider([this]() {
         return m_settings->defaultLayoutId();
     });
+
+    // Synthesize a settings-derived default AssignmentEntry for the
+    // cascade. The lib falls through to this when a (screen, desktop,
+    // activity) tuple has no stored entry — most importantly, brand-new
+    // virtual desktops the user never explicitly configured. Without
+    // this hook a fresh desktop has no mode assignment at all: the
+    // autotile engine never activates on it (issue #368) and the OSD
+    // shows a snap-only fallback even when the user has configured
+    // autotile as their global mode.
+    //
+    // Mode priority: autotile-only > snap > snap-default > none.
+    //   - snapping disabled + autotile enabled  → autotile, default algorithm
+    //   - snapping enabled                      → snap, default layout id
+    //   - both disabled                         → default-constructed entry
+    //                                             (cascade reports "no entry",
+    //                                             matching pre-368 behaviour)
+    // Snap takes priority when both are enabled because snap is the
+    // historical default mode — autotile only wins when the user has
+    // explicitly turned snapping off.
+    m_layoutManager->setDefaultAssignmentEntryProvider([this]() {
+        PhosphorZones::AssignmentEntry entry;
+        if (!m_settings) {
+            return entry;
+        }
+        const bool snap = m_settings->snappingEnabled();
+        const bool autotile = m_settings->autotileEnabled();
+        if (snap) {
+            entry.mode = PhosphorZones::AssignmentEntry::Snapping;
+            entry.snappingLayout = m_settings->defaultLayoutId();
+        } else if (autotile) {
+            entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+            entry.tilingAlgorithm = m_settings->defaultAutotileAlgorithm();
+        }
+        return entry;
+    });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
@@ -950,6 +985,7 @@ void Daemon::stop()
     // fan-out during qDeleteAll(m_layouts)) stay safe.
     if (m_layoutManager) {
         m_layoutManager->setDefaultLayoutIdProvider({});
+        m_layoutManager->setDefaultAssignmentEntryProvider({});
     }
 
     m_running = false;

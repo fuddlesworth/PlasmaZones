@@ -138,6 +138,31 @@ public:
      */
     void setDefaultLayoutIdProvider(std::function<QString()> provider);
 
+    /**
+     * @brief Inject a callback that returns the user-configured default
+     * assignment entry for screens with no explicit cascade hit.
+     *
+     * The library's cascade resolves (screen, desktop, activity) via
+     * stored assignments. When *every* fallback misses (for example, a
+     * brand-new virtual desktop the user never explicitly configured),
+     * @ref assignmentEntryForScreen / @ref assignmentIdForScreen /
+     * @ref layoutForScreen consult this provider as the final step.
+     *
+     * Composition roots are expected to synthesize the entry from the
+     * settings layer — typically @c snappingEnabled / @c autotileEnabled
+     * plus the configured default snap layout id and default autotile
+     * algorithm. Callbacks must return a default-constructed entry
+     * (@c isValid() returning false) when the user has not configured a
+     * runtime mode; callers treat that as "no entry" the same way an
+     * empty cascade does.
+     *
+     * Invoked on every cascade-miss with no caching, so providers can
+     * re-read settings cheaply per call. Pass an empty function to
+     * disable, restoring pre-368 cascade behaviour (no synthesized
+     * fallback).
+     */
+    void setDefaultAssignmentEntryProvider(std::function<AssignmentEntry()> provider);
+
     // ─── Assignments (per-context routing) ────────────────────────────────
 
     /// Get the previous active layout (before the most recent
@@ -292,6 +317,13 @@ private:
     Layout* resolveConfiguredDefault() const;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
+    /// Empty = provider disabled; cascade returns no entry when every fallback misses.
+    /// When set, the provider's return value is the final cascade step for
+    /// @ref assignmentEntryForScreen / @ref assignmentIdForScreen /
+    /// @ref layoutForScreen — synthesizing a settings-derived default for
+    /// contexts the user never explicitly configured (e.g. brand-new
+    /// virtual desktops).
+    std::function<AssignmentEntry()> m_defaultAssignmentEntryProvider;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of m_ownedBackend.get(); always non-null
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") — drives locateAll discovery

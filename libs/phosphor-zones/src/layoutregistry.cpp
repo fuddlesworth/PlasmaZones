@@ -56,6 +56,11 @@ void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provide
     m_defaultLayoutIdProvider = std::move(provider);
 }
 
+void LayoutRegistry::setDefaultAssignmentEntryProvider(std::function<AssignmentEntry()> provider)
+{
+    m_defaultAssignmentEntryProvider = std::move(provider);
+}
+
 void LayoutRegistry::setLayoutDirectory(const QString& directory)
 {
     if (m_layoutDirectory != directory) {
