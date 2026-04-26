@@ -288,6 +288,7 @@ void AutotileEngine::connectSignals()
                             for (const QString& orphanId : orphanedVsIds)
                                 s->clearPerScreenAutotileSettings(orphanId);
                         }
+                        Q_EMIT settingsPersistRequested();
                     }
 
                     // Clean up desktop overrides for removed virtual screens on this physical screen.
