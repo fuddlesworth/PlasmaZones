@@ -48,10 +48,18 @@ void Daemon::initializeAutotile()
         // fires for float, swap, window open/close, etc. which is too noisy)
         connect(m_autotileEngine.get(), &PlacementEngineBase::algorithmChanged, this,
                 [this](const QString& algorithmId) {
-                    // Only show OSD when actually in autotile mode — loadState() emits
-                    // algorithmChanged during startup even if we're in manual mode.
-                    // Defer OSD display (same rationale as autotileApplied handler above).
-                    if (m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
+                    // Suppress during startup: loadState() emits algorithmChanged from
+                    // finalizeStartup(), and finalizeStartup() is the authoritative
+                    // startup-OSD path (gated on showOsdOnDesktopSwitch via
+                    // showOsdForAllScreens). Letting this handler also fire would both
+                    // double-queue an OSD on the focused screen AND leak past
+                    // showOsdOnDesktopSwitch=false, since this branch gates only on
+                    // showOsdOnLayoutSwitch.
+                    //
+                    // Also gate on isAnyScreenAutotile() — loadState() may emit even
+                    // when no screen is in autotile mode, and a runtime algorithm
+                    // change is irrelevant in that case.
+                    if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                         && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
                         auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
                         QString displayName = algo ? algo->name() : algorithmId;
@@ -664,7 +672,10 @@ void Daemon::finalizeStartup()
 
     // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
     // The layoutApplied signal only fires for the focused screen; this covers the rest.
-    if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+    // Gated on the desktop-switch OSD toggle (not the layout-switch toggle): startup is
+    // a passive context change like a desktop switch, not an explicit user-driven layout
+    // change, so users who disable desktop-switch OSDs expect quiet startup too.
+    if (m_settings && m_settings->showOsdOnDesktopSwitch()) {
         showOsdForAllScreens(currentDesktop(), currentActivity());
     }
 }

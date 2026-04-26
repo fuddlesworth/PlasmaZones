@@ -248,6 +248,7 @@ public:
     PZ_CONFIG_KEY(showNumbersKey, "ShowNumbers")
     PZ_CONFIG_KEY(flashOnSwitchKey, "FlashOnSwitch")
     PZ_CONFIG_KEY(osdOnLayoutSwitchKey, "OsdOnLayoutSwitch")
+    PZ_CONFIG_KEY(osdOnDesktopSwitchKey, "OsdOnDesktopSwitch")
     PZ_CONFIG_KEY(navigationOsdKey, "NavigationOsd")
     PZ_CONFIG_KEY(osdStyleKey, "OsdStyle")
     PZ_CONFIG_KEY(overlayDisplayModeKey, "OverlayDisplayMode")

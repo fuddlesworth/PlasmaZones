@@ -540,6 +540,7 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool},
         {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool},
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
+        {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool},
         {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
         {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, {}, clampInt(CD::osdStyleMin(), CD::osdStyleMax())},
         {CD::overlayDisplayModeKey(),

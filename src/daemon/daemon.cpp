@@ -721,11 +721,19 @@ bool Daemon::init()
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
 
-            // Show OSD for changed screens — use locked OSD variant when context is locked
+            // Show OSD for changed screens — use locked OSD variant when context is locked.
+            // KCM Apply is an explicit user-driven layout assignment change, so the regular
+            // preview OSDs gate on showOsdOnLayoutSwitch (matching cycle / quick-layout /
+            // zone-selector-drop). The locked-context OSD bypasses the toggle by design — it
+            // explains why a requested change had no visible effect on that screen, the same
+            // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
+            const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
             for (const auto& osd : std::as_const(osdEntries)) {
                 int mode = osd.isAutotile ? 1 : 0;
                 if (isCurrentContextLockedForMode(osd.screenId, mode)) {
                     showLockedPreviewOsd(osd.screenId);
+                } else if (!osdEnabled) {
+                    continue;
                 } else if (osd.isAutotile) {
                     if (!osd.algoId.isEmpty())
                         showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
@@ -847,6 +855,12 @@ void Daemon::start()
     // the migration finds no windows to migrate.
     migrateStartupScreenAssignments();
 
+    // Intentionally last: the algorithmChanged handler (signals.cpp) and showDesktopSwitchOsd
+    // (osd.cpp) both gate on !m_running to suppress OSD/feedback during startup. finalizeStartup()
+    // calls m_autotileEngine->loadState() which synchronously emits algorithmChanged, and
+    // KWin/Plasma can deliver desktop/activity-change signals during the same window. Setting
+    // m_running before finalizeStartup() returns would let those handlers fire and double-queue
+    // (or leak past) the startup OSD that finalizeStartup() is responsible for.
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 }

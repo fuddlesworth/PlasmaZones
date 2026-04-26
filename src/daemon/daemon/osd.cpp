@@ -417,7 +417,7 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     if (!m_running) {
         return;
     }
-    if (!m_settings || !m_settings->showOsdOnLayoutSwitch() || !m_overlayService || !m_layoutManager
+    if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
         || !m_screenManager) {
         return;
     }
