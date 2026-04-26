@@ -256,9 +256,9 @@ bool Daemon::init()
     // shows a snap-only fallback even when the user has configured
     // autotile as their global mode.
     //
-    // Mode priority: autotile-only > snap > snap-default > none.
-    //   - snapping disabled + autotile enabled  → autotile, default algorithm
+    // Mode priority: snap > autotile > none.
     //   - snapping enabled                      → snap, default layout id
+    //   - snapping disabled + autotile enabled  → autotile, default algorithm
     //   - both disabled                         → default-constructed entry
     //                                             (cascade reports "no entry",
     //                                             matching pre-368 behaviour)

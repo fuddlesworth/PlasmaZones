@@ -634,6 +634,141 @@ private Q_SLOTS:
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 4), fallback);
     }
 
+    void testDefaultAssignmentEntryProvider_snapWithUnknownUuid_fallsThroughToDefaultLayout()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* registered = createTestLayout(QStringLiteral("Registered"));
+        mgr->addLayout(registered);
+
+        // Provider points at a UUID that's NOT in the registry. layoutForScreen
+        // must fall through to defaultLayout() rather than returning nullptr —
+        // a stale defaultLayoutId in settings shouldn't break overlay/drag.
+        const QString bogusId = QUuid::createUuid().toString();
+        mgr->setDefaultAssignmentEntryProvider([bogusId]() {
+            PhosphorZones::AssignmentEntry e;
+            e.mode = PhosphorZones::AssignmentEntry::Snapping;
+            e.snappingLayout = bogusId;
+            return e;
+        });
+
+        // assignmentIdForScreen surfaces the raw stored string (matches the
+        // method's documented contract — KCM/UI sees the dangling reference
+        // and can warn/clear it).
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), bogusId);
+        // assignmentEntryForScreen agrees (gated on activeLayoutId() non-empty
+        // — bogusId is non-empty so it propagates).
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4).snappingLayout, bogusId);
+        // layoutForScreen, however, must not return nullptr — it falls
+        // through to defaultLayout() when the synth UUID can't be resolved.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 4), registered);
+    }
+
+    void testDefaultAssignmentEntryProvider_autotileWithEmptyAlgorithm_yieldsBareAutotileId()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        // Mode-only autotile (empty algorithm = "use engine default") is the
+        // KCM's representation of "autotile mode, no specific algorithm"
+        // — activeLayoutId() must yield "autotile:" so the cascade visitor
+        // accepts it and downstream callers route via LayoutId::isAutotile.
+        mgr->setDefaultAssignmentEntryProvider([]() {
+            PhosphorZones::AssignmentEntry e;
+            e.mode = PhosphorZones::AssignmentEntry::Autotile;
+            e.tilingAlgorithm = QString(); // explicitly empty
+            return e;
+        });
+
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QStringLiteral("autotile:"));
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+        // layoutForScreen rejects autotile entries (no Layout* to resolve)
+        // and falls through to defaultLayout(); registry has no layouts
+        // here so the result is nullptr.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 4), nullptr);
+    }
+
+    void testDefaultAssignmentEntryProvider_partialSnapEntry_treatedAsNoEntry()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        // Snap enabled but no defaultLayoutId set — provider returns a
+        // partial entry. All three cascade views must agree this is "no
+        // entry" (matching the activeLayoutId()-empty rule the cascade
+        // visitor uses internally), preserving pre-368 behaviour for
+        // callers that expect default-constructed.
+        mgr->setDefaultAssignmentEntryProvider([]() {
+            PhosphorZones::AssignmentEntry e;
+            e.mode = PhosphorZones::AssignmentEntry::Snapping;
+            e.snappingLayout = QString(); // no UUID configured
+            return e;
+        });
+
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QVERIFY(!entry.isValid());
+        QCOMPARE(entry.snappingLayout, QString());
+    }
+
+    void testDefaultAssignmentEntryProvider_cascadeHitSkipsProvider()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Stored"));
+        mgr->addLayout(layout);
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layout);
+
+        // shared_ptr so the lambda copy and the test reach the same counter.
+        auto callCount = std::make_shared<int>(0);
+        mgr->setDefaultAssignmentEntryProvider([callCount]() {
+            ++(*callCount);
+            PhosphorZones::AssignmentEntry e;
+            e.mode = PhosphorZones::AssignmentEntry::Autotile;
+            e.tilingAlgorithm = QStringLiteral("bsp");
+            return e;
+        });
+
+        // Exact-key cascade hit — provider must not be invoked.
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(*callCount, 0);
+
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 1), layout->id().toString());
+        QCOMPARE(*callCount, 0);
+
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1), layout);
+        QCOMPARE(*callCount, 0);
+
+        // Cascade miss on a different desktop — provider IS invoked once
+        // per cascade-querying method.
+        (void)mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
+        QCOMPARE(*callCount, 1);
+    }
+
+    void testDefaultAssignmentEntryProvider_replaceProviderReplacesBehaviour()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        // First provider — autotile.
+        mgr->setDefaultAssignmentEntryProvider([]() {
+            PhosphorZones::AssignmentEntry e;
+            e.mode = PhosphorZones::AssignmentEntry::Autotile;
+            e.tilingAlgorithm = QStringLiteral("bsp");
+            return e;
+        });
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QStringLiteral("autotile:bsp"));
+
+        // Replace with a different provider — second value must win, not stack.
+        mgr->setDefaultAssignmentEntryProvider([]() {
+            PhosphorZones::AssignmentEntry e;
+            e.mode = PhosphorZones::AssignmentEntry::Autotile;
+            e.tilingAlgorithm = QStringLiteral("dwindle");
+            return e;
+        });
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QStringLiteral("autotile:dwindle"));
+
+        // Clearing the provider restores pre-368 cascade behaviour.
+        mgr->setDefaultAssignmentEntryProvider({});
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+    }
+
     void testAssignmentEntry_fromLayoutId_setsModeSetsField_preservesOther()
     {
         PhosphorZones::AssignmentEntry existing;

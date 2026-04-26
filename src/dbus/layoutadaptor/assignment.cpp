@@ -151,21 +151,28 @@ QString LayoutAdaptor::getAllScreenAssignments()
         }
         QJsonObject screenObj;
 
-        // Explicit assignment entry with mode, snappingLayout, tilingAlgorithm
-        auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
-        QString effectiveId = entry.activeLayoutId();
-        if (!effectiveId.isEmpty()) {
-            screenObj[QLatin1String("default")] = effectiveId;
+        // Per-screen base entry — only emit when explicitly stored.
+        // assignmentEntryForScreen would happily synthesize the user's
+        // global default here (per-368 fallback), but this JSON is the
+        // KCM's view of *stored* state and may be round-tripped back
+        // through SetAllScreenAssignments on save. Persisting the
+        // synthesized default would shadow future global-default
+        // changes and defeat the "synthesized fallback only" intent.
+        if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
+            auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
+            QString effectiveId = entry.activeLayoutId();
+            if (!effectiveId.isEmpty()) {
+                screenObj[QLatin1String("default")] = effectiveId;
+            }
+            // Expose both fields so the KCM can populate snapping AND tiling assignments
+            if (!entry.snappingLayout.isEmpty()) {
+                screenObj[QLatin1String("snappingLayout")] = entry.snappingLayout;
+            }
+            if (!entry.tilingAlgorithm.isEmpty()) {
+                screenObj[QLatin1String("tilingAlgorithm")] = entry.tilingAlgorithm;
+            }
+            screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
         }
-
-        // Expose both fields so the KCM can populate snapping AND tiling assignments
-        if (!entry.snappingLayout.isEmpty()) {
-            screenObj[QLatin1String("snappingLayout")] = entry.snappingLayout;
-        }
-        if (!entry.tilingAlgorithm.isEmpty()) {
-            screenObj[QLatin1String("tilingAlgorithm")] = entry.tilingAlgorithm;
-        }
-        screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
 
         // Per-desktop entries (desktop > 0) — only include explicitly assigned
         // desktops, not inherited base defaults.  Without this guard every
@@ -179,12 +186,14 @@ QString LayoutAdaptor::getAllScreenAssignments()
             }
         }
 
-        if (!screenObj.isEmpty()) {
-            // Key by connector name for KCM compatibility (D-Bus boundary translates on save)
-            // Include screenId inside the object for consumers that need it
-            screenObj[QLatin1String("screenId")] = screenId;
-            root[connectorName] = screenObj;
-        }
+        // Always emit one entry per effective screen — the editor's
+        // m_availableScreenIds enumeration relies on this. Pre-368 the
+        // base-level write set screenObj["mode"] unconditionally so
+        // every screen ended up in the JSON; with the explicit-only
+        // guard above, screens with no stored entries would otherwise
+        // be dropped.
+        screenObj[QLatin1String("screenId")] = screenId;
+        root[connectorName] = screenObj;
     }
 
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));

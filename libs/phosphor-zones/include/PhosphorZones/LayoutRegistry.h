@@ -151,15 +151,26 @@ public:
      * Composition roots are expected to synthesize the entry from the
      * settings layer — typically @c snappingEnabled / @c autotileEnabled
      * plus the configured default snap layout id and default autotile
-     * algorithm. Callbacks must return a default-constructed entry
-     * (@c isValid() returning false) when the user has not configured a
-     * runtime mode; callers treat that as "no entry" the same way an
-     * empty cascade does.
+     * algorithm. Callbacks should return a default-constructed entry
+     * when the user has not configured a runtime mode; the registry
+     * additionally guards against partial entries by gating the synth
+     * on the same acceptance rule the cascade visitors use
+     * (@c activeLayoutId() non-empty for entry/id queries; @c Snapping
+     * mode with a resolvable layout for @ref layoutForScreen).
      *
      * Invoked on every cascade-miss with no caching, so providers can
      * re-read settings cheaply per call. Pass an empty function to
      * disable, restoring pre-368 cascade behaviour (no synthesized
      * fallback).
+     *
+     * Callers that need to inspect the user's *stored* state without
+     * the synth fallback (e.g. KCM readbacks that round-trip through
+     * persistence) should gate their query with @ref hasExplicitAssignment.
+     *
+     * Thread-safety: the provider is read on every cascade query and
+     * swapped via this setter without synchronization; both must run
+     * on the same thread (the LayoutRegistry's owner thread, typically
+     * the main Qt thread).
      */
     void setDefaultAssignmentEntryProvider(std::function<AssignmentEntry()> provider);
 
@@ -203,12 +214,20 @@ public:
     /// Raw assignment id for a (screen, desktop, activity) context.
     /// Returns the stored string (manual-layout UUID or
     /// @c "autotile:<algorithmId>") without resolving to a @ref Layout*.
-    /// Empty if no explicit assignment.
+    /// Empty if no explicit assignment AND no synthesized default from
+    /// @ref setDefaultAssignmentEntryProvider applies. Callers that
+    /// need to distinguish "stored" from "synthesized fallback" must
+    /// pair this with @ref hasExplicitAssignment.
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                   const QString& activity = QString()) const;
 
     /// Full entry for a (screen, desktop, activity) context (same
-    /// cascade as @ref layoutForScreen).
+    /// cascade as @ref layoutForScreen). When every cascade level
+    /// misses, the entry returned by @ref setDefaultAssignmentEntryProvider
+    /// is surfaced (gated on the same acceptance rule the cascade
+    /// visitors use); a default-constructed entry otherwise. Callers
+    /// that need raw stored state without the synth fallback must gate
+    /// with @ref hasExplicitAssignment.
     AssignmentEntry assignmentEntryForScreen(const QString& screenId, int virtualDesktop = 0,
                                              const QString& activity = QString()) const;
 

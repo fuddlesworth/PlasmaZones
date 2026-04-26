@@ -261,11 +261,20 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
     // Cascade miss — surface the settings-derived default entry so callers
     // that branch on mode (autotile engine activation, OSD, KCM "current
     // mode" displays) see what the user has configured globally instead
-    // of a default-constructed Snapping entry with no layout id. Provider
-    // callers that have no runtime mode configured return a
-    // default-constructed entry, which preserves historical behaviour.
+    // of a default-constructed Snapping entry with no layout id.
+    //
+    // Gate on the same acceptance rule the in-cascade visitor above
+    // uses (activeLayoutId() non-empty) so the three cascade views
+    // (entry / id / layout) agree: a partial provider entry — e.g.
+    // {Snapping, snappingLayout=""} when the user has snap enabled but
+    // no defaultLayoutId set — is treated as "no entry", matching
+    // assignmentIdForScreen's behaviour and preserving pre-368 callers
+    // that expect a default-constructed return.
     if (m_defaultAssignmentEntryProvider) {
-        return m_defaultAssignmentEntryProvider();
+        const AssignmentEntry def = m_defaultAssignmentEntryProvider();
+        if (!def.activeLayoutId().isEmpty()) {
+            return def;
+        }
     }
     return AssignmentEntry{};
 }
