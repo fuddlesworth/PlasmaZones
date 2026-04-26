@@ -430,8 +430,8 @@ private:
     {
         QPointer<KWin::OutlinedBorderItem> item;
         QMetaObject::Connection geometryConnection;
-        QPointer<KWin::SurfaceItem> clippedSurface;
-        KWin::BorderRadius savedSurfaceRadius;
+        QPointer<KWin::Item> clippedContainer;
+        KWin::BorderRadius savedContainerRadius;
     };
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 

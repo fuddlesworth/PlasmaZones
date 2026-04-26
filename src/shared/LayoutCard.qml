@@ -29,7 +29,6 @@ Item {
     property real previewHeight
     // Feature toggles
     property bool showCardBackground: false
-    property bool showIndicatorBar: false
     // ZonePreview passthrough
     property bool interactive: false
     property int selectedZoneIndex: -1
@@ -216,40 +215,6 @@ Item {
             Behavior on border.width {
                 NumberAnimation {
                     duration: root.shortAnimationDuration
-                }
-
-            }
-
-        }
-
-        // Left accent bar (zone selector mode)
-        Rectangle {
-            id: indicatorBar
-
-            visible: root.showIndicatorBar
-            anchors.left: previewBackground.left
-            anchors.top: previewBackground.top
-            anchors.bottom: previewBackground.bottom
-            anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
-            anchors.topMargin: Kirigami.Units.smallSpacing
-            anchors.bottomMargin: Kirigami.Units.smallSpacing
-            width: root.isActive ? Kirigami.Units.smallSpacing : 0
-            radius: Math.round(Kirigami.Units.smallSpacing / 2)
-            color: Kirigami.Theme.highlightColor
-            opacity: root.isActive ? 1 : 0
-
-            Behavior on width {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
-                }
-
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
                 }
 
             }
