@@ -19,6 +19,13 @@ public:
     virtual StickyWindowHandling stickyWindowHandling() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
+
+    // Force-on master toggle: when true, every manual layout auto-assigns new
+    // windows to its first empty zone regardless of its individual `autoAssign`
+    // flag. The per-layout flag still applies independently — effective behavior
+    // is `globalAutoAssign OR layout->autoAssign()`. Default false preserves the
+    // pre-#370 per-layout-only semantics.
+    virtual bool autoAssignAllLayouts() const = 0;
 };
 
 } // namespace PhosphorEngineApi

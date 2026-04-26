@@ -345,6 +345,23 @@ Flickable {
                     }
 
                     SettingsRow {
+                        title: i18n("Auto-assign new windows for all layouts")
+                        description: i18n("Fill the first empty zone when a new window opens. When on, this overrides each layout's individual auto-assign toggle and applies to every layout.")
+
+                        SettingsSwitch {
+                            checked: appSettings.autoAssignAllLayouts
+                            accessibleName: i18n("Auto-assign new windows for all layouts")
+                            onToggled: function(newValue) {
+                                appSettings.autoAssignAllLayouts = newValue;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
                         title: i18n("Restore size on unsnap")
                         description: i18n("Return a window to its original size when dragged out of a zone")
 

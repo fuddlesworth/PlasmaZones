@@ -537,6 +537,13 @@ public:
     void setRestoreWindowsToZonesOnLogin(bool) override
     {
     }
+    bool autoAssignAllLayouts() const override
+    {
+        return false;
+    }
+    void setAutoAssignAllLayouts(bool) override
+    {
+    }
     bool snapAssistFeatureEnabled() const override
     {
         return m_snapAssistFeatureEnabled;

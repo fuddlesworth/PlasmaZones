@@ -1342,6 +1342,9 @@ void Settings::setStickyWindowHandlingInt(int handling)
 PZ_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
 PZ_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
                   restoreWindowsToZonesOnLoginChanged)
+PZ_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
+PZ_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
+                  autoAssignAllLayoutsChanged)
 
 QString Settings::defaultLayoutId() const
 {

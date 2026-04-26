@@ -202,6 +202,7 @@ public:
     PZ_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     PZ_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     PZ_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
+    PZ_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     PZ_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     PZ_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
 
