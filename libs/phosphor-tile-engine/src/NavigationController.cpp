@@ -116,13 +116,14 @@ void NavigationController::rotateWindowOrder(bool clockwise)
     qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
 }
 
-void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action)
+void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action,
+                                                  const QString& explicitWindowId)
 {
     const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
 
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
-    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
+    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
 
     if (windows.size() < 2 || !state) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
@@ -130,7 +131,7 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         return;
     }
 
-    const QString focused = state->focusedWindow();
+    const QString focused = !explicitWindowId.isEmpty() ? explicitWindowId : state->focusedWindow();
     if (focused.isEmpty()) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
         return;
@@ -157,13 +158,14 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
 }
 
-void NavigationController::focusInDirection(const QString& direction, const QString& action)
+void NavigationController::focusInDirection(const QString& direction, const QString& action,
+                                            const QString& explicitWindowId)
 {
     const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
 
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
-    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
+    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
 
     if (windows.isEmpty() || !state) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(),
@@ -171,7 +173,7 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
         return;
     }
 
-    const QString focused = state->focusedWindow();
+    const QString focused = !explicitWindowId.isEmpty() ? explicitWindowId : state->focusedWindow();
     const int currentIndex = qMax(0, windows.indexOf(focused));
     const int targetIndex = (currentIndex + (forward ? 1 : -1) + windows.size()) % windows.size();
 
@@ -179,11 +181,11 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     Q_EMIT m_engine->navigationFeedback(true, action, direction, QString(), QString(), screenId);
 }
 
-void NavigationController::moveFocusedToPosition(int position)
+void NavigationController::moveFocusedToPosition(int position, const QString& explicitWindowId)
 {
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
-    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
+    const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
 
     if (windows.isEmpty() || !state) {
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_windows"), QString(),
@@ -191,7 +193,7 @@ void NavigationController::moveFocusedToPosition(int position)
         return;
     }
 
-    const QString focused = state->focusedWindow();
+    const QString focused = !explicitWindowId.isEmpty() ? explicitWindowId : state->focusedWindow();
     if (focused.isEmpty()) {
         Q_EMIT m_engine->navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_focus"), QString(),
                                             QString(), screenId);
@@ -368,9 +370,31 @@ void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirs
 }
 
 QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScreenId,
-                                                               PhosphorTiles::TilingState*& outState)
+                                                               PhosphorTiles::TilingState*& outState,
+                                                               const QString& explicitWindowId)
 {
     outState = nullptr;
+
+    // Authoritative path: when the daemon supplied a windowId (KWin's live
+    // focus), find the state that actually contains that window. The engine's
+    // per-state focusedWindow() tracker may be stale because focus moved
+    // through floating, snapped, or never-tracked windows that don't update
+    // it — using the daemon's value avoids operating on the wrong window.
+    if (!explicitWindowId.isEmpty()) {
+        for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+            if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
+                continue;
+            }
+            PhosphorTiles::TilingState* state = it.value();
+            if (state && state->containsWindow(explicitWindowId)) {
+                outScreenId = it.key().screenId;
+                outState = state;
+                return state->tiledWindows();
+            }
+        }
+        // Fall through to focused-screen lookup if the explicit window isn't
+        // tracked by autotile — caller will surface no_focus / no_windows.
+    }
 
     // Use the tracked active screen (set by onWindowFocused) to avoid
     // non-deterministic QHash iteration when multiple screens have focused windows

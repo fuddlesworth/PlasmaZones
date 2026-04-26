@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPoint>
+#include <QRect>
 #include <QSet>
 #include <QString>
 #include <QStringList>

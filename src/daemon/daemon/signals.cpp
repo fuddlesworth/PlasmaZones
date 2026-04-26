@@ -734,22 +734,15 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     }
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     // Cross-engine handoff: this signal fires when autotile has just taken
-    // ownership of a window that may still be tracked by snap. If snap still
-    // has zone/screen assignments for the window, releasing them here is the
-    // missing half of the handoff — without it, the daemon's float router
-    // (lastActiveScreenName via screenAssignments) would still resolve to
-    // snap on the source screen, and the next float toggle would float the
-    // window back to its old snap zone instead of operating on its new
-    // autotile placement. Drag-drop from snap → autotile is the canonical
-    // case; the cancellation paths (handoffRelease is no-op when the engine
-    // doesn't track the window) make this safe to call unconditionally.
-    if (m_snapEngine && (wts->isWindowSnapped(windowId) || wts->isWindowFloating(windowId))) {
-        const QString snapScreen = wts->screenAssignments().value(windowId);
-        if (!snapScreen.isEmpty() && snapScreen != screenId) {
-            qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(snap screen"
-                             << snapScreen << "→ autotile screen" << screenId << ")";
-            m_snapEngine->handoffRelease(windowId);
-        }
+    // ownership of a window that may still be tracked by snap. handoffRelease
+    // is a no-op when the engine doesn't track the window, so we can call it
+    // unconditionally — that closes the loophole where snap thought the
+    // window was on the same screen ID as the autotile target (stale state
+    // mid-mode-switch) and the previous gated path skipped cleanup.
+    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(autotile screen"
+                         << screenId << ")";
+        m_snapEngine->handoffRelease(windowId);
     }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);

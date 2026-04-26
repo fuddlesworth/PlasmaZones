@@ -1898,7 +1898,7 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
         // screen.
         //
         // Cross-engine handoff now goes through the explicit
-        // receiveWindow/releaseWindow contract orchestrated by the daemon
+        // handoffReceive/handoffRelease contract orchestrated by the daemon
         // — this path is purely "no-op when the window isn't ours".
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
@@ -1943,10 +1943,21 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         return;
     }
 
-    // Already tracked — nothing to adopt; the float toggle path is what the
-    // caller probably wants instead.
-    if (m_windowToStateKey.contains(windowId) && state->containsWindow(windowId)) {
+    // Already tracked on the destination screen — nothing to adopt; the float
+    // toggle path is what the caller probably wants instead.
+    const auto destKey = currentKeyForScreen(ctx.toScreenId);
+    const auto trackedKeyIt = m_windowToStateKey.constFind(windowId);
+    if (trackedKeyIt != m_windowToStateKey.constEnd() && trackedKeyIt.value() == destKey
+        && state->containsWindow(windowId)) {
         return;
+    }
+    // Already tracked but on a DIFFERENT autotile state (cross-screen
+    // handoff inside the same engine, or stale tracking after an aborted
+    // prior handoff). Release the previous state first to avoid orphaning
+    // the entry — handoffRelease is the correct primitive for "drop
+    // tracking without mutating geometry" within this engine too.
+    if (trackedKeyIt != m_windowToStateKey.constEnd() && trackedKeyIt.value() != destKey) {
+        handoffRelease(windowId);
     }
 
     state->addWindow(windowId);
@@ -3748,27 +3759,31 @@ void AutotileEngine::setFocusNewWindows(bool enabled)
 // concrete AutotileEngine method with the right parameters.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& ctx)
 {
-    focusInDirection(direction, QStringLiteral("focus"));
+    // Daemon-authoritative windowId overrides the per-state focusedWindow()
+    // tracker, which can drift when focus moves through floating, snapped, or
+    // never-tracked windows that don't update it (same root cause as the
+    // toggleFocusedFloat fix).
+    m_navigation->focusInDirection(direction, QStringLiteral("focus"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     // In autotile, "move in direction" is implemented as swap-with-neighbour
     // in the tiling order — the only way to move is to trade places with
     // the neighbour. OSD label "move" keeps the user-facing wording.
-    swapFocusedInDirection(direction, QStringLiteral("move"));
+    m_navigation->swapFocusedInDirection(direction, QStringLiteral("move"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
-    swapFocusedInDirection(direction, QStringLiteral("swap"));
+    m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& /*ctx*/)
+void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)
 {
-    moveFocusedToPosition(position);
+    m_navigation->moveFocusedToPosition(position, canonicalizeForLookup(ctx.windowId));
 }
 
 void AutotileEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
@@ -3807,10 +3822,10 @@ void AutotileEngine::toggleFocusedFloat(const NavigationContext& ctx)
     toggleFocusedWindowFloat();
 }
 
-void AutotileEngine::cycleFocus(bool forward, const NavigationContext& /*ctx*/)
+void AutotileEngine::cycleFocus(bool forward, const NavigationContext& ctx)
 {
     const QString dir = forward ? QStringLiteral("right") : QStringLiteral("left");
-    focusInDirection(dir, QStringLiteral("cycle"));
+    m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId));
 }
 
 void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
@@ -3820,10 +3835,17 @@ void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
     // becomes a harmless press in autotile mode.
 }
 
-void AutotileEngine::restoreFocusedWindow(const NavigationContext& /*ctx*/)
+void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 {
     // "Restore" in autotile means pulling the focused window out of the
     // tiling layout — toggling its float state achieves exactly that.
+    // Same daemon-authoritative routing as toggleFocusedFloat: prefer
+    // ctx.windowId over the engine's per-state focusedWindow() tracker.
+    if (!ctx.windowId.isEmpty()) {
+        const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
+        toggleWindowFloat(ctx.windowId, screenId);
+        return;
+    }
     toggleFocusedWindowFloat();
 }
 

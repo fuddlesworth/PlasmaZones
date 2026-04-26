@@ -157,28 +157,38 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating
                          << "screen=" << screenId;
 
-    // Route to the correct engine based on screen mode
+    // Route to the correct engine based on screen mode. Both directions go
+    // through the explicit cross-engine handoff contract when the window
+    // isn't yet tracked by the destination engine.
+    PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
+    PhosphorEngineApi::PlacementEngineBase* source = nullptr;
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
-        // If the window isn't tracked by autotile yet (e.g., dragged from a snap
-        // screen), hand off ownership via the explicit cross-engine contract.
-        // SnapEngine::handoffRelease drops its tracking;
-        // AutotileEngine::handoffReceive adds the window to the destination
-        // state with the requested floating disposition. Virtual dispatch
-        // handles each engine's policy.
-        if (floating && !m_autotileEngine->isWindowTracked(windowId)) {
-            PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
-            ctx.windowId = windowId;
-            ctx.toScreenId = screenId;
-            ctx.fromEngineId = m_snapEngine ? m_snapEngine->engineId() : QString();
-            ctx.wasFloating = true;
-            if (m_snapEngine) {
-                m_snapEngine->handoffRelease(windowId);
-            }
-            m_autotileEngine->handoffReceive(ctx);
-        }
-        m_autotileEngine->setWindowFloat(windowId, floating);
+        dest = m_autotileEngine.data();
+        source = m_snapEngine.data();
     } else if (m_snapEngine) {
-        m_snapEngine->setWindowFloat(windowId, floating);
+        dest = m_snapEngine.data();
+        source = m_autotileEngine.data();
+    }
+
+    if (dest && floating && !dest->isWindowTracked(windowId)) {
+        // Build the HandoffContext from whichever engine actually claims the
+        // window — fromEngineId stays empty when neither side tracks it (e.g.
+        // a brand-new floating dialog), so receive-side reasoning that depends
+        // on the source mode correctly degrades.
+        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = screenId;
+        ctx.wasFloating = true;
+        if (source && source->isWindowTracked(windowId)) {
+            ctx.fromEngineId = source->engineId();
+            ctx.sourceGeometry = m_frameGeometry.value(windowId);
+            source->handoffRelease(windowId);
+        }
+        dest->handoffReceive(ctx);
+    }
+
+    if (dest) {
+        dest->setWindowFloat(windowId, floating);
     }
 }
 

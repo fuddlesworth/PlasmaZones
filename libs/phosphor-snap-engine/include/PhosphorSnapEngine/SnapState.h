@@ -107,6 +107,14 @@ public:
 
     void setFloating(const QString& windowId, bool floating);
 
+    /// Mark a window floating AND record its screen+desktop without a zone.
+    /// Used by cross-engine handoff when the snap engine adopts a floating
+    /// window from another engine — the screen entry is what makes the snap
+    /// engine answerable for "where does this window live" lookups
+    /// (screenAssignments / screenForTrackedWindow) so future shortcut
+    /// routing reaches this engine.
+    void setFloatingOnScreen(const QString& windowId, const QString& screenId, int virtualDesktop);
+
     /// Save zone assignment before floating for later restore.
     UnassignResult unsnapForFloat(const QString& windowId);
     QString preFloatZone(const QString& windowId) const;
@@ -267,6 +275,15 @@ Q_SIGNALS:
 
 private:
     bool removeWindowData(const QString& windowId);
+
+    /// Shared body of unassignWindow / unsnapForFloat. Removes the window's
+    /// zone assignment and (optionally) its screen+desktop assignment, clears
+    /// the last-used-zone tracker if it referenced one of the removed zones,
+    /// and emits the windowUnassigned/stateChanged signals.
+    /// `preserveScreenAndDesktop` keeps the screen + desktop assignment maps
+    /// intact — used by unsnapForFloat so the snap engine still knows which
+    /// screen the now-floating window lives on.
+    UnassignResult clearZoneAssignment(const QString& windowId, bool preserveScreenAndDesktop);
 
     QSet<QString> allManagedWindowIds() const
     {

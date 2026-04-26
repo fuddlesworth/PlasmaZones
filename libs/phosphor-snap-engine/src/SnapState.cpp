@@ -184,14 +184,21 @@ void SnapState::assignWindowToZones(const QString& windowId, const QStringList& 
 
 SnapState::UnassignResult SnapState::unassignWindow(const QString& windowId)
 {
+    return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/false);
+}
+
+SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& windowId, bool preserveScreenAndDesktop)
+{
     UnassignResult result;
     QStringList previousZones = m_windowZoneAssignments.value(windowId);
     if (!m_windowZoneAssignments.remove(windowId)) {
         return result;
     }
     result.wasAssigned = true;
-    m_windowScreenAssignments.remove(windowId);
-    m_windowDesktopAssignments.remove(windowId);
+    if (!preserveScreenAndDesktop) {
+        m_windowScreenAssignments.remove(windowId);
+        m_windowDesktopAssignments.remove(windowId);
+    }
     if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
         m_lastUsedZoneId.clear();
         m_lastUsedScreenId.clear();
@@ -273,6 +280,30 @@ void SnapState::setFloating(const QString& windowId, bool floating)
     }
 }
 
+void SnapState::setFloatingOnScreen(const QString& windowId, const QString& screenId, int virtualDesktop)
+{
+    if (windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    bool changed = false;
+    if (!m_floatingWindows.contains(windowId)) {
+        m_floatingWindows.insert(windowId);
+        changed = true;
+    }
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT floatingChanged(windowId, true);
+        Q_EMIT stateChanged();
+    }
+}
+
 SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
 {
     const auto zones = zonesForWindow(windowId);
@@ -293,22 +324,7 @@ SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
     // to a stale cached value — for the float toggle, that misroutes the
     // unfloat to whichever engine the cache points at (e.g. autotile on the
     // source VS) instead of the snap engine that owns this screen.
-    UnassignResult result;
-    QStringList previousZones = m_windowZoneAssignments.value(windowId);
-    if (!m_windowZoneAssignments.remove(windowId)) {
-        return result;
-    }
-    result.wasAssigned = true;
-    if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
-        m_lastUsedZoneId.clear();
-        m_lastUsedScreenId.clear();
-        m_lastUsedZoneClass.clear();
-        m_lastUsedDesktop = 0;
-        result.lastUsedZoneCleared = true;
-    }
-    Q_EMIT windowUnassigned(windowId);
-    Q_EMIT stateChanged();
-    return result;
+    return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/true);
 }
 
 QString SnapState::preFloatScreen(const QString& windowId) const

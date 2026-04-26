@@ -195,10 +195,14 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
 
-    // Floating placement: keep the snap state in sync (so future float toggles
-    // route back to this engine via lastActiveScreenName's screenAssignment
-    // lookup) but don't apply geometry here — the dropping caller already
-    // committed the position.
+    // Floating placement: record the window in snap state as floating-on-screen
+    // so future shortcut routing (lastActiveScreenName via screenAssignments
+    // and screenForTrackedWindow) reaches this engine. Don't apply geometry
+    // here — the dropping caller already committed the position.
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    m_snapState->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
+    // Mirror floating state into WTS so cross-engine readers (autotile,
+    // adaptors) see a consistent flag.
     m_windowTracker->setWindowFloating(ctx.windowId, true);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
 }
@@ -241,6 +245,17 @@ QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
     // screenAssignments map; an empty string means the snap engine doesn't
     // currently track this window at all.
     return m_snapState->screenAssignments().value(windowId);
+}
+
+bool SnapEngine::isWindowTracked(const QString& windowId) const
+{
+    // The snap engine considers a window "tracked" if it appears in any of
+    // the SnapState maps that imply ownership: zone assignment (snapped),
+    // screen assignment (covers snap-floated post-unsnapForFloat), or the
+    // floating set. Any of those means a snap-engine shortcut routes to
+    // this engine and would be a no-op without our intervention.
+    return m_snapState->isWindowSnapped(windowId) || m_snapState->isFloating(windowId)
+        || m_snapState->screenAssignments().contains(windowId);
 }
 
 } // namespace PlasmaZones
