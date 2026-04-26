@@ -210,7 +210,19 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    // Resolve aspectRatioClass from PhosphorZones::Layout* if available
+    // Resolve aspectRatioClass.
+    //
+    // Snap layouts (UUID id): use the layout's tagged aspect-ratio class so a
+    // class="portrait" layout renders at the canonical 9:16 preview regardless
+    // of the exact screen aspect — preserves the layout author's intent.
+    //
+    // Autotile algorithms (non-UUID id like "autotile:rows") have no intrinsic
+    // class. Classify the screen's actual aspect ratio and use that class so
+    // the preview snaps to the same canonical ratio the comparable snap-layout
+    // OSD would render at on this screen. Without this, autotile previews
+    // showed the raw screen aspect (e.g. 0.93 for a 1600×1716 VS, nearly
+    // square) while snap layouts on the same screen rendered at 9:16 — a
+    // visibly inconsistent feel between the two OSD paths.
     qreal layoutAR = aspectRatio;
     {
         QString arClass = QStringLiteral("any");
@@ -222,6 +234,10 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
                 layoutAR =
                     PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
             }
+        } else {
+            const auto screenClass = PhosphorLayout::ScreenClassification::classify(aspectRatio);
+            arClass = PhosphorLayout::ScreenClassification::toString(screenClass);
+            layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(screenClass, aspectRatio);
         }
         writeQmlProperty(window, QStringLiteral("aspectRatioClass"), arClass);
     }
