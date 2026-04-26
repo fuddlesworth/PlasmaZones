@@ -277,13 +277,13 @@ private Q_SLOTS:
         QCOMPARE(order.at(1), QStringLiteral("win4"));
     }
 
-    void testDeserializeWindowOrders_outOfOrderArrival_fallsBackToInsertPosition()
+    void testDeserializeWindowOrders_exactWindowIdMatch_isStrict()
     {
-        // Regression pin for the bug where opening windows out of saved order
-        // (e.g., previous session was [vesktop, ghostty] but the user opens
-        // ghostty first then vesktop today) would force vesktop to position 0,
-        // ignoring the user's "After existing" insertPosition preference.
-        // The advisory path now appends out-of-order arrivals via insertPosition.
+        // Daemon-reload restoration: only the daemon restarted, KWin held the
+        // windows across the gap, so arriving windowIds match saved entries
+        // exactly. Saved positions must be honored even when arrivals are
+        // out of sequence — otherwise the prior layout silently scrambles.
+        // Pinning the inverse of the appId-fallback advisory case below.
         QJsonArray data;
         data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("vesktop"), QStringLiteral("ghostty")}));
 
@@ -292,11 +292,10 @@ private Q_SLOTS:
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
         QCoreApplication::processEvents();
 
-        // Open ghostty first (saved position 1), then vesktop (saved position 0).
-        // With the advisory path: ghostty inserted at 0 (no earlier saved
-        // entries in state, appends at tail). Then vesktop's saved position 0
-        // would push ghostty — falls through to insertPosition (default End)
-        // and appends.
+        // Opens ghostty first (saved pos 1), then vesktop (saved pos 0). Both
+        // windowIds match saved entries exactly — strict path inserts each at
+        // its saved position regardless of arrival sequence. Final order
+        // matches the saved order.
         engine.windowOpened(QStringLiteral("ghostty"), QStringLiteral("eDP-1"), 0, 0);
         engine.windowOpened(QStringLiteral("vesktop"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
@@ -305,8 +304,46 @@ private Q_SLOTS:
         QVERIFY(state);
         const QStringList order = state->windowOrder();
         QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("ghostty"));
-        QCOMPARE(order.at(1), QStringLiteral("vesktop"));
+        QCOMPARE(order.at(0), QStringLiteral("vesktop"));
+        QCOMPARE(order.at(1), QStringLiteral("ghostty"));
+    }
+
+    void testDeserializeWindowOrders_appIdFallbackOutOfOrder_fallsBackToInsertPosition()
+    {
+        // KWin-restart restoration / new window today: the saved entries hold
+        // stale windowIds (UUID part changed). Arriving windowIds match saved
+        // entries only via the appId fallback. For out-of-order arrivals the
+        // saved position is yesterday's hint, not today's reality — honor the
+        // user's insertPosition setting instead of pushing live entries to
+        // re-create the prior layout.
+        //
+        // windowIds use the canonical "appId|UUID" shape so currentAppIdFor()
+        // can extract a stable appId. Saved entries hold one set of UUIDs;
+        // arrivals carry different UUIDs (simulating KWin's UUID drift).
+        QJsonArray data;
+        data.append(buildEntry(QStringLiteral("eDP-1"), 1,
+                               {QStringLiteral("vesktop|old-uuid-A"), QStringLiteral("ghostty|old-uuid-B")}));
+
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.deserializeWindowOrders(data);
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        QCoreApplication::processEvents();
+
+        // Open ghostty first with a fresh UUID (saved pos 1 via appId
+        // fallback), then vesktop with a fresh UUID (saved pos 0 via appId
+        // fallback). Advisory path: ghostty appends at tail; vesktop's saved
+        // pos 0 would push ghostty so it falls through to insertPosition
+        // (default End) and appends.
+        engine.windowOpened(QStringLiteral("ghostty|new-uuid-1"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("vesktop|new-uuid-2"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("ghostty|new-uuid-1"));
+        QCOMPARE(order.at(1), QStringLiteral("vesktop|new-uuid-2"));
     }
 
     void testDeserializeWindowOrders_floatingRestoresAllContexts()

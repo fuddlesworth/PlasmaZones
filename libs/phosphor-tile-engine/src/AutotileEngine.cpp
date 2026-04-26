@@ -2478,6 +2478,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     if (pendingIt != m_pendingInitialOrders.end()) {
         const QStringList pendingOrder = pendingIt.value(); // copy, not reference (BUG-1 fix)
         int desiredPos = pendingOrder.indexOf(windowId);
+        // An exact windowId match means KWin held this window across the
+        // daemon's lifetime gap (i.e. only the daemon reloaded; the window's
+        // compositor-assigned identity is unchanged). The saved position is
+        // therefore an authoritative restoration target, not yesterday's
+        // historical hint — treat it as strict below so daemon-reload bursts
+        // restore the prior layout even when arrivals are out of sequence.
+        const bool exactWindowIdMatch = (desiredPos >= 0);
 
         // Fallback: match by appId when exact windowId not found (KWin restart
         // changes UUIDs, so saved windowIds have stale suffixes). FIFO consumption
@@ -2508,19 +2515,28 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     ++insertAt;
                 }
             }
-            // Strict ordering (mode transition via setInitialWindowOrder):
-            // the daemon pre-computed an order it intentionally wants preserved
-            // even if windows arrive out of sequence. Insert at the saved
-            // position regardless of whether it pushes existing windows.
+            // Strict ordering applies in two cases:
+            //   1. Mode transition via setInitialWindowOrder — the daemon
+            //      pre-computed an order from the prior mode's zones and
+            //      intentionally wants it preserved.
+            //   2. Cross-session restore where the arriving windowId matches
+            //      the saved entry exactly. Exact match means KWin retained
+            //      the window across the gap (i.e. only the daemon
+            //      reloaded), so the saved position is a real restoration
+            //      target — pushing live entries to honor it just rebuilds
+            //      yesterday's layout, which is the user's intent on a
+            //      daemon reload.
             //
-            // Advisory ordering (cross-session restore via deserializeWindowOrders
-            // / promoteSavedWindowOrders): the saved order is yesterday's
-            // workspace layout. Honor it only when it appends at the current
-            // tail; if it would push existing windows around, the user opened
-            // windows out of the saved sequence and expects their insertPosition
-            // setting ("After existing" / "After focused" / "As main window")
-            // to apply to new arrivals.
-            const bool strict = m_strictInitialOrderScreens.contains(screenId);
+            // Advisory ordering applies to cross-session arrivals matched by
+            // appId fallback (UUID drift after a KWin restart, or a new
+            // window today that happens to share an app class with a saved
+            // entry). For those, the saved position is yesterday's hint
+            // rather than today's reality — honor it only when it appends
+            // at the current tail. If it would push existing windows, fall
+            // through to insertPosition so the user's "After existing" /
+            // "After focused" / "As main window" setting wins for new
+            // arrivals.
+            const bool strict = m_strictInitialOrderScreens.contains(screenId) || exactWindowIdMatch;
             if (strict || insertAt >= state->windowCount()) {
                 state->addWindow(windowId, insertAt);
                 inserted = true;
