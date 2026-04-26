@@ -269,6 +269,7 @@ void AutotileEngine::connectSignals()
                         releasedWindows.append(floated);
                         m_pendingInitialOrders.remove(sid);
                         m_pendingOrderGeneration.remove(sid);
+                        m_strictInitialOrderScreens.remove(sid);
                         it.value()->deleteLater();
                         it.remove();
                     }
@@ -575,15 +576,20 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // on another desktop, e.g., panel added/removed). The effect-side borderless
         // re-application handles the visual state; the retile ensures positions match
         // the current screen geometry.
-        if (m_pendingInitialOrders.contains(screenId)) {
-            // Pending initial order exists — the windows are already known (seeded
-            // from zone-ordered window list during mode toggle). Consume the order
-            // now and insert windows into the PhosphorTiles::TilingState so the retile has something
-            // to work with.  Previously we skipped the retile here expecting the
-            // KWin effect to re-send windowOpened D-Bus calls, but during a per-screen
-            // mode toggle the windows are already open — they never arrive via D-Bus.
+        // Only consume the pending order eagerly for STRICT entries (mode
+        // transition seeded by setInitialWindowOrder — windows are already
+        // open in KWin and need to be added to the autotile state with the
+        // computed order, since they won't arrive via windowOpened again).
+        // Advisory entries (from deserializeWindowOrders / promoteSavedWindowOrders)
+        // describe historical positions for windows that aren't open yet —
+        // pre-seeding the state would create ghost entries the user can't
+        // close, and would also override the user's insertPosition preference
+        // when the windows actually do open. Leave the advisory order in
+        // pendingInitialOrders for insertWindow() to consult on arrival.
+        if (m_pendingInitialOrders.contains(screenId) && m_strictInitialOrderScreens.contains(screenId)) {
             const QStringList order = m_pendingInitialOrders.take(screenId);
             m_pendingOrderGeneration.remove(screenId);
+            m_strictInitialOrderScreens.remove(screenId);
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey key = currentKeyForScreen(screenId);
@@ -647,6 +653,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         m_configResolver->removeOverridesForScreen(key.screenId);
         m_pendingInitialOrders.remove(key.screenId);
         m_pendingOrderGeneration.remove(key.screenId);
+        m_strictInitialOrderScreens.remove(key.screenId);
         it.value()->deleteLater();
         it.remove();
     }
@@ -1052,6 +1059,10 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
             << "setInitialWindowOrder: overwriting existing pending order for" << screenId;
     }
     m_pendingInitialOrders[screenId] = windowIds;
+    // Mode-transition seeding is strict: the daemon explicitly computed an
+    // order it wants preserved (zone order from the previous mode). Even if
+    // windows arrive in a different sequence, the saved positions win.
+    m_strictInitialOrderScreens.insert(screenId);
     uint64_t gen = ++m_pendingOrderGeneration[screenId];
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Pre-seeded window order for screen=" << screenId << "windows=" << windowIds;
@@ -1064,6 +1075,7 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
         }
         if (m_pendingInitialOrders.remove(screenId)) {
             m_pendingOrderGeneration.remove(screenId);
+            m_strictInitialOrderScreens.remove(screenId);
             qCWarning(PhosphorTileEngine::lcTileEngine)
                 << "Pending initial order for screen" << screenId << "timed out after" << PendingOrderTimeoutMs
                 << "ms - cleaning up stale entry";
@@ -2496,10 +2508,31 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     ++insertAt;
                 }
             }
-            state->addWindow(windowId, insertAt);
-            inserted = true;
-            qCDebug(PhosphorTileEngine::lcTileEngine)
-                << "Inserted pre-seeded window" << windowId << "at position=" << insertAt << "desired=" << desiredPos;
+            // Strict ordering (mode transition via setInitialWindowOrder):
+            // the daemon pre-computed an order it intentionally wants preserved
+            // even if windows arrive out of sequence. Insert at the saved
+            // position regardless of whether it pushes existing windows.
+            //
+            // Advisory ordering (cross-session restore via deserializeWindowOrders
+            // / promoteSavedWindowOrders): the saved order is yesterday's
+            // workspace layout. Honor it only when it appends at the current
+            // tail; if it would push existing windows around, the user opened
+            // windows out of the saved sequence and expects their insertPosition
+            // setting ("After existing" / "After focused" / "As main window")
+            // to apply to new arrivals.
+            const bool strict = m_strictInitialOrderScreens.contains(screenId);
+            if (strict || insertAt >= state->windowCount()) {
+                state->addWindow(windowId, insertAt);
+                inserted = true;
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "Inserted pre-seeded window" << windowId << "at position=" << insertAt
+                    << "desired=" << desiredPos << (strict ? "(strict)" : "(advisory)");
+            } else {
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "Advisory pre-seeded window" << windowId << "at desired=" << desiredPos
+                    << "would push existing windows (insertAt=" << insertAt << " < windowCount=" << state->windowCount()
+                    << ") — falling back to insertPosition";
+            }
         }
         // Clean up pending order when all pre-seeded windows have been inserted (or closed)
         if (inserted) {
@@ -2664,6 +2697,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
         pit.value().removeAll(windowId);
         if (pit.value().isEmpty()) {
             m_pendingOrderGeneration.remove(pit.key());
+            m_strictInitialOrderScreens.remove(pit.key());
             pit = m_pendingInitialOrders.erase(pit);
         } else {
             const QString screen = pit.key();
@@ -3662,6 +3696,7 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
     qCDebug(PhosphorTileEngine::lcTileEngine) << "All pre-seeded windows resolved for screen" << screenId;
     m_pendingInitialOrders.erase(pit);
     m_pendingOrderGeneration.remove(screenId);
+    m_strictInitialOrderScreens.remove(screenId);
     return true;
 }
 

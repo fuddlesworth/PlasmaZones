@@ -1335,6 +1335,17 @@ private:
     // removeWindow() if a pre-seeded window closes before arriving.
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
+    // Screens whose pendingInitialOrders entry is "strict" — saved order
+    // wins even when arrival order differs. Set by setInitialWindowOrder
+    // (mode transition: the daemon intentionally pre-computed an order from
+    // the previous mode's zones, and that order MUST be preserved).
+    // Cleared after the order is fully consumed. Entries from the
+    // deserialize / promoteSavedWindowOrders paths are NOT in this set —
+    // for those, the saved position is "advisory": honored only when it
+    // appends at the current tail, otherwise insertPosition takes over.
+    // This is the behaviour users expect from their "After existing" /
+    // "After focused" / "As main window" preference for new windows.
+    QSet<QString> m_strictInitialOrderScreens;
 
     // Saved window orders from session persistence, keyed by full context.
     // On desktop/activity switch, orders for the new context are promoted into
