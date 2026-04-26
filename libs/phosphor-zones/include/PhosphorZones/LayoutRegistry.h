@@ -125,6 +125,14 @@ public:
     ///      and non-empty).
     ///   2. The first registered layout (by @c defaultOrder).
     ///   3. nullptr if no layouts are registered.
+    ///
+    /// @note Snap-only fallback. Unlike @ref assignmentIdForScreen and
+    /// @ref assignmentEntryForScreen — which on cascade-miss consult
+    /// both the snap and autotile level-1 providers — this method only
+    /// consults the snap provider, because @ref Layout has no autotile
+    /// counterpart. Autotile-mode resolution is the autotile engine's
+    /// job, driven by @ref assignmentIdForScreen returning an
+    /// @c "autotile:<algo>" id from the level-1 cascade.
     Layout* defaultLayout() const;
 
     /**
@@ -223,14 +231,23 @@ public:
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                   const QString& activity = QString()) const;
 
-    /// Full entry for a (screen, desktop, activity) context (same
-    /// cascade as @ref layoutForScreen). On cascade-miss, synthesizes
-    /// from the level-1 global defaults — snap provider first, then
-    /// autotile provider — using the same precedence as
-    /// @ref assignmentIdForScreen; a default-constructed entry when
-    /// neither provider returns a value. Callers that need raw stored
-    /// state without the synth fallback must gate with
-    /// @ref hasExplicitAssignment.
+    /// Full entry for a (screen, desktop, activity) context. Shares
+    /// the per-context cascade with @ref layoutForScreen up through
+    /// level-2 (per-screen base entry), but the two diverge at level-1
+    /// (global defaults): on cascade-miss this method synthesizes from
+    /// BOTH providers — snap provider first, then autotile provider —
+    /// using the same precedence as @ref assignmentIdForScreen, while
+    /// @ref layoutForScreen consults only the snap provider via
+    /// @ref defaultLayout. This means a caller mixing both APIs may
+    /// see @c entry.mode == @c Autotile with @ref layoutForScreen
+    /// returning a snap @ref Layout* (the historical pre-368 fallback
+    /// shape, preserved so the autotile engine's
+    /// @ref assignmentIdForScreen-driven activation path remains
+    /// mode-aware while the snap engine's
+    /// @ref layoutForScreen-driven path stays @ref Layout*-typed).
+    /// Returns a default-constructed entry when neither provider
+    /// returns a value. Callers that need raw stored state without
+    /// the synth fallback must gate with @ref hasExplicitAssignment.
     AssignmentEntry assignmentEntryForScreen(const QString& screenId, int virtualDesktop = 0,
                                              const QString& activity = QString()) const;
 

@@ -248,10 +248,18 @@ bool Daemon::init()
     // contexts (fixes #368 without baking engine specifics into the
     // composition root).
     //
-    // Settings is owned by `this` (daemon) and outlives the layout
-    // manager (declared earlier in daemon.h), so the captured pointer
-    // is safe; null-checks defend against the destructor path that
-    // clears these via stop() before m_settings is reset.
+    // Lifetime: m_settings is declared AFTER m_layoutManager in
+    // daemon.h, so reverse-order member destruction tears m_settings
+    // down FIRST. The lambdas capture `this` and dereference m_settings,
+    // so any cascade query during member-destruction would UAF without
+    // the explicit teardown in stop() (which clears both providers
+    // before any unique_ptr member runs its destructor) plus the null
+    // checks below as a belt-and-suspenders guard against future
+    // refactors that reset m_settings explicitly. NOTE: snap with
+    // defaultLayoutId="" silently falls through to the autotile branch
+    // — see test_layoutmanager_assignment.cpp
+    // testLevel1Default_snapEnabledEmptyId_autotileEnabled_autotileWins
+    // for the pinned behaviour.
     m_layoutManager->setDefaultLayoutIdProvider([this]() {
         if (!m_settings || !m_settings->snappingEnabled()) {
             return QString();

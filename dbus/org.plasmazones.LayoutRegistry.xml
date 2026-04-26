@@ -249,9 +249,9 @@
             </arg>
         </method>
         <method name="getAllScreenAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. The JSON is a view of *stored* assignment state (suitable for round-trip back through setAllScreenAssignments) — synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead."/>
             <arg name="assignmentsJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object mapping screens to layout IDs."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name. Every effective screen yields one entry containing at least {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;mode&quot;}; screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Absence of these fields means the screen / desktop has no stored entry — DO NOT assume a default mode of Snapping; consult the per-context lookup methods or read the global-default settings directly."/>
             </arg>
         </method>
         <!-- Quick Layout Slots (1-9) -->
