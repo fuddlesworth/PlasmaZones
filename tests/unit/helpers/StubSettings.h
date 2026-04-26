@@ -145,6 +145,13 @@ public:
     void setShowOsdOnLayoutSwitch(bool) override
     {
     }
+    bool showOsdOnDesktopSwitch() const override
+    {
+        return false;
+    }
+    void setShowOsdOnDesktopSwitch(bool) override
+    {
+    }
     bool showNavigationOsd() const override
     {
         return false;

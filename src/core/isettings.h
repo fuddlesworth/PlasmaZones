@@ -222,6 +222,7 @@ Q_SIGNALS:
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
+    void showOsdOnDesktopSwitchChanged();
     void showNavigationOsdChanged();
     void osdStyleChanged();
     void overlayDisplayModeChanged();

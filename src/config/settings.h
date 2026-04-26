@@ -87,6 +87,8 @@ public:
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
+    Q_PROPERTY(bool showOsdOnDesktopSwitch READ showOsdOnDesktopSwitch WRITE setShowOsdOnDesktopSwitch NOTIFY
+                   showOsdOnDesktopSwitchChanged)
     Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
@@ -464,6 +466,8 @@ public:
     void setFlashZonesOnSwitch(bool flash) override;
     bool showOsdOnLayoutSwitch() const override;
     void setShowOsdOnLayoutSwitch(bool show) override;
+    bool showOsdOnDesktopSwitch() const override;
+    void setShowOsdOnDesktopSwitch(bool show) override;
     bool showNavigationOsd() const override;
     void setShowNavigationOsd(bool show) override;
     OsdStyle osdStyle() const override;

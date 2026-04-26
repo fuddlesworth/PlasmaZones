@@ -123,6 +123,10 @@ public:
     {
         return true;
     }
+    static bool showOsdOnDesktopSwitch()
+    {
+        return true;
+    }
     static bool showNavigationOsd()
     {
         return true;

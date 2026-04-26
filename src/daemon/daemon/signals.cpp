@@ -664,7 +664,10 @@ void Daemon::finalizeStartup()
 
     // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
     // The layoutApplied signal only fires for the focused screen; this covers the rest.
-    if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+    // Gated on the desktop-switch OSD toggle (not the layout-switch toggle): startup is
+    // a passive context change like a desktop switch, not an explicit user-driven layout
+    // change, so users who disable desktop-switch OSDs expect quiet startup too.
+    if (m_settings && m_settings->showOsdOnDesktopSwitch()) {
         showOsdForAllScreens(currentDesktop(), currentActivity());
     }
 }
