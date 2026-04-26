@@ -435,9 +435,22 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (cursorEffectiveId.isEmpty()) {
             return;
         }
-        m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
-        applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
-        return;
+        // Per-VS toggle (autotile→snap mid-session) leaves us with a VS that
+        // is no longer excluded but never had its overlay window created at
+        // first-show time. Detect that here — the cursor is now on a non-
+        // excluded VS with no live window — and fall through to full init
+        // so Phase 3 creates the window. Without this, applyIdleStateForCursor
+        // finds nothing to flip and the overlay never becomes visible until
+        // the next hide()/show() cycle.
+        const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
+            && m_screenStates.value(cursorEffectiveId).overlayWindow != nullptr;
+        if (cursorVsHasWindow || m_excludedScreens.contains(cursorEffectiveId)) {
+            m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
+            applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
+            return;
+        }
+        // Fall through — initializeOverlay will (re)build the per-VS window
+        // set against the current excluded set and resume normal operation.
     }
 
     initializeOverlay(cursorScreen, cursorPos);
