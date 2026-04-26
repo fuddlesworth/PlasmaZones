@@ -1896,29 +1896,23 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
     }
 
     if (!state) {
-        // Window not tracked by autotile — if it's floating (daemon-side) on an autotile
-        // screen, adopt it into the tiling layout. This handles the flow:
-        // float on snap screen → move to autotile screen → toggle float to tile.
-        // The windowFloating flag is checked via the callback to avoid coupling to WTS.
-        if (isAutotileScreen(screenId) && m_isWindowFloatingFn && m_isWindowFloatingFn(windowId)) {
-            state = tilingStateForScreen(screenId);
-            if (state && !state->containsWindow(windowId)) {
-                state->addWindow(windowId);
-                state->setFloating(windowId, true);
-                m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
-                resolvedScreen = screenId;
-                qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "toggleWindowFloat: adopted floating window" << windowId << "into autotile on" << screenId;
-                // Fall through to performToggleFloat which will unfloat it
-            }
-        }
-        if (!state) {
-            qCWarning(PhosphorTileEngine::lcTileEngine)
-                << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
-            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
-                                      QString(), screenId);
-            return;
-        }
+        // Window not tracked by autotile. The opportunistic "is this a
+        // floating window I should adopt?" branch that used to live here
+        // was the second-order accomplice in a class of cross-engine
+        // misroute bugs: if the daemon's lastActiveScreen pointed at an
+        // autotile screen while the window actually lived on a snap screen
+        // (because snap had cleared its tracking on float), this branch
+        // would silently grab the floating window and tile it on the wrong
+        // screen.
+        //
+        // Cross-engine handoff now goes through the explicit
+        // handoffReceive/handoffRelease contract orchestrated by the daemon
+        // — this path is purely "no-op when the window isn't ours".
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
+                                  QString(), screenId);
+        return;
     }
 
     performToggleFloat(state, windowId, resolvedScreen);
@@ -1937,23 +1931,80 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenId);
 }
 
-void AutotileEngine::adoptWindowAsFloating(const QString& windowId, const QString& screenId)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cross-engine handoff (see IPlacementEngine.h for contract)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::handoffReceive(const HandoffContext& ctx)
 {
-    if (windowId.isEmpty() || screenId.isEmpty() || !isAutotileScreen(screenId)) {
+    if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty() || !isAutotileScreen(ctx.toScreenId)) {
         return;
     }
-    // Already tracked — nothing to adopt
-    if (m_windowToStateKey.contains(windowId)) {
+    qCInfo(PhosphorTileEngine::lcTileEngine)
+        << "AutotileEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId << "from" << ctx.fromEngineId
+        << "wasFloating=" << ctx.wasFloating;
+
+    const QString windowId = canonicalizeWindowId(ctx.windowId);
+
+    PhosphorTiles::TilingState* state = tilingStateForScreen(ctx.toScreenId);
+    if (!state) {
         return;
     }
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
-    if (!state || state->containsWindow(windowId)) {
+
+    // Already tracked on the destination screen — nothing to adopt; the float
+    // toggle path is what the caller probably wants instead.
+    const auto destKey = currentKeyForScreen(ctx.toScreenId);
+    const auto trackedKeyIt = m_windowToStateKey.constFind(windowId);
+    if (trackedKeyIt != m_windowToStateKey.constEnd() && trackedKeyIt.value() == destKey
+        && state->containsWindow(windowId)) {
         return;
     }
+    // Already tracked but on a DIFFERENT autotile state (cross-screen
+    // handoff inside the same engine, or stale tracking after an aborted
+    // prior handoff). Release the previous state first to avoid orphaning
+    // the entry — handoffRelease is the correct primitive for "drop
+    // tracking without mutating geometry" within this engine too.
+    if (trackedKeyIt != m_windowToStateKey.constEnd() && trackedKeyIt.value() != destKey) {
+        handoffRelease(windowId);
+    }
+
     state->addWindow(windowId);
-    state->setFloating(windowId, true);
-    m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
-    qCInfo(PhosphorTileEngine::lcTileEngine) << "adoptWindowAsFloating:" << windowId << "on" << screenId;
+    // Autotile-engine policy on receive: a window arriving as "floating in
+    // the source" stays floating here too — drag-from-snap typically falls
+    // into this branch, and the user's drop position is where they want it.
+    // A non-floating arrival gets tiled (the layout engine picks the slot)
+    // — drag-from-another-autotile-screen typically falls here.
+    state->setFloating(windowId, ctx.wasFloating);
+    m_windowToStateKey[windowId] = currentKeyForScreen(ctx.toScreenId);
+
+    // Trigger a retile so a non-floating arrival actually lands in a tile;
+    // floating arrivals retile too because their displacement may free a
+    // slot for the remaining tiled set.
+    retileAfterOperation(ctx.toScreenId, true);
+}
+
+void AutotileEngine::handoffRelease(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    const QString canonical = canonicalizeWindowId(windowId);
+    qCInfo(PhosphorTileEngine::lcTileEngine) << "AutotileEngine::handoffRelease:" << canonical;
+
+    auto it = m_windowToStateKey.constFind(canonical);
+    if (it == m_windowToStateKey.constEnd()) {
+        return; // Not ours; nothing to release.
+    }
+    const auto key = it.value();
+    auto stateIt = m_screenStates.find(key);
+    if (stateIt != m_screenStates.end() && stateIt.value()) {
+        // Tracking-only release: drop from layout, drop from floating set.
+        // No retile of the rest is requested here — the orchestrator will
+        // call receiveWindow on the destination engine which (if also
+        // autotile) will retile its own state.
+        stateIt.value()->removeWindow(canonical);
+    }
+    m_windowToStateKey.remove(canonical);
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat)
@@ -3716,27 +3767,31 @@ void AutotileEngine::setFocusNewWindows(bool enabled)
 // concrete AutotileEngine method with the right parameters.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::focusInDirection(const QString& direction, const NavigationContext& ctx)
 {
-    focusInDirection(direction, QStringLiteral("focus"));
+    // Daemon-authoritative windowId overrides the per-state focusedWindow()
+    // tracker, which can drift when focus moves through floating, snapped, or
+    // never-tracked windows that don't update it (same root cause as the
+    // toggleFocusedFloat fix).
+    m_navigation->focusInDirection(direction, QStringLiteral("focus"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     // In autotile, "move in direction" is implemented as swap-with-neighbour
     // in the tiling order — the only way to move is to trade places with
     // the neighbour. OSD label "move" keeps the user-facing wording.
-    swapFocusedInDirection(direction, QStringLiteral("move"));
+    m_navigation->swapFocusedInDirection(direction, QStringLiteral("move"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
+void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
-    swapFocusedInDirection(direction, QStringLiteral("swap"));
+    m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& /*ctx*/)
+void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)
 {
-    moveFocusedToPosition(position);
+    m_navigation->moveFocusedToPosition(position, canonicalizeForLookup(ctx.windowId));
 }
 
 void AutotileEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
@@ -3756,15 +3811,29 @@ void AutotileEngine::snapAllWindows(const NavigationContext& ctx)
     retile(ctx.screenId);
 }
 
-void AutotileEngine::toggleFocusedFloat(const NavigationContext& /*ctx*/)
+void AutotileEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
+    // Prefer the daemon-provided windowId from KWin's authoritative focus
+    // tracking. The legacy toggleFocusedWindowFloat() uses state->focusedWindow()
+    // which is updated only when KWin emits windowActivated for an
+    // autotile-tracked window — focus moves through floating, snapped, or
+    // never-tracked windows leave it stale, and the next float shortcut then
+    // toggles the wrong window.
+    //
+    // Fall back to the legacy "find a focused state" lookup only when ctx
+    // doesn't carry a windowId (some test paths and direct invocations).
+    if (!ctx.windowId.isEmpty()) {
+        const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
+        toggleWindowFloat(ctx.windowId, screenId);
+        return;
+    }
     toggleFocusedWindowFloat();
 }
 
-void AutotileEngine::cycleFocus(bool forward, const NavigationContext& /*ctx*/)
+void AutotileEngine::cycleFocus(bool forward, const NavigationContext& ctx)
 {
     const QString dir = forward ? QStringLiteral("right") : QStringLiteral("left");
-    focusInDirection(dir, QStringLiteral("cycle"));
+    m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId));
 }
 
 void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
@@ -3774,10 +3843,17 @@ void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
     // becomes a harmless press in autotile mode.
 }
 
-void AutotileEngine::restoreFocusedWindow(const NavigationContext& /*ctx*/)
+void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
 {
     // "Restore" in autotile means pulling the focused window out of the
     // tiling layout — toggling its float state achieves exactly that.
+    // Same daemon-authoritative routing as toggleFocusedFloat: prefer
+    // ctx.windowId over the engine's per-state focusedWindow() tracker.
+    if (!ctx.windowId.isEmpty()) {
+        const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
+        toggleWindowFloat(ctx.windowId, screenId);
+        return;
+    }
     toggleFocusedWindowFloat();
 }
 

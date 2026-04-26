@@ -485,6 +485,243 @@ private Q_SLOTS:
         QCOMPARE(saveCount, 2);
         QCOMPARE(loadCount, 1);
     }
+
+    // =========================================================================
+    // Float-state screen preservation (PR #366 regression pin)
+    //
+    // unsnapForFloat now preserves the window's screen assignment so that the
+    // daemon can still answer "what screen does this floating window live on"
+    // — that's what makes the float-toggle router send the unfloat shortcut
+    // back to this engine. Erasing the screen would route to whatever the
+    // focus cache pointed at, which is exactly the bug the PR fixes.
+    // =========================================================================
+
+    void testUnsnapForFloat_preservesScreenAssignment()
+    {
+        const QString windowId = QStringLiteral("app|uuid-screen-preserve");
+        const QString screen = QStringLiteral("DP-3");
+
+        m_snapState->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 4);
+        QCOMPARE(m_snapState->screenAssignments().value(windowId), screen);
+
+        m_snapState->unsnapForFloat(windowId);
+
+        // Zone gone, but screen + desktop preserved.
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+        QCOMPARE(m_snapState->screenAssignments().value(windowId), screen);
+        QCOMPARE(m_snapState->desktopForWindow(windowId), 4);
+    }
+
+    void testUnassignWindow_clearsScreenAssignment()
+    {
+        // Sister test confirming the non-float path still clears the screen
+        // — the DRY refactor of clearZoneAssignment must keep the two paths
+        // distinct.
+        const QString windowId = QStringLiteral("app|uuid-screen-clear");
+        const QString screen = QStringLiteral("DP-3");
+
+        m_snapState->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 4);
+        m_snapState->unassignWindow(windowId);
+
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+        QVERIFY(m_snapState->screenAssignments().value(windowId).isEmpty());
+        QCOMPARE(m_snapState->desktopForWindow(windowId), 0);
+    }
+
+    // =========================================================================
+    // setFloatingOnScreen — used by SnapEngine::handoffReceive when adopting
+    // a floating window from another engine. Must populate the screen and
+    // desktop assignments so subsequent screenForTrackedWindow lookups
+    // resolve, and so isWindowTracked returns true.
+    // =========================================================================
+
+    void testSetFloatingOnScreen_populatesScreenDesktopAndFloating()
+    {
+        const QString windowId = QStringLiteral("app|uuid-handoff-recv");
+        const QString screen = QStringLiteral("HDMI-1");
+
+        m_snapState->setFloatingOnScreen(windowId, screen, 2);
+
+        QVERIFY(m_snapState->isFloating(windowId));
+        QCOMPARE(m_snapState->screenAssignments().value(windowId), screen);
+        QCOMPARE(m_snapState->desktopForWindow(windowId), 2);
+        QVERIFY(!m_snapState->isWindowSnapped(windowId));
+    }
+
+    void testSetFloatingOnScreen_emptyArgsIsNoop()
+    {
+        m_snapState->setFloatingOnScreen(QString(), QStringLiteral("DP-1"), 0);
+        m_snapState->setFloatingOnScreen(QStringLiteral("app|uuid"), QString(), 0);
+        QVERIFY(m_snapState->isEmpty());
+    }
+
+    // =========================================================================
+    // SnapEngine::handoffRelease — drops snap-private tracking only. Must
+    // NOT route through WindowTrackingService (which fires shared signals
+    // that the autotile engine listens to). Pre-float capture is preserved.
+    // =========================================================================
+
+    void testHandoffRelease_clearsZoneAssignment()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-release-zone");
+        const QString screen = QStringLiteral("DP-2");
+        engine.snapState()->assignWindowToZone(windowId, QStringLiteral("zone-3"), screen, 1);
+        QVERIFY(engine.snapState()->isWindowSnapped(windowId));
+
+        engine.handoffRelease(windowId);
+
+        QVERIFY(!engine.snapState()->isWindowSnapped(windowId));
+        QVERIFY(engine.snapState()->screenAssignments().value(windowId).isEmpty());
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testHandoffRelease_clearsFloatingTracking()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-release-float");
+        const QString screen = QStringLiteral("DP-2");
+        engine.snapState()->setFloatingOnScreen(windowId, screen, 0);
+        QVERIFY(engine.snapState()->isFloating(windowId));
+
+        engine.handoffRelease(windowId);
+
+        QVERIFY(!engine.snapState()->isFloating(windowId));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testHandoffRelease_doesNotEmitWtsZoneSignal()
+    {
+        // Routing release through WTS would fire windowZoneChanged, which
+        // the autotile engine listens to — and would interpret as "drop
+        // this window from your state mid-handoff" (the bug commit
+        // 56146efc fixed). Guard the regression by spying for the WTS
+        // signal during a handoffRelease.
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-release-no-signal");
+        engine.snapState()->assignWindowToZone(windowId, QStringLiteral("zone-1"), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy zoneSpy(m_wts, &WindowTrackingService::windowZoneChanged);
+
+        engine.handoffRelease(windowId);
+
+        QCOMPARE(zoneSpy.count(), 0);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testHandoffRelease_preservesPreFloatCapture()
+    {
+        // The receiving engine may consult HandoffContext for size restoration
+        // on a future return handoff — pre-float capture must survive.
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-release-prefloat");
+        const QString screen = QStringLiteral("DP-2");
+        engine.snapState()->assignWindowToZone(windowId, QStringLiteral("zone-2"), screen, 0);
+        engine.snapState()->unsnapForFloat(windowId); // populates pre-float capture
+        QVERIFY(!engine.snapState()->preFloatZone(windowId).isEmpty());
+
+        engine.handoffRelease(windowId);
+
+        QVERIFY(!engine.snapState()->preFloatZone(windowId).isEmpty());
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // SnapEngine::handoffReceive — floating arrival populates screen so
+    // subsequent screenForTrackedWindow / lastActiveScreenName resolve.
+    // =========================================================================
+
+    void testHandoffReceive_floatingArrivalPopulatesScreen()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-recv-float");
+        const QString screen = QStringLiteral("DP-1");
+
+        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = screen;
+        ctx.fromEngineId = QStringLiteral("autotile");
+        ctx.wasFloating = true;
+        engine.handoffReceive(ctx);
+
+        QCOMPARE(engine.screenForTrackedWindow(windowId), screen);
+        QVERIFY(engine.isWindowTracked(windowId));
+        QVERIFY(engine.snapState()->isFloating(windowId));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testHandoffReceive_emptyArgsIsNoop()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = QString();
+        ctx.toScreenId = QStringLiteral("DP-1");
+        engine.handoffReceive(ctx);
+
+        ctx.windowId = QStringLiteral("app|uuid");
+        ctx.toScreenId = QString();
+        engine.handoffReceive(ctx);
+
+        QVERIFY(engine.snapState()->isEmpty());
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // screenForTrackedWindow / isWindowTracked — used by the daemon's
+    // shortcut router (lastActiveScreenName) to resolve the right engine.
+    // =========================================================================
+
+    void testScreenForTrackedWindow_returnsEmptyWhenUntracked()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+        QCOMPARE(engine.screenForTrackedWindow(QStringLiteral("app|uuid-not-tracked")), QString());
+        QVERIFY(!engine.isWindowTracked(QStringLiteral("app|uuid-not-tracked")));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testScreenForTrackedWindow_followsSnapAssignment()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-tracked-snap");
+        const QString screen = QStringLiteral("DP-2");
+        engine.snapState()->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 0);
+
+        QCOMPARE(engine.screenForTrackedWindow(windowId), screen);
+        QVERIFY(engine.isWindowTracked(windowId));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testScreenForTrackedWindow_followsFloatedSnap()
+    {
+        // After unsnapForFloat the screen is preserved — so the snap engine
+        // must still claim ownership of the window for routing purposes.
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+
+        const QString windowId = QStringLiteral("app|uuid-tracked-floated");
+        const QString screen = QStringLiteral("DP-2");
+        engine.snapState()->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 0);
+        engine.snapState()->unsnapForFloat(windowId);
+
+        QCOMPARE(engine.screenForTrackedWindow(windowId), screen);
+        QVERIFY(engine.isWindowTracked(windowId));
+        m_wts->setSnapState(nullptr);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSnapEngine)

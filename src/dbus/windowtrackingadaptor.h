@@ -82,11 +82,18 @@ public:
      *
      * The KWin effect has reliable screen info on both X11 and Wayland.
      * Use this as a fallback when cursor screen is unavailable.
+     *
+     * Implementation: prefers the active window's current daemon-tracked
+     * screen assignment over the cached value. KWin only fires
+     * `windowActivated` on focus changes, so a window that gets dragged or
+     * snapped to a different VS without losing focus leaves
+     * `m_lastActiveScreenId` pointing at the OLD screen — which then
+     * misroutes shortcut handlers (e.g. the float shortcut going to the
+     * autotile engine for the source VS instead of the snap engine for the
+     * destination VS). Reading the live screenAssignment closes that gap
+     * without requiring a separate signal/cache invalidation path.
      */
-    Q_INVOKABLE QString lastActiveScreenName() const override
-    {
-        return m_lastActiveScreenId;
-    }
+    Q_INVOKABLE QString lastActiveScreenName() const override;
 
     /**
      * @brief Last screen the cursor was on, reported by the KWin effect

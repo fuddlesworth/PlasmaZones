@@ -162,4 +162,62 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     return result;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cross-engine handoff (see IPlacementEngine.h for contract)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapEngine::handoffReceive(const HandoffContext& ctx)
+{
+    if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty()) {
+        return;
+    }
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId
+                                             << "from" << ctx.fromEngineId << "wasFloating=" << ctx.wasFloating;
+
+    if (!ctx.sourceZoneIds.isEmpty()) {
+        QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
+        if (zoneGeo.isValid()) {
+            if (ctx.sourceZoneIds.size() > 1) {
+                commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
+            } else {
+                commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);
+            }
+            Q_EMIT applyGeometryRequested(ctx.windowId, zoneGeo.x(), zoneGeo.y(), zoneGeo.width(), zoneGeo.height(),
+                                          QString(), ctx.toScreenId, false);
+            return;
+        }
+    }
+
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    m_snapState->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
+    m_windowTracker->setWindowFloating(ctx.windowId, true);
+    Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
+}
+
+void SnapEngine::handoffRelease(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId;
+
+    if (m_snapState->isWindowSnapped(windowId)) {
+        m_snapState->unassignWindow(windowId);
+    }
+    if (m_snapState->isFloating(windowId)) {
+        m_snapState->setFloating(windowId, false);
+    }
+}
+
+QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
+{
+    return m_snapState->screenAssignments().value(windowId);
+}
+
+bool SnapEngine::isWindowTracked(const QString& windowId) const
+{
+    return m_snapState->isWindowSnapped(windowId) || m_snapState->isFloating(windowId)
+        || m_snapState->screenAssignments().contains(windowId);
+}
+
 } // namespace PhosphorSnapEngine
