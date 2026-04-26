@@ -5,6 +5,7 @@
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/configbackends.h"
@@ -304,9 +305,47 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         return;
     }
 
-    // Check if the window is snapped — if not, nothing to do
+    // Floating window with a tracked screen: refresh the engine's
+    // screen-tracking via the cross-engine handoff contract so subsequent
+    // shortcut routing (lastActiveScreenName) finds the new screen instead of
+    // the stale one. Without this, a snap-floated window dragged to another
+    // screen leaves screenAssignments pointing at the source forever — the
+    // float toggle then unfloats it back to the source-screen zone.
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
+        if (!m_service->isWindowFloating(windowId)) {
+            return;
+        }
+        const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();
+        const QString trackedAutotile =
+            m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
+        const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap : trackedAutotile;
+        if (trackedScreen.isEmpty() || Phosphor::Screens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
+            return;
+        }
+        PhosphorEngineApi::PlacementEngineBase* source =
+            !trackedSnap.isEmpty() ? m_snapEngine.data() : m_autotileEngine.data();
+        PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
+        if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
+            dest = m_autotileEngine.data();
+        } else if (m_snapEngine) {
+            dest = m_snapEngine.data();
+        }
+        if (!dest) {
+            return;
+        }
+        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = newScreenId;
+        ctx.fromEngineId = source ? source->engineId() : QString();
+        ctx.wasFloating = true;
+        ctx.sourceGeometry = m_frameGeometry.value(windowId);
+        if (source && source != dest) {
+            source->handoffRelease(windowId);
+        }
+        dest->handoffReceive(ctx);
+        qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
+                             << "to" << newScreenId << "- handoff complete";
         return;
     }
 
@@ -513,6 +552,41 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
 QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
 {
     return m_frameGeometry.value(windowId);
+}
+
+QString WindowTrackingAdaptor::lastActiveScreenName() const
+{
+    // Prefer the active window's live screen tracking from either engine
+    // over the cached m_lastActiveScreenId. KWin only fires windowActivated
+    // on focus changes, so a window dragged/snapped/tiled to a different
+    // VS without losing focus leaves the cache pointing at the source
+    // screen — and the shortcut router would then dispatch (float,
+    // navigate, etc.) to the wrong engine.
+    //
+    // Lookup order:
+    //   1. snap-side screenForTrackedWindow (covers snap-mode windows
+    //      including snap-floated ones whose screen we now preserve through
+    //      float, and floating windows received via cross-engine handoff)
+    //   2. autotile-side screenForTrackedWindow (covers windows that
+    //      crossed engines via drag-insert handoff — snap released its
+    //      tracking, autotile took ownership)
+    //   3. cached m_lastActiveScreenId (windows neither engine tracks —
+    //      brand-new windows pre-tile, dialogs, etc.)
+    if (!m_lastActiveWindowId.isEmpty()) {
+        if (m_snapEngine) {
+            const QString tracked = m_snapEngine->screenForTrackedWindow(m_lastActiveWindowId);
+            if (!tracked.isEmpty()) {
+                return tracked;
+            }
+        }
+        if (m_autotileEngine) {
+            const QString tracked = m_autotileEngine->screenForTrackedWindow(m_lastActiveWindowId);
+            if (!tracked.isEmpty()) {
+                return tracked;
+            }
+        }
+    }
+    return m_lastActiveScreenId;
 }
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)

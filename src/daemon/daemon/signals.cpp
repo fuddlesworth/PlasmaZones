@@ -733,6 +733,17 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         return;
     }
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    // Cross-engine handoff: this signal fires when autotile has just taken
+    // ownership of a window that may still be tracked by snap. handoffRelease
+    // is a no-op when the engine doesn't track the window, so we can call it
+    // unconditionally — that closes the loophole where snap thought the
+    // window was on the same screen ID as the autotile target (stale state
+    // mid-mode-switch) and the previous gated path skipped cleanup.
+    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(autotile screen"
+                         << screenId << ")";
+        m_snapEngine->handoffRelease(windowId);
+    }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);

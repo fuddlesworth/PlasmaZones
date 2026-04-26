@@ -88,6 +88,20 @@ public:
     void saveState() override;
     void loadState() override;
 
+    // Cross-engine handoff
+    QString engineId() const override
+    {
+        return QStringLiteral("snap");
+    }
+    void handoffReceive(const HandoffContext& ctx) override;
+    void handoffRelease(const QString& windowId) override;
+    QString screenForTrackedWindow(const QString& windowId) const override;
+    /// Whether this engine considers the window owned (snapped, snap-floated,
+    /// or otherwise carried in SnapState's screen/zone maps). Used by the
+    /// daemon to disambiguate which engine should handle a shortcut and to
+    /// decide whether a cross-engine handoff is needed.
+    bool isWindowTracked(const QString& windowId) const override;
+
     /**
      * @brief Resnap windows from previous layout to current layout after layout switch
      *
