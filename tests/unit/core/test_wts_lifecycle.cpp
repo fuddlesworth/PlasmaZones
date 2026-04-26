@@ -47,6 +47,7 @@
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 using StubSettingsLifecycle = StubSettings;

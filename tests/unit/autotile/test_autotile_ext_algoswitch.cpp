@@ -16,6 +16,7 @@
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Extended tests for algorithm switch behaviors

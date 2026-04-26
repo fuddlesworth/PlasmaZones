@@ -1438,7 +1438,8 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
     // form (the schema validator would canonicalise on both sides anyway,
     // but avoiding the redundant write keeps the settingsChanged signal
     // from firing when a caller writes a semantically equal unsorted map).
-    const QVariantMap sanitized = AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(value));
+    const QVariantMap sanitized = PhosphorTileEngine::AutotileConfig::perAlgoToVariantMap(
+        PhosphorTileEngine::AutotileConfig::perAlgoFromVariantMap(value));
     if (autotilePerAlgorithmSettings() == sanitized) {
         return;
     }

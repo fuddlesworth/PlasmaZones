@@ -25,6 +25,7 @@
 #include <QJsonObject>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 class TestEngineSettings : public QObject
@@ -652,13 +653,11 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
         QCoreApplication::processEvents();
 
-        QSignalSpy writeBackSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested);
+        const qreal ratioBefore = settings.autotileSplitRatio();
         engine.windowFocused(QStringLiteral("win1"), screen);
         engine.increaseMasterRatio(0.1);
 
-        QVERIFY(writeBackSpy.count() > 0);
-        const QVariantMap wb = writeBackSpy.last().at(0).toMap();
-        QVERIFY(wb.contains(QLatin1String("autotileSplitRatio")));
+        QVERIFY(settings.autotileSplitRatio() != ratioBefore);
     }
 };
 

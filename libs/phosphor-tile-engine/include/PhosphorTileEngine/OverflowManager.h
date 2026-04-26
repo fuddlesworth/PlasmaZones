@@ -15,7 +15,7 @@
 // C++ headers
 #include <functional>
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 /**
  * @brief Per-screen overflow window tracking (pure tracking — no PhosphorTiles::TilingState mutation)
@@ -129,4 +129,4 @@ private:
     QHash<QString, QString> m_windowToScreen; // windowId -> screenId (reverse index)
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

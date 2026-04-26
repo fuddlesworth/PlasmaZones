@@ -11,7 +11,7 @@
 #include <QString>
 #include <QVariantMap>
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 /**
  * @brief Per-algorithm saved settings (split ratio + master count)
@@ -258,8 +258,8 @@ struct PHOSPHORTILEENGINE_EXPORT AutotileConfig
     static AutotileConfig defaults();
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine
 
 // Enable use with QVariant
-Q_DECLARE_METATYPE(PlasmaZones::AutotileConfig)
-Q_DECLARE_METATYPE(PlasmaZones::AutotileConfig::InsertPosition)
+Q_DECLARE_METATYPE(PhosphorTileEngine::AutotileConfig)
+Q_DECLARE_METATYPE(PhosphorTileEngine::AutotileConfig::InsertPosition)

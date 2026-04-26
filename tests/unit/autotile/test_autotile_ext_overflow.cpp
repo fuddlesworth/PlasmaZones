@@ -13,6 +13,7 @@
 #include "core/constants.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Extended tests for minimize tracking, mode transition,

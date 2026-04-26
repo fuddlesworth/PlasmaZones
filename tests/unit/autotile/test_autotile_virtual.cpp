@@ -29,6 +29,7 @@
 #include "../helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 using PlasmaZones::TestHelpers::makeSplitConfig;
 using PlasmaZones::TestHelpers::makeThreeWayConfig;
 

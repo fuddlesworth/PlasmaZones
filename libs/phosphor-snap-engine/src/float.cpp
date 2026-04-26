@@ -7,7 +7,10 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "snapenginelogging.h"
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::SnapIntent;
+using PhosphorEngineApi::UnfloatResult;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Float toggle / set
@@ -159,4 +162,4 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     return result;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

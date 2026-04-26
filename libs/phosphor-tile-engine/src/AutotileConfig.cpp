@@ -9,7 +9,7 @@
 #include <QRegularExpression>
 #include <QtMath>
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 // Use shared JSON keys and defaults from constants.h
 using namespace PhosphorTiles::AutotileJsonKeys;
@@ -243,4 +243,4 @@ AutotileConfig AutotileConfig::defaults()
     return AutotileConfig();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

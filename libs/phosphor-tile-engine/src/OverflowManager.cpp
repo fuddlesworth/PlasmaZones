@@ -7,7 +7,7 @@
 // KDE/Qt logging
 #include "tileenginelogging.h"
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 void OverflowManager::markOverflow(const QString& windowId, const QString& screenId)
 {
@@ -184,4 +184,4 @@ bool OverflowManager::isEmpty() const
     return m_windowToScreen.isEmpty();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

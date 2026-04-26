@@ -516,42 +516,6 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
-    m_writeBackSaveTimer.setSingleShot(true);
-    m_writeBackSaveTimer.setInterval(500);
-    connect(&m_writeBackSaveTimer, &QTimer::timeout, this, [this]() {
-        if (m_settings) {
-            m_settings->save();
-        }
-    });
-
-    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsWriteBackRequested, this,
-            [this](const QVariantMap& values) {
-                namespace WBK = PhosphorTiles::WriteBackKeys;
-                if (!m_settings)
-                    return;
-                const QSignalBlocker blocker(m_settings.get());
-                for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
-                    const QString& key = it.key();
-                    if (key == WBK::DefaultAutotileAlgorithm)
-                        m_settings->setDefaultAutotileAlgorithm(it.value().toString());
-                    else if (key == WBK::AutotileSplitRatio)
-                        m_settings->setAutotileSplitRatio(it.value().toDouble());
-                    else if (key == WBK::AutotileMasterCount)
-                        m_settings->setAutotileMasterCount(it.value().toInt());
-                    else if (key == WBK::AutotileMaxWindows)
-                        m_settings->setAutotileMaxWindows(it.value().toInt());
-                    else if (key == WBK::AutotilePerAlgorithmSettings)
-                        m_settings->setAutotilePerAlgorithmSettings(it.value().toMap());
-                    else if (key == WBK::ClearPerScreenAutotileSettings) {
-                        const QStringList orphans = it.value().toStringList();
-                        for (const QString& orphanId : orphans)
-                            m_settings->clearPerScreenAutotileSettings(orphanId);
-                    } else
-                        qCWarning(lcDaemon) << "settingsWriteBack: unknown key" << key;
-                }
-                m_writeBackSaveTimer.start();
-            });
-
     autotileEngine->refreshConfigFromSettings();
 
     // Give the window drag adaptor access to the autotile engine for per-screen
@@ -587,14 +551,14 @@ bool Daemon::init()
     // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
     // clearPreTileGeometry). A future refactor should move that state onto
     // SnapEngine or WindowTrackingService and retire the back-reference.
-    snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
+    snapEngine->setNavigationStateProvider(m_windowTrackingAdaptor);
 
     // Clear stale autotile-floated flag when a window is snapped. A window
     // dragged from an autotile VS to a snap VS retains its autotileFloated
     // marker; without this, a subsequent mode change on the autotile VS
     // incorrectly processes the already-snapped window as autotile-managed.
     // Wired here (daemon) because engines must not know about each other.
-    connect(snapEngine, &SnapEngine::windowSnapStateChanged, this,
+    connect(snapEngine, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
             [this](const QString& windowId, const WindowStateEntry&) {
                 if (m_autotileEngine) {
                     m_autotileEngine->clearModeSpecificFloatMarker(windowId);

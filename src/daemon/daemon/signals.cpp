@@ -292,7 +292,7 @@ void Daemon::initializeAutotile()
             // to share the same screen, producing wrong results.
             // Windows that were autotile-only (never zone-snapped) get their
             // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
-            auto* concreteSnap = qobject_cast<SnapEngine*>(m_snapEngine.get());
+            auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
             if (applied && wasAutotile && !concreteSnap) {
                 if (m_snapEngine) {
                     qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";

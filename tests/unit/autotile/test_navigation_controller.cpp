@@ -13,6 +13,7 @@
 #include "../helpers/AutotileTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Unit tests for NavigationController (via AutotileEngine forwarding)

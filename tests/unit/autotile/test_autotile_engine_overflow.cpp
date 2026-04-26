@@ -13,6 +13,7 @@
 #include "core/constants.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief AutotileEngine tests for overflow window management

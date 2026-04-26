@@ -16,7 +16,7 @@
 
 #include <optional>
 
-namespace PhosphorZones {
+namespace PhosphorSnapEngine {
 
 /// Per-screen snap placement state.
 ///
@@ -298,4 +298,4 @@ private:
     QSet<QString> m_autoSnappedWindows;
 };
 
-} // namespace PhosphorZones
+} // namespace PhosphorSnapEngine

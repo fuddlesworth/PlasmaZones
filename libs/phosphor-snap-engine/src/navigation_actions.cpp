@@ -14,10 +14,9 @@
  * Navigation is now SnapEngine's concern. Every entry point takes an
  * explicit NavigationContext {windowId, screenId} from the daemon's
  * shortcut handler, so the engine no longer reaches into the WTA shadow
- * store on every call. The back-reference to WTA is retained for last-
- * resort fallback (when the daemon can't resolve a target), for the
- * frame-geometry shadow used by the float pre-tile capture, and for
- * the resnap fallback-screen helper in applyBatchAssignments.
+ * store on every call. Compositor-layer fallbacks (last-active window,
+ * last-cursor screen, frame geometry) are now accessed through the typed
+ * INavigationStateProvider interface rather than opaque QObject* invoke.
  *
  * Signals emitted by these methods are SnapEngine signals; SnapAdaptor
  * relays them to WindowTrackingAdaptor, which exposes them on D-Bus.
@@ -26,6 +25,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -36,26 +36,24 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <QMetaObject>
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::NavigationContext;
+using PhosphorEngineApi::SnapIntent;
+using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorProtocol::CycleTargetResult;
+using PhosphorProtocol::FocusTargetResult;
+using PhosphorProtocol::MoveTargetResult;
+using PhosphorProtocol::RestoreTargetResult;
+using PhosphorProtocol::SwapTargetResult;
+using PhosphorProtocol::WindowGeometryList;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Private helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 namespace {
-
-QString invokeStringGetter(QObject* obj, const char* method)
-{
-    QString r;
-    if (obj) {
-        bool ok = QMetaObject::invokeMethod(obj, method, Q_RETURN_ARG(QString, r));
-        if (Q_UNLIKELY(!ok))
-            qCWarning(PhosphorSnapEngine::lcSnapEngine) << "invokeStringGetter: method" << method << "failed on" << obj;
-    }
-    return r;
-}
 
 /// Resolve the screen to use for a navigation operation on @p windowId.
 ///
@@ -64,9 +62,9 @@ QString invokeStringGetter(QObject* obj, const char* method)
 ///      This keeps the operation on the monitor the user originally chose,
 ///      rather than the one KWin happens to think the window is on.
 ///   2. An explicit @p preferredScreen from the NavigationContext.
-///   3. The WTA cursor / last-active screen shadows.
-QString resolveNavScreen(QObject* wta, const QString& windowId, PhosphorEngineApi::IWindowTrackingService* service,
-                         const QString& preferredScreen = QString())
+///   3. The INavigationStateProvider cursor / last-active screen values.
+QString resolveNavScreen(INavigationStateProvider* navState, const QString& windowId,
+                         PhosphorEngineApi::IWindowTrackingService* service, const QString& preferredScreen = QString())
 {
     if (service && !windowId.isEmpty()) {
         const QString zoneId = service->zoneForWindow(windowId);
@@ -91,35 +89,35 @@ QString resolveNavScreen(QObject* wta, const QString& windowId, PhosphorEngineAp
     if (!preferredScreen.isEmpty()) {
         return preferredScreen;
     }
-    if (!wta) {
+    if (!navState) {
         return QString();
     }
-    QString screen = invokeStringGetter(wta, "lastCursorScreenName");
+    QString screen = navState->lastCursorScreenName();
     if (screen.isEmpty()) {
-        screen = invokeStringGetter(wta, "lastActiveScreenName");
+        screen = navState->lastActiveScreenName();
     }
     return screen;
 }
 
 /// Pick the effective window id: the explicit one from NavigationContext
-/// if set, otherwise the last-active shadow on WTA. Returns empty when
-/// neither is available — caller emits "no_window" feedback.
-QString effectiveWindowId(const NavigationContext& ctx, QObject* wta)
+/// if set, otherwise the last-active window from INavigationStateProvider.
+/// Returns empty when neither is available — caller emits "no_window" feedback.
+QString effectiveWindowId(const NavigationContext& ctx, INavigationStateProvider* navState)
 {
     if (!ctx.windowId.isEmpty()) {
         return ctx.windowId;
     }
-    return invokeStringGetter(wta, "lastActiveWindowId");
+    return navState ? navState->lastActiveWindowId() : QString();
 }
 
 /// Pick the effective screen id: the explicit one from NavigationContext
-/// if set, otherwise the last-active screen shadow on WTA.
-QString effectiveScreenId(const NavigationContext& ctx, QObject* wta)
+/// if set, otherwise the last-active screen from INavigationStateProvider.
+QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider* navState)
 {
     if (!ctx.screenId.isEmpty()) {
         return ctx.screenId;
     }
-    return invokeStringGetter(wta, "lastActiveScreenName");
+    return navState ? navState->lastActiveScreenName() : QString();
 }
 
 } // namespace
@@ -171,13 +169,13 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
     if (!resolver) {
         return; // ensureTargetResolver emitted feedback
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window"), QString(), QString(),
                                   ctx.screenId);
         return;
     }
-    const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     FocusTargetResult result = resolver->getFocusTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         return; // resolver already emitted feedback via its callback
@@ -204,7 +202,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
     if (!resolver) {
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_window"), QString(), QString(),
                                   ctx.screenId);
@@ -213,7 +211,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
     if (isWindowExcludedForAction(windowId, QStringLiteral("move"), ctx.screenId)) {
         return;
     }
-    const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     MoveTargetResult result = resolver->getMoveTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         return;
@@ -247,7 +245,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     if (!resolver) {
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_window"), QString(), QString(),
                                   ctx.screenId);
@@ -256,7 +254,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     if (isWindowExcludedForAction(windowId, QStringLiteral("swap"), ctx.screenId)) {
         return;
     }
-    const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         return;
@@ -298,16 +296,16 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
     if (!resolver) {
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_window"), QString(), QString(),
-                                  effectiveScreenId(ctx, m_wta));
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
     if (isWindowExcludedForAction(windowId, QStringLiteral("snap"), ctx.screenId)) {
         return;
     }
-    const QString effectiveScreen = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     MoveTargetResult result = resolver->getSnapToZoneByNumberTarget(windowId, zoneNumber, effectiveScreen);
     if (!result.success) {
         return;
@@ -336,16 +334,16 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
     if (!resolver) {
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("no_window"), QString(), QString(),
-                                  effectiveScreenId(ctx, m_wta));
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
     if (isWindowExcludedForAction(windowId, QStringLiteral("push"), ctx.screenId)) {
         return;
     }
-    const QString effectiveScreen = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     MoveTargetResult result = resolver->getPushTargetForWindow(windowId, effectiveScreen);
     if (!result.success) {
         return;
@@ -374,13 +372,13 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
     if (!resolver) {
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("restore"), QStringLiteral("no_window"), QString(), QString(),
-                                  effectiveScreenId(ctx, m_wta));
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
-    const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     RestoreTargetResult result = resolver->getRestoreForWindow(windowId, screenId);
     if (!result.success) {
         return;
@@ -399,8 +397,8 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
                                   QString(), ctx.screenId);
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
-    const QString screenId = effectiveScreenId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
+    const QString screenId = effectiveScreenId(ctx, m_navState);
     if (windowId.isEmpty() || screenId.isEmpty()) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "toggleFocusedFloat: no active window in context";
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_active_window"), QString(),
@@ -415,13 +413,8 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // window is snapped/tiled, the live shadow holds the zone rect — storing
     // it would poison the pre-tile entry with tile coordinates, so we leave
     // whatever's already stored untouched.
-    //
-    // The frame-geometry shadow is the one compositor-layer piece of state
-    // still living on WTA. Reading it here is the last remaining behavior
-    // coupling to the adaptor in this file.
-    if (m_wta && m_snapState->isFloating(windowId)) {
-        QRect geo;
-        QMetaObject::invokeMethod(m_wta, "frameGeometry", Q_RETURN_ARG(QRect, geo), Q_ARG(QString, windowId));
+    if (m_navState && m_snapState->isFloating(windowId)) {
+        QRect geo = m_navState->frameGeometry(windowId);
         if (geo.isValid()) {
             storeUnmanagedGeometry(windowId, geo, screenId, /*overwrite=*/true);
         }
@@ -445,13 +438,13 @@ void SnapEngine::cycleFocus(bool forward, const NavigationContext& ctx)
     if (!resolver) {
         return;
     }
-    const QString windowId = effectiveWindowId(ctx, m_wta);
+    const QString windowId = effectiveWindowId(ctx, m_navState);
     if (windowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("no_window"), QString(), QString(),
-                                  effectiveScreenId(ctx, m_wta));
+                                  effectiveScreenId(ctx, m_navState));
         return;
     }
-    const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     CycleTargetResult result = resolver->getCycleTargetForWindow(windowId, forward, screenId);
     if (!result.success) {
         return;
@@ -487,16 +480,19 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
     }
 
     // Apply the batch through WTS's unified helper. UserInitiated intent
-    // preserves historical rotate semantics (each windows snap updates
-    // last-used-zone). The fallback resolver is the compositor-layer
-    // cursor/active-window shadow on WTA — only used when none of the
-    // built-in strategies (targetScreenId / geometry.center() /
-    // QGuiApplication::screens()) yield a screen.
-    const QPointer<QObject> wta = m_wta;
-    WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
-        QString cursor = invokeStringGetter(wta.data(), "lastCursorScreenName");
+    // preserves historical rotate semantics (each window's snap updates
+    // last-used-zone). The fallback resolver queries the compositor-layer
+    // cursor/active-screen shadows via INavigationStateProvider — only
+    // used when none of the built-in strategies (targetScreenId /
+    // geometry.center() / QGuiApplication::screens()) yield a screen.
+    INavigationStateProvider* navState = m_navState;
+    WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [navState]() -> QString {
+        if (!navState) {
+            return QString();
+        }
+        QString cursor = navState->lastCursorScreenName();
         if (cursor.isEmpty()) {
-            cursor = invokeStringGetter(wta.data(), "lastActiveScreenName");
+            cursor = navState->lastActiveScreenName();
         }
         return cursor;
     });
@@ -515,4 +511,4 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
 // the emitBatchedResnap → resnapToNewLayoutRequested → WTA::handleBatchedResnap
 // pipeline, which remains the canonical batch-resnap path.
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

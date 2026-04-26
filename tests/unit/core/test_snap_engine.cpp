@@ -12,6 +12,7 @@
 #include "core/interfaces.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 
 // =========================================================================
 // Minimal stubs for WTS constructor assertions
@@ -84,7 +85,7 @@ private:
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     WindowTrackingService* m_wts = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
+    PhosphorSnapEngine::SnapState* m_snapState = nullptr;
 
 private Q_SLOTS:
 
@@ -95,7 +96,7 @@ private Q_SLOTS:
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
-        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_wts->setSnapState(m_snapState);
     }
 

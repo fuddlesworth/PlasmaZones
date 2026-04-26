@@ -4,12 +4,16 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngineApi/IGeometrySettings.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include "snapenginelogging.h"
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::NavigationContext;
 
 // In production (Daemon::start) all dependencies are non-null. Headless unit
 // tests deliberately pass nullptr to construct an engine with minimal parents
@@ -22,7 +26,7 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
-    , m_snapState(new PhosphorZones::SnapState(QString(), this))
+    , m_snapState(new SnapState(QString(), this))
     , m_zoneDetector(zoneDetector)
     , m_virtualDesktopManager(vdm)
 {
@@ -131,26 +135,15 @@ void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
     }
 }
 
-void SnapEngine::setZoneDetectionAdaptor(QObject* adaptor)
+void SnapEngine::setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver)
 {
-    m_zoneDetectionAdaptor = adaptor;
-    // Push the zone detector into the target resolver if it exists yet.
-    // The resolver constructs lazily on first navigation call; if that
-    // hasn't happened yet, ensureTargetResolver() will pick up the adaptor
-    // from m_zoneDetectionAdaptor when it first runs.
+    m_zoneAdjacencyResolver = resolver;
+    // Push the resolver into the target resolver if it exists yet.
+    // The target resolver constructs lazily on first navigation call;
+    // if that hasn't happened yet, ensureTargetResolver() will pick up
+    // m_zoneAdjacencyResolver when it first runs.
     if (m_targetResolver) {
-        m_targetResolver->setZoneDetector(adaptor);
-    }
-    // Sever the resolver's raw pointer when the adaptor is destroyed
-    // out-of-band. Production always destroys the adaptor before the
-    // engine, but tests and shutdown orderings can diverge; without this
-    // the resolver would hold a dangling ZoneDetectionAdaptor*.
-    if (adaptor) {
-        connect(adaptor, &QObject::destroyed, this, [this]() {
-            if (m_targetResolver) {
-                m_targetResolver->setZoneDetector(nullptr);
-            }
-        });
+        m_targetResolver->setZoneAdjacencyResolver(resolver);
     }
 }
 
@@ -178,7 +171,7 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
     // navigationFeedback signal, so external consumers see the same
     // wire format as when the resolver lived on WTA.
     m_targetResolver = std::make_unique<SnapNavigationTargetResolver>(
-        m_windowTracker, m_layoutManager, m_zoneDetectionAdaptor.data(),
+        m_windowTracker, m_layoutManager, m_zoneAdjacencyResolver,
         [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                const QString& targetZoneId, const QString& screenId) {
             Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
@@ -186,9 +179,9 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
     return m_targetResolver.get();
 }
 
-void SnapEngine::setWindowTrackingAdaptor(QObject* adaptor)
+void SnapEngine::setNavigationStateProvider(INavigationStateProvider* provider)
 {
-    m_wta = adaptor;
+    m_navState = provider;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -224,8 +217,8 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 // restoreFocusedWindow, toggleFocusedFloat, cycleFocus,
 // rotateWindowsInLayout, resnapCurrentAssignments, resnapToNewLayout)
 // live in snapengine/navigation_actions.cpp and call back into
-// WindowTrackingAdaptor via m_wta for target resolution and shared
-// bookkeeping helpers. The resnap-by-layout-switch pipeline
+// INavigationStateProvider (m_navState) for fallback target resolution
+// and compositor-layer state. The resnap-by-layout-switch pipeline
 // (calculateResnapEntriesFromAutotileOrder, snapAllWindows etc.) lives
 // in snapengine/navigation.cpp unchanged.
 
@@ -295,4 +288,4 @@ const PhosphorEngineApi::IPlacementState* SnapEngine::stateForScreen(const QStri
     return m_snapState;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

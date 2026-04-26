@@ -197,7 +197,7 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
 }
 
 QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, const QString& direction,
-                                              const QString& screenId)
+                                              const QString& screenId) const
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get adjacent zone"))) {
         return QString();
@@ -243,7 +243,7 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     return zones.at(bestIndex)->id().toString();
 }
 
-QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenId)
+QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenId) const
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
         return QString();

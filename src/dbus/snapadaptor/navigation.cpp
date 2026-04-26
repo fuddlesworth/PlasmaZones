@@ -83,7 +83,7 @@ void SnapAdaptor::cycleWindowsInZone(bool forward)
 // handleBatchedResnap). Thin wrapper over
 // SnapEngine::applyBatchAssignments.
 // ═══════════════════════════════════════════════════════════════════════════════
-static bool processBatchEntries(WindowTrackingAdaptor* wta, SnapEngine* engine,
+static bool processBatchEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::SnapEngine* engine,
                                 const QVector<ZoneAssignmentEntry>& entries, const QString& action)
 {
     if (!engine || !wta) {
