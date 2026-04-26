@@ -54,9 +54,8 @@ public:
      */
     virtual QString getFirstZoneInDirection(const QString& direction, const QString& screenId) const = 0;
 
-protected:
-    IZoneAdjacencyResolver(const IZoneAdjacencyResolver&) = default;
-    IZoneAdjacencyResolver& operator=(const IZoneAdjacencyResolver&) = default;
+    IZoneAdjacencyResolver(const IZoneAdjacencyResolver&) = delete;
+    IZoneAdjacencyResolver& operator=(const IZoneAdjacencyResolver&) = delete;
 };
 
 } // namespace PhosphorSnapEngine

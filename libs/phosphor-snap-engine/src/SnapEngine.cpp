@@ -145,6 +145,18 @@ void SnapEngine::setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver)
     if (m_targetResolver) {
         m_targetResolver->setZoneAdjacencyResolver(resolver);
     }
+    // Guard against out-of-order destruction: null the raw pointer if the
+    // underlying QObject is destroyed before SnapEngine. The interface is
+    // not a QObject, but every production implementor (ZoneDetectionAdaptor)
+    // is — dynamic_cast recovers the QObject identity for the connection.
+    if (auto* qobj = dynamic_cast<QObject*>(resolver)) {
+        connect(qobj, &QObject::destroyed, this, [this]() {
+            m_zoneAdjacencyResolver = nullptr;
+            if (m_targetResolver) {
+                m_targetResolver->setZoneAdjacencyResolver(nullptr);
+            }
+        });
+    }
 }
 
 SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& action)
@@ -182,6 +194,13 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
 void SnapEngine::setNavigationStateProvider(INavigationStateProvider* provider)
 {
     m_navState = provider;
+    // Guard against out-of-order destruction: null the raw pointer if the
+    // underlying QObject is destroyed before SnapEngine.
+    if (auto* qobj = dynamic_cast<QObject*>(provider)) {
+        connect(qobj, &QObject::destroyed, this, [this]() {
+            m_navState = nullptr;
+        });
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

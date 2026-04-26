@@ -798,11 +798,9 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // setAlgorithm with stale KCM algo).
     {
         m_writeBackGuardTimer.start();
+        writeBackTuning();
         if (auto* s = autotileSettings()) {
             s->setDefaultAutotileAlgorithm(newId);
-            s->setAutotileSplitRatio(m_config->splitRatio);
-            s->setAutotileMasterCount(m_config->masterCount);
-            s->setAutotilePerAlgorithmSettings(AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings));
             if (m_config->maxWindows != oldMaxWindows)
                 s->setAutotileMaxWindows(m_config->maxWindows);
         }
@@ -1756,11 +1754,7 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
 
     {
         m_writeBackGuardTimer.start();
-        if (auto* s = autotileSettings()) {
-            s->setAutotileSplitRatio(m_config->splitRatio);
-            s->setAutotileMasterCount(m_config->masterCount);
-            s->setAutotilePerAlgorithmSettings(AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings));
-        }
+        writeBackTuning();
     }
 }
 

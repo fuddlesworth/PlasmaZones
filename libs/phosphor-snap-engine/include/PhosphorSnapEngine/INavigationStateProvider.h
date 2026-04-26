@@ -47,9 +47,8 @@ public:
     /// Returns an invalid QRect when the window is unknown.
     virtual QRect frameGeometry(const QString& windowId) const = 0;
 
-protected:
-    INavigationStateProvider(const INavigationStateProvider&) = default;
-    INavigationStateProvider& operator=(const INavigationStateProvider&) = default;
+    INavigationStateProvider(const INavigationStateProvider&) = delete;
+    INavigationStateProvider& operator=(const INavigationStateProvider&) = delete;
 };
 
 } // namespace PhosphorSnapEngine
