@@ -375,6 +375,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
     // Track zones we're assigning in this batch (to avoid double-assigning)
     QSet<QUuid> batchOccupied = occupiedZoneIds;
 
+    auto [gapZonePadding, gapOuterGaps] = resolveGapParams();
+
     for (const QString& windowId : windowIds) {
         // Find the first unoccupied zone
         PhosphorZones::Zone* targetZone = nullptr;
@@ -390,9 +392,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             break;
         }
 
-        auto [zonePadding, outerGaps] = resolveGapParams();
         QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId,
-                                                                           layout, zonePadding, outerGaps);
+                                                                           layout, gapZonePadding, gapOuterGaps);
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
@@ -496,6 +497,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             continue;
         }
 
+        auto [rotGapPadding, rotGapOuter] = resolveGapParams();
+
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {
             int currentIdx = pair.second;
@@ -504,9 +507,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
 
             PhosphorZones::Zone* sourceZone = zones[currentIdx];
             PhosphorZones::Zone* targetZone = zones[targetIdx];
-            auto [zp, og] = resolveGapParams();
-            QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen,
-                                                                               screenId, layout, zp, og);
+            QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(
+                screenManager, targetZone, screen, screenId, layout, rotGapPadding, rotGapOuter);
 
             if (geo.isValid()) {
                 ZoneAssignmentEntry entry;

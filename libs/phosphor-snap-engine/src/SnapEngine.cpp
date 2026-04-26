@@ -120,8 +120,16 @@ void SnapEngine::setAutotileEngine(PhosphorEngineApi::IPlacementEngine* engine)
 {
     auto* obj = dynamic_cast<QObject*>(engine);
     Q_ASSERT(!engine || obj);
+    if (m_autotileEngineObj) {
+        disconnect(m_autotileEngineObj, &QObject::destroyed, this, nullptr);
+    }
     m_autotileEngineObj = obj;
     m_autotileEngineTyped = engine;
+    if (obj) {
+        connect(obj, &QObject::destroyed, this, [this]() {
+            m_autotileEngineTyped = nullptr;
+        });
+    }
 }
 
 void SnapEngine::setZoneDetectionAdaptor(QObject* adaptor)
