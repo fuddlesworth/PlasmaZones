@@ -24,17 +24,17 @@ namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
 class LayoutRegistry;
-class SnapState;
 class Zone;
 }
 
-namespace PlasmaZones {
-class ISettings;
-// Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
-} // namespace PlasmaZones
+namespace PhosphorSnapEngine {
+class SnapState;
+}
+
 namespace Phosphor::Screens {
 class ScreenManager;
 }
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::EmptyZoneList;
@@ -42,6 +42,7 @@ using PhosphorProtocol::WindowGeometryEntry;
 using PhosphorProtocol::WindowGeometryList;
 using PhosphorProtocol::WindowStateEntry;
 
+class ISettings;
 class VirtualDesktopManager;
 class WindowRegistry;
 
@@ -98,7 +99,7 @@ public:
         m_windowRegistry = registry;
     }
 
-    void setSnapState(PhosphorZones::SnapState* state)
+    void setSnapState(PhosphorSnapEngine::SnapState* state)
     {
         m_snapState = state;
     }
@@ -835,7 +836,7 @@ private:
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
-    PhosphorZones::SnapState* m_snapState = nullptr;
+    PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.

@@ -19,7 +19,11 @@
 #include <QScreen>
 #include <QUuid>
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::PendingRestore;
+using PhosphorEngineApi::SnapResult;
+using PhosphorEngineApi::StickyWindowHandling;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Auto-Snap Logic
@@ -461,4 +465,4 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     return result;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

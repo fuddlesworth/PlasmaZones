@@ -151,15 +151,6 @@ inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 } // namespace AutotileJsonValues
 
-namespace WriteBackKeys {
-inline constexpr QLatin1String DefaultAutotileAlgorithm{"defaultAutotileAlgorithm"};
-inline constexpr QLatin1String AutotileSplitRatio{"autotileSplitRatio"};
-inline constexpr QLatin1String AutotileMasterCount{"autotileMasterCount"};
-inline constexpr QLatin1String AutotileMaxWindows{"autotileMaxWindows"};
-inline constexpr QLatin1String AutotilePerAlgorithmSettings{"autotilePerAlgorithmSettings"};
-inline constexpr QLatin1String ClearPerScreenAutotileSettings{"clearPerScreenAutotileSettings"};
-} // namespace WriteBackKeys
-
 /**
  * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`
  *        sites (e.g. `src/autotile/AutotileConfig.cpp`) resolve the value names

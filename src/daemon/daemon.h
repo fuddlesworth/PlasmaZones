@@ -558,7 +558,6 @@ private:
     bool m_prevAutotileEnabled = false;
 
     QTimer m_previewNotifyTimer;
-    QTimer m_writeBackSaveTimer;
     PhosphorTiles::AlgorithmPreviewParams m_preRetilePreviewParams;
 
     // Single-threaded pool for shader baking — QShaderBaker/glslang is not

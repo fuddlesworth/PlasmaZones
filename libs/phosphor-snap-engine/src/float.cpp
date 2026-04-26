@@ -7,7 +7,10 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "snapenginelogging.h"
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::SnapIntent;
+using PhosphorEngineApi::UnfloatResult;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Float toggle / set
@@ -171,16 +174,6 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId
                                              << "from" << ctx.fromEngineId << "wasFloating=" << ctx.wasFloating;
 
-    // Snap-engine policy on receive:
-    //  - If the source had a snap zone (sourceZoneIds non-empty) AND this
-    //    engine knows that zone in the destination screen's layout, restore
-    //    the snap. Useful for same-mode cross-screen moves where the layouts
-    //    happen to share a zone id.
-    //  - Otherwise, treat as floating on the destination screen — preserves
-    //    the user's geometry (sourceGeometry) and lets them drop-snap or use
-    //    the float toggle to land in a zone explicitly. This intentionally
-    //    matches the "drop on snap screen with no zone hit" behaviour rather
-    //    than auto-snapping to a guessed zone.
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
         if (zoneGeo.isValid()) {
@@ -195,14 +188,8 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
 
-    // Floating placement: record the window in snap state as floating-on-screen
-    // so future shortcut routing (lastActiveScreenName via screenAssignments
-    // and screenForTrackedWindow) reaches this engine. Don't apply geometry
-    // here — the dropping caller already committed the position.
     const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     m_snapState->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
-    // Mirror floating state into WTS so cross-engine readers (autotile,
-    // adaptors) see a consistent flag.
     m_windowTracker->setWindowFloating(ctx.windowId, true);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
 }
@@ -214,22 +201,6 @@ void SnapEngine::handoffRelease(const QString& windowId)
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId;
 
-    // Tracking-only release: drop snap-engine-private state directly without
-    // routing through WindowTrackingService. WTS is the shared coordination
-    // layer that BOTH engines react to via signals — calling its
-    // unassignWindow / setWindowFloating from here would propagate state
-    // changes back into the autotile engine that just took ownership,
-    // causing it to drop the freshly-adopted window mid-handoff (the
-    // drag-insert-from-snap-to-autotile bug).
-    //
-    // The daemon orchestrator owns the shared WTS-side floating-flag
-    // transitions during a cross-engine handoff (see Daemon::
-    // syncAutotileFloatStatePassive); this method only clears what's
-    // private to the snap engine.
-    //
-    // pre-float / pre-tile captures are intentionally preserved — the
-    // receive side may consult them via the HandoffContext for size
-    // restoration on a future handoff back.
     if (m_snapState->isWindowSnapped(windowId)) {
         m_snapState->unassignWindow(windowId);
     }
@@ -240,22 +211,13 @@ void SnapEngine::handoffRelease(const QString& windowId)
 
 QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
 {
-    // SnapState stores the screen for both snapped and (post-prior-fix)
-    // floating windows that originated as snaps. Either populates the
-    // screenAssignments map; an empty string means the snap engine doesn't
-    // currently track this window at all.
     return m_snapState->screenAssignments().value(windowId);
 }
 
 bool SnapEngine::isWindowTracked(const QString& windowId) const
 {
-    // The snap engine considers a window "tracked" if it appears in any of
-    // the SnapState maps that imply ownership: zone assignment (snapped),
-    // screen assignment (covers snap-floated post-unsnapForFloat), or the
-    // floating set. Any of those means a snap-engine shortcut routes to
-    // this engine and would be a no-op without our intervention.
     return m_snapState->isWindowSnapped(windowId) || m_snapState->isFloating(windowId)
         || m_snapState->screenAssignments().contains(windowId);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

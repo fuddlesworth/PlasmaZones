@@ -28,6 +28,7 @@
 #include "core/windowregistry.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 namespace {
 

@@ -29,6 +29,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // ═══════════════════════════════════════════════════════════════════════════════

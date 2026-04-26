@@ -13,6 +13,7 @@
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Tests for the IPlacementEngine cross-engine handoff contract on

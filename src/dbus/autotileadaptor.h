@@ -21,6 +21,10 @@ namespace PhosphorTiles {
 class ITileAlgorithmRegistry;
 }
 
+namespace PhosphorTileEngine {
+class AutotileEngine;
+}
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::AlgorithmInfoEntry;
@@ -28,8 +32,6 @@ using PhosphorProtocol::TileRequestEntry;
 using PhosphorProtocol::TileRequestList;
 using PhosphorProtocol::WindowOpenedEntry;
 using PhosphorProtocol::WindowOpenedList;
-
-class AutotileEngine;
 
 /**
  * @brief D-Bus adaptor for autotiling control
@@ -82,7 +84,8 @@ public:
      *        registry divergence doesn't silently re-route D-Bus queries.
      * @param parent Parent QObject (typically the daemon)
      */
-    explicit AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::ScreenManager* screenManager,
+    explicit AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
+                             Phosphor::Screens::ScreenManager* screenManager,
                              PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
 
@@ -413,7 +416,7 @@ private:
      */
     bool deferUntilPanelReady();
 
-    AutotileEngine* m_engine = nullptr;
+    PhosphorTileEngine::AutotileEngine* m_engine = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
 

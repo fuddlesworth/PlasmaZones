@@ -5,7 +5,7 @@
 
 #include <QJsonArray>
 
-namespace PhosphorZones {
+namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)
     : QObject(parent)
@@ -689,4 +689,4 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
     return state;
 }
 
-} // namespace PhosphorZones
+} // namespace PhosphorSnapEngine

@@ -14,7 +14,7 @@ namespace PhosphorTiles {
 class TilingAlgorithm;
 }
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
@@ -109,4 +109,4 @@ private:
     QHash<QString, QVariantMap> m_perScreenOverrides;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

@@ -12,7 +12,7 @@
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
@@ -287,4 +287,4 @@ PhosphorTiles::TilingAlgorithm* PerScreenConfigResolver::effectiveAlgorithm(cons
     return m_engine->algorithmRegistry()->algorithm(effectiveAlgorithmId(screenId));
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

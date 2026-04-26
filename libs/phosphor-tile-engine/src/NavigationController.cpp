@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 namespace PerScreenKeys = PhosphorEngineApi::PerScreenKeys;
 
@@ -458,4 +458,4 @@ void NavigationController::applyToAllStates(const std::function<void(PhosphorTil
     }
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

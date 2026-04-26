@@ -12,6 +12,10 @@
 #include <QStringList>
 #include <QVector>
 
+namespace PhosphorSnapEngine {
+class SnapEngine;
+}
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::SnapAllResultList;
@@ -19,7 +23,6 @@ using PhosphorProtocol::SnapConfirmationList;
 using PhosphorProtocol::UnfloatRestoreResult;
 using PhosphorProtocol::WindowGeometryList;
 
-class SnapEngine;
 class ScreenModeRouter;
 class WindowTrackingAdaptor;
 class ISettings;
@@ -60,7 +63,7 @@ public:
      * @param settings ISettings for restore-on-login gate (not owned)
      * @param parent Parent QObject (must be the D-Bus-registered daemon)
      */
-    explicit SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings,
+    explicit SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings,
                          QObject* parent = nullptr);
     ~SnapAdaptor() override = default;
 
@@ -85,7 +88,7 @@ public:
     /**
      * @brief Access the underlying SnapEngine (for daemon-side callers)
      */
-    SnapEngine* engine() const;
+    PhosphorSnapEngine::SnapEngine* engine() const;
 
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -318,7 +321,7 @@ private:
     void applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);
 
-    SnapEngine* m_engine = nullptr;
+    PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
     ScreenModeRouter* m_screenModeRouter = nullptr;

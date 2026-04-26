@@ -12,7 +12,7 @@ namespace PhosphorTiles {
 class TilingState;
 }
 
-namespace PlasmaZones {
+namespace PhosphorTileEngine {
 
 class AutotileEngine;
 
@@ -114,4 +114,4 @@ private:
     AutotileEngine* m_engine = nullptr;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTileEngine

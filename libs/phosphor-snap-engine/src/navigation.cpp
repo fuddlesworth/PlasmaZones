@@ -10,7 +10,11 @@
 #include <PhosphorEngineTypes/EngineTypes.h>
 #include <PhosphorZones/Zone.h>
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorProtocol::SnapAllResultEntry;
+using PhosphorProtocol::SnapAllResultList;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode resnap coordination
@@ -138,4 +142,4 @@ void SnapEngine::snapAllWindows(const QString& screenId)
     Q_EMIT snapAllWindowsRequested(screenId);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

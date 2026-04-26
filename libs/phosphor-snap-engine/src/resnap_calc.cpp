@@ -24,7 +24,10 @@
 #include <algorithm>
 #include <tuple>
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::ResnapEntry;
+using PhosphorEngineApi::ZoneAssignmentEntry;
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 {
@@ -524,4 +527,4 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
     return result;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

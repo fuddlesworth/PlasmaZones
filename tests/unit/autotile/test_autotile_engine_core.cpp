@@ -20,6 +20,7 @@
 #include <QJsonObject>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Core AutotileEngine tests: construction, enable/disable, algorithm

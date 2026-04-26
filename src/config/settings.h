@@ -645,15 +645,15 @@ public:
     bool autotileEnabled() const;
     void setAutotileEnabled(bool enabled);
     QString defaultAutotileAlgorithm() const override;
-    void setDefaultAutotileAlgorithm(const QString& algorithm);
+    void setDefaultAutotileAlgorithm(const QString& algorithm) override;
     qreal autotileSplitRatio() const override;
-    void setAutotileSplitRatio(qreal ratio);
+    void setAutotileSplitRatio(qreal ratio) override;
     qreal autotileSplitRatioStep() const override;
     void setAutotileSplitRatioStep(qreal step);
     int autotileMasterCount() const override;
-    void setAutotileMasterCount(int count);
+    void setAutotileMasterCount(int count) override;
     QVariantMap autotilePerAlgorithmSettings() const override;
-    void setAutotilePerAlgorithmSettings(const QVariantMap& settings);
+    void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override;
     int autotileInnerGap() const override;
     void setAutotileInnerGap(int gap);
     int autotileOuterGap() const override;
@@ -673,7 +673,7 @@ public:
     bool autotileSmartGaps() const override;
     void setAutotileSmartGaps(bool smart);
     int autotileMaxWindows() const override;
-    void setAutotileMaxWindows(int count);
+    void setAutotileMaxWindows(int count) override;
 
     using AutotileInsertPosition = PhosphorTiles::AutotileInsertPosition;
     PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const override;

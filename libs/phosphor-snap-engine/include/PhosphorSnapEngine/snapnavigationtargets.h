@@ -15,7 +15,7 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
 
 using PhosphorProtocol::CycleTargetResult;
 using PhosphorProtocol::FocusTargetResult;
@@ -24,8 +24,7 @@ using PhosphorProtocol::RestoreTargetResult;
 using PhosphorProtocol::SwapTargetResult;
 
 class ISettings;
-
-class ZoneDetectionAdaptor;
+class IZoneAdjacencyResolver;
 
 /**
  * @brief Pure snap-mode navigation target resolver.
@@ -37,7 +36,7 @@ class ZoneDetectionAdaptor;
  *
  * Separation of concerns:
  * - This class is pure compute. It holds const* references to
- *   WindowTrackingService / PhosphorZones::LayoutRegistry / ZoneDetectionAdaptor and
+ *   WindowTrackingService / PhosphorZones::LayoutRegistry / IZoneAdjacencyResolver and
  *   reads from them. It does not mutate their state.
  * - It never touches D-Bus or Qt signals directly — navigation
  *   feedback (OSD data) is emitted through a std::function callback
@@ -73,17 +72,17 @@ public:
      *
      * @param service            window tracking state store (non-owning)
      * @param layoutManager      layout / zone owner (non-owning)
-     * @param zoneDetector       adjacent/first-in-direction query helper (non-owning)
+     * @param zoneAdjacency      typed adjacency resolver (non-owning; may be nullptr)
      * @param feedback           OSD feedback callback; may be empty (suppresses feedback)
      */
     SnapNavigationTargetResolver(PhosphorEngineApi::IWindowTrackingService* service,
-                                 PhosphorZones::LayoutRegistry* layoutManager, QObject* zoneDetector,
+                                 PhosphorZones::LayoutRegistry* layoutManager, IZoneAdjacencyResolver* zoneAdjacency,
                                  FeedbackFn feedback);
 
-    /// Late setter for the zone detector — it may not be available at
+    /// Late setter for the zone adjacency resolver — it may not be available at
     /// construction time, so we allow nullptr and bind the pointer when
     /// it becomes available.
-    void setZoneDetector(QObject* zoneDetector);
+    void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
 
     MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
 
@@ -115,8 +114,8 @@ private:
 
     PhosphorEngineApi::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    QObject* m_zoneDetector = nullptr;
+    IZoneAdjacencyResolver* m_zoneAdjacency = nullptr;
     FeedbackFn m_feedback;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine

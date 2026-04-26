@@ -165,7 +165,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 // unit that includes this header.
 WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
-SnapEngine* WindowTrackingAdaptor::snapEngine() const
+PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 {
     return m_cachedSnapEngine;
 }
@@ -187,7 +187,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
-    m_cachedSnapEngine = qobject_cast<SnapEngine*>(snapEngine);
+    m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
@@ -195,16 +195,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* s
     // When clearing (nullptr, nullptr), we also clear stale cross-references
     // to prevent dangling pointer access.
     // ═══════════════════════════════════════════════════════════════════════════
-    if (auto* snap = qobject_cast<SnapEngine*>(snapEngine)) {
-        snap->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
-        if (auto* autotile = qobject_cast<AutotileEngine*>(autotileEngine)) {
+    if (auto* snap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine)) {
+        snap->setZoneAdjacencyResolver(m_zoneDetectionAdaptor);
+        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
             snap->setAutotileEngine(autotile);
         }
 
         // Snap-specific signal: carries WindowStateEntry which is snap-mode-only.
         // Connected via qobject_cast since the member type is PlacementEngineBase.
-        connect(snap, &SnapEngine::windowSnapStateChanged, this, &WindowTrackingAdaptor::windowStateChanged);
-        connect(snap, &SnapEngine::windowFloatingClearedForSnap, this,
+        connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
+                &WindowTrackingAdaptor::windowStateChanged);
+        connect(snap, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this,
                 [this](const QString& windowId, const QString& screenId) {
                     Q_EMIT windowFloatingChanged(windowId, false, screenId);
                 });

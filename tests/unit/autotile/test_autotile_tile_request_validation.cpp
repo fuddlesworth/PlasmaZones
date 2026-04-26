@@ -39,6 +39,7 @@
 #include <PhosphorProtocol/WireTypes.h>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 using namespace PhosphorProtocol;
 
 namespace {

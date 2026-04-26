@@ -7,7 +7,7 @@
 // Project headers
 #include <PhosphorTileEngine/OverflowManager.h>
 
-using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 static const QString kScreen1 = QStringLiteral("Screen1");
 static const QString kScreen2 = QStringLiteral("Screen2");

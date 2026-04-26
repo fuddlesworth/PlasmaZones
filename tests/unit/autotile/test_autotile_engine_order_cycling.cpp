@@ -13,6 +13,7 @@
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Tests that window order is preserved across autotile screen removal

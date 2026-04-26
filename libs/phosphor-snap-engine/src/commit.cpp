@@ -9,7 +9,13 @@
 #include <QGuiApplication>
 #include <QScreen>
 
-namespace PlasmaZones {
+namespace PhosphorSnapEngine {
+
+using PhosphorEngineApi::SnapIntent;
+using PhosphorEngineApi::ZoneAssignmentEntry;
+using PhosphorProtocol::WindowGeometryEntry;
+using PhosphorProtocol::WindowGeometryList;
+using PhosphorProtocol::WindowStateEntry;
 
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 SnapIntent intent)
@@ -163,4 +169,4 @@ WindowGeometryList SnapEngine::applyBatchAssignments(const QVector<ZoneAssignmen
     return geometries;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSnapEngine
