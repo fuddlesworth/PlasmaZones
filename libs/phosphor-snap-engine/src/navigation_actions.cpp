@@ -485,14 +485,13 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
     // cursor/active-screen shadows via INavigationStateProvider — only
     // used when none of the built-in strategies (targetScreenId /
     // geometry.center() / QGuiApplication::screens()) yield a screen.
-    INavigationStateProvider* navState = m_navState;
-    WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [navState]() -> QString {
-        if (!navState) {
+    WindowGeometryList geometries = applyBatchAssignments(entries, SnapIntent::UserInitiated, [this]() -> QString {
+        if (!m_navState) {
             return QString();
         }
-        QString cursor = navState->lastCursorScreenName();
+        QString cursor = m_navState->lastCursorScreenName();
         if (cursor.isEmpty()) {
-            cursor = navState->lastActiveScreenName();
+            cursor = m_navState->lastActiveScreenName();
         }
         return cursor;
     });

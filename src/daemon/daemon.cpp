@@ -516,6 +516,12 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
+    connect(autotileEngine, &PhosphorEngineApi::PlacementEngineBase::settingsPersistRequested, this, [this]() {
+        if (m_settings) {
+            m_settings->save();
+        }
+    });
+
     autotileEngine->refreshConfigFromSettings();
 
     // Give the window drag adaptor access to the autotile engine for per-screen

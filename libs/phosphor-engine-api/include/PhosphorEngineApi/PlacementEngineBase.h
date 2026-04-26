@@ -121,6 +121,10 @@ Q_SIGNALS:
     /// Emitted when windows are released from engine management.
     void windowsReleased(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
+    /// Emitted when the engine writes tuning values back to the settings
+    /// object and wants the daemon to persist them to disk.
+    void settingsPersistRequested();
+
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
     QHash<QString, WindowState> m_windowStates;

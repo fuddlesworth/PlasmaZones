@@ -86,6 +86,7 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     // keep the guard alive until the burst settles.
     m_writeBackGuardTimer.setSingleShot(true);
     m_writeBackGuardTimer.setInterval(500);
+    connect(&m_writeBackGuardTimer, &QTimer::timeout, this, &AutotileEngine::settingsPersistRequested);
 
     m_settingsRetileTimer.setSingleShot(true);
     m_settingsRetileTimer.setInterval(100);
@@ -282,6 +283,7 @@ void AutotileEngine::connectSignals()
                     // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
                     // as virtual screen IDs are never reused after reconfiguration.
                     if (!orphanedVsIds.isEmpty()) {
+                        const QSignalBlocker blocker(engineSettings());
                         if (auto* s = autotileSettings()) {
                             for (const QString& orphanId : orphanedVsIds)
                                 s->clearPerScreenAutotileSettings(orphanId);
@@ -798,6 +800,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // setAlgorithm with stale KCM algo).
     {
         m_writeBackGuardTimer.start();
+        const QSignalBlocker blocker(engineSettings());
         writeBackTuning();
         if (auto* s = autotileSettings()) {
             s->setDefaultAutotileAlgorithm(newId);
@@ -1119,6 +1122,11 @@ PhosphorEngineApi::IAutotileSettings* AutotileEngine::autotileSettings() const
 
 void AutotileEngine::writeBackTuning()
 {
+    auto* settings = engineSettings();
+    if (!settings) {
+        return;
+    }
+    const QSignalBlocker blocker(settings);
     if (auto* s = autotileSettings()) {
         s->setAutotileSplitRatio(m_config->splitRatio);
         s->setAutotileMasterCount(m_config->masterCount);
