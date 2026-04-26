@@ -159,7 +159,9 @@ private:
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *
-     * Uses showOsdOnLayoutSwitch and osdStyle settings, same as manual layout switch.
+     * Renders the OSD unconditionally — gating on user OSD toggles
+     * (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch) is the caller's
+     * responsibility. The osdStyle setting controls visual style.
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
     void clearHighlight();
