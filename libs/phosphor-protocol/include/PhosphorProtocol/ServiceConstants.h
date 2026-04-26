@@ -36,7 +36,11 @@ inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 // ("1", "2", …) to keep comparison trivial.
 //
 //   v1: original protocol (PlasmaZones v3.0–v3.x)
-//   v2: split dragStopped + snapAssistReady signal (Phase C)
+//   v2: split dragStopped + snapAssistReady signal (Phase C);
+//       WindowGeometryEntry gained `screenId` (a(siiiis)) so the compositor
+//       can seed its tracked-screen cache from the daemon's authoritative
+//       answer instead of re-deriving from geometry (which races with VS
+//       reconfig).
 //
 inline constexpr int ApiVersion = 2;
 inline constexpr int MinPeerApiVersion = 2;

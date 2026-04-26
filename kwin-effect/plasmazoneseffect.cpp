@@ -2558,6 +2558,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
+        QString screenId; ///< daemon-authoritative target screen (empty = no override)
     };
     QVector<PendingApply> pending;
 
@@ -2591,6 +2592,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         PendingApply p;
         p.window = QPointer<KWin::EffectWindow>(window);
         p.geometry = entry.toRect();
+        p.screenId = entry.screenId;
         pending.append(p);
     }
 
@@ -2616,8 +2618,25 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         pending.size(),
         [this, pending](int i) {
             const auto& p = pending[i];
-            if (p.window) {
-                applySnapGeometry(p.window, p.geometry);
+            if (!p.window) {
+                return;
+            }
+            applySnapGeometry(p.window, p.geometry);
+            // Seed the tracked-screen cache from the daemon's authoritative
+            // answer for this batch. Without this, the windowFrameGeometryChanged
+            // handler at line ~920 would re-derive the screen from the new
+            // center against m_virtualScreenDefs — which races with VS
+            // swap/rotate (the boundary cache lags behind the daemon's move
+            // and a stale interpretation would fire a spurious cross-VS
+            // unsnap). The daemon already knows the canonical target screen,
+            // so trust it.
+            //
+            // Empty screenId means the daemon didn't supply an authoritative
+            // answer (e.g. autotile float-restore path) — fall through to the
+            // existing geometry-based behavior in that case.
+            if (!p.screenId.isEmpty()) {
+                m_trackedScreenPerWindow[p.window] = p.screenId;
+                m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
         },
         [this, savedStack, action]() {

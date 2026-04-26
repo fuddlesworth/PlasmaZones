@@ -184,7 +184,7 @@ QDebug operator<<(QDebug debug, DragBypassReason r)
 QDBusArgument& operator<<(QDBusArgument& arg, const WindowGeometryEntry& e)
 {
     arg.beginStructure();
-    arg << e.windowId << e.x << e.y << e.width << e.height;
+    arg << e.windowId << e.x << e.y << e.width << e.height << e.screenId;
     arg.endStructure();
     return arg;
 }
@@ -192,7 +192,7 @@ QDBusArgument& operator<<(QDBusArgument& arg, const WindowGeometryEntry& e)
 const QDBusArgument& operator>>(const QDBusArgument& arg, WindowGeometryEntry& e)
 {
     arg.beginStructure();
-    arg >> e.windowId >> e.x >> e.y >> e.width >> e.height;
+    arg >> e.windowId >> e.x >> e.y >> e.width >> e.height >> e.screenId;
     arg.endStructure();
     return arg;
 }
