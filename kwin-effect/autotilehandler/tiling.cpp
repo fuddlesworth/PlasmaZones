@@ -308,6 +308,16 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             if (!snap.window || snap.window->isDeleted()) {
                 return;
             }
+            // Suppress the windowFrameGeometryChanged crossing-detection paths for the
+            // duration of this per-window apply. applySnapGeometry's moveResize emits
+            // frameGeometryChanged synchronously, and after a VS swap/rotate the cached
+            // m_virtualScreenDefs may still hold pre-rotation regions — without this
+            // guard the slot would resolve the new position against stale boundaries
+            // and falsely conclude the window crossed VSes, then unsnap it.
+            m_effect->m_inDaemonGeometryApply = true;
+            const auto guard = qScopeGuard([this] {
+                m_effect->m_inDaemonGeometryApply = false;
+            });
             saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window->frameGeometry());
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
             // A window can only be tile-managed by one screen at a time.
@@ -400,8 +410,12 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // fires. Detect the change here so the autotile engine can transfer the
     // window. Only check windows we're already tracking (m_notifiedWindowScreens)
     // and only when the physical screen has virtual subdivisions.
+    // Skip during a daemon-driven apply (slotWindowsTileRequested /
+    // slotApplyGeometriesBatch): the daemon is the authoritative source of the
+    // window's intended VS during VS swap/rotate, and the cached
+    // m_virtualScreenDefs may still reflect pre-rotation regions.
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
-        && m_effect->m_virtualScreensReady) {
+        && m_effect->m_virtualScreensReady && !m_effect->m_inDaemonGeometryApply) {
         // Don't detect VS crossings for the dragged window — the drop handler
         // (callDragStopped / autotile drag end) owns state transitions.
         // Detecting mid-drag would transfer the window before the user drops it.
