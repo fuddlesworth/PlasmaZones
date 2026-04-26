@@ -5,7 +5,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/logging.h"
 #include "../../core/windowtrackingservice.h"
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>

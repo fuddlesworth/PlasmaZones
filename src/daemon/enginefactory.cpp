@@ -4,8 +4,8 @@
 #include "enginefactory.h"
 
 // Concrete engine includes — only this TU needs them.
-#include "../autotile/AutotileEngine.h"
-#include "../snap/SnapEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../core/screenmoderouter.h"
 
 namespace PlasmaZones {

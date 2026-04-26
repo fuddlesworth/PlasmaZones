@@ -23,7 +23,7 @@
 #include <QSet>
 #include <QUuid>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "../autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

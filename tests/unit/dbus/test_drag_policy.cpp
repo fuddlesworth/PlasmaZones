@@ -30,7 +30,7 @@
 #include <QCoreApplication>
 #include <QObject>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include "dbus/windowdragadaptor.h"
 

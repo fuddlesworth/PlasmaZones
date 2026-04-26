@@ -55,8 +55,8 @@ public Q_SLOTS:
 
     // PhosphorZones::Zone navigation - get adjacent zone in a direction
     // direction: "left", "right", "up", "down"
-    QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
-                            const QString& screenId = QString());
+    Q_INVOKABLE QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                        const QString& screenId = QString());
 
     /**
      * @brief Get the first (edge) zone in a given direction
@@ -71,7 +71,7 @@ public Q_SLOTS:
      * @param direction Direction string ("left", "right", "up", "down")
      * @return PhosphorZones::Zone ID of the edge zone, or empty string if no zones available
      */
-    QString getFirstZoneInDirection(const QString& direction, const QString& screenId = QString());
+    Q_INVOKABLE QString getFirstZoneInDirection(const QString& direction, const QString& screenId = QString());
 
     // Get zone info by zone number (1-indexed), optionally for a specific screen
     QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());

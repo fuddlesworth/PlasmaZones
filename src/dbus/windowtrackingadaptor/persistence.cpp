@@ -3,7 +3,7 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>

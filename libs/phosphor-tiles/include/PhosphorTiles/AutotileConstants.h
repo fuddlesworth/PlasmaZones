@@ -48,6 +48,8 @@ constexpr qreal MinSplitRatio = 0.1;
 constexpr qreal MaxSplitRatio = 0.9;
 constexpr int MinMasterCount = 1;
 constexpr int MaxMasterCount = 5;
+constexpr int DefaultInnerGap = 8;
+constexpr int DefaultOuterGap = 8;
 constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
 constexpr int MinZoneSizePx = 50;
@@ -174,6 +176,12 @@ using AutotileJsonValues::OverflowUnlimited;
 enum class AutotileOverflowBehavior {
     Float = 0,
     Unlimited = 1
+};
+
+enum class AutotileInsertPosition {
+    End = 0,
+    AfterFocused = 1,
+    AsMaster = 2
 };
 
 enum class AutotileDragBehavior {
