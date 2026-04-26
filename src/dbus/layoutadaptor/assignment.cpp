@@ -129,6 +129,11 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
 }
 
+QStringList LayoutAdaptor::getAvailableScreenIds()
+{
+    return m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList();
+}
+
 QString LayoutAdaptor::getAllScreenAssignments()
 {
     QJsonObject root;
@@ -139,17 +144,13 @@ QString LayoutAdaptor::getAllScreenAssignments()
     const QStringList screenIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& screenId : std::as_const(screenIds)) {
-        // Derive connector name for the JSON key (KCM compatibility)
-        // Virtual screens use their full ID directly (e.g., "physId/vs:0");
-        // physical screens use the QScreen connector name for KCM parity.
-        QString connectorName;
-        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-            connectorName = screenId;
-        } else {
-            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
-            connectorName = physScreen ? physScreen->name() : screenId;
-        }
+        // Walk the screen's stored entries first; only allocate JSON +
+        // resolve the connector key if at least one is present. Screen
+        // enumeration moved to getAvailableScreenIds(), so this method
+        // can stay narrowly scoped to *stored* assignment state without
+        // emitting empty objects for unconfigured screens.
         QJsonObject screenObj;
+        bool hasAnyStored = false;
 
         // Per-screen base entry — only emit when explicitly stored.
         // assignmentEntryForScreen would happily synthesize the user's
@@ -159,6 +160,7 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // synthesized default would shadow future global-default
         // changes and defeat the "synthesized fallback only" intent.
         if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
+            hasAnyStored = true;
             auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
             QString effectiveId = entry.activeLayoutId();
             if (!effectiveId.isEmpty()) {
@@ -181,17 +183,26 @@ QString LayoutAdaptor::getAllScreenAssignments()
             if (m_layoutManager->hasExplicitAssignment(screenId, desktop, QString())) {
                 QString desktopId = m_layoutManager->assignmentIdForScreen(screenId, desktop, QString());
                 if (!desktopId.isEmpty()) {
+                    hasAnyStored = true;
                     screenObj[QString::number(desktop)] = desktopId;
                 }
             }
         }
 
-        // Always emit one entry per effective screen — the editor's
-        // m_availableScreenIds enumeration relies on this. Pre-368 the
-        // base-level write set screenObj["mode"] unconditionally so
-        // every screen ended up in the JSON; with the explicit-only
-        // guard above, screens with no stored entries would otherwise
-        // be dropped.
+        if (!hasAnyStored) {
+            continue;
+        }
+
+        // Derive connector name for the JSON key (KCM compatibility).
+        // Virtual screens use their full ID directly (e.g., "physId/vs:0");
+        // physical screens use the QScreen connector name for KCM parity.
+        QString connectorName;
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            connectorName = screenId;
+        } else {
+            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+            connectorName = physScreen ? physScreen->name() : screenId;
+        }
         screenObj[QLatin1String("screenId")] = screenId;
         root[connectorName] = screenObj;
     }

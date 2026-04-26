@@ -178,6 +178,15 @@ public Q_SLOTS:
     // Virtual desktop information
     int getVirtualDesktopCount();
     QStringList getVirtualDesktopNames();
+
+    /// Stable screen-id enumeration for UI / settings consumers.
+    /// Mirrors @c ScreenManager::effectiveScreenIds() — one entry per
+    /// physical monitor plus any virtual-screen subdivisions.
+    /// Separated from @ref getAllScreenAssignments so the JSON readback
+    /// can stay narrowly scoped to *stored* assignment state without
+    /// also having to enumerate unconfigured screens.
+    QStringList getAvailableScreenIds();
+
     QString getAllScreenAssignments();
     QVariantMap getAllDesktopAssignments(); // Get all per-desktop assignments as key -> layoutId
     QVariantMap getAllActivityAssignments(); // Get all per-activity assignments as key -> layoutId
