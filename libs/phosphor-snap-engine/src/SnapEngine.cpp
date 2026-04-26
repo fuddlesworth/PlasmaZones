@@ -7,7 +7,6 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngineApi/IGeometrySettings.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
-#include <PhosphorTiles/AutotileConstants.h>
 #include "snapenginelogging.h"
 
 namespace PlasmaZones {
@@ -37,9 +36,9 @@ PhosphorEngineApi::ISnapSettings* SnapEngine::snapSettings() const
 SnapEngine::GapParams SnapEngine::resolveGapParams() const
 {
     auto* gs = dynamic_cast<PhosphorEngineApi::IGeometrySettings*>(engineSettings());
-    int zonePadding = gs ? gs->zonePadding() : PhosphorTiles::AutotileDefaults::DefaultInnerGap;
+    int zonePadding = gs ? gs->zonePadding() : PhosphorEngineApi::GeometryDefaults::ZonePadding;
     auto outerGaps = gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap())
-                        : ::PhosphorLayout::EdgeGaps::uniform(PhosphorTiles::AutotileDefaults::DefaultOuterGap);
+                        : ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngineApi::GeometryDefaults::OuterGap);
     return {zonePadding, outerGaps};
 }
 

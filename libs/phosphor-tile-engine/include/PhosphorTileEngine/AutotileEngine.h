@@ -7,6 +7,7 @@
 #include <PhosphorEngineApi/PerScreenKeys.h>
 #include <PhosphorEngineTypes/EngineTypes.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorEngineApi/IWindowRegistry.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
@@ -24,8 +25,6 @@
 #include <optional>
 
 #include <PhosphorTileEngine/OverflowManager.h>
-
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones {
 class Layout;
@@ -1279,7 +1278,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngineApi::IWindowTrackingService* m_windowTracker = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
-    QObject* m_windowRegistry = nullptr; ///< Shared registry (QObject*) for class lookups; not owned
+    PhosphorEngineApi::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;

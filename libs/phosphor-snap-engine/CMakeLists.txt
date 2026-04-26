@@ -58,15 +58,11 @@ target_link_libraries(PhosphorSnapEngine
         Qt6::Core
         Qt6::Gui
         PhosphorEngineApi::PhosphorEngineApi
-        PhosphorEngineTypes::PhosphorEngineTypes
         PhosphorZones::PhosphorZones
-        PhosphorGeometry::PhosphorGeometry
-        PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
     PRIVATE
         PhosphorScreens::PhosphorScreens
         PhosphorIdentity::PhosphorIdentity
-        PhosphorTiles::PhosphorTiles
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

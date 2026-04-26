@@ -3485,8 +3485,8 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
-    m_windowRegistry = registry;
-    if (!registry) {
+    m_windowRegistry = dynamic_cast<PhosphorEngineApi::IWindowRegistry*>(registry);
+    if (!m_windowRegistry) {
         return;
     }
     auto resolver = [this](const QString& windowId) {
@@ -3523,10 +3523,7 @@ QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)
     // instance id. Unit tests construct the engine without a registry and
     // fall back to a local map to keep the canonicalization invariant.
     if (m_windowRegistry) {
-        QString result;
-        QMetaObject::invokeMethod(m_windowRegistry, "canonicalizeWindowId", Q_RETURN_ARG(QString, result),
-                                  Q_ARG(QString, rawWindowId));
-        return result;
+        return m_windowRegistry->canonicalizeWindowId(rawWindowId);
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
@@ -3560,10 +3557,7 @@ QString AutotileEngine::canonicalizeForLookup(const QString& rawWindowId) const
         return rawWindowId;
     }
     if (m_windowRegistry) {
-        QString result;
-        QMetaObject::invokeMethod(m_windowRegistry, "canonicalizeForLookup", Q_RETURN_ARG(QString, result),
-                                  Q_ARG(QString, rawWindowId));
-        return result;
+        return m_windowRegistry->canonicalizeForLookup(rawWindowId);
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
@@ -3577,9 +3571,7 @@ QString AutotileEngine::currentAppIdFor(const QString& anyWindowId) const
     }
     if (m_windowRegistry) {
         const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
-        QString fromRegistry;
-        QMetaObject::invokeMethod(m_windowRegistry, "appIdFor", Q_RETURN_ARG(QString, fromRegistry),
-                                  Q_ARG(QString, instanceId));
+        const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
         if (!fromRegistry.isEmpty()) {
             return fromRegistry;
         }

@@ -58,10 +58,7 @@ target_link_libraries(PhosphorTileEngine
     PUBLIC
         Qt6::Core
         PhosphorEngineApi::PhosphorEngineApi
-        PhosphorEngineTypes::PhosphorEngineTypes
         PhosphorTiles::PhosphorTiles
-        PhosphorGeometry::PhosphorGeometry
-        PhosphorLayoutApi::PhosphorLayoutApi
     PRIVATE
         PhosphorScreens::PhosphorScreens
         PhosphorIdentity::PhosphorIdentity
