@@ -246,6 +246,22 @@ public:
         return false;
     }
 
+    /// Return the screen this engine considers the window to be on, or empty
+    /// if the window isn't tracked by this engine.
+    ///
+    /// The daemon-side shortcut router consults this across engines to resolve
+    /// the active window's current screen for routing decisions (float, focus,
+    /// move). Without it, a cross-engine handoff (e.g. drag-insert from snap
+    /// into autotile) leaves the daemon's screenAssignments lookup empty
+    /// because the source engine has released its tracking, and the next
+    /// shortcut routes to whichever engine the cached focus screen pointed at
+    /// rather than the engine that now owns the window.
+    virtual QString screenForTrackedWindow(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return {};
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     //

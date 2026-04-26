@@ -234,4 +234,13 @@ void SnapEngine::handoffRelease(const QString& windowId)
     }
 }
 
+QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
+{
+    // SnapState stores the screen for both snapped and (post-prior-fix)
+    // floating windows that originated as snaps. Either populates the
+    // screenAssignments map; an empty string means the snap engine doesn't
+    // currently track this window at all.
+    return m_snapState->screenAssignments().value(windowId);
+}
+
 } // namespace PlasmaZones

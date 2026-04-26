@@ -95,6 +95,7 @@ public:
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
+    QString screenForTrackedWindow(const QString& windowId) const override;
 
     /**
      * @brief Resnap windows from previous layout to current layout after layout switch

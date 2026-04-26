@@ -439,6 +439,11 @@ public:
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
+    QString screenForTrackedWindow(const QString& windowId) const override
+    {
+        const auto it = m_windowToStateKey.constFind(canonicalizeForLookup(windowId));
+        return it == m_windowToStateKey.constEnd() ? QString() : it.value().screenId;
+    }
 
     /**
      * @brief Serialize per-context autotile window orders to JSON
