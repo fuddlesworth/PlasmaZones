@@ -431,6 +431,10 @@ public:
     {
         return true;
     }
+    static bool autoAssignAllLayouts()
+    {
+        return false;
+    }
     static bool filterLayoutsByAspectRatio()
     {
         return true;

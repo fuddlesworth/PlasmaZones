@@ -143,6 +143,8 @@ public:
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
+                   autoAssignAllLayoutsChanged)
     Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
                    snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
@@ -554,6 +556,8 @@ public:
     void setStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
+    bool autoAssignAllLayouts() const override;
+    void setAutoAssignAllLayouts(bool enabled) override;
     bool snapAssistFeatureEnabled() const override;
     void setSnapAssistFeatureEnabled(bool enabled) override;
     bool snapAssistEnabled() const override;

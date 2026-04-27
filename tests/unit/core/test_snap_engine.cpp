@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QLoggingCategory>
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/windowtrackingservice.h"
@@ -23,6 +24,7 @@ using namespace PhosphorSnapEngine;
 #include "core/virtualdesktopmanager.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using StubSettingsSnap = StubSettings;
 
@@ -720,6 +722,133 @@ private Q_SLOTS:
 
         QCOMPARE(engine.screenForTrackedWindow(windowId), screen);
         QVERIFY(engine.isWindowTracked(windowId));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // calculateSnapToEmptyZone — auto-assign gate (#370)
+    //
+    // Effective gate is `layout->autoAssign() OR settings->autoAssignAllLayouts()`.
+    // The four-quadrant truth table verifies that toggling EITHER input flips
+    // the gate, and only the FALSE/FALSE quadrant short-circuits to noSnap with
+    // the "autoAssign=false" debug log. The other three quadrants pass the
+    // gate; geometry resolution then fails in this guiless fixture (no
+    // ScreenManager), so a different debug log fires. We assert via log
+    // capture rather than result.shouldSnap because the geometry side of
+    // calculateSnapToEmptyZone needs a wired QScreen — out of scope for
+    // exercising the gate itself.
+    // =========================================================================
+
+private:
+    static QStringList& gateLogSink()
+    {
+        static QStringList sink;
+        return sink;
+    }
+    static void gateLogHandler(QtMsgType, const QMessageLogContext&, const QString& msg)
+    {
+        gateLogSink().append(msg);
+    }
+
+    /// Run calculateSnapToEmptyZone with the given gate inputs and capture
+    /// debug logs from the snap-engine category. Returns the captured lines.
+    QStringList runGate(SnapEngine& engine, PhosphorZones::Layout* layout, bool perLayoutAuto, bool globalAuto,
+                        const QString& screenId)
+    {
+        layout->setAutoAssign(perLayoutAuto);
+        m_settings->setAutoAssignAllLayouts(globalAuto);
+
+        QLoggingCategory::setFilterRules(QStringLiteral("org.phosphor.snap-engine.debug=true"));
+        gateLogSink().clear();
+        QtMessageHandler prev = qInstallMessageHandler(&TestSnapEngine::gateLogHandler);
+
+        // Result is intentionally ignored — geometry resolution depends on a
+        // wired ScreenManager, which a guiless fixture doesn't provide. The
+        // log line tells us which branch executed, which is what the gate
+        // contract is actually about.
+        (void)engine.calculateSnapToEmptyZone(QStringLiteral("app|uuid-gate"), screenId, /*isSticky*/ false);
+
+        qInstallMessageHandler(prev);
+        QLoggingCategory::setFilterRules(QString());
+        return gateLogSink();
+    }
+
+private Q_SLOTS:
+
+    void testCalculateSnapToEmptyZone_gate_globalOff_perLayoutOff_blocks()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        const QStringList lines =
+            runGate(engine, layout, /*perLayoutAuto*/ false, /*globalAuto*/ false, QStringLiteral("DP-1"));
+
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("autoAssign=false")),
+                 "gate must short-circuit with the autoAssign=false debug log when both inputs are false");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testCalculateSnapToEmptyZone_gate_globalOff_perLayoutOn_passes()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        const QStringList lines =
+            runGate(engine, layout, /*perLayoutAuto*/ true, /*globalAuto*/ false, QStringLiteral("DP-1"));
+
+        const QString joined = lines.join(QLatin1Char('\n'));
+        QVERIFY2(!joined.contains(QStringLiteral("autoAssign=false")),
+                 "per-layout flag alone must pass the gate (no autoAssign=false log)");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testCalculateSnapToEmptyZone_gate_globalOn_perLayoutOff_passes()
+    {
+        // Force-on override (#370): when the global toggle is on, the gate
+        // must pass even with the per-layout flag off.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        const QStringList lines =
+            runGate(engine, layout, /*perLayoutAuto*/ false, /*globalAuto*/ true, QStringLiteral("DP-1"));
+
+        const QString joined = lines.join(QLatin1Char('\n'));
+        QVERIFY2(!joined.contains(QStringLiteral("autoAssign=false")),
+                 "global toggle alone must pass the gate (no autoAssign=false log)");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testCalculateSnapToEmptyZone_gate_globalOn_perLayoutOn_passes()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        const QStringList lines =
+            runGate(engine, layout, /*perLayoutAuto*/ true, /*globalAuto*/ true, QStringLiteral("DP-1"));
+
+        const QString joined = lines.join(QLatin1Char('\n'));
+        QVERIFY2(!joined.contains(QStringLiteral("autoAssign=false")),
+                 "both inputs true must pass the gate (no autoAssign=false log)");
         m_wts->setSnapState(nullptr);
     }
 };

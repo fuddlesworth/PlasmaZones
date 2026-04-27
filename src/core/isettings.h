@@ -258,6 +258,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();

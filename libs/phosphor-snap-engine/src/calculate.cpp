@@ -256,13 +256,21 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
         }
     }
 
-    // Check layout has autoAssign enabled
+    // Check the effective auto-assign gate. Autotile screens are filtered out
+    // upstream (lifecycle.cpp short-circuits before reaching here), so by the
+    // time we evaluate this gate we're always operating on a manual layout.
+    // The global "all layouts" master toggle (#370) is a force-on override
+    // that lights up auto-assign for any such layout regardless of its
+    // per-layout flag; when the global toggle is off, the per-layout flag
+    // remains the sole gate.
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenId);
     if (!layout) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToEmptyZone: no layout for screen" << windowScreenId;
         return SnapResult::noSnap();
     }
-    if (!layout->autoAssign()) {
+    auto* settings = snapSettings();
+    const bool effectiveAuto = layout->autoAssign() || (settings && settings->autoAssignAllLayouts());
+    if (!effectiveAuto) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToEmptyZone: layout" << layout->name() << "autoAssign=false";
         return SnapResult::noSnap();
     }

@@ -1383,10 +1383,18 @@ ApplicationWindow {
                 }
 
                 MenuItem {
-                    text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
-                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
+                    readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
+                    readonly property bool globalAuto: appSettings.autoAssignAllLayouts === true
+
+                    // When the global "Auto-assign for all layouts" toggle is on (#370),
+                    // every layout effectively auto-assigns regardless of its per-layout flag,
+                    // so the per-layout toggle is preserved but disabled here. The label
+                    // points the user at the global setting that's overriding it.
+                    text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
+                    icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
                     visible: !layoutContextMenu.isAutotile
-                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+                    enabled: !globalAuto
+                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
                 }
 
                 // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --

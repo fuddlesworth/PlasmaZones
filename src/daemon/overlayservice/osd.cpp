@@ -172,7 +172,12 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
                      PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass()));
     writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(PhosphorZones::LayoutCategory::Manual));
+    // Push the per-layout flag and the global "Auto-assign for all layouts"
+    // master toggle (#370) separately; CategoryBadge folds them into the
+    // effective state. Same convention as buildLayoutsList consumers
+    // (selector_update.cpp, snapassist.cpp).
     writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
+    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
     writeAutotileMetadata(window, false, false);
     writeQmlProperty(window, QStringLiteral("zones"),
                      layout->zones().isEmpty()
@@ -243,6 +248,12 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
     writeQmlProperty(window, QStringLiteral("category"), category);
     writeQmlProperty(window, QStringLiteral("autoAssign"), autoAssign);
+    // Forward the global master toggle (#370) only for manual layouts.
+    // Autotile screens never reach calculateSnapToEmptyZone, so the global
+    // flag has no effect on them and must not influence the badge.
+    const bool isManual = category == static_cast<int>(PhosphorZones::LayoutCategory::Manual);
+    writeQmlProperty(window, QStringLiteral("globalAutoAssign"),
+                     isManual && m_settings && m_settings->autoAssignAllLayouts());
     writeAutotileMetadata(window, showMasterDot, producesOverlappingZones, zoneNumberDisplay, masterCount);
     writeQmlProperty(window, QStringLiteral("zones"), zones);
     writeFontProperties(window, m_settings);
@@ -276,6 +287,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"), QStringLiteral("any"));
     writeQmlProperty(window, QStringLiteral("category"), 0);
     writeQmlProperty(window, QStringLiteral("autoAssign"), false);
+    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), false);
     writeAutotileMetadata(window, false, false);
     writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
     writeFontProperties(window, m_settings);

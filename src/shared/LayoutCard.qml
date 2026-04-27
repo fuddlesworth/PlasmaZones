@@ -24,6 +24,10 @@ Item {
     property bool isSelected: false
     property bool isHovered: false
     property bool isRecommended: layoutData.recommended !== undefined ? layoutData.recommended : true
+    // When the global "Auto-assign for all layouts" master toggle is on (#370),
+    // every layout effectively auto-assigns. Parents pass it down so the badge
+    // reflects actual snap behavior even when the per-layout flag is off.
+    property bool globalAutoAssign: false
     // Dimensions (set by parent, no defaults)
     property real previewWidth
     property real previewHeight
@@ -326,6 +330,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             category: root.layoutData.category !== undefined ? root.layoutData.category : 0
             autoAssign: root.layoutData.autoAssign === true
+            globalAutoAssign: root.globalAutoAssign
         }
 
         AspectRatioBadge {
