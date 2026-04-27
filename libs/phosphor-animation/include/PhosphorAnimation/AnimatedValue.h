@@ -147,6 +147,15 @@ public:
     AnimatedValue(AnimatedValue&&) noexcept = default;
     AnimatedValue& operator=(AnimatedValue&&) noexcept = default;
 
+    // Sibling Space instantiations are friends so `seedFrom` can copy
+    // private idle state (m_from, m_to, m_current, m_isComplete) across
+    // a space boundary without a public setter per field. Used by
+    // wrappers (PhosphorAnimatedColor) that keep one instance per
+    // ColorSpace and need to propagate the quiesced visual state when
+    // the active space flips.
+    template<typename, ColorSpace>
+    friend class AnimatedValue;
+
     // The Space template parameter is only consulted when T == QColor.
     // For every other T the value is ignored and the default Linear is
     // harmless noise in the type. Enforced via `if constexpr` in the
@@ -424,129 +433,10 @@ public:
         return retarget(std::move(newTo), m_spec.retargetPolicy);
     }
 
-    /**
-     * @brief Swap the driving clock without touching target, state, or
-     *        interpolation.
-     *
-     * Used when the underlying handle migrates between paint drivers
-     * mid-animation — a window moving between physical outputs on a
-     * mixed-refresh-rate desktop, a QML scene re-parented to a
-     * different `QQuickWindow`. The animation's progress (value,
-     * velocity, elapsed) is preserved; the next `advance()` just reads
-     * `dt` from the new clock instead of the old one.
-     *
-     * ## Epoch contract and timestamp rebase
-     *
-     * Per-output clocks latch `now()` independently from their own
-     * paint cycles — two clocks that share the same `std::chrono::
-     * steady_clock` epoch can still return *different* absolute values
-     * at the same wall instant because each returns the timestamp of
-     * *its* last `updatePresentTime` call. Naïvely swapping the clock
-     * pointer therefore leaves `m_startTime` (latched against the old
-     * clock's last-observed `now`) potentially ahead of the new
-     * clock's current `now` — the next `advance()` would compute a
-     * negative `elapsed`, and the stateless progression branch would
-     * sample `curve->evaluate(negative-t)` and visibly rewind.
-     *
-     * Rebind therefore rebases `m_startTime` and `m_lastTickTime` by
-     * the delta between the two clocks' current readings so that
-     * `newNow - m_startTime` equals the pre-rebind `oldNow -
-     * m_startTime`. Progress, not wall-time, is preserved across the
-     * boundary.
-     *
-     * Both clocks must still share a monotonic epoch for the rebase
-     * arithmetic to make sense — the shipped clocks (`CompositorClock`
-     * backed by KWin's presentTime, `QtQuickClock` backed by
-     * `std::chrono::steady_clock`) both derive from
-     * `std::chrono::steady_clock`, so any pair is safe. A third-party
-     * `IMotionClock` using a different epoch (e.g., wall-clock, a
-     * domain-specific counter) must not be rebound with this method —
-     * the rebase delta would mix incompatible time bases.
-     *
-     * Passing @p newClock == nullptr cancels the animation (same as
-     * `cancel()`) — a null clock means no driver; progress cannot
-     * continue. **Same owning-container stranding caveat as
-     * `cancel()`** — the entry stays in the owner's map with both
-     * `isAnimating()` and `isComplete()` false until explicitly
-     * removed. `AnimationController::advanceAnimations` only calls
-     * `rebindClock` when the per-tick resolver returns a non-null
-     * clock, so this path is never hit through the controller; it
-     * only matters for direct consumers of `AnimatedValue<T>`.
-     *
-     * No-op when the new clock equals the current clock (cheap
-     * pointer compare). No callbacks fire — rebind is a pure plumbing
-     * operation, distinct from retarget (which may notify per
-     * `onAnimationRetargeted`).
-     */
-    void rebindClock(IMotionClock* newClock)
-    {
-        if (newClock == m_spec.clock) {
-            return;
-        }
-        if (!newClock) {
-            cancel();
-            return;
-        }
-        // Epoch-compatibility gate. Rebase arithmetic assumes both
-        // clocks share a monotonic time base — two clocks with
-        // different `epochIdentity()` (or either unknown, i.e. a null
-        // identity) would produce a physically meaningless delta. Log
-        // once per instance and refuse the migration, leaving the
-        // captured clock in place. The controller's per-tick call
-        // path already guards this as well; this check is the
-        // belt-and-suspenders for direct callers.
-        //
-        // Gate runs ANY time we have a current clock to compare against
-        // — not only when m_startTime is latched. A rebind between
-        // start() and the first advance() (i.e. isAnimating == true
-        // but m_startTime unset) would otherwise silently install an
-        // incompatible clock whose epoch identity then latches
-        // permanently at the next advance; a subsequent rebind back
-        // to the original clock would then rebase across incompatible
-        // epochs without a defensible gate (the stored-current clock
-        // by then IS the incompatible one). Checking before the
-        // rebase-ability check means the captured epoch is always a
-        // clock the instance deliberately accepted.
-        if (m_spec.clock) {
-            if (!IMotionClock::epochCompatible(m_spec.clock, newClock)) {
-                if (!m_loggedEpochMismatch) {
-                    qCWarning(lcAnimatedValue)
-                        << "rebindClock refused: epoch identity mismatch "
-                        << "(old=" << m_spec.clock->epochIdentity() << ", new=" << newClock->epochIdentity()
-                        << ") — rebase would corrupt progress. Keeping captured clock.";
-                    m_loggedEpochMismatch = true;
-                }
-                return;
-            }
-            if (m_startTime) {
-                // Rebase latched timestamps by the delta between the
-                // two clocks' current readings so `elapsed` and `dt`
-                // survive the swap unchanged. Without this, a new
-                // clock whose last-latched `now()` sits behind
-                // `m_startTime` produces a negative elapsed on the
-                // next stateless advance and the curve samples at t < 0.
-                const auto oldNow = m_spec.clock->now();
-                const auto newNow = newClock->now();
-                const auto delta = newNow - oldNow;
-                *m_startTime += delta;
-                if (m_lastTickTime) {
-                    *m_lastTickTime += delta;
-                }
-            }
-            // If m_startTime is unset (rebind between start() and
-            // first advance), nothing to rebase — the first advance
-            // on the new clock will latch startTime against newClock's
-            // `now()` directly.
-        }
-        m_spec.clock = newClock;
-        if (m_isAnimating) {
-            // The new clock's paint loop may not be ticking this
-            // handle right now; kick it so the first frame on the
-            // new driver latches m_lastTickTime against a fresh
-            // timestamp.
-            newClock->requestFrame();
-        }
-    }
+    /// Swap the driving clock without touching target/state/interpolation.
+    /// Definition (with the full epoch-rebase contract docs) lives in
+    /// <PhosphorAnimation/AnimatedValue_lifecycle_extras.h>.
+    void rebindClock(IMotionClock* newClock);
 
     /**
      * @brief Stop animating; leave `value()` at its current position.
@@ -576,6 +466,18 @@ public:
         m_isAnimating = false;
         m_isComplete = false;
     }
+
+    /// Cross-Space idle-state copy for color-space wrapper dispatch.
+    /// Definition + idle-precondition rationale live in
+    /// <PhosphorAnimation/AnimatedValue_lifecycle_extras.h>.
+    template<ColorSpace OtherSpace>
+    void seedFrom(const AnimatedValue<T, OtherSpace>& other);
+
+    /// Companion to seedFrom — copies clock + callbacks, leaves profile alone.
+    /// Definition + rationale live in
+    /// <PhosphorAnimation/AnimatedValue_lifecycle_extras.h>.
+    template<ColorSpace OtherSpace>
+    void seedSpecFrom(const AnimatedValue<T, OtherSpace>& other);
 
     /**
      * @brief Force the animation to its target value immediately.
@@ -849,124 +751,36 @@ public:
         return m_to;
     }
 
-    // ─────── Geometric bounds (positional T only) ───────
+    // ─────── Geometric bounds & swept-range queries ───────
+    //
+    // Definitions live in <PhosphorAnimation/AnimatedValue_geometric.h>,
+    // included unconditionally at the bottom of this file. The split
+    // exists because the combined header crossed the project's 800-line
+    // cap; the geometric surface is logically separable (snap engine
+    // never queries bounds on its own animations, and damage callers
+    // never need start()) so the cut preserves cohesion. ABI-compatible
+    // — every consumer keeps including only <PhosphorAnimation/
+    // AnimatedValue.h>. See the sibling header for full per-method docs.
 
-    /**
-     * @brief Bounding rectangle covering the full animation path
-     *        including curve overshoot — positional specialisations.
-     *
-     * Union of the start and target values (treated as positions or
-     * rects); for curves where `overshoots()` is true, the curve is
-     * additionally sampled at 50 points and each sample union'd in.
-     * The result is the damage rect the consumer must invalidate so
-     * no frame of the animation paints outside an already-invalidated
-     * region.
-     *
-     * Available only on specialisations that carry a position:
-     * `QPointF` (bounding box of the two endpoint positions) and
-     * `QRectF` (union of the two endpoint rects). `QSizeF` has no
-     * inherent position — use `boundsAt(anchor)` or `sweptSize()`
-     * instead. Scalar / colour / transform specialisations expose
-     * `sweptRange()` or leave damage to the owning item (see design
-     * doc decision E).
-     */
+    /// Bounding rectangle of the swept path including curve overshoot.
     QRectF bounds() const
-        requires detail::PositionalGeometric<T>
-    {
-        return boundsImpl();
-    }
+        requires detail::PositionalGeometric<T>;
 
-    /**
-     * @brief Bounding rectangle anchored at @p anchor — size-only T.
-     *
-     * Computes the envelope of widths and heights swept during the
-     * animation (including overshoot samples) and returns a rect
-     * rooted at @p anchor with those dimensions. The caller supplies
-     * the anchor because a `QSizeF` animation does not carry
-     * positional information — forcing the anchor through the API
-     * makes the precondition explicit and eliminates the silent
-     * origin-at-(0, 0) trap a combined `bounds()` signature would
-     * otherwise hide.
-     *
-     * Available only on the `QSizeF` specialisation.
-     */
+    /// Damage rect anchored at @p anchor — size-only T (QSizeF).
     QRectF boundsAt(QPointF anchor) const
-        requires detail::SizeGeometric<T>
-    {
-        // Damage envelope anchored at @p anchor is the MAX dimension
-        // observed over the swept path — a rect smaller than `hiSize`
-        // would be contained within the damage rect that `hiSize`
-        // produces. `sweptSize()` exposes both (lo, hi) for consumers
-        // doing explicit layout math; damage tracking only needs hi.
-        // Only the `hi` bound is needed for the damage rect; the `lo`
-        // bound is part of `sweptSizeImpl`'s pair return for callers
-        // of `sweptSize()`. Pick out the second element directly so
-        // no unused-binding discard is needed.
-        return QRectF(anchor, sweptSizeImpl().second);
-    }
+        requires detail::SizeGeometric<T>;
 
-    /**
-     * @brief Min / max size the animation sweeps through, including
-     *        curve overshoot.
-     *
-     * Componentwise analogue of `sweptRange()` for scalar T. Returns
-     * `(minSize, maxSize)` where each field is the min/max of that
-     * dimension observed across the endpoints and any overshoot
-     * samples. Consumers doing their own anchor / layout math use
-     * this instead of `boundsAt` when the anchor isn't known ahead
-     * of time.
-     *
-     * Available only on the `QSizeF` specialisation.
-     */
+    /// (minSize, maxSize) the animation sweeps through — QSizeF only.
     std::pair<QSizeF, QSizeF> sweptSize() const
-        requires detail::SizeGeometric<T>
-    {
-        return sweptSizeImpl();
-    }
+        requires detail::SizeGeometric<T>;
 
-    /**
-     * @brief Has the current interpolated value diverged from the
-     *        target size by more than @p epsilonPx on either axis?
-     *
-     * Intended for compositor adapters that only need to apply a
-     * scale transform when size is actually changing (pure-translate
-     * snaps leave scale at identity). Replaces the hand-inlined
-     * "|current.w - target.w| > 1.0 || ..." check that otherwise
-     * duplicates across every adapter.
-     *
-     * Default `epsilonPx` matches `SnapPolicy::kSnapSizeEpsilonPx` —
-     * the snap gate and the paint-path scale decision agree on what
-     * counts as "size changed", so a sub-pixel delta cannot flip one
-     * side without flipping the other.
-     *
-     * Available only on the `QRectF` specialisation — `QSizeF` has
-     * no natural "target" distinct from the lerp endpoint (every
-     * animation of a size changes the size), and geometric `QPointF`
-     * has no size axis at all.
-     */
+    /// True when current size diverges from target by > @p epsilonPx.
     bool hasSizeChange(qreal epsilonPx = kRectSizeEpsilonPx) const
-        requires std::same_as<T, QRectF>
-    {
-        return qAbs(m_current.width() - m_to.width()) > epsilonPx
-            || qAbs(m_current.height() - m_to.height()) > epsilonPx;
-    }
+        requires std::same_as<T, QRectF>;
 
-    // ─────── Scalar swept range (only for arithmetic T) ───────
-
-    /**
-     * @brief Min / max value the animation sweeps through, including
-     *        curve overshoot.
-     *
-     * Available only on scalar specialisations. Consumers use this
-     * for damage tracking or axis range sizing where "bounds as a
-     * rect" doesn't make sense (a scalar opacity's swept range is
-     * [0.0, 1.0] or with overshoot [-0.02, 1.05]).
-     */
+    /// (lo, hi) of a scalar animation's swept range, with overshoot.
     std::pair<T, T> sweptRange() const
-        requires detail::ScalarValue<T>
-    {
-        return sweptRangeImpl();
-    }
+        requires detail::ScalarValue<T>;
 
     /**
      * @brief Terminal wall-clock guard for stateful curves.
@@ -1016,102 +830,21 @@ private:
         return defaultFallbackCurve();
     }
 
-    // Positional bounds — position-carrying T only (QPointF, QRectF).
-    // QSizeF has its own sweptSizeImpl below; the public API routes
-    // QSizeF callers through boundsAt(anchor) / sweptSize() so the
-    // anchor precondition is explicit at the call site.
-    //
-    // Implemented via explicit (minX, minY, maxX, maxY) reduction
-    // instead of `QRectF::united()` because Qt treats zero-width /
-    // zero-height rects as "empty" and drops them from a union — a
-    // QPointF sweep (effectively a degenerate rect at each endpoint)
-    // would collapse to a single endpoint if run through united().
-    // min/max over the endpoint-and-sample set is the robust formulation.
-    QRectF boundsImpl() const
-        requires detail::PositionalGeometric<T>
-    {
-        qreal minX, minY, maxX, maxY;
-        if constexpr (std::same_as<T, QPointF>) {
-            minX = std::min(m_from.x(), m_to.x());
-            maxX = std::max(m_from.x(), m_to.x());
-            minY = std::min(m_from.y(), m_to.y());
-            maxY = std::max(m_from.y(), m_to.y());
-            sampleOvershoots(minX, minY, maxX, maxY, [this](qreal p) {
-                const QPointF s = Interpolate<QPointF>::lerp(m_from, m_to, p);
-                return std::tuple<qreal, qreal, qreal, qreal>{s.x(), s.y(), s.x(), s.y()};
-            });
-        } else {
-            // QRectF — full swept rect including overshoot.
-            minX = std::min(m_from.left(), m_to.left());
-            minY = std::min(m_from.top(), m_to.top());
-            maxX = std::max(m_from.right(), m_to.right());
-            maxY = std::max(m_from.bottom(), m_to.bottom());
-            sampleOvershoots(minX, minY, maxX, maxY, [this](qreal p) {
-                const QRectF s = Interpolate<QRectF>::lerp(m_from, m_to, p);
-                return std::tuple<qreal, qreal, qreal, qreal>{s.left(), s.top(), s.right(), s.bottom()};
-            });
-        }
-        return QRectF(minX, minY, maxX - minX, maxY - minY);
-    }
+    // ─── Geometric impl helpers (defined in AnimatedValue_geometric.h) ───
+    // Forward declarations only — bodies live alongside the public
+    // geometric API in the sibling header so the file-size split keeps
+    // both the public surface and its impl together for review.
 
-    // Size-envelope implementation — QSizeF only. Returns the min/max
-    // width and height observed across the two endpoints plus any
-    // overshoot samples. The public surface wraps this with either an
-    // explicit anchor (`boundsAt`) or raw endpoint-pair access
-    // (`sweptSize`) so the caller controls the coordinate mapping.
+    QRectF boundsImpl() const
+        requires detail::PositionalGeometric<T>;
+
     std::pair<QSizeF, QSizeF> sweptSizeImpl() const
-        requires detail::SizeGeometric<T>
-    {
-        qreal minW = std::min(m_from.width(), m_to.width());
-        qreal maxW = std::max(m_from.width(), m_to.width());
-        qreal minH = std::min(m_from.height(), m_to.height());
-        qreal maxH = std::max(m_from.height(), m_to.height());
-        const auto curve = effectiveCurve();
-        if (curve && curve->overshoots()) {
-            for (int i = 1; i < kOvershootSamples; ++i) {
-                const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
-                const QSizeF sampled = Interpolate<QSizeF>::lerp(m_from, m_to, p);
-                minW = std::min(minW, sampled.width());
-                maxW = std::max(maxW, sampled.width());
-                minH = std::min(minH, sampled.height());
-                maxH = std::max(maxH, sampled.height());
-            }
-        }
-        return {QSizeF(minW, minH), QSizeF(maxW, maxH)};
-    }
+        requires detail::SizeGeometric<T>;
 
     template<typename Sampler>
-    void sampleOvershoots(qreal& minX, qreal& minY, qreal& maxX, qreal& maxY, const Sampler& sampleAt) const
-    {
-        const auto curve = effectiveCurve();
-        if (!curve || !curve->overshoots()) {
-            return;
-        }
-        for (int i = 1; i < kOvershootSamples; ++i) {
-            const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
-            const auto [x1, y1, x2, y2] = sampleAt(p);
-            minX = std::min(minX, x1);
-            minY = std::min(minY, y1);
-            maxX = std::max(maxX, x2);
-            maxY = std::max(maxY, y2);
-        }
-    }
+    void sampleOvershoots(qreal& minX, qreal& minY, qreal& maxX, qreal& maxY, const Sampler& sampleAt) const;
 
-    std::pair<T, T> sweptRangeImpl() const
-    {
-        T lo = std::min(m_from, m_to);
-        T hi = std::max(m_from, m_to);
-        const auto curve = effectiveCurve();
-        if (curve && curve->overshoots()) {
-            for (int i = 1; i < kOvershootSamples; ++i) {
-                const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
-                const T sampled = Interpolate<T>::lerp(m_from, m_to, p);
-                lo = std::min(lo, sampled);
-                hi = std::max(hi, sampled);
-            }
-        }
-        return {lo, hi};
-    }
+    std::pair<T, T> sweptRangeImpl() const;
 
     // State
     T m_from{};
@@ -1148,3 +881,12 @@ private:
 };
 
 } // namespace PhosphorAnimation
+
+// Out-of-class member-template definitions split into sibling headers to
+// keep this file under the project's 800-line cap. MUST be included AFTER
+// the class is fully defined and AFTER the namespace closes (each sibling
+// re-opens its own namespace block). Header-only and ABI-compatible —
+// every consumer keeps using `#include <PhosphorAnimation/AnimatedValue.h>`
+// and transparently picks up every part.
+#include <PhosphorAnimation/AnimatedValue_geometric.h>
+#include <PhosphorAnimation/AnimatedValue_lifecycle_extras.h>

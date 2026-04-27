@@ -434,6 +434,18 @@ void moveKey(const QJsonObject& src, const QString& srcKey, QJsonObject& dst, co
 
 void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 {
+    // Defense-in-depth idempotency guard. The PhosphorConfig::MigrationRunner
+    // already gates this function on `version == 1`, and `ensureJsonConfig`
+    // bails early when the on-disk version is >= ConfigSchemaVersion. But
+    // a direct caller (test harness, future tooling) that hands us a v2 doc
+    // would otherwise read the v2 `Animations` group as if it were v1,
+    // remove it, fail to find any v1 keys inside, and end up writing back
+    // an empty animations group — silently nuking the user's Profile blob.
+    // Bail out before touching the document.
+    if (root.value(ConfigKeys::versionKey()).toInt(0) >= 2) {
+        return;
+    }
+
     // ── Read all v1 groups (using ConfigKeys v1 accessors) ────────────────
     const QJsonObject v1Activation = root.value(ConfigKeys::v1ActivationGroup()).toObject();
     const QJsonObject v1Display = root.value(ConfigKeys::v1DisplayGroup()).toObject();
@@ -687,16 +699,107 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!shaders.isEmpty())
         root[QLatin1String("Shaders")] = shaders;
 
-    // ── Animations (key renames) ────────────────────────────────────────────
+    // ── Animations (key renames + Phase-4 Profile-blob packing) ────────────
+    // v1 stored five per-field animation keys + a standalone `AnimationsEnabled`
+    // bool. v2's Phase-4-restructure packs the five per-field values into a
+    // single `Profile` JSON blob (decision S) while keeping `Enabled` as an
+    // orthogonal bool. Preserve v1 users' customisation by composing the
+    // Profile blob inline here rather than dropping the fields.
+    //
+    // Both sides go through accessors: v2 via ConfigDefaults / Profile
+    // constants (per CLAUDE.md rule: no inline QStringLiteral for config
+    // keys) so a schema rename touches one accessor, and v1 via
+    // ConfigKeys::v1Animation*Key() so the migration is unambiguous about
+    // "reading legacy field" — the v1 shape is stable by definition but
+    // having a single source of truth keeps `grep "AnimationDuration"`
+    // returning one accessor declaration instead of N call-sites.
     QJsonObject animations;
-    moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, QLatin1String("Enabled"));
-    moveKey(v1Animations, QLatin1String("AnimationDuration"), animations, QLatin1String("Duration"));
-    moveKey(v1Animations, QLatin1String("AnimationEasingCurve"), animations, QLatin1String("EasingCurve"));
-    moveKey(v1Animations, QLatin1String("AnimationMinDistance"), animations, QLatin1String("MinDistance"));
-    moveKey(v1Animations, QLatin1String("AnimationSequenceMode"), animations, QLatin1String("SequenceMode"));
-    moveKey(v1Animations, QLatin1String("AnimationStaggerInterval"), animations, QLatin1String("StaggerInterval"));
+    moveKey(v1Animations, ConfigKeys::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
+
+    // Assemble Profile fields from the v1 keys (if present). We build
+    // the JSON shape directly using Profile's public field-name
+    // constants — matches `Profile::toJson` output without pulling
+    // phosphor-animation runtime objects into the migration path
+    // (which would bloat the daemon-startup dependency graph for a
+    // transient code path). Sharing the constants guarantees that a
+    // Profile field rename touches producer and migration together.
+    // Every clampable field goes through `qBound` against the
+    // ConfigDefaults Min/Max accessors. A v1 config with, say,
+    // `AnimationDuration=-50` or `AnimationStaggerInterval=600000` would
+    // otherwise land in the v2 blob verbatim — and `Profile::fromJson`
+    // rejects out-of-range values at load time with a warning, so the
+    // user silently loses their customisation AND the log gets noisy.
+    // Clamping at migration time prevents both: the stored value is
+    // always in-range, and `Profile::fromJson` accepts it cleanly.
+    QJsonObject profile;
+    if (v1Animations.contains(ConfigKeys::v1AnimationDurationKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationDurationKey()).toInt();
+        const int clamped = qBound(ConfigDefaults::animationDurationMin(), raw, ConfigDefaults::animationDurationMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] = clamped;
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationEasingCurveKey())) {
+        // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
+        // stack-local CurveRegistry so we store the canonical wire form
+        // (e.g. "0.33,1.00,0.68,1.00") in the Profile blob. Without this
+        // step, `Profile::fromJson` resolves the friendly name on read
+        // via the consumer's registry, but the first UI save then
+        // serialises the Curve back using `Curve::toString()` — which
+        // always emits canonical wire form — causing a spurious config
+        // rewrite on first post-migration interaction. Built-in curves
+        // auto-register via the CurveRegistry constructor, so no
+        // explicit registerBuiltins() call is needed here.
+        //
+        // Unknown specs (custom curve names from a v1 plugin that no
+        // longer exists, typos in hand-edited v1 configs) are DROPPED
+        // here rather than persisted. Persisting the raw string would
+        // make `Profile::fromJson` emit the "curve spec … did not
+        // resolve" warning on every daemon start forever; dropping the
+        // field lets the library-default OutCubic apply and silences
+        // the repeating diagnostic. The migration log below records
+        // the dropped spec so an operator investigating a silent
+        // curve change can find it.
+        const QString v1Curve = v1Animations.value(ConfigKeys::v1AnimationEasingCurveKey()).toString();
+        PhosphorAnimation::CurveRegistry registry;
+        if (const auto resolved = registry.tryCreate(v1Curve)) {
+            profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved->toString();
+        } else {
+            qInfo("migrateV1ToV2: dropping unresolved v1 curve spec '%s' — library default (OutCubic) will apply",
+                  qPrintable(v1Curve));
+        }
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationMinDistanceKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationMinDistanceKey()).toInt();
+        const int clamped =
+            qBound(ConfigDefaults::animationMinDistanceMin(), raw, ConfigDefaults::animationMinDistanceMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] = clamped;
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationSequenceModeKey())) {
+        // SequenceMode is a closed enum (AllAtOnce=0, Stagger=1 as of v2).
+        // Out-of-range values snap to the project default rather than
+        // clamping to the nearest bound — clamping would silently alias
+        // e.g. 999 onto Stagger, which is semantically different from
+        // "the user's setting is meaningless, use the default".
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationSequenceModeKey()).toInt();
+        const int resolved =
+            (raw >= ConfigDefaults::animationSequenceModeMin() && raw <= ConfigDefaults::animationSequenceModeMax())
+            ? raw
+            : ConfigDefaults::animationSequenceMode();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] = resolved;
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationStaggerIntervalKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationStaggerIntervalKey()).toInt();
+        const int clamped =
+            qBound(ConfigDefaults::animationStaggerIntervalMin(), raw, ConfigDefaults::animationStaggerIntervalMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
+    }
+    if (!profile.isEmpty()) {
+        // Stored as a JSON-encoded string under the animation-profile
+        // key — matches the schema's QMetaType::QString declaration.
+        animations[ConfigDefaults::animationProfileKey()] =
+            QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
+    }
     if (!animations.isEmpty())
-        root[QLatin1String("Animations")] = animations;
+        root[ConfigDefaults::animationsGroup()] = animations;
 
     // ── Shortcuts.Global (drop "Shortcut" suffix from some keys) ────────────
     QJsonObject globalShortcuts;

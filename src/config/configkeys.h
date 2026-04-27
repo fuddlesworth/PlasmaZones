@@ -381,6 +381,17 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // (uses enabledKey)
+    // Phase 4 sub-commit 6: animation fields migrated from 5 per-field
+    // keys (duration / easingCurve / minDistance / sequenceMode /
+    // staggerInterval) to a single Profile JSON blob under animationProfileKey.
+    // The v1 keys are folded into the Profile blob by `migrateV1ToV2`
+    // (see `configmigration.cpp`). The v1 key accessors are retained for
+    // that migration function only; no separate backwards-compat code
+    // exists within v2. The per-field accessor surface on Settings
+    // (animationDuration / etc.) is preserved and projects through the
+    // Profile blob at read/write time for QML Q_PROPERTY binding
+    // compatibility.
+    PZ_CONFIG_KEY(animationProfileKey, "Profile")
     PZ_CONFIG_KEY(durationKey, "Duration")
     PZ_CONFIG_KEY(easingCurveKey, "EasingCurve")
     PZ_CONFIG_KEY(minDistanceKey, "MinDistance")
@@ -530,6 +541,17 @@ public:
     PZ_CONFIG_GROUP(v1AutotilingGroup, "Autotiling")
     PZ_CONFIG_GROUP(v1AutotileShortcutsGroup, "AutotileShortcuts")
     PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations") // = v2 animationsGroup
+    // v1 animation per-field keys — Phase-4 migration packs these into the
+    // v2 `Profile` JSON blob (see configmigration.cpp::migrateV1ToV2).
+    // The accessors exist solely so migration code is unambiguous about
+    // "reading legacy field" vs "reading new blob"; production reads after
+    // migration go through `Profile::JsonField*` constants.
+    PZ_CONFIG_KEY(v1AnimationsEnabledKey, "AnimationsEnabled")
+    PZ_CONFIG_KEY(v1AnimationDurationKey, "AnimationDuration")
+    PZ_CONFIG_KEY(v1AnimationEasingCurveKey, "AnimationEasingCurve")
+    PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
+    PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
+    PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
     PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
     PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
     PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup

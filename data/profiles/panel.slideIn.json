@@ -1,0 +1,5 @@
+{
+  "name": "panel.slideIn",
+  "duration": 200,
+  "curve": "widget-out"
+}

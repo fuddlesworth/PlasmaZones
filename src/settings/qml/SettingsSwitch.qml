@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 Item {
     id: root
@@ -39,18 +40,20 @@ Item {
             x: root.checked ? parent.width - width - pad : pad
 
             Behavior on x {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutBack
+                PhosphorMotionAnimation {
+                    profile: "widget.toggle"
                 }
 
             }
 
         }
 
+        // Color uses widget.toggle-color (no overshoot) — overshooting a
+        // colour interpolation produces clamped out-of-gamut intermediates.
+        // Position (Behavior on x above) keeps widget.toggle's overshoot.
         Behavior on color {
-            ColorAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "widget.toggle-color"
             }
 
         }

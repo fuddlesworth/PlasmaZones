@@ -16,15 +16,15 @@ namespace PlasmaZones::ShaderRender {
 
 struct RenderOptions
 {
-    QString metadataPath;          ///< Absolute path to data/shaders/<id>/metadata.json.
-    ShaderMetadata metadata;       ///< Parsed metadata; fragment / buffer paths absolute.
-    QVector<Zone> zones;           ///< Pixel-space rects + colors (loadLayoutZones).
-    QSize resolution;              ///< Render target size (passed to the shader as iResolution).
-    QSize outputSize;              ///< Final encoded size; the renderer scales if different.
+    QString metadataPath; ///< Absolute path to data/shaders/<id>/metadata.json.
+    ShaderMetadata metadata; ///< Parsed metadata; fragment / buffer paths absolute.
+    QVector<Zone> zones; ///< Pixel-space rects + colors (loadLayoutZones).
+    QSize resolution; ///< Render target size (passed to the shader as iResolution).
+    QSize outputSize; ///< Final encoded size; the renderer scales if different.
     int frameCount = 150;
     int fps = 30;
-    AudioMock* audio = nullptr;    ///< Per-frame spectrum source.  Borrowed.
-    FrameSink* sink = nullptr;     ///< Per-frame output destination.  Borrowed.
+    AudioMock* audio = nullptr; ///< Per-frame spectrum source.  Borrowed.
+    FrameSink* sink = nullptr; ///< Per-frame output destination.  Borrowed.
 };
 
 /**

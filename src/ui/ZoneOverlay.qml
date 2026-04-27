@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -270,13 +271,12 @@ Window {
             SequentialAnimation {
                 id: flashAnimation
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: flashOverlay
-                    property: "opacity"
+                    properties: "opacity"
                     from: 0.3
                     to: 0
-                    duration: 300
-                    easing.type: Easing.OutQuad
+                    profile: "zone.flash"
                 }
 
             }

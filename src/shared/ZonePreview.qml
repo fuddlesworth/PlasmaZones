@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Shared zone preview component for rendering layout zones
@@ -57,7 +58,11 @@ Item {
     /// raw geometry is rendered as-is. Set from algorithm metadata
     /// (@producesOverlappingZones) rather than auto-detected at runtime.
     property bool producesOverlappingZones: false
-    /// Animation duration in milliseconds
+    /// DEPRECATED — vestigial post-PR-344. Was Animation duration in ms
+    /// per Behavior; durations now come from the profile registry (see
+    /// `PhosphorAnimation::ProfilePaths::Widget*` and `zone.highlight`).
+    /// Kept as a no-op accept so `LayoutCard.qml` and `AlgorithmPreview.qml`
+    /// binding sites don't break.
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
     property bool interactive: false
@@ -214,8 +219,9 @@ Item {
                 }
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: root.animationDuration
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
+                        durationOverride: root.animationDuration
                     }
 
                 }
@@ -233,40 +239,50 @@ Item {
                 onEntered: root.zoneHovered(index)
             }
 
-            // Animations
+            // Animations — durationOverride binds to root.animationDuration
+            // so consumer Items that override the default 150 ms (LayoutCard,
+            // AlgorithmPreview) still drive the timing here.
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on scale {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.2
+                // OutBack overshoot=1.20 feel — restored faithfully via the
+                // osd-pop curve referenced through zone.highlight-pop.
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight-pop"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
+            // Border feedback uses the half-duration zone.highlight-border
+            // profile so the border snaps in twice as fast as the fill —
+            // matches the pre-PR-344 `duration: animationDuration / 2` shape.
             Behavior on border.color {
-                ColorAnimation {
-                    duration: root.animationDuration / 2
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight-border"
+                    durationOverride: root.animationDuration / 2
                 }
 
             }
 
             Behavior on border.width {
-                NumberAnimation {
-                    duration: root.animationDuration / 2
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight-border"
+                    durationOverride: root.animationDuration / 2
                 }
 
             }

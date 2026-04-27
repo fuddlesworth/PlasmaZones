@@ -60,6 +60,19 @@ const QString ShaderOpen = QStringLiteral("shader.open");
 const QString ShaderClose = QStringLiteral("shader.close");
 const QString ShaderSwitch = QStringLiteral("shader.switch");
 
+// widget.*
+const QString Widget = QStringLiteral("widget");
+const QString WidgetHover = QStringLiteral("widget.hover");
+const QString WidgetPress = QStringLiteral("widget.press");
+const QString WidgetToggle = QStringLiteral("widget.toggle");
+const QString WidgetBadge = QStringLiteral("widget.badge");
+const QString WidgetTint = QStringLiteral("widget.tint");
+const QString WidgetDim = QStringLiteral("widget.dim");
+const QString WidgetFade = QStringLiteral("widget.fade");
+const QString WidgetReorder = QStringLiteral("widget.reorder");
+const QString WidgetAccordion = QStringLiteral("widget.accordion");
+const QString WidgetProgress = QStringLiteral("widget.progress");
+
 QStringList allBuiltInPaths()
 {
     // Ordered to match taxonomy tree walk — category root, then leaves.
@@ -103,6 +116,17 @@ QStringList allBuiltInPaths()
         ShaderOpen,
         ShaderClose,
         ShaderSwitch,
+        Widget,
+        WidgetHover,
+        WidgetPress,
+        WidgetToggle,
+        WidgetBadge,
+        WidgetTint,
+        WidgetDim,
+        WidgetFade,
+        WidgetReorder,
+        WidgetAccordion,
+        WidgetProgress,
     };
 }
 

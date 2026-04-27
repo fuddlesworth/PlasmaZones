@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * Navigation OSD Window - Shows brief feedback when using keyboard navigation
@@ -31,9 +32,10 @@ Window {
     property int windowCount: 1 // Number of windows affected (for rotation)
     // Timing
     property int displayDuration: 1000
-    // ms before auto-hide (shorter than layout OSD)
-    property int fadeInDuration: 150
-    property int fadeOutDuration: 200
+    // ms before auto-hide (shorter than layout OSD). Show/hide fade
+    // shapes are driven by the "osd.show" / "osd.hide" / "osd.pop"
+    // profile JSONs — tune those rather than re-introducing per-window
+    // duration overrides here.
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -275,27 +277,30 @@ Window {
         onTriggered: root.hide()
     }
 
-    // Show animation
+    // Show animation — see matching comment in LayoutOsd.qml for the
+    // osd.show / osd.pop split rationale (preserves the OutBack scale
+    // overshoot from the pre-PhosphorMotion design). durationOverride
+    // binds to root.fadeInDuration / fadeOutDuration so consumers that
+    // override those properties still drive the timing.
     ParallelAnimation {
         id: showAnimation
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: contentWrapper
-            property: "opacity"
+            properties: "opacity"
             from: 0
             to: 1
-            duration: root.fadeInDuration
-            easing.type: Easing.OutCubic
+            profile: "osd.show"
+            durationOverride: root.fadeInDuration
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: container
-            property: "scale"
+            properties: "scale"
             from: 0.8
             to: 1
-            duration: root.fadeInDuration
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.2
+            profile: "osd.pop"
+            durationOverride: root.fadeInDuration
         }
 
     }
@@ -305,20 +310,20 @@ Window {
         id: hideAnimation
 
         ParallelAnimation {
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 target: contentWrapper
-                property: "opacity"
+                properties: "opacity"
                 to: 0
-                duration: root.fadeOutDuration
-                easing.type: Easing.InCubic
+                profile: "osd.hide"
+                durationOverride: root.fadeOutDuration
             }
 
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 target: container
-                property: "scale"
+                properties: "scale"
                 to: 0.9
-                duration: root.fadeOutDuration
-                easing.type: Easing.InCubic
+                profile: "osd.hide"
+                durationOverride: root.fadeOutDuration
             }
 
         }

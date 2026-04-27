@@ -24,7 +24,13 @@ namespace Phosphor::Screens {
 class PlasmaPanelSource;
 }
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorConfig/IBackend.h>
+
+namespace PhosphorAnimation {
+class CurveLoader;
+class ProfileLoader;
+}
 
 namespace PhosphorZones {
 class Layout;
@@ -165,6 +171,47 @@ private:
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
     void clearHighlight();
+
+    /**
+     * @brief Bridge Settings::animationProfile into `PhosphorProfileRegistry`
+     *        so QML `PhosphorMotionAnimation { profile: "<path>" }` resolves
+     *        to the user's active animation settings and live-updates on edit.
+     *
+     * Phase 4 sub-commit 7. Scans the XDG `plasmazones/curves` and
+     * `plasmazones/profiles` directories for user-authored definitions
+     * (per decision U's consumer-namespace pattern) and installs
+     * live-reload watchers. Registers the daemon's active animation
+     * Profile under every well-known `ProfilePaths` shell path that
+     * maps to PlasmaZones's single-Profile settings surface so QML
+     * consumers can reference specific paths (`zone.highlight`,
+     * `osd.show`, etc.) without the daemon carrying per-event
+     * sub-profiles — future sub-commits can diverge paths when
+     * per-event customisation is actually exposed to users.
+     *
+     * Reconnects to `Settings::animationProfileChanged` for live
+     * updates; each emit re-registers the active Profile against the
+     * same path set, firing `PhosphorProfileRegistry::profileChanged`
+     * on each — bound `PhosphorMotionAnimation` consumers re-resolve
+     * transparently.
+     */
+    void setupAnimationProfiles();
+    /// Push the current `Settings::animationProfile()` into the registry
+    /// under the shell's well-known paths. Called from
+    /// `setupAnimationProfiles()` at startup and from the coalescing
+    /// trampoline `requestAnimationProfilePublish` on every
+    /// `animationProfileChanged` / `profilesChanged` /
+    /// `curvesChanged` signal.
+    void publishActiveAnimationProfile();
+    /// Schedule a coalesced publish on the next event-loop tick. The
+    /// settings-slider drag fires `animationProfileChanged` at ~30 Hz,
+    /// and a curve-pack edit can fire `curvesChanged` and
+    /// `profilesChanged` back-to-back in the same tick. Funnelling
+    /// through a single-shot 0-ms timer collapses every signal in the
+    /// current event-loop iteration into one publish call. The
+    /// registry's value-equality guard would already make duplicate
+    /// publishes free, but the publish itself does a Settings parse
+    /// + curve resolve which is not free during a slider drag.
+    void requestAnimationProfilePublish();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation handlers — single code path per operation (DRY/SOLID)
@@ -405,6 +452,20 @@ private:
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
+    /// Per-daemon curve registry. Replaces the prior per-process
+    /// `CurveRegistry::instance()` singleton — composition roots own
+    /// their own.
+    ///
+    /// DECLARATION ORDER INVARIANT: must be declared BEFORE `m_settings`
+    /// (which takes a borrowed pointer to it in its constructor) and
+    /// BEFORE `m_curveLoader` / `m_profileLoader` (which also borrow).
+    /// Reverse-order destruction then tears every consumer down before
+    /// the registry itself, guaranteeing no UAF on the Settings /
+    /// loader teardown paths. Also reset from `PhosphorCurve::s_registry`
+    /// in `~Daemon` before teardown so the QML static helper doesn't
+    /// dangle into freed memory on process shutdown or successive
+    /// Daemon constructions in tests.
+    PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
     // Single source of truth for live-window instance identity + metadata.
@@ -480,6 +541,23 @@ private:
     std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
+
+    /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
+    /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG
+    /// data dirs and register discovered entries with `CurveRegistry`
+    /// / `PhosphorProfileRegistry` with live-reload enabled. Owned by
+    /// the daemon for process lifetime; QFileSystemWatcher survives
+    /// as long as the loader.
+    std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
+    std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
+
+    /// Coalescing trampoline for the publish path — see
+    /// `requestAnimationProfilePublish`. Single-shot, parented to the
+    /// daemon so destruction is automatic; only its `pending` flag is
+    /// used (the timeout slot fires at 0 ms regardless of when the
+    /// trampoline was first armed during the current event-loop tick).
+    QTimer m_animationPublishTimer;
+    bool m_animationPublishPending = false;
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;

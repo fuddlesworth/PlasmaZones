@@ -45,11 +45,19 @@ class RenderEffect : public PhosphorRendering::ShaderEffect
     Q_OBJECT
 public:
     explicit RenderEffect(QQuickItem* parent = nullptr)
-        : PhosphorRendering::ShaderEffect(parent) {}
+        : PhosphorRendering::ShaderEffect(parent)
+    {
+    }
     explicit RenderEffect(QQuickItem* parent, const QString& vertPath)
-        : PhosphorRendering::ShaderEffect(parent), m_vertexShaderPath(vertPath) {}
+        : PhosphorRendering::ShaderEffect(parent)
+        , m_vertexShaderPath(vertPath)
+    {
+    }
 
-    void setVertexShaderPath(const QString& p) { m_vertexShaderPath = p; }
+    void setVertexShaderPath(const QString& p)
+    {
+        m_vertexShaderPath = p;
+    }
 
     /// Set the zoneCount / highlightedCount values that zone-aware
     /// shaders key off via common.glsl's `zoneCount` uniform.  The
@@ -68,7 +76,8 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override
     {
         QSGNode* node = PhosphorRendering::ShaderEffect::updatePaintNode(oldNode, data);
-        if (!node) return node;
+        if (!node)
+            return node;
         auto* rhiNode = dynamic_cast<PhosphorRendering::ShaderNodeRhi*>(node);
         if (rhiNode) {
             if (!m_vertexLoaded && !m_vertexShaderPath.isEmpty()) {
@@ -87,14 +96,12 @@ protected:
         return node;
     }
 
-
 private:
     QString m_vertexShaderPath;
     bool m_vertexLoaded = false;
     int m_zoneCountTotal = 0;
     int m_zoneCountHighlighted = 0;
 };
-
 
 QVector<PlasmaZones::ZoneData> toRuntimeZones(const QVector<Zone>& srcZones)
 {
@@ -114,9 +121,7 @@ QVector<PlasmaZones::ZoneData> toRuntimeZones(const QVector<Zone>& srcZones)
     return out;
 }
 
-void seedShaderEffect(PhosphorRendering::ShaderEffect& effect,
-                      const ShaderMetadata& md,
-                      const QSize& resolution)
+void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetadata& md, const QSize& resolution)
 {
     effect.setIResolution(QSizeF(resolution));
     effect.setShaderSource(QUrl::fromLocalFile(md.fragmentShader));
@@ -130,9 +135,11 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect,
         effect.setBufferFeedback(md.bufferFeedback);
         effect.setBufferScale(md.bufferScale);
         effect.setBufferWrap(md.bufferWrap);
-        if (!md.bufferWraps.isEmpty()) effect.setBufferWraps(md.bufferWraps);
+        if (!md.bufferWraps.isEmpty())
+            effect.setBufferWraps(md.bufferWraps);
         effect.setBufferFilter(md.bufferFilter);
-        if (!md.bufferFilters.isEmpty()) effect.setBufferFilters(md.bufferFilters);
+        if (!md.bufferFilters.isEmpty())
+            effect.setBufferFilters(md.bufferFilters);
     }
     effect.setUseDepthBuffer(md.depthBuffer);
     effect.setUseWallpaper(md.wallpaper);
@@ -240,14 +247,12 @@ int Renderer::render(const RenderOptions& opts)
 
     // ── Offscreen render target: texture + depth + render pass ──
     std::unique_ptr<QRhiTexture> colorTex(rhi->newTexture(
-        QRhiTexture::RGBA8, physicalSize, 1,
-        QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
+        QRhiTexture::RGBA8, physicalSize, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     if (!colorTex->create()) {
         std::cerr << "Renderer::render: colour texture create() failed\n";
         return 1;
     }
-    std::unique_ptr<QRhiRenderBuffer> dsBuf(rhi->newRenderBuffer(
-        QRhiRenderBuffer::DepthStencil, physicalSize, 1));
+    std::unique_ptr<QRhiRenderBuffer> dsBuf(rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, physicalSize, 1));
     if (!dsBuf->create()) {
         std::cerr << "Renderer::render: depth buffer create() failed\n";
         return 1;
@@ -255,10 +260,8 @@ int Renderer::render(const RenderOptions& opts)
     QRhiColorAttachment colorAtt(colorTex.get());
     QRhiTextureRenderTargetDescription rtDesc(colorAtt);
     rtDesc.setDepthStencilBuffer(dsBuf.get());
-    std::unique_ptr<QRhiTextureRenderTarget> textureRT(
-        rhi->newTextureRenderTarget(rtDesc));
-    std::unique_ptr<QRhiRenderPassDescriptor> rpDesc(
-        textureRT->newCompatibleRenderPassDescriptor());
+    std::unique_ptr<QRhiTextureRenderTarget> textureRT(rhi->newTextureRenderTarget(rtDesc));
+    std::unique_ptr<QRhiRenderPassDescriptor> rpDesc(textureRT->newCompatibleRenderPassDescriptor());
     textureRT->setRenderPassDescriptor(rpDesc.get());
     if (!textureRT->create()) {
         std::cerr << "Renderer::render: texture render target create() failed\n";
@@ -276,12 +279,10 @@ int Renderer::render(const RenderOptions& opts)
     // anchored to it get 0x0 and the scene graph culls them.
     window->contentItem()->setSize(QSizeF(size));
 
-    auto* effect = new RenderEffect(window->contentItem(),
-                                    opts.metadata.vertexShader);
+    auto* effect = new RenderEffect(window->contentItem(), opts.metadata.vertexShader);
     effect->setSize(QSizeF(size));
     effect->setVisible(true);
     effect->setShaderIncludePaths(shaderIncludePaths());
-
 
     auto zoneExt = std::make_shared<PlasmaZones::ZoneUniformExtension>();
     const auto runtimeZones = toRuntimeZones(opts.zones);
@@ -293,7 +294,9 @@ int Renderer::render(const RenderOptions& opts)
     // aware shaders gate their entire draw path on zoneCount > 0
     // — without this, they early-return vec4(0) before drawing.
     int highlightedCount = 0;
-    for (const auto& z : runtimeZones) if (z.isHighlighted) ++highlightedCount;
+    for (const auto& z : runtimeZones)
+        if (z.isHighlighted)
+            ++highlightedCount;
     effect->setZoneCounts(runtimeZones.size(), highlightedCount);
 
     seedShaderEffect(*effect, opts.metadata, size);
@@ -302,8 +305,7 @@ int Renderer::render(const RenderOptions& opts)
     // the first sign something went wrong.
     QObject::connect(effect, &ShaderEffect::statusChanged, [effect]() {
         if (effect->status() == ShaderEffect::Status::Error) {
-            std::cerr << "shader error: "
-                      << effect->errorLog().toStdString() << "\n";
+            std::cerr << "shader error: " << effect->errorLog().toStdString() << "\n";
         }
     });
 
@@ -321,13 +323,13 @@ int Renderer::render(const RenderOptions& opts)
     };
     for (int i = 0; i < 3; ++i) {
         warmup();
-        if (effect->status() == ShaderEffect::Status::Ready) break;
+        if (effect->status() == ShaderEffect::Status::Ready)
+            break;
     }
     if (effect->status() != ShaderEffect::Status::Ready) {
-        std::cerr << "warning: shader not Ready after warmup (status="
-                  << static_cast<int>(effect->status()) << "). Continuing anyway.\n";
+        std::cerr << "warning: shader not Ready after warmup (status=" << static_cast<int>(effect->status())
+                  << "). Continuing anyway.\n";
     }
-
 
     // Transparent clear so the shader's alpha channel passes through
     // in the output (most shaders render semi-transparent content
@@ -370,8 +372,7 @@ int Renderer::render(const RenderOptions& opts)
         batch->readBackTexture(readbackDesc, &readbackResult);
         QRhiCommandBuffer* cb = control->commandBuffer();
         if (!cb) {
-            std::cerr << "Renderer::render: control has no command buffer on frame "
-                      << i << "\n";
+            std::cerr << "Renderer::render: control has no command buffer on frame " << i << "\n";
             return 1;
         }
         cb->resourceUpdate(batch);
@@ -382,10 +383,8 @@ int Renderer::render(const RenderOptions& opts)
             return 1;
         }
 
-        QImage frame(reinterpret_cast<const uchar*>(readbackResult.data.constData()),
-                     physicalSize.width(), physicalSize.height(),
-                     physicalSize.width() * 4,
-                     QImage::Format_RGBA8888);
+        QImage frame(reinterpret_cast<const uchar*>(readbackResult.data.constData()), physicalSize.width(),
+                     physicalSize.height(), physicalSize.width() * 4, QImage::Format_RGBA8888);
         const QImage flipped = flipVertical(frame);
         QImage out = flipped;
         if (flipped.size() != size) {

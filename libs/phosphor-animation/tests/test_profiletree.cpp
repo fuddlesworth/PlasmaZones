@@ -49,10 +49,14 @@ private Q_SLOTS:
     {
         ProfileTree tree;
         const Profile resolved = tree.resolve(PP::WindowOpen);
-        // No override, no baseline → library defaults filled by withDefaults().
+        // No override, no baseline → library defaults filled by
+        // withDefaults(). `withDefaults` now fills every field including
+        // `curve` (default-constructed Easing = OutCubic cubic-bezier);
+        // callers no longer need to substitute a fallback themselves.
         QCOMPARE(*resolved.duration, Profile::DefaultDuration);
         QCOMPARE(*resolved.staggerInterval, Profile::DefaultStaggerInterval);
-        QVERIFY(resolved.curve == nullptr);
+        QVERIFY(resolved.curve != nullptr);
+        QCOMPARE(resolved.curve->typeId(), QStringLiteral("bezier"));
     }
 
     void testResolveBaselineFillsGaps()

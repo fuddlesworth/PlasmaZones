@@ -5,6 +5,8 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -58,9 +60,17 @@ public:
      * editor controller) already do this at startup.
      *
      * @param backend Non-owned backend pointer (must outlive this Settings)
+     * @param curveRegistry Non-owned curve registry pointer used for Profile
+     *                      JSON parsing. If nullptr, falls back to a local
+     *                      static registry (standalone tests). Must outlive
+     *                      this Settings. Supplying at construction time
+     *                      guarantees the initial `load()` resolves curves
+     *                      through the caller's registry, preserving
+     *                      `shared_ptr<const Curve>` identity across the
+     *                      Settings ↔ daemon boundary.
      * @param parent Parent QObject
      */
-    Settings(PhosphorConfig::IBackend* backend, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -714,8 +724,19 @@ public:
 
     // Animation Settings (applies to both snapping and autotiling geometry
     // changes) — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Phase 4 sub-commit 6: storage format migrated to a single Profile
+    // JSON blob; per-field accessors below are projections. The `animationProfile`
+    // getter / setter is the new canonical surface for consumers that want
+    // the whole Profile atomically (daemon's WindowAnimator config-reload path,
+    // plugin-authored profile presets).
     bool animationsEnabled() const override;
     void setAnimationsEnabled(bool enabled) override;
+    /// The single Profile blob backing every per-field accessor below.
+    /// Not a Q_PROPERTY — QML consumers that need the typed Profile
+    /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
+    /// returns a C++-only PhosphorAnimation::Profile value.
+    PhosphorAnimation::Profile animationProfile() const;
+    void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
     QString animationEasingCurve() const override;
@@ -966,6 +987,15 @@ public:
     void applyAutotileBorderSystemColor();
 
 Q_SIGNALS:
+    /// Emitted when the whole animation Profile blob is replaced via
+    /// `setAnimationProfile`. Fires alongside every per-field *Changed
+    /// signal. Consumers that want to observe the Profile atomically
+    /// (e.g., daemon's WindowAnimator re-configuring its MotionSpec
+    /// defaults) prefer this signal; Q_PROPERTY consumers bound to the
+    /// per-field surface get re-triggered through the individual
+    /// signals per the existing NOTIFY wiring.
+    void animationProfileChanged();
+
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -1039,6 +1069,43 @@ private:
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
 
+    // Patch one field of the Profile JSON blob and emit the canonical
+    // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
+    //
+    // Hot path: per-field setters fired by settings-UI sliders at ~30 Hz.
+    // The helper consolidates the 5 near-identical animation field setters
+    // (duration / easing-curve / min-distance / sequence-mode / stagger-
+    // interval) so the merge contract (read existing blob → insert one
+    // field → write back, preserving every other on-disk key) is in one
+    // place rather than copy-pasted five times.
+    //
+    // T must be comparable (`operator==`) and convertible to QJsonValue
+    // (the QJsonObject::insert overload set covers int / double / bool /
+    // QString / QJsonValue / QJsonArray / QJsonObject).
+    //
+    // - @p jsonFieldName     The Profile JSON key (raw `const char*` —
+    //                        wrapped via `QLatin1String` at the insert site
+    //                        to satisfy Qt6's deleted raw-string ctor).
+    // - @p currentValue      What the corresponding getter returns BEFORE
+    //                        the write — supplied by the caller because the
+    //                        getter shape varies per field (int via
+    //                        `effectiveDuration`, QString via raw blob
+    //                        read for the curve case, etc.). The no-op
+    //                        guard short-circuits when `currentValue ==
+    //                        newValue` so a slider drag at constant value
+    //                        wakes no observers.
+    // - @p newValue          The post-clamp / post-resolve value to insert.
+    //                        Pre-processing (clamping for numeric setters,
+    //                        registry resolution for the easing setter)
+    //                        stays at the call site — the helper is a pure
+    //                        merge primitive, not a validator.
+    // - @p fieldChangedSignal The per-field NOTIFY pointer. Fires alongside
+    //                         animationProfileChanged + settingsChanged on
+    //                         every successful write.
+    template<typename T>
+    void patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
+                           void (Settings::*fieldChangedSignal)());
+
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
@@ -1101,6 +1168,16 @@ private:
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     // Animations are stored in m_store; no cached members here.
+
+    // Non-owned CurveRegistry for animation profile parsing. Injected
+    // at construction (daemon composition root); null for standalone
+    // Settings instances that fall back to a local static registry.
+    // Injection is constructor-only — there is no post-construction
+    // setter because `load()` runs during ctor and would leave cached
+    // Profile state parsed through the wrong registry if a setter ran
+    // after. Callers must pass the registry up front or accept the
+    // fallback contract.
+    PhosphorAnimation::CurveRegistry* m_curveRegistry = nullptr;
 
     // Additional Autotiling Settings
     // Autotiling (continued) stored in m_store.

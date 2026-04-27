@@ -186,6 +186,9 @@ bool ProfileTree::operator==(const ProfileTree& other) const
     if (m_baseline != other.m_baseline) {
         return false;
     }
+    if (m_insertionOrder != other.m_insertionOrder) {
+        return false;
+    }
     if (m_overrides.size() != other.m_overrides.size()) {
         return false;
     }

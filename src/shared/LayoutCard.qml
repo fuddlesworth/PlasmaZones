@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Shared layout card for rendering a single layout in grid/list views.
@@ -61,7 +62,12 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-    // Animation (defaults track Kirigami platform durations)
+    // DEPRECATED — vestigial Kirigami-duration passthroughs. Pre-PR-344
+    // QML animations referenced these to override Behavior durations
+    // per-instance; post-migration, durations come from the profile
+    // registry (see `PhosphorAnimation::ProfilePaths::Widget*`). Kept as
+    // no-op accepts so existing consumer QML (`AlgorithmPreview.qml`,
+    // `GeneralPage.qml`) does not fail to parse.
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
     // Label
@@ -138,15 +144,17 @@ Item {
         border.width: root.stateBorderWidth
 
         Behavior on color {
-            ColorAnimation {
-                duration: root.animationDuration
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: root.animationDuration
             }
 
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: root.animationDuration
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: root.animationDuration
             }
 
         }
@@ -201,24 +209,25 @@ Item {
             border.width: root.showCardBackground ? 0 : root.stateBorderWidth
 
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on border.width {
-                NumberAnimation {
-                    duration: root.shortAnimationDuration
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: root.shortAnimationDuration
                 }
 
             }
@@ -252,26 +261,27 @@ Item {
             }
 
             Behavior on width {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: style.badgeOvershoot
+                PhosphorMotionAnimation {
+                    profile: "widget.badge"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on height {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: style.badgeOvershoot
+                PhosphorMotionAnimation {
+                    profile: "widget.badge"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
+            // Opacity must not overshoot — widget.badge's curve has overshoot
+            // for the size pop, but for opacity that produces a clamped peak.
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.shortAnimationDuration
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: root.shortAnimationDuration
                 }
 
             }
@@ -360,17 +370,17 @@ Item {
             width: Math.min(implicitWidth, root.previewWidth - Kirigami.Units.gridUnit)
 
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: root.animationDuration
                 }
 
             }

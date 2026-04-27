@@ -1,0 +1,11 @@
+{
+  "name": "cubic-out",
+  "displayName": "Qt OutCubic (faithful)",
+  "typeId": "cubic-bezier",
+  "parameters": {
+    "x1": 0.215,
+    "y1": 0.61,
+    "x2": 0.355,
+    "y2": 1.00
+  }
+}

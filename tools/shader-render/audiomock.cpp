@@ -80,10 +80,14 @@ public:
 
 std::unique_ptr<AudioMock> makeAudioMock(const QString& mode)
 {
-    if (mode == QLatin1String("silent")) return std::make_unique<SilentMock>();
-    if (mode == QLatin1String("sine"))   return std::make_unique<SineMock>();
-    if (mode == QLatin1String("noise"))  return std::make_unique<NoiseMock>();
-    if (mode == QLatin1String("sweep"))  return std::make_unique<SweepMock>();
+    if (mode == QLatin1String("silent"))
+        return std::make_unique<SilentMock>();
+    if (mode == QLatin1String("sine"))
+        return std::make_unique<SineMock>();
+    if (mode == QLatin1String("noise"))
+        return std::make_unique<NoiseMock>();
+    if (mode == QLatin1String("sweep"))
+        return std::make_unique<SweepMock>();
     return nullptr;
 }
 

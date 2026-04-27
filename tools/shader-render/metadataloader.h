@@ -32,17 +32,17 @@ struct ShaderMetadata
 
     // Resolved absolute paths.  metadataloader fills these from the
     // metadata.json's directory + relative filename fields.
-    QString fragmentShader;            ///< .frag (required)
-    QString vertexShader;              ///< .vert (optional)
-    QString bufferShader;              ///< single-buffer multipass
-    QStringList bufferShaders;         ///< multi-buffer multipass
+    QString fragmentShader; ///< .frag (required)
+    QString vertexShader; ///< .vert (optional)
+    QString bufferShader; ///< single-buffer multipass
+    QStringList bufferShaders; ///< multi-buffer multipass
 
-    bool wallpaper      = false;
-    bool multipass      = false;
+    bool wallpaper = false;
+    bool multipass = false;
     bool bufferFeedback = false;
-    bool depthBuffer    = false;
-    qreal bufferScale   = 1.0;
-    QString bufferWrap   = QStringLiteral("clamp");
+    bool depthBuffer = false;
+    qreal bufferScale = 1.0;
+    QString bufferWrap = QStringLiteral("clamp");
     QStringList bufferWraps;
     QString bufferFilter = QStringLiteral("linear");
     QStringList bufferFilters;
@@ -56,7 +56,7 @@ struct ShaderMetadata
     // unset stays at the ShaderEffect's "unset sentinel" (-1.0 vec4 /
     // transparent black) so the shader can detect it.
     std::array<QVector4D, 8> customParams = {};
-    std::array<QColor, 16>   customColors = {};
+    std::array<QColor, 16> customColors = {};
 
     // For shaders that declare image-typed parameters; absolute paths.
     std::array<QString, 4> userTextures = {};

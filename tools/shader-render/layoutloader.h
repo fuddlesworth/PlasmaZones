@@ -25,11 +25,11 @@ struct Zone
     QRectF rect;
     QColor fillColor;
     QColor borderColor;
-    qreal borderWidth   = 1.5;
-    qreal borderRadius  = 8.0;
-    int zoneNumber      = 1;
-    bool isHighlighted  = true;     ///< Set on every zone for previews — most
-                                    ///< audio-reactive shaders keyframe off this.
+    qreal borderWidth = 1.5;
+    qreal borderRadius = 8.0;
+    int zoneNumber = 1;
+    bool isHighlighted = true; ///< Set on every zone for previews — most
+                               ///< audio-reactive shaders keyframe off this.
 };
 
 /**
@@ -41,8 +41,6 @@ struct Zone
  * here, then optionally tinted with the layout's per-zone fill /
  * border colors if present (otherwise a default brand cycle).
  */
-bool loadLayoutZones(const QString& layoutPath,
-                     const QSize& resolution,
-                     QVector<Zone>& outZones);
+bool loadLayoutZones(const QString& layoutPath, const QSize& resolution, QVector<Zone>& outZones);
 
 } // namespace PlasmaZones::ShaderRender

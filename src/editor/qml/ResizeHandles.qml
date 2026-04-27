@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Resize handles component for zone resizing
@@ -192,11 +193,6 @@ Item {
             }
 
             MouseArea {
-                // Initial zone height in canvas coordinates
-                // newX stays at startZoneX
-                // newY stays at startZoneY
-                // Idle
-
                 id: handleMouse
 
                 // Store initial state for resize calculations
@@ -311,7 +307,6 @@ Item {
                 }
                 onPositionChanged: function(mouse) {
                     // South handles move bottom edge
-
                     // State 2 = Resizing
                     if (!pressed || resizeHandles.root.operationState !== 2)
                         return ;
@@ -473,9 +468,8 @@ Item {
                         // This prevents jumping because we only snap the edge being dragged
                         var snapped = resizeHandles.root.controller.snapGeometrySelective(relX, relY, relW, relH, resizeHandles.root.zoneId, snapLeft, snapRight, snapTop, snapBottom);
                         // Convert back to canvas coordinates
+                        // threshold
                         if (snapped && isFinite(snapped.x) && !isNaN(snapped.x) && isFinite(snapped.y) && !isNaN(snapped.y) && isFinite(snapped.width) && !isNaN(snapped.width) && snapped.width > 0 && isFinite(snapped.height) && !isNaN(snapped.height) && snapped.height > 0) {
-                            // threshold
-
                             var snappedX = snapped.x * actualW;
                             var snappedY = snapped.y * actualH;
                             var snappedW = snapped.width * actualW;
@@ -653,25 +647,29 @@ Item {
                 }
             }
 
-            // Smooth fade in/out
+            // Smooth fade in/out — was 150ms originally, restore that timing
+            // on top of the widget-out shape rather than the 50 ms cursor.drag
+            // profile (which is for cursor-tracking, not handle visibility).
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 150
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
                 }
 
             }
 
-            // Smooth hover transitions
+            // Smooth hover transitions — original was 100 ms.
             Behavior on color {
-                ColorAnimation {
-                    duration: 100
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: 100
                 }
 
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: 100
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: 100
                 }
 
             }

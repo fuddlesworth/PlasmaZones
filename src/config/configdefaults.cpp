@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configdefaults.h"
+
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -71,6 +75,26 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
     }
 
     return renderingBackend();
+}
+
+QString ConfigDefaults::animationProfile(const PhosphorAnimation::CurveRegistry& registry)
+{
+    // Assemble the default animation Profile from the existing per-field
+    // defaults and serialise via Profile::toJson. This preserves the
+    // pre-migration feel — same duration / easing / minDistance etc.
+    // — while persisting in the new Phase-4 single-blob format.
+    //
+    // Curve is looked up through CurveRegistry so the wire format
+    // ("0.33,1.00,0.68,1.00" — cubic-bezier) resolves to the exact
+    // same shared_ptr<const Curve> the AnimatedValue<T> runtime uses,
+    // no divergent parse paths.
+    PhosphorAnimation::Profile p;
+    p.curve = registry.create(animationEasingCurve());
+    p.duration = static_cast<qreal>(animationDuration());
+    p.minDistance = animationMinDistance();
+    p.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(animationSequenceMode());
+    p.staggerInterval = animationStaggerInterval();
+    return QString::fromUtf8(QJsonDocument(p.toJson()).toJson(QJsonDocument::Compact));
 }
 
 } // namespace PlasmaZones

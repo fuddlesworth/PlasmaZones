@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Bottom control bar component for the layout editor
@@ -422,22 +423,20 @@ ToolBar {
                 unsavedIndicator.opacity = 1;
             }
 
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 targets: [unsavedIcon, unsavedIndicator]
-                property: "opacity"
+                properties: "opacity"
                 from: 1
                 to: 0.4
-                duration: 500
-                easing.type: Easing.InOutSine
+                profile: "widget.pulse-fast"
             }
 
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 targets: [unsavedIcon, unsavedIndicator]
-                property: "opacity"
+                properties: "opacity"
                 from: 0.4
                 to: 1
-                duration: 500
-                easing.type: Easing.InOutSine
+                profile: "widget.pulse-fast"
             }
 
         }

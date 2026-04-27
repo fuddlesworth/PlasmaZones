@@ -3,6 +3,7 @@
 
 #include "EditorController.h"
 #include "EditorLaunchController.h"
+#include "../core/animationbootstrap.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include <PhosphorShell/LayerShellPluginLoader.h>
@@ -168,6 +169,14 @@ int main(int argc, char* argv[])
     if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
         return 0;
     }
+
+    // Bootstrap the per-process PhosphorProfileRegistry so QML
+    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve against
+    // the shipped data/profiles JSONs. Mirrors the daemon's loader setup;
+    // without it the editor's animations fall back to the library default
+    // 150 ms regardless of the shipped profile data. Must outlive the QML
+    // engine (Behavior bindings keep registry handles).
+    PlasmaZones::AnimationBootstrap animationBootstrap;
 
     // Create the editor controller. This is cheap: wires up services and
     // loads local KConfig but does not make any blocking D-Bus calls to

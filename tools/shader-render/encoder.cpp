@@ -18,15 +18,13 @@ class PngSequenceSink : public FrameSink
 {
 public:
     PngSequenceSink(const QString& outPath)
-        : m_stem(QFileInfo(outPath).absoluteFilePath().chopped(4))  // drop ".png"
+        : m_stem(QFileInfo(outPath).absoluteFilePath().chopped(4)) // drop ".png"
     {
     }
 
     bool writeFrame(const QImage& frame) override
     {
-        const QString name = QStringLiteral("%1_%2.png")
-            .arg(m_stem)
-            .arg(m_index, 4, 10, QLatin1Char('0'));
+        const QString name = QStringLiteral("%1_%2.png").arg(m_stem).arg(m_index, 4, 10, QLatin1Char('0'));
         if (!frame.save(name, "PNG")) {
             std::cerr << "PngSequenceSink: failed to save " << name.toStdString() << "\n";
             return false;
@@ -35,7 +33,10 @@ public:
         return true;
     }
 
-    bool finalize() override { return true; }
+    bool finalize() override
+    {
+        return true;
+    }
 
 private:
     QString m_stem;
@@ -49,7 +50,9 @@ class FfmpegPipeSink : public FrameSink
 {
 public:
     FfmpegPipeSink(const QString& outPath, const QSize& size, int fps)
-        : m_outPath(outPath), m_size(size), m_fps(fps)
+        : m_outPath(outPath)
+        , m_size(size)
+        , m_fps(fps)
     {
     }
 
@@ -72,23 +75,27 @@ public:
 
         QStringList args = {
             QStringLiteral("-y"),
-            QStringLiteral("-f"), QStringLiteral("rawvideo"),
-            QStringLiteral("-pix_fmt"), QStringLiteral("rgba"),
-            QStringLiteral("-s"), QStringLiteral("%1x%2").arg(m_size.width()).arg(m_size.height()),
-            QStringLiteral("-r"), QString::number(m_fps),
-            QStringLiteral("-i"), QStringLiteral("pipe:0"),
+            QStringLiteral("-f"),
+            QStringLiteral("rawvideo"),
+            QStringLiteral("-pix_fmt"),
+            QStringLiteral("rgba"),
+            QStringLiteral("-s"),
+            QStringLiteral("%1x%2").arg(m_size.width()).arg(m_size.height()),
+            QStringLiteral("-r"),
+            QString::number(m_fps),
+            QStringLiteral("-i"),
+            QStringLiteral("pipe:0"),
             QStringLiteral("-an"),
-            QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
+            QStringLiteral("-pix_fmt"),
+            QStringLiteral("yuv420p"),
         };
         if (ext == QLatin1String("webm")) {
-            args << QStringLiteral("-c:v") << QStringLiteral("libvpx-vp9")
-                 << QStringLiteral("-b:v") << QStringLiteral("600k")
-                 << QStringLiteral("-crf") << QStringLiteral("34")
+            args << QStringLiteral("-c:v") << QStringLiteral("libvpx-vp9") << QStringLiteral("-b:v")
+                 << QStringLiteral("600k") << QStringLiteral("-crf") << QStringLiteral("34")
                  << QStringLiteral("-row-mt") << QStringLiteral("1");
         } else if (ext == QLatin1String("mp4")) {
-            args << QStringLiteral("-c:v") << QStringLiteral("libx264")
-                 << QStringLiteral("-crf") << QStringLiteral("23")
-                 << QStringLiteral("-preset") << QStringLiteral("medium");
+            args << QStringLiteral("-c:v") << QStringLiteral("libx264") << QStringLiteral("-crf")
+                 << QStringLiteral("23") << QStringLiteral("-preset") << QStringLiteral("medium");
         } else {
             std::cerr << "FfmpegPipeSink: unsupported extension ." << ext.toStdString() << "\n";
             return false;
@@ -114,13 +121,11 @@ public:
         QByteArray buf;
         buf.reserve(expected);
         for (int y = 0; y < rgba.height(); ++y) {
-            buf.append(reinterpret_cast<const char*>(rgba.constScanLine(y)),
-                       rgba.width() * 4);
+            buf.append(reinterpret_cast<const char*>(rgba.constScanLine(y)), rgba.width() * 4);
         }
         const qint64 written = m_proc.write(buf);
         if (written != buf.size()) {
-            std::cerr << "FfmpegPipeSink: short write (" << written << " of "
-                      << buf.size() << ")\n";
+            std::cerr << "FfmpegPipeSink: short write (" << written << " of " << buf.size() << ")\n";
             return false;
         }
         // Don't let the pipe back up: wait for ffmpeg to drain when
@@ -142,9 +147,9 @@ public:
     }
 
 private:
-    QString  m_outPath;
-    QSize    m_size;
-    int      m_fps;
+    QString m_outPath;
+    QSize m_size;
+    int m_fps;
     QProcess m_proc;
 };
 

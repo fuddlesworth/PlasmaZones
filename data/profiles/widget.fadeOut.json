@@ -1,0 +1,5 @@
+{
+  "name": "widget.fadeOut",
+  "duration": 400,
+  "curve": "cubic-in"
+}

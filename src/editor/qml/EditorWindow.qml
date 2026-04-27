@@ -7,6 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /// Main editor window for zone layout editing
 Window {
@@ -347,9 +348,9 @@ Window {
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "widget.fade"
+                durationOverride: 200
             }
 
         }
@@ -609,9 +610,8 @@ Window {
                 Behavior on anchors.leftMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -619,9 +619,8 @@ Window {
                 Behavior on anchors.topMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -629,9 +628,8 @@ Window {
                 Behavior on anchors.rightMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -639,9 +637,8 @@ Window {
                 Behavior on anchors.bottomMargin {
                     enabled: drawingArea._insetsReady
 
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
                     }
 
                 }
@@ -735,8 +732,9 @@ Window {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "widget.fade"
+                durationOverride: 200
             }
 
         }

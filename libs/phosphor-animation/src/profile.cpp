@@ -4,12 +4,16 @@
 #include <PhosphorAnimation/Profile.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Easing.h>
 
 #include <QJsonValue>
 #include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSet>
+
+#include <cmath>
+#include <limits>
 
 namespace PhosphorAnimation {
 
@@ -33,11 +37,23 @@ bool shouldWarnUnknownSequenceMode(int raw)
     seen.insert(raw);
     return true;
 }
+
 }
 
 Profile Profile::withDefaults() const
 {
     Profile out = *this;
+    if (!out.curve) {
+        // Match `AnimatedValue::defaultFallbackCurve()` and every other
+        // "no curve set" fallback across the library: a default-
+        // constructed Easing is OutCubic (0.33, 1.00, 0.68, 1.00).
+        // Filling this here means `withDefaults()` is now "every field
+        // has a concrete value" — matching the method name — rather
+        // than the previous "all scalars filled, curve silently still
+        // null" shape that surprised callers reading the header and
+        // expecting a fully-populated Profile.
+        out.curve = std::make_shared<const Easing>();
+    }
     if (!out.duration) {
         out.duration = DefaultDuration;
     }
@@ -57,22 +73,22 @@ QJsonObject Profile::toJson() const
 {
     QJsonObject obj;
     if (curve) {
-        obj.insert(QLatin1String("curve"), curve->toString());
+        obj.insert(QLatin1String(JsonFieldCurve), curve->toString());
     }
     if (duration) {
-        obj.insert(QLatin1String("duration"), *duration);
+        obj.insert(QLatin1String(JsonFieldDuration), *duration);
     }
     if (minDistance) {
-        obj.insert(QLatin1String("minDistance"), *minDistance);
+        obj.insert(QLatin1String(JsonFieldMinDistance), *minDistance);
     }
     if (sequenceMode) {
-        obj.insert(QLatin1String("sequenceMode"), static_cast<int>(*sequenceMode));
+        obj.insert(QLatin1String(JsonFieldSequenceMode), static_cast<int>(*sequenceMode));
     }
     if (staggerInterval) {
-        obj.insert(QLatin1String("staggerInterval"), *staggerInterval);
+        obj.insert(QLatin1String(JsonFieldStaggerInterval), *staggerInterval);
     }
     if (presetName) {
-        obj.insert(QLatin1String("presetName"), *presetName);
+        obj.insert(QLatin1String(JsonFieldPresetName), *presetName);
     }
     return obj;
 }
@@ -81,21 +97,70 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     Profile p;
 
-    if (obj.contains(QLatin1String("curve"))) {
-        const QString spec = obj.value(QLatin1String("curve")).toString();
+    if (obj.contains(QLatin1String(JsonFieldCurve))) {
+        const QString spec = obj.value(QLatin1String(JsonFieldCurve)).toString();
         if (!spec.isEmpty()) {
-            p.curve = registry.create(spec);
+            // Route through tryCreate (not create): a malformed spec
+            // would otherwise silently fall through to the library
+            // default cubic-bezier inside create(), masking user typos
+            // like "srping:14,0.6" as "my curve works but feels wrong".
+            // When resolution fails, leave p.curve unset (effectiveXxx
+            // will still substitute the library default) and warn loudly
+            // with the original spec so the author can find the typo.
+            p.curve = registry.tryCreate(spec);
+            if (!p.curve) {
+                qCWarning(lcProfile).nospace() << "Profile::fromJson: curve spec '" << spec
+                                               << "' did not resolve — keeping profile without a curve "
+                                                  "(library default will apply at animation time)";
+            }
         }
     }
 
-    if (obj.contains(QLatin1String("duration"))) {
-        p.duration = obj.value(QLatin1String("duration")).toDouble(DefaultDuration);
+    if (obj.contains(QLatin1String(JsonFieldDuration))) {
+        const qreal raw = obj.value(QLatin1String(JsonFieldDuration)).toDouble(DefaultDuration);
+        // Reject NaN / infinity / non-positive / absurdly-large values.
+        // The downstream qRound() into int and QQuickPropertyAnimation::
+        // setDuration(int) have no tolerance for these — NaN rounds to
+        // UB, negatives are silently treated as 0, and large doubles
+        // overflow the int conversion. Leaving the field unset makes
+        // `effectiveDuration()` substitute the library default, which
+        // is the correct fallback for garbage input.
+        if (!std::isfinite(raw) || raw <= 0.0 || raw > Profile::MaxDurationMs) {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting duration " << raw
+                << " (expected 0 < duration <= " << Profile::MaxDurationMs << " ms) — library default will apply";
+        } else {
+            p.duration = raw;
+        }
     }
-    if (obj.contains(QLatin1String("minDistance"))) {
-        p.minDistance = obj.value(QLatin1String("minDistance")).toInt(DefaultMinDistance);
+    if (obj.contains(QLatin1String(JsonFieldMinDistance))) {
+        // `QJsonValue::toInt(default)` returns the default verbatim when
+        // the underlying value is a JSON double (even for whole-number-
+        // valued doubles like `5.0`), so a file written by a non-C++
+        // serializer that emitted the integer as a JSON Number would
+        // silently fall back to the library default. Route through
+        // toDouble() and round to int so `5.0` and `5` both produce 5.
+        const qreal rawDouble = obj.value(QLatin1String(JsonFieldMinDistance)).toDouble(DefaultMinDistance);
+        const int raw = qRound(rawDouble);
+        // Negative minDistance would make the distance-skip check
+        // trivially true for every animation (no real distance is
+        // less than a negative threshold), effectively disabling the
+        // skip everywhere. Zero is the documented "no skip" value
+        // and is accepted.
+        if (raw < 0) {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting negative minDistance " << raw << " — library default will apply";
+        } else {
+            p.minDistance = raw;
+        }
     }
-    if (obj.contains(QLatin1String("sequenceMode"))) {
-        const int raw = obj.value(QLatin1String("sequenceMode")).toInt(static_cast<int>(DefaultSequenceMode));
+    if (obj.contains(QLatin1String(JsonFieldSequenceMode))) {
+        // toDouble + qRound (not toInt): handles `0.0` from non-C++
+        // serializers without falling back to the toInt(default) path.
+        // Same rationale as minDistance / staggerInterval.
+        const qreal rawDouble =
+            obj.value(QLatin1String(JsonFieldSequenceMode)).toDouble(static_cast<int>(DefaultSequenceMode));
+        const int raw = std::isfinite(rawDouble) ? qRound(rawDouble) : static_cast<int>(DefaultSequenceMode);
         // Map valid enumerators; anything else falls back to the library
         // default. This is NOT forward-compat with future enumerators
         // written by a newer client — those would silently land on
@@ -117,11 +182,43 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             p.sequenceMode = DefaultSequenceMode;
         }
     }
-    if (obj.contains(QLatin1String("staggerInterval"))) {
-        p.staggerInterval = obj.value(QLatin1String("staggerInterval")).toInt(DefaultStaggerInterval);
+    if (obj.contains(QLatin1String(JsonFieldStaggerInterval))) {
+        // toDouble + qRound (not toInt): a JSON Number written as `30.0`
+        // by a non-C++ serializer round-trips as 30 instead of falling
+        // back to the toInt(default) path. Same shape as minDistance.
+        const qreal rawDouble = obj.value(QLatin1String(JsonFieldStaggerInterval)).toDouble(DefaultStaggerInterval);
+        if (!std::isfinite(rawDouble) || rawDouble < 0.0 || rawDouble > static_cast<qreal>(MaxStaggerIntervalMs)) {
+            // Negative stagger would make every cascade element fire
+            // immediately (its scheduled-start would already be in the
+            // past), erasing the cascade visual. An hour-plus stagger
+            // would freeze the cascade for any practical animation.
+            // Same shape and rationale as the duration / minDistance /
+            // sequenceMode validators above — leaving the field unset
+            // routes `effectiveStaggerInterval()` to the library default.
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: rejecting staggerInterval " << rawDouble
+                << " (expected 0 <= staggerInterval <= " << MaxStaggerIntervalMs << " ms) — library default will apply";
+        } else {
+            p.staggerInterval = qRound(rawDouble);
+        }
     }
-    if (obj.contains(QLatin1String("presetName"))) {
-        p.presetName = obj.value(QLatin1String("presetName")).toString();
+    if (obj.contains(QLatin1String(JsonFieldPresetName))) {
+        // `toString()` on a non-string QJsonValue returns an empty
+        // QString, which — when assigned to `p.presetName` — engages
+        // the optional with an empty value. That's semantically
+        // distinct from "unset" (engaged-empty means "explicit empty
+        // override"; unset means "inherit from parent"), so a JSON
+        // file with `"presetName": 42` would silently become
+        // `presetName = ""` instead of leaving the optional
+        // disengaged. Guard on `isString()` so only genuine strings
+        // engage the optional.
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldPresetName));
+        if (v.isString()) {
+            p.presetName = v.toString();
+        } else {
+            qCWarning(lcProfile).nospace()
+                << "Profile::fromJson: ignoring non-string presetName (type=" << v.type() << ")";
+        }
     }
 
     return p;

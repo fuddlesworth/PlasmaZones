@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -17,6 +18,15 @@ import org.plasmazones.common as QFZCommon
  * Mouse: Click a layout to select, click outside to dismiss.
  */
 Window {
+    // Show / hide animations use the osd.* profiles for the curve
+    // shape, but bind `durationOverride` to metrics.showDuration /
+    // hideDuration (which are `Kirigami.Units.shortDuration`-derived
+    // and therefore follow Plasma's system-wide animation-speed
+    // preference). Without the override this picker would ignore
+    // that preference — the osd.* profiles ship with hardcoded
+    // fallback durations tuned for the in-shell OSD rather than the
+    // system-theme-scaled picker.
+
     id: root
 
     // Layout data (array of layout objects with id, name, zones, category, autoAssign)
@@ -45,6 +55,14 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    // Mirror of LayoutOsd's `_osdDismissed` lifecycle. True while the picker is
+    // logically hidden — set on warm-up (window pre-created but not yet shown),
+    // cleared by show(), set again at the end of the hide animation. The Window
+    // flags binding folds in `Qt.WindowTransparentForInput` while this is true so
+    // an invisible-but-Qt-visible layer surface doesn't eat clicks at its screen
+    // position. Toggled on discrete show/dismiss events — NOT tied to opacity —
+    // so the flag doesn't churn during the fade.
+    property bool _pickerDismissed: true
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
@@ -70,23 +88,29 @@ Window {
     signal layoutSelected(string layoutId)
     signal dismissed()
 
-    // Show with animation
+    // Show with animation. After warm-up the window stays Qt-visible for its
+    // entire lifetime; show() flips _pickerDismissed off (so input is accepted
+    // again) and runs the fade-in animation. Mirrors LayoutOsd::show().
     function show() {
         showAnimation.stop();
         hideAnimation.stop();
         contentWrapper.opacity = 0;
         container.scale = metrics.showScaleFrom;
+        root._pickerDismissed = false;
         root.visible = true;
         showAnimation.start();
         root.requestActivate();
     }
 
-    // Hide with animation
+    // Hide with animation. Surface stays alive for the next show; the dismiss
+    // ScriptAction flips _pickerDismissed back on so the window flags re-bind to
+    // include WindowTransparentForInput.
     function hide() {
         showAnimation.stop();
-        if (root.visible)
-            hideAnimation.start();
+        if (root._pickerDismissed)
+            return ;
 
+        hideAnimation.start();
     }
 
     function moveSelection(dx, dy) {
@@ -116,8 +140,12 @@ Window {
         }
     }
 
-    // Window configuration
-    flags: Qt.FramelessWindowHint | Qt.Tool
+    // Window configuration. The TransparentForInput flag is bound to the
+    // dismiss state so the layer surface — which we keep Qt-visible across
+    // hide/show cycles to avoid Wayland Vulkan-swapchain re-init cost — stops
+    // intercepting clicks while logically hidden. Mirrors LayoutOsd's flag
+    // binding.
+    flags: Qt.FramelessWindowHint | Qt.Tool | (root._pickerDismissed ? Qt.WindowTransparentForInput : 0)
     color: "transparent"
     visible: false
 
@@ -140,27 +168,28 @@ Window {
         readonly property real showOvershoot: 1.1
     }
 
-    // Show animation
+    // Scale uses osd.pop (OutBack overshoot) to preserve the
+    // "pop" feel from the pre-PhosphorMotion easing.type=OutBack
+    // overshoot=1.2 design.
     ParallelAnimation {
         id: showAnimation
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: contentWrapper
-            property: "opacity"
+            properties: "opacity"
             from: 0
             to: 1
-            duration: metrics.showDuration
-            easing.type: Easing.OutCubic
+            profile: "osd.show"
+            durationOverride: metrics.showDuration
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: container
-            property: "scale"
+            properties: "scale"
             from: metrics.showScaleFrom
             to: 1
-            duration: metrics.showDuration
-            easing.type: Easing.OutBack
-            easing.overshoot: metrics.showOvershoot
+            profile: "osd.pop"
+            durationOverride: metrics.showDuration
         }
 
     }
@@ -170,27 +199,32 @@ Window {
         id: hideAnimation
 
         ParallelAnimation {
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 target: contentWrapper
-                property: "opacity"
+                properties: "opacity"
                 to: 0
-                duration: metrics.hideDuration
-                easing.type: Easing.InCubic
+                profile: "osd.hide"
+                durationOverride: metrics.hideDuration
             }
 
-            NumberAnimation {
+            PhosphorMotionAnimation {
                 target: container
-                property: "scale"
+                properties: "scale"
                 to: metrics.hideScaleTo
-                duration: metrics.hideDuration
-                easing.type: Easing.InCubic
+                profile: "osd.hide"
+                durationOverride: metrics.hideDuration
             }
 
         }
 
         ScriptAction {
             script: {
-                root.visible = false;
+                // Do NOT set root.visible = false — the surface stays Qt-
+                // visible for the daemon's lifetime so the next show() reuses
+                // the warmed Vulkan swapchain. _pickerDismissed flips the
+                // WindowTransparentForInput flag instead, so the still-mapped
+                // layer surface stops eating clicks at its screen position.
+                root._pickerDismissed = true;
                 root.dismissed();
             }
         }
