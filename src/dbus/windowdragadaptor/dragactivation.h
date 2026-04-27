@@ -18,13 +18,17 @@ namespace PlasmaZones {
  * returned latches back into its own members for the next tick.
  *
  * Toggle-mode rising-edge detection (@c triggerHeld going from false to
- * true while @c toggleMode is on) flips @c activationToggled. The
- * deactivation gate (#249) is applied AFTER toggle resolution so a
- * toggled-on overlay also hides while held; releasing the deactivation
- * trigger restores the prior toggle state without flipping it.
+ * true while @c toggleMode is on) flips @c activationToggled.
  *
- * Deactivation is gated on @p alwaysActiveOnDrag — it's only meaningful
- * when "Activate on every drag" is on, matching the UI surface.
+ * The activation list serves dual purpose (#249): when @p alwaysActiveOnDrag
+ * is true (the AlwaysActive sentinel is in the list), the active output is
+ * inverted — the same non-sentinel triggers that would activate the overlay
+ * in normal mode now deactivate it (hold mode → trigger held hides overlay;
+ * toggle mode → tap to toggle off the implicitly-on overlay). @p triggerHeld
+ * MUST be computed from the non-sentinel entries only (see
+ * @c WindowDragAdaptor::anyNonSentinelTriggerHeld) — the sentinel matches
+ * every tick by definition, which would otherwise make inversion read as
+ * "always held" and the overlay never show.
  */
 struct ActivationDecision
 {
@@ -33,7 +37,7 @@ struct ActivationDecision
     bool nextActivationToggled = false; ///< Feedback for the toggle latch.
 };
 
-PLASMAZONES_EXPORT ActivationDecision resolveActivationActive(bool triggerHeld, bool deactivateHeld, bool toggleMode,
+PLASMAZONES_EXPORT ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode,
                                                               bool alwaysActiveOnDrag, bool prevTriggerHeld,
                                                               bool activationToggled);
 

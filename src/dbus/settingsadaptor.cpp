@@ -228,17 +228,6 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("stringlist");
 
-    // Sibling deactivation triggers (#249) — empty by default; only consulted
-    // when the activation list contains AlwaysActive.
-    m_getters[QStringLiteral("dragDeactivationTriggers")] = [this]() {
-        return QVariant::fromValue(m_settings->dragDeactivationTriggers());
-    };
-    m_setters[QStringLiteral("dragDeactivationTriggers")] = [this](const QVariant& v) {
-        m_settings->setDragDeactivationTriggers(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("dragDeactivationTriggers")] = QStringLiteral("stringlist");
-
     REGISTER_BOOL_SETTING("zoneSpanEnabled", zoneSpanEnabled, setZoneSpanEnabled)
 
     // PhosphorZones::Zone span modifier (legacy single value)

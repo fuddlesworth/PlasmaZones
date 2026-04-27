@@ -181,9 +181,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(triggersKey, "Triggers")
-    // Sibling of `Triggers` under Snapping.Behavior — when "always activate"
-    // is on, holding any of these suppresses the overlay for that drag (#249).
-    PZ_CONFIG_KEY(deactivationTriggersKey, "DeactivationTriggers")
     PZ_CONFIG_KEY(toggleActivationKey, "ToggleActivation")
 
     // Snapping.Behavior.ZoneSpan

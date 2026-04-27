@@ -1136,13 +1136,13 @@ PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabled
 PZ_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
 PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
 
-// Shared helper for the four "plain" trigger-list setters. Post-write compare
-// — the schema's per-list validator (canonicalTriggerList /
-// deactivationTriggerList) drops non-map entries, strips unknown keys, and
-// caps the list. A pre-write equality check against the stored canonical
+// Shared helper for the three "plain" trigger-list setters (activation,
+// snap-assist, autotile-insert). Post-write compare — the schema's
+// canonicalTriggerList validator drops non-map entries, strips unknown keys,
+// and caps the list. A pre-write equality check against the stored canonical
 // form would fire a spurious changed signal whenever the caller passed a
 // list that canonicalises to the same value (e.g. extra keys, sub-cap
-// padding, or AlwaysActive in the deactivation list).
+// padding). zoneSpan keeps its own setter due to the legacy-modifier sync.
 void Settings::writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                                 TriggerListSignalFn specificSignal)
 {
@@ -1164,17 +1164,6 @@ void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
     writeTriggerList(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
                      &Settings::dragActivationTriggersChanged);
-}
-
-QVariantList Settings::dragDeactivationTriggers() const
-{
-    return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::deactivationTriggersKey())
-        .toList();
-}
-void Settings::setDragDeactivationTriggers(const QVariantList& triggers)
-{
-    writeTriggerList(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::deactivationTriggersKey(), triggers,
-                     &Settings::dragDeactivationTriggersChanged);
 }
 
 PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)

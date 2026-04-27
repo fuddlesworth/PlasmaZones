@@ -9,10 +9,9 @@
  *
  * The function lives in src/dbus/windowdragadaptor/dragactivation.cpp so the
  * truth table can be exercised without standing up the adaptor + its
- * compositor dependencies. Pinning the table here means the runtime gate
- * for the deactivate-while-held trigger (#249) — including the
- * always-active gate that keeps it from silently suppressing the overlay
- * for hold-to-activate users — can't drift.
+ * compositor dependencies. Pinning the table here means the always-active
+ * inversion (#249) — where the same activation triggers serve double duty
+ * as deactivate-while-held / toggle-off — can't drift.
  */
 
 #include <QTest>
@@ -27,13 +26,13 @@ class TestDragActivation : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    // ─── Hold-to-activate (toggleMode = false) ─────────────────────────────
+    // ─── Hold-to-activate (toggleMode = false, alwaysActive = false) ──────
 
     void hold_triggerHeld_active()
     {
-        const auto d = resolveActivationActive(/*triggerHeld=*/true, /*deactivateHeld=*/false,
-                                               /*toggleMode=*/false, /*alwaysActive=*/false,
-                                               /*prevTriggerHeld=*/false, /*activationToggled=*/false);
+        const auto d = resolveActivationActive(/*triggerHeld=*/true, /*toggleMode=*/false,
+                                               /*alwaysActive=*/false, /*prevTriggerHeld=*/false,
+                                               /*activationToggled=*/false);
         QVERIFY(d.active);
         QVERIFY(d.nextPrevTriggerHeld);
         QVERIFY(!d.nextActivationToggled);
@@ -41,17 +40,18 @@ private Q_SLOTS:
 
     void hold_triggerReleased_inactive()
     {
-        const auto d = resolveActivationActive(false, false, false, false, true, false);
+        const auto d = resolveActivationActive(false, false, false, true, false);
         QVERIFY(!d.active);
         QVERIFY(!d.nextPrevTriggerHeld);
     }
 
-    // ─── Toggle mode rising-edge latch ─────────────────────────────────────
+    // ─── Toggle mode rising-edge latch (alwaysActive = false) ─────────────
 
     void toggle_risingEdge_flipsLatch()
     {
-        const auto d = resolveActivationActive(/*triggerHeld=*/true, false, /*toggleMode=*/true, false,
-                                               /*prevTriggerHeld=*/false, /*activationToggled=*/false);
+        const auto d = resolveActivationActive(/*triggerHeld=*/true, /*toggleMode=*/true,
+                                               /*alwaysActive=*/false, /*prevTriggerHeld=*/false,
+                                               /*activationToggled=*/false);
         QVERIFY(d.active);
         QVERIFY(d.nextActivationToggled);
     }
@@ -59,8 +59,8 @@ private Q_SLOTS:
     void toggle_releasedAfterToggleOn_staysActive()
     {
         // Trigger released after a previous tick toggled the latch on — the
-        // overlay must remain on. This is the core toggle-mode contract.
-        const auto d = resolveActivationActive(false, false, true, false, true, true);
+        // overlay must remain on. Core toggle-mode contract.
+        const auto d = resolveActivationActive(false, true, false, true, true);
         QVERIFY(d.active);
         QVERIFY(d.nextActivationToggled);
         QVERIFY(!d.nextPrevTriggerHeld);
@@ -68,7 +68,7 @@ private Q_SLOTS:
 
     void toggle_secondPress_flipsBackOff()
     {
-        const auto d = resolveActivationActive(true, false, true, false, false, true);
+        const auto d = resolveActivationActive(true, true, false, false, true);
         QVERIFY(!d.active);
         QVERIFY(!d.nextActivationToggled);
     }
@@ -77,55 +77,89 @@ private Q_SLOTS:
     {
         // Same trigger held across consecutive ticks must NOT re-flip the
         // latch — only the rising edge counts.
-        const auto d = resolveActivationActive(true, false, true, false, true, true);
+        const auto d = resolveActivationActive(true, true, false, true, true);
         QVERIFY(d.active);
         QVERIFY(d.nextActivationToggled);
     }
 
-    // ─── Deactivation override (#249) — gated on alwaysActiveOnDrag ───────
+    // ─── Always-active inversion (#249) — hold mode ───────────────────────
 
-    void deactivation_alwaysActiveOff_neverSuppresses()
+    void alwaysActive_holdMode_noTrigger_active()
     {
-        // Hold-to-activate user who somehow has a deactivation trigger
-        // configured (e.g. set it while in always-active mode then switched
-        // back) must not get silent suppression — the runtime gate matches
-        // the UI gate.
-        const auto d = resolveActivationActive(/*triggerHeld=*/true, /*deactivateHeld=*/true, false,
-                                               /*alwaysActive=*/false, true, false);
-        QVERIFY2(d.active,
-                 "Deactivation must be a no-op outside always-active mode (#249) — UI hides the row, runtime matches");
-    }
-
-    void deactivation_alwaysActiveOn_suppresses()
-    {
-        const auto d =
-            resolveActivationActive(true, /*deactivateHeld=*/true, false, /*alwaysActive=*/true, false, false);
-        QVERIFY(!d.active);
-    }
-
-    void deactivation_alwaysActiveOn_releasedRestoresActive()
-    {
-        // Always-active user releases the deactivation trigger — the overlay
-        // returns immediately because activation is implicit.
-        const auto d = resolveActivationActive(true, /*deactivateHeld=*/false, false, true, false, false);
+        // alwaysActive on, no non-sentinel trigger held: overlay implicitly
+        // on. This is the typical config for users who want the overlay on
+        // every drag without configuring a deactivate trigger.
+        const auto d = resolveActivationActive(/*triggerHeld=*/false, /*toggleMode=*/false,
+                                               /*alwaysActive=*/true, false, false);
         QVERIFY(d.active);
     }
 
-    void deactivation_doesNotMutateToggleLatch()
+    void alwaysActive_holdMode_triggerHeld_inactive()
     {
-        // Toggle-mode + always-active + deactivation: the latch must survive
-        // an entire press/release cycle of the deactivation trigger so the
-        // overlay returns to its toggled-on state on release. This is the
-        // load-bearing claim from the PR description.
-        const auto pressed =
-            resolveActivationActive(/*triggerHeld=*/false, /*deactivateHeld=*/true, /*toggleMode=*/true,
-                                    /*alwaysActive=*/true, /*prevTriggerHeld=*/false,
-                                    /*activationToggled=*/true);
-        QVERIFY2(!pressed.active, "Overlay must hide while deactivation is held");
-        QVERIFY2(pressed.nextActivationToggled, "Toggle latch must NOT flip — release should restore prior state");
+        // alwaysActive on, non-sentinel trigger held: hold-to-deactivate.
+        // Overlay hides while the trigger is held.
+        const auto d = resolveActivationActive(/*triggerHeld=*/true, false, /*alwaysActive=*/true, false, false);
+        QVERIFY(!d.active);
+    }
 
-        const auto released = resolveActivationActive(false, false, true, true, false, pressed.nextActivationToggled);
-        QVERIFY2(released.active, "Overlay must return to its pre-deactivation toggled-on state");
+    void alwaysActive_holdMode_triggerReleased_restoresActive()
+    {
+        // Always-active user releases the deactivate trigger — overlay
+        // returns immediately because activation is implicit.
+        const auto d = resolveActivationActive(false, false, true, true, false);
+        QVERIFY(d.active);
+    }
+
+    // ─── Always-active inversion — toggle mode ────────────────────────────
+
+    void alwaysActive_toggleMode_default_active()
+    {
+        // alwaysActive + toggle, latch=false (default). Overlay is on.
+        const auto d = resolveActivationActive(false, /*toggleMode=*/true, /*alwaysActive=*/true, false, false);
+        QVERIFY(d.active);
+    }
+
+    void alwaysActive_toggleMode_firstPress_togglesOff()
+    {
+        // First rising edge of the trigger: latch flips true → overlay off.
+        const auto d = resolveActivationActive(/*triggerHeld=*/true, true, true, /*prevTriggerHeld=*/false,
+                                               /*activationToggled=*/false);
+        QVERIFY(!d.active);
+        QVERIFY(d.nextActivationToggled);
+    }
+
+    void alwaysActive_toggleMode_releasedAfterFlip_staysOff()
+    {
+        // After flipping off, releasing the trigger keeps the overlay off
+        // (toggle-mode latch survives release).
+        const auto d = resolveActivationActive(false, true, true, true, true);
+        QVERIFY(!d.active);
+        QVERIFY(d.nextActivationToggled);
+    }
+
+    void alwaysActive_toggleMode_secondPress_flipsBackOn()
+    {
+        // Second rising edge: latch flips back to false → overlay on.
+        const auto d = resolveActivationActive(true, true, true, false, true);
+        QVERIFY(d.active);
+        QVERIFY(!d.nextActivationToggled);
+    }
+
+    // ─── Symmetry guard: latch survives mode switches ─────────────────────
+
+    void latch_survivesAlwaysActiveSwitch()
+    {
+        // toggleMode=true, latch=true. Overlay state depends on
+        // alwaysActiveOnDrag. Switching the always-active bit between calls
+        // (e.g. user changes settings mid-drag — unlikely but the resolver
+        // is stateless wrt the bit) flips the displayed active state
+        // without disturbing the latch.
+        const auto normal = resolveActivationActive(false, true, /*alwaysActive=*/false, false, true);
+        QVERIFY(normal.active); // latch=true in normal mode → overlay on
+
+        const auto inverted = resolveActivationActive(false, true, /*alwaysActive=*/true, false, true);
+        QVERIFY(!inverted.active); // latch=true in always-active mode → overlay off
+        QVERIFY(inverted.nextActivationToggled); // latch unchanged
     }
 };
 

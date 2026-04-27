@@ -65,8 +65,6 @@ public:
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
-    Q_PROPERTY(QVariantList dragDeactivationTriggers READ dragDeactivationTriggers WRITE setDragDeactivationTriggers
-                   NOTIFY dragDeactivationTriggersChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
@@ -439,8 +437,6 @@ public:
     // Activation — PhosphorConfig::Store-backed.
     QVariantList dragActivationTriggers() const override;
     void setDragActivationTriggers(const QVariantList& triggers) override;
-    QVariantList dragDeactivationTriggers() const override;
-    void setDragDeactivationTriggers(const QVariantList& triggers) override;
     bool zoneSpanEnabled() const override;
     void setZoneSpanEnabled(bool enabled) override;
     DragModifier zoneSpanModifier() const override;

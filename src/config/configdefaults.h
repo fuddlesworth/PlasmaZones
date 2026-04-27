@@ -64,11 +64,6 @@ public:
     {
         return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
     }
-    static QVariantList dragDeactivationTriggers()
-    {
-        // Default empty: deactivation only fires in always-active mode (#249).
-        return {};
-    }
     static bool toggleActivation()
     {
         return false;

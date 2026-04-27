@@ -61,11 +61,15 @@ Flickable {
                     SettingsSeparator {
                     }
 
+                    // The activation trigger list and the Hold/Toggle controls
+                    // serve dual purpose (#249): when "Activate on every drag"
+                    // is on, the same triggers DEACTIVATE the overlay (hold to
+                    // hide; toggle to flip off the implicitly-on overlay).
+                    // resolveActivationActive in the runtime mirrors this with
+                    // an inversion gated on alwaysActiveOnDrag.
                     SettingsRow {
-                        title: i18n("Hold to activate")
-                        description: i18n("Hold a modifier or mouse button to show zones while dragging")
-                        enabled: !alwaysActivateSwitch.checked
-                        opacity: enabled ? 1 : 0.4
+                        title: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
+                        description: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
 
                         ModifierAndMouseCheckBoxes {
                             id: dragActivationInput
@@ -88,43 +92,13 @@ Flickable {
 
                     SettingsRow {
                         title: i18n("Toggle mode")
-                        description: i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
-                        enabled: !alwaysActivateSwitch.checked
-                        opacity: enabled ? 1 : 0.4
+                        description: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
 
                         SettingsSwitch {
                             checked: appSettings.toggleActivation
                             accessibleName: i18n("Toggle mode")
                             onToggled: function(newValue) {
                                 appSettings.toggleActivation = newValue;
-                            }
-                        }
-
-                    }
-
-                    // Deactivation trigger (#249). The runtime gates this on
-                    // always-active mode too — see WindowDragAdaptor's
-                    // m_alwaysActiveOnDrag — so visibility here matches behavior.
-                    SettingsSeparator {
-                        visible: alwaysActivateSwitch.checked
-                    }
-
-                    SettingsRow {
-                        title: i18n("Deactivate while held")
-                        description: i18n("Hold a modifier or mouse button during a drag to hide the zone overlay. Esc still cancels the drag entirely.")
-                        visible: alwaysActivateSwitch.checked
-
-                        ModifierAndMouseCheckBoxes {
-                            id: dragDeactivationInput
-
-                            width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
-                            allowMultiple: true
-                            acceptMode: acceptModeAll
-                            triggers: root.settingsBridge.dragDeactivationTriggers
-                            defaultTriggers: root.settingsBridge.defaultDragDeactivationTriggers
-                            tooltipEnabled: false
-                            onTriggersModified: (triggers) => {
-                                root.settingsBridge.dragDeactivationTriggers = triggers;
                             }
                         }
 

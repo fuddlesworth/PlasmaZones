@@ -239,6 +239,13 @@ private:
     bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
     // Overload using pre-parsed triggers (hot path during drag)
     bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Like anyTriggerHeld but skips entries whose modifier is the
+    // AlwaysActive sentinel — those match every tick by definition, so
+    // they're useless as a per-tick "user is holding the trigger" signal.
+    // Used by dragMoved so the activation cache can carry both the master
+    // always-active bit and user-configurable hold/toggle entries (#249).
+    bool anyNonSentinelTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
+                                   int mouseButtons) const;
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 
@@ -424,14 +431,8 @@ private:
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
-    QVector<ParsedTrigger> m_cachedDeactivationTriggers; // #249 — suppresses activationActive while held
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
     QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;
-    // Cached on dragStarted from m_cachedActivationTriggers — true if any
-    // entry has DragModifier::AlwaysActive. Per-tick dragMoved consults this
-    // bool directly so the deactivation override (#249) only fires in
-    // always-active mode (matches the SnappingBehaviorPage UI surface).
-    bool m_alwaysActiveOnDrag = false;
 
     // Autotile drag-insert preview state lives on AutotileEngine
     // (hasDragInsertPreview(), dragInsertPreviewScreenId()). The adaptor
