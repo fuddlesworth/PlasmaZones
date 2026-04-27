@@ -191,9 +191,11 @@ Window {
     /// to OverlayService → Surface::hide().
     signal dismissRequested()
 
-    /// Restart the auto-dismiss timer from C++ on every show.
+    /// Restart the auto-dismiss timer from C++ on every show. The
+    /// `_dismissed` latch reset is driven off the timer's runningChanged
+    /// transition (Connections block below); see LayoutOsd.qml for the
+    /// full rationale.
     function restartDismissTimer() {
-        _dismissed = false;
         dismissTimer.restart();
     }
 
@@ -269,6 +271,19 @@ Window {
 
         interval: root.displayDuration
         onTriggered: root._requestDismiss()
+    }
+
+    // Reset the dismiss latch when the timer (re)starts. See LayoutOsd.qml
+    // for the rationale — the reset is the timer's responsibility, not
+    // the helper's, so any restart path keeps the latch in sync.
+    Connections {
+        function onRunningChanged() {
+            if (dismissTimer.running)
+                root._dismissed = false;
+
+        }
+
+        target: dismissTimer
     }
 
     // Content wrapper. Opacity defaults to 1 — the SurfaceAnimator drives

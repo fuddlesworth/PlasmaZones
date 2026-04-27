@@ -686,6 +686,116 @@ private Q_SLOTS:
         // (now-default-only) no-op animator, which is safe.
         delete surface;
     }
+
+    /// Regression: cancelTracking must not destroy an AnimatedValue
+    /// under its own advance() call stack.
+    ///
+    /// The animator's `spec.onValueChanged` is fired synchronously from
+    /// inside AnimatedValue::advance(). It writes to the target's
+    /// opacity/scale property, which fires QML's opacityChanged signal
+    /// (also synchronously). A consumer slot connected to that signal
+    /// can call `anim.cancel(surface)` — which routes through
+    /// cancelTracking. Pre-fix, cancelTracking destroyed the
+    /// AnimatedValue at scope exit (local unique_ptr), tearing it down
+    /// while `advance()` was still on the stack. AnimatedValue.h:547
+    /// forbids this — `advance()` accesses `*this` after the callback
+    /// returns (e.g. the m_isComplete branch).
+    ///
+    /// The fix parks cancelled AnimatedValues in m_pendingDestroy
+    /// (mirroring legCompleted's deferred-destroy contract), so
+    /// destruction happens only after every advance() frame on the
+    /// stack has unwound.
+    ///
+    /// Without the fix, this test reliably crashes (heap-use-after-free
+    /// under ASan) on the AnimatedValue's m_isComplete read after
+    /// onValueChanged returns.
+    void cancel_during_onValueChanged_does_not_uaf()
+    {
+        // Long-duration profile so we're guaranteed multiple mid-fade
+        // ticks before completion (16 ms tick × ~12 ticks @ 200 ms).
+        // The default 20 ms test profile completes in ~2 ticks, leaving
+        // a narrow window where the cancel + the per-tick callback
+        // synchronisation race against test-runner scheduling.
+        const QString path = QStringLiteral("test.cancel-during-tick");
+        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/200));
+        struct Cleanup
+        {
+            QString p;
+            ~Cleanup()
+            {
+                PhosphorProfileRegistry::instance().unregisterProfile(p);
+            }
+        } _{path};
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = path;
+        cfg.hideProfile = path;
+        SurfaceAnimator anim(cfg);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("cancel-during-tick");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->show();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // Hook opacityChanged BEFORE the first mid-fade tick lands —
+        // surface->show()'s synchronous setOpacity(fromOpacity=0) has
+        // already fired its emit (which we don't observe from here),
+        // and the timer's first advance() will fire onValueChanged(0)
+        // (suppressed by Qt's qFuzzyCompare since opacity is already 0).
+        // The second tick fires onValueChanged with the partially-progressed
+        // value — that's the one we cancel from.
+        int opacityChangeFires = 0;
+        bool cancelled = false;
+        QObject::connect(target, &QQuickItem::opacityChanged, target, [&]() {
+            ++opacityChangeFires;
+            if (cancelled) {
+                return;
+            }
+            // Cancel from inside the spec.onValueChanged → setOpacity →
+            // opacityChanged → this slot call chain. Pre-fix this UAFs
+            // when advance() returns and accesses `this` post-callback.
+            cancelled = true;
+            anim.cancel(surface);
+        });
+
+        QVERIFY2(waitFor(
+                     [&] {
+                         return cancelled;
+                     },
+                     1000),
+                 "opacityChanged must fire at least once during the 200 ms animation; "
+                 "if 0 fires were observed the animator's tick driver is not running");
+
+        // Pre-fix this is where the UAF lands: the next QTimer tick
+        // calls tickAll → advance() on the parked-but-still-undestroyed
+        // AnimatedValue's freed memory. Post-fix m_pendingDestroy drains
+        // at the start of the next tick before any advance() runs.
+        QTest::qWait(150);
+
+        // Opacity must have stopped progressing after cancel — if the
+        // animation kept ticking, post-fix m_pendingDestroy was wrong
+        // OR the cancel didn't take effect.
+        const qreal first = target->opacity();
+        QTest::qWait(50);
+        const qreal second = target->opacity();
+        QCOMPARE(first, second);
+
+        delete surface;
+    }
 };
 
 QTEST_MAIN(TestSurfaceAnimator)

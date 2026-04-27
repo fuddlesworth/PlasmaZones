@@ -111,9 +111,12 @@ Window {
 
     /// Restart the auto-dismiss timer from C++ on every show. Replaces the
     /// QML-internal `dismissTimer.restart()` that the old show() used to
-    /// call.
+    /// call. The `_dismissed` latch reset is driven off the timer's
+    /// runningChanged transition (Connections block below) — that way any
+    /// path that restarts the timer (this helper today, or a hypothetical
+    /// future direct call) resets the latch automatically and a forgetful
+    /// caller can't desync the two.
     function restartDismissTimer() {
-        _dismissed = false;
         dismissTimer.restart();
     }
 
@@ -145,6 +148,22 @@ Window {
 
         interval: root.displayDuration
         onTriggered: root._requestDismiss()
+    }
+
+    // Reset the dismiss latch when the timer (re)starts. Bound here
+    // rather than inline in restartDismissTimer so the reset is the
+    // timer's responsibility, not the helper's. Any path that calls
+    // dismissTimer.restart() — current or future — automatically resets
+    // the latch, preventing a forgetful caller from leaving the OSD
+    // permanently latched-as-dismissed for the rest of its lifetime.
+    Connections {
+        function onRunningChanged() {
+            if (dismissTimer.running)
+                root._dismissed = false;
+
+        }
+
+        target: dismissTimer
     }
 
     // Content wrapper - opacity defaults to 1 now. Phase 5 SurfaceAnimator

@@ -225,7 +225,16 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         m_snapAssistWindow->setWidth(screenGeom.width());
         m_snapAssistWindow->setHeight(screenGeom.height());
     }
-    if (m_snapAssistSurface) {
+    // Skip surface->show() when reusing an already-Shown surface. Surface
+    // treats Shown→Shown as a re-trigger and replays the panel.popup
+    // fade-in (cancel + fresh beginShow with fromOpacity=0). For the
+    // continuation pattern — user finishes one snap, the next snap-assist
+    // reuses the warmed window — that flash is a regression of the
+    // warm-surface optimisation. Property writes already updated the
+    // candidates/zones; nothing about the visual state needs to replay.
+    // First-show on a freshly-created surface (reuseWindow=false) and
+    // re-show on a previously-hidden surface both still dispatch normally.
+    if (m_snapAssistSurface && (!reuseWindow || !m_snapAssistSurface->isLogicallyShown())) {
         m_snapAssistSurface->show();
     }
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
@@ -297,7 +306,13 @@ void OverlayService::hideSnapAssist()
 {
     bool wasVisible = isSnapAssistVisible();
     const QString screenId = m_snapAssistScreenId;
-    m_thumbnailCache.clear();
+    // Don't clear m_thumbnailCache — it's keyed on KWin compositor handles
+    // (stable per-window for the lifetime of the window) and the cache is
+    // designed to be reused across continuation. Clearing on every dismiss
+    // forced full thumbnail recapture on every snap, defeating the cache.
+    // The cache naturally bounds itself: ~one entry per window the user
+    // has snap-assisted to in the current session, and entries don't go
+    // stale until KWin recycles a handle (rare).
     destroySnapAssistWindow();
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();

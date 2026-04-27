@@ -183,33 +183,37 @@ void OverlayService::setupSurfaceAnimator()
                                                  .hideScaleTo = 0.9};
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
     m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
-    {
-        PAL::SurfaceAnimator::Config c;
-        c.showProfile = osdShow;
-        c.showScaleProfile = osdPop;
-        c.showScaleFrom = 0.9;
-        c.hideProfile = osdHide;
-        c.hideScaleProfile = osdHide;
-        c.hideScaleTo = 0.95;
-        m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, c);
-    }
+
+    // LayoutPicker: same osd shape but a softer scale envelope (0.9→1
+    // instead of 0.8→1) — the picker is a larger surface so the overshoot
+    // reads as a pop rather than a slam.
+    const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = osdShow,
+                                                          .hideProfile = osdHide,
+                                                          .showScaleProfile = osdPop,
+                                                          .hideScaleProfile = osdHide,
+                                                          .showScaleFrom = 0.9,
+                                                          .hideScaleTo = 0.95};
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, layoutPickerConfig);
+
     // ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
-    // the hide animation actually paints).
-    {
-        PAL::SurfaceAnimator::Config c;
-        c.showProfile = panelPopup;
-        c.hideProfile = widgetFadeOut;
-        m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, c);
-    }
+    // the hide animation actually paints). Explicit `= {}` on the unused
+    // scale fields suppresses GCC's -Wmissing-field-initializers under
+    // designated init.
+    const PAL::SurfaceAnimator::Config zoneSelectorConfig{.showProfile = panelPopup,
+                                                          .hideProfile = widgetFadeOut,
+                                                          .showScaleProfile = {},
+                                                          .hideScaleProfile = {}};
+    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, zoneSelectorConfig);
+
     // SnapAssist: pop-in show only. The overlay uses destroy-on-hide
     // (keepMappedOnHide=false), so ~Surface synchronously cancels any
     // in-flight beginHide before the hide animation can paint a frame.
     // Registering a hideProfile here would be dead code; leave it empty.
-    {
-        PAL::SurfaceAnimator::Config c;
-        c.showProfile = panelPopup;
-        m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, c);
-    }
+    const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = panelPopup,
+                                                        .hideProfile = {},
+                                                        .showScaleProfile = {},
+                                                        .hideScaleProfile = {}};
+    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, snapAssistConfig);
 }
 
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,

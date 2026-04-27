@@ -177,12 +177,23 @@ public:
     /// beginShow/beginHide; cancel is an explicitly non-completion
     /// termination".
     ///
-    /// Move the AnimatedValues out of the tracking entry BEFORE erasing,
-    /// then cancel through the local unique_ptrs. If a future change to
-    /// AnimatedValue::cancel ever regresses the contract and fires
-    /// spec.onComplete synchronously, legCompleted() would invalidate
-    /// `it` mid-cancel — but we're already past the iterator; the local
-    /// pointers are stable.
+    /// ## Lifetime contract — defer destruction
+    ///
+    /// `cancelTracking` can be reached from inside an AnimatedValue's
+    /// own `spec.onValueChanged` callback: a synchronous QML binding
+    /// on the target's opacity/scale property fires consumer code that
+    /// calls `cancel(surface)`. AnimatedValue.h:547 forbids destroying
+    /// `*this` from within a spec callback — `advance()` continues to
+    /// access `this` after the callback returns (e.g. the m_isComplete
+    /// branch and the velocity guard). Destroying the AnimatedValue
+    /// synchronously here would UAF.
+    ///
+    /// Mirror legCompleted's deferred-destroy: cancel the AnimatedValues
+    /// (which sets m_isAnimating=false so any subsequent advance() bails
+    /// before any further state mutation) and park them in
+    /// m_pendingDestroy. The graveyard drains at the start of the next
+    /// `tickAll` — by which point every advance() frame on the call
+    /// stack has fully unwound, and destruction is safe.
     ///
     /// The track's `onComplete` is destroyed alongside the tracking entry
     /// (the unordered_map::erase below runs ~Track which destroys the
@@ -197,15 +208,19 @@ public:
         if (it == m_tracks.end()) {
             return;
         }
-        auto opacity = std::move(it->second.opacity);
-        auto scale = std::move(it->second.scale);
+        // Cancel BEFORE moving so m_isAnimating=false propagates to any
+        // advance() frame that might still be on the call stack — the
+        // remaining post-callback work in advance() then bails on the
+        // m_isAnimating guard rather than mutating cancelled state.
+        if (it->second.opacity) {
+            it->second.opacity->cancel();
+            m_pendingDestroy.push_back(std::move(it->second.opacity));
+        }
+        if (it->second.scale) {
+            it->second.scale->cancel();
+            m_pendingDestroy.push_back(std::move(it->second.scale));
+        }
         m_tracks.erase(it);
-        if (opacity) {
-            opacity->cancel();
-        }
-        if (scale) {
-            scale->cancel();
-        }
     }
 
     /// Look up the per-role config or fall back to default.
@@ -572,7 +587,10 @@ SurfaceAnimator::~SurfaceAnimator()
     // Cancel any leftover entries — should be empty in correct lifecycle
     // (Surface dtor cancels), but a misordered teardown would leave entries
     // pointing at QQuickItems whose AnimatedValues fire onto deleted memory
-    // on the next clock tick.
+    // on the next clock tick. cancelTracking parks the AnimatedValues in
+    // m_pendingDestroy; Private's destructor destroys them via the
+    // declaration-ordered teardown (m_clock outlives them; m_driverTimer
+    // is stopped first so no tick can race with destruction).
     while (!d->m_tracks.empty()) {
         auto it = d->m_tracks.begin();
         d->cancelTracking(it->first);
