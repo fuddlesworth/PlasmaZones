@@ -4,7 +4,9 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/IQmlEngineProvider.h>
 #include <PhosphorLayer/IScreenProvider.h>
+#include <PhosphorLayer/ISurfaceAnimator.h>
 #include <PhosphorLayer/Surface.h>
+#include <PhosphorLayer/defaults/NoOpSurfaceAnimator.h>
 
 #include "internal.h"
 
@@ -27,6 +29,21 @@ SurfaceConfig::SurfaceConfig() = default;
 SurfaceConfig::~SurfaceConfig() = default;
 SurfaceConfig::SurfaceConfig(SurfaceConfig&&) noexcept = default;
 SurfaceConfig& SurfaceConfig::operator=(SurfaceConfig&&) noexcept = default;
+
+namespace {
+/// Library-wide fallback animator used whenever the consumer leaves
+/// `SurfaceFactory::Deps::animator` null. Shared across every Surface that
+/// opts in to the no-op default; stateless and thread-safe (every method
+/// is `const`-equivalent — calls onComplete synchronously, no per-instance
+/// data). A function-static keeps initialisation out of the dynamic-init
+/// phase so the dtor ordering at process shutdown can't accidentally call
+/// into it after Qt has been torn down.
+ISurfaceAnimator& noOpAnimator()
+{
+    static NoOpSurfaceAnimator s_instance;
+    return s_instance;
+}
+} // namespace
 
 ScreenProviderNotifier::ScreenProviderNotifier(QObject* parent)
     : QObject(parent)
@@ -81,6 +98,13 @@ public:
     ~Impl()
     {
         QObject::disconnect(m_screensChangedConnection);
+        // Cancel any in-flight animation BEFORE we tear the QQuickItem tree
+        // down. The animator may be holding a QPropertyAnimation or a Phase-3
+        // AnimatedValue<qreal> targeting `m_rootItem` / `m_window->contentItem()`
+        // — letting that survive into the destructor of the QQuickWindow it
+        // animates causes a "modify after delete" on the property setter when
+        // the next animation tick fires.
+        animator().cancel(m_q);
         // Ordered teardown: transport → component → window → engine. The component
         // holds a pointer into the engine and touches it in its dtor, so it must
         // go before the engine. The window hosts QML objects whose dtors also
@@ -174,6 +198,29 @@ public:
     std::unique_ptr<ITransportHandle> m_handle;
     QString m_failureReason;
 
+    // ── Animator helpers ──────────────────────────────────────────────
+    /// Resolve the injected animator or fall back to the library-wide no-op.
+    /// Always returns a valid reference — every dispatch site can call
+    /// `animator().beginShow(...)` without null-checking. The fallback is a
+    /// shared no-op singleton (see noOpAnimator()).
+    ISurfaceAnimator& animator() const
+    {
+        return m_deps.animator ? *m_deps.animator : noOpAnimator();
+    }
+
+    /// Resolve the QQuickItem the animator should drive: the explicit
+    /// item-rooted content, or the Window's contentItem for Window-rooted
+    /// QML. Both expose `opacity` / `scale` / transforms in the standard
+    /// QQuickItem property surface, so the animator implementation needs no
+    /// special-case for the two content shapes.
+    QQuickItem* animatorTarget() const
+    {
+        if (m_rootItem) {
+            return m_rootItem.data();
+        }
+        return m_window ? m_window->contentItem() : nullptr;
+    }
+
     // ── Public-API drivers ────────────────────────────────────────────
 
     void requestWarm()
@@ -238,7 +285,51 @@ private:
                 break;
             case Intent::Hide:
                 if (m_state == State::Shown && m_window) {
-                    m_window->hide();
+                    // Cancel any in-flight show animation before starting the
+                    // hide path. The animator's per-surface state is keyed on
+                    // m_q — letting an in-flight beginShow finish onto a
+                    // window we've just unmapped writes a stale opacity into
+                    // a torn-down QQuickItem.
+                    animator().cancel(m_q);
+
+                    if (m_config.keepMappedOnHide) {
+                        // Phase-5 lifecycle: keep the wl_surface attached
+                        // across hide/show cycles. The animator drives the
+                        // QQuickItem's opacity to zero for the visual fade;
+                        // the still-mapped layer surface stops intercepting
+                        // clicks via WindowTransparentForInput. The QQuick-
+                        // Window stays Qt-visible for the surface's entire
+                        // lifetime (so the Vulkan swapchain survives). m_q
+                        // captured by-value into the lambda — onComplete may
+                        // fire after this drive() frame returns, and the
+                        // raw `this` pointer is unsafe across that span.
+                        m_window->setFlag(Qt::WindowTransparentForInput, true);
+                        QPointer<Surface> self = m_q;
+                        animator().beginHide(m_q, animatorTarget(), [self]() {
+                            // No-op completion: we already transitioned
+                            // synchronously below. The callback is a
+                            // notification slot for consumers that want to
+                            // observe animation end (none today; reserved
+                            // for future ScreenSurfaceRegistry teardown
+                            // signalling).
+                            Q_UNUSED(self);
+                        });
+                    } else {
+                        // Pre-Phase-5 lifecycle: animator runs the visual
+                        // fade in parallel (synchronously for the no-op
+                        // default), then we unmap the wl_surface. Most
+                        // animators that *actually animate* will want
+                        // keepMappedOnHide=true — synchronous unmap defeats
+                        // the visual transition because the compositor
+                        // tears the surface down before the animation is
+                        // perceptible. Kept as the default for callers that
+                        // never opt in to an animator.
+                        QPointer<Surface> self = m_q;
+                        animator().beginHide(m_q, animatorTarget(), [self]() {
+                            Q_UNUSED(self);
+                        });
+                        m_window->hide();
+                    }
                     transitionTo(State::Hidden);
                 }
                 // Other states: already hidden-ish (Constructed/Warming/Hidden);
@@ -300,7 +391,25 @@ private:
                 failWith(QStringLiteral("Internal error: Hidden state with no window"));
                 return;
             }
+            // Cancel any in-flight hide animation. show-while-hiding is the
+            // canonical "user re-triggered the popup mid-fade" race; without
+            // cancel() the in-flight beginHide animation would continue
+            // driving opacity to 0 even after we set it back to 1.
+            animator().cancel(m_q);
+
+            if (m_config.keepMappedOnHide) {
+                // The window is already Qt-visible across the keepMappedOnHide
+                // hide path; clearing TransparentForInput restores click
+                // routing. m_window->show() is still called for the
+                // first-show case where we go Constructed → Warming →
+                // Hidden → Shown (Qt window not yet mapped at that point).
+                m_window->setFlag(Qt::WindowTransparentForInput, false);
+            }
             m_window->show();
+            QPointer<Surface> self = m_q;
+            animator().beginShow(m_q, animatorTarget(), [self]() {
+                Q_UNUSED(self);
+            });
             transitionTo(State::Shown);
         }
         // Intent::Warm + state Hidden → nothing more to do; we're warmed.

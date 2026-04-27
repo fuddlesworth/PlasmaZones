@@ -125,8 +125,12 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_screenManager = screenManager;
     m_shaderRegistry = shaderRegistry;
 
-    m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(PhosphorLayer::SurfaceFactory::Deps{
-        m_transport.get(), m_screenProvider.get(), nullptr, QStringLiteral("plasmazones.overlay")});
+    m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(
+        PhosphorLayer::SurfaceFactory::Deps{.transport = m_transport.get(),
+                                            .screens = m_screenProvider.get(),
+                                            .engineProvider = nullptr,
+                                            .animator = nullptr,
+                                            .loggingCategory = QStringLiteral("plasmazones.overlay")});
 
     const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     const QString pipelineCachePath =

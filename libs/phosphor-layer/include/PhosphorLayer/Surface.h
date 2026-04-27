@@ -20,6 +20,7 @@ namespace PhosphorLayer {
 class ILayerShellTransport;
 class IQmlEngineProvider;
 class IScreenProvider;
+class ISurfaceAnimator;
 class ITransportHandle;
 class SurfaceFactory;
 
@@ -46,6 +47,11 @@ struct SurfaceDeps
     /// after screensChanged and will hand dangling pointers to the transport
     /// on reattach. The factory always sets it.
     IScreenProvider* screenProvider = nullptr;
+    /// Phase-5 hook for show/hide visual transitions. Optional: nullptr means
+    /// the Surface uses the library-internal NoOp default (synchronous
+    /// onComplete; identical pre-Phase-5 behaviour). The factory propagates
+    /// SurfaceFactory::Deps::animator into this slot.
+    ISurfaceAnimator* animator = nullptr;
     QString loggingCategory;
 };
 
