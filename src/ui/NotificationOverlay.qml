@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Window
+import org.kde.kirigami as Kirigami
 
 /**
  * Unified notification overlay — single Wayland layer-shell host that swaps
@@ -51,9 +52,14 @@ Window {
     // content type has its own default (1500 ms for layout-osd, 1000 ms for
     // navigation-osd) and the per-content binding is omitted in the
     // Components below so those defaults remain authoritative.
-    property color backgroundColor: "white"
-    property color textColor: "black"
-    property color highlightColor: "blue"
+    // Theme defaults must mirror Kirigami so the Component bindings below
+    // don't override the loaded content's matching Kirigami defaults with
+    // hardcoded sentinels — neither showLayoutOsd nor showNavigationOsd
+    // calls writeColorSettings, so without these the OSD body would render
+    // against a literal white/black/blue palette.
+    property color backgroundColor: Kirigami.Theme.backgroundColor
+    property color textColor: Kirigami.Theme.textColor
+    property color highlightColor: Kirigami.Theme.highlightColor
     // ── LayoutOsd-only properties ──────────────────────────────────────────
     property string layoutId: ""
     property string layoutName: ""
@@ -82,7 +88,7 @@ Window {
     property var highlightedZoneIds: []
     property string sourceZoneId: ""
     property int windowCount: 1
-    property color errorColor: "red"
+    property color errorColor: Kirigami.Theme.negativeTextColor
     // Re-export the loaded content's contentDesiredWidth/Height — the C++
     // OSD show paths read these via window->property("contentDesiredWidth")
     // to size the layer surface (and to compute matching layer-shell margins),
