@@ -300,6 +300,14 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         setNeedsSave(true);
     });
+    // Forward the helper's per-mode monitor-disable signal up so QML bridges
+    // can react to programmatic changes (daemon shortcut, D-Bus write) the
+    // same way they react to user-driven toggles. setMonitorDisabled goes
+    // through ScreenHelper::setMonitorDisabledFor which emits this; without
+    // the forward, QML Connections { onDisabledMonitorsChanged: … } targeting
+    // settingsController would silently never fire.
+    connect(&m_screenHelper, &ScreenHelper::disabledMonitorsChanged, this,
+            &SettingsController::disabledMonitorsChanged);
 
     // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);

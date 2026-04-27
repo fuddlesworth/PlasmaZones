@@ -36,6 +36,7 @@ QtObject {
     // Forward external changes (daemon shortcuts) to QML consumers
     property Connections _externalSignals
 
+    signal disabledMonitorsChanged()
     signal disabledDesktopsChanged()
     signal disabledActivitiesChanged()
     signal screenAssignmentsChanged()
@@ -107,6 +108,12 @@ QtObject {
         // Per-mode signals carry the mode that flipped. Forward only when the
         // change is for the page's mode — the other page's bridge will see it
         // on its own connection.
+        function onDisabledMonitorsChanged(viewMode) {
+            if (viewMode === assignmentViewMode)
+                disabledMonitorsChanged();
+
+        }
+
         function onDisabledDesktopsChanged(viewMode) {
             if (viewMode === assignmentViewMode)
                 disabledDesktopsChanged();
