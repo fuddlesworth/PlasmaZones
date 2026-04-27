@@ -89,15 +89,19 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!state.zoneSelectorWindow) {
                 createZoneSelectorWindow(screenId, physScreen, targetGeom);
             }
-            auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
-            if (!window) {
+            const auto& s = m_screenStates.value(screenId);
+            auto* window = s.zoneSelectorWindow;
+            auto* surface = s.zoneSelectorSurface;
+            if (!window || !surface) {
                 continue;
             }
             assertWindowOnScreen(window, physScreen, targetGeom);
             updateZoneSelectorWindow(screenId);
             window->setWidth(targetGeom.width());
             window->setHeight(targetGeom.height());
-            QMetaObject::invokeMethod(window, "show");
+            // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup)
+            // and clears Qt.WindowTransparentForInput so input routes again.
+            surface->show();
         }
     } else {
         // Fallback: no Phosphor::Screens::ScreenManager
@@ -120,15 +124,18 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!state.zoneSelectorWindow) {
                 createZoneSelectorWindow(screenId, screen, geom);
             }
-            auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
-            if (!window) {
+            const auto& s = m_screenStates.value(screenId);
+            auto* window = s.zoneSelectorWindow;
+            auto* surface = s.zoneSelectorSurface;
+            if (!window || !surface) {
                 continue;
             }
             assertWindowOnScreen(window, screen);
             updateZoneSelectorWindow(screenId);
             window->setWidth(geom.width());
             window->setHeight(geom.height());
-            QMetaObject::invokeMethod(window, "show");
+            // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup).
+            surface->show();
         }
     }
 
@@ -146,16 +153,21 @@ void OverlayService::hideZoneSelector()
     // Note: Don't clear selected zone here — we need it for snapping when
     // drag ends. The selected zone is cleared after the snap is processed.
 
-    // Trigger the QML hide animation on every per-screen window. The QML
-    // animation's ScriptAction flips `_selectorDismissed`, which re-binds
-    // `Qt.WindowTransparentForInput` so the still-mapped layer surface stops
-    // intercepting clicks. Surfaces stay alive so the next drag-near-edge
-    // reuses the warmed Vulkan swapchain instead of paying ~50-100 ms for a
-    // fresh layer-shell attach.
+    // Phase 5: Surface::hide() routes through SurfaceAnimator's beginHide
+    // (widget.fadeOut profile, opacity 1→0) and flips
+    // Qt.WindowTransparentForInput on the QWindow. Surfaces stay alive so
+    // the next drag-near-edge reuses the warmed Vulkan swapchain instead
+    // of paying ~50-100 ms for a fresh layer-shell attach. Reset the QML-
+    // side hover state explicitly — autoScrollTimer would otherwise tick
+    // on stale cursor coords between hide and the next show.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
-        if (auto* window = m_screenStates.value(screenId).zoneSelectorWindow) {
-            QMetaObject::invokeMethod(window, "hide");
+        const auto& s = m_screenStates.value(screenId);
+        if (s.zoneSelectorWindow) {
+            QMetaObject::invokeMethod(s.zoneSelectorWindow, "resetCursorState");
+        }
+        if (s.zoneSelectorSurface) {
+            s.zoneSelectorSurface->hide();
         }
     }
 
@@ -392,8 +404,13 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     const auto role = PzRoles::ZoneSelector.withScopePrefix(
         QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
+    // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
+    // across hide/show cycles; SurfaceAnimator drives the visual fade and
+    // the library flips Qt::WindowTransparentForInput during the hide so
+    // the still-mapped layer surface stops eating clicks.
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), physScreen, role,
-                                       "zone selector", QVariantMap(), anchorsOverride, marginsOverride);
+                                       "zone selector", QVariantMap(), anchorsOverride, marginsOverride,
+                                       /*keepMappedOnHide=*/true);
     if (!surface) {
         return;
     }

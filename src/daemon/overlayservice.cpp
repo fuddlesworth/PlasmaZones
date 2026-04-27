@@ -403,7 +403,8 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
                                                            const PhosphorLayer::Role& role, const char* windowType,
                                                            const QVariantMap& windowProperties,
                                                            std::optional<PhosphorLayer::Anchors> anchorsOverride,
-                                                           std::optional<QMargins> marginsOverride)
+                                                           std::optional<QMargins> marginsOverride,
+                                                           bool keepMappedOnHide)
 {
     if (!screen) {
         qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << windowType;
@@ -417,6 +418,7 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
     cfg.windowProperties = windowProperties;
     cfg.anchorsOverride = anchorsOverride;
     cfg.marginsOverride = marginsOverride;
+    cfg.keepMappedOnHide = keepMappedOnHide;
     cfg.debugName = QString::fromUtf8(windowType);
 
     return m_surfaceManager->createSurface(std::move(cfg), this);

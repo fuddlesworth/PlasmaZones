@@ -187,7 +187,11 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
 
     qreal layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
-    QMetaObject::invokeMethod(window, "show");
+    // Phase 5: Surface::show() drives SurfaceAnimator (osd.show + osd.pop);
+    // restartDismissTimer kicks the QML auto-dismiss Timer that emits
+    // dismissRequested → surface->hide().
+    surface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
@@ -259,7 +263,8 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
-    QMetaObject::invokeMethod(window, "show");
+    surface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
 
@@ -293,7 +298,8 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, aspectRatio);
-    QMetaObject::invokeMethod(window, "show");
+    surface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
 
@@ -391,18 +397,27 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
     const auto role = PzRoles::LayoutOsd.withScopePrefix(
         QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, role, "layout OSD");
+    // Phase 5: keepMappedOnHide=true so SurfaceAnimator drives opacity for
+    // the visual fade and the library handles Qt.WindowTransparentForInput
+    // on hide. Surface stays Qt-visible across cycles — the warm-up pre-
+    // creation pattern stays intact.
+    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, role, "layout OSD",
+                                       QVariantMap(), std::nullopt, std::nullopt,
+                                       /*keepMappedOnHide=*/true);
     if (!surface) {
         return;
     }
 
-    // L3 v2 handles dismiss entirely in QML (see LayoutOsd.qml hideAnimation →
-    // ScriptAction → _osdDismissed = true). The surface stays warmed for the
-    // daemon's lifetime and is reused on every layout switch.
     auto& state = m_screenStates[screenId];
     state.layoutOsdSurface = surface;
     state.layoutOsdWindow = surface->window();
     state.layoutOsdPhysScreen = physScreen;
+
+    // Wire the QML auto-dismiss timer's `dismissRequested()` signal to
+    // Surface::hide() — drives the SurfaceAnimator's beginHide which
+    // animates opacity to zero. Without this connection the dismissTimer
+    // would have nothing to call (Phase 5 removed the QML hide() function).
+    QObject::connect(state.layoutOsdWindow, SIGNAL(dismissRequested()), surface, SLOT(hide()));
 }
 
 void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
@@ -568,8 +583,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     centerLayerWindowOnScreen(navSurface ? navSurface->transport() : nullptr, physGeom, screenGeom, desiredWidth,
                               desiredHeight);
 
-    // Show with animation
-    QMetaObject::invokeMethod(window, "show");
+    // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
+    // restartDismissTimer kicks the QML auto-dismiss Timer that emits
+    // dismissRequested → surface->hide().
+    navSurface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
 
     qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action << "reason=" << reason
                       << "highlightedZones=" << highlightedZoneIds;
@@ -591,8 +609,10 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
     const auto role = PzRoles::NavigationOsd.withScopePrefix(
         QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
 
+    // Phase 5 keepMappedOnHide=true (same rationale as createLayoutOsdWindow).
     auto* surface =
-        createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, role, "navigation OSD");
+        createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, role, "navigation OSD",
+                           QVariantMap(), std::nullopt, std::nullopt, /*keepMappedOnHide=*/true);
     if (!surface) {
         m_navigationOsdCreationFailed.insert(screenId, true);
         return;
@@ -603,6 +623,12 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
     state.navigationOsdWindow = surface->window();
     state.navigationOsdPhysScreen = physScreen;
     m_navigationOsdCreationFailed.remove(screenId);
+
+    // Wire the QML dismiss-timer signal to Surface::hide() — same pattern
+    // as createLayoutOsdWindow above. Without this the dismissTimer fires
+    // dismissRequested() into an unconnected signal and the OSD never
+    // visually dismisses.
+    QObject::connect(state.navigationOsdWindow, SIGNAL(dismissRequested()), surface, SLOT(hide()));
 }
 
 void OverlayService::destroyNavigationOsdWindow(const QString& screenId)

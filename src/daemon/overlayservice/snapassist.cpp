@@ -409,12 +409,11 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenId)
 {
-    // Guard: if picker is currently visible (mid-show or fully shown — the
-    // QML `_pickerDismissed` reflects the logical hide state), don't double-
-    // trigger. The surface stays Qt-visible across hide/show cycles so a
-    // bare `m_layoutPickerWindow` check is no longer the right signal — use
-    // the QML dismissed-flag instead.
-    if (m_layoutPickerWindow && !m_layoutPickerWindow->property("_pickerDismissed").toBool()) {
+    // Guard: if picker is currently shown (Surface state is Shown), don't
+    // double-trigger. The surface stays Qt-visible across hide/show cycles
+    // (keepMappedOnHide), so the Surface state machine is the right signal
+    // for "logically visible" — not the QQuickWindow's isVisible().
+    if (m_layoutPickerSurface && m_layoutPickerSurface->state() == PhosphorLayer::Surface::State::Shown) {
         return;
     }
 
@@ -520,12 +519,15 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         }
     }
 
-    // The QML root exposes a show() function that flips `_pickerDismissed`
-    // to false (re-binding the WindowTransparentForInput flag off), sets
-    // visible=true, and plays the show animation (opacity 0→1, scale-in).
-    // Surface stays Qt-visible across hide/show cycles so the next show
-    // reuses the warmed Vulkan swapchain.
-    QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
+    // Phase 5: Surface::show() drives the SurfaceAnimator (registered for
+    // PzRoles::LayoutPicker with osd.show + osd.pop) which animates
+    // opacity 0→1 and scale 0.9→1 with overshoot. The library handles
+    // visible=true and clears Qt.WindowTransparentForInput so input
+    // routing returns. requestActivate() asks the compositor to focus
+    // the still-Wayland-mapped layer surface (Wayland's keyboard focus
+    // is otherwise gated by the keyboard_interactivity setter above).
+    m_layoutPickerSurface->show();
+    m_layoutPickerWindow->requestActivate();
 
     qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
                       << "active=" << activeId << "reuseSurface=" << reuseSurface;
@@ -533,24 +535,23 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
 void OverlayService::hideLayoutPicker()
 {
-    if (!m_layoutPickerWindow) {
+    if (!m_layoutPickerSurface) {
         return;
     }
 
-    // Trigger QML hide animation. The animation's ScriptAction flips
-    // `_pickerDismissed` back on (re-binding WindowTransparentForInput) and
-    // emits dismissed() — but dismissed() is now connected to a Q_EMIT-only
-    // path in onLayoutPickerSelected / event-filter Escape paths, NOT to
-    // re-entry into hideLayoutPicker, so this stays a single-shot.
-    QMetaObject::invokeMethod(m_layoutPickerWindow, "hide");
+    // Phase 5: Surface::hide() drives the SurfaceAnimator's beginHide
+    // (osd.hide profile, opacity 1→0, scale 1→0.95). With keepMappedOnHide
+    // the library does NOT call QQuickWindow::hide(); it flips
+    // Qt.WindowTransparentForInput so the still-mapped layer surface stops
+    // eating clicks. Re-entrancy is benign — Surface::hide is a no-op when
+    // already in Hidden state.
+    m_layoutPickerSurface->hide();
 
     // Drop keyboard interactivity so the still-mapped layer surface stops
     // intercepting keyboard events while the hide animation is in flight
     // and afterwards. Mirrors snap-assist's hide path (line ~393).
-    if (m_layoutPickerSurface) {
-        if (auto* handle = m_layoutPickerSurface->transport()) {
-            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
-        }
+    if (auto* handle = m_layoutPickerSurface->transport()) {
+        handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
     }
 
     // Re-show the zone selector that was hidden when layout picker was shown (line ~435).
@@ -596,7 +597,10 @@ void OverlayService::warmUpLayoutPicker()
 
 bool OverlayService::isLayoutPickerVisible() const
 {
-    return m_layoutPickerWindow && m_layoutPickerWindow->isVisible();
+    // Phase 5 keepMappedOnHide: QQuickWindow.isVisible() stays true across
+    // logical hide/show cycles, so it's not a signal of "currently shown"
+    // anymore. Surface state machine is.
+    return m_layoutPickerSurface && m_layoutPickerSurface->state() == PhosphorLayer::Surface::State::Shown;
 }
 
 void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
@@ -636,8 +640,14 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     const auto role = PzRoles::LayoutPicker.withScopePrefix(
         QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
+    // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
+    // across hide/show cycles; SurfaceAnimator drives opacity for the
+    // visual fade and the library flips Qt::WindowTransparentForInput
+    // during the hide so the still-mapped layer surface stops eating
+    // clicks.
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, role,
-                                       "layout picker", QVariantMap(), anchorsOverride, marginsOverride);
+                                       "layout picker", QVariantMap(), anchorsOverride, marginsOverride,
+                                       /*keepMappedOnHide=*/true);
     if (!surface) {
         return;
     }

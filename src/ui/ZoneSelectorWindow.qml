@@ -19,6 +19,14 @@ Window {
     // KeyboardInteractivity::None (PzRoles::ZoneSelector) so the
     // compositor cannot grant it focus anyway. The call is a no-op
     // at best and may log warnings on strict compositors.
+    // Phase 5: surface lifecycle + show/hide animations are entirely library-
+    // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
+    // PzRoles::ZoneSelector) drives this Window's content opacity via its
+    // `panel.popup` / `widget.fadeOut` profiles; the PhosphorLayer::Surface
+    // state machine handles `Qt.WindowTransparentForInput` on the underlying
+    // QWindow during the hide cycle. The previous `_selectorDismissed` flag
+    // + `showAnimation` / `hideAnimation` blocks are gone.
+    // (Phase 5: showAnimation / hideAnimation removed — library drives.)
 
     id: root
 
@@ -122,14 +130,6 @@ Window {
     property real inactiveOpacity: 0.3 // Match Settings default
     // Shared fade color for scroll edge indicators
     readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
-    // Mirror of LayoutOsd's `_osdDismissed` lifecycle. True while the selector
-    // is logically hidden — set on warm-up (window pre-created but not yet
-    // shown), cleared by show(), set again at the end of the hide animation.
-    // The Window flags binding folds in `Qt.WindowTransparentForInput` while
-    // this is true so the still-mapped layer surface doesn't intercept clicks
-    // at its screen position. Toggled on discrete show/dismiss events — NOT
-    // tied to opacity — so the flag doesn't churn during the fade.
-    property bool _selectorDismissed: true
 
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
@@ -146,80 +146,27 @@ Window {
         }
     }
 
-    function show() {
-        showAnimation.stop();
-        hideAnimation.stop();
-        contentWrapper.opacity = 0;
-        root._selectorDismissed = false;
-        root.visible = true;
-        showAnimation.start();
-    }
-
-    function hide() {
-        showAnimation.stop();
-        // Reset cursor state so autoScrollTimer doesn't tick on stale
-        // coordinates between hide and the next show().
+    /// Reset transient hover state. C++ calls this from hideZoneSelector
+    /// before invoking Surface::hide() so the autoScrollTimer doesn't tick
+    /// on stale coordinates between hide and the next show().
+    function resetCursorState() {
         root.cursorX = -1;
         root.cursorY = -1;
-        if (root._selectorDismissed)
-            return ;
-
-        hideAnimation.start();
     }
 
-    // Window configuration for overlay - QPA layer-shell plugin handles layering on Wayland.
-    // TransparentForInput is bound to the dismiss state so the layer surface —
-    // which we keep Qt-visible across hide/show cycles to avoid Wayland Vulkan-
-    // swapchain re-init cost — stops intercepting clicks while logically hidden.
-    flags: Qt.FramelessWindowHint | Qt.Tool | (root._selectorDismissed ? Qt.WindowTransparentForInput : 0)
+    // Window configuration. Static flags — Phase 5 surface lifecycle owns
+    // `Qt.WindowTransparentForInput` on the underlying QWindow during hide.
+    flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
     visible: false
 
-    // Animation constants
+    // Animation constants (kept for non-show/hide bindings inside this file
+    // that still reference shortDuration / normalDuration).
     QtObject {
         id: animationConstants
 
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
-    }
-
-    ParallelAnimation {
-        id: showAnimation
-
-        PhosphorMotionAnimation {
-            target: contentWrapper
-            properties: "opacity"
-            from: 0
-            to: 1
-            profile: "panel.popup"
-            durationOverride: animationConstants.shortDuration
-        }
-
-    }
-
-    SequentialAnimation {
-        id: hideAnimation
-
-        // Hide-out wants an InCubic-style accel curve. panel.popup is the
-        // shared decel/show profile; widget.fadeOut carries the cubic-in
-        // shape so the window's hide actually accelerates as it leaves.
-        PhosphorMotionAnimation {
-            target: contentWrapper
-            properties: "opacity"
-            to: 0
-            profile: "widget.fadeOut"
-            durationOverride: animationConstants.shortDuration
-        }
-
-        ScriptAction {
-            // Do NOT set root.visible = false — the surface stays Qt-visible
-            // for the daemon's lifetime so the next show() reuses the warmed
-            // Vulkan swapchain. _selectorDismissed flips the
-            // WindowTransparentForInput flag instead, so the still-mapped
-            // layer surface stops eating clicks at its screen position.
-            script: root._selectorDismissed = true
-        }
-
     }
 
     // Auto-scroll constants for drag-based scrolling.

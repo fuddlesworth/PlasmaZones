@@ -608,7 +608,8 @@ private:
                                                const char* windowType,
                                                const QVariantMap& windowProperties = QVariantMap(),
                                                std::optional<PhosphorLayer::Anchors> anchorsOverride = std::nullopt,
-                                               std::optional<QMargins> marginsOverride = std::nullopt);
+                                               std::optional<QMargins> marginsOverride = std::nullopt,
+                                               bool keepMappedOnHide = false);
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
