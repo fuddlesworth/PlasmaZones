@@ -483,7 +483,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // would never show. The non-sentinel entries serve double duty: they
     // activate the overlay when always-active is off, and deactivate it
     // (hold or toggle) when always-active is on (#249).
-    const bool triggerHeld = anyNonSentinelTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
+    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
 
     // ── Autotile drag-insert preview (runs even when m_snapCancelled) ───────
     // This block is intentionally ABOVE the snap-cancelled early return because
@@ -623,19 +623,25 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
 
     // Conflict detection: warn once per drag when activation and zone span
-    // share an identical trigger entry. Runtime semantics are AND within an
-    // entry (both modifier and mouseButton must match — see anyTriggerHeld),
-    // so a partial-field overlap like (Ctrl, LMB) vs (Ctrl, RMB) is not
-    // actually a conflict and shouldn't warn.
+    // can both fire on the same physical input. Runtime semantics are AND
+    // within an entry, with 0 acting as a wildcard for that field (see
+    // anyTriggerHeld). So (Ctrl, LMB) vs (Ctrl, RMB) is not a conflict —
+    // those triggers are mutually exclusive — but (Ctrl, 0) vs (Ctrl, RMB)
+    // IS, because the 0-button entry matches whenever Ctrl is held,
+    // including when Ctrl+RMB satisfies the zone-span entry too. Treat 0 as
+    // wildcard in both fields to catch these real overlaps.
     if (!m_modifierConflictWarned) {
         m_modifierConflictWarned = true;
         for (const auto& at : m_cachedActivationTriggers) {
             if (at.modifier == 0 && at.mouseButton == 0)
                 continue;
             for (const auto& st : m_cachedZoneSpanTriggers) {
-                if (at.modifier == st.modifier && at.mouseButton == st.mouseButton) {
-                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
-                                            << "(mod:" << at.modifier << "btn:" << at.mouseButton << ");"
+                const bool modOverlap = at.modifier == st.modifier || at.modifier == 0 || st.modifier == 0;
+                const bool btnOverlap = at.mouseButton == st.mouseButton || at.mouseButton == 0 || st.mouseButton == 0;
+                if (modOverlap && btnOverlap) {
+                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span can both match"
+                                            << "(activation mod:" << at.modifier << "btn:" << at.mouseButton
+                                            << "vs zone-span mod:" << st.modifier << "btn:" << st.mouseButton << ");"
                                             << "zone span takes priority when both match";
                 }
             }

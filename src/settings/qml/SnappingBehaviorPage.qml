@@ -68,8 +68,11 @@ Flickable {
                     // resolveActivationActive in the runtime mirrors this with
                     // an inversion gated on alwaysActiveOnDrag.
                     SettingsRow {
-                        title: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
-                        description: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
+                        readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
+                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
+
+                        title: activeTitle
+                        description: activeDescription
 
                         ModifierAndMouseCheckBoxes {
                             id: dragActivationInput
@@ -91,8 +94,10 @@ Flickable {
                     }
 
                     SettingsRow {
+                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
+
                         title: i18n("Toggle mode")
-                        description: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
+                        description: activeDescription
 
                         SettingsSwitch {
                             checked: appSettings.toggleActivation

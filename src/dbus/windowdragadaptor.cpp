@@ -182,23 +182,11 @@ QVector<WindowDragAdaptor::ParsedTrigger> WindowDragAdaptor::parseTriggers(const
 }
 
 bool WindowDragAdaptor::anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
-                                       int mouseButtons) const
-{
-    for (const auto& pt : triggers) {
-        const bool modMatch = (pt.modifier == 0) || checkModifier(pt.modifier, mods);
-        const bool btnMatch = (pt.mouseButton == 0) || (mouseButtons & pt.mouseButton) != 0;
-        if (modMatch && btnMatch && (pt.modifier != 0 || pt.mouseButton != 0))
-            return true;
-    }
-    return false;
-}
-
-bool WindowDragAdaptor::anyNonSentinelTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
-                                                  int mouseButtons) const
+                                       int mouseButtons, bool excludeSentinel) const
 {
     const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
     for (const auto& pt : triggers) {
-        if (pt.modifier == alwaysActive)
+        if (excludeSentinel && pt.modifier == alwaysActive)
             continue;
         const bool modMatch = (pt.modifier == 0) || checkModifier(pt.modifier, mods);
         const bool btnMatch = (pt.mouseButton == 0) || (mouseButtons & pt.mouseButton) != 0;

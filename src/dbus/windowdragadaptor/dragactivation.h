@@ -26,9 +26,9 @@ namespace PlasmaZones {
  * in normal mode now deactivate it (hold mode → trigger held hides overlay;
  * toggle mode → tap to toggle off the implicitly-on overlay). @p triggerHeld
  * MUST be computed from the non-sentinel entries only (see
- * @c WindowDragAdaptor::anyNonSentinelTriggerHeld) — the sentinel matches
- * every tick by definition, which would otherwise make inversion read as
- * "always held" and the overlay never show.
+ * @c WindowDragAdaptor::anyTriggerHeld with @c excludeSentinel = true) —
+ * the sentinel matches every tick by definition, which would otherwise make
+ * inversion read as "always held" and the overlay never show.
  */
 struct ActivationDecision
 {
@@ -37,6 +37,10 @@ struct ActivationDecision
     bool nextActivationToggled = false; ///< Feedback for the toggle latch.
 };
 
+// PLASMAZONES_EXPORT keeps the symbol in plasmazones_core's dynamic symbol
+// table so the unit test (test_drag_activation) can resolve it at runtime.
+// Without it the build's effective hidden visibility makes the function
+// local and the test fails with an undefined-symbol error.
 PLASMAZONES_EXPORT ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode,
                                                               bool alwaysActiveOnDrag, bool prevTriggerHeld,
                                                               bool activationToggled);
