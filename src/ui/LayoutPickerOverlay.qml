@@ -70,7 +70,11 @@ Window {
     /// on an already-Hidden surface and the library logs a `qCWarning` per
     /// spurious click. Same shape as the latches in LayoutOsd.qml /
     /// NavigationOsd.qml — the picker has no auto-dismiss timer, so the
-    /// reset is bound to the C++-driven `_shortcutsActive` flip below.
+    /// reset is driven explicitly from C++: OverlayService::showLayoutPicker
+    /// writes `_dismissed = false` alongside `_shortcutsActive = true`
+    /// before calling `Surface::show()`. (QML's `on<Name>Changed` handler
+    /// form does not work for underscore-prefixed properties, so the
+    /// natural-looking binding-from-QML path isn't an option.)
     property bool _dismissed: false
     // Phase 5: surface lifecycle + show/hide animations are entirely library-
     // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
@@ -146,18 +150,6 @@ Window {
         }
     }
 
-    /// Reset the dismiss latch on every transition into a logically-shown
-    /// state. C++ writes `_shortcutsActive = true` from showLayoutPicker
-    /// before Surface::show(); writes `false` from hideLayoutPicker before
-    /// Surface::hide(). The false→true transition is the canonical "the
-    /// picker is becoming user-active again" signal, so the latch reset
-    /// rides it. Any path that flips `_shortcutsActive` (current or
-    /// future) keeps the latch in sync without a forgetful caller.
-    onShortcutsActiveChanged: {
-        if (_shortcutsActive)
-            _dismissed = false;
-
-    }
     // Window configuration. Static flags — Phase 5 surface lifecycle owns
     // `Qt.WindowTransparentForInput` on the underlying QWindow during the
     // hide cycle (Surface::Impl::drive sets the flag when keepMappedOnHide

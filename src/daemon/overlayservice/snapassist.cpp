@@ -604,6 +604,14 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // hidden picker (still Qt-visible under keepMappedOnHide) doesn't
     // silently respond to stray accelerator deliveries.
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), true);
+    // Reset the QML-side dismiss latch (LayoutPickerOverlay.qml's
+    // `_dismissed`) so multiple rapid backdrop clicks during the
+    // upcoming show cycle collapse into a single dismissRequested.
+    // QML's `on<Name>Changed` handler form does not work for
+    // underscore-prefixed properties, so the latch reset is driven
+    // explicitly here rather than tied to `_shortcutsActive`'s change
+    // signal in QML.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_dismissed"), false);
 
     // Phase 5: Surface::show() drives the SurfaceAnimator (registered for
     // PzRoles::LayoutPicker with osd.show + osd.pop) which animates
