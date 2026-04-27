@@ -913,25 +913,40 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
 void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 {
-    // Walk the dot-path "Snapping" → "Behavior" → "Display" structure to find
-    // the v2 disable lists. Empty objects along the way mean nothing to migrate.
-    const auto snappingIt = root.find(QLatin1String("Snapping"));
-    QJsonObject snapping;
-    if (snappingIt != root.end() && snappingIt->isObject()) {
-        snapping = snappingIt->toObject();
-    }
+    // Walk the canonical v2 dot-path Snapping.Behavior.Display by splitting
+    // the group accessor on '.' — this keeps the migration in lockstep with
+    // the schema instead of duplicating segment names as bare literals.
+    // The accessor still resolves to the v2 group because that group lives
+    // on past v3 (it continues to hold ShowOnAllMonitors and
+    // FilterByAspectRatio); only the three Disabled* keys move out.
+    const QStringList v2GroupSegments =
+        ConfigKeys::snappingBehaviorDisplayGroup().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    Q_ASSERT(v2GroupSegments.size() == 3);
+    const QString& snappingSeg = v2GroupSegments[0];
+    const QString& behaviorSeg = v2GroupSegments[1];
+    const QString& displaySeg = v2GroupSegments[2];
 
-    QJsonObject behavior = snapping.value(QLatin1String("Behavior")).toObject();
-    QJsonObject v2Display = behavior.value(QLatin1String("Display")).toObject();
+    QJsonObject snapping = root.value(snappingSeg).toObject();
+    QJsonObject behavior = snapping.value(behaviorSeg).toObject();
+    QJsonObject v2Display = behavior.value(displaySeg).toObject();
 
+    // takeKey: read the v2 string value at @p key, drop the key from @p obj
+    // unconditionally if present (even when the value isn't a string — we
+    // don't want a hand-edited array or null lingering past the migration
+    // and looking like live v2 data on a v3-stamped config), and return
+    // the string representation when one is available.
     auto takeKey = [](QJsonObject& obj, const QString& key) -> QString {
-        const QJsonValue v = obj.value(key);
-        if (v.isString()) {
-            const QString s = v.toString();
-            obj.remove(key);
-            return s;
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            return {};
         }
-        return {};
+        const QJsonValue v = it.value();
+        QString result;
+        if (v.isString()) {
+            result = v.toString();
+        }
+        obj.erase(it);
+        return result;
     };
 
     const QString v2Monitors = takeKey(v2Display, ConfigKeys::v2DisabledMonitorsKey());
@@ -959,19 +974,19 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
     // the Display sub-object entirely if it became empty (no ShowOnAllMonitors
     // / FilterByAspectRatio either). Same for Snapping.Behavior itself.
     if (v2Display.isEmpty()) {
-        behavior.remove(QLatin1String("Display"));
+        behavior.remove(displaySeg);
     } else {
-        behavior[QLatin1String("Display")] = v2Display;
+        behavior[displaySeg] = v2Display;
     }
     if (behavior.isEmpty()) {
-        snapping.remove(QLatin1String("Behavior"));
+        snapping.remove(behaviorSeg);
     } else {
-        snapping[QLatin1String("Behavior")] = behavior;
+        snapping[behaviorSeg] = behavior;
     }
     if (snapping.isEmpty()) {
-        root.remove(QLatin1String("Snapping"));
+        root.remove(snappingSeg);
     } else {
-        root[QLatin1String("Snapping")] = snapping;
+        root[snappingSeg] = snapping;
     }
 
     if (!v3Display.isEmpty()) {

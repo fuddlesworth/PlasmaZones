@@ -118,6 +118,21 @@ void Settings::load()
             snapshot[i] = prop.read(this);
     }
 
+    // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
+    // argument, which Q_PROPERTY can't express). Snapshot them explicitly
+    // so the post-reparse re-emission below can fire the per-mode signals
+    // when an external write — daemon shortcut, D-Bus call, discard path —
+    // changes a list. Without this, QML consumers bound through the bridge
+    // never see cross-process disable-state changes until the page is
+    // re-rendered.
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    const QStringList snapMonitorsBefore = disabledMonitors(Mode::Snapping);
+    const QStringList autotileMonitorsBefore = disabledMonitors(Mode::Autotile);
+    const QStringList snapDesktopsBefore = disabledDesktops(Mode::Snapping);
+    const QStringList autotileDesktopsBefore = disabledDesktops(Mode::Autotile);
+    const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
+    const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
+
     m_configBackend->reparseConfiguration();
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -150,6 +165,22 @@ void Settings::load()
             notify.invoke(this, Qt::DirectConnection);
         }
     }
+
+    // Per-mode disable lists: emit each signal once if its list changed.
+    // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
+    // of by property index.
+    if (disabledMonitors(Mode::Snapping) != snapMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
+    if (disabledMonitors(Mode::Autotile) != autotileMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
+    if (disabledDesktops(Mode::Snapping) != snapDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
+    if (disabledDesktops(Mode::Autotile) != autotileDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
+    if (disabledActivities(Mode::Snapping) != snapActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
+    if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────

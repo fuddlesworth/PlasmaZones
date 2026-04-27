@@ -32,8 +32,10 @@ bool ScreenHelper::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, 
 void ScreenHelper::setMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                                       bool disabled)
 {
-    setMonitorDisabledFor(m_settings, mode, screenName, disabled, [this, mode]() {
-        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
+    // Settings::setDisabledMonitors fires ISettings::disabledMonitorsChanged(mode)
+    // when the canonicalised list actually changes. SettingsController forwards
+    // that signal to QML, so ScreenHelper only needs to mark the page dirty.
+    setMonitorDisabledFor(m_settings, mode, screenName, disabled, [this]() {
         Q_EMIT needsSave();
     });
 }

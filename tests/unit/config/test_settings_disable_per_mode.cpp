@@ -204,6 +204,76 @@ private Q_SLOTS:
         QCOMPARE(contextDisabledReason(&settings, Mode::Autotile, screen, desktop, activity),
                  DisabledReason::ActivityDisabled);
     }
+
+    // =========================================================================
+    // load() cross-process refresh
+    //
+    // When a daemon shortcut or D-Bus call writes to the on-disk config, the
+    // settings UI's onExternalSettingsChanged() invokes Settings::load() to
+    // reparse. Because the per-mode disable accessors are not Q_PROPERTYs
+    // (their getters take a Mode argument), the meta-object loop in load()
+    // can't re-emit them via NOTIFY — load() must do so explicitly. Without
+    // that explicit emission, QML bindings driven by SharedBridge's
+    // disabledMonitorsChanged() never fire on cross-process changes.
+    // =========================================================================
+
+    /// Simulates the cross-process flow: writer instance flips a value to disk,
+    /// observer instance reloads and is expected to emit the per-mode signal
+    /// for whichever list actually changed (and ONLY that one).
+    void testLoad_emitsPerModeSignalsForExternalWrites()
+    {
+        IsolatedConfigGuard guard;
+        Settings writerSettings;
+        Settings observerSettings;
+
+        QSignalSpy monitorSpy(&observerSettings, &Settings::disabledMonitorsChanged);
+        QSignalSpy desktopSpy(&observerSettings, &Settings::disabledDesktopsChanged);
+        QSignalSpy activitySpy(&observerSettings, &Settings::disabledActivitiesChanged);
+        QVERIFY(monitorSpy.isValid());
+        QVERIFY(desktopSpy.isValid());
+        QVERIFY(activitySpy.isValid());
+
+        // Writer flips snap-side monitor list and persists.
+        writerSettings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        writerSettings.save();
+
+        // Observer's load() picks up the on-disk delta. Only the snap-side
+        // monitor signal should fire — autotile monitor list and both
+        // desktop/activity lists were unchanged.
+        observerSettings.load();
+
+        QCOMPARE(monitorSpy.count(), 1);
+        QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Snapping));
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(activitySpy.count(), 0);
+
+        // Observer now sees the new value via its own getter.
+        QCOMPARE(observerSettings.disabledMonitors(Mode::Snapping), QStringList{QStringLiteral("DP-1")});
+        QVERIFY(observerSettings.disabledMonitors(Mode::Autotile).isEmpty());
+    }
+
+    /// load() must NOT fire any per-mode signal when the on-disk value matches
+    /// what the observer already had. Otherwise every save() / load() cycle
+    /// (e.g. discard-changes) would churn QML bindings unnecessarily.
+    void testLoad_noEmitWhenUnchanged()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        settings.save();
+
+        QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
+        QSignalSpy desktopSpy(&settings, &Settings::disabledDesktopsChanged);
+        QSignalSpy activitySpy(&settings, &Settings::disabledActivitiesChanged);
+        QVERIFY(monitorSpy.isValid());
+
+        // Reload without any external mutation — file content matches memory.
+        settings.load();
+
+        QCOMPARE(monitorSpy.count(), 0);
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(activitySpy.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestSettingsDisablePerMode)

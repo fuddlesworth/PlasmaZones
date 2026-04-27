@@ -38,9 +38,10 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void screensChanged();
-    /// Per-mode disable list changed. The argument matches
-    /// PhosphorZones::AssignmentEntry::Mode (0 = snapping, 1 = autotile).
-    void disabledMonitorsChanged(int viewMode);
+    // Note: there is no disabledMonitorsChanged here. The canonical source is
+    // ISettings::disabledMonitorsChanged(Mode), which Settings emits on every
+    // write (in-process or via load() reparse). SettingsController forwards
+    // that signal to QML; ScreenHelper only needs to mark dirty via needsSave().
     void needsSave();
 
 private:

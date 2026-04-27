@@ -300,14 +300,27 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         setNeedsSave(true);
     });
-    // Forward the helper's per-mode monitor-disable signal up so QML bridges
-    // can react to programmatic changes (daemon shortcut, D-Bus write) the
-    // same way they react to user-driven toggles. setMonitorDisabled goes
-    // through ScreenHelper::setMonitorDisabledFor which emits this; without
-    // the forward, QML Connections { onDisabledMonitorsChanged: … } targeting
-    // settingsController would silently never fire.
-    connect(&m_screenHelper, &ScreenHelper::disabledMonitorsChanged, this,
-            &SettingsController::disabledMonitorsChanged);
+
+    // Forward the per-mode disable signals from the underlying Settings up
+    // through the controller so QML bridges react regardless of write origin:
+    //   - in-process toggle in this UI (controller invokables → Settings setters)
+    //   - cross-process external write reflected via load() (daemon shortcut,
+    //     D-Bus call to SettingsAdaptor) — see Settings::load() for the
+    //     post-reparse emission of these signals
+    //   - ScreenHelper-mediated monitor toggle (the helper writes through to
+    //     Settings, which fires the underlying signal)
+    // Single forwarding point keeps the three modes' write paths symmetrical
+    // and avoids per-callsite Q_EMIT bookkeeping.
+    connect(&m_settings, &ISettings::disabledMonitorsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
+        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
+    });
+    connect(&m_settings, &ISettings::disabledDesktopsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
+        Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
+    });
+    connect(&m_settings, &ISettings::disabledActivitiesChanged, this,
+            [this](PhosphorZones::AssignmentEntry::Mode mode) {
+                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
+            });
 
     // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
@@ -1494,8 +1507,22 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
 // every call through the helper keeps the cast explicit and gives us a single
 // place to add range-clamping if a future mode is introduced.
+//
+// SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
+// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
+// subclass forgets the override, every disable read/write would silently
+// land on the snapping list — exactly the mode confusion this whole
+// machinery is meant to eliminate. Warn loudly so the bug is caught the
+// first time a developer tests the affected page.
 static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
+    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
+        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
+        qCWarning(PlasmaZones::lcCore)
+            << "modeFromViewMode: unexpected viewMode" << viewMode
+            << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
+        Q_ASSERT(false && "modeFromViewMode received a value outside {Snapping=0, Autotile=1}");
+    }
     return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
         ? PhosphorZones::AssignmentEntry::Autotile
         : PhosphorZones::AssignmentEntry::Snapping;
@@ -1518,6 +1545,9 @@ bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenNa
 
 void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
 {
+    // The disabledDesktopsChanged(viewMode) signal is fired by the
+    // m_settings → controller forward in the constructor — no manual emit
+    // needed here.
     const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + QString::number(desktop);
     QStringList entries = m_settings.disabledDesktops(mode);
@@ -1525,11 +1555,9 @@ void SettingsController::setDesktopDisabled(int viewMode, const QString& screenN
         entries.append(key);
         m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged(viewMode);
     } else if (!disabled && entries.removeAll(key) > 0) {
         m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged(viewMode);
     }
 }
 
@@ -1541,6 +1569,8 @@ bool SettingsController::isActivityDisabled(int viewMode, const QString& screenN
 void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
                                              bool disabled)
 {
+    // See setDesktopDisabled — the per-mode signal is forwarded from
+    // m_settings via the connect set up in the constructor.
     const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + activityId;
     QStringList entries = m_settings.disabledActivities(mode);
@@ -1548,11 +1578,9 @@ void SettingsController::setActivityDisabled(int viewMode, const QString& screen
         entries.append(key);
         m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged(viewMode);
     } else if (!disabled && entries.removeAll(key) > 0) {
         m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged(viewMode);
     }
 }
 
@@ -1614,13 +1642,13 @@ void SettingsController::onVirtualDesktopsChanged()
     refreshVirtualDesktops();
 
     // Prune both per-mode disabled-desktop lists — see start.cpp comment re:
-    // mid-range renumbering limitation.
+    // mid-range renumbering limitation. The per-mode disabledDesktopsChanged
+    // signal is forwarded from m_settings (see ctor); no manual emit here.
     for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
         QStringList disabled = m_settings.disabledDesktops(mode);
         if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
             m_settings.setDisabledDesktops(mode, disabled);
             setNeedsSave(true);
-            Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
         }
     }
 
@@ -1641,12 +1669,12 @@ void SettingsController::onActivitiesChanged()
                 validIds.insert(id);
             }
         }
+        // Per-mode signal forwarded from m_settings (see ctor) — no manual emit.
         for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
             QStringList disabledActs = m_settings.disabledActivities(mode);
             if (pruneDisabledActivityEntries(disabledActs, validIds)) {
                 m_settings.setDisabledActivities(mode, disabledActs);
                 setNeedsSave(true);
-                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
             }
         }
     }
