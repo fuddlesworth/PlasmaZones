@@ -89,6 +89,25 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     std::optional<KeyboardInteractivity> keyboardOverride;
     std::optional<QMargins> marginsOverride;
 
+    // ── Lifecycle policy ────────────────────────────────────────────────
+    /// When true, Surface::hide() does NOT call QQuickWindow::hide(); the
+    /// surface stays Qt-visible and the visual "hidden" state is driven by
+    /// the injected ISurfaceAnimator (typically by animating the root QML
+    /// item's opacity to 0). The library still flips the underlying
+    /// QWindow's `Qt::WindowTransparentForInput` flag during the hide so
+    /// the still-mapped layer surface stops intercepting clicks at its
+    /// screen position.
+    ///
+    /// Use this for overlays where reattaching the wl_surface (and its
+    /// Vulkan swapchain) on every show/hide cycle is too expensive — the
+    /// PlasmaZones layout picker, navigation OSD, and zone selector all
+    /// fall into this category. The Phase-4 LayoutOsd "L3 v2" pattern
+    /// pioneered this for OSDs; Phase 5 generalises it into the library.
+    ///
+    /// Default `false` preserves the original lifecycle: hide() unmaps the
+    /// window immediately and a future show() pays the reattach cost.
+    bool keepMappedOnHide = false;
+
     /// Logged in state transitions. Defaults to Role::scopePrefix when empty.
     QString debugName;
 

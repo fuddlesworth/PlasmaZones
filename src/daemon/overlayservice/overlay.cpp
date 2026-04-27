@@ -398,8 +398,13 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
 
     PhosphorLayer::Surface* surface = nullptr;
     if (usingShader) {
-        surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), physScreen, role,
-                                     "shader overlay", initProps, anchorsOverride, marginsOverride);
+        surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")),
+                                      .screen = physScreen,
+                                      .role = role,
+                                      .windowType = "shader overlay",
+                                      .windowProperties = initProps,
+                                      .anchorsOverride = anchorsOverride,
+                                      .marginsOverride = marginsOverride});
         if (surface) {
             qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screenId;
         } else {
@@ -409,8 +414,13 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         }
     }
     if (!surface) {
-        surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), physScreen, role, "overlay",
-                                     initProps, anchorsOverride, marginsOverride);
+        surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")),
+                                      .screen = physScreen,
+                                      .role = role,
+                                      .windowType = "overlay",
+                                      .windowProperties = initProps,
+                                      .anchorsOverride = anchorsOverride,
+                                      .marginsOverride = marginsOverride});
         if (!surface) {
             return;
         }

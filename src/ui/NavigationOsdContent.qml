@@ -5,44 +5,45 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 
 /**
- * Navigation OSD content — Item-rooted body for use either inside the
- * standalone NavigationOsd Window or inside the unified NotificationOverlay
- * host that swaps OSD/picker modes via Loader.
+ * Navigation OSD content — Item-rooted body for use inside the unified
+ * NotificationOverlay host that swaps OSD modes via Loader.
  *
- * Owns the toast's data properties, animations, dismiss timer, show/hide
- * functions, and content tree. The hosting Window is a thin shell that
- * forwards C++ property writes via aliases and binds Qt.WindowTransparentForInput
- * to the public `dismissed` state.
+ * Phase 5: surface lifecycle + show/hide animations are driven entirely by
+ * PhosphorAnimationLayer::SurfaceAnimator (registered for the notification
+ * scope with the shared OSD config — `osd.show` / `osd.pop` / `osd.hide`).
+ * The library handles the visual fade by animating Window.contentItem
+ * opacity + scale on the host surface, and PhosphorLayer::Surface handles
+ * `Qt.WindowTransparentForInput` on the underlying QWindow during hide.
+ *
+ * This Item only owns:
+ *   - Data properties written by C++ (action, reason, zones, …)
+ *   - Computed messageText + container layout
+ *   - The auto-dismiss Timer + dismissRequested signal that C++ wires to
+ *     Surface::hide() (via the unified host's signal forwarding)
  */
 Item {
     id: root
 
-    // Navigation feedback data
+    // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
     property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
-    // Zone data
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
     property string sourceZoneId: "" // Source zone for move/swap operations
     property int windowCount: 1 // Number of windows affected (for rotation)
-    // Timing
+    // Auto-dismiss interval. Show/hide fade shapes are owned by the
+    // SurfaceAnimator's `osd.show` / `osd.pop` / `osd.hide` profile JSONs;
+    // tune the JSONs to adjust the appear/disappear feel rather than
+    // re-introducing per-window duration overrides here.
     property int displayDuration: 1000
-    // ms before auto-hide (shorter than layout OSD). Show/hide fade
-    // shapes are driven by the "osd.show" / "osd.hide" / "osd.pop"
-    // profile JSONs — tune those rather than re-introducing per-window
-    // duration overrides here.
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
     property color highlightColor: Kirigami.Theme.highlightColor
     property color errorColor: Kirigami.Theme.negativeTextColor
-    // Per-instance fade overrides forwarded from the host Window.
-    property int fadeInDuration: -1
-    property int fadeOutDuration: -1
     // Get target zone number (first highlighted zone)
     readonly property int targetZoneNumber: {
         if (highlightedZoneIds && highlightedZoneIds.length > 0)
@@ -169,19 +170,42 @@ Item {
             return i18n("Action completed");
         }
     }
-    // Public dismiss state used by the hosting Window's flags binding to
-    // toggle Qt.WindowTransparentForInput. True while the OSD is logically
-    // hidden (pre-first-show or after a full hide animation), cleared by
-    // show(), set again at the end of hideAnimation. NOT tied to opacity —
-    // discrete flip on show/dismiss only, so the host's input-region flag
-    // doesn't churn during the fade.
-    property bool dismissed: true
-    // Content-driven desired size, exposed for the hosting Window (or Loader
-    // host) to read after C++ writes action/reason/zones. Mirrors the live
-    // measurement of container's content so the host can size its layer
-    // surface to fit the rendered text.
+    // Content-driven desired size, exposed for the unified host (which binds
+    // its Window width/height to these readonly properties; C++ also reads
+    // them after every property write to compute matching layer-shell margins).
     readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
     readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
+    /// Idempotency latch for `dismissRequested`. The timer-fire path and the
+    /// MouseArea click path can both attempt to dismiss within the same
+    /// show cycle; without the latch, C++ runs Surface::hide() twice and the
+    /// second call qCWarnings on the already-Hidden state. Reset on every
+    /// dismissTimer.restart() via the Connections block below.
+    property bool _dismissed: false
+
+    /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
+    /// The unified NotificationOverlay host re-emits this as its own
+    /// `dismissRequested` so OverlayService::createWarmedOsdSurface's
+    /// connect to Surface::hide() drives the library animator's beginHide.
+    signal dismissRequested()
+
+    /// Restart the auto-dismiss timer from C++ on every show. Replaces the
+    /// QML-internal `dismissTimer.restart()` that the old show() used to
+    /// call. Latch reset is driven off the timer's runningChanged
+    /// transition (Connections block below) — that way any path that
+    /// restarts the timer (this helper today, or a hypothetical future
+    /// direct call) resets the latch automatically.
+    function restartDismissTimer() {
+        dismissTimer.restart();
+    }
+
+    /// Internal: emit dismissRequested at most once per show cycle.
+    function _requestDismiss() {
+        if (_dismissed)
+            return ;
+
+        _dismissed = true;
+        root.dismissRequested();
+    }
 
     // Helper function to normalize UUID format for comparison
     // Handles both "{uuid}" and "uuid" formats by stripping braces
@@ -230,108 +254,27 @@ Item {
         }
     }
 
-    // Show the OSD with animation
-    function show() {
-        // Stop any running animations to prevent conflicts
-        showAnimation.stop();
-        hideAnimation.stop();
-        dismissTimer.stop();
-        // Reset state for fresh animation
-        root.opacity = 0;
-        container.scale = 0.8;
-        root.dismissed = false;
-        showAnimation.start();
-        dismissTimer.restart();
-    }
-
-    // Hide the OSD with animation. After first show, root.opacity is the
-    // sole driver of the visible/invisible toggle — the host Window stays
-    // Qt-visible to preserve the Wayland layer-shell wl_surface and Vulkan
-    // swap chain across hide/show cycles, with input-region releases
-    // gated on `dismissed` via the host's flags binding.
-    function hide() {
-        if (root.dismissed)
-            return ;
-
-        showAnimation.stop();
-        dismissTimer.stop();
-        hideAnimation.start();
-    }
-
-    // Animated by show/hide animations. Item.opacity works on Wayland where
-    // Window.opacity does not — the previous standalone NavigationOsd.qml
-    // wrapped the content in a contentWrapper Item for exactly this reason;
-    // now that the root IS that Item, the wrapper layer is gone.
-    opacity: 0
-
-    // Auto-dismiss timer
+    // Auto-dismiss timer. Emits a signal that C++ hooks to Surface::hide().
     Timer {
         id: dismissTimer
 
         interval: root.displayDuration
-        onTriggered: root.hide()
+        onTriggered: root._requestDismiss()
     }
 
-    // Show animation — see matching comment in LayoutOsd.qml for the
-    // osd.show / osd.pop split rationale (preserves the OutBack scale
-    // overshoot from the pre-PhosphorMotion design). durationOverride
-    // binds to root.fadeInDuration / fadeOutDuration so consumers that
-    // override those properties still drive the timing.
-    ParallelAnimation {
-        id: showAnimation
-
-        PhosphorMotionAnimation {
-            target: root
-            properties: "opacity"
-            from: 0
-            to: 1
-            profile: "osd.show"
-            durationOverride: root.fadeInDuration
-        }
-
-        PhosphorMotionAnimation {
-            target: container
-            properties: "scale"
-            from: 0.8
-            to: 1
-            profile: "osd.pop"
-            durationOverride: root.fadeInDuration
-        }
-
-    }
-
-    // Hide animation
-    SequentialAnimation {
-        id: hideAnimation
-
-        ParallelAnimation {
-            PhosphorMotionAnimation {
-                target: root
-                properties: "opacity"
-                to: 0
-                profile: "osd.hide"
-                durationOverride: root.fadeOutDuration
-            }
-
-            PhosphorMotionAnimation {
-                target: container
-                properties: "scale"
-                to: 0.9
-                profile: "osd.hide"
-                durationOverride: root.fadeOutDuration
-            }
+    // Reset the dismiss latch when the timer (re)starts. Bound to the
+    // timer's runningChanged transition rather than inline in
+    // restartDismissTimer so the reset is the timer's responsibility,
+    // preventing a forgetful caller from leaving the OSD permanently
+    // latched-as-dismissed for the rest of its lifetime.
+    Connections {
+        function onRunningChanged() {
+            if (dismissTimer.running)
+                root._dismissed = false;
 
         }
 
-        ScriptAction {
-            script: {
-                // Flip dismissed so the host Window's flags binding engages
-                // Qt.WindowTransparentForInput. Window.visible is intentionally
-                // not toggled — see the host's hide()-related comment.
-                root.dismissed = true;
-            }
-        }
-
+        target: dismissTimer
     }
 
     // Shadow effect
@@ -378,13 +321,11 @@ Item {
 
     }
 
-    // Click to dismiss. Gated on dismissed so that in the post-hide
-    // transparent state we don't consume events at the Qt Quick level
-    // even if the wl_surface input region hasn't been updated yet.
+    // Click to dismiss. _requestDismiss collapses timer-fire + click into
+    // a single dismissRequested per show cycle.
     MouseArea {
         anchors.fill: parent
-        enabled: !root.dismissed
-        onClicked: root.hide()
+        onClicked: root._requestDismiss()
     }
 
 }

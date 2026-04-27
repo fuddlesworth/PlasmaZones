@@ -18,6 +18,7 @@ namespace PhosphorLayer {
 class ILayerShellTransport;
 class IQmlEngineProvider;
 class IScreenProvider;
+class ISurfaceAnimator;
 
 /**
  * @brief Stateless constructor for Surfaces.
@@ -56,6 +57,23 @@ public:
         /// isolation). Non-null → provider decides (e.g. return the same
         /// engine for every call to share).
         IQmlEngineProvider* engineProvider = nullptr;
+
+        /// Optional. Nullptr → Surface uses the no-op default animator
+        /// (synchronous beginShow/beginHide; identical to the pre-Phase-5
+        /// lifecycle). Non-null → Surface dispatches show/hide transitions
+        /// through this animator.
+        ///
+        /// **Lifetime contract**: when non-null, the animator MUST outlive
+        /// every Surface produced by this factory AND the factory itself.
+        /// The factory propagates the raw pointer into each `SurfaceDeps`,
+        /// and Surfaces dispatch through it on every state transition
+        /// (including their own destruction, which calls `cancel()` to
+        /// drop in-flight tracking). A common owner pattern: the consumer
+        /// holds the animator and the SurfaceFactory together with the
+        /// animator declared first so reverse-declaration-order destruction
+        /// destroys the factory (and any Surfaces it parented) before the
+        /// animator. See `OverlayService` member ordering for an example.
+        ISurfaceAnimator* animator = nullptr;
 
         /// Logging category name for internal diagnostics. Empty → "phosphorlayer".
         QString loggingCategory;

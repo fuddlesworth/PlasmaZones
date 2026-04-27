@@ -112,6 +112,7 @@ std::optional<SurfaceDeps> SurfaceFactory::validateAndPrepareDeps(SurfaceConfig&
     sdeps.transport = m_impl->m_deps.transport;
     sdeps.engineProvider = m_impl->m_deps.engineProvider;
     sdeps.screenProvider = m_impl->m_deps.screens;
+    sdeps.animator = m_impl->m_deps.animator;
     sdeps.loggingCategory =
         m_impl->m_deps.loggingCategory.isEmpty() ? QStringLiteral("phosphorlayer") : m_impl->m_deps.loggingCategory;
     return sdeps;

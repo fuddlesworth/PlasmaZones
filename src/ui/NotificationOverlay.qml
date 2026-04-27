@@ -8,37 +8,33 @@ import QtQuick.Window
  * Unified notification overlay — single Wayland layer-shell host that swaps
  * between LayoutOsd and NavigationOsd content via a Loader keyed on `mode`.
  *
- * Phase 2 of the surface-reduction plan: per effective screen the daemon
- * previously kept LayoutOsd and NavigationOsd warmed as two distinct
- * QQuickWindows / QSGRenderThreads / Vulkan swapchains / wl_surfaces. Both
- * use the same protocol shape (PzRoles::OsdBase — FullscreenOverlay layer,
- * AnchorAll, no keyboard, click-through), and the two modes are never
- * visible simultaneously, so they collapse cleanly to a single surface
+ * Per effective screen the daemon previously kept LayoutOsd and NavigationOsd
+ * warmed as two distinct QQuickWindows / QSGRenderThreads / Vulkan swapchains
+ * / wl_surfaces. Both use the same protocol shape (PzRoles::OsdBase —
+ * FullscreenOverlay layer, AnchorAll, no keyboard, click-through) and are
+ * never visible simultaneously, so they collapse cleanly to a single surface
  * whose content swaps based on which message is being shown.
  *
- * LayoutPickerOverlay does NOT participate — it uses CenteredModal
- * (exclusive keyboard, distinct anchors) and wlr-layer-shell anchors are
- * immutable post-attach. It keeps its own surface.
+ * LayoutPickerOverlay does NOT participate — it uses CenteredModal (exclusive
+ * keyboard, distinct anchors) and wlr-layer-shell anchors are immutable
+ * post-attach. It keeps its own surface.
  *
- * Window configuration mirrors the per-mode standalone files: keep
- * root.visible == true after the first show() for the window's entire
- * lifetime (Qt's Vulkan backend on Wayland layer-shell can't reliably
- * reinitialize the VkSwapchainKHR after the wl_surface is torn down by
- * hide), and toggle Qt.WindowTransparentForInput via the loaded content's
- * `dismissed` flip so the invisible-but-Qt-visible layer surface doesn't
- * eat clicks at its screen position.
+ * Phase 5 lifecycle:
+ *   - C++ writes mode + data properties, then calls `surface->show()`
+ *     which drives the SurfaceAnimator's beginShow (osd.show + osd.pop).
+ *   - C++ also invokes the QML `restartDismissTimer()` function so the
+ *     loaded content's auto-dismiss timer (re)starts.
+ *   - When the timer fires (or the user clicks the OSD body), the loaded
+ *     content emits `dismissRequested`; this host re-emits it as its own
+ *     `dismissRequested(string)` signal which OverlayService wires to
+ *     `Surface::hide()`. The library animator drives the fade out and
+ *     flips Qt.WindowTransparentForInput on the still-mapped layer
+ *     surface.
  *
- * C++ usage (osd.cpp):
- *   writeQmlProperty(window, "mode", "layout-osd");
- *   writeQmlProperty(window, "layoutId", ...);
- *   writeQmlProperty(window, "layoutName", ...);
- *   ...
- *   QMetaObject::invokeMethod(window, "show");
- *
- * Setting `mode` first triggers the Loader to instantiate the matching
- * content; subsequent property writes flow through bindings to the loaded
- * item. The bindings are declared per-Component below — each Component
- * only references the subset of root properties its content type uses.
+ * Window.visible flips to true on the first Surface::show() and stays true
+ * for the surface's lifetime (keepMappedOnHide=true) — Qt's Vulkan backend
+ * on Wayland layer-shell doesn't reliably reinitialise the VkSwapchainKHR
+ * after the wl_surface is torn down by hide.
  */
 Window {
     // ── Mode selection ─────────────────────────────────────────────────────
@@ -58,8 +54,6 @@ Window {
     property color backgroundColor: "white"
     property color textColor: "black"
     property color highlightColor: "blue"
-    property int fadeInDuration: -1
-    property int fadeOutDuration: -1
     // ── LayoutOsd-only properties ──────────────────────────────────────────
     property string layoutId: ""
     property string layoutName: ""
@@ -91,48 +85,43 @@ Window {
     property color errorColor: "red"
     // Re-export the loaded content's contentDesiredWidth/Height — the C++
     // OSD show paths read these via window->property("contentDesiredWidth")
-    // to size the layer surface (and to compute the matching layer-shell
-    // margins), and the Window itself binds width/height to them so the
-    // QML side stays self-consistent. Fallback values cover the warm-up
-    // window where mode="" → no content loaded; the surface is invisible
-    // at that point so the exact value doesn't matter, it just has to be
-    // a valid wl_surface size.
+    // to size the layer surface (and to compute matching layer-shell margins),
+    // and the Window itself binds width/height to them so the QML side
+    // stays self-consistent. Fallback values cover the warm-up window
+    // where mode="" → no content loaded; the surface is invisible at that
+    // point so the exact value doesn't matter.
     readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : 240
     readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : 70
 
-    // Forward show / hide to whichever content is currently loaded. C++
-    // invokes via QMetaObject::invokeMethod(window, "show") — same path as
-    // the per-mode standalone Windows, so osd.cpp's call site is unchanged.
-    // Window.visible is flipped here exactly once (on first show); after
-    // that the layer surface stays mapped for the daemon's lifetime so
-    // subsequent shows reuse the warmed VkSwapchainKHR — see the
-    // pre-extraction LayoutOsd.qml/NavigationOsd.qml for the same pattern.
-    function show() {
-        visible = true;
+    /// Auto-dismiss request forwarded from the loaded content. C++ side
+    /// connects this to Surface::hide() in OverlayService::createWarmedOsdSurface
+    /// (string-based connect — QML-defined signals aren't addressable via
+    /// `&Class::signal` pointers), so the dispatch chain
+    ///   QML dismissTimer → loaded content dismissRequested → host dismissRequested
+    ///     → Surface::hide() → SurfaceAnimator::beginHide
+    /// closes around the unified surface.
+    signal dismissRequested()
+
+    /// Restart the loaded content's auto-dismiss timer. C++ invokes this
+    /// after every Surface::show() so the timer (re)starts. No-op if no
+    /// content is loaded (mode == "").
+    function restartDismissTimer() {
         if (loader.item)
-            loader.item.show();
+            loader.item.restartDismissTimer();
 
     }
 
-    function hide() {
-        if (loader.item)
-            loader.item.hide();
-
-    }
-
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | ((loader.item && !loader.item.dismissed) ? 0 : Qt.WindowTransparentForInput)
+    // Static flags — Phase 5 surface lifecycle owns Qt.WindowTransparentForInput
+    // on the underlying QWindow during hide.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
-    // Bind to the content-driven desired size. C++ also reads these
-    // properties before show() and calls setWidth / setHeight with the
-    // same value (so the explicit write and the binding agree) and uses
-    // the value to compute matching wlr-layer-shell margins. The OSD
-    // body Items size themselves to fit their own contents, so neither
-    // QML nor C++ carries any hardcoded magic numbers.
+    // Bind to the content-driven desired size — see contentDesiredWidth /
+    // contentDesiredHeight comment above for the rationale.
     width: contentDesiredWidth
     height: contentDesiredHeight
-    // Start hidden; show() flips this once and never back. The layer surface
-    // stays mapped after first show so the next show() reuses the warmed
-    // Vulkan swapchain — see file-level comment.
+    // Start hidden; first Surface::show() flips visible=true. Subsequent
+    // hides keep the layer surface mapped (keepMappedOnHide=true) so the
+    // warmed Vulkan swapchain survives across show cycles.
     visible: false
 
     Loader {
@@ -148,6 +137,15 @@ Window {
             default:
                 return null;
             }
+        }
+        // Forward dismissRequested from whichever content is loaded —
+        // onLoaded fires after the new item finishes property
+        // initialization, and Connections handles the case where the
+        // sourceComponent flips to a different mode.
+        onLoaded: {
+            if (loader.item)
+                loader.item.dismissRequested.connect(root.dismissRequested);
+
         }
     }
 
@@ -165,8 +163,6 @@ Window {
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
-            fadeInDuration: root.fadeInDuration
-            fadeOutDuration: root.fadeOutDuration
             // LayoutOsd-specific
             layoutId: root.layoutId
             layoutName: root.layoutName
@@ -201,8 +197,6 @@ Window {
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
-            fadeInDuration: root.fadeInDuration
-            fadeOutDuration: root.fadeOutDuration
             // NavigationOsd-specific
             success: root.success
             action: root.action

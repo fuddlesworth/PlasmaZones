@@ -20,6 +20,7 @@ namespace PhosphorLayer {
 class ILayerShellTransport;
 class IQmlEngineProvider;
 class IScreenProvider;
+class ISurfaceAnimator;
 class ITransportHandle;
 class SurfaceFactory;
 
@@ -46,6 +47,17 @@ struct SurfaceDeps
     /// after screensChanged and will hand dangling pointers to the transport
     /// on reattach. The factory always sets it.
     IScreenProvider* screenProvider = nullptr;
+    /// Phase-5 hook for show/hide visual transitions. Optional: nullptr means
+    /// the Surface uses the library-internal NoOp default (synchronous
+    /// onComplete; identical pre-Phase-5 behaviour). The factory propagates
+    /// SurfaceFactory::Deps::animator into this slot.
+    ///
+    /// **Lifetime contract**: when non-null, the animator MUST outlive every
+    /// Surface that holds this SurfaceDeps. The Surface dispatches through
+    /// the raw pointer on every show/hide and on its own destruction
+    /// (~Impl calls `animator().cancel(this)` to drop in-flight tracking).
+    /// Dropping the animator while a Surface still holds the pointer is UB.
+    ISurfaceAnimator* animator = nullptr;
     QString loggingCategory;
 };
 
@@ -108,10 +120,39 @@ public:
     State state() const noexcept;
     const SurfaceConfig& config() const noexcept;
 
+    /**
+     * @brief Convenience: is the Surface in the logical "shown" state?
+     *
+     * Equivalent to `state() == State::Shown` and exists to give consumers
+     * a single canonical answer to "is this overlay currently the
+     * user's view of itself" regardless of the underlying lifecycle.
+     *
+     * Under @ref SurfaceConfig::keepMappedOnHide=true, the QQuickWindow
+     * stays Qt-visible across logical hide/show cycles — `window()->isVisible()`
+     * is therefore NOT a reliable signal for "currently shown" because it
+     * stays `true` while the surface is logically Hidden under
+     * `Qt::WindowTransparentForInput`. This helper is the right answer
+     * for both lifecycles: keep-mapped surfaces consult Surface state
+     * (false during the transparent-for-input span); destroy-on-hide
+     * surfaces are simply gone from the consumer's tracking when hidden,
+     * so the call site never reaches isLogicallyShown() on a destroyed
+     * Surface.
+     */
+    [[nodiscard]] bool isLogicallyShown() const noexcept;
+
     /// @name Lifecycle
     /// Idempotent and safe to call in any state. Invalid transitions warn
     /// and no-op.
+    ///
+    /// Declared as Q_SLOTS so consumers can wire QML-side signals (e.g. a
+    /// dismissTimer's `dismissRequested()`) directly via the string-based
+    /// `QObject::connect(window, SIGNAL(foo()), surface, SLOT(hide()))`
+    /// syntax. QML-defined signals can't be addressed via Qt5
+    /// `&Class::signal` pointers, so the string form is the only path —
+    /// without Q_SLOT registration the connect would silently fail at
+    /// runtime.
     /// @{
+public Q_SLOTS:
     void show();
     void hide();
     /// Create engine + window + content, leave hidden. Pre-compiles QML so
@@ -119,6 +160,7 @@ public:
     void warmUp();
     /// @}
 
+public:
     /// @name Escape hatches
     /// Prefer the declarative API. These are for consumers that need to
     /// reach into Qt machinery (installing event filters, connecting to
@@ -150,6 +192,12 @@ Q_SIGNALS:
     /// (Shown/Hidden); consumers decide whether to destroy+rebuild or wait
     /// for the screen to come back. `m_config.screen` is nulled inside the
     /// library so the next attach falls back to the provider's primary.
+    ///
+    /// ## Safe to delete the Surface from this slot
+    /// The library defers this signal via `Qt::QueuedConnection` so consumer
+    /// slots that call `delete surface` do not re-enter library code on a
+    /// dead `this`. Deleting the Surface from a stateChanged slot for
+    /// non-Failed transitions remains UB — prefer `deleteLater()` there.
     void screenLost();
 
 public:

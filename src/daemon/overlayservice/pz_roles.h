@@ -55,6 +55,16 @@ inline const PhosphorLayer::Role LayoutOsd = OsdBase.withScopePrefix(QStringLite
 /// aside from scope — intentionally sharing the same base.
 inline const PhosphorLayer::Role NavigationOsd = OsdBase.withScopePrefix(QStringLiteral("plasmazones-navigation-osd"));
 
+/// Unified notification surface — single per-screen wl_surface that hosts
+/// both LayoutOsd and NavigationOsd content via NotificationOverlay.qml's
+/// mode-driven Loader. The two OSD modes share OsdBase (FullscreenOverlay,
+/// AnchorAll, no keyboard, click-through) and are never simultaneously
+/// visible, so a single Surface backs both. createNotificationWindow
+/// extends this prefix per-screen-and-generation; the SurfaceAnimator
+/// uses longest-prefix matching to apply the OSD config across all
+/// derived prefixes.
+inline const PhosphorLayer::Role Notification = OsdBase.withScopePrefix(QStringLiteral("plasmazones-notification"));
+
 /// Snap assist (post-snap window picker). Top layer, exclusive keyboard
 /// so Escape reliably dismisses. Singleton — one instance, re-targeted
 /// to whichever screen the snap happened on.

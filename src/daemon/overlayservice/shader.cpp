@@ -461,8 +461,11 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     const auto role = PzRoles::ShaderPreview.withScopePrefix(
         QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, role,
-                                       "shader preview overlay", initProps);
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "shader preview overlay",
+                                        .windowProperties = initProps});
     if (!surface) {
         return;
     }

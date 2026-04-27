@@ -24,19 +24,6 @@ namespace PlasmaZones {
 
 namespace {
 
-// Result of OSD window preparation
-struct OsdWindowSetup
-{
-    QQuickWindow* window = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 16.0 / 9.0;
-
-    explicit operator bool() const
-    {
-        return window != nullptr;
-    }
-};
-
 // Center an OSD/layer window within a screen geometry using layer surface margins.
 // physScreenGeom is the full physical screen; targetGeom is the area to center within
 // (same as physScreenGeom for physical screens, or a sub-region for virtual screens).
@@ -227,7 +214,11 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
-    QMetaObject::invokeMethod(window, "show");
+    // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
+    // restartDismissTimer kicks the QML auto-dismiss Timer that emits
+    // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
+    surface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
@@ -300,7 +291,8 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
-    QMetaObject::invokeMethod(window, "show");
+    surface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
 
@@ -334,21 +326,24 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
-    QMetaObject::invokeMethod(window, "show");
+    surface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
 
-// hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to the QML
-// dismissed() signal) are intentionally gone. The OSD dismiss path is now
-// entirely QML-driven: the hide animation's ScriptAction flips the content's
-// `dismissed` property which re-evaluates the host Window's flags binding to
-// include Qt.WindowTransparentForInput, and that's the whole mechanism. No
-// C++ work runs on dismiss, so destroying the QQuickWindow (and paying the
-// blocking ~QQuickWindow Vulkan teardown) never happens in the hot path.
-// Windows are pre-warmed by warmUpLayoutOsd() / warmUpNavigationOsd() (both
-// of which now route into the same per-screen NotificationOverlay surface)
-// and stay alive for the daemon's lifetime; destroyNotificationWindow() is
-// only invoked from screen-removal / shutdown cleanup paths.
+// hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to a QML
+// `dismissed()` signal) are intentionally gone. The Phase-5 dismiss path is:
+//   QML dismissTimer → loaded content `dismissRequested()` signal
+//     → host NotificationOverlay re-emits dismissRequested()
+//     → wired by createWarmedOsdSurface to Surface::hide() (string-based)
+//     → SurfaceAnimator::beginHide drives the visual fade
+//     → Surface::Impl flips Qt::WindowTransparentForInput on the QWindow
+// No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
+// across the keepMappedOnHide=true lifecycle so the warmed Vulkan
+// swapchain survives. Pre-warmed by warmUpLayoutOsd / warmUpNavigationOsd
+// (both route through warmUpNotifications onto the same surface) and
+// reused for the daemon's lifetime; destroyNotificationWindow only fires
+// on screen-removal / shutdown.
 
 // Shared hot-plug hook. Called from warmUpLayoutOsd AND warmUpNavigationOsd
 // (both legacy entry points route into the same unified-notification warmer
@@ -429,15 +424,18 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
         return;
     }
 
-    // PzRoles::OsdBase shape (FullscreenOverlay layer, AnchorAll, no keyboard,
-    // click-through). Scope prefix kept as `plasmazones-notification` rather
-    // than the legacy `plasmazones-layout-osd` so the compositor sees the
-    // post-unification surface as a single distinct identity per screen.
-    const auto role = PzRoles::OsdBase.withScopePrefix(
-        QStringLiteral("plasmazones-notification-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
-
+    // Phase 5: keepMappedOnHide=true and dismissRequested → Surface::hide()
+    // wiring are both done inside createWarmedOsdSurface. Scope prefix kept
+    // as `plasmazones-notification` (rather than the legacy
+    // `plasmazones-layout-osd` / `plasmazones-navigation-osd` pair) so the
+    // compositor sees the post-unification surface as a single distinct
+    // identity per screen, AND so the SurfaceAnimator's longest-prefix
+    // role-config lookup matches PzRoles::Notification.
+    const QString scopePrefix =
+        QStringLiteral("plasmazones-notification-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
     auto* surface =
-        createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")), physScreen, role, "notification");
+        createWarmedOsdSurface(PzRoles::OsdBase, scopePrefix, QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")),
+                               physScreen, "notification");
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create notification window for screen=" << screenId
                              << "— suppressing further attempts until screen is replugged";
@@ -525,11 +523,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Reuse existing per-screen NotificationOverlay window (create only if
-    // not in map). The window stays alive across rapid navigation calls —
-    // QML show() resets the animation and restarts the dismiss timer each
-    // time. Surfaces are torn down only on screen-removal / shutdown via
-    // destroyNotificationWindow(); the dismiss path is QML-only. The
-    // create-failure spam-guard lives in createNotificationWindow itself.
+    // not in map). The window stays alive (keepMappedOnHide=true) across
+    // rapid navigation calls; Surface::show() re-dispatches beginShow on
+    // every call so the visual fade replays, and restartDismissTimer
+    // extends the auto-hide. Cleanup happens only on screen removal /
+    // shutdown via destroyNotificationWindow; the dismiss path is QML
+    // → Surface::hide(). The create-failure spam-guard lives in
+    // createNotificationWindow itself.
     if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].notificationWindow)) {
         createNotificationWindow(effectiveId, physScreen);
     }
@@ -601,8 +601,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // calls above return.
     sizeAndCenterOsd(window, navSurface, physScreen, navScreenGeom);
 
-    // Show with animation
-    QMetaObject::invokeMethod(window, "show");
+    // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
+    // restartDismissTimer kicks the QML auto-dismiss Timer that emits
+    // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
+    navSurface->show();
+    QMetaObject::invokeMethod(window, "restartDismissTimer");
 
     qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action << "reason=" << reason
                       << "highlightedZones=" << highlightedZoneIds;

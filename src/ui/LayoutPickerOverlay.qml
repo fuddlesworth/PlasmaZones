@@ -8,30 +8,26 @@ import QtQuick.Window
  * Layout Picker Overlay Window — Wayland layer-shell host for LayoutPickerContent.
  *
  * Thin shell that owns the QQuickWindow lifecycle, exposes the C++ signal
- * contract (layoutSelected, dismissed), and forwards C++ writeQmlProperty
- * calls to the embedded content via aliases. All animations, dismiss state,
- * keyboard navigation, and the visible content tree (backdrop + popup frame
- * + grid of layout cards) live in LayoutPickerContent.qml so the same body
- * can be hosted by the unified NotificationOverlay (Loader-driven) when
- * Phase 2 of the surface-collapse refactor lands.
+ * contract (layoutSelected, dismissRequested), and forwards C++
+ * writeQmlProperty calls to the embedded content via aliases. All keyboard
+ * navigation, dismiss state, and the visible content tree (backdrop +
+ * popup frame + grid of layout cards) live in LayoutPickerContent.qml so
+ * the body stays consistent with the OSD content components.
  *
- * Window configuration mirrors the pre-extraction file: the surface stays
- * Qt-visible across hide/show cycles to preserve the Wayland VkSwapchainKHR
- * (Qt's Vulkan backend can't reliably reinit one after a wl_surface tear-
- * down), and Qt.WindowTransparentForInput is folded into the window flags
- * while logically dismissed so the still-mapped layer surface doesn't eat
- * clicks at its screen position.
+ * Phase 5: surface lifecycle + show/hide animations are driven entirely by
+ * PhosphorAnimationLayer::SurfaceAnimator (registered for
+ * PzRoles::LayoutPicker). The library handles
+ * `Qt.WindowTransparentForInput` on the underlying QWindow during the hide
+ * cycle (Surface::Impl::drive sets the flag when keepMappedOnHide routes
+ * through beginHide). Static flags here — a QML binding tied to a dismiss
+ * state would fight the library's setFlag.
  */
 Window {
+    id: root
+
     // Aliases let the C++ writeQmlProperty(window, "...", ...) callsites in
     // overlayservice/snapassist.cpp continue to address the same names
     // without knowing they're now stored on the inner content Item.
-    // `_pickerDismissed` keeps its underscored name to match snapassist.cpp:417's
-    // existing read; the inner content's property is `dismissed`, uniform
-    // with the OSD content components.
-
-    id: root
-
     property alias layouts: content.layouts
     property alias activeLayoutId: content.activeLayoutId
     property alias globalAutoAssign: content.globalAutoAssign
@@ -51,54 +47,48 @@ Window {
     property alias fontStrikeout: content.fontStrikeout
     property alias locked: content.locked
     property alias selectedIndex: content.selectedIndex
-    // Legacy alias for snapassist.cpp:417's `m_layoutPickerWindow->property("_pickerDismissed")`
-    // read. Underscore prefix preserved.
-    property alias _pickerDismissed: content.dismissed
+    /// Logically-shown gate — written by C++ alongside Surface::show/hide
+    /// so a logically-hidden picker (still Qt-visible under
+    /// keepMappedOnHide=true) doesn't silently respond to stray
+    /// accelerator deliveries.
+    property alias _shortcutsActive: content._shortcutsActive
+    /// Idempotency latch for `dismissRequested`. Reset by C++ on every
+    /// show (QML's `on<Name>Changed` handler form does not work for
+    /// underscore-prefixed properties, so the reset can't be tied to
+    /// `_shortcutsActive`'s change signal).
+    property alias _dismissed: content._dismissed
 
-    // Public C++ signal contract — connected at snapassist.cpp:662-663.
+    // Public C++ signal contract — connected at snapassist.cpp via
+    // SIGNAL(layoutSelected(QString)) / SIGNAL(dismissRequested()).
     signal layoutSelected(string layoutId)
-    signal dismissed()
+    /// User-initiated dismiss request — backdrop click, Shortcut Escape
+    /// (handled by C++ event filter and routed through hideLayoutPicker
+    /// directly), or in-flight race during the fade-out window.
+    /// OverlayService::createWarmedOsdSurface (or showLayoutPicker's
+    /// connection in snapassist.cpp) wires this to Surface::hide().
+    signal dismissRequested()
 
-    // Show with animation. Activates the layer surface so keyboard shortcuts
-    // (Return/Enter/Arrow keys, all owned by the content Item) reach this
-    // Window's focus chain.
-    function show() {
-        visible = true;
-        content.show();
-        requestActivate();
-    }
-
-    function hide() {
-        content.hide();
-    }
-
-    flags: Qt.FramelessWindowHint | Qt.Tool | (content.dismissed ? Qt.WindowTransparentForInput : 0)
+    // Static flags — Phase 5 surface lifecycle owns
+    // Qt.WindowTransparentForInput during the hide cycle.
+    flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
-    // Start hidden; show() flips this once and never back. The layer surface
-    // stays mapped after first show so the next show() reuses the warmed
-    // Vulkan swapchain — see file-level comment.
+    // Start hidden; first Surface::show() flips visible=true. Subsequent
+    // hides keep the layer surface mapped (keepMappedOnHide=true) so the
+    // warmed Vulkan swapchain survives across show cycles.
     visible: false
 
     LayoutPickerContent {
         id: content
 
         anchors.fill: parent
-        // Forward the content's internal layoutSelected to the Window's
-        // public signal — preserves snapassist.cpp's existing
-        // SIGNAL(layoutSelected(QString)) connection target.
+        // Forward content's internal signals to the Window's public ones
+        // — preserves snapassist.cpp's existing
+        // SIGNAL(layoutSelected(QString)) / SIGNAL(dismissRequested())
+        // connection targets.
         onLayoutSelected: function(layoutId) {
             root.layoutSelected(layoutId);
         }
-        // Re-emit dismissed() exactly once when the hide animation's
-        // ScriptAction flips the content's dismissed back to true. Matches
-        // the original file's behavior where dismissed() fired alongside
-        // _pickerDismissed = true in the same ScriptAction. Initial value
-        // (true) does not trigger this handler.
-        onDismissedChanged: {
-            if (content.dismissed)
-                root.dismissed();
-
-        }
+        onDismissRequested: root.dismissRequested()
     }
 
 }
