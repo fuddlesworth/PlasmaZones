@@ -102,9 +102,9 @@ Flickable {
 
                     }
 
-                    // Deactivation trigger (#249): only meaningful when "Activate on every drag"
-                    // is on. Holding any of these modifiers/mouse buttons during a drag
-                    // suppresses the overlay for that drag — Esc still cancels entirely.
+                    // Deactivation trigger (#249). The runtime gates this on
+                    // always-active mode too — see WindowDragAdaptor's
+                    // m_alwaysActiveOnDrag — so visibility here matches behavior.
                     SettingsSeparator {
                         visible: alwaysActivateSwitch.checked
                     }

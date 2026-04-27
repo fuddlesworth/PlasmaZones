@@ -372,6 +372,13 @@ add_executable(test_drag_policy dbus/test_drag_policy.cpp)
 target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
+# Truth-table guard for resolveActivationActive() — pins the per-tick
+# overlay-active decision (toggle latch + deactivation override + the
+# always-active gate that scopes deactivation to its UI surface, #249).
+add_executable(test_drag_activation dbus/test_drag_activation.cpp)
+target_link_libraries(test_drag_activation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_drag_activation COMMAND test_drag_activation)
+
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)

@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowdragadaptor.h"
+#include "dragactivation.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
 #include "../../config/configdefaults.h"
+#include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -43,6 +45,14 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_cachedDeactivationTriggers = parseTriggers(m_settings->dragDeactivationTriggers());
     m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
     m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
+    // Cache the AlwaysActive bit once per drag so the per-tick deactivation
+    // gate (#249) is a single bool compare rather than a list scan. Matches
+    // the semantics of `SnappingBehaviorController::alwaysActivateOnDrag`,
+    // which is what the UI consults to show the deactivation row.
+    m_alwaysActiveOnDrag = std::any_of(m_cachedActivationTriggers.cbegin(), m_cachedActivationTriggers.cend(),
+                                       [](const ParsedTrigger& pt) {
+                                           return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
+                                       });
     // Ensure no stale preview carries over from a prior drag.
     cancelDragInsertIfActive();
 
@@ -469,11 +479,11 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap unboxing per tick.
     const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
 
-    // Deactivation triggers (#249) — empty list short-circuits. Holding any
-    // configured deactivation trigger forces the overlay off for the rest of
-    // this drag tick, regardless of activation/toggle state. Applied below
-    // after the toggle-mode logic resolves so a toggled-on overlay also hides
-    // while held without the toggle flipping.
+    // Deactivation triggers (#249) — empty list short-circuits. The
+    // resolveActivationActive() pure function gates the override on
+    // m_alwaysActiveOnDrag (matches the UI surface) so hold-to-activate
+    // users never get silent suppression from a leftover deactivation
+    // binding configured while in always-active mode.
     const bool deactivateHeld =
         !m_cachedDeactivationTriggers.isEmpty() && anyTriggerHeld(m_cachedDeactivationTriggers, mods, mouseButtons);
 
@@ -577,28 +587,16 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_overlayService->updateMousePosition(cursorX, cursorY);
     }
 
-    // Activation state: use the trigger check from above (already computed)
-    const bool zoneActivationHeld = triggerHeld;
-
-    // Toggle mode: detect rising edge (release→press) to flip overlay state
-    bool activationActive;
-    if (m_settings->toggleActivation()) {
-        if (zoneActivationHeld && !m_prevTriggerHeld) {
-            m_activationToggled = !m_activationToggled;
-        }
-        m_prevTriggerHeld = zoneActivationHeld;
-        activationActive = m_activationToggled;
-    } else {
-        activationActive = zoneActivationHeld;
-    }
-
-    // Deactivation override (#249): suppress the overlay while a configured
-    // deactivation trigger is held. Applied after toggle-mode resolution so a
-    // toggled-on overlay also hides while held; releasing the deactivation
-    // trigger restores the prior toggle state without flipping it.
-    if (deactivateHeld) {
-        activationActive = false;
-    }
+    // Resolve overlay state via the pure helper — keeps the truth table
+    // (toggle rising edge, deactivation override, always-active gate) in
+    // one testable place. Adaptor stays as the I/O shell that feeds in
+    // current input state and persists the returned latches.
+    const ActivationDecision decision =
+        resolveActivationActive(triggerHeld, deactivateHeld, m_settings->toggleActivation(), m_alwaysActiveOnDrag,
+                                m_prevTriggerHeld, m_activationToggled);
+    m_prevTriggerHeld = decision.nextPrevTriggerHeld;
+    m_activationToggled = decision.nextActivationToggled;
+    bool activationActive = decision.active;
 
     // Log activation-state transitions so overlay show/hide churn can be traced.
     if (activationActive != m_lastLoggedActivationActive) {
@@ -625,7 +623,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Check all configured zone span triggers (multi-bind support)
     const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
 
-    // Conflict detection: warn once per drag when activation and zone span share a trigger
+    // Conflict detection: warn once per drag when activation overlaps with
+    // either zone span or deactivation. The latter is only diagnosable when
+    // always-active mode is on — that's the only state where the deactivation
+    // override actually fires (#249).
     if (!m_modifierConflictWarned) {
         m_modifierConflictWarned = true;
         for (const auto& at : m_cachedActivationTriggers) {
@@ -637,6 +638,16 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
                                             << "(mod:" << at.modifier << "btn:" << at.mouseButton << ");"
                                             << "zone span takes priority when both match";
+                }
+            }
+            if (m_alwaysActiveOnDrag) {
+                for (const auto& dt : m_cachedDeactivationTriggers) {
+                    if ((at.modifier != 0 && dt.modifier == at.modifier)
+                        || (at.mouseButton != 0 && dt.mouseButton == at.mouseButton)) {
+                        qCWarning(lcDbusWindow) << "Trigger overlap: activation and deactivation share trigger"
+                                                << "(mod:" << at.modifier << "btn:" << at.mouseButton << ");"
+                                                << "deactivation suppresses the overlay whenever activation matches";
+                    }
                 }
             }
         }

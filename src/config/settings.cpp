@@ -1136,26 +1136,34 @@ PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabled
 PZ_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
 PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
 
+// Shared helper for the four "plain" trigger-list setters. Post-write compare
+// — the schema's per-list validator (canonicalTriggerList /
+// deactivationTriggerList) drops non-map entries, strips unknown keys, and
+// caps the list. A pre-write equality check against the stored canonical
+// form would fire a spurious changed signal whenever the caller passed a
+// list that canonicalises to the same value (e.g. extra keys, sub-cap
+// padding, or AlwaysActive in the deactivation list).
+void Settings::writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
+                                TriggerListSignalFn specificSignal)
+{
+    const QVariantList before = m_store->readVariant(group, key).toList();
+    m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
+    const QVariantList after = m_store->readVariant(group, key).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
 QVariantList Settings::dragActivationTriggers() const
 {
     return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
 }
 void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
-    // Post-write compare — the schema's canonicalTriggerList validator
-    // drops non-map entries, strips unknown keys, and caps the list. A
-    // pre-write equality check against the stored canonical form would fire
-    // a spurious changed signal whenever the caller passed a list that
-    // canonicalises to the same value (e.g. extra keys, sub-cap padding).
-    const QVariantList before = dragActivationTriggers();
-    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = dragActivationTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT dragActivationTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::dragActivationTriggersChanged);
 }
 
 QVariantList Settings::dragDeactivationTriggers() const
@@ -1165,16 +1173,8 @@ QVariantList Settings::dragDeactivationTriggers() const
 }
 void Settings::setDragDeactivationTriggers(const QVariantList& triggers)
 {
-    // Same canonicalising-validator round-trip pattern as setDragActivationTriggers.
-    const QVariantList before = dragDeactivationTriggers();
-    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::deactivationTriggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = dragDeactivationTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT dragDeactivationTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::deactivationTriggersKey(), triggers,
+                     &Settings::dragDeactivationTriggersChanged);
 }
 
 PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
@@ -1395,17 +1395,8 @@ QVariantList Settings::snapAssistTriggers() const
 }
 void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 {
-    // Post-write compare — see setDragActivationTriggers for the
-    // canonicalisation rationale.
-    const QVariantList before = snapAssistTriggers();
-    m_store->write(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = snapAssistTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT snapAssistTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::snapAssistTriggersChanged);
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
@@ -1709,17 +1700,8 @@ QVariantList Settings::autotileDragInsertTriggers() const
 }
 void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
-    // Post-write compare — see setDragActivationTriggers for the
-    // canonicalisation rationale.
-    const QVariantList before = autotileDragInsertTriggers();
-    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = autotileDragInsertTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT autotileDragInsertTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::autotileDragInsertTriggersChanged);
 }
 
 PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)

@@ -188,6 +188,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     // against them without a chicken-and-egg dependency.
     if (m_settings) {
         m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
+        m_cachedDeactivationTriggers = parseTriggers(m_settings->dragDeactivationTriggers());
         m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
     }
 

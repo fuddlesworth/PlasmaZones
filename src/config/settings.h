@@ -991,6 +991,19 @@ private:
     /// per-index NOTIFY signal.
     using ShortcutSignalFn = void (Settings::*)();
 
+    /// Member-function-pointer alias for the per-trigger-list NOTIFY signal
+    /// passed into @ref writeTriggerList.
+    using TriggerListSignalFn = void (Settings::*)();
+
+    /// Shared trigger-list setter used by the four "plain" setters
+    /// (activation, deactivation, snap-assist, autotile-insert). Caps at
+    /// @c MaxTriggersPerAction, round-trips through the schema's validator,
+    /// and only emits @p specificSignal + @c settingsChanged on a real change.
+    /// @c setZoneSpanTriggers does its own dance because it also synchronises
+    /// the legacy single-modifier key.
+    void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
+                          TriggerListSignalFn specificSignal);
+
     // ─── load() / save() helpers ────────────────────────────────────────
     // Only non-Store groups need dedicated helpers now. Store-backed groups
     // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/

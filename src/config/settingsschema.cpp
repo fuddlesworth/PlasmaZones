@@ -10,6 +10,7 @@
 
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -128,6 +129,24 @@ QVariant canonicalTriggerList(const QVariant& v)
         out.append(canon);
     }
     return QVariant(out);
+}
+
+/// Deactivation lists (#249) inherit the canonical-trigger shape but reject
+/// the AlwaysActive sentinel — its semantics ("matches every tick") would
+/// permanently suppress the overlay, which is never what a user wants and
+/// is unreachable from the deactivation UI (no AlwaysActive checkbox).
+/// D-Bus / hand-edited configs can still try to smuggle it in; this drops
+/// any such entry while preserving the rest of the list.
+QVariant deactivationTriggerList(const QVariant& v)
+{
+    QVariantList list = canonicalTriggerList(v).toList();
+    list.erase(std::remove_if(list.begin(), list.end(),
+                              [](const QVariant& e) {
+                                  return e.toMap().value(ConfigKeys::triggerModifierField()).toInt()
+                                      == static_cast<int>(DragModifier::AlwaysActive);
+                              }),
+               list.end());
+    return QVariant(list);
 }
 
 /// Canonicalize a per-algorithm settings map: round-trip through
@@ -609,7 +628,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
          CD::dragDeactivationTriggers(),
          QMetaType::QVariantList,
          {},
-         canonicalTriggerList},
+         deactivationTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
     };
     schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {
