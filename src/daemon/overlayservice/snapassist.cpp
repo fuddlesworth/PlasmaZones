@@ -196,10 +196,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
 
-    // On reuse, restore exclusive keyboard grab via the mutable transport handle —
-    // it was released in onSnapAssistWindowSelected() to keep the desktop responsive
-    // during the D-Bus roundtrip. Fresh-create path already attaches with Exclusive
-    // via PzRoles::SnapAssist, so nothing extra to do there.
+    // On reuse, defensively re-assert the Exclusive keyboard grab. The fresh-
+    // create path always attaches with Exclusive via PzRoles::SnapAssist, but
+    // the grab is mutable on a live wl_surface; any external code path that
+    // ever drops it (today: none — but cheap insurance) would otherwise leave
+    // the reused window unable to receive Escape / Enter. Idempotent.
     if (reuseWindow && m_snapAssistSurface) {
         if (auto* handle = m_snapAssistSurface->transport()) {
             handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::Exclusive);
@@ -310,6 +311,15 @@ void OverlayService::hideSnapAssist()
 
 bool OverlayService::isSnapAssistVisible() const
 {
+    // Asymmetric with isLayoutPickerVisible (which reads Surface::state).
+    // SnapAssist uses keepMappedOnHide=false (destroy-on-hide), so the
+    // QQuickWindow isVisible flag IS the right "logically shown" signal —
+    // the window is destroyed when it's logically hidden, and isVisible
+    // tracks the live mapping state until then.
+    // The picker uses keepMappedOnHide=true and stays Qt-visible across
+    // logical hide cycles, so it must consult Surface state instead.
+    // Both encode the same intent ("is this overlay logically on screen?"),
+    // and both are correct for their respective lifecycle.
     return m_snapAssistWindow && m_snapAssistWindow->isVisible();
 }
 
@@ -406,14 +416,15 @@ void OverlayService::destroySnapAssistWindow()
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson)
 {
-    // Release exclusive keyboard grab immediately so the desktop remains
-    // responsive while the D-Bus roundtrip to KWin processes the snap.
-    // The window stays visible for potential reuse by showSnapAssist() continuation.
-    if (m_snapAssistSurface) {
-        if (auto* handle = m_snapAssistSurface->transport()) {
-            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
-        }
-    }
+    // Keyboard interactivity stays Exclusive across selection: the window is
+    // either dismissed by hideSnapAssist() (keyboard grab is then dropped
+    // alongside the destroy) or reused by a continuation call to
+    // showSnapAssist (which re-grabs explicitly). Releasing here would leak
+    // the surface into a logically-shown-but-keyboard-unresponsive state if
+    // any failure path drops the dismiss/continuation call — Escape and
+    // Enter would silently no-op until the next show. The few-ms keyboard
+    // capture during the D-Bus roundtrip to KWin is invisible at human
+    // timescales; the failure-mode safety wins here.
 
     // Use the virtual-aware screen ID stored when snap assist was shown
     QString screenId = m_snapAssistScreenId;

@@ -167,17 +167,19 @@ void OverlayService::setupSurfaceAnimator()
     // OutCubic curve and stay frame-aligned. AnimatedValue resolves the
     // path independently per leg; the registry's QHash lookup is cheap
     // enough that the duplicate query is irrelevant.
-    {
-        PAL::SurfaceAnimator::Config c;
-        c.showProfile = osdShow;
-        c.showScaleProfile = osdPop;
-        c.showScaleFrom = 0.8;
-        c.hideProfile = osdHide;
-        c.hideScaleProfile = osdHide;
-        c.hideScaleTo = 0.9;
-        m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, c);
-        m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, c);
-    }
+    //
+    // LayoutOsd and NavigationOsd share an intentionally-identical config
+    // — both use the same fade-and-pop shape because the visual treatment
+    // is meant to read the same. Keep them registered against a single
+    // named local so a future tuning edit lands on both, never one.
+    const PAL::SurfaceAnimator::Config osdConfig{.showProfile = osdShow,
+                                                 .hideProfile = osdHide,
+                                                 .showScaleProfile = osdPop,
+                                                 .hideScaleProfile = osdHide,
+                                                 .showScaleFrom = 0.8,
+                                                 .hideScaleTo = 0.9};
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
+    m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
     {
         PAL::SurfaceAnimator::Config c;
         c.showProfile = osdShow;
@@ -967,6 +969,21 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
                 ++it;
             }
         }
+    }
+
+    // Drop the dedup sentinel for this physical screen so a hot-plug cycle
+    // doesn't suppress the first navigation OSD on the reconnected monitor
+    // when it lands inside the implicit 200 ms timeout window. The dedup is
+    // keyed on the screenId at time-of-fire, and a removed-then-readded
+    // monitor reuses the same id — without this clear, a navigation action
+    // on the readded screen within 200 ms of the last action on the
+    // pre-removal incarnation gets silently swallowed.
+    if (!physId.isEmpty()
+        && (m_lastNavigationScreenId == physId
+            || m_lastNavigationScreenId.startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator))) {
+        m_lastNavigationActionKey.clear();
+        m_lastNavigationScreenId.clear();
+        m_lastNavigationTime.invalidate();
     }
 }
 

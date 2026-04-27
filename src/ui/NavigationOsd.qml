@@ -181,6 +181,12 @@ Window {
     // on the rendered message length rather than a hardcoded constant.
     readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
     readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
+    /// Idempotency latch for `dismissRequested`. See LayoutOsd.qml for the
+    /// full rationale — the timer-fire and click paths can both attempt to
+    /// dismiss within the same show cycle; without the latch, C++ runs
+    /// Surface::hide() twice and the second call qCWarnings on the
+    /// already-Hidden state.
+    property bool _dismissed: false
 
     /// Auto-dismiss request emitted by the dismissTimer. C++ side hooks this
     /// to OverlayService → Surface::hide().
@@ -188,7 +194,17 @@ Window {
 
     /// Restart the auto-dismiss timer from C++ on every show.
     function restartDismissTimer() {
+        _dismissed = false;
         dismissTimer.restart();
+    }
+
+    /// Internal: emit dismissRequested at most once per show cycle.
+    function _requestDismiss() {
+        if (_dismissed)
+            return ;
+
+        _dismissed = true;
+        root.dismissRequested();
     }
 
     // Helper function to normalize UUID format for comparison
@@ -253,7 +269,7 @@ Window {
         id: dismissTimer
 
         interval: root.displayDuration
-        onTriggered: root.dismissRequested()
+        onTriggered: root._requestDismiss()
     }
 
     // Content wrapper. Opacity defaults to 1 — the SurfaceAnimator drives
@@ -307,12 +323,12 @@ Window {
 
         }
 
-        // Click to dismiss. With Phase-5 surface lifecycle the post-hide
-        // input gate is enforced at the QWindow level via
-        // Qt.WindowTransparentForInput.
+        // Click to dismiss. _requestDismiss collapses timer-fire + click
+        // into a single dismissRequested per show cycle (see LayoutOsd.qml
+        // for the full rationale).
         MouseArea {
             anchors.fill: parent
-            onClicked: root.dismissRequested()
+            onClicked: root._requestDismiss()
         }
 
     }

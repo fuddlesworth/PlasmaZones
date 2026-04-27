@@ -209,6 +209,146 @@ private Q_SLOTS:
         QCOMPARE(anim.configForRole(unrelated).showProfile, QStringLiteral("test.show"));
     }
 
+    /// Two-leg show (opacity + scale): both AnimatedValues must reach
+    /// their terminal values, AND the consumer's onComplete must fire
+    /// exactly once after BOTH legs settle (not after the first finishes).
+    /// Locks in the `pendingLegs` state machine — a regression that
+    /// erased the entry on the first leg's completion would still pass
+    /// the existing single-leg test.
+    void beginShow_two_leg_completes_after_both_legs()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = QStringLiteral("test.show");
+        cfg.showScaleProfile = QStringLiteral("test.scale-show");
+        cfg.showScaleFrom = 0.5;
+        cfg.hideProfile = QStringLiteral("test.hide");
+        SurfaceAnimator anim(cfg);
+
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        // Don't wire deps.animator — we want to drive the standalone
+        // SurfaceAnimator directly so we observe its onComplete without
+        // Surface::Impl swallowing it as Q_UNUSED.
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("two-leg-test");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        // warmUp builds the window + content tree so animatedItem() can
+        // resolve the target. We're driving the animator directly (not
+        // through Surface::show), so we don't want to actually flip the
+        // surface to Shown state.
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        int onCompleteCallCount = 0;
+        anim.beginShow(surface, target, [&onCompleteCallCount]() {
+            ++onCompleteCallCount;
+        });
+
+        // Both legs must reach their terminal values...
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999 && target->scale() >= 0.999;
+            },
+            500));
+
+        // ...and the consumer's callback must have fired exactly once
+        // (after the second leg settled, not after the first).
+        QVERIFY(waitFor(
+            [&onCompleteCallCount] {
+                return onCompleteCallCount == 1;
+            },
+            200));
+        // Wait a bit more to ensure no spurious second invocation.
+        QTest::qWait(50);
+        QCOMPARE(onCompleteCallCount, 1);
+
+        delete surface;
+    }
+
+    /// Live profile re-resolution: replacing a registered profile between
+    /// dispatches must apply the new curve / duration on the next show.
+    /// Lock in the contract from the PR description: "live profile
+    /// reloads (drop a JSON, see it apply on next show) flow through the
+    /// registry's existing watcher path — the animator just re-resolves
+    /// on every beginShow / beginHide."
+    void profile_reload_applies_on_next_dispatch()
+    {
+        const QString path = QStringLiteral("test.reload");
+        // Register an absurdly long profile first so we can detect the
+        // reload took effect (the short profile finishes in tens of ms,
+        // the long one wouldn't in our wait window).
+        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/5000));
+        struct Cleanup
+        {
+            QString p;
+            ~Cleanup()
+            {
+                PhosphorProfileRegistry::instance().unregisterProfile(p);
+            }
+        } _{path};
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = path;
+        cfg.hideProfile = path;
+        SurfaceAnimator anim(cfg);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.debugName = QStringLiteral("reload-test");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        // warmUp builds the window + content tree so animatedItem() can
+        // resolve the target. We're driving the animator directly.
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // First show with the 5000ms profile — opacity must NOT reach 1.0
+        // within the test's 100ms window.
+        anim.beginShow(surface, target, []() { });
+        QTest::qWait(100);
+        QVERIFY2(target->opacity() < 0.999,
+                 "5000ms profile must not have completed yet — animator may not be re-resolving live");
+
+        // Cancel the in-flight long animation so we get a clean slate.
+        anim.cancel(surface);
+        target->setOpacity(1.0); // reset for the supersession-aware fresh-show check
+        target->setScale(1.0);
+
+        // Reload the profile to a 20ms duration — same path, new shape.
+        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/20));
+
+        // Second show: must pick up the reloaded profile and complete fast.
+        anim.beginShow(surface, target, []() { });
+        QVERIFY2(waitFor(
+                     [target] {
+                         return target->opacity() >= 0.999;
+                     },
+                     500),
+                 "reloaded 20ms profile must complete within 500ms — animator is caching profile resolution");
+
+        delete surface;
+    }
+
     /// Driving a real Surface end-to-end. Uses MockTransport + MockScreen
     /// so the test doesn't need a live compositor. Verifies opacity
     /// reaches 1.0 and the completion callback fires.
@@ -491,15 +631,26 @@ private Q_SLOTS:
     /// SurfaceAnimator destructor cancels any leftover tracks. Without
     /// this guard a surface that outlives the animator (mis-ordered
     /// teardown) would write into a dead Track on its next tick.
+    ///
+    /// Naively, deleting the Surface first runs Surface::~Impl which
+    /// calls deps.animator->cancel(surface) and empties m_tracks before
+    /// ~SurfaceAnimator runs — the dtor's defensive loop never executes.
+    /// To actually exercise the loop we construct the Surface with a
+    /// null deps.animator (so Surface dispatches through the lib-default
+    /// no-op animator and our SurfaceAnimator never gets a Surface-side
+    /// cancel), then manually drive our standalone SurfaceAnimator via
+    /// beginShow() to install a tracking entry. Deleting the animator
+    /// while the surface is still alive forces the dtor's
+    /// `while (!m_tracks.empty())` loop to clean up the leftover entry.
     void dtor_cancels_leftover_tracks()
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
 
-        auto* anim = new SurfaceAnimator(defaultsForTesting());
-
+        // Surface plumbed with NO animator — Surface::~Impl will call
+        // the lib-default no-op animator's cancel(), not ours.
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
-        deps.animator = anim;
+        deps.animator = nullptr;
         SurfaceFactory f(deps);
 
         PhosphorLayer::SurfaceConfig cfg;
@@ -510,17 +661,30 @@ private Q_SLOTS:
         cfg.debugName = QStringLiteral("dtor-test");
 
         auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
         surface->show();
 
-        // Delete the surface FIRST so the Surface::~Impl path runs
-        // animator->cancel() while the animator is still alive. Then
-        // delete the animator. This is the correct teardown order (the
-        // production path always destroys the daemon's surfaces before
-        // its OverlayService-owned animator); the test verifies the
-        // ~Private destructor doesn't crash on a non-empty m_tracks if
-        // the consumer somehow leaves entries behind.
-        delete surface;
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // Standalone animator with a long-running profile so its track
+        // entry is in-flight at the time we delete the animator.
+        auto* anim = new SurfaceAnimator(defaultsForTesting());
+        bool completed = false;
+        anim->beginShow(surface, target, [&completed]() {
+            completed = true;
+        });
+
+        // Animator's m_tracks now contains an entry for `surface`.
+        // Deleting the animator must clean it up via the defensive
+        // dtor loop without firing onComplete (cancellation is a
+        // non-completion termination per the documented contract).
         delete anim;
+        QVERIFY2(!completed, "animator dtor must NOT fire onComplete on leftover tracks");
+
+        // Surface still alive at this point — its dtor calls into the
+        // (now-default-only) no-op animator, which is safe.
+        delete surface;
     }
 };
 

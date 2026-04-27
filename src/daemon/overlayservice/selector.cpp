@@ -160,15 +160,23 @@ void OverlayService::hideZoneSelector()
     // of paying ~50-100 ms for a fresh layer-shell attach. Reset the QML-
     // side hover state explicitly — autoScrollTimer would otherwise tick
     // on stale cursor coords between hide and the next show.
+    //
+    // Restrict the reset + hide to surfaces actually in Shown state. With
+    // many virtual screens, m_screenStates accumulates one entry per VS
+    // even if only one selector was ever shown for the active drag; the
+    // unfiltered loop wrote a small storm of redundant QML invocations on
+    // every hide. Surface::hide() on a non-Shown surface is already a
+    // no-op + warning, so filtering also keeps the journal quiet.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
         const auto& s = m_screenStates.value(screenId);
+        if (!s.zoneSelectorSurface || s.zoneSelectorSurface->state() != PhosphorLayer::Surface::State::Shown) {
+            continue;
+        }
         if (s.zoneSelectorWindow) {
             QMetaObject::invokeMethod(s.zoneSelectorWindow, "resetCursorState");
         }
-        if (s.zoneSelectorSurface) {
-            s.zoneSelectorSurface->hide();
-        }
+        s.zoneSelectorSurface->hide();
     }
 
     Q_EMIT zoneSelectorVisibilityChanged(false);

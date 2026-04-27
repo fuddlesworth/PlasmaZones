@@ -133,9 +133,12 @@ public:
     /// Per-surface in-flight bookkeeping. Each surface tracks at most one
     /// opacity AnimatedValue and one (optional) scale AnimatedValue at a
     /// time — beginShow/beginHide replace any prior pair via cancel(). The
-    /// AnimatedValue<qreal>s are heap-allocated because they're move-only
-    /// AND the `onValueChanged` callback they hold needs to capture a
-    /// stable pointer to *this* AnimatedValue for re-entry safety.
+    /// AnimatedValue<qreal>s are held via unique_ptr so the slot can be
+    /// nulled (`slot.opacity.reset()`) before installing a fresh value,
+    /// without forcing AnimatedValue itself to expose an empty / moved-from
+    /// state. unordered_map already permits move-only mapped types; the
+    /// indirection is solely for the reset-and-replace semantics
+    /// `runLeg` relies on.
     struct Track
     {
         QPointer<QQuickItem> target; ///< Auto-nulls if QML scene tears down mid-flight
@@ -310,12 +313,26 @@ public:
         // usable slot whose unique_ptrs we explicitly reset below before
         // installing fresh AnimatedValues. Belt-and-braces: a Q_ASSERT
         // here would be debug-only and silently corrupt release builds.
-        Track& slot = m_tracks[surface];
-        slot.opacity.reset();
-        slot.scale.reset();
-        slot.target = target;
-        slot.onComplete = std::move(onComplete);
-        slot.pendingLegs = legCount;
+        {
+            Track& slot = m_tracks[surface];
+            slot.opacity.reset();
+            slot.scale.reset();
+            slot.target = target;
+            slot.onComplete = std::move(onComplete);
+            slot.pendingLegs = legCount;
+            // Construct both AnimatedValues into the slot atomically BEFORE
+            // calling start() on either. start() can synchronously fire
+            // onValueChanged → target->setOpacity() → QML binding chain →
+            // re-entrant cancel(surface), which would erase the slot. By
+            // installing both unique_ptrs up front (instead of constructing
+            // the scale leg AFTER opacity->start() returns) we avoid the
+            // dangling-reference window that an interleaved teardown would
+            // otherwise open between the two assignments.
+            slot.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            if (!scaleProfilePath.isEmpty()) {
+                slot.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            }
+        }
 
         // Capture-by-value of `surface` is safe — it's a raw pointer key,
         // never dereferenced inside the callback. The QPointer<QQuickItem>
@@ -324,46 +341,73 @@ public:
         // the SurfaceAnimator's lifetime contract is "outlives every Surface
         // it animates" — the daemon owns the SurfaceAnimator and the
         // SurfaceFactory together, dtor ordering guarantees this.
-        slot.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
-        slot.opacity->start(fromOpacity, toOpacity,
-                            buildSpec(
-                                resolveProfile(m_registry, opacityProfilePath), clock,
-                                /*onValueChanged=*/
-                                [this, surface](const qreal& v) {
-                                    auto it = m_tracks.find(surface);
-                                    if (it == m_tracks.end() || !it->second.target) {
-                                        return;
-                                    }
-                                    it->second.target->setOpacity(v);
-                                },
-                                /*onComplete=*/
-                                [this, surface]() {
-                                    legCompleted(surface);
-                                }));
+        //
+        // Re-find on every access between start() calls so we never hold a
+        // dangling reference to the slot. If a re-entrant cancel erased the
+        // entry mid-flight (see comment above), the second start() simply
+        // bails — we can't drive a leg whose tracking entry no longer
+        // exists. The first leg's start() may also see its own track
+        // erased by a synchronous onComplete (zero-duration profile +
+        // 1-leg case), which is harmless: the AnimatedValue lives in the
+        // unique_ptr we just installed, and its destruction is owned by
+        // legCompleted's `m_tracks.erase(it)` — we never re-touch the slot
+        // after the start() call below.
+        {
+            auto it = m_tracks.find(surface);
+            if (it == m_tracks.end() || !it->second.opacity) {
+                // Nothing to start — runLeg races against re-entry; no-op.
+                return;
+            }
+            it->second.opacity->start(fromOpacity, toOpacity,
+                                      buildSpec(
+                                          resolveProfile(m_registry, opacityProfilePath), clock,
+                                          /*onValueChanged=*/
+                                          [this, surface](const qreal& v) {
+                                              auto sit = m_tracks.find(surface);
+                                              if (sit == m_tracks.end() || !sit->second.target) {
+                                                  return;
+                                              }
+                                              sit->second.target->setOpacity(v);
+                                          },
+                                          /*onComplete=*/
+                                          [this, surface]() {
+                                              legCompleted(surface);
+                                          }));
+        }
 
         if (!scaleProfilePath.isEmpty()) {
-            slot.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
-            slot.scale->start(fromScale, toScale,
-                              buildSpec(
-                                  resolveProfile(m_registry, scaleProfilePath), clock,
-                                  /*onValueChanged=*/
-                                  [this, surface](const qreal& v) {
-                                      auto it = m_tracks.find(surface);
-                                      if (it == m_tracks.end() || !it->second.target) {
-                                          return;
-                                      }
-                                      it->second.target->setScale(v);
-                                  },
-                                  /*onComplete=*/
-                                  [this, surface]() {
-                                      legCompleted(surface);
-                                  }));
+            auto it = m_tracks.find(surface);
+            if (it == m_tracks.end() || !it->second.scale) {
+                // The opacity leg's start() (or one of its synchronous
+                // callbacks) cancelled the tracking entry. Nothing to
+                // scale-leg into — bail and let the cancellation stand.
+                return;
+            }
+            it->second.scale->start(fromScale, toScale,
+                                    buildSpec(
+                                        resolveProfile(m_registry, scaleProfilePath), clock,
+                                        /*onValueChanged=*/
+                                        [this, surface](const qreal& v) {
+                                            auto sit = m_tracks.find(surface);
+                                            if (sit == m_tracks.end() || !sit->second.target) {
+                                                return;
+                                            }
+                                            sit->second.target->setScale(v);
+                                        },
+                                        /*onComplete=*/
+                                        [this, surface]() {
+                                            legCompleted(surface);
+                                        }));
         }
 
         // Kick the driver so advance() starts firing on the next event-
         // loop tick. ensureDriving is idempotent — repeated beginShow /
         // beginHide calls on different surfaces don't pile up timers.
-        ensureDriving();
+        // Skip if a re-entrant cancel already drained the map — no point
+        // running the timer for nothing.
+        if (!m_tracks.empty()) {
+            ensureDriving();
+        }
     }
 
     /// Decrement pendingLegs for @p surface; fire the consumer's

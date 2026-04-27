@@ -94,6 +94,16 @@ Window {
     property bool locked: false
     property bool disabled: false
     property string disabledReason
+    /// Idempotency latch for `dismissRequested`. The timer-fire path and the
+    /// MouseArea click path both want to dismiss; without this, a click
+    /// landing during the brief window between dismissTimer triggering and
+    /// `Qt.WindowTransparentForInput` actually flipping at the QWindow
+    /// level (the lib sets it inside the hide dispatch, which is async wrt
+    /// the QML event loop) double-fires. C++ then re-runs Surface::hide()
+    /// on a Hidden surface and logs `qCWarning` for every spurious click.
+    /// Reset on every restartDismissTimer() so a re-shown OSD dismisses
+    /// normally.
+    property bool _dismissed: false
 
     /// Auto-dismiss request emitted by the dismissTimer. C++ side hooks this
     /// to OverlayService → Surface::hide() so the library can drive the
@@ -104,7 +114,17 @@ Window {
     /// QML-internal `dismissTimer.restart()` that the old show() used to
     /// call.
     function restartDismissTimer() {
+        _dismissed = false;
         dismissTimer.restart();
+    }
+
+    /// Internal: emit dismissRequested at most once per show cycle.
+    function _requestDismiss() {
+        if (_dismissed)
+            return ;
+
+        _dismissed = true;
+        root.dismissRequested();
     }
 
     // Window configuration. Static flags — Phase 5 surface lifecycle owns
@@ -125,7 +145,7 @@ Window {
         id: dismissTimer
 
         interval: root.displayDuration
-        onTriggered: root.dismissRequested()
+        onTriggered: root._requestDismiss()
     }
 
     // Content wrapper - opacity defaults to 1 now. Phase 5 SurfaceAnimator
@@ -277,14 +297,15 @@ Window {
 
         }
 
-        // Click to dismiss. With Phase-5 surface lifecycle the post-hide
-        // transparent state is enforced at the QWindow level via
-        // Qt.WindowTransparentForInput (set by Surface::Impl when the
-        // animator's beginHide path runs), so the MouseArea no longer
-        // needs the QML-side gate — the click never reaches us.
+        // Click to dismiss. The QML-side `_dismissed` latch in
+        // `_requestDismiss()` collapses overlapping dismiss sources
+        // (timer-fire + click during the same show cycle) into a single
+        // dismissRequested signal. C++ then runs Surface::hide() exactly
+        // once, avoiding the spurious qCWarning storm a double-call would
+        // otherwise produce.
         MouseArea {
             anchors.fill: parent
-            onClicked: root.dismissRequested()
+            onClicked: root._requestDismiss()
         }
 
     }
