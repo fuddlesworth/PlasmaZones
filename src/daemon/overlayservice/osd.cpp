@@ -393,16 +393,14 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
         return;
     }
 
-    const auto role = PzRoles::LayoutOsd.withScopePrefix(
-        QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
-
-    // Phase 5: keepMappedOnHide=true so SurfaceAnimator drives opacity for
-    // the visual fade and the library handles Qt.WindowTransparentForInput
-    // on hide. Surface stays Qt-visible across cycles — the warm-up pre-
-    // creation pattern stays intact.
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, role, "layout OSD",
-                                       QVariantMap(), std::nullopt, std::nullopt,
-                                       /*keepMappedOnHide=*/true);
+    // Phase 5: keepMappedOnHide=true (handled by createWarmedOsdSurface) so
+    // SurfaceAnimator drives opacity for the visual fade and the library
+    // handles Qt.WindowTransparentForInput on hide. The dismissRequested
+    // wiring is also done inside the helper.
+    const QString scopePrefix =
+        QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
+    auto* surface = createWarmedOsdSurface(PzRoles::LayoutOsd, scopePrefix,
+                                           QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, "layout OSD");
     if (!surface) {
         return;
     }
@@ -411,12 +409,6 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
     state.layoutOsdSurface = surface;
     state.layoutOsdWindow = surface->window();
     state.layoutOsdPhysScreen = physScreen;
-
-    // Wire the QML auto-dismiss timer's `dismissRequested()` signal to
-    // Surface::hide() — drives the SurfaceAnimator's beginHide which
-    // animates opacity to zero. Without this connection the dismissTimer
-    // would have nothing to call (Phase 5 removed the QML hide() function).
-    QObject::connect(state.layoutOsdWindow, SIGNAL(dismissRequested()), surface, SLOT(hide()));
 }
 
 void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
@@ -605,13 +597,13 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
         return;
     }
 
-    const auto role = PzRoles::NavigationOsd.withScopePrefix(
-        QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
-
-    // Phase 5 keepMappedOnHide=true (same rationale as createLayoutOsdWindow).
+    // Phase 5: keepMappedOnHide + dismissRequested wiring done inside
+    // createWarmedOsdSurface (same rationale as createLayoutOsdWindow).
+    const QString scopePrefix =
+        QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
     auto* surface =
-        createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, role, "navigation OSD",
-                           QVariantMap(), std::nullopt, std::nullopt, /*keepMappedOnHide=*/true);
+        createWarmedOsdSurface(PzRoles::NavigationOsd, scopePrefix, QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")),
+                               physScreen, "navigation OSD");
     if (!surface) {
         m_navigationOsdCreationFailed.insert(screenId, true);
         return;
@@ -622,12 +614,6 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
     state.navigationOsdWindow = surface->window();
     state.navigationOsdPhysScreen = physScreen;
     m_navigationOsdCreationFailed.remove(screenId);
-
-    // Wire the QML dismiss-timer signal to Surface::hide() — same pattern
-    // as createLayoutOsdWindow above. Without this the dismissTimer fires
-    // dismissRequested() into an unconnected signal and the OSD never
-    // visually dismisses.
-    QObject::connect(state.navigationOsdWindow, SIGNAL(dismissRequested()), surface, SLOT(hide()));
 }
 
 void OverlayService::destroyNavigationOsdWindow(const QString& screenId)

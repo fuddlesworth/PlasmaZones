@@ -81,6 +81,21 @@ public:
         , m_config(std::move(cfg))
         , m_deps(std::move(deps))
     {
+        // Footgun warning: an injected animator with keepMappedOnHide=false
+        // means hide() unmaps the QQuickWindow synchronously after dispatching
+        // beginHide. The animator's first frame doesn't get a chance to render
+        // before the wl_surface tears down, so the visual fade is invisible
+        // to the user even though all the dispatch plumbing is correct.
+        // Logged at debug because some consumers may legitimately want
+        // beginHide for non-visual side effects (telemetry, prefetch
+        // teardown) and don't care about the fade — but most don't.
+        if (m_deps.animator && !m_config.keepMappedOnHide) {
+            qCDebug(lcPhosphorLayer) << "Surface" << m_config.effectiveDebugName()
+                                     << "has an injected animator but keepMappedOnHide=false — "
+                                        "hide animation frames will not paint before window unmap. "
+                                        "Set SurfaceConfig::keepMappedOnHide=true if a visible "
+                                        "fade-out is desired.";
+        }
         // Subscribe to screen-removal so we never hand the transport a dangling
         // QScreen* after a hot-unplug. When the attached screen disappears we
         // null m_config.screen; the next finishAttach() falls back to the

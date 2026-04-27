@@ -583,6 +583,32 @@ private:
                                 QRect& screenGeom, qreal& aspectRatio, const QString& screenId = QString());
 
     /**
+     * @brief Parameters for @ref createLayerSurface, kept as a named-member
+     *        aggregate so call sites read top-to-bottom rather than relying
+     *        on positional arg ordering. Required fields up top, optional
+     *        below; Qt6 designated-init form is `LayerSurfaceParams{.qmlUrl=...}`.
+     */
+    struct LayerSurfaceParams
+    {
+        // Required.
+        QUrl qmlUrl = {}; ///< QML file (Window-rooted — PZ's overlay QML convention)
+        QScreen* screen = nullptr; ///< target screen (physical; virtual-screen positioning is the caller's job)
+        PhosphorLayer::Role role = {}; ///< protocol-level preset (see pz_roles.h)
+        const char* windowType = ""; ///< debug/telemetry label
+
+        // Optional — explicit `= {}` suppresses GCC's
+        // -Wmissing-field-initializers warning on designated-init call sites
+        // that omit these. (For `QUrl` / `Role` above the same is true; we
+        // just want one consistent style across the struct.)
+        QVariantMap windowProperties = {}; ///< Applied as dynamic properties before QML loads.
+        std::optional<PhosphorLayer::Anchors> anchorsOverride =
+            std::nullopt; ///< Overrides the role's anchors (virtual-screen positioning).
+        std::optional<QMargins> marginsOverride =
+            std::nullopt; ///< Overrides the role's margins (virtual-screen positioning).
+        bool keepMappedOnHide = false; ///< See SurfaceConfig::keepMappedOnHide.
+    };
+
+    /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
      *
      * Every overlay, OSD, zone selector, snap assist, layout picker, and shader
@@ -591,25 +617,32 @@ private:
      * is hidden — callers decide when to call @c surface->show() or keep it warm
      * for pre-warmed OSDs.
      *
-     * @param qmlUrl            QML file (Window-rooted — PZ's overlay QML convention)
-     * @param screen            target screen (physical; virtual-screen positioning is the caller's job)
-     * @param role              protocol-level preset (see pz_roles.h)
-     * @param windowType        debug/telemetry label
-     * @param windowProperties  QVariantMap applied as dynamic properties on the
-     *                          QQuickWindow before QML loads
-     * @param anchorsOverride   if set, overrides the role's anchors (used for
-     *                          virtual-screen positioning)
-     * @param marginsOverride   if set, overrides the role's margins (used for
-     *                          virtual-screen positioning)
-     *
      * @return the surface on success; nullptr on failure (warnings logged internally).
      */
-    PhosphorLayer::Surface* createLayerSurface(const QUrl& qmlUrl, QScreen* screen, const PhosphorLayer::Role& role,
-                                               const char* windowType,
-                                               const QVariantMap& windowProperties = QVariantMap(),
-                                               std::optional<PhosphorLayer::Anchors> anchorsOverride = std::nullopt,
-                                               std::optional<QMargins> marginsOverride = std::nullopt,
-                                               bool keepMappedOnHide = false);
+    PhosphorLayer::Surface* createLayerSurface(LayerSurfaceParams params);
+
+    /**
+     * @brief Create a warmed OSD-style surface and wire its dismiss signal.
+     *
+     * Common pattern for `createLayoutOsdWindow` / `createNavigationOsdWindow`:
+     * (1) build a per-instance scope-prefixed Role from the base role,
+     * (2) call createLayerSurface with keepMappedOnHide=true,
+     * (3) string-connect the QML-side `dismissRequested()` signal to
+     *     `Surface::hide()` so the auto-dismiss timer can drive the animator.
+     *
+     * Returns the warmed Surface on success; nullptr on failure (warning
+     * logged inside createLayerSurface). Caller installs the surface +
+     * window pointers into PerScreenOverlayState.
+     *
+     * @param baseRole       Base role to scope-prefix (e.g. PzRoles::LayoutOsd).
+     * @param scopePrefix    Prefix string template after the base role's
+     *                       prefix (typically `"plasmazones-{kind}-{screenId}-{gen}"`).
+     * @param qmlUrl         QML file to load.
+     * @param physScreen     Target physical screen.
+     * @param windowType     Debug/telemetry label.
+     */
+    PhosphorLayer::Surface* createWarmedOsdSurface(const PhosphorLayer::Role& baseRole, const QString& scopePrefix,
+                                                   const QUrl& qmlUrl, QScreen* physScreen, const char* windowType);
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);

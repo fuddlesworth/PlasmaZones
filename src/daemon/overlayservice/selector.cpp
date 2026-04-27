@@ -408,9 +408,13 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // across hide/show cycles; SurfaceAnimator drives the visual fade and
     // the library flips Qt::WindowTransparentForInput during the hide so
     // the still-mapped layer surface stops eating clicks.
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), physScreen, role,
-                                       "zone selector", QVariantMap(), anchorsOverride, marginsOverride,
-                                       /*keepMappedOnHide=*/true);
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")),
+                                        .screen = physScreen,
+                                        .role = role,
+                                        .windowType = "zone selector",
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride,
+                                        .keepMappedOnHide = true});
     if (!surface) {
         return;
     }

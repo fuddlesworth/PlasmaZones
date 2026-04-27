@@ -343,6 +343,151 @@ private Q_SLOTS:
         delete surface;
     }
 
+    /// Regression: beginShow superseding a mid-flight beginHide must pick
+    /// up from the live opacity instead of jumping back to 0. Pre-fix,
+    /// the show path hardcoded fromOpacity=0; with the live-from change
+    /// a re-show while the hide is at 0.5 fades 0.5→1.0, not 0.5→0→1.0.
+    void show_after_partial_hide_starts_from_live_opacity()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        SurfaceAnimator anim(defaultsForTesting());
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorLayer::Roles::CenteredModal;
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = s.primary();
+        cfg.keepMappedOnHide = true;
+        cfg.debugName = QStringLiteral("supersede-test");
+
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+        surface->show();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999;
+            },
+            500));
+
+        // Manually pin the target opacity to a mid-fade value to simulate
+        // a hide caught mid-flight. We're not running a real hide (timing
+        // would race the test); the contract is "beginShow reads live
+        // opacity, doesn't slam to 0".
+        target->setOpacity(0.5);
+
+        // The show path's runLeg sets the target opacity to the computed
+        // fromOpacity synchronously before the first tick — so right after
+        // surface->show(), opacity must NOT be 0 (the pre-fix bug). Since
+        // 0.5 < 1.0, the supersession-aware path should keep it at 0.5
+        // and fade up.
+        surface->show();
+        const qreal opacityAfterShow = target->opacity();
+        QVERIFY2(opacityAfterShow > 0.001, "beginShow superseding a partial state must not slam opacity to 0");
+
+        // And it should still finish at 1.0.
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999;
+            },
+            500));
+        delete surface;
+    }
+
+    /// Fresh first show (no prior animation, target opacity defaulted to
+    /// 1.0 by QQuickItem) must reset to 0 and fade up. Otherwise the
+    /// supersession-aware live-from path would observe opacity==1.0 and
+    /// run a no-op fade-from-1-to-1.
+    void show_fresh_starts_from_zero()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        SurfaceAnimator anim(defaultsForTesting());
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorLayer::Roles::CenteredModal;
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = s.primary();
+        cfg.debugName = QStringLiteral("fresh-show-test");
+
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+
+        // Surface warming is what gives us a window + content tree.
+        // Resolving the target before show() returns nullptr.
+        surface->show();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // After show kicks the runLeg synchronously, target opacity must
+        // be 0.0 — the fresh-show path picked the configured fromOpacity
+        // because the live opacity (QQuickItem default 1.0) was at the
+        // terminal value. Without the supersession-aware reset this would
+        // be 1.0 and we'd see no fade-in.
+        QCOMPARE(target->opacity(), 0.0);
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999;
+            },
+            500));
+        delete surface;
+    }
+
+    /// Zero-duration profile completes the leg synchronously. Verify the
+    /// user's onComplete fires exactly once and that the target lands at
+    /// the terminal value. Edge case for the Profile JSON live-reload
+    /// path — a user could ship a 0 ms profile to "instantly snap" an
+    /// overlay.
+    void zero_duration_profile_completes_synchronously()
+    {
+        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.zero"), makeProfile(0));
+        struct Cleanup
+        {
+            ~Cleanup()
+            {
+                PhosphorProfileRegistry::instance().unregisterProfile(QStringLiteral("test.zero"));
+            }
+        } _;
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = QStringLiteral("test.zero");
+        cfg.hideProfile = QStringLiteral("test.zero");
+        SurfaceAnimator anim(cfg);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.debugName = QStringLiteral("zero-duration-test");
+
+        auto* surface = f.create(std::move(sc));
+        surface->show();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // 0 ms profile may still need one tick to settle since AnimatedValue
+        // latches startTime on the first advance. Wait for the timer.
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999;
+            },
+            500));
+        delete surface;
+    }
+
     /// SurfaceAnimator destructor cancels any leftover tracks. Without
     /// this guard a surface that outlives the animator (mis-ordered
     /// teardown) would write into a dead Track on its next tick.

@@ -55,6 +55,14 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    /// Logically-shown state, written by C++ alongside Surface::show/hide so
+    /// the QML-side keyboard Shortcuts below can be disabled while the
+    /// surface is hidden. With keepMappedOnHide=true the QQuickWindow stays
+    /// Qt-visible across hide/show cycles, so QML Shortcuts attached to the
+    /// root remain registered with Qt's accelerator pipeline; without this
+    /// gate, a stray accelerator delivery (focus stealer, programmatic key
+    /// event) could trigger Enter/arrows on a logically-hidden picker.
+    property bool _shortcutsActive: false
     // Phase 5: surface lifecycle + show/hide animations are entirely library-
     // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
     // PzRoles::LayoutPicker) drives this Window's content opacity + container
@@ -89,7 +97,9 @@ Window {
     /// User-initiated dismiss request (backdrop click, Escape). C++ event
     /// filter and the OverlayService::hideLayoutPicker slot translate this
     /// into Surface::hide() — which then drives the library animator.
-    signal dismissed()
+    /// Named to match LayoutOsd / NavigationOsd for consistency across
+    /// dismissable overlays.
+    signal dismissRequested()
 
     function moveSelection(dx, dy) {
         if (layoutCount === 0 || root.locked)
@@ -140,34 +150,42 @@ Window {
         readonly property int previewWidth: 160
     }
 
-    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support)
+    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support).
+    // All Shortcuts gate on root._shortcutsActive — see the property doc for
+    // why this matters under keepMappedOnHide=true.
     Shortcut {
         sequence: "Return"
+        enabled: root._shortcutsActive
         onActivated: confirmSelection()
     }
 
     Shortcut {
         sequence: "Enter"
+        enabled: root._shortcutsActive
         onActivated: confirmSelection()
     }
 
     Shortcut {
         sequence: "Left"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(-1, 0)
     }
 
     Shortcut {
         sequence: "Right"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(1, 0)
     }
 
     Shortcut {
         sequence: "Up"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(0, -1)
     }
 
     Shortcut {
         sequence: "Down"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(0, 1)
     }
 
@@ -180,11 +198,11 @@ Window {
         anchors.fill: parent
 
         // Backdrop — click outside to dismiss (transparent, no dim). The
-        // C++ side hooks dismissed() to OverlayService::hideLayoutPicker,
+        // C++ side hooks dismissRequested() to OverlayService::hideLayoutPicker,
         // which calls Surface::hide() and drives the animator.
         MouseArea {
             anchors.fill: parent
-            onClicked: root.dismissed()
+            onClicked: root.dismissRequested()
             Accessible.name: i18n("Dismiss layout picker")
             Accessible.role: Accessible.Button
         }

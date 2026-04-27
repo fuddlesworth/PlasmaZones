@@ -163,13 +163,15 @@ public:
         if (it == m_tracks.end()) {
             return;
         }
-        // Stop the AnimatedValues before invoking onComplete: a buggy
-        // consumer that reads back property state from inside onComplete
-        // mustn't catch the AnimatedValue mid-tick. AnimatedValue::stop
-        // is documented as not firing the spec.onComplete (matches the
-        // ISurfaceAnimator::cancel contract — "the animator must call
-        // onComplete exactly once per beginShow/beginHide" — cancel is
-        // an explicitly non-completion termination).
+        // AnimatedValue::cancel() clears m_isAnimating + m_isComplete
+        // without firing spec.onComplete (verified at AnimatedValue.h:464);
+        // this matches the ISurfaceAnimator::cancel contract — "the
+        // animator must call onComplete exactly once per
+        // beginShow/beginHide; cancel is an explicitly non-completion
+        // termination". Order matters: cancel both legs BEFORE erasing
+        // so the leg-completion lambdas captured by the AnimatedValues
+        // don't observe a half-erased Track if a buggy curve impl ever
+        // re-enters via onValueChanged during teardown.
         if (it->second.opacity) {
             it->second.opacity->cancel();
         }
@@ -269,15 +271,19 @@ public:
 
         const int legCount = scaleProfilePath.isEmpty() ? 1 : 2;
 
-        // Insert FIRST so the leg-completion callbacks below find the
-        // entry already present. AnimatedValue::start fires onValueChanged
-        // synchronously on the first tick (same event-loop turn) under
-        // some clock implementations; without the pre-insert the lambda
-        // would race the map insert. cancelTracking() above guarantees a
-        // fresh entry, so try_emplace always default-constructs the Track.
-        auto [trackIt, inserted] = m_tracks.try_emplace(surface);
-        Q_ASSERT(inserted);
-        Track& slot = trackIt->second;
+        // Insert/refresh FIRST so the leg-completion callbacks below find
+        // the entry already present. AnimatedValue::start fires
+        // onValueChanged synchronously on the first tick (same event-loop
+        // turn) under some clock implementations; without the pre-insert
+        // the lambda would race the map insert. cancelTracking() above
+        // normally guarantees a fresh entry — but if a future refactor
+        // ever leaves a stale entry behind, operator[] still gives us a
+        // usable slot whose unique_ptrs we explicitly reset below before
+        // installing fresh AnimatedValues. Belt-and-braces: a Q_ASSERT
+        // here would be debug-only and silently corrupt release builds.
+        Track& slot = m_tracks[surface];
+        slot.opacity.reset();
+        slot.scale.reset();
         slot.target = target;
         slot.onComplete = std::move(onComplete);
         slot.pendingLegs = legCount;
@@ -484,9 +490,25 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
         return;
     }
     const Config cfg = d->configFor(surface->config().role);
-    const qreal fromScale = cfg.showScaleProfile.isEmpty() ? 1.0 : cfg.showScaleFrom;
+
+    // Supersession-aware starting state. If the previous animation left
+    // the target mid-fade (opacity < 1 / scale < 1), pick up from there
+    // so the user sees a continuous fade-up instead of a one-frame jump
+    // back to the configured "from" value. If we're already at (or past)
+    // the terminal state — fresh first show, no prior animation — fall
+    // back to the configured starting values so we actually run an
+    // animation rather than a no-op fade-from-1-to-1.
+    const qreal liveOpacity = rootItem ? rootItem->opacity() : 1.0;
+    const qreal fromOpacity = (liveOpacity < 1.0) ? liveOpacity : 0.0;
+
     const qreal toScale = 1.0;
-    d->runLeg(surface, rootItem, /*fromOpacity=*/0.0, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
+    qreal fromScale = 1.0;
+    if (!cfg.showScaleProfile.isEmpty()) {
+        const qreal liveScale = rootItem ? rootItem->scale() : 1.0;
+        fromScale = (liveScale < toScale) ? liveScale : cfg.showScaleFrom;
+    }
+
+    d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
               cfg.showScaleProfile, std::move(onComplete));
 }
 

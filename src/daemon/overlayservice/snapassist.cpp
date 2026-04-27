@@ -327,8 +327,12 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
     const auto role = PzRoles::SnapAssist.withScopePrefix(
         QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
 
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")), screen, role,
-                                       "snap assist", QVariantMap(), anchorsOverride, marginsOverride);
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "snap assist",
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride});
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create snap assist overlay";
         return;
@@ -519,6 +523,13 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         }
     }
 
+    // Activate the QML-side keyboard Shortcuts before show() so any
+    // accelerator events that race the show animation reach a picker
+    // that's expecting them. Cleared in hideLayoutPicker so a logically-
+    // hidden picker (still Qt-visible under keepMappedOnHide) doesn't
+    // silently respond to stray accelerator deliveries.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), true);
+
     // Phase 5: Surface::show() drives the SurfaceAnimator (registered for
     // PzRoles::LayoutPicker with osd.show + osd.pop) which animates
     // opacity 0→1 and scale 0.9→1 with overshoot. The library handles
@@ -537,6 +548,16 @@ void OverlayService::hideLayoutPicker()
 {
     if (!m_layoutPickerSurface) {
         return;
+    }
+
+    // Disable the picker's QML-side keyboard Shortcuts before the surface
+    // transitions to Hidden. Under keepMappedOnHide the QQuickWindow stays
+    // Qt-visible, which means the Shortcuts remain registered with Qt's
+    // accelerator pipeline; gating them on a property C++ controls keeps
+    // a logically-hidden picker from responding to stray accelerator
+    // events.
+    if (m_layoutPickerWindow) {
+        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), false);
     }
 
     // Phase 5: Surface::hide() drives the SurfaceAnimator's beginHide
@@ -645,9 +666,13 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // visual fade and the library flips Qt::WindowTransparentForInput
     // during the hide so the still-mapped layer surface stops eating
     // clicks.
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, role,
-                                       "layout picker", QVariantMap(), anchorsOverride, marginsOverride,
-                                       /*keepMappedOnHide=*/true);
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "layout picker",
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride,
+                                        .keepMappedOnHide = true});
     if (!surface) {
         return;
     }
@@ -663,14 +688,13 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
         }
     });
 
-    // Connect layoutSelected and dismissed signals from QML.
-    // dismissed() is the QML-visible "user dismissed" event — fired at the
-    // end of the hide animation and from the event-filter Escape path. The
-    // C++ slot emits the public layoutPickerSelected/dismissed signals; it
-    // does NOT re-enter hideLayoutPicker (the QML hide() invocation already
-    // did the bookkeeping that called us).
+    // Connect layoutSelected and dismissRequested signals from QML.
+    // dismissRequested() is the QML-visible "user dismissed" event — fired
+    // from the backdrop MouseArea (and the C++ Escape event-filter path
+    // routes through hideLayoutPicker directly, not via this signal). Same
+    // signal name as LayoutOsd / NavigationOsd for consistency.
     connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
-    connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutPicker()));
+    connect(window, SIGNAL(dismissRequested()), this, SLOT(hideLayoutPicker()));
 
     // No visibleChanged → hide hookup here. The post-warmup design keeps the
     // Qt window `visible == true` for the surface's lifetime; the dismiss

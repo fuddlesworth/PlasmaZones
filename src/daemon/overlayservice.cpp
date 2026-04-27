@@ -121,13 +121,25 @@ void OverlayService::setupSurfaceAnimator()
 {
     namespace PAL = PhosphorAnimationLayer;
 
+    // Profile path strings used below. Lifted as named statics so a typo
+    // within this function is impossible (the compiler binds the symbol;
+    // the registry resolves the value once at first call). Profile JSONs
+    // discovered through PhosphorProfileRegistry's watcher path can still
+    // change the curve/duration these names resolve to at runtime.
+    static const QString osdShow = QStringLiteral("osd.show");
+    static const QString osdPop = QStringLiteral("osd.pop");
+    static const QString osdHide = QStringLiteral("osd.hide");
+    static const QString panelPopup = QStringLiteral("panel.popup");
+    static const QString widgetFade = QStringLiteral("widget.fade");
+    static const QString widgetFadeOut = QStringLiteral("widget.fadeOut");
+
     // Default config: every Surface whose Role isn't explicitly
     // registered gets a plain opacity-only fade using widget.fade. This
     // is what e.g. ShaderPreview or any future overlay we forget to
     // register falls back to.
     PAL::SurfaceAnimator::Config defaults;
-    defaults.showProfile = QStringLiteral("widget.fade");
-    defaults.hideProfile = QStringLiteral("widget.fadeOut");
+    defaults.showProfile = widgetFade;
+    defaults.hideProfile = widgetFadeOut;
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(std::move(defaults));
 
     // Per-overlay tunings. Profile names are the same paths PhosphorMotion-
@@ -140,30 +152,40 @@ void OverlayService::setupSurfaceAnimator()
     // opacity-only fades.
     {
         PAL::SurfaceAnimator::Config c;
-        c.showProfile = QStringLiteral("osd.show");
-        c.showScaleProfile = QStringLiteral("osd.pop");
+        c.showProfile = osdShow;
+        c.showScaleProfile = osdPop;
         c.showScaleFrom = 0.8;
-        c.hideProfile = QStringLiteral("osd.hide");
-        c.hideScaleProfile = QStringLiteral("osd.hide");
+        c.hideProfile = osdHide;
+        c.hideScaleProfile = osdHide;
         c.hideScaleTo = 0.9;
         m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, c);
         m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, c);
     }
     {
         PAL::SurfaceAnimator::Config c;
-        c.showProfile = QStringLiteral("osd.show");
-        c.showScaleProfile = QStringLiteral("osd.pop");
+        c.showProfile = osdShow;
+        c.showScaleProfile = osdPop;
         c.showScaleFrom = 0.9;
-        c.hideProfile = QStringLiteral("osd.hide");
-        c.hideScaleProfile = QStringLiteral("osd.hide");
+        c.hideProfile = osdHide;
+        c.hideScaleProfile = osdHide;
         c.hideScaleTo = 0.95;
         m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, c);
     }
+    // ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
+    // the hide animation actually paints).
     {
         PAL::SurfaceAnimator::Config c;
-        c.showProfile = QStringLiteral("panel.popup");
-        c.hideProfile = QStringLiteral("widget.fadeOut");
+        c.showProfile = panelPopup;
+        c.hideProfile = widgetFadeOut;
         m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, c);
+    }
+    // SnapAssist: pop-in show only. The overlay uses destroy-on-hide
+    // (keepMappedOnHide=false), so ~Surface synchronously cancels any
+    // in-flight beginHide before the hide animation can paint a frame.
+    // Registering a hideProfile here would be dead code; leave it empty.
+    {
+        PAL::SurfaceAnimator::Config c;
+        c.showProfile = panelPopup;
         m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, c);
     }
 }
@@ -399,29 +421,49 @@ OverlayService::~OverlayService()
     m_surfaceManager->drainDeferredDeletes();
 }
 
-PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,
-                                                           const PhosphorLayer::Role& role, const char* windowType,
-                                                           const QVariantMap& windowProperties,
-                                                           std::optional<PhosphorLayer::Anchors> anchorsOverride,
-                                                           std::optional<QMargins> marginsOverride,
-                                                           bool keepMappedOnHide)
+PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams params)
 {
-    if (!screen) {
-        qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << windowType;
+    if (!params.screen) {
+        qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << params.windowType;
         return nullptr;
     }
 
     PhosphorLayer::SurfaceConfig cfg;
-    cfg.role = role;
-    cfg.contentUrl = qmlUrl;
-    cfg.screen = screen;
-    cfg.windowProperties = windowProperties;
-    cfg.anchorsOverride = anchorsOverride;
-    cfg.marginsOverride = marginsOverride;
-    cfg.keepMappedOnHide = keepMappedOnHide;
-    cfg.debugName = QString::fromUtf8(windowType);
+    cfg.role = std::move(params.role);
+    cfg.contentUrl = std::move(params.qmlUrl);
+    cfg.screen = params.screen;
+    cfg.windowProperties = std::move(params.windowProperties);
+    cfg.anchorsOverride = std::move(params.anchorsOverride);
+    cfg.marginsOverride = std::move(params.marginsOverride);
+    cfg.keepMappedOnHide = params.keepMappedOnHide;
+    cfg.debugName = QString::fromUtf8(params.windowType);
 
     return m_surfaceManager->createSurface(std::move(cfg), this);
+}
+
+PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& baseRole,
+                                                               const QString& scopePrefix, const QUrl& qmlUrl,
+                                                               QScreen* physScreen, const char* windowType)
+{
+    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
+                                        .screen = physScreen,
+                                        .role = baseRole.withScopePrefix(scopePrefix),
+                                        .windowType = windowType,
+                                        .keepMappedOnHide = true});
+    if (!surface) {
+        return nullptr;
+    }
+
+    // Wire the QML-side auto-dismiss signal to Surface::hide(). LayoutOsd
+    // and NavigationOsd both expose `signal dismissRequested()` driven by
+    // their internal Timer; LayoutPicker also uses the same name (post-#9
+    // rename) for backdrop-click dismissal. String-based connect is the
+    // only path because QML-defined signals aren't addressable via Qt5
+    // `&Class::signal` pointers.
+    if (auto* window = surface->window()) {
+        QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));
+    }
+    return surface;
 }
 
 void OverlayService::show()
