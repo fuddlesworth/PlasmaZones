@@ -293,9 +293,17 @@ void OverlayService::hideSnapAssist()
     // Surface::show() pairs with the Surface::hide() in showSnapAssist so the
     // SurfaceAnimator drives the fade-in and the keepMappedOnHide flag flip is
     // reverted properly.
+    //
+    // Gate on Surface state: if a different code path (e.g. a fresh
+    // showZoneSelector triggered by a new drag) already re-showed the
+    // selector while snap-assist was visible, dispatching show() again would
+    // cancel + replay the fade-in on an already-visible surface — visually a
+    // "blip". Only re-show when the surface is genuinely Hidden.
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            selectorSurface->show();
+            if (selectorSurface->state() != PhosphorLayer::Surface::State::Shown) {
+                selectorSurface->show();
+            }
         }
     }
 }
@@ -518,11 +526,17 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Anchors + margins were baked into the Surface by createLayoutPickerWindowFor above
     // using screenGeom, so positioning is already correct.
-    if (!reuseSurface) {
-        assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
-        m_layoutPickerWindow->setWidth(screenGeom.width());
-        m_layoutPickerWindow->setHeight(screenGeom.height());
-    }
+    //
+    // assertWindowOnScreen + setWidth/setHeight are run on every show, even
+    // on the reuse path — if the screen geometry changed between the warmed
+    // surface's creation and now (e.g. external resolution change while the
+    // picker was hidden), the cached dimensions would otherwise be stale.
+    // Both calls are idempotent when nothing changed (Qt skips the property
+    // notify when the new value matches the old), so the cost on the common
+    // unchanged-geometry path is a few comparisons.
+    assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
+    m_layoutPickerWindow->setWidth(screenGeom.width());
+    m_layoutPickerWindow->setHeight(screenGeom.height());
 
     // Re-grab keyboard focus on every show. Layer-shell keyboard
     // interactivity is mutable on the live wl_surface (snap-assist uses the
@@ -590,11 +604,14 @@ void OverlayService::hideLayoutPicker()
     // Re-show the zone selector that was hidden when layout picker was shown (line ~435).
     // Surface::show() pairs with the Surface::hide() in showLayoutPicker so the
     // SurfaceAnimator drives the fade-in and the keepMappedOnHide flag flip is
-    // reverted properly.
+    // reverted properly. Same state-guard rationale as hideSnapAssist above —
+    // skip the dispatch if the selector is already visible.
     const QString screenId = m_layoutPickerScreenId;
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            selectorSurface->show();
+            if (selectorSurface->state() != PhosphorLayer::Surface::State::Shown) {
+                selectorSurface->show();
+            }
         }
     }
 }

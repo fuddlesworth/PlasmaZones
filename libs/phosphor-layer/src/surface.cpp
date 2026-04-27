@@ -81,21 +81,13 @@ public:
         , m_config(std::move(cfg))
         , m_deps(std::move(deps))
     {
-        // Footgun warning: an injected animator with keepMappedOnHide=false
-        // means hide() unmaps the QQuickWindow synchronously after dispatching
-        // beginHide. The animator's first frame doesn't get a chance to render
-        // before the wl_surface tears down, so the visual fade is invisible
-        // to the user even though all the dispatch plumbing is correct.
-        // Logged at debug because some consumers may legitimately want
-        // beginHide for non-visual side effects (telemetry, prefetch
-        // teardown) and don't care about the fade — but most don't.
-        if (m_deps.animator && !m_config.keepMappedOnHide) {
-            qCDebug(lcPhosphorLayer) << "Surface" << m_config.effectiveDebugName()
-                                     << "has an injected animator but keepMappedOnHide=false — "
-                                        "hide animation frames will not paint before window unmap. "
-                                        "Set SurfaceConfig::keepMappedOnHide=true if a visible "
-                                        "fade-out is desired.";
-        }
+        // The "animator + keepMappedOnHide=false" combination is legitimate
+        // for consumers that destroy on hide (snap-assist style) and use the
+        // animator only for the show fade. A blanket constructor warning
+        // would false-positive for that pattern; the actual misuse — calling
+        // Surface::hide() expecting a visible fade-out under the unmap-on-
+        // hide policy — is detected at the hide call site (gated on
+        // m_hideFootgunWarned for once-per-surface diagnostics).
         // Subscribe to screen-removal so we never hand the transport a dangling
         // QScreen* after a hot-unplug. When the attached screen disappears we
         // null m_config.screen; the next finishAttach() falls back to the
@@ -196,6 +188,11 @@ public:
     /// evaluates with the latched intent when it loops back to the top.
     bool m_driving = false;
     bool m_intentPending = false; ///< A nested drive() latched a new intent
+    /// Once-per-surface flag for the "animator + unmap-on-hide" diagnostic.
+    /// Logged at the first Surface::hide() call where the combination would
+    /// drop animation frames; subsequent hides on the same surface stay
+    /// quiet so a hot dismiss path doesn't fill the journal.
+    bool m_hideFootgunWarned = false;
 
     QPointer<QQmlEngine> m_engine;
     EngineOwnership m_engineOwnership = EngineOwnership::None;
@@ -339,6 +336,17 @@ private:
                         // tears the surface down before the animation is
                         // perceptible. Kept as the default for callers that
                         // never opt in to an animator.
+                        if (m_deps.animator && !m_hideFootgunWarned) {
+                            m_hideFootgunWarned = true;
+                            qCWarning(lcPhosphorLayer)
+                                << "Surface" << m_config.effectiveDebugName()
+                                << "Surface::hide() dispatched beginHide on an animator but"
+                                << "keepMappedOnHide=false — wl_surface unmaps synchronously and the"
+                                << "fade-out frames will not paint. Set"
+                                << "SurfaceConfig::keepMappedOnHide=true if a visible fade-out is"
+                                << "desired, or destroy the surface instead of calling hide() if the"
+                                << "animator was wired only for show.";
+                        }
                         QPointer<Surface> self = m_q;
                         animator().beginHide(m_q, animatorTarget(), [self]() {
                             Q_UNUSED(self);
@@ -418,6 +426,24 @@ private:
             //     same property.
             animator().cancel(m_q);
 
+            // Dispatch beginShow BEFORE m_window->show(). runLeg sets the
+            // target's opacity (and optionally scale) to the computed
+            // fromOpacity synchronously on dispatch, so the QQuickItem's
+            // opacity is at 0 (or wherever a supersession left it)
+            // BEFORE the wl_surface maps. Without this ordering the cold-
+            // start path mapped the window with opacity=1.0 (QQuickItem
+            // default), giving the compositor a window to paint a single
+            // frame at the terminal value before the animator's
+            // setOpacity(0) lands — visible as a one-frame "flash" of the
+            // fully-opaque OSD prior to the fade-in. Always dispatch
+            // beginShow — the Shown→Shown path replays the visual fade so
+            // OSD-style consumers that re-show on every user trigger see
+            // the same animation each time.
+            QPointer<Surface> self = m_q;
+            animator().beginShow(m_q, animatorTarget(), [self]() {
+                Q_UNUSED(self);
+            });
+
             if (m_state == State::Hidden) {
                 if (m_config.keepMappedOnHide) {
                     // Window is already Qt-visible across the keepMappedOnHide
@@ -429,16 +455,6 @@ private:
                 }
                 m_window->show();
             }
-            // Always dispatch beginShow — the Shown→Shown path replays the
-            // visual fade so OSD-style consumers that re-show on every
-            // user trigger (rapid layout switches, repeated keyboard nav)
-            // see the same animation each time. Pre-Phase-5 the QML
-            // function show() reset opacity to 0 and re-ran showAnimation
-            // unconditionally; this preserves that behaviour.
-            QPointer<Surface> self = m_q;
-            animator().beginShow(m_q, animatorTarget(), [self]() {
-                Q_UNUSED(self);
-            });
             if (m_state != State::Shown) {
                 transitionTo(State::Shown);
             }

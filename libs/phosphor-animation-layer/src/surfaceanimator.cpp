@@ -81,6 +81,14 @@ namespace {
 /// Resolve a Profile path through the registry, falling back to a library-
 /// default Profile (durationOverride applies the library default duration via
 /// the Profile's own resolution chain — `withDefaults` fills in unset fields).
+///
+/// An empty path is the documented "use library defaults" sentinel — silent
+/// fallback. A non-empty path that fails to resolve is a typo or a missing
+/// profile JSON; surface that as `qCWarning` so it's visible in the journal
+/// without enabling debug categories. The QML-side
+/// `scripts/check-animation-profiles.py` build-time lint catches typos in
+/// QML references, but it can't inspect C++ string literals, so this runtime
+/// warning is the backstop for `setupSurfaceAnimator`-style registrations.
 PhosphorAnimation::Profile resolveProfile(PhosphorAnimation::PhosphorProfileRegistry& registry, const QString& path)
 {
     if (path.isEmpty()) {
@@ -89,9 +97,11 @@ PhosphorAnimation::Profile resolveProfile(PhosphorAnimation::PhosphorProfileRegi
     if (auto p = registry.resolve(path)) {
         return p->withDefaults();
     }
-    qCDebug(lcSurfaceAnimator).nospace() << "Profile path '" << path
-                                         << "' did not resolve through registry — "
-                                            "falling back to library defaults";
+    qCWarning(lcSurfaceAnimator).nospace() << "Profile path '" << path
+                                           << "' did not resolve through registry — "
+                                              "falling back to library defaults (150 ms OutCubic). "
+                                              "Check the profile name for typos and that the "
+                                              "corresponding JSON ships under data/profiles/.";
     return PhosphorAnimation::Profile{}.withDefaults();
 }
 
@@ -156,27 +166,34 @@ public:
     /// Cancel any in-flight legs for a surface. Called both directly via
     /// SurfaceAnimator::cancel and implicitly when beginShow/beginHide
     /// supersedes a still-running animation on the same surface.
+    ///
+    /// AnimatedValue::cancel() clears m_isAnimating + m_isComplete
+    /// without firing spec.onComplete (verified at AnimatedValue.h:464);
+    /// this matches the ISurfaceAnimator::cancel contract — "the
+    /// animator must call onComplete exactly once per
+    /// beginShow/beginHide; cancel is an explicitly non-completion
+    /// termination".
+    ///
+    /// Move the AnimatedValues out of the tracking entry BEFORE erasing,
+    /// then cancel through the local unique_ptrs. If a future change to
+    /// AnimatedValue::cancel ever regresses the contract and fires
+    /// spec.onComplete synchronously, legCompleted() would invalidate
+    /// `it` mid-cancel — but we're already past the iterator; the local
+    /// pointers are stable.
+    ///
+    /// The track's `onComplete` is destroyed alongside the tracking entry
+    /// (the unordered_map::erase below runs ~Track which destroys the
+    /// `std::function`). Dropping the consumer's onComplete on the floor
+    /// is the documented semantic for cancellation — cancel is the
+    /// non-completion termination path; consumers that need a "settled"
+    /// signal (whether by completion or cancellation) must wrap their
+    /// callback themselves.
     void cancelTracking(PhosphorLayer::Surface* surface)
     {
         const auto it = m_tracks.find(surface);
         if (it == m_tracks.end()) {
             return;
         }
-        // AnimatedValue::cancel() clears m_isAnimating + m_isComplete
-        // without firing spec.onComplete (verified at AnimatedValue.h:464);
-        // this matches the ISurfaceAnimator::cancel contract — "the
-        // animator must call onComplete exactly once per
-        // beginShow/beginHide; cancel is an explicitly non-completion
-        // termination".
-        //
-        // Move the AnimatedValues + the consumer's onComplete out of the
-        // tracking entry BEFORE erasing, then cancel through the local
-        // unique_ptrs. If a future change to AnimatedValue::cancel ever
-        // regresses the contract and fires spec.onComplete synchronously,
-        // legCompleted() would invalidate `it` mid-cancel — but we're
-        // already past the iterator; the local pointers are stable.
-        // Dropping the consumer's onComplete on the floor is the documented
-        // semantic for cancellation (cancel is non-completion).
         auto opacity = std::move(it->second.opacity);
         auto scale = std::move(it->second.scale);
         m_tracks.erase(it);
@@ -426,18 +443,25 @@ public:
     /// the same prefix are semantically the same role; QHash<QString>
     /// gives O(1) lookup.
     QHash<QString, Config> m_configByRole;
+    /// Single steady-clock-backed clock shared across every track. The
+    /// AnimatedValue<T> contract holds it by non-owning pointer; this
+    /// member MUST be declared BEFORE m_tracks so reverse-declaration
+    /// destruction order destroys m_tracks (and the AnimatedValues in
+    /// it) before m_clock. The explicit cancellation loop in
+    /// ~SurfaceAnimator is defence-in-depth, but member-order alone is
+    /// the load-bearing invariant — a future maintainer who deletes the
+    /// loop must not introduce a UAF.
+    internal::SteadyClock m_clock;
     /// Keyed on raw Surface pointer. Tracks only in-flight animations;
     /// a missing entry means "no active animation on this surface."
     /// std::unordered_map (not QHash) because Track contains a move-only
     /// `unique_ptr<AnimatedValue<qreal>>` and Qt6's QHash still requires
     /// copy-constructible value types.
     std::unordered_map<PhosphorLayer::Surface*, Track> m_tracks;
-    /// Single steady-clock-backed clock shared across every track. The
-    /// AnimatedValue<T> contract holds it by non-owning pointer; this
-    /// member outlives every AnimatedValue we hand the pointer to (it's
-    /// destroyed after m_tracks at ~Private).
-    internal::SteadyClock m_clock;
-    /// Drives advance() at ~60Hz while any track is in flight.
+    /// Drives advance() at ~60Hz while any track is in flight. Declared
+    /// LAST so reverse-declaration destruction stops the timer BEFORE
+    /// m_tracks is destroyed — otherwise a final tick could fire after
+    /// the tracks have been freed.
     QTimer m_driverTimer;
 };
 

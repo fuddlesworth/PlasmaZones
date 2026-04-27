@@ -133,10 +133,22 @@ void OverlayService::setupSurfaceAnimator()
     static const QString widgetFade = QStringLiteral("widget.fade");
     static const QString widgetFadeOut = QStringLiteral("widget.fadeOut");
 
-    // Default config: every Surface whose Role isn't explicitly
-    // registered gets a plain opacity-only fade using widget.fade. This
-    // is what e.g. ShaderPreview or any future overlay we forget to
-    // register falls back to.
+    // Default config: every Surface whose Role isn't explicitly registered
+    // AND that goes through Surface::show()/hide() gets a plain opacity-only
+    // fade using widget.fade. The surfaces that actually use the animator
+    // dispatch path are listed in the per-Role registrations below
+    // (LayoutOsd, NavigationOsd, LayoutPicker, ZoneSelector, SnapAssist).
+    // Two existing surface types deliberately BYPASS this animator and
+    // therefore never read the default config:
+    //   - Overlay (zone overlay rendering): hidden via direct
+    //     window->hide() in dismissOverlayWindow because the rapid
+    //     drag-mode path uses _idled property toggling rather than the
+    //     show/hide state machine.
+    //   - ShaderPreview (editor preview window): shown via direct
+    //     window->show() in showShaderPreview because the editor controls
+    //     visibility imperatively and re-creates on every open.
+    // The default config remains as a safety net for future overlays that
+    // DO route through Surface::show()/hide() and forget to register.
     PAL::SurfaceAnimator::Config defaults;
     defaults.showProfile = widgetFade;
     defaults.hideProfile = widgetFadeOut;

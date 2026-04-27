@@ -125,7 +125,19 @@ public:
      *
      * Profile resolution failures (typo, missing JSON) fall back to the
      * library default Profile (150 ms OutCubic) — same fallback as
-     * `PhosphorMotionAnimation` in the QML bindings.
+     * `PhosphorMotionAnimation` in the QML bindings. The fallback is
+     * surfaced at `qCWarning` so a typo doesn't silently degrade the
+     * animation; the QML-side `check-animation-profiles.py` build-time
+     * lint catches QML references but cannot inspect C++ literals, so
+     * the runtime warning is the backstop for `setupSurfaceAnimator`-
+     * style registrations.
+     *
+     * @note **Pre-1.0 ABI.** Config is a plain aggregate exposed across
+     * the DSO boundary. Adding or reordering fields between releases is
+     * a binary-incompatible change until the library reaches 1.0
+     * (SOVERSION 0 signals this). Consumers that aggregate-init by
+     * position must rebuild against each release; prefer named-member
+     * init (`Config{.showProfile = ...}`) for forward compatibility.
      */
     struct Config
     {
