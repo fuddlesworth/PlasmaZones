@@ -61,10 +61,11 @@ namespace PhosphorAnimationLayer {
  *
  * `beginShow` / `beginHide` drive the QQuickItem's `opacity` property
  * (always, 0↔1) and optionally its `scale` property (when a scale-profile
- * is configured). Both run in parallel against the same QtQuickClock so
- * frame timing aligns. Internally each property animation is a
- * `PhosphorAnimation::AnimatedValue<qreal>` that ticks via the per-window
- * `QtQuickClockManager` clock.
+ * is configured). Both run in parallel against a shared steady-clock so
+ * frame timing aligns. Each property animation is a
+ * `PhosphorAnimation::AnimatedValue<qreal>` ticked at ~60 Hz by an internal
+ * QTimer (decoupled from `QQuickWindow::beforeRendering` so offscreen QPA
+ * tests work).
  *
  * ## Cancellation & supersession
  *
@@ -85,10 +86,11 @@ namespace PhosphorAnimationLayer {
  *
  * ## Thread safety
  *
- * GUI-thread only — every method touches QQuickItem state, and the
- * underlying `AnimatedValue<T>` runtime asserts the same. The ctor /
- * `registerConfigForRole` may run from any thread, but in practice they
- * always run during process / OverlayService construction.
+ * GUI-thread only. Every method touches QQuickItem / QHash state without
+ * synchronisation; the underlying `AnimatedValue<T>` runtime asserts the
+ * same. Construction and `registerConfigForRole` are typically called once
+ * during process / OverlayService startup but must still run on the GUI
+ * thread to satisfy the QHash invariant.
  */
 class PHOSPHORANIMATIONLAYER_EXPORT SurfaceAnimator : public PhosphorLayer::ISurfaceAnimator
 {
@@ -141,10 +143,16 @@ public:
     SurfaceAnimator(const SurfaceAnimator&) = delete;
     SurfaceAnimator& operator=(const SurfaceAnimator&) = delete;
 
-    /// Override the configuration for one Role. Roles inherit their
-    /// `scopePrefix` as the lookup key (so two `Role` instances with the
-    /// same prefix share the same config — matches how PlasmaZones treats
-    /// `PzRoles::LayoutOsd` as a singleton across factory calls).
+    /// Override the configuration for one Role. The role's `scopePrefix`
+    /// is used as the registration key. Lookup is longest-prefix-match
+    /// (with `'-'` boundary) against the surface's `role.scopePrefix`,
+    /// so consumers can register a config against a stable base role
+    /// (e.g. `PzRoles::LayoutOsd` with prefix `"plasmazones-layout-osd"`)
+    /// while the surfaces themselves carry per-instance roles derived via
+    /// `withScopePrefix("plasmazones-layout-osd-{screenId}-{gen}")` for
+    /// compositor scope uniqueness. Without prefix matching, the unique
+    /// per-instance suffix would make every lookup miss and silently fall
+    /// back to the default config.
     void registerConfigForRole(const PhosphorLayer::Role& role, Config cfg);
 
     /// Read-only config lookup. Returns the registered config for @p role

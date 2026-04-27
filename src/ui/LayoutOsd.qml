@@ -15,43 +15,22 @@ import org.plasmazones.common as QFZCommon
  * Provides visual feedback superior to text-only Plasma OSD
  */
 Window {
-    // contentWrapper
-    // Note: Escape shortcut removed - layer-shell overlay windows do not
-    // receive keyboard focus on Wayland (KeyboardInteractivityNone)
-    // Dismiss state used for input gating. True while the OSD is logically
-    // hidden (pre-first-show or after a full hide animation). When true, we
-    // bind Qt.WindowTransparentForInput into the window flags so the
-    // invisible-but-still-mapped layer surface doesn't eat clicks at its
-    // screen position. Toggled on discrete show/dismiss events — NOT tied
-    // to opacity — so the flag doesn't churn during the fade animation
-    // (which would cause repeated QWindow::setFlags() calls and potential
-    // input-region reconfiguration on every animation tick).
-    // (No signals — previously emitted dismissed() to a C++ slot that did
-    // nothing; both were removed in L3 v2. The flip of _osdDismissed at the
-    // end of hideAnimation's ScriptAction is the entire dismiss mechanism.)
-    // Hide the OSD with animation.
-    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland.
-    // We keep root.visible == true after the first show() for the window's entire
-    // lifetime (never cycling back to false in the hide animation), because Qt's
-    // Vulkan backend on Wayland layer-shell doesn't reliably reinitialize the
-    // VkSwapchainKHR after the wl_surface is torn down by a hide. The OSD's
-    // visual "hidden" state is entirely opacity-driven (contentWrapper.opacity
-    // goes to 0), not Qt-window-visibility-driven.
-    // Show animation. Opacity uses osd.show (plain OutCubic decel).
-    // Scale uses osd.pop (OutBack overshoot) to preserve the subtle
-    // "pop" the original design used — matching the pre-PhosphorMotion
-    // NumberAnimation { easing.type: Easing.OutBack; overshoot: 1.2 }
-    // shape. Do not collapse both onto a single profile.
     // Phase 5: surface lifecycle + show/hide animations are entirely library-
     // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
     // PzRoles::LayoutOsd) drives Window.contentItem opacity + scale via its
     // `osd.show` / `osd.pop` / `osd.hide` profiles; PhosphorLayer::Surface
     // handles `Qt.WindowTransparentForInput` on the underlying QWindow during
-    // the hide cycle. The previous `_osdDismissed` flag + `showAnimation` /
-    // `hideAnimation` blocks + QML show()/hide() functions are gone.
-    // (Phase 5: showAnimation / hideAnimation removed — library drives the
-    // contentItem opacity + scale via SurfaceAnimator on the
-    // PzRoles::LayoutOsd config.)
+    // the hide cycle.
+    // root.visible flips to true on the first Surface::show() and stays true
+    // for the surface's lifetime (keepMappedOnHide=true). Qt's Vulkan backend
+    // on Wayland layer-shell doesn't reliably reinitialise the VkSwapchainKHR
+    // after the wl_surface is torn down, so the visual "hidden" state is
+    // driven by Window.contentItem opacity going to 0, not by toggling
+    // Qt-window visibility.
+    // Auto-dismiss is QML-side: dismissTimer fires dismissRequested() which
+    // C++ wires to Surface::hide(). Escape is not handled (layer-shell
+    // overlay windows do not receive keyboard focus when keyboard
+    // interactivity is None).
 
     id: root
 

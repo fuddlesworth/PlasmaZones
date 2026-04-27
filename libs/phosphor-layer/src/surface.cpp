@@ -386,31 +386,47 @@ private:
             // Still loading — onComponentStatus() will re-enter drive() when ready.
             return;
         }
-        if (m_state == State::Hidden && m_intent == Intent::Show) {
+        if (m_intent == Intent::Show && (m_state == State::Hidden || m_state == State::Shown)) {
             if (!m_window) {
-                failWith(QStringLiteral("Internal error: Hidden state with no window"));
+                if (m_state == State::Hidden) {
+                    failWith(QStringLiteral("Internal error: Hidden state with no window"));
+                }
                 return;
             }
-            // Cancel any in-flight hide animation. show-while-hiding is the
-            // canonical "user re-triggered the popup mid-fade" race; without
-            // cancel() the in-flight beginHide animation would continue
-            // driving opacity to 0 even after we set it back to 1.
+            // Cancel any in-flight animation before kicking the new beginShow.
+            //   - Hidden → Shown: cancel a still-running beginHide so the
+            //     supersession doesn't keep driving opacity to 0 after we
+            //     set it back to 1.
+            //   - Shown  → Shown: cancel a still-running beginShow so a
+            //     rapid re-trigger (e.g. user switches layout while the
+            //     OSD's fade-in is in progress) doesn't double-drive the
+            //     same property.
             animator().cancel(m_q);
 
-            if (m_config.keepMappedOnHide) {
-                // The window is already Qt-visible across the keepMappedOnHide
-                // hide path; clearing TransparentForInput restores click
-                // routing. m_window->show() is still called for the
-                // first-show case where we go Constructed → Warming →
-                // Hidden → Shown (Qt window not yet mapped at that point).
-                m_window->setFlag(Qt::WindowTransparentForInput, false);
+            if (m_state == State::Hidden) {
+                if (m_config.keepMappedOnHide) {
+                    // Window is already Qt-visible across the keepMappedOnHide
+                    // hide path; clearing TransparentForInput restores click
+                    // routing. m_window->show() is still called for the
+                    // first-show case where we go Constructed → Warming →
+                    // Hidden → Shown (Qt window not yet mapped at that point).
+                    m_window->setFlag(Qt::WindowTransparentForInput, false);
+                }
+                m_window->show();
             }
-            m_window->show();
+            // Always dispatch beginShow — the Shown→Shown path replays the
+            // visual fade so OSD-style consumers that re-show on every
+            // user trigger (rapid layout switches, repeated keyboard nav)
+            // see the same animation each time. Pre-Phase-5 the QML
+            // function show() reset opacity to 0 and re-ran showAnimation
+            // unconditionally; this preserves that behaviour.
             QPointer<Surface> self = m_q;
             animator().beginShow(m_q, animatorTarget(), [self]() {
                 Q_UNUSED(self);
             });
-            transitionTo(State::Shown);
+            if (m_state != State::Shown) {
+                transitionTo(State::Shown);
+            }
         }
         // Intent::Warm + state Hidden → nothing more to do; we're warmed.
     }

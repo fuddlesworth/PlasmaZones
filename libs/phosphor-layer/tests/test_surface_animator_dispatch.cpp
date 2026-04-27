@@ -242,6 +242,49 @@ private Q_SLOTS:
         QVERIFY(sawCancelBeforeShow);
     }
 
+    /// Regression: rapid show-while-shown (e.g. user switches layout
+    /// while the previous OSD's fade-in is still in progress, or
+    /// keyboard nav re-fires before the dismiss timer expires) must
+    /// re-dispatch beginShow with a cancel of the prior in-flight
+    /// animation. Without this the visual fade does not replay on
+    /// repeated show() calls and the OSD just statically updates,
+    /// regressing the pre-Phase-5 QML behaviour where the show()
+    /// function reset opacity to 0 and re-ran showAnimation each time.
+    void supersession_show_while_shown_replays_animation()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/true));
+        surface->show();
+        QCOMPARE(surface->state(), Surface::State::Shown);
+        anim.m_calls.clear();
+
+        // Second show() while still in Shown state — must cancel the
+        // (possibly-still-running) prior show and dispatch a fresh
+        // beginShow so the animator replays the fade.
+        surface->show();
+        QCOMPARE(surface->state(), Surface::State::Shown);
+
+        bool sawCancel = false;
+        bool sawShowAfterCancel = false;
+        for (const auto& call : anim.m_calls) {
+            if (call.kind == RecordingAnimator::Call::Kind::Cancel) {
+                sawCancel = true;
+            }
+            if (call.kind == RecordingAnimator::Call::Kind::Show) {
+                QVERIFY2(sawCancel, "cancel must precede the replayed beginShow");
+                QCOMPARE(call.surface, surface);
+                QVERIFY(call.rootItem);
+                sawShowAfterCancel = true;
+            }
+        }
+        QVERIFY(sawCancel);
+        QVERIFY(sawShowAfterCancel);
+    }
+
     /// Surface destruction cancels any in-flight animation. Without this,
     /// the animator could still hold a QPropertyAnimation pointing at a
     /// torn-down QQuickItem.

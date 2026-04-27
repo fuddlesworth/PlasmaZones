@@ -226,15 +226,15 @@ Window {
         }
     }
 
-    // Content wrapper for opacity animation — mirrors LayoutPickerOverlay
-    // pattern. Wrapping in an Item lets the show animation fade the visible
-    // tree from 0→1 without animating root.opacity (which would emit Wayland
-    // setOpacity warnings on layer-shell surfaces).
+    // Content wrapper. Opacity defaults to 1 — Phase 5 SurfaceAnimator
+    // drives Window.contentItem opacity for show/hide so this child stays
+    // at 1 and inherits visibility from the parent fade. Animating
+    // root.opacity directly would emit Wayland setOpacity warnings on
+    // layer-shell surfaces.
     Item {
         id: contentWrapper
 
         anchors.fill: parent
-        opacity: 0
 
         // Main container - uses States for proper anchor management
         // Conditional anchors with undefined don't reliably unset in QML

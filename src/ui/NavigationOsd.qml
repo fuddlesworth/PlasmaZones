@@ -256,11 +256,6 @@ Window {
         onTriggered: root.dismissRequested()
     }
 
-    // (Phase 5: showAnimation / hideAnimation removed — library drives.)
-    Item {
-        id: _phase5Placeholder
-    }
-
     // Content wrapper. Opacity defaults to 1 — the SurfaceAnimator drives
     // window.contentItem opacity for show/hide.
     Item {

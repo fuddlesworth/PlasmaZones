@@ -29,6 +29,13 @@ namespace PhosphorAnimationLayer {
 
 namespace {
 Q_LOGGING_CATEGORY(lcSurfaceAnimator, "phosphoranimationlayer.surfaceanimator")
+
+/// Animation driver tick interval. AnimatedValue::advance() fires on this
+/// cadence while any track is in flight; SteadyClock::refreshRate() must
+/// agree (1000 / kTickIntervalMs) so velocity-based curves (Spring) sample
+/// at the same rate the timer ticks.
+constexpr int kTickIntervalMs = 16;
+constexpr qreal kRefreshRateHz = 1000.0 / kTickIntervalMs;
 } // namespace
 
 namespace internal {
@@ -52,10 +59,10 @@ public:
 
     qreal refreshRate() const override
     {
-        // Match the QTimer driver below. AnimatedValue uses this for
-        // velocity-based curve sampling (Spring); 60Hz matches the
-        // typical compositor cadence and the timer's 16ms tick.
-        return 60.0;
+        // Must match the QTimer driver cadence; AnimatedValue uses this
+        // for velocity-based curve sampling (Spring). Both derived from
+        // the single kTickIntervalMs constant in the anonymous namespace.
+        return kRefreshRateHz;
     }
 
     /// requestFrame is a hint — the SurfaceAnimator's QTimer ticks
@@ -135,11 +142,11 @@ public:
         : m_registry(registry)
         , m_defaultConfig(std::move(defaults))
     {
-        // Animation driver: while any track is in flight, fire a 16ms
-        // timer that calls advance() on every AnimatedValue. Stop the
-        // timer when m_tracks becomes empty — idle daemons don't keep
-        // a 60Hz wake-up scheduled on the GUI thread.
-        m_driverTimer.setInterval(std::chrono::milliseconds(16));
+        // Animation driver: while any track is in flight, fire on the
+        // kTickIntervalMs cadence and call advance() on every AnimatedValue.
+        // Stop the timer when m_tracks becomes empty — idle daemons don't
+        // keep a 60 Hz wake-up scheduled on the GUI thread.
+        m_driverTimer.setInterval(std::chrono::milliseconds(kTickIntervalMs));
         m_driverTimer.setTimerType(Qt::PreciseTimer);
         QObject::connect(&m_driverTimer, &QTimer::timeout, [this]() {
             tickAll();
@@ -173,13 +180,39 @@ public:
     }
 
     /// Look up the per-role config or fall back to default.
+    ///
+    /// Lookup is longest-prefix-match on `Role::scopePrefix` because
+    /// PlasmaZones (and other consumers) derive per-surface roles via
+    /// `Role::withScopePrefix("base-prefix-{screenId}-{gen}")` to give the
+    /// compositor a unique wl_surface scope per instance, while registering
+    /// configs against the *base* role (whose prefix is the unsuffixed
+    /// "base-prefix"). A bare `find()` would always miss because the keys
+    /// don't match exactly.
+    ///
+    /// Match boundary is `'-'` or end-of-string so a registered key
+    /// `"plasmazones-layout"` doesn't accidentally match a surface scoped
+    /// `"plasmazones-layout-picker-..."` if both `"plasmazones-layout"` and
+    /// `"plasmazones-layout-picker"` are registered. Longest matching key
+    /// wins.
     Config configFor(const PhosphorLayer::Role& role) const
     {
-        const auto it = m_configByRole.find(role.scopePrefix);
-        if (it != m_configByRole.end()) {
-            return it.value();
+        const QString& target = role.scopePrefix;
+        int bestLen = -1;
+        Config bestCfg = m_defaultConfig;
+        for (auto it = m_configByRole.constBegin(); it != m_configByRole.constEnd(); ++it) {
+            const QString& key = it.key();
+            if (key.isEmpty() || !target.startsWith(key)) {
+                continue;
+            }
+            if (target.size() != key.size() && target.at(key.size()) != QLatin1Char('-')) {
+                continue;
+            }
+            if (key.size() > bestLen) {
+                bestLen = key.size();
+                bestCfg = it.value();
+            }
         }
-        return m_defaultConfig;
+        return bestCfg;
     }
 
     /// Run a show or hide leg. Used by beginShow/beginHide which thread
@@ -240,13 +273,11 @@ public:
         // entry already present. AnimatedValue::start fires onValueChanged
         // synchronously on the first tick (same event-loop turn) under
         // some clock implementations; without the pre-insert the lambda
-        // would race the map insert. unordered_map insert returns a pair
-        // {iterator, inserted}; in our flow we just emplaced after a
-        // cancelTracking erase so this is always a fresh insert.
+        // would race the map insert. cancelTracking() above guarantees a
+        // fresh entry, so try_emplace always default-constructs the Track.
         auto [trackIt, inserted] = m_tracks.try_emplace(surface);
-        Q_UNUSED(inserted);
+        Q_ASSERT(inserted);
         Track& slot = trackIt->second;
-        slot = Track{};
         slot.target = target;
         slot.onComplete = std::move(onComplete);
         slot.pendingLegs = legCount;

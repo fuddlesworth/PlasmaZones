@@ -304,16 +304,15 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 }
 
 // hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to the QML
-// dismissed() signal) are intentionally gone. The OSD dismiss path is now
-// entirely QML-driven: the hide animation's ScriptAction flips _osdDismissed
-// which re-evaluates the Window flags binding to include
-// Qt.WindowTransparentForInput, and that's the whole mechanism. No C++ work
-// runs on dismiss, so destroying the QQuickWindow (and paying the blocking
-// ~QQuickWindow Vulkan teardown) never happens in the hot path. Windows are
-// pre-warmed by warmUpLayoutOsd() / warmUpNavigationOsd() and stay alive
-// for the daemon's lifetime; destroyLayoutOsdWindow() / destroy-
-// NavigationOsdWindow() are only invoked from screen-removal / shutdown
-// cleanup paths.
+// dismissed() signal) are intentionally gone. The Phase-5 dismiss path is:
+//   QML dismissTimer → dismissRequested() signal → Surface::hide() slot
+//     → SurfaceAnimator::beginHide drives the visual fade
+//     → Surface::Impl flips Qt::WindowTransparentForInput on the QWindow
+// No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
+// across the keepMappedOnHide=true lifecycle so the warmed Vulkan
+// swapchain survives. Pre-warmed by warmUpLayoutOsd() / warmUpNavigationOsd()
+// and reused for the daemon's lifetime; destroyLayoutOsdWindow() /
+// destroyNavigationOsdWindow() only fire on screen-removal / shutdown.
 
 // Shared hot-plug hook for both OSDs. Called from warmUpLayoutOsd AND
 // warmUpNavigationOsd so a caller that only warms one kind still gets
@@ -490,12 +489,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Reuse existing window for this screen (create only if not in map).
-    // The window stays alive and visible across rapid navigation calls —
-    // QML show() resets the animation and restarts the dismiss timer each time.
-    // Cleanup happens when the dismiss timer expires: dismissed() signal →
-    // hideNavigationOsd() slot → destroyNavigationOsdWindow(). This matches
-    // the layout OSD pattern and avoids Vulkan surface create/destroy churn
-    // that causes resource exhaustion and daemon freezes during rapid input.
+    // The window stays alive (keepMappedOnHide) across rapid navigation
+    // calls; Surface::show() re-dispatches beginShow on every call so the
+    // visual fade replays, and restartDismissTimer extends the auto-hide.
+    // Cleanup happens only on screen removal / shutdown, avoiding the
+    // Vulkan surface create/destroy churn that previously caused resource
+    // exhaustion and daemon freezes during rapid input.
     if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].navigationOsdWindow)) {
         // Only try to create if we haven't failed before (prevents log spam)
         if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
