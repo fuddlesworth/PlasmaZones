@@ -56,4 +56,36 @@ QVariantList makeAlwaysActiveTriggerList()
     return {trigger};
 }
 
+QVariantList stripAlwaysActiveTrigger(const QVariantList& triggers)
+{
+    QVariantList result;
+    result.reserve(triggers.size());
+    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
+    for (const auto& t : triggers) {
+        if (t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt() == alwaysActive) {
+            continue;
+        }
+        result.append(t);
+    }
+    return result;
+}
+
+QVariantList mergeAlwaysActiveTrigger(const QVariantList& nonSentinelTriggers)
+{
+    constexpr int max = ConfigDefaults::maxTriggersPerAction();
+    QVariantList result;
+    result.reserve(qMin(nonSentinelTriggers.size() + 1, max));
+    QVariantMap sentinel;
+    sentinel[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
+    sentinel[ConfigDefaults::triggerMouseButtonField()] = 0;
+    result.append(sentinel);
+    for (const auto& t : nonSentinelTriggers) {
+        if (result.size() >= max) {
+            break;
+        }
+        result.append(t);
+    }
+    return result;
+}
+
 } // namespace PlasmaZones::TriggerUtils
