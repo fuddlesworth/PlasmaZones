@@ -295,6 +295,18 @@ public:
 
         if (!target) {
             qCWarning(lcSurfaceAnimator) << "runLeg called with null target — onComplete fires synchronously";
+            // Re-entrancy contract for the synchronous-completion path:
+            // the caller's onComplete runs on the same call stack as
+            // beginShow/beginHide, so anything the SurfaceAnimator's
+            // header forbids during a regular legCompleted-fired
+            // callback (see SurfaceAnimator.h:79-90 — must not delete
+            // the SurfaceAnimator) applies here too. Deleting the
+            // SurfaceAnimator from this onComplete would tear down `d`
+            // while runLeg's frame is still on the stack — `cancelTracking`
+            // above already touched `d`, and a re-entrant beginShow that
+            // the consumer's onComplete might dispatch is also unsafe.
+            // Deleting the *Surface* whose runLeg this is remains safe
+            // (no tracking entry was installed before this branch).
             if (onComplete) {
                 onComplete();
             }
@@ -529,8 +541,15 @@ public:
     PhosphorAnimation::PhosphorProfileRegistry& m_registry;
     Config m_defaultConfig;
     /// Keyed on `Role::scopePrefix` because two `Role` instances with
-    /// the same prefix are semantically the same role; QHash<QString>
-    /// gives O(1) lookup.
+    /// the same prefix are semantically the same role.
+    ///
+    /// Lookup (`configFor`) is O(N) — a linear scan over registered keys
+    /// computing longest-prefix-match against the surface's scopePrefix.
+    /// Storage uses QHash for cheap insert / iterate, not for the lookup
+    /// shape; the longest-prefix semantic precludes a hash hit. Fine for
+    /// the handful of roles a typical consumer registers; if the
+    /// registration count ever grows to hundreds, swap to a trie or
+    /// precompute longest-prefix at registration time.
     QHash<QString, Config> m_configByRole;
     /// Single steady-clock-backed clock shared across every track. The
     /// AnimatedValue<T> contract holds it by non-owning pointer; this
@@ -584,18 +603,47 @@ SurfaceAnimator::SurfaceAnimator(Config defaults)
 
 SurfaceAnimator::~SurfaceAnimator()
 {
-    // Cancel any leftover entries — should be empty in correct lifecycle
-    // (Surface dtor cancels), but a misordered teardown would leave entries
-    // pointing at QQuickItems whose AnimatedValues fire onto deleted memory
-    // on the next clock tick. cancelTracking parks the AnimatedValues in
-    // m_pendingDestroy; Private's destructor destroys them via the
-    // declaration-ordered teardown (m_clock outlives them; m_driverTimer
-    // is stopped first so no tick can race with destruction).
-    while (!d->m_tracks.empty()) {
-        auto it = d->m_tracks.begin();
-        d->cancelTracking(it->first);
-    }
+    // Stop the timer FIRST so no tick can race with the destruction work
+    // below. cancelTracking parks AnimatedValues in m_pendingDestroy; if
+    // the timer fires between the cancel loop and the explicit drain it
+    // would call tickAll which itself drains m_pendingDestroy — harmless
+    // but pointless work, and a future maintainer might worry about the
+    // ordering. Stopping up front makes the dtor a single sequential
+    // teardown.
     d->m_driverTimer.stop();
+
+    // Move-out the track map and cancel each entry's AnimatedValues into
+    // the graveyard. Move-out is cheaper than the prior `while (!empty)
+    // { begin() }` loop (no per-iteration find / rehash) and preserves
+    // the cancellation semantics: each entry's `onComplete` is dropped
+    // (cancellation is a non-completion termination) and the AVs are
+    // parked into m_pendingDestroy via cancelTracking.
+    //
+    // We iterate over the moved-out copy rather than calling
+    // cancelTracking directly on m_tracks because cancelTracking does a
+    // map find/erase; iterating an `unordered_map` while erasing requires
+    // care. The move-out gives us a stable iteration target.
+    auto leftovers = std::move(d->m_tracks);
+    d->m_tracks.clear();
+    for (auto& [_, track] : leftovers) {
+        if (track.opacity) {
+            track.opacity->cancel();
+            d->m_pendingDestroy.push_back(std::move(track.opacity));
+        }
+        if (track.scale) {
+            track.scale->cancel();
+            d->m_pendingDestroy.push_back(std::move(track.scale));
+        }
+    }
+
+    // Drain the graveyard explicitly. This is defence-in-depth on top of
+    // member-declaration order — m_clock is declared before
+    // m_pendingDestroy, so reverse-order destruction would still tear the
+    // AnimatedValues down before m_clock disappears. Doing it here keeps
+    // the invariant local to the dtor instead of buried in member order;
+    // a future maintainer who reorders members won't accidentally turn
+    // this into a UAF on shutdown.
+    d->m_pendingDestroy.clear();
 }
 
 void SurfaceAnimator::registerConfigForRole(const PhosphorLayer::Role& role, Config cfg)

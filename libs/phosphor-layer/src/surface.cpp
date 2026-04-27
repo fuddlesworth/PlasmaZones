@@ -311,21 +311,17 @@ private:
                         // the still-mapped layer surface stops intercepting
                         // clicks via WindowTransparentForInput. The QQuick-
                         // Window stays Qt-visible for the surface's entire
-                        // lifetime (so the Vulkan swapchain survives). m_q
-                        // captured by-value into the lambda — onComplete may
-                        // fire after this drive() frame returns, and the
-                        // raw `this` pointer is unsafe across that span.
+                        // lifetime (so the Vulkan swapchain survives).
+                        //
+                        // No-op completion callback. We've already
+                        // transitioned synchronously below; the animator's
+                        // onComplete is reserved for future
+                        // ScreenSurfaceRegistry teardown signalling.
+                        // Lifetime: the animator's per-Surface state is
+                        // cancelled in ~Impl, so the lambda only fires
+                        // while this Surface is alive — no capture needed.
                         m_window->setFlag(Qt::WindowTransparentForInput, true);
-                        QPointer<Surface> self = m_q;
-                        animator().beginHide(m_q, animatorTarget(), [self]() {
-                            // No-op completion: we already transitioned
-                            // synchronously below. The callback is a
-                            // notification slot for consumers that want to
-                            // observe animation end (none today; reserved
-                            // for future ScreenSurfaceRegistry teardown
-                            // signalling).
-                            Q_UNUSED(self);
-                        });
+                        animator().beginHide(m_q, animatorTarget(), []() { });
                     } else {
                         // Pre-Phase-5 lifecycle: animator runs the visual
                         // fade in parallel (synchronously for the no-op
@@ -353,10 +349,10 @@ private:
                                 << "desired, or destroy the surface instead of calling hide() if the"
                                 << "animator was wired only for show.";
                         }
-                        QPointer<Surface> self = m_q;
-                        animator().beginHide(m_q, animatorTarget(), [self]() {
-                            Q_UNUSED(self);
-                        });
+                        // No capture needed — the animator's per-Surface
+                        // state is cancelled in ~Impl, so the lambda only
+                        // fires while this Surface is alive.
+                        animator().beginHide(m_q, animatorTarget(), []() { });
                         m_window->hide();
                     }
                     transitionTo(State::Hidden);
@@ -395,7 +391,23 @@ private:
             // The library cannot pick either for them (destroy-during-signal is
             // unsafe without consumer cooperation), so surface the event.
             if (m_state == State::Shown || m_state == State::Hidden) {
-                Q_EMIT m_q->screenLost();
+                // Defer the emission via QueuedConnection so consumer slots
+                // that respond by destroying the Surface (a documented
+                // valid response — the slot can't always know whether to
+                // wait for the screen to come back) don't re-enter library
+                // code on a dead `this`. onScreensChanged itself touches
+                // m_config, m_state, and m_deps after the emit point would
+                // run — synchronous emit + synchronous delete would UAF.
+                // Matches the pattern `failed()` uses for the same reason.
+                QMetaObject::invokeMethod(
+                    m_q,
+                    [q = m_q]() {
+                        if (!q) {
+                            return;
+                        }
+                        Q_EMIT q->screenLost();
+                    },
+                    Qt::QueuedConnection);
             }
         }
     }
@@ -445,10 +457,10 @@ private:
             // beginShow — the Shown→Shown path replays the visual fade so
             // OSD-style consumers that re-show on every user trigger see
             // the same animation each time.
-            QPointer<Surface> self = m_q;
-            animator().beginShow(m_q, animatorTarget(), [self]() {
-                Q_UNUSED(self);
-            });
+            // No capture needed — the animator's per-Surface state is
+            // cancelled in ~Impl, so the lambda only fires while this
+            // Surface is alive.
+            animator().beginShow(m_q, animatorTarget(), []() { });
 
             if (m_state == State::Hidden) {
                 if (m_config.keepMappedOnHide) {

@@ -51,6 +51,12 @@ struct SurfaceDeps
     /// the Surface uses the library-internal NoOp default (synchronous
     /// onComplete; identical pre-Phase-5 behaviour). The factory propagates
     /// SurfaceFactory::Deps::animator into this slot.
+    ///
+    /// **Lifetime contract**: when non-null, the animator MUST outlive every
+    /// Surface that holds this SurfaceDeps. The Surface dispatches through
+    /// the raw pointer on every show/hide and on its own destruction
+    /// (~Impl calls `animator().cancel(this)` to drop in-flight tracking).
+    /// Dropping the animator while a Surface still holds the pointer is UB.
     ISurfaceAnimator* animator = nullptr;
     QString loggingCategory;
 };
@@ -186,6 +192,12 @@ Q_SIGNALS:
     /// (Shown/Hidden); consumers decide whether to destroy+rebuild or wait
     /// for the screen to come back. `m_config.screen` is nulled inside the
     /// library so the next attach falls back to the provider's primary.
+    ///
+    /// ## Safe to delete the Surface from this slot
+    /// The library defers this signal via `Qt::QueuedConnection` so consumer
+    /// slots that call `delete surface` do not re-enter library code on a
+    /// dead `this`. Deleting the Surface from a stateChanged slot for
+    /// non-Failed transitions remains UB — prefer `deleteLater()` there.
     void screenLost();
 
 public:

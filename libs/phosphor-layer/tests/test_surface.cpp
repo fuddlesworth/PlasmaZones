@@ -349,12 +349,20 @@ private Q_SLOTS:
         // Remove the only screen. Library emits screenLost and nulls the
         // internal config.screen so the next re-attach won't pass the
         // dangling pointer.
+        //
+        // screenLost is emitted via Qt::QueuedConnection (so consumer
+        // slots can `delete surface` safely) — wait for the event loop
+        // to deliver before checking the spy.
         s.setScreens({});
-        QCOMPARE(lostSpy.count(), 1);
         QCOMPARE(surface->state(), Surface::State::Hidden);
+        QVERIFY(lostSpy.wait(/*timeoutMs=*/1000));
+        QCOMPARE(lostSpy.count(), 1);
 
         // Re-emitting setScreens({}) with no screen to lose: no new signal.
+        // Spin the event loop briefly to confirm no spurious queued emit
+        // lands.
         s.setScreens({});
+        QTest::qWait(50);
         QCOMPARE(lostSpy.count(), 1);
 
         // Restore a screen. Build a fresh surface and verify the factory

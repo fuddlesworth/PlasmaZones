@@ -117,31 +117,134 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
 
 } // namespace
 
+namespace {
+
+// ── Profile path constants ─────────────────────────────────────────────
+// Lifted as named statics so a typo within this file is impossible (the
+// compiler binds the symbol; the registry resolves the value once at
+// first call). Profile JSONs discovered through PhosphorProfileRegistry's
+// watcher path can still change the curve/duration these names resolve
+// to at runtime.
+const QString& osdShow()
+{
+    static const QString s = QStringLiteral("osd.show");
+    return s;
+}
+const QString& osdPop()
+{
+    static const QString s = QStringLiteral("osd.pop");
+    return s;
+}
+const QString& osdHide()
+{
+    static const QString s = QStringLiteral("osd.hide");
+    return s;
+}
+const QString& panelPopup()
+{
+    static const QString s = QStringLiteral("panel.popup");
+    return s;
+}
+const QString& widgetFadeOut()
+{
+    // Registered hide profile for ZoneSelector (panel.popup show +
+    // widget.fadeOut hide). The matching widget.fade is intentionally
+    // absent — no overlay uses it after the dead-default cleanup; if a
+    // future overlay needs a plain widget fade, register the path
+    // inline at the call site.
+    static const QString s = QStringLiteral("widget.fadeOut");
+    return s;
+}
+
+// ── Per-role Config builders ───────────────────────────────────────────
+// One factory per overlay role so adding/tweaking a 6th overlay touches
+// exactly one named function rather than appending to a 100-line
+// setupSurfaceAnimator. Each builder documents the visual shape it
+// encodes; setupSurfaceAnimator just wires the builder output to the
+// matching PzRole.
+//
+// **Profile-coupling caveat (osd.hide on the scale leg):** the OSD and
+// LayoutPicker configs reuse `osdHide` as the `hideScaleProfile`. That
+// means a user-tunable JSON edit to `osd.hide` (e.g. swapping its
+// easing for Spring physics to bounce the opacity) ALSO affects the
+// scale leg, because both legs resolve the same Profile path. Live-
+// reload's "drop a JSON, see it apply" UX is intentional, but profile
+// authors should know the two legs are coupled. If a future overlay
+// needs independent opacity/scale tuning, introduce a separate
+// `osd.hide-scale` profile and register it on `hideScaleProfile`
+// instead of reusing `osdHide`.
+
+namespace PAL = PhosphorAnimationLayer;
+
+/// Default config — empty. Surfaces that route through the animator
+/// without a registered config fall back to AnimatedValue's library
+/// default (150 ms OutCubic), same as a missing-profile lookup. Every
+/// Surface that goes through Surface::show()/hide() in this service has
+/// an explicit registration below; the empty default is documentation.
+PAL::SurfaceAnimator::Config buildDefaultConfig()
+{
+    return PAL::SurfaceAnimator::Config{};
+}
+
+/// LayoutOsd / NavigationOsd: identical fade-and-pop shape. The visual
+/// treatment is meant to read the same across the two OSDs, so a single
+/// shared config keeps tuning edits consistent. OutBack-overshoot scale
+/// pop preserved from the original QML hand-roll.
+PAL::SurfaceAnimator::Config buildOsdConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
+                                        .hideProfile = osdHide(),
+                                        .showScaleProfile = osdPop(),
+                                        .hideScaleProfile = osdHide(),
+                                        .showScaleFrom = 0.8,
+                                        .hideScaleTo = 0.9};
+}
+
+/// LayoutPicker: same osd shape as buildOsdConfig but with a softer
+/// scale envelope (0.9→1 instead of 0.8→1). The picker is a larger
+/// surface so the overshoot reads as a pop rather than a slam.
+PAL::SurfaceAnimator::Config buildLayoutPickerConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
+                                        .hideProfile = osdHide(),
+                                        .showScaleProfile = osdPop(),
+                                        .hideScaleProfile = osdHide(),
+                                        .showScaleFrom = 0.9,
+                                        .hideScaleTo = 0.95};
+}
+
+/// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
+/// the hide animation actually paints). Opacity-only — explicit empty
+/// scale fields suppress GCC's -Wmissing-field-initializers under
+/// designated init.
+PAL::SurfaceAnimator::Config buildZoneSelectorConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
+                                        .hideProfile = widgetFadeOut(),
+                                        .showScaleProfile = {},
+                                        .hideScaleProfile = {}};
+}
+
+/// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
+/// (keepMappedOnHide=false), so ~Surface synchronously cancels any
+/// in-flight beginHide before the hide animation can paint a frame.
+/// Registering a hideProfile here would be dead code; leave it empty.
+PAL::SurfaceAnimator::Config buildSnapAssistConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
+                                        .hideProfile = {},
+                                        .showScaleProfile = {},
+                                        .hideScaleProfile = {}};
+}
+
+} // namespace
+
 void OverlayService::setupSurfaceAnimator()
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Profile path strings used below. Lifted as named statics so a typo
-    // within this function is impossible (the compiler binds the symbol;
-    // the registry resolves the value once at first call). Profile JSONs
-    // discovered through PhosphorProfileRegistry's watcher path can still
-    // change the curve/duration these names resolve to at runtime.
-    static const QString osdShow = QStringLiteral("osd.show");
-    static const QString osdPop = QStringLiteral("osd.pop");
-    static const QString osdHide = QStringLiteral("osd.hide");
-    static const QString panelPopup = QStringLiteral("panel.popup");
-    // widget.fadeOut is the registered hide profile for ZoneSelector
-    // (panel.popup show + widget.fadeOut hide). The matching widget.fade
-    // is intentionally absent — no overlay uses it after the dead-default
-    // cleanup; if a future overlay needs a plain widget fade, register
-    // the path inline at the call site.
-    static const QString widgetFadeOut = QStringLiteral("widget.fadeOut");
-
-    // Default config: empty. Every Surface that routes through
-    // Surface::show()/hide() in this service is registered explicitly
-    // below (LayoutOsd, NavigationOsd, LayoutPicker, ZoneSelector,
-    // SnapAssist). Two existing surface types deliberately BYPASS this
-    // animator and therefore never read any config (default or per-role):
+    // Two existing surface types deliberately BYPASS this animator and
+    // therefore never read any config (default or per-role):
     //   - Overlay (zone overlay rendering): hidden via direct
     //     window->hide() in dismissOverlayWindow because the rapid
     //     drag-mode path uses _idled property toggling rather than the
@@ -149,71 +252,17 @@ void OverlayService::setupSurfaceAnimator()
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
-    // The previous default referenced widget.fade / widget.fadeOut
-    // profiles, which suggested those names were load-bearing — they
-    // weren't. Empty makes the dead-default explicit; if a future
-    // overlay routes through the animator without a registration, it
-    // falls back to AnimatedValue's library default (150 ms OutCubic),
-    // same as a missing-profile lookup would.
-    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(PAL::SurfaceAnimator::Config{});
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(buildDefaultConfig());
 
-    // Per-overlay tunings. Profile names are the same paths PhosphorMotion-
-    // Animation in QML uses today, so the live-reload path (drop a JSON,
-    // see it apply on next show) automatically applies to the C++ side too.
-    //
-    // OSDs (LayoutOsd / NavigationOsd / LayoutPicker) use the osd.show /
-    // osd.pop / osd.hide combo to preserve the OutBack-overshoot scale
-    // pop the original QML hand-rolled. ZoneSelector and SnapAssist are
-    // opacity-only fades.
-    // hideScaleProfile reuses osdHide intentionally: the same Profile drives
-    // opacity 1→0 and scale 1→0.9 in parallel so the two legs share the
-    // OutCubic curve and stay frame-aligned. AnimatedValue resolves the
-    // path independently per leg; the registry's QHash lookup is cheap
-    // enough that the duplicate query is irrelevant.
-    //
-    // LayoutOsd and NavigationOsd share an intentionally-identical config
-    // — both use the same fade-and-pop shape because the visual treatment
-    // is meant to read the same. Keep them registered against a single
-    // named local so a future tuning edit lands on both, never one.
-    const PAL::SurfaceAnimator::Config osdConfig{.showProfile = osdShow,
-                                                 .hideProfile = osdHide,
-                                                 .showScaleProfile = osdPop,
-                                                 .hideScaleProfile = osdHide,
-                                                 .showScaleFrom = 0.8,
-                                                 .hideScaleTo = 0.9};
+    // Profile names are the same paths PhosphorMotionAnimation in QML
+    // uses today, so the live-reload path (drop a JSON, see it apply on
+    // next show) automatically applies to the C++ side too.
+    const auto osdConfig = buildOsdConfig();
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
     m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
-
-    // LayoutPicker: same osd shape but a softer scale envelope (0.9→1
-    // instead of 0.8→1) — the picker is a larger surface so the overshoot
-    // reads as a pop rather than a slam.
-    const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = osdShow,
-                                                          .hideProfile = osdHide,
-                                                          .showScaleProfile = osdPop,
-                                                          .hideScaleProfile = osdHide,
-                                                          .showScaleFrom = 0.9,
-                                                          .hideScaleTo = 0.95};
-    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, layoutPickerConfig);
-
-    // ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
-    // the hide animation actually paints). Explicit `= {}` on the unused
-    // scale fields suppresses GCC's -Wmissing-field-initializers under
-    // designated init.
-    const PAL::SurfaceAnimator::Config zoneSelectorConfig{.showProfile = panelPopup,
-                                                          .hideProfile = widgetFadeOut,
-                                                          .showScaleProfile = {},
-                                                          .hideScaleProfile = {}};
-    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, zoneSelectorConfig);
-
-    // SnapAssist: pop-in show only. The overlay uses destroy-on-hide
-    // (keepMappedOnHide=false), so ~Surface synchronously cancels any
-    // in-flight beginHide before the hide animation can paint a frame.
-    // Registering a hideProfile here would be dead code; leave it empty.
-    const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = panelPopup,
-                                                        .hideProfile = {},
-                                                        .showScaleProfile = {},
-                                                        .hideScaleProfile = {}};
-    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, snapAssistConfig);
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig());
 }
 
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,

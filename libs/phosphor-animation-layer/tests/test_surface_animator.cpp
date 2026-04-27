@@ -796,6 +796,175 @@ private Q_SLOTS:
 
         delete surface;
     }
+
+    /// Regression: the two-leg path (opacity + scale) has a separate
+    /// onValueChanged callback per leg. Cancelling from inside the
+    /// SCALE leg's callback while the OPACITY leg is still in flight
+    /// hits a slightly different code path than the single-leg test
+    /// above (different AnimatedValue is being torn down; the opacity
+    /// leg's still-installed unique_ptr also needs to land in the
+    /// graveyard cleanly).
+    ///
+    /// Without the deferred-destroy contract this would UAF on the
+    /// scale AnimatedValue's m_isComplete read post-callback.
+    void cancel_from_scale_leg_during_two_leg_animation()
+    {
+        const QString path = QStringLiteral("test.two-leg-cancel");
+        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/200));
+        struct Cleanup
+        {
+            QString p;
+            ~Cleanup()
+            {
+                PhosphorProfileRegistry::instance().unregisterProfile(p);
+            }
+        } _{path};
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = path;
+        cfg.showScaleProfile = path;
+        cfg.showScaleFrom = 0.5;
+        cfg.hideProfile = path;
+        SurfaceAnimator anim(cfg);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("two-leg-cancel");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->show();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // Cancel from inside scaleChanged's slot — the scale leg's
+        // onValueChanged → setScale → scaleChanged → this slot chain.
+        // Pre-fix this UAFs on the scale AnimatedValue's post-callback
+        // access.
+        bool cancelled = false;
+        QObject::connect(target, &QQuickItem::scaleChanged, target, [&]() {
+            if (cancelled) {
+                return;
+            }
+            // Only cancel mid-flight (target hasn't reached 1.0 yet).
+            // The first scaleChanged is the synchronous setScale(0.5)
+            // from runLeg's pre-tick state-set; we want the second one
+            // which is the first AnimatedValue tick.
+            if (target->scale() >= 0.999) {
+                return;
+            }
+            if (target->scale() <= 0.501) {
+                // First (synchronous) emit — wait for the next tick.
+                return;
+            }
+            cancelled = true;
+            anim.cancel(surface);
+        });
+
+        QVERIFY2(waitFor(
+                     [&] {
+                         return cancelled;
+                     },
+                     1000),
+                 "scaleChanged must fire mid-flight; if 0 mid-flight fires were observed the "
+                 "animator's tick driver is not running or the scale leg never started");
+
+        // Pre-fix UAF window — give the timer two more ticks to fire
+        // tickAll after cancel. m_pendingDestroy must drain the cancelled
+        // AnimatedValues before any advance() touches them.
+        QTest::qWait(150);
+
+        // Both legs must have stopped progressing after cancel.
+        const qreal firstOp = target->opacity();
+        const qreal firstSc = target->scale();
+        QTest::qWait(50);
+        const qreal secondOp = target->opacity();
+        const qreal secondSc = target->scale();
+        QCOMPARE(firstOp, secondOp);
+        QCOMPARE(firstSc, secondSc);
+
+        delete surface;
+    }
+
+    /// Regression: live profile reload during an in-flight animation
+    /// must NOT affect the in-flight animation. The header's
+    /// "live profile reloads apply on next show" contract relies on
+    /// MotionSpec capturing the Profile by value at start() time — a
+    /// future refactor that switched to a registry pointer lookup per
+    /// advance() would silently break this.
+    void profile_reload_during_flight_does_not_affect_inflight()
+    {
+        const QString path = QStringLiteral("test.reload-during-flight");
+        // Start with a 200 ms profile.
+        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/200));
+        struct Cleanup
+        {
+            QString p;
+            ~Cleanup()
+            {
+                PhosphorProfileRegistry::instance().unregisterProfile(p);
+            }
+        } _{path};
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = path;
+        cfg.hideProfile = path;
+        SurfaceAnimator anim(cfg);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.debugName = QStringLiteral("reload-during-flight");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // Kick off the show with the 200 ms profile.
+        anim.beginShow(surface, target, []() { });
+
+        // Wait for the animation to make some progress but not finish.
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() > 0.05 && target->opacity() < 0.95;
+            },
+            500));
+
+        // Replace the profile mid-flight with a 5000 ms one. If the
+        // animator re-resolved per advance(), the in-flight animation
+        // would suddenly slow to a crawl.
+        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/5000));
+
+        // The in-flight 200 ms animation must still finish within ~250 ms
+        // of the original start. Allow generous headroom for CI jitter
+        // but well under the 5000 ms reloaded profile would take.
+        QVERIFY2(waitFor(
+                     [target] {
+                         return target->opacity() >= 0.999;
+                     },
+                     800),
+                 "in-flight animation must not pick up the reloaded profile mid-flight — "
+                 "Profile is captured by value at start() time, not re-resolved per advance()");
+
+        delete surface;
+    }
 };
 
 QTEST_MAIN(TestSurfaceAnimator)
