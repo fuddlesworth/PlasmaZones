@@ -561,12 +561,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight)
     assertWindowOnScreen(window, physScreen, navScreenGeom);
 
-    // Read the QML-computed desired size. The NavigationOsd.qml root Window
-    // exposes contentDesiredWidth/Height which cascade from messageLabel's
-    // implicitWidth (QQuickText measures text synchronously when its text
-    // property changes, so by the time writeQmlProperty("reason", ...) above
-    // returns the binding has settled). Falls back to 240x70 if the property
-    // can't be read — same as the previous hardcoded value.
+    // Read the QML-computed desired size. NotificationOverlay.qml re-exports
+    // contentDesiredWidth/Height from the loaded NavigationOsdContent body,
+    // which in turn cascades from messageLabel's implicitWidth (QQuickText
+    // measures text synchronously when its text property changes, so by the
+    // time writeQmlProperty("reason", ...) above returns the binding has
+    // settled). Falls back to 240x70 if the property can't be read — same
+    // as the previous hardcoded value.
     constexpr int kFallbackWidth = 240;
     constexpr int kFallbackHeight = 70;
     const QVariant widthVar = window->property("contentDesiredWidth");
