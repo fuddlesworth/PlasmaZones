@@ -117,13 +117,24 @@ public:
     /// @name Lifecycle
     /// Idempotent and safe to call in any state. Invalid transitions warn
     /// and no-op.
+    ///
+    /// Declared as Q_SLOTS so consumers can wire QML-side signals (e.g. a
+    /// dismissTimer's `dismissRequested()`) directly via the string-based
+    /// `QObject::connect(window, SIGNAL(foo()), surface, SLOT(hide()))`
+    /// syntax. QML-defined signals can't be addressed via Qt5
+    /// `&Class::signal` pointers, so the string form is the only path —
+    /// without Q_SLOT registration the connect would silently fail at
+    /// runtime.
     /// @{
+public Q_SLOTS:
     void show();
     void hide();
     /// Create engine + window + content, leave hidden. Pre-compiles QML so
     /// the first show() is latency-free.
     void warmUp();
     /// @}
+
+public:
 
     /// @name Escape hatches
     /// Prefer the declarative API. These are for consumers that need to

@@ -70,6 +70,19 @@ public:
     std::vector<Call> m_calls;
 };
 
+/// Minimal QObject with a parameter-less signal so the QML-style
+/// string-based connect path from an external signal source to
+/// `Surface::hide()` can be exercised in a unit test. Mirrors the
+/// way LayoutOsd.qml's dismissTimer fires `dismissRequested()`.
+class SignalEmitter : public QObject
+{
+    Q_OBJECT
+public:
+    using QObject::QObject;
+Q_SIGNALS:
+    void fire();
+};
+
 SurfaceConfig buildConfig(QScreen* screen, bool keepMapped = false)
 {
     SurfaceConfig cfg;
@@ -283,6 +296,47 @@ private Q_SLOTS:
         }
         QVERIFY(sawCancel);
         QVERIFY(sawShowAfterCancel);
+    }
+
+    /// Regression: show() / hide() / warmUp() must be registered as
+    /// Q_SLOTS so QML-defined signals (e.g. an OSD dismissTimer's
+    /// `dismissRequested()`) can target them via the string-based
+    /// QObject::connect(src, SIGNAL(...), surface, SLOT(hide())) syntax.
+    /// QML signals can't be addressed via Qt5 &-pointer connect; the
+    /// string form is the only path. Without Q_SLOT registration the
+    /// connect silently fails at runtime and the OSD never dismisses.
+    void lifecycle_methods_registered_as_slots()
+    {
+        const QMetaObject* mo = &Surface::staticMetaObject;
+        QVERIFY2(mo->indexOfSlot("show()") != -1, "Surface::show must be a Q_SLOT");
+        QVERIFY2(mo->indexOfSlot("hide()") != -1, "Surface::hide must be a Q_SLOT");
+        QVERIFY2(mo->indexOfSlot("warmUp()") != -1, "Surface::warmUp must be a Q_SLOT");
+    }
+
+    /// End-to-end: a QML-style string-based connect from an external
+    /// signal source must reach Surface::hide. This is exactly the
+    /// pattern the OSD dismiss path uses.
+    void hide_via_string_based_connect_from_signal()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/true));
+        QVERIFY(surface);
+        surface->show();
+        QCOMPARE(surface->state(), Surface::State::Shown);
+
+        // Emit dismissed() via the same string-based connect the daemon's
+        // osd.cpp uses to wire QML dismissTimer.dismissRequested →
+        // surface->hide().
+        SignalEmitter emitter;
+        const bool connected =
+            QObject::connect(&emitter, SIGNAL(fire()), surface, SLOT(hide()));
+        QVERIFY2(connected, "string-based connect to Surface::hide must succeed");
+        Q_EMIT emitter.fire();
+
+        QCOMPARE(surface->state(), Surface::State::Hidden);
     }
 
     /// Surface destruction cancels any in-flight animation. Without this,
