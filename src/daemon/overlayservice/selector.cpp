@@ -68,7 +68,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             // Skip monitors/desktops/activities where PlasmaZones is disabled
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             // Skip autotile-managed screens (zone selector is for manual zone selection)
@@ -100,7 +101,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {

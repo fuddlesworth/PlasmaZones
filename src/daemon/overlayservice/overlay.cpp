@@ -99,7 +99,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (!physScreen) {
                 continue;
             }
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -112,7 +113,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     } else {
         for (auto* screen : Utils::allScreens()) {
             const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -485,7 +487,8 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     for (const QString& screenId : screensToRecreate)
         destroyOverlayWindow(screenId);
     for (const QString& screenId : screensToRecreate) {
-        if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+        if (!isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
+                               m_currentActivity)) {
             QScreen* physScreen = savedPhysScreens.value(screenId);
             if (!physScreen)
                 continue;

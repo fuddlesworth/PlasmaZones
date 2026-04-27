@@ -89,7 +89,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     bool useOverlayZone = true;
     int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     QString curActivityDrop = m_layoutManager ? m_layoutManager->currentActivity() : QString();
-    if (releaseScreen && isContextDisabled(m_settings, releaseScreenId, curDesktopDrop, curActivityDrop)) {
+    if (releaseScreen
+        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, releaseScreenId, curDesktopDrop,
+                             curActivityDrop)) {
         useOverlayZone = false;
     }
 
@@ -181,7 +183,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 QString::number(curMode) + QStringLiteral(":") + selectorScreenId, curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
-            && !isContextDisabled(m_settings, selectorScreenId, curDesktopDrop, curActivityDrop)) {
+            && !isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
+                                  curDesktopDrop, curActivityDrop)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();

@@ -35,7 +35,8 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings,
 
     // 1) Disabled context (activity / desktop / monitor excluded in settings).
     //    Dead drag: no overlay, no cursor stream, no float transition.
-    if (settings && !screenId.isEmpty() && isContextDisabled(settings, screenId, curDesktop, curActivity)) {
+    if (settings && !screenId.isEmpty()
+        && isContextDisabled(settings, PhosphorZones::AssignmentEntry::Snapping, screenId, curDesktop, curActivity)) {
         policy.bypassReason = DragBypassReason::ContextDisabled;
         return policy;
     }
@@ -228,8 +229,8 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     if (!triggerHeld && !toggleMode && m_settings && m_settings->zoneSelectorEnabled()) {
         auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
         if (resolved.qscreen
-            && !isContextDisabled(m_settings, resolved.screenId, m_layoutManager->currentVirtualDesktop(),
-                                  m_layoutManager->currentActivity())) {
+            && !isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, resolved.screenId,
+                                  m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
             edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
         }
     }

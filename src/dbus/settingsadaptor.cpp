@@ -303,9 +303,34 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
-    REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
-    REGISTER_STRINGLIST_SETTING("disabledDesktops", disabledDesktops, setDisabledDesktops)
-    REGISTER_STRINGLIST_SETTING("disabledActivities", disabledActivities, setDisabledActivities)
+    // Per-mode disable lists. Six entries — one per (context, mode) pair —
+    // because both the read and the write need a Mode argument that the
+    // REGISTER_STRINGLIST_SETTING macro doesn't expose. Pre-v3 these were a
+    // single set of three keys whose values silently gated both modes; the
+    // new wire schema names the mode explicitly so consumers can't conflate.
+#define REGISTER_PER_MODE_DISABLE(keyName, modeEnum, getterFn, setterFn)                                               \
+    m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
+        return m_settings->getterFn(modeEnum);                                                                         \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
+        m_settings->setterFn(modeEnum, v.toStringList());                                                              \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("stringlist");
+
+    REGISTER_PER_MODE_DISABLE("snappingDisabledMonitors", PhosphorZones::AssignmentEntry::Snapping, disabledMonitors,
+                              setDisabledMonitors)
+    REGISTER_PER_MODE_DISABLE("autotileDisabledMonitors", PhosphorZones::AssignmentEntry::Autotile, disabledMonitors,
+                              setDisabledMonitors)
+    REGISTER_PER_MODE_DISABLE("snappingDisabledDesktops", PhosphorZones::AssignmentEntry::Snapping, disabledDesktops,
+                              setDisabledDesktops)
+    REGISTER_PER_MODE_DISABLE("autotileDisabledDesktops", PhosphorZones::AssignmentEntry::Autotile, disabledDesktops,
+                              setDisabledDesktops)
+    REGISTER_PER_MODE_DISABLE("snappingDisabledActivities", PhosphorZones::AssignmentEntry::Snapping,
+                              disabledActivities, setDisabledActivities)
+    REGISTER_PER_MODE_DISABLE("autotileDisabledActivities", PhosphorZones::AssignmentEntry::Autotile,
+                              disabledActivities, setDisabledActivities)
+#undef REGISTER_PER_MODE_DISABLE
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)

@@ -118,6 +118,21 @@ void Settings::load()
             snapshot[i] = prop.read(this);
     }
 
+    // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
+    // argument, which Q_PROPERTY can't express). Snapshot them explicitly
+    // so the post-reparse re-emission below can fire the per-mode signals
+    // when an external write — daemon shortcut, D-Bus call, discard path —
+    // changes a list. Without this, QML consumers bound through the bridge
+    // never see cross-process disable-state changes until the page is
+    // re-rendered.
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    const QStringList snapMonitorsBefore = disabledMonitors(Mode::Snapping);
+    const QStringList autotileMonitorsBefore = disabledMonitors(Mode::Autotile);
+    const QStringList snapDesktopsBefore = disabledDesktops(Mode::Snapping);
+    const QStringList autotileDesktopsBefore = disabledDesktops(Mode::Autotile);
+    const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
+    const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
+
     m_configBackend->reparseConfiguration();
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -150,6 +165,22 @@ void Settings::load()
             notify.invoke(this, Qt::DirectConnection);
         }
     }
+
+    // Per-mode disable lists: emit each signal once if its list changed.
+    // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
+    // of by property index.
+    if (disabledMonitors(Mode::Snapping) != snapMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
+    if (disabledMonitors(Mode::Autotile) != autotileMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
+    if (disabledDesktops(Mode::Snapping) != snapDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
+    if (disabledDesktops(Mode::Autotile) != autotileDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
+    if (disabledActivities(Mode::Snapping) != snapActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
+    if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -163,6 +194,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
@@ -671,12 +703,59 @@ PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnA
 PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
                   showZonesOnAllMonitorsChanged)
 
-QStringList Settings::disabledMonitors() const
+// Per-mode disable lists. Storage is `Display.{Snapping,Autotile}Disabled*`
+// — pick the right key from `mode`. The connector-name resolution stays
+// PZ-side so consumers always see canonical screen ids.
+namespace {
+QString disabledMonitorsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledMonitorsKey()
+                                                            : ConfigDefaults::snappingDisabledMonitorsKey();
+}
+QString disabledDesktopsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledDesktopsKey()
+                                                            : ConfigDefaults::snappingDisabledDesktopsKey();
+}
+QString disabledActivitiesKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledActivitiesKey()
+                                                            : ConfigDefaults::snappingDisabledActivitiesKey();
+}
+} // namespace
+
+QStringList Settings::readDisableList(const QString& key) const
+{
+    return parseCommaList(m_store->read<QString>(ConfigDefaults::displayGroup(), key));
+}
+
+void Settings::writeDisableList(const QString& key, const QStringList& entries,
+                                PhosphorZones::AssignmentEntry::Mode mode, DisableModeSignalFn signalFn)
+{
+    // Post-write compare — the canonicalCommaList validator normalises
+    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
+    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
+    // and fire a spurious changed signal even though the canonical form is
+    // identical.
+    const QString before = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
+    m_store->write(ConfigDefaults::displayGroup(), key, entries.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*signalFn)(mode);
+    Q_EMIT settingsChanged();
+}
+
+QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const
 {
     // Resolve connector names → stable screen ids on every read. Stored
     // connector names stay human-readable; consumers see canonical ids.
-    QStringList entries = parseCommaList(
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey()));
+    // Desktop/activity getters intentionally skip this resolution because
+    // their composite keys (`screenId/desktop`, `screenId/activity`) embed
+    // the screen id in a non-isolatable way; the connector↔id matching is
+    // done at lookup time inside isDesktopDisabled / isActivityDisabled.
+    QStringList entries = readDisableList(disabledMonitorsKeyFor(mode));
     for (auto& name : entries) {
         if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
             const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
@@ -688,29 +767,14 @@ QStringList Settings::disabledMonitors() const
     return entries;
 }
 
-void Settings::setDisabledMonitors(const QStringList& screenIdOrNames)
+void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
 {
-    // Post-write compare — the canonicalCommaList validator normalises
-    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
-    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
-    // and fire a spurious changed signal even though the canonical form is
-    // identical.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey());
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey(),
-                   screenIdOrNames.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT disabledMonitorsChanged();
-    Q_EMIT settingsChanged();
+    writeDisableList(disabledMonitorsKeyFor(mode), screenIdOrNames, mode, &Settings::disabledMonitorsChanged);
 }
 
-bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
+bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
 {
-    const QStringList entries = disabledMonitors();
+    const QStringList entries = disabledMonitors(mode);
     if (entries.contains(screenIdOrName)) {
         return true;
     }
@@ -730,35 +794,26 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
     return false;
 }
 
-QStringList Settings::disabledDesktops() const
+// Composite keys (`screenId/desktop`) are returned verbatim — connector-name
+// resolution is deferred to isDesktopDisabled, which knows how to split the
+// composite and match either the connector or the resolved id segment.
+QStringList Settings::disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey()));
+    return readDisableList(disabledDesktopsKeyFor(mode));
 }
 
-void Settings::setDisabledDesktops(const QStringList& entries)
+void Settings::setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey());
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey(),
-                   entries.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT disabledDesktopsChanged();
-    Q_EMIT settingsChanged();
+    writeDisableList(disabledDesktopsKeyFor(mode), entries, mode, &Settings::disabledDesktopsChanged);
 }
 
-bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) const
+bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                 int desktop) const
 {
     if (desktop <= 0) {
         return false;
     }
-    const QStringList entries = disabledDesktops();
+    const QStringList entries = disabledDesktops(mode);
     QStringList namesToCheck = {screenIdOrName};
     if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
         const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
@@ -780,35 +835,26 @@ bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) con
     return false;
 }
 
-QStringList Settings::disabledActivities() const
+// Composite keys (`screenId/activityUuid`) are returned verbatim — see the
+// comment on disabledDesktops for why connector-name resolution is deferred
+// to isActivityDisabled rather than applied per-read here.
+QStringList Settings::disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(),
-                                                 ConfigDefaults::disabledActivitiesKey()));
+    return readDisableList(disabledActivitiesKeyFor(mode));
 }
 
-void Settings::setDisabledActivities(const QStringList& entries)
+void Settings::setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey());
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey(),
-                   entries.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT disabledActivitiesChanged();
-    Q_EMIT settingsChanged();
+    writeDisableList(disabledActivitiesKeyFor(mode), entries, mode, &Settings::disabledActivitiesChanged);
 }
 
-bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const
+bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                  const QString& activityId) const
 {
     if (activityId.isEmpty()) {
         return false;
     }
-    const QStringList entries = disabledActivities();
+    const QStringList entries = disabledActivities(mode);
     QStringList namesToCheck = {screenIdOrName};
     if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
         const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);

@@ -525,10 +525,19 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
 
     schema.groups[CD::snappingBehaviorDisplayGroup()] = {
         {CD::showOnAllMonitorsKey(), CD::showOnAllMonitors(), QMetaType::Bool},
-        {CD::disabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::disabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::disabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
+    };
+
+    // Mode-neutral Display group: per-mode disable lists. Each pair is independent —
+    // disabling a monitor for snap leaves autotile gates untouched. Connector-name
+    // resolution stays PZ-side (see Settings::disabledMonitors).
+    schema.groups[CD::displayGroup()] = {
+        {CD::snappingDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::autotileDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::snappingDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::autotileDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::snappingDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::autotileDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
     };
 
     // Full Effects group declared here in one shot. Blur is logically an

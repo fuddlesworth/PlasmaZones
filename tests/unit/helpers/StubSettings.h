@@ -101,36 +101,37 @@ public:
     void setShowZonesOnAllMonitors(bool) override
     {
     }
-    QStringList disabledMonitors() const override
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode) const override
     {
         return {};
     }
-    void setDisabledMonitors(const QStringList&) override
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
     {
     }
-    bool isMonitorDisabled(const QString&) const override
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
     {
         return false;
     }
-    QStringList disabledDesktops() const override
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode) const override
     {
         return {};
     }
-    void setDisabledDesktops(const QStringList&) override
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
     {
     }
-    bool isDesktopDisabled(const QString& /*screenIdOrName*/, int) const override
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/, int) const override
     {
         return false;
     }
-    QStringList disabledActivities() const override
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode) const override
     {
         return {};
     }
-    void setDisabledActivities(const QStringList&) override
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
     {
     }
-    bool isActivityDisabled(const QString& /*screenIdOrName*/, const QString&) const override
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/,
+                            const QString&) const override
     {
         return false;
     }
