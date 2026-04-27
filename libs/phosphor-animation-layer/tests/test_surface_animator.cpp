@@ -439,6 +439,121 @@ private Q_SLOTS:
         delete surface;
     }
 
+    /// cancel(surface) must NOT fire the consumer's onComplete.
+    /// Cancellation is the documented non-completion termination path;
+    /// the contract is "consumers that need a settled signal regardless
+    /// of completion-vs-cancellation must wrap the callback themselves."
+    /// `dtor_cancels_leftover_tracks` exercises this in the dtor scenario;
+    /// this test pins the same invariant on the explicit `cancel()` path.
+    void cancel_does_not_fire_oncomplete()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        SurfaceAnimator anim(defaultsForTesting());
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorLayer::Roles::CenteredModal;
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = s.primary();
+        cfg.keepMappedOnHide = true;
+        cfg.debugName = QStringLiteral("cancel-no-oncomplete");
+
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        int onCompleteFires = 0;
+        anim.beginShow(surface, target, [&onCompleteFires]() {
+            ++onCompleteFires;
+        });
+
+        // Cancel before the 20ms profile completes.
+        anim.cancel(surface);
+
+        // Wait long enough that any natural completion or stale tick
+        // would have fired the user's onComplete. The 20ms test profile
+        // would settle in ~3 ticks at 16ms each; 100ms is well beyond.
+        QTest::qWait(100);
+
+        QCOMPARE(onCompleteFires, 0);
+        delete surface;
+    }
+
+    /// Regression: a synchronous cancel(surface) re-entered from inside
+    /// the pre-state-set QML chain (target->setOpacity firing
+    /// opacityChanged → consumer slot → cancel) must be honoured.
+    /// Pre-fix the slot was installed AFTER the synchronous setOpacity,
+    /// so cancelTracking saw an empty m_tracks, did nothing, and runLeg
+    /// then installed a fresh slot the consumer wanted gone — silently
+    /// dropping the cancel intent and starting an unwanted animation.
+    /// Post-fix the slot is installed BEFORE the pre-state writes, so
+    /// the re-entrant cancel finds an AV-less entry, erases it cleanly,
+    /// and the post-write re-find detects the erasure and bails.
+    void cancel_during_prestate_setOpacity_is_honoured()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        SurfaceAnimator anim(defaultsForTesting());
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorLayer::Roles::CenteredModal;
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = s.primary();
+        cfg.keepMappedOnHide = true;
+        cfg.debugName = QStringLiteral("cancel-during-prestate");
+
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // Force opacity ≠ 0 so the upcoming runLeg's setOpacity(0) actually
+        // emits opacityChanged (Qt's qFuzzyCompare suppresses no-op writes).
+        target->setOpacity(1.0);
+
+        // Connect a one-shot opacityChanged handler that calls cancel
+        // synchronously from inside the QML signal chain — exactly the
+        // re-entry pattern this fix is designed to honour.
+        bool cancelled = false;
+        int onCompleteFires = 0;
+        QMetaObject::Connection conn = QObject::connect(target, &QQuickItem::opacityChanged, target, [&]() {
+            if (cancelled) {
+                return;
+            }
+            cancelled = true;
+            anim.cancel(surface);
+        });
+
+        anim.beginShow(surface, target, [&onCompleteFires]() {
+            ++onCompleteFires;
+        });
+
+        QObject::disconnect(conn);
+
+        // The synchronous setOpacity inside runLeg fired opacityChanged,
+        // our slot called cancel, and runLeg should have detected the
+        // erasure on its post-state-set re-find and bailed. So:
+        //   - cancelled is true (the slot ran)
+        //   - opacity has NOT been driven further (no animation started)
+        //   - onComplete never fires
+        QVERIFY(cancelled);
+        const qreal opAfter = target->opacity();
+        QTest::qWait(100); // would let any started animation tick
+        QCOMPARE(target->opacity(), opAfter);
+        QCOMPARE(onCompleteFires, 0);
+
+        delete surface;
+    }
+
     /// cancel mid-flight stops the AnimatedValue and does not produce a
     /// completion callback. After cancel, opacity stays at whatever
     /// value the animation left it at (no snap-to-target).

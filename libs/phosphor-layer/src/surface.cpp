@@ -399,12 +399,14 @@ private:
                 // m_config, m_state, and m_deps after the emit point would
                 // run — synchronous emit + synchronous delete would UAF.
                 // Matches the pattern `failed()` uses for the same reason.
+                //
+                // Receiver-based queued invocation: Qt cancels the queued
+                // invocation when m_q is destroyed before dispatch, so the
+                // lambda body cannot run on a dead receiver. No QPointer
+                // null-check needed — that path is unreachable.
                 QMetaObject::invokeMethod(
                     m_q,
                     [q = m_q]() {
-                        if (!q) {
-                            return;
-                        }
                         Q_EMIT q->screenLost();
                     },
                     Qt::QueuedConnection);
@@ -636,19 +638,24 @@ private:
         if (!m_component || m_component->isLoading()) {
             return;
         }
-        // Latch self — failWith() defers its signals via QueuedConnection, but
-        // instantiateFromComponent() emits stateChanged(Hidden) synchronously
-        // via transitionTo(). A consumer slot on stateChanged that deletes
-        // the Surface would leave us touching `this` on return. Bail if gone.
-        QPointer<Surface> self = m_q;
         if (m_component->isError()) {
             failWith(m_component->errorString());
             return;
         }
+        // Synchronous-delete contract: instantiateFromComponent() emits
+        // stateChanged(Hidden) inline via transitionTo(), and afterward
+        // touches `this` (m_component->completeCreate()). A consumer that
+        // synchronously deletes the Surface from a non-failure stateChanged
+        // slot would UAF on completeCreate before we ever return here —
+        // a local QPointer guard at this layer cannot reach inside
+        // instantiateFromComponent's tail. The contract documented at
+        // Surface.h:185 (`stateChanged` → use `deleteLater()` for
+        // non-failure transitions; `failed`/`screenLost` are deferred and
+        // always delete-safe) is therefore load-bearing for synchronous
+        // deletes — we deliberately do NOT add a misleading half-defense
+        // here. failWith's signals are deferred (QueuedConnection above),
+        // so the failure return paths above never see a sync-delete.
         if (!instantiateFromComponent()) {
-            return;
-        }
-        if (!self) {
             return;
         }
         // Content ready — resume whatever intent was latched.
@@ -846,12 +853,13 @@ private:
         // runs after the current call stack unwinds — by which point we've
         // either returned to the consumer's event loop or been explicitly
         // torn down via ~Surface.
+        //
+        // Receiver-based queued invocation: Qt cancels the queued invocation
+        // when m_q is destroyed before dispatch, so the lambda body cannot
+        // run on a dead receiver. No QPointer null-check needed.
         QMetaObject::invokeMethod(
             m_q,
             [q = m_q, reason]() {
-                if (!q) {
-                    return;
-                }
                 Q_EMIT q->stateChanged(State::Failed);
                 Q_EMIT q->failed(reason);
             },

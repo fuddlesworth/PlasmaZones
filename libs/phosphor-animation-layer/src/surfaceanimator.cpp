@@ -320,6 +320,30 @@ public:
         // QTimer drives advance() at 60Hz instead.
         PhosphorAnimation::IMotionClock* clock = &m_clock;
 
+        const int legCount = scaleProfilePath.isEmpty() ? 1 : 2;
+
+        // Install the bookkeeping slot BEFORE the synchronous pre-state
+        // writes below. `target->setOpacity(fromOpacity)` /
+        // `target->setScale(fromScale)` fire QML opacity-/scale-changed
+        // signals synchronously, and a consumer binding observing them
+        // can re-enter `cancel(surface)` from the QML side. Without the
+        // slot installed, that cancel finds an empty m_tracks (we just
+        // erased any prior entry above), silently does nothing, and we
+        // then install a fresh slot the consumer wanted gone — losing
+        // the cancel intent. With the slot installed first, cancelTracking
+        // sees an AV-less entry, removes it cleanly (nothing to park in
+        // m_pendingDestroy because we haven't constructed the
+        // AnimatedValues yet), and the post-write re-find below detects
+        // the erasure and bails.
+        {
+            Track& slot = m_tracks[surface];
+            slot.opacity.reset();
+            slot.scale.reset();
+            slot.target = target;
+            slot.onComplete = std::move(onComplete);
+            slot.pendingLegs = legCount;
+        }
+
         // Set the initial frame state synchronously so the compositor
         // doesn't paint a stale opacity for the one frame between
         // beginShow returning and the first AnimatedValue tick.
@@ -328,36 +352,29 @@ public:
             target->setScale(fromScale);
         }
 
-        const int legCount = scaleProfilePath.isEmpty() ? 1 : 2;
-
-        // Insert/refresh FIRST so the leg-completion callbacks below find
-        // the entry already present. AnimatedValue::start fires
-        // onValueChanged synchronously on the first tick (same event-loop
-        // turn) under some clock implementations; without the pre-insert
-        // the lambda would race the map insert. cancelTracking() above
-        // normally guarantees a fresh entry — but if a future refactor
-        // ever leaves a stale entry behind, operator[] still gives us a
-        // usable slot whose unique_ptrs we explicitly reset below before
-        // installing fresh AnimatedValues. Belt-and-braces: a Q_ASSERT
-        // here would be debug-only and silently corrupt release builds.
+        // Construct both AnimatedValues into the slot atomically BEFORE
+        // calling start() on either. start() can synchronously fire
+        // onValueChanged → target->setOpacity() → QML binding chain →
+        // re-entrant cancel(surface), which would erase the slot. By
+        // installing both unique_ptrs up front (instead of constructing
+        // the scale leg AFTER opacity->start() returns) we avoid the
+        // dangling-reference window that an interleaved teardown would
+        // otherwise open between the two assignments.
+        //
+        // Re-find here in case the synchronous setOpacity/setScale chain
+        // re-entered cancel(surface) and erased the slot. Honour that
+        // cancellation by bailing — the consumer's onComplete was moved
+        // into the now-erased slot and dropped per the cancellation
+        // contract (cancel = non-completion termination, see
+        // cancelTracking's docstring).
         {
-            Track& slot = m_tracks[surface];
-            slot.opacity.reset();
-            slot.scale.reset();
-            slot.target = target;
-            slot.onComplete = std::move(onComplete);
-            slot.pendingLegs = legCount;
-            // Construct both AnimatedValues into the slot atomically BEFORE
-            // calling start() on either. start() can synchronously fire
-            // onValueChanged → target->setOpacity() → QML binding chain →
-            // re-entrant cancel(surface), which would erase the slot. By
-            // installing both unique_ptrs up front (instead of constructing
-            // the scale leg AFTER opacity->start() returns) we avoid the
-            // dangling-reference window that an interleaved teardown would
-            // otherwise open between the two assignments.
-            slot.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            auto it = m_tracks.find(surface);
+            if (it == m_tracks.end()) {
+                return;
+            }
+            it->second.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             if (!scaleProfilePath.isEmpty()) {
-                slot.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                it->second.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
         }
 
@@ -683,6 +700,17 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
     // the terminal state — fresh first show, no prior animation — fall
     // back to the configured starting values so we actually run an
     // animation rather than a no-op fade-from-1-to-1.
+    //
+    // Asymmetry caveat: scale supersession is one-sided. `liveScale > 1.0`
+    // (e.g. a custom QML pinch effect that overshoots above 1) is treated
+    // as "at or past the terminal state" and falls back to
+    // `cfg.showScaleFrom` (typically < 1), causing a visible scale-down-
+    // then-up. Opacity has no analogous edge case because `>1.0` opacity
+    // doesn't render any differently than `1.0`. Production overlays
+    // never push scale above 1 outside of an in-flight show, so this is
+    // a documented limitation rather than a bug — surfaces that need
+    // overshoot-from-above supersession should drive scale via their
+    // own animator and skip `cfg.showScaleProfile`.
     const qreal liveOpacity = rootItem ? rootItem->opacity() : 1.0;
     const qreal fromOpacity = (liveOpacity < 1.0) ? liveOpacity : 0.0;
 

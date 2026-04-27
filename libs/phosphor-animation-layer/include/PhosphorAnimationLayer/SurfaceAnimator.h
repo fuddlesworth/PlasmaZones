@@ -37,7 +37,13 @@ namespace PhosphorAnimationLayer {
  * single library-driven runtime that resolves curve + duration from
  * `PhosphorProfileRegistry`. Live profile reloads (drop a JSON, see it
  * apply on next show) flow through the registry's existing watcher path —
- * the animator just re-resolves on every `beginShow` / `beginHide`.
+ * the animator re-resolves the path on every `beginShow` / `beginHide`
+ * and captures the resolved Profile **by value** into the underlying
+ * `MotionSpec`. In-flight animations therefore keep the Profile they
+ * started with through to completion; reloads apply to the *next*
+ * dispatch, not to a currently-running tick. (Verified by the
+ * `profile_reload_during_flight_does_not_affect_inflight` regression
+ * test in `pal_test_surface_animator`.)
  *
  * ## Per-role configuration
  *

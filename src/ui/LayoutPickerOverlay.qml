@@ -62,6 +62,16 @@ Window {
     /// gate, a stray accelerator delivery (focus stealer, programmatic key
     /// event) could trigger Enter/arrows on a logically-hidden picker.
     property bool _shortcutsActive: false
+    /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
+    /// clicks during the keepMappedOnHide=true fade-out window can fire
+    /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
+    /// lands at the QWindow level (the lib sets it inside the hide dispatch,
+    /// async wrt the QML event loop). Without this, C++ runs Surface::hide()
+    /// on an already-Hidden surface and the library logs a `qCWarning` per
+    /// spurious click. Same shape as the latches in LayoutOsd.qml /
+    /// NavigationOsd.qml — the picker has no auto-dismiss timer, so the
+    /// reset is bound to the C++-driven `_shortcutsActive` flip below.
+    property bool _dismissed: false
     // Phase 5: surface lifecycle + show/hide animations are entirely library-
     // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
     // PzRoles::LayoutPicker) drives this Window's content opacity + container
@@ -100,6 +110,15 @@ Window {
     /// dismissable overlays.
     signal dismissRequested()
 
+    /// Internal: emit dismissRequested at most once per show cycle.
+    function _requestDismiss() {
+        if (_dismissed)
+            return ;
+
+        _dismissed = true;
+        root.dismissRequested();
+    }
+
     function moveSelection(dx, dy) {
         if (layoutCount === 0 || root.locked)
             return ;
@@ -127,6 +146,18 @@ Window {
         }
     }
 
+    /// Reset the dismiss latch on every transition into a logically-shown
+    /// state. C++ writes `_shortcutsActive = true` from showLayoutPicker
+    /// before Surface::show(); writes `false` from hideLayoutPicker before
+    /// Surface::hide(). The false→true transition is the canonical "the
+    /// picker is becoming user-active again" signal, so the latch reset
+    /// rides it. Any path that flips `_shortcutsActive` (current or
+    /// future) keeps the latch in sync without a forgetful caller.
+    onShortcutsActiveChanged: {
+        if (_shortcutsActive)
+            _dismissed = false;
+
+    }
     // Window configuration. Static flags — Phase 5 surface lifecycle owns
     // `Qt.WindowTransparentForInput` on the underlying QWindow during the
     // hide cycle (Surface::Impl::drive sets the flag when keepMappedOnHide
@@ -198,10 +229,12 @@ Window {
 
         // Backdrop — click outside to dismiss (transparent, no dim). The
         // C++ side hooks dismissRequested() to OverlayService::hideLayoutPicker,
-        // which calls Surface::hide() and drives the animator.
+        // which calls Surface::hide() and drives the animator. Route through
+        // _requestDismiss so rapid clicks during the fade-out window collapse
+        // into a single dismissRequested per show cycle.
         MouseArea {
             anchors.fill: parent
-            onClicked: root.dismissRequested()
+            onClicked: root._requestDismiss()
             Accessible.name: i18n("Dismiss layout picker")
             Accessible.role: Accessible.Button
         }
