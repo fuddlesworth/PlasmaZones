@@ -97,6 +97,8 @@ public:
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
+    Q_PROPERTY(bool showOsdOnDesktopSwitch READ showOsdOnDesktopSwitch WRITE setShowOsdOnDesktopSwitch NOTIFY
+                   showOsdOnDesktopSwitchChanged)
     Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
@@ -151,6 +153,8 @@ public:
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
+                   autoAssignAllLayoutsChanged)
     Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
                    snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
@@ -474,6 +478,8 @@ public:
     void setFlashZonesOnSwitch(bool flash) override;
     bool showOsdOnLayoutSwitch() const override;
     void setShowOsdOnLayoutSwitch(bool show) override;
+    bool showOsdOnDesktopSwitch() const override;
+    void setShowOsdOnDesktopSwitch(bool show) override;
     bool showNavigationOsd() const override;
     void setShowNavigationOsd(bool show) override;
     OsdStyle osdStyle() const override;
@@ -560,6 +566,8 @@ public:
     void setStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
+    bool autoAssignAllLayouts() const override;
+    void setAutoAssignAllLayouts(bool enabled) override;
     bool snapAssistFeatureEnabled() const override;
     void setSnapAssistFeatureEnabled(bool enabled) override;
     bool snapAssistEnabled() const override;

@@ -119,6 +119,40 @@ inline QString resolveShortcutScreenId(Phosphor::Screens::ScreenManager* mgr,
 }
 
 /**
+ * @brief Resolve the screen ID for a screen-targeted shortcut (cursor-first).
+ *
+ * Sibling of @ref resolveShortcutScreenId for actions that target a screen
+ * (per-VS layout-source toggle) rather than a window (focus, move, swap).
+ * The user's intent for a screen-targeted shortcut is "the screen I am
+ * looking at right now" — i.e. the cursor's screen. Routing those off the
+ * focused window's screen silently misroutes the action when the focused
+ * window lives on a different VS than the cursor.
+ *
+ * Falls back to focused-window screen, then primary screen.
+ *
+ * @p mgr is unused today (lastCursorScreenName is already virtual-screen
+ * resolved at the WindowTrackingAdaptor source). Kept in the signature so
+ * the call site mirrors @ref resolveShortcutScreenId and so a future
+ * resolution policy that needs ScreenManager has a place to land.
+ */
+inline QString resolveCursorScreenId(Phosphor::Screens::ScreenManager* /*mgr*/,
+                                     const WindowTrackingAdaptor* trackingAdaptor)
+{
+    if (trackingAdaptor) {
+        const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
+        if (!cursorScreen.isEmpty()) {
+            return cursorScreen;
+        }
+        const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+        if (!activeScreen.isEmpty()) {
+            return activeScreen;
+        }
+    }
+    QScreen* primary = Utils::primaryScreen();
+    return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
+}
+
+/**
  * @brief Convert NavigationDirection enum to string for D-Bus/engine calls
  */
 inline QString navigationDirectionToString(NavigationDirection direction)

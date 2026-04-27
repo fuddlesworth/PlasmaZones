@@ -128,6 +128,10 @@ public:
     {
         return true;
     }
+    static bool showOsdOnDesktopSwitch()
+    {
+        return true;
+    }
     static bool showNavigationOsd()
     {
         return true;
@@ -431,6 +435,10 @@ public:
     static bool restoreWindowsToZonesOnLogin()
     {
         return true;
+    }
+    static bool autoAssignAllLayouts()
+    {
+        return false;
     }
     static bool filterLayoutsByAspectRatio()
     {

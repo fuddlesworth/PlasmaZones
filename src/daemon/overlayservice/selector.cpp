@@ -274,11 +274,26 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
                 for (int z = 0; z < zones.size(); ++z) {
                     QVariantMap zoneMap = zones[z].toMap();
-                    QVariantMap relGeo = zoneMap[QStringLiteral("relativeGeometry")].toMap();
-                    qreal rx = relGeo[QStringLiteral("x")].toReal();
-                    qreal ry = relGeo[QStringLiteral("y")].toReal();
-                    qreal rw = relGeo[QStringLiteral("width")].toReal();
-                    qreal rh = relGeo[QStringLiteral("height")].toReal();
+                    // LayoutPreview serializes zones with flat x/y/width/height
+                    // (layoutpreviewserialize.cpp::zoneMap). The legacy
+                    // zonesToVariantList path produced a nested relativeGeometry
+                    // sub-map. Match ZonePreview.qml's resolution order: prefer
+                    // flat keys, fall back to nested. Reading nested-only made
+                    // every rx/ry/rw/rh come out as 0 once LayoutPreview became
+                    // the canonical wire format, collapsing every zone hit-rect
+                    // to a tiny box at the indicator's top-left corner.
+                    const QVariantMap relGeo = zoneMap.value(QStringLiteral("relativeGeometry")).toMap();
+                    auto coord = [&](QLatin1String flatKey, QLatin1String nestedKey) {
+                        const QVariant flat = zoneMap.value(flatKey);
+                        if (flat.isValid() && !flat.isNull()) {
+                            return flat.toReal();
+                        }
+                        return relGeo.value(nestedKey).toReal();
+                    };
+                    qreal rx = coord(QLatin1String("x"), QLatin1String("x"));
+                    qreal ry = coord(QLatin1String("y"), QLatin1String("y"));
+                    qreal rw = coord(QLatin1String("width"), QLatin1String("width"));
+                    qreal rh = coord(QLatin1String("height"), QLatin1String("height"));
 
                     // Calculate zone rectangle exactly as QML does
                     int zoneX = indicatorX + static_cast<int>(rx * layout.indicatorWidth) + scaledPadding;

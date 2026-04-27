@@ -26,6 +26,9 @@ Window {
     property var layouts: []
     property string activeLayoutId: ""
     property string hoveredLayoutId: ""
+    // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
+    // Forwarded into LayoutCard so the category badge shows effective state.
+    property bool globalAutoAssign: false
     // Selected zone tracking
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
@@ -522,6 +525,7 @@ Window {
                                 layoutData: indicator.modelData
                                 isActive: indicator.isActive
                                 isSelected: indicator.hasSelectedZone
+                                globalAutoAssign: root.globalAutoAssign
                                 previewWidth: root.indicatorWidth
                                 previewHeight: root.indicatorHeight
                                 // Zone selector features

@@ -202,6 +202,7 @@ public:
     PZ_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     PZ_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     PZ_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
+    PZ_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     PZ_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     PZ_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
 
@@ -248,6 +249,7 @@ public:
     PZ_CONFIG_KEY(showNumbersKey, "ShowNumbers")
     PZ_CONFIG_KEY(flashOnSwitchKey, "FlashOnSwitch")
     PZ_CONFIG_KEY(osdOnLayoutSwitchKey, "OsdOnLayoutSwitch")
+    PZ_CONFIG_KEY(osdOnDesktopSwitchKey, "OsdOnDesktopSwitch")
     PZ_CONFIG_KEY(navigationOsdKey, "NavigationOsd")
     PZ_CONFIG_KEY(osdStyleKey, "OsdStyle")
     PZ_CONFIG_KEY(overlayDisplayModeKey, "OverlayDisplayMode")

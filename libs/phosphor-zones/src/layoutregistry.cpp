@@ -56,6 +56,49 @@ void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provide
     m_defaultLayoutIdProvider = std::move(provider);
 }
 
+void LayoutRegistry::setDefaultAutotileAlgorithmProvider(std::function<QString()> provider)
+{
+    m_defaultAutotileAlgorithmProvider = std::move(provider);
+}
+
+AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
+{
+    // Level-1 global default: snap takes precedence, autotile follows.
+    // Each provider is expected to return empty when its mode is not
+    // the user's active default (composition roots gate on
+    // snappingEnabled / autotileEnabled), so "snap disabled +
+    // autotile enabled" naturally resolves to autotile here without
+    // any mode-priority logic in the daemon.
+    //
+    // Provider returns are surfaced raw — neither the snap UUID nor
+    // the autotile algorithm id is validated against the registry /
+    // algorithm registry here. A stale UUID (settings still references
+    // a deleted layout) or an unknown algorithm id (settings predates
+    // a renamed/removed algorithm) falls through to the caller, where
+    // the KCM/UI is expected to surface "stale default" UX. Adding
+    // membership validation here would silently swallow that signal —
+    // see testLevel1Default_snapWithUnknownUuid_layoutForScreenFallsThrough.
+    if (m_defaultLayoutIdProvider) {
+        const QString id = m_defaultLayoutIdProvider();
+        if (!id.isEmpty()) {
+            AssignmentEntry e;
+            e.mode = AssignmentEntry::Snapping;
+            e.snappingLayout = id;
+            return e;
+        }
+    }
+    if (m_defaultAutotileAlgorithmProvider) {
+        const QString algo = m_defaultAutotileAlgorithmProvider();
+        if (!algo.isEmpty()) {
+            AssignmentEntry e;
+            e.mode = AssignmentEntry::Autotile;
+            e.tilingAlgorithm = algo;
+            return e;
+        }
+    }
+    return AssignmentEntry{};
+}
+
 void LayoutRegistry::setLayoutDirectory(const QString& directory)
 {
     if (m_layoutDirectory != directory) {

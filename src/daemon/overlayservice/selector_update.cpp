@@ -160,6 +160,11 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     QVariantList layouts = buildLayoutsList(screenId);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
+    // Global "Auto-assign for all layouts" master toggle (#370) — when on, every
+    // layout effectively auto-assigns regardless of its per-layout flag. Pushed
+    // here so the badge in each LayoutCard shows the effective state.
+    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
+
     // Set active layout ID for this screen
     // Per-screen assignment takes priority so each monitor highlights its own layout
     QString activeLayoutId;

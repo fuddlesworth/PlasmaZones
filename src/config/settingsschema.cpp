@@ -541,6 +541,7 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool},
         {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool},
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
+        {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool},
         {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
         {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, {}, clampInt(CD::osdStyleMin(), CD::osdStyleMax())},
         {CD::overlayDisplayModeKey(),
@@ -649,6 +650,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
                   static_cast<int>(StickyWindowHandling::IgnoreAll))},
         {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
+        {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
         {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {

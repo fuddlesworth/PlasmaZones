@@ -921,6 +921,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
                 return;
             }
+            // Suppress crossing detection while the daemon is moving this window in response
+            // to a VS swap/rotate or resnap. The cached m_virtualScreenDefs may still hold
+            // pre-rotation regions when the geometry change fires synchronously from
+            // applySnapGeometry, so getWindowScreenId would resolve the new position against
+            // stale boundaries and report a phantom crossing.
+            if (m_inDaemonGeometryApply) {
+                return;
+            }
             const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             if (!PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
@@ -2621,23 +2629,23 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             if (!p.window) {
                 return;
             }
-            applySnapGeometry(p.window, p.geometry);
-            // Seed the tracked-screen cache from the daemon's authoritative
-            // answer for this batch. Without this, the windowFrameGeometryChanged
-            // handler at line ~920 would re-derive the screen from the new
-            // center against m_virtualScreenDefs — which races with VS
-            // swap/rotate (the boundary cache lags behind the daemon's move
-            // and a stale interpretation would fire a spurious cross-VS
-            // unsnap). The daemon already knows the canonical target screen,
-            // so trust it.
-            //
-            // Empty screenId means the daemon didn't supply an authoritative
-            // answer (e.g. autotile float-restore path) — fall through to the
-            // existing geometry-based behavior in that case.
+            // Seed the tracked-screen cache from the daemon's authoritative answer for
+            // this batch BEFORE applySnapGeometry, not after. Empty screenId means the
+            // daemon didn't supply an authoritative answer (e.g. autotile float-restore
+            // path) — fall through to the existing geometry-based behavior in that case.
+            // The pre-seed handles async follow-up frame changes; m_inDaemonGeometryApply
+            // (set below) handles the synchronous frame change emitted from inside
+            // applySnapGeometry, which would otherwise resolve the new position against
+            // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
+            m_inDaemonGeometryApply = true;
+            const auto guard = qScopeGuard([this] {
+                m_inDaemonGeometryApply = false;
+            });
+            applySnapGeometry(p.window, p.geometry);
         },
         [this, savedStack, action]() {
             // Restore z-order after all geometries applied

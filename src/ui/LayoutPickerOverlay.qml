@@ -32,6 +32,9 @@ Window {
     // Layout data (array of layout objects with id, name, zones, category, autoAssign)
     property var layouts: []
     property string activeLayoutId: ""
+    // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
+    // Forwarded into LayoutCard so the category badge shows effective state.
+    property bool globalAutoAssign: false
     // Screen info for aspect ratio
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
@@ -317,6 +320,7 @@ Window {
                             isActive: layoutCard.isActive
                             isSelected: layoutCard.isSelected
                             isHovered: layoutCard.isHovered
+                            globalAutoAssign: root.globalAutoAssign
                             showMasterDot: layoutCard.layoutData.isAutotile === true && layoutCard.layoutData.supportsMasterCount === true
                             producesOverlappingZones: layoutCard.layoutData.producesOverlappingZones === true
                             zoneNumberDisplay: layoutCard.layoutData.zoneNumberDisplay || "all"

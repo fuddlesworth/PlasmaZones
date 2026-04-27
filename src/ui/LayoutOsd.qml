@@ -46,7 +46,15 @@ Window {
     property var zones: []
     // Layout category: 0=Manual (matches LayoutCategory in C++)
     property int category: 0
+    // Per-layout autoAssign flag (raw, not yet OR'd with the global master
+    // toggle). CategoryBadge folds in `globalAutoAssign` to display effective
+    // state — see selector_update.cpp / snapassist.cpp / osd.cpp where these
+    // properties are written.
     property bool autoAssign: false
+    // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
+    // Forwarded into CategoryBadge so the badge shows effective state even
+    // when the per-layout flag is off.
+    property bool globalAutoAssign: false
     // Autotile algorithm metadata
     property bool showMasterDot: false
     property int masterCount: 1
@@ -344,6 +352,7 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     category: root.category
                     autoAssign: root.autoAssign === true
+                    globalAutoAssign: root.globalAutoAssign === true
                 }
 
                 Label {

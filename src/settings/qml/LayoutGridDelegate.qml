@@ -24,6 +24,10 @@ Item {
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
     // The full autotile default ID including prefix, for comparison
     readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
+    // Global "Auto-assign for all layouts" master toggle (#370). Read once at
+    // the root so child controls (auto-assign button, CategoryBadge) share a
+    // single binding and stay consistent.
+    readonly property bool globalAutoAssign: root.appSettings.autoAssignAllLayouts === true
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
@@ -234,20 +238,39 @@ Item {
                     anchors.margins: Kirigami.Units.smallSpacing / 2
                     spacing: 0
 
-                    // Auto-assign toggle (hidden for autotile — the tiling engine manages those)
+                    // Auto-assign toggle (hidden for autotile — the tiling engine manages those).
+                    // When the global "Auto-assign for all layouts" master toggle is on (#370),
+                    // every layout effectively auto-assigns regardless of its per-layout flag,
+                    // so this button is forced into the on appearance and disabled to make the
+                    // override visible (the per-layout flag is preserved underneath).
                     ToolButton {
+                        readonly property bool perLayoutAuto: root.modelData.autoAssign === true
+                        readonly property bool globalAuto: root.globalAutoAssign
+                        readonly property bool effectiveAuto: perLayoutAuto || globalAuto
+
+                        function tooltipText() {
+                            if (globalAuto)
+                                return i18n("Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.");
+
+                            if (perLayoutAuto)
+                                return i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.");
+
+                            return i18n("Click to auto-assign new windows to empty zones");
+                        }
+
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.modelData.isAutotile !== true && (root.isHovered || root.modelData.autoAssign === true)
-                        icon.name: root.modelData.autoAssign === true ? "window-duplicate" : "window-new"
+                        visible: root.modelData.isAutotile !== true && (root.isHovered || effectiveAuto)
+                        enabled: !globalAuto
+                        icon.name: effectiveAuto ? "window-duplicate" : "window-new"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
-                        icon.color: root.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
-                        onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
+                        icon.color: effectiveAuto ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
+                        onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !perLayoutAuto)
                         Accessible.name: i18n("Auto-assign layout")
                         ToolTip.visible: hovered
-                        ToolTip.text: root.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
+                        ToolTip.text: tooltipText()
                     }
 
                     // Visibility toggle
@@ -279,6 +302,7 @@ Item {
                     visible: root.modelData.category !== undefined
                     category: root.modelData.category !== undefined ? root.modelData.category : 0
                     autoAssign: root.modelData.autoAssign === true
+                    globalAutoAssign: root.globalAutoAssign
                 }
 
                 // Memory indicator for algorithms that persist split state

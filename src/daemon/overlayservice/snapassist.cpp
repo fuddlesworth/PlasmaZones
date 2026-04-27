@@ -474,6 +474,10 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("layouts"), layoutsList);
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("activeLayoutId"), activeId);
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("screenAspectRatio"), aspectRatio);
+    // Global "Auto-assign for all layouts" master toggle (#370) — see matching
+    // comment in selector_update.cpp.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("globalAutoAssign"),
+                     m_settings && m_settings->autoAssignAllLayouts());
     writeFontProperties(m_layoutPickerWindow, m_settings);
 
     // Push lock state so picker disables non-active layout interaction

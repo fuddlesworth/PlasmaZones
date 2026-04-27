@@ -21,6 +21,9 @@ Rectangle {
     property var zones: [] // Array of zone objects with relativeGeometry
     property int category: 0 // 0=Manual (matches LayoutCategory in C++)
     property bool autoAssign: false
+    // Global "Auto-assign for all layouts" master toggle (#370) — passed by the
+    // parent so the badge shows effective rather than per-layout state.
+    property bool globalAutoAssign: false
     // Autotile algorithm metadata
     property bool showMasterDot: false
     property bool producesOverlappingZones: false
@@ -144,6 +147,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 category: root.category
                 autoAssign: root.autoAssign === true
+                globalAutoAssign: root.globalAutoAssign
             }
 
             Label {
