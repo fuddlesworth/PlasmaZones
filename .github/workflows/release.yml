@@ -93,11 +93,15 @@ jobs:
   # Build RPM Package
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm:
-    name: Build .rpm (Fedora 43)
+    name: Build .rpm (Fedora ${{ matrix.fedora }})
     needs: version
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: [43, 44]
     container:
-      image: fedora:43
+      image: fedora:${{ matrix.fedora }}
 
     steps:
       - name: Install prerequisites
@@ -147,7 +151,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: rpm-fedora-43
+          name: rpm-fedora-${{ matrix.fedora }}
           path: dist/*.rpm
           retention-days: 30
 
@@ -553,7 +557,10 @@ jobs:
             echo ""
             echo "**Fedora (manual RPM):**"
             echo '```bash'
+            echo "# Fedora 43"
             echo "sudo dnf install plasmazones-${VERSION}-1.fc43.x86_64.rpm"
+            echo "# Fedora 44"
+            echo "sudo dnf install plasmazones-${VERSION}-1.fc44.x86_64.rpm"
             echo '```'
             echo ""
             echo "**openSUSE Tumbleweed (manual RPM):**"
@@ -774,7 +781,7 @@ jobs:
   # COPR builds are triggered automatically via GitHub webhook (no CI job needed).
   # When a tag is pushed, GitHub sends a webhook to COPR, which clones the repo
   # at that tag, runs .copr/Makefile to produce the SRPM, and builds RPMs for
-  # all enabled chroots (Fedora 43, Rawhide, etc.).
+  # all enabled chroots (Fedora 43, Fedora 44, Rawhide, etc.).
   #
   # Setup (one-time):
   #   1. Create COPR project "plasmazones" at copr.fedorainfracloud.org
