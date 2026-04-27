@@ -331,8 +331,7 @@ private Q_SLOTS:
         // osd.cpp uses to wire QML dismissTimer.dismissRequested →
         // surface->hide().
         SignalEmitter emitter;
-        const bool connected =
-            QObject::connect(&emitter, SIGNAL(fire()), surface, SLOT(hide()));
+        const bool connected = QObject::connect(&emitter, SIGNAL(fire()), surface, SLOT(hide()));
         QVERIFY2(connected, "string-based connect to Surface::hide must succeed");
         Q_EMIT emitter.fire();
 

@@ -135,7 +135,6 @@ public Q_SLOTS:
     /// @}
 
 public:
-
     /// @name Escape hatches
     /// Prefer the declarative API. These are for consumers that need to
     /// reach into Qt machinery (installing event filters, connecting to
