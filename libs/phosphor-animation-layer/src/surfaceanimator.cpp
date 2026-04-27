@@ -411,9 +411,25 @@ public:
     }
 
     /// Decrement pendingLegs for @p surface; fire the consumer's
-    /// onComplete and erase the tracking entry once both legs report
+    /// onComplete and retire the tracking entry once both legs report
     /// done. Idempotent against a missing entry (cancel() may have
     /// raced through).
+    ///
+    /// ## Lifetime contract
+    ///
+    /// `legCompleted` runs from inside the spec.onComplete callback of
+    /// the very AnimatedValue we'd be destroying — `AnimatedValue.h:547`
+    /// is explicit that "spec callbacks must NOT cause *this to be
+    /// destroyed while they run". Erasing the track here would tear
+    /// down the AnimatedValue under its own `advance()` call stack.
+    ///
+    /// Defer destruction by parking both AnimatedValues in
+    /// `m_pendingDestroy`. They become inert the moment the leg
+    /// completes (`m_isAnimating=false`, `m_isComplete=true`); subsequent
+    /// `advance()` calls on them are no-ops. The graveyard drains at
+    /// the start of the next `tickAll` — by which point every advance()
+    /// frame on the call stack has fully unwound, and destroying the
+    /// AnimatedValue is safe.
     void legCompleted(PhosphorLayer::Surface* surface)
     {
         const auto it = m_tracks.find(surface);
@@ -424,11 +440,18 @@ public:
         if (it->second.pendingLegs > 0) {
             return;
         }
-        // Move the callback out before erase so the call site can erase
-        // the entry without invalidating the captured callback. Calling
-        // a moved-from std::function is UB; empty after move. Same
-        // pattern AnimationController uses for its completion hooks.
+        // Move the callback + AnimatedValues out before erase so:
+        //   1. m_tracks.erase doesn't drop the std::function we're
+        //      about to invoke;
+        //   2. m_tracks.erase doesn't destroy the AnimatedValue whose
+        //      onComplete we're currently inside (deferred to graveyard).
         auto onComplete = std::move(it->second.onComplete);
+        if (it->second.opacity) {
+            m_pendingDestroy.push_back(std::move(it->second.opacity));
+        }
+        if (it->second.scale) {
+            m_pendingDestroy.push_back(std::move(it->second.scale));
+        }
         m_tracks.erase(it);
         if (onComplete) {
             onComplete();
@@ -442,6 +465,13 @@ public:
     /// is safe against re-entrant erase from the completion callback.
     void tickAll()
     {
+        // Drain the graveyard from the prior tick. AnimatedValues parked
+        // here completed last tick inside their own spec.onComplete
+        // callback (legCompleted's deferred-destroy contract). By now
+        // the advance() call stack that fired that callback has fully
+        // unwound, so destroying the AnimatedValues is safe.
+        m_pendingDestroy.clear();
+
         // Snapshot the surfaces to advance; legCompleted may erase from
         // m_tracks during iteration.
         std::vector<PhosphorLayer::Surface*> surfaces;
@@ -502,6 +532,15 @@ public:
     /// `unique_ptr<AnimatedValue<qreal>>` and Qt6's QHash still requires
     /// copy-constructible value types.
     std::unordered_map<PhosphorLayer::Surface*, Track> m_tracks;
+    /// Deferred-destroy graveyard for AnimatedValues whose final tick
+    /// fired `legCompleted` from inside their own `spec.onComplete`.
+    /// `AnimatedValue.h:547` forbids destroying *this from within a
+    /// spec callback; legCompleted parks them here and tickAll drains
+    /// the list at the start of the next tick (after the firing
+    /// `advance()` has fully unwound). MUST be declared after m_clock
+    /// (clock outlives the values) and before m_driverTimer (the timer
+    /// drains them on tick — order matches m_tracks's invariant).
+    std::vector<std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>>> m_pendingDestroy;
     /// Drives advance() at ~60Hz while any track is in flight. Declared
     /// LAST so reverse-declaration destruction stops the timer BEFORE
     /// m_tracks is destroyed — otherwise a final tick could fire after

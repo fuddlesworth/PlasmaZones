@@ -529,6 +529,26 @@ private:
     void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen);
     void destroyNavigationOsdWindow(const QString& screenId);
 
+    /// Shared create/destroy plumbing for the warmed OSD pair (LayoutOsd /
+    /// NavigationOsd). Both OSDs follow an identical pattern: pre-warm a
+    /// PhosphorLayer::Surface with `keepMappedOnHide=true`, store
+    /// surface/window/physScreen back into the per-screen state, and on
+    /// destroy issue `deleteLater` + null the cached pointers. Member-
+    /// pointer parameters select which slice of the state struct each
+    /// caller owns; the helpers carry the surface lifecycle and the
+    /// callers carry only the (small) per-OSD specific bookkeeping
+    /// (e.g. m_navigationOsdCreationFailed gating).
+    ///
+    /// Returns true on success.
+    bool createOsdWindowImpl(const QString& screenId, QScreen* physScreen, const PhosphorLayer::Role& baseRole,
+                             const QString& scopeFamily, const QUrl& qmlUrl, const char* windowType,
+                             PhosphorLayer::Surface* PerScreenOverlayState::* surfaceField,
+                             QQuickWindow* PerScreenOverlayState::* windowField,
+                             QScreen* PerScreenOverlayState::* physScreenField);
+    void destroyOsdWindowImpl(const QString& screenId, PhosphorLayer::Surface* PerScreenOverlayState::* surfaceField,
+                              QQuickWindow* PerScreenOverlayState::* windowField,
+                              QScreen* PerScreenOverlayState::* physScreenField);
+
     void destroyIfTypeMismatch(const QString& screenId);
     void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
     void destroyShaderPreviewWindow();

@@ -5,7 +5,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**

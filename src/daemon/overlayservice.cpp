@@ -130,16 +130,18 @@ void OverlayService::setupSurfaceAnimator()
     static const QString osdPop = QStringLiteral("osd.pop");
     static const QString osdHide = QStringLiteral("osd.hide");
     static const QString panelPopup = QStringLiteral("panel.popup");
-    static const QString widgetFade = QStringLiteral("widget.fade");
+    // widget.fadeOut is the registered hide profile for ZoneSelector
+    // (panel.popup show + widget.fadeOut hide). The matching widget.fade
+    // is intentionally absent — no overlay uses it after the dead-default
+    // cleanup; if a future overlay needs a plain widget fade, register
+    // the path inline at the call site.
     static const QString widgetFadeOut = QStringLiteral("widget.fadeOut");
 
-    // Default config: every Surface whose Role isn't explicitly registered
-    // AND that goes through Surface::show()/hide() gets a plain opacity-only
-    // fade using widget.fade. The surfaces that actually use the animator
-    // dispatch path are listed in the per-Role registrations below
-    // (LayoutOsd, NavigationOsd, LayoutPicker, ZoneSelector, SnapAssist).
-    // Two existing surface types deliberately BYPASS this animator and
-    // therefore never read the default config:
+    // Default config: empty. Every Surface that routes through
+    // Surface::show()/hide() in this service is registered explicitly
+    // below (LayoutOsd, NavigationOsd, LayoutPicker, ZoneSelector,
+    // SnapAssist). Two existing surface types deliberately BYPASS this
+    // animator and therefore never read any config (default or per-role):
     //   - Overlay (zone overlay rendering): hidden via direct
     //     window->hide() in dismissOverlayWindow because the rapid
     //     drag-mode path uses _idled property toggling rather than the
@@ -147,12 +149,13 @@ void OverlayService::setupSurfaceAnimator()
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
-    // The default config remains as a safety net for future overlays that
-    // DO route through Surface::show()/hide() and forget to register.
-    PAL::SurfaceAnimator::Config defaults;
-    defaults.showProfile = widgetFade;
-    defaults.hideProfile = widgetFadeOut;
-    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(std::move(defaults));
+    // The previous default referenced widget.fade / widget.fadeOut
+    // profiles, which suggested those names were load-bearing — they
+    // weren't. Empty makes the dead-default explicit; if a future
+    // overlay routes through the animator without a registration, it
+    // falls back to AnimatedValue's library default (150 ms OutCubic),
+    // same as a missing-profile lookup would.
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(PAL::SurfaceAnimator::Config{});
 
     // Per-overlay tunings. Profile names are the same paths PhosphorMotion-
     // Animation in QML uses today, so the live-reload path (drop a JSON,

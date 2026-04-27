@@ -387,42 +387,66 @@ void OverlayService::warmUpNavigationOsd()
     ensureOsdScreenAddedConnected();
 }
 
-void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen)
+bool OverlayService::createOsdWindowImpl(const QString& screenId, QScreen* physScreen,
+                                         const PhosphorLayer::Role& baseRole, const QString& scopeFamily,
+                                         const QUrl& qmlUrl, const char* windowType,
+                                         PhosphorLayer::Surface* PerScreenOverlayState::* surfaceField,
+                                         QQuickWindow* PerScreenOverlayState::* windowField,
+                                         QScreen* PerScreenOverlayState::* physScreenField)
 {
-    if (m_screenStates.contains(screenId) && m_screenStates[screenId].layoutOsdSurface) {
-        return;
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].*surfaceField) {
+        return true; // Already created — treat as success for the create-if-absent contract.
     }
 
     // Phase 5: keepMappedOnHide=true (handled by createWarmedOsdSurface) so
     // SurfaceAnimator drives opacity for the visual fade and the library
     // handles Qt.WindowTransparentForInput on hide. The dismissRequested
     // wiring is also done inside the helper.
-    const QString scopePrefix =
-        QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
-    auto* surface = createWarmedOsdSurface(PzRoles::LayoutOsd, scopePrefix,
-                                           QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, "layout OSD");
+    const QString scopePrefix = QStringLiteral("plasmazones-%1-%2-%3")
+                                    .arg(scopeFamily)
+                                    .arg(screenId)
+                                    .arg(m_surfaceManager->nextScopeGeneration());
+    auto* surface = createWarmedOsdSurface(baseRole, scopePrefix, qmlUrl, physScreen, windowType);
     if (!surface) {
-        return;
+        return false;
     }
 
     auto& state = m_screenStates[screenId];
-    state.layoutOsdSurface = surface;
-    state.layoutOsdWindow = surface->window();
-    state.layoutOsdPhysScreen = physScreen;
+    state.*surfaceField = surface;
+    state.*windowField = surface->window();
+    state.*physScreenField = physScreen;
+    return true;
 }
 
-void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
+void OverlayService::destroyOsdWindowImpl(const QString& screenId,
+                                          PhosphorLayer::Surface* PerScreenOverlayState::* surfaceField,
+                                          QQuickWindow* PerScreenOverlayState::* windowField,
+                                          QScreen* PerScreenOverlayState::* physScreenField)
 {
     auto it = m_screenStates.find(screenId);
     if (it == m_screenStates.end()) {
         return;
     }
-    if (it->layoutOsdSurface) {
-        it->layoutOsdSurface->deleteLater();
-        it->layoutOsdSurface = nullptr;
-        it->layoutOsdWindow = nullptr;
+    if (it.value().*surfaceField) {
+        (it.value().*surfaceField)->deleteLater();
+        it.value().*surfaceField = nullptr;
+        it.value().*windowField = nullptr;
     }
-    it->layoutOsdPhysScreen = nullptr;
+    it.value().*physScreenField = nullptr;
+}
+
+void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen)
+{
+    createOsdWindowImpl(screenId, physScreen, PzRoles::LayoutOsd, QStringLiteral("layout-osd"),
+                        QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), "layout OSD",
+                        &PerScreenOverlayState::layoutOsdSurface, &PerScreenOverlayState::layoutOsdWindow,
+                        &PerScreenOverlayState::layoutOsdPhysScreen);
+}
+
+void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
+{
+    destroyOsdWindowImpl(screenId, &PerScreenOverlayState::layoutOsdSurface, &PerScreenOverlayState::layoutOsdWindow,
+                         &PerScreenOverlayState::layoutOsdPhysScreen);
 }
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
@@ -593,40 +617,24 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
 void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen)
 {
-    if (m_screenStates.contains(screenId) && m_screenStates[screenId].navigationOsdSurface) {
-        return;
-    }
-
     // Phase 5: keepMappedOnHide + dismissRequested wiring done inside
     // createWarmedOsdSurface (same rationale as createLayoutOsdWindow).
-    const QString scopePrefix =
-        QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
-    auto* surface =
-        createWarmedOsdSurface(PzRoles::NavigationOsd, scopePrefix, QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")),
-                               physScreen, "navigation OSD");
-    if (!surface) {
+    const bool ok =
+        createOsdWindowImpl(screenId, physScreen, PzRoles::NavigationOsd, QStringLiteral("navigation-osd"),
+                            QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), "navigation OSD",
+                            &PerScreenOverlayState::navigationOsdSurface, &PerScreenOverlayState::navigationOsdWindow,
+                            &PerScreenOverlayState::navigationOsdPhysScreen);
+    if (!ok) {
         m_navigationOsdCreationFailed.insert(screenId, true);
         return;
     }
-
-    auto& state = m_screenStates[screenId];
-    state.navigationOsdSurface = surface;
-    state.navigationOsdWindow = surface->window();
-    state.navigationOsdPhysScreen = physScreen;
     m_navigationOsdCreationFailed.remove(screenId);
 }
 
 void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
 {
-    auto it = m_screenStates.find(screenId);
-    if (it != m_screenStates.end()) {
-        if (it->navigationOsdSurface) {
-            it->navigationOsdSurface->deleteLater();
-            it->navigationOsdSurface = nullptr;
-            it->navigationOsdWindow = nullptr;
-        }
-        it->navigationOsdPhysScreen = nullptr;
-    }
+    destroyOsdWindowImpl(screenId, &PerScreenOverlayState::navigationOsdSurface,
+                         &PerScreenOverlayState::navigationOsdWindow, &PerScreenOverlayState::navigationOsdPhysScreen);
     m_navigationOsdCreationFailed.remove(screenId);
 }
 

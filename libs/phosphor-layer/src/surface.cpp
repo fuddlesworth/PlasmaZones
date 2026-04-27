@@ -329,13 +329,19 @@ private:
                     } else {
                         // Pre-Phase-5 lifecycle: animator runs the visual
                         // fade in parallel (synchronously for the no-op
-                        // default), then we unmap the wl_surface. Most
-                        // animators that *actually animate* will want
-                        // keepMappedOnHide=true — synchronous unmap defeats
-                        // the visual transition because the compositor
-                        // tears the surface down before the animation is
-                        // perceptible. Kept as the default for callers that
-                        // never opt in to an animator.
+                        // default), then we unmap the wl_surface. The
+                        // ISurfaceAnimator contract is "beginHide fires
+                        // on every Shown→Hidden transition" — preserved
+                        // here so consumers can rely on the dispatch
+                        // count for bookkeeping (e.g. settling counters,
+                        // teardown gating). Most animators that *actually
+                        // animate* will want keepMappedOnHide=true —
+                        // synchronous unmap defeats the visual transition
+                        // because the compositor tears the surface down
+                        // before the animation is perceptible. Kept as
+                        // the default for callers that never opt in to
+                        // an animator. The per-surface footgun warning
+                        // surfaces the mismatch in the journal.
                         if (m_deps.animator && !m_hideFootgunWarned) {
                             m_hideFootgunWarned = true;
                             qCWarning(lcPhosphorLayer)
@@ -856,6 +862,11 @@ Surface::~Surface() = default;
 Surface::State Surface::state() const noexcept
 {
     return m_impl->m_state;
+}
+
+bool Surface::isLogicallyShown() const noexcept
+{
+    return m_impl->m_state == State::Shown;
 }
 
 const SurfaceConfig& Surface::config() const noexcept

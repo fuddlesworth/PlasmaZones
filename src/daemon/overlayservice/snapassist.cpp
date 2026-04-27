@@ -143,8 +143,21 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // for the next drag-near-edge cycle. Calling QQuickWindow::hide() directly
     // would unmap the wl_surface and defeat the warm-surface optimisation
     // createZoneSelectorWindow opted into.
-    if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-        selectorSurface->hide();
+    //
+    // Reset the QML hover state BEFORE hiding so when snap-assist later
+    // re-shows the selector via hideSnapAssist, autoScrollTimer doesn't
+    // tick on cursor coords frozen from the drag that triggered snap-assist
+    // — that would cause an unwanted edge-scroll the moment the selector
+    // reappears. Mirrors the reset hideZoneSelector does on the explicit-
+    // hide path.
+    {
+        const auto& selectorState = m_screenStates.value(screenId);
+        if (selectorState.zoneSelectorSurface) {
+            if (selectorState.zoneSelectorWindow) {
+                QMetaObject::invokeMethod(selectorState.zoneSelectorWindow, "resetCursorState");
+            }
+            selectorState.zoneSelectorSurface->hide();
+        }
     }
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
@@ -302,7 +315,7 @@ void OverlayService::hideSnapAssist()
     // "blip". Only re-show when the surface is genuinely Hidden.
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            if (selectorSurface->state() != PhosphorLayer::Surface::State::Shown) {
+            if (!selectorSurface->isLogicallyShown()) {
                 selectorSurface->show();
             }
         }
@@ -445,7 +458,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // double-trigger. The surface stays Qt-visible across hide/show cycles
     // (keepMappedOnHide), so the Surface state machine is the right signal
     // for "logically visible" — not the QQuickWindow's isVisible().
-    if (m_layoutPickerSurface && m_layoutPickerSurface->state() == PhosphorLayer::Surface::State::Shown) {
+    if (m_layoutPickerSurface && m_layoutPickerSurface->isLogicallyShown()) {
         return;
     }
 
@@ -468,8 +481,18 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Route through Surface::hide() so the SurfaceAnimator drives the fade-out;
     // calling QQuickWindow::hide() directly would unmap the wl_surface and
     // discard the swapchain that keepMappedOnHide=true was meant to preserve.
-    if (auto* selectorSurface = m_screenStates.value(resolvedId).zoneSelectorSurface) {
-        selectorSurface->hide();
+    //
+    // Reset the QML hover state BEFORE hiding (same rationale as showSnapAssist):
+    // hideLayoutPicker re-shows the selector and autoScrollTimer would otherwise
+    // tick on stale drag-time cursor coords.
+    {
+        const auto& selectorState = m_screenStates.value(resolvedId);
+        if (selectorState.zoneSelectorSurface) {
+            if (selectorState.zoneSelectorWindow) {
+                QMetaObject::invokeMethod(selectorState.zoneSelectorWindow, "resetCursorState");
+            }
+            selectorState.zoneSelectorSurface->hide();
+        }
     }
 
     // Reuse the warmed surface when it's already attached to the right screen —
@@ -607,7 +630,10 @@ void OverlayService::hideLayoutPicker()
 
     // Drop keyboard interactivity so the still-mapped layer surface stops
     // intercepting keyboard events while the hide animation is in flight
-    // and afterwards. Mirrors snap-assist's hide path (line ~393).
+    // and afterwards. Snap-assist doesn't need an analogous step — it
+    // destroys on hide and the keyboard grab is dropped alongside the
+    // wl_surface teardown in ~Surface. The picker stays Qt-mapped under
+    // keepMappedOnHide=true, so we have to drop the grab explicitly.
     if (auto* handle = m_layoutPickerSurface->transport()) {
         handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
     }
@@ -620,7 +646,7 @@ void OverlayService::hideLayoutPicker()
     const QString screenId = m_layoutPickerScreenId;
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            if (selectorSurface->state() != PhosphorLayer::Surface::State::Shown) {
+            if (!selectorSurface->isLogicallyShown()) {
                 selectorSurface->show();
             }
         }
@@ -664,7 +690,7 @@ bool OverlayService::isLayoutPickerVisible() const
     // Phase 5 keepMappedOnHide: QQuickWindow.isVisible() stays true across
     // logical hide/show cycles, so it's not a signal of "currently shown"
     // anymore. Surface state machine is.
-    return m_layoutPickerSurface && m_layoutPickerSurface->state() == PhosphorLayer::Surface::State::Shown;
+    return m_layoutPickerSurface && m_layoutPickerSurface->isLogicallyShown();
 }
 
 void OverlayService::createLayoutPickerWindow(QScreen* physScreen)

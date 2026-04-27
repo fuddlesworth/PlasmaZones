@@ -114,6 +114,26 @@ public:
     State state() const noexcept;
     const SurfaceConfig& config() const noexcept;
 
+    /**
+     * @brief Convenience: is the Surface in the logical "shown" state?
+     *
+     * Equivalent to `state() == State::Shown` and exists to give consumers
+     * a single canonical answer to "is this overlay currently the
+     * user's view of itself" regardless of the underlying lifecycle.
+     *
+     * Under @ref SurfaceConfig::keepMappedOnHide=true, the QQuickWindow
+     * stays Qt-visible across logical hide/show cycles — `window()->isVisible()`
+     * is therefore NOT a reliable signal for "currently shown" because it
+     * stays `true` while the surface is logically Hidden under
+     * `Qt::WindowTransparentForInput`. This helper is the right answer
+     * for both lifecycles: keep-mapped surfaces consult Surface state
+     * (false during the transparent-for-input span); destroy-on-hide
+     * surfaces are simply gone from the consumer's tracking when hidden,
+     * so the call site never reaches isLogicallyShown() on a destroyed
+     * Surface.
+     */
+    [[nodiscard]] bool isLogicallyShown() const noexcept;
+
     /// @name Lifecycle
     /// Idempotent and safe to call in any state. Invalid transitions warn
     /// and no-op.

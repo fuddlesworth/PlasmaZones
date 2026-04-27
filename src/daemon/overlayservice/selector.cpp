@@ -170,7 +170,7 @@ void OverlayService::hideZoneSelector()
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
         const auto& s = m_screenStates.value(screenId);
-        if (!s.zoneSelectorSurface || s.zoneSelectorSurface->state() != PhosphorLayer::Surface::State::Shown) {
+        if (!s.zoneSelectorSurface || !s.zoneSelectorSurface->isLogicallyShown()) {
             continue;
         }
         if (s.zoneSelectorWindow) {
