@@ -23,6 +23,10 @@ Item {
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
     // The full autotile default ID including prefix, for comparison
     readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
+    // Global "Auto-assign for all layouts" master toggle (#370). Read once at
+    // the root so child controls (auto-assign button, CategoryBadge) share a
+    // single binding and stay consistent.
+    readonly property bool globalAutoAssign: root.appSettings.autoAssignAllLayouts === true
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
@@ -240,8 +244,18 @@ Item {
                     // override visible (the per-layout flag is preserved underneath).
                     ToolButton {
                         readonly property bool perLayoutAuto: root.modelData.autoAssign === true
-                        readonly property bool globalAuto: typeof appSettings !== "undefined" && appSettings.autoAssignAllLayouts === true
+                        readonly property bool globalAuto: root.globalAutoAssign
                         readonly property bool effectiveAuto: perLayoutAuto || globalAuto
+
+                        function tooltipText() {
+                            if (globalAuto)
+                                return i18n("Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.");
+
+                            if (perLayoutAuto)
+                                return i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.");
+
+                            return i18n("Click to auto-assign new windows to empty zones");
+                        }
 
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
@@ -255,7 +269,7 @@ Item {
                         onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !perLayoutAuto)
                         Accessible.name: i18n("Auto-assign layout")
                         ToolTip.visible: hovered
-                        ToolTip.text: globalAuto ? i18n("Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.") : perLayoutAuto ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
+                        ToolTip.text: tooltipText()
                     }
 
                     // Visibility toggle
@@ -287,7 +301,7 @@ Item {
                     visible: root.modelData.category !== undefined
                     category: root.modelData.category !== undefined ? root.modelData.category : 0
                     autoAssign: root.modelData.autoAssign === true
-                    globalAutoAssign: typeof appSettings !== "undefined" && appSettings.autoAssignAllLayouts === true
+                    globalAutoAssign: root.globalAutoAssign
                 }
 
                 // Memory indicator for algorithms that persist split state

@@ -6,6 +6,8 @@
 #include "config/configdefaults.h"
 #include "core/interfaces.h"
 
+#include <PhosphorSnapEngine/ISnapSettings.h>
+
 namespace PlasmaZones {
 
 /**
@@ -13,8 +15,15 @@ namespace PlasmaZones {
  *
  * Provides sensible defaults for all ISettings pure virtual methods.
  * The defaultLayoutId can be overridden via setTestDefaultLayoutId().
+ *
+ * Also inherits PhosphorEngineApi::ISnapSettings so SnapEngine's
+ * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
+ * via setEngineSettings(). The ISnapSettings methods (excludedApplications,
+ * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
+ * autoAssignAllLayouts) are already implemented for ISettings — the multiple
+ * inheritance just registers the second base so the cast resolves.
  */
-class StubSettings : public ISettings
+class StubSettings : public ISettings, public PhosphorEngineApi::ISnapSettings
 {
     // No Q_OBJECT — this stub has no signals/slots of its own.
     // ISettings::Q_OBJECT provides the meta-object system integration.
@@ -539,10 +548,11 @@ public:
     }
     bool autoAssignAllLayouts() const override
     {
-        return false;
+        return m_autoAssignAllLayouts;
     }
-    void setAutoAssignAllLayouts(bool) override
+    void setAutoAssignAllLayouts(bool enabled) override
     {
+        m_autoAssignAllLayouts = enabled;
     }
     bool snapAssistFeatureEnabled() const override
     {
@@ -782,6 +792,7 @@ private:
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;
+    bool m_autoAssignAllLayouts = false;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
 };
