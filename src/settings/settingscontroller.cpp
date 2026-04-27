@@ -1512,8 +1512,16 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // SnappingBridge / TilingBridge subclass MUST override. If a future bridge
 // subclass forgets the override, every disable read/write would silently
 // land on the snapping list — exactly the mode confusion this whole
-// machinery is meant to eliminate. Warn loudly so the bug is caught the
-// first time a developer tests the affected page.
+// machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
+//
+// The previous implementation triggered Q_ASSERT(false) on the unexpected
+// path, but QML binding evaluation order during component construction can
+// run a `function on*Changed: isMonitorDisabled(name)` handler before the
+// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
+// takes effect, hard-crashing dev builds on what is otherwise transient
+// state. The warning is enough — the fallback to Snapping is the safest
+// choice (defaults to the more permissive of the two lists for reads,
+// avoids accidental writes to a list the user didn't intend).
 static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
     if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
@@ -1521,7 +1529,6 @@ static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
         qCWarning(PlasmaZones::lcCore)
             << "modeFromViewMode: unexpected viewMode" << viewMode
             << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
-        Q_ASSERT(false && "modeFromViewMode received a value outside {Snapping=0, Autotile=1}");
     }
     return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
         ? PhosphorZones::AssignmentEntry::Autotile

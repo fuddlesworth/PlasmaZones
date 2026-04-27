@@ -1060,6 +1060,47 @@ private Q_SLOTS:
                  QStringLiteral("DP-1"));
     }
 
+    /// A v2 config whose disable list has a non-string type (hand-edited
+    /// array, number, null) must be cleaned up during migration — the v2 key
+    /// is dropped unconditionally, no v3 entry is synthesized from the
+    /// malformed data, and nothing leaks past the v3 stamp as orphaned
+    /// "looks like v2" data.
+    void testMigrateV2ToV3_dropsNonStringDisableValues()
+    {
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 2;
+
+        QJsonObject display;
+        // Hand-edited array — not the v2 wire format (which is a comma-joined string).
+        QJsonArray badArray;
+        badArray.append(QStringLiteral("DP-1"));
+        badArray.append(QStringLiteral("HDMI-1"));
+        display[QStringLiteral("DisabledMonitors")] = badArray;
+        // null literal.
+        display[QStringLiteral("DisabledDesktops")] = QJsonValue::Null;
+        // Number.
+        display[QStringLiteral("DisabledActivities")] = 42;
+
+        QJsonObject behavior;
+        behavior[QStringLiteral("Display")] = display;
+        QJsonObject snapping;
+        snapping[QStringLiteral("Behavior")] = behavior;
+        root[QStringLiteral("Snapping")] = snapping;
+
+        ConfigMigration::migrateV2ToV3(root);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 3);
+
+        // No v3 entries were synthesized — non-string values are dropped.
+        QVERIFY(!root.contains(QStringLiteral("Display")));
+
+        // The v2 keys are gone from Snapping.Behavior.Display so they don't
+        // linger as orphaned "looks like v2" data on a v3-stamped config.
+        // The whole chain collapses because the only keys in Display were
+        // the three malformed ones.
+        QVERIFY(!root.contains(QStringLiteral("Snapping")));
+    }
+
     /// End-to-end check that ensureJsonConfig() chains v1→v2→v3 when given a
     /// v1 file with disabled-monitor data — the data must end up in BOTH the
     /// snap and autotile v3 lists, not just the snap one.

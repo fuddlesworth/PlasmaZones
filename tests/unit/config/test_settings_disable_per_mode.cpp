@@ -274,6 +274,65 @@ private Q_SLOTS:
         QCOMPARE(desktopSpy.count(), 0);
         QCOMPARE(activitySpy.count(), 0);
     }
+
+    // =========================================================================
+    // reset() clears per-mode disable lists
+    //
+    // Pre-v3 these lived under Snapping.Behavior.Display, so the Snapping
+    // top-level group deletion in Settings::reset() swept them. v3 moved them
+    // into a sibling top-level Display group, which must therefore appear in
+    // managedGroupNames() too — otherwise "Reset to Defaults" would silently
+    // preserve user-disabled monitors/desktops/activities while every other
+    // setting reset.
+    // =========================================================================
+
+    /// After Settings::reset(), every per-mode disable list must be empty.
+    /// Covers all three axes (monitor, desktop, activity) for both modes.
+    void testReset_clearsPerModeDisableLists()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        const QString screen = QStringLiteral("DP-1");
+        const int desktop = 2;
+        const QString activity = QStringLiteral("uuid-foo");
+        const QString deskKey = screen + QLatin1Char('/') + QString::number(desktop);
+        const QString actKey = screen + QLatin1Char('/') + activity;
+
+        settings.setDisabledMonitors(Mode::Snapping, {screen});
+        settings.setDisabledMonitors(Mode::Autotile, {screen});
+        settings.setDisabledDesktops(Mode::Snapping, {deskKey});
+        settings.setDisabledDesktops(Mode::Autotile, {deskKey});
+        settings.setDisabledActivities(Mode::Snapping, {actKey});
+        settings.setDisabledActivities(Mode::Autotile, {actKey});
+        settings.save();
+
+        // Sanity check: state was actually persisted.
+        QVERIFY(settings.isMonitorDisabled(Mode::Snapping, screen));
+        QVERIFY(settings.isMonitorDisabled(Mode::Autotile, screen));
+        QVERIFY(settings.isDesktopDisabled(Mode::Snapping, screen, desktop));
+        QVERIFY(settings.isActivityDisabled(Mode::Autotile, screen, activity));
+
+        settings.reset();
+
+        QVERIFY(settings.disabledMonitors(Mode::Snapping).isEmpty());
+        QVERIFY(settings.disabledMonitors(Mode::Autotile).isEmpty());
+        QVERIFY(settings.disabledDesktops(Mode::Snapping).isEmpty());
+        QVERIFY(settings.disabledDesktops(Mode::Autotile).isEmpty());
+        QVERIFY(settings.disabledActivities(Mode::Snapping).isEmpty());
+        QVERIFY(settings.disabledActivities(Mode::Autotile).isEmpty());
+
+        // And — critically — the values must not come back on next construction.
+        // (reset() deletes the on-disk group AND syncs; a fresh Settings instance
+        // reads from the same persisted file.)
+        Settings reloaded;
+        QVERIFY(reloaded.disabledMonitors(Mode::Snapping).isEmpty());
+        QVERIFY(reloaded.disabledMonitors(Mode::Autotile).isEmpty());
+        QVERIFY(reloaded.disabledDesktops(Mode::Snapping).isEmpty());
+        QVERIFY(reloaded.disabledDesktops(Mode::Autotile).isEmpty());
+        QVERIFY(reloaded.disabledActivities(Mode::Snapping).isEmpty());
+        QVERIFY(reloaded.disabledActivities(Mode::Autotile).isEmpty());
+    }
 };
 
 QTEST_MAIN(TestSettingsDisablePerMode)

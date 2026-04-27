@@ -1000,6 +1000,28 @@ private:
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
 
+    /// Member-function-pointer alias for the three per-mode disable NOTIFY
+    /// signals passed into @ref writeDisableList. The signals carry the mode
+    /// that flipped so listeners only react to their own axis.
+    using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
+
+    /// Shared comma-list setter used by @ref setDisabledMonitors,
+    /// @ref setDisabledDesktops, and @ref setDisabledActivities. Reads under
+    /// @c displayGroup, writes the joined list, post-write compares against
+    /// the canonicalised form (the @c canonicalCommaList validator
+    /// trims/de-dupes/normalises whitespace), and only fires
+    /// @p signalFn + @c settingsChanged on a real change.
+    void writeDisableList(const QString& key, const QStringList& entries, PhosphorZones::AssignmentEntry::Mode mode,
+                          DisableModeSignalFn signalFn);
+
+    /// Shared getter for the three per-mode disable lists. Reads under
+    /// @c displayGroup and parses the comma-joined value into a list. The
+    /// monitor variant additionally resolves connector names to canonical
+    /// screen ids — that step lives in @ref disabledMonitors itself, not
+    /// here, because composite-keyed lists (desktop/activity) embed the
+    /// screen id and would need parsing the composite to canonicalise.
+    QStringList readDisableList(const QString& key) const;
+
     // ─── load() / save() helpers ────────────────────────────────────────
     // Only non-Store groups need dedicated helpers now. Store-backed groups
     // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
