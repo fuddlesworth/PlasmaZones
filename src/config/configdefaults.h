@@ -103,14 +103,6 @@ public:
     {
         return false;
     }
-    static QStringList disabledDesktops()
-    {
-        return {};
-    }
-    static QStringList disabledActivities()
-    {
-        return {};
-    }
     static bool showNumbers()
     {
         return true;

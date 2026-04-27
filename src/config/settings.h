@@ -76,12 +76,10 @@ public:
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
                    showZonesOnAllMonitorsChanged)
-    Q_PROPERTY(
-        QStringList disabledMonitors READ disabledMonitors WRITE setDisabledMonitors NOTIFY disabledMonitorsChanged)
-    Q_PROPERTY(
-        QStringList disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
-    Q_PROPERTY(QStringList disabledActivities READ disabledActivities WRITE setDisabledActivities NOTIFY
-                   disabledActivitiesChanged)
+    // Per-mode disable lists are not exposed as Q_PROPERTYs because their
+    // accessors take a Mode argument. QML / D-Bus consumers go through the
+    // mode-aware Q_INVOKABLEs on SettingsController and the per-mode
+    // registrations in SettingsAdaptor instead.
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
@@ -453,15 +451,17 @@ public:
     // Display — PhosphorConfig::Store-backed.
     bool showZonesOnAllMonitors() const override;
     void setShowZonesOnAllMonitors(bool show) override;
-    QStringList disabledMonitors() const override;
-    void setDisabledMonitors(const QStringList& screenIdOrNames) override;
-    bool isMonitorDisabled(const QString& screenIdOrName) const override;
-    QStringList disabledDesktops() const override;
-    void setDisabledDesktops(const QStringList& entries) override;
-    bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const override;
-    QStringList disabledActivities() const override;
-    void setDisabledActivities(const QStringList& entries) override;
-    bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const override;
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) override;
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const override;
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override;
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                           int desktop) const override;
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override;
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                            const QString& activityId) const override;
     bool showZoneNumbers() const override;
     void setShowZoneNumbers(bool show) override;
     bool flashZonesOnSwitch() const override;

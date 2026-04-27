@@ -216,9 +216,12 @@ Q_SIGNALS:
     void toggleActivationChanged();
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
-    void disabledMonitorsChanged();
-    void disabledDesktopsChanged();
-    void disabledActivitiesChanged();
+    // The per-mode disable signals carry the mode that flipped so listeners can
+    // re-read only the relevant list. Pre-v3 these were no-arg signals; the mode
+    // argument was added when the storage was split into per-mode lists.
+    void disabledMonitorsChanged(PhosphorZones::AssignmentEntry::Mode mode);
+    void disabledDesktopsChanged(PhosphorZones::AssignmentEntry::Mode mode);
+    void disabledActivitiesChanged(PhosphorZones::AssignmentEntry::Mode mode);
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();

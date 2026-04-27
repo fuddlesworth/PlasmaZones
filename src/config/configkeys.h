@@ -71,6 +71,11 @@ public:
     PZ_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     PZ_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
+    // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
+    // because the values gate the whole product (snap + autotile), not just
+    // snapping. v3 schema; in v2 these were under Snapping.Behavior.Display.
+    PZ_CONFIG_GROUP(displayGroup, "Display")
+
     // Tiling sub-groups
     PZ_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     PZ_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
@@ -192,10 +197,16 @@ public:
 
     // Snapping.Behavior.Display
     PZ_CONFIG_KEY(showOnAllMonitorsKey, "ShowOnAllMonitors")
-    PZ_CONFIG_KEY(disabledMonitorsKey, "DisabledMonitors")
-    PZ_CONFIG_KEY(disabledDesktopsKey, "DisabledDesktops")
-    PZ_CONFIG_KEY(disabledActivitiesKey, "DisabledActivities")
     PZ_CONFIG_KEY(filterByAspectRatioKey, "FilterByAspectRatio")
+
+    // Display — per-mode disable lists (v3+). Each pair is independent: disabling
+    // a monitor for snap leaves autotile gates untouched, and vice versa.
+    PZ_CONFIG_KEY(snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
+    PZ_CONFIG_KEY(autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
+    PZ_CONFIG_KEY(snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
+    PZ_CONFIG_KEY(autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
+    PZ_CONFIG_KEY(snappingDisabledActivitiesKey, "SnappingDisabledActivities")
+    PZ_CONFIG_KEY(autotileDisabledActivitiesKey, "AutotileDisabledActivities")
 
     // Snapping.Behavior.WindowHandling
     PZ_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")
@@ -524,6 +535,17 @@ public:
     PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
     PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
     PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // v2 legacy key accessors — used ONLY by migrateV2ToV3.
+    // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it
+    // still holds ShowOnAllMonitors and FilterByAspectRatio. Only the three
+    // disabled-* keys move out, so we name the keys with a v2 prefix and
+    // reuse snappingBehaviorDisplayGroup() above for the read.
+    // ───────────────────────────────────────────────────────────────────────────
+    PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
+    PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
+    PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
 
 private:
     // Non-instantiable

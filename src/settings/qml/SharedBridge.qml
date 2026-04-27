@@ -16,6 +16,10 @@ QtObject {
     // ─── Screen locking ─────────────────────────────────────────────
     // ─── Shortcuts ──────────────────────────────────────────────────
     // ─── External signal forwarding ─────────────────────────────────
+    // assignmentViewMode is the per-page mode set by the SnappingBridge /
+    // TilingBridge subclasses (0 = snapping, 1 = tiling) and forwarded into
+    // every disable check / mutation so the snapping page only reads-and-writes
+    // the snapping list, the tiling page only the tiling list.
 
     // 0 = snapping, 1 = tiling — overridden by subclass
     property int assignmentViewMode: -1
@@ -26,7 +30,6 @@ QtObject {
     readonly property var layouts: settingsController.layouts
     readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
     readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
-    readonly property var disabledMonitors: appSettings.disabledMonitors
     readonly property bool activitiesAvailable: settingsController.activitiesAvailable
     readonly property var activities: settingsController.activities
     readonly property string currentActivity: settingsController.currentActivity
@@ -45,27 +48,27 @@ QtObject {
     signal tilingQuickLayoutSlotsChanged()
 
     function isMonitorDisabled(name) {
-        return settingsController.isMonitorDisabled(name);
+        return settingsController.isMonitorDisabled(assignmentViewMode, name);
     }
 
     function setMonitorDisabled(name, disabled) {
-        settingsController.setMonitorDisabled(name, disabled);
+        settingsController.setMonitorDisabled(assignmentViewMode, name, disabled);
     }
 
     function isDesktopDisabled(screenName, desktop) {
-        return settingsController.isDesktopDisabled(screenName, desktop);
+        return settingsController.isDesktopDisabled(assignmentViewMode, screenName, desktop);
     }
 
     function setDesktopDisabled(screenName, desktop, disabled) {
-        settingsController.setDesktopDisabled(screenName, desktop, disabled);
+        settingsController.setDesktopDisabled(assignmentViewMode, screenName, desktop, disabled);
     }
 
     function isActivityDisabled(screenName, activityId) {
-        return settingsController.isActivityDisabled(screenName, activityId);
+        return settingsController.isActivityDisabled(assignmentViewMode, screenName, activityId);
     }
 
     function setActivityDisabled(screenName, activityId, disabled) {
-        settingsController.setActivityDisabled(screenName, activityId, disabled);
+        settingsController.setActivityDisabled(assignmentViewMode, screenName, activityId, disabled);
     }
 
     function isScreenLocked(screen, mode) {
@@ -101,12 +104,19 @@ QtObject {
             screenAssignmentsChanged();
         }
 
-        function onDisabledDesktopsChanged() {
-            disabledDesktopsChanged();
+        // Per-mode signals carry the mode that flipped. Forward only when the
+        // change is for the page's mode — the other page's bridge will see it
+        // on its own connection.
+        function onDisabledDesktopsChanged(viewMode) {
+            if (viewMode === assignmentViewMode)
+                disabledDesktopsChanged();
+
         }
 
-        function onDisabledActivitiesChanged() {
-            disabledActivitiesChanged();
+        function onDisabledActivitiesChanged(viewMode) {
+            if (viewMode === assignmentViewMode)
+                disabledActivitiesChanged();
+
         }
 
         target: settingsController

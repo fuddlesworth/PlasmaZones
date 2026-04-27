@@ -36,7 +36,7 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.versionKey = ConfigKeys::versionKey();
     s.migrations = {
         {1, &ConfigMigration::migrateV1ToV2},
-        // {2, &ConfigMigration::migrateV2ToV3},
+        {2, &ConfigMigration::migrateV2ToV3},
     };
     return s;
 }
@@ -46,8 +46,9 @@ std::span<const MigrationStep> ConfigMigration::migrationSteps()
 {
     // Kept for callers/tests that want a flat list of PZ-native steps. Built
     // once lazily; the underlying function pointers never change at runtime.
-    static const std::array<MigrationStep, 1> s_steps{{
+    static const std::array<MigrationStep, 2> s_steps{{
         {1, &ConfigMigration::migrateV1ToV2},
+        {2, &ConfigMigration::migrateV2ToV3},
     }};
     return {s_steps.data(), s_steps.size()};
 }
@@ -893,6 +894,92 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (allSideEffectsSucceeded) {
         root[ConfigKeys::versionKey()] = 2;
     }
+}
+
+// ── Schema migration: v2 → v3 ───────────────────────────────────────────────
+// Splits the single "this monitor / desktop / activity is disabled in PlasmaZones"
+// list into independent per-mode lists, and relocates them out of
+// Snapping.Behavior.Display (which historically gated both modes despite the
+// snapping-prefixed group name) into a mode-neutral Display group.
+//
+// Migration semantics: every entry in a v2 disabled list is copied into BOTH
+// the snapping and autotile lists in v3. Rationale: v2 didn't distinguish
+// modes, so the only safe interpretation of "the user disabled monitor X" is
+// "the user wanted X off in PlasmaZones, period" — preserve that intent in
+// both modes until the user explicitly re-enables one in the new UI.
+//
+// Side note: the v2 keys ShowOnAllMonitors and FilterByAspectRatio remain
+// in Snapping.Behavior.Display untouched — only the three Disabled* keys move.
+
+void ConfigMigration::migrateV2ToV3(QJsonObject& root)
+{
+    // Walk the dot-path "Snapping" → "Behavior" → "Display" structure to find
+    // the v2 disable lists. Empty objects along the way mean nothing to migrate.
+    const auto snappingIt = root.find(QLatin1String("Snapping"));
+    QJsonObject snapping;
+    if (snappingIt != root.end() && snappingIt->isObject()) {
+        snapping = snappingIt->toObject();
+    }
+
+    QJsonObject behavior = snapping.value(QLatin1String("Behavior")).toObject();
+    QJsonObject v2Display = behavior.value(QLatin1String("Display")).toObject();
+
+    auto takeKey = [](QJsonObject& obj, const QString& key) -> QString {
+        const QJsonValue v = obj.value(key);
+        if (v.isString()) {
+            const QString s = v.toString();
+            obj.remove(key);
+            return s;
+        }
+        return {};
+    };
+
+    const QString v2Monitors = takeKey(v2Display, ConfigKeys::v2DisabledMonitorsKey());
+    const QString v2Desktops = takeKey(v2Display, ConfigKeys::v2DisabledDesktopsKey());
+    const QString v2Activities = takeKey(v2Display, ConfigKeys::v2DisabledActivitiesKey());
+
+    // Write the duplicated lists into the new Display group. Skip empties so
+    // a clean v2 config with no disabled entries doesn't grow noise keys.
+    QJsonObject v3Display = root.value(ConfigKeys::displayGroup()).toObject();
+
+    auto writeIfNonEmpty = [&v3Display](const QString& key, const QString& value) {
+        if (!value.isEmpty()) {
+            v3Display[key] = value;
+        }
+    };
+
+    writeIfNonEmpty(ConfigKeys::snappingDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::autotileDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::snappingDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::autotileDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::snappingDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::autotileDisabledActivitiesKey(), v2Activities);
+
+    // Stitch the trimmed v2 Display object back into Snapping.Behavior, drop
+    // the Display sub-object entirely if it became empty (no ShowOnAllMonitors
+    // / FilterByAspectRatio either). Same for Snapping.Behavior itself.
+    if (v2Display.isEmpty()) {
+        behavior.remove(QLatin1String("Display"));
+    } else {
+        behavior[QLatin1String("Display")] = v2Display;
+    }
+    if (behavior.isEmpty()) {
+        snapping.remove(QLatin1String("Behavior"));
+    } else {
+        snapping[QLatin1String("Behavior")] = behavior;
+    }
+    if (snapping.isEmpty()) {
+        root.remove(QLatin1String("Snapping"));
+    } else {
+        root[QLatin1String("Snapping")] = snapping;
+    }
+
+    if (!v3Display.isEmpty()) {
+        root[ConfigKeys::displayGroup()] = v3Display;
+    }
+
+    // Stamp literal 3 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
+    root[ConfigKeys::versionKey()] = 3;
 }
 
 } // namespace PlasmaZones

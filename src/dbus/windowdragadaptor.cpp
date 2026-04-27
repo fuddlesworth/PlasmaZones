@@ -335,8 +335,8 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     QString selectorScreenId = resolved.screenId;
     QScreen* screen = resolved.qscreen;
     if (screen
-        && isContextDisabled(m_settings, selectorScreenId, m_layoutManager->currentVirtualDesktop(),
-                             m_layoutManager->currentActivity())) {
+        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
+                             m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_zoneSelectorShownOn.clear();

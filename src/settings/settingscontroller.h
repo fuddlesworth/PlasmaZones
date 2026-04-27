@@ -268,13 +268,16 @@ public:
     Q_INVOKABLE void setLayoutAutoAssign(const QString& layoutId, bool enabled);
     Q_INVOKABLE void setLayoutAspectRatio(const QString& layoutId, int aspectRatioClass);
 
-    // Screen helpers
-    Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
-    Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
-    Q_INVOKABLE bool isDesktopDisabled(const QString& screenName, int desktop) const;
-    Q_INVOKABLE void setDesktopDisabled(const QString& screenName, int desktop, bool disabled);
-    Q_INVOKABLE bool isActivityDisabled(const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE void setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled);
+    // Screen helpers — `viewMode` selects the mode whose disable list to read/write
+    // (0 = snapping, 1 = autotile; matches PhosphorZones::AssignmentEntry::Mode).
+    // Disabling a monitor in one mode leaves the gate untouched in the other.
+    Q_INVOKABLE bool isMonitorDisabled(int viewMode, const QString& screenName) const;
+    Q_INVOKABLE void setMonitorDisabled(int viewMode, const QString& screenName, bool disabled);
+    Q_INVOKABLE bool isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const;
+    Q_INVOKABLE void setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled);
+    Q_INVOKABLE bool isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE void setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
+                                         bool disabled);
 
     // Font helpers (for FontPickerDialog)
     Q_INVOKABLE QStringList fontStylesForFamily(const QString& family) const;
@@ -531,8 +534,12 @@ Q_SIGNALS:
     // KZones import signals
     void kzonesImportFinished(int count, const QString& message);
     void lockedScreensChanged();
-    void disabledDesktopsChanged();
-    void disabledActivitiesChanged();
+    // Per-mode disable signals carry the mode that flipped (0 = snapping, 1 =
+    // autotile; matches PhosphorZones::AssignmentEntry::Mode). QML consumers
+    // can ignore the argument if they only render one page at a time.
+    void disabledMonitorsChanged(int viewMode);
+    void disabledDesktopsChanged(int viewMode);
+    void disabledActivitiesChanged(int viewMode);
 
     // Ordering staged signals
     void stagedSnappingOrderChanged();

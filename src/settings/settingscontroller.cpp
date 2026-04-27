@@ -1482,55 +1482,69 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // Screen helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool SettingsController::isMonitorDisabled(const QString& screenName) const
+// Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
+// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
+// every call through the helper keeps the cast explicit and gives us a single
+// place to add range-clamping if a future mode is introduced.
+static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
-    return m_screenHelper.isMonitorDisabled(screenName);
+    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
+        ? PhosphorZones::AssignmentEntry::Autotile
+        : PhosphorZones::AssignmentEntry::Snapping;
 }
 
-void SettingsController::setMonitorDisabled(const QString& screenName, bool disabled)
+bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
 {
-    m_screenHelper.setMonitorDisabled(screenName, disabled);
+    return m_screenHelper.isMonitorDisabled(modeFromViewMode(viewMode), screenName);
 }
 
-bool SettingsController::isDesktopDisabled(const QString& screenName, int desktop) const
+void SettingsController::setMonitorDisabled(int viewMode, const QString& screenName, bool disabled)
 {
-    return m_settings.isDesktopDisabled(screenName, desktop);
+    m_screenHelper.setMonitorDisabled(modeFromViewMode(viewMode), screenName, disabled);
 }
 
-void SettingsController::setDesktopDisabled(const QString& screenName, int desktop, bool disabled)
+bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const
 {
+    return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
+}
+
+void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
+{
+    const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + QString::number(desktop);
-    QStringList entries = m_settings.disabledDesktops();
+    QStringList entries = m_settings.disabledDesktops(mode);
     if (disabled && !entries.contains(key)) {
         entries.append(key);
-        m_settings.setDisabledDesktops(entries);
+        m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
+        Q_EMIT disabledDesktopsChanged(viewMode);
     } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledDesktops(entries);
+        m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
+        Q_EMIT disabledDesktopsChanged(viewMode);
     }
 }
 
-bool SettingsController::isActivityDisabled(const QString& screenName, const QString& activityId) const
+bool SettingsController::isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const
 {
-    return m_settings.isActivityDisabled(screenName, activityId);
+    return m_settings.isActivityDisabled(modeFromViewMode(viewMode), screenName, activityId);
 }
 
-void SettingsController::setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled)
+void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
+                                             bool disabled)
 {
+    const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + activityId;
-    QStringList entries = m_settings.disabledActivities();
+    QStringList entries = m_settings.disabledActivities(mode);
     if (disabled && !entries.contains(key)) {
         entries.append(key);
-        m_settings.setDisabledActivities(entries);
+        m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged();
+        Q_EMIT disabledActivitiesChanged(viewMode);
     } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledActivities(entries);
+        m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged();
+        Q_EMIT disabledActivitiesChanged(viewMode);
     }
 }
 
@@ -1591,13 +1605,15 @@ void SettingsController::onVirtualDesktopsChanged()
 {
     refreshVirtualDesktops();
 
-    // Prune disabled-desktop entries that reference desktops beyond the new count.
-    // See start.cpp comment re: mid-range renumbering limitation.
-    QStringList disabled = m_settings.disabledDesktops();
-    if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
-        m_settings.setDisabledDesktops(disabled);
-        setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
+    // Prune both per-mode disabled-desktop lists — see start.cpp comment re:
+    // mid-range renumbering limitation.
+    for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+        QStringList disabled = m_settings.disabledDesktops(mode);
+        if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
+            m_settings.setDisabledDesktops(mode, disabled);
+            setNeedsSave(true);
+            Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
+        }
     }
 
     Q_EMIT virtualDesktopsChanged();
@@ -1617,11 +1633,13 @@ void SettingsController::onActivitiesChanged()
                 validIds.insert(id);
             }
         }
-        QStringList disabledActs = m_settings.disabledActivities();
-        if (pruneDisabledActivityEntries(disabledActs, validIds)) {
-            m_settings.setDisabledActivities(disabledActs);
-            setNeedsSave(true);
-            Q_EMIT disabledActivitiesChanged();
+        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+            QStringList disabledActs = m_settings.disabledActivities(mode);
+            if (pruneDisabledActivityEntries(disabledActs, validIds)) {
+                m_settings.setDisabledActivities(mode, disabledActs);
+                setNeedsSave(true);
+                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
+            }
         }
     }
 

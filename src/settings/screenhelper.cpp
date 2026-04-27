@@ -24,15 +24,16 @@ void ScreenHelper::refreshScreens()
     Q_EMIT screensChanged();
 }
 
-bool ScreenHelper::isMonitorDisabled(const QString& screenName) const
+bool ScreenHelper::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName) const
 {
-    return isMonitorDisabledFor(m_settings, screenName);
+    return isMonitorDisabledFor(m_settings, mode, screenName);
 }
 
-void ScreenHelper::setMonitorDisabled(const QString& screenName, bool disabled)
+void ScreenHelper::setMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+                                      bool disabled)
 {
-    setMonitorDisabledFor(m_settings, screenName, disabled, [this]() {
-        Q_EMIT disabledMonitorsChanged();
+    setMonitorDisabledFor(m_settings, mode, screenName, disabled, [this, mode]() {
+        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
         Q_EMIT needsSave();
     });
 }
