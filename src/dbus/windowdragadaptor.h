@@ -237,8 +237,14 @@ private:
     bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const;
     // Check if any trigger in a list matches current modifiers/mouse buttons
     bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
-    // Overload using pre-parsed triggers (hot path during drag)
-    bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Overload using pre-parsed triggers (hot path during drag). Pass
+    // @p excludeSentinel = true to skip entries whose modifier is the
+    // AlwaysActive sentinel — those match every tick by definition, so they
+    // are useless as a per-tick "user is holding the trigger" signal.
+    // dragMoved uses this so the activation cache can carry both the master
+    // always-active bit and user-configurable hold/toggle entries (#249).
+    bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons,
+                        bool excludeSentinel = false) const;
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 

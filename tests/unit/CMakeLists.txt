@@ -387,6 +387,28 @@ add_executable(test_drag_policy dbus/test_drag_policy.cpp)
 target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
+# Truth-table guard for resolveActivationActive() — pins the per-tick
+# overlay-active decision (toggle latch + deactivation override + the
+# always-active gate that scopes deactivation to its UI surface, #249).
+add_executable(test_drag_activation dbus/test_drag_activation.cpp)
+target_link_libraries(test_drag_activation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_drag_activation COMMAND test_drag_activation)
+
+# Round-trip guard for the AlwaysActive sentinel handling shared by
+# TriggerUtils and SnappingBehaviorController (#249). Pins the cap-aware
+# merge that prevents the sentinel from being silently truncated when the
+# user already holds MAX activation triggers — without this, the
+# always-active toggle would quietly fail. Compiles the controller +
+# triggerutils sources directly because they live in the plasmazones-settings
+# executable rather than plasmazones_core.
+add_executable(test_snapping_behavior_controller
+    settings/test_snapping_behavior_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/snappingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/triggerutils.cpp
+)
+target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
+
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)

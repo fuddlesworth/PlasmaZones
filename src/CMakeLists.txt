@@ -150,6 +150,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
+    dbus/windowdragadaptor/dragactivation.cpp
+    dbus/windowdragadaptor/dragactivation.h
     dbus/windowdragadaptor.h
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
