@@ -122,6 +122,14 @@ Window {
     property real inactiveOpacity: 0.3 // Match Settings default
     // Shared fade color for scroll edge indicators
     readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
+    // Mirror of LayoutOsd's `_osdDismissed` lifecycle. True while the selector
+    // is logically hidden — set on warm-up (window pre-created but not yet
+    // shown), cleared by show(), set again at the end of the hide animation.
+    // The Window flags binding folds in `Qt.WindowTransparentForInput` while
+    // this is true so the still-mapped layer surface doesn't intercept clicks
+    // at its screen position. Toggled on discrete show/dismiss events — NOT
+    // tied to opacity — so the flag doesn't churn during the fade.
+    property bool _selectorDismissed: true
 
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
@@ -142,6 +150,7 @@ Window {
         showAnimation.stop();
         hideAnimation.stop();
         contentWrapper.opacity = 0;
+        root._selectorDismissed = false;
         root.visible = true;
         showAnimation.start();
     }
@@ -152,13 +161,17 @@ Window {
         // coordinates between hide and the next show().
         root.cursorX = -1;
         root.cursorY = -1;
-        if (root.visible)
-            hideAnimation.start();
+        if (root._selectorDismissed)
+            return ;
 
+        hideAnimation.start();
     }
 
-    // Window configuration for overlay - QPA layer-shell plugin handles layering on Wayland
-    flags: Qt.FramelessWindowHint | Qt.Tool
+    // Window configuration for overlay - QPA layer-shell plugin handles layering on Wayland.
+    // TransparentForInput is bound to the dismiss state so the layer surface —
+    // which we keep Qt-visible across hide/show cycles to avoid Wayland Vulkan-
+    // swapchain re-init cost — stops intercepting clicks while logically hidden.
+    flags: Qt.FramelessWindowHint | Qt.Tool | (root._selectorDismissed ? Qt.WindowTransparentForInput : 0)
     color: "transparent"
     visible: false
 
@@ -199,7 +212,12 @@ Window {
         }
 
         ScriptAction {
-            script: root.visible = false
+            // Do NOT set root.visible = false — the surface stays Qt-visible
+            // for the daemon's lifetime so the next show() reuses the warmed
+            // Vulkan swapchain. _selectorDismissed flips the
+            // WindowTransparentForInput flag instead, so the still-mapped
+            // layer surface stops eating clicks at its screen position.
+            script: root._selectorDismissed = true
         }
 
     }

@@ -78,12 +78,17 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             }
             const QRect geom = mgr->screenGeometry(screenId);
             const QRect targetGeom = geom.isValid() ? geom : physScreen->geometry();
-            // Destroy + recreate each show — mirrors LayoutPickerOverlay. The
-            // fresh layer-shell attach is also what the layout picker does
-            // (and it works), so pre-warming + hide/re-show gymnastics are
-            // unnecessary here.
-            destroyZoneSelectorWindow(screenId);
-            createZoneSelectorWindow(screenId, physScreen, targetGeom);
+            // Reuse the warmed surface when one already exists for this
+            // screen — wlr-layer-shell v3 anchors are immutable post-attach,
+            // so the only thing that forces a rebuild is the screen entry
+            // disappearing entirely (handled by destroyZoneSelectorWindow on
+            // screen removal). Rebuilding on every drag-near-edge would pay
+            // ~50-100 ms for surface attach + Vulkan swapchain init before
+            // the show animation starts.
+            const auto& state = m_screenStates.value(screenId);
+            if (!state.zoneSelectorWindow) {
+                createZoneSelectorWindow(screenId, physScreen, targetGeom);
+            }
             auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
             if (!window) {
                 continue;
@@ -111,8 +116,10 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             auto* smgr = m_screenManager;
             QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
                                                                             : screen->geometry();
-            destroyZoneSelectorWindow(screenId);
-            createZoneSelectorWindow(screenId, screen, geom);
+            const auto& state = m_screenStates.value(screenId);
+            if (!state.zoneSelectorWindow) {
+                createZoneSelectorWindow(screenId, screen, geom);
+            }
             auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
             if (!window) {
                 continue;
@@ -139,11 +146,17 @@ void OverlayService::hideZoneSelector()
     // Note: Don't clear selected zone here — we need it for snapping when
     // drag ends. The selected zone is cleared after the snap is processed.
 
-    // Destroy on hide (mirrors LayoutPickerOverlay). Next showZoneSelector()
-    // will create a fresh surface.
+    // Trigger the QML hide animation on every per-screen window. The QML
+    // animation's ScriptAction flips `_selectorDismissed`, which re-binds
+    // `Qt.WindowTransparentForInput` so the still-mapped layer surface stops
+    // intercepting clicks. Surfaces stay alive so the next drag-near-edge
+    // reuses the warmed Vulkan swapchain instead of paying ~50-100 ms for a
+    // fresh layer-shell attach.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
-        destroyZoneSelectorWindow(screenId);
+        if (auto* window = m_screenStates.value(screenId).zoneSelectorWindow) {
+            QMetaObject::invokeMethod(window, "hide");
+        }
     }
 
     Q_EMIT zoneSelectorVisibilityChanged(false);
