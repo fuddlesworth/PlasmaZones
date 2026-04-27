@@ -12,6 +12,7 @@
         <file alias="LayoutOsdContent.qml">../ui/LayoutOsdContent.qml</file>
         <file alias="NavigationOsd.qml">../ui/NavigationOsd.qml</file>
         <file alias="NavigationOsdContent.qml">../ui/NavigationOsdContent.qml</file>
+        <file alias="NotificationOverlay.qml">../ui/NotificationOverlay.qml</file>
         <file alias="SnapAssistOverlay.qml">../ui/SnapAssistOverlay.qml</file>
         <file alias="LayoutPickerOverlay.qml">../ui/LayoutPickerOverlay.qml</file>
         <file alias="LayoutPickerContent.qml">../ui/LayoutPickerContent.qml</file>

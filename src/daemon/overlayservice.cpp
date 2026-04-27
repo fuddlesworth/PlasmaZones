@@ -64,24 +64,18 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
     if (state.zoneSelectorSurface) {
         state.zoneSelectorSurface->deleteLater();
     }
-    if (state.layoutOsdSurface) {
-        state.layoutOsdSurface->deleteLater();
-    }
-    if (state.navigationOsdSurface) {
-        state.navigationOsdSurface->deleteLater();
+    if (state.notificationSurface) {
+        state.notificationSurface->deleteLater();
     }
     state.overlaySurface = nullptr;
     state.zoneSelectorSurface = nullptr;
-    state.layoutOsdSurface = nullptr;
-    state.navigationOsdSurface = nullptr;
+    state.notificationSurface = nullptr;
     state.overlayWindow = nullptr;
     state.zoneSelectorWindow = nullptr;
-    state.layoutOsdWindow = nullptr;
-    state.navigationOsdWindow = nullptr;
+    state.notificationWindow = nullptr;
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
-    state.layoutOsdPhysScreen = nullptr;
-    state.navigationOsdPhysScreen = nullptr;
+    state.notificationPhysScreen = nullptr;
 }
 
 // Release every surface across the state map, then clear it.
@@ -172,8 +166,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // not the bare "physId" key itself.
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyLayoutOsdWindow(physicalScreenId);
-                destroyNavigationOsdWindow(physicalScreenId);
+                destroyNotificationWindow(physicalScreenId);
                 m_screenStates.remove(physicalScreenId);
                 return;
             }
@@ -186,8 +179,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyLayoutOsdWindow(physicalScreenId);
-                destroyNavigationOsdWindow(physicalScreenId);
+                destroyNotificationWindow(physicalScreenId);
             }
 
             // Clear selected zone before destroying windows — the selection references
@@ -802,11 +794,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     for (const QString& id : screenIds) {
         const auto& state = m_screenStates[id];
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || state.layoutOsdPhysScreen == screen || state.navigationOsdPhysScreen == screen) {
+            || state.notificationPhysScreen == screen) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
-            destroyLayoutOsdWindow(id);
-            destroyNavigationOsdWindow(id);
+            destroyNotificationWindow(id);
             // If every window for this screen-id was already released (or
             // this state entry never actually held any — e.g. an OSD
             // creation failed earlier), drop the empty shell so screen
@@ -814,7 +805,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // cleanupVirtualScreenStates semantics: the state entry is
             // meaningless without at least one live window.
             auto& s = m_screenStates[id];
-            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.layoutOsdSurface && !s.navigationOsdSurface) {
+            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.notificationSurface) {
                 m_screenStates.remove(id);
             }
         }

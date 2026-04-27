@@ -96,14 +96,6 @@ Item {
     readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
     readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
 
-    // Animated by show/hide animations. Item.opacity works on Wayland where
-    // Window.opacity does not — the previous standalone LayoutOsd.qml wrapped
-    // the content in a contentWrapper Item for exactly this reason; now that
-    // the root IS that Item, the wrapper layer is gone.
-    opacity: 0
-
-    Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
-
     // Show the OSD with animation
     function show() {
         // Stop any running animations to prevent conflicts
@@ -134,6 +126,13 @@ Item {
         dismissTimer.stop();
         hideAnimation.start();
     }
+
+    // Animated by show/hide animations. Item.opacity works on Wayland where
+    // Window.opacity does not — the previous standalone LayoutOsd.qml wrapped
+    // the content in a contentWrapper Item for exactly this reason; now that
+    // the root IS that Item, the wrapper layer is gone.
+    opacity: 0
+    Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
 
     // Auto-dismiss timer
     Timer {
