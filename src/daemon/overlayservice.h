@@ -28,6 +28,10 @@ class SurfaceFactory;
 // Role is a value type — full definition pulled in via Role.h above.
 } // namespace PhosphorLayer
 
+namespace PhosphorAnimationLayer {
+class SurfaceAnimator;
+} // namespace PhosphorAnimationLayer
+
 namespace PhosphorZones {
 class Zone;
 }
@@ -422,6 +426,14 @@ private:
     // raw pointers to the other two).
     std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
     std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
+    /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for
+    /// every Surface this service creates. Forward-declared to keep the
+    /// phosphor-animation-layer header out of the daemon's public surface;
+    /// the unique_ptr destructor only needs the type at .cpp definition
+    /// time. MUST outlive m_surfaceFactory (the factory's Deps captures
+    /// the animator pointer; surfaces it produces dispatch through it on
+    /// every show/hide).
+    std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
 
     // Managed surface lifecycle: shared QQmlEngine, Vulkan keep-alive, scope generation.
@@ -532,6 +544,18 @@ private:
     void createLayoutPickerWindow(QScreen* physScreen);
     void createLayoutPickerWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
     void destroyLayoutPickerWindow();
+
+    /**
+     * @brief Construct the SurfaceAnimator and register per-Role configs.
+     *
+     * Phase 5 of the phosphor-animation roadmap: a single library-driven
+     * animator drives show/hide across every overlay (LayoutOsd,
+     * NavigationOsd, LayoutPicker, ZoneSelector, SnapAssist) using
+     * Profile-resolved curves shared with in-window animations. Called
+     * exactly once from the ctor; the animator's lifetime is tied to
+     * `*this`.
+     */
+    void setupSurfaceAnimator();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
     void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl);

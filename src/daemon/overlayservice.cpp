@@ -35,6 +35,7 @@
 #include "pz_qml_i18n.h"
 #include "vulkan_support.h"
 
+#include <PhosphorAnimationLayer/SurfaceAnimator.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
@@ -116,6 +117,57 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
 
 } // namespace
 
+void OverlayService::setupSurfaceAnimator()
+{
+    namespace PAL = PhosphorAnimationLayer;
+
+    // Default config: every Surface whose Role isn't explicitly
+    // registered gets a plain opacity-only fade using widget.fade. This
+    // is what e.g. ShaderPreview or any future overlay we forget to
+    // register falls back to.
+    PAL::SurfaceAnimator::Config defaults;
+    defaults.showProfile = QStringLiteral("widget.fade");
+    defaults.hideProfile = QStringLiteral("widget.fadeOut");
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(std::move(defaults));
+
+    // Per-overlay tunings. Profile names are the same paths PhosphorMotion-
+    // Animation in QML uses today, so the live-reload path (drop a JSON,
+    // see it apply on next show) automatically applies to the C++ side too.
+    //
+    // OSDs (LayoutOsd / NavigationOsd / LayoutPicker) use the osd.show /
+    // osd.pop / osd.hide combo to preserve the OutBack-overshoot scale
+    // pop the original QML hand-rolled. ZoneSelector and SnapAssist are
+    // opacity-only fades.
+    {
+        PAL::SurfaceAnimator::Config c;
+        c.showProfile = QStringLiteral("osd.show");
+        c.showScaleProfile = QStringLiteral("osd.pop");
+        c.showScaleFrom = 0.8;
+        c.hideProfile = QStringLiteral("osd.hide");
+        c.hideScaleProfile = QStringLiteral("osd.hide");
+        c.hideScaleTo = 0.9;
+        m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, c);
+        m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, c);
+    }
+    {
+        PAL::SurfaceAnimator::Config c;
+        c.showProfile = QStringLiteral("osd.show");
+        c.showScaleProfile = QStringLiteral("osd.pop");
+        c.showScaleFrom = 0.9;
+        c.hideProfile = QStringLiteral("osd.hide");
+        c.hideScaleProfile = QStringLiteral("osd.hide");
+        c.hideScaleTo = 0.95;
+        m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, c);
+    }
+    {
+        PAL::SurfaceAnimator::Config c;
+        c.showProfile = QStringLiteral("panel.popup");
+        c.hideProfile = QStringLiteral("widget.fadeOut");
+        m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, c);
+        m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, c);
+    }
+}
+
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                QObject* parent)
     : IOverlayService(parent)
@@ -125,11 +177,19 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_screenManager = screenManager;
     m_shaderRegistry = shaderRegistry;
 
+    // Phase-5 SurfaceAnimator. One instance drives every overlay's
+    // show/hide via Profile-resolved curves; per-Role configs install
+    // below in setupSurfaceAnimator(). Constructed BEFORE the
+    // SurfaceFactory because the factory's Deps captures the animator
+    // pointer; Surfaces produced after this point dispatch through it
+    // on every show/hide.
+    setupSurfaceAnimator();
+
     m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(
         PhosphorLayer::SurfaceFactory::Deps{.transport = m_transport.get(),
                                             .screens = m_screenProvider.get(),
                                             .engineProvider = nullptr,
-                                            .animator = nullptr,
+                                            .animator = m_surfaceAnimator.get(),
                                             .loggingCategory = QStringLiteral("plasmazones.overlay")});
 
     const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
