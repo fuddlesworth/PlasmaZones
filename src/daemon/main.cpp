@@ -49,6 +49,17 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
+    // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
+    // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
+    // environment (e.g. set globally for games), and its NVIDIA stat-polling
+    // thread costs ~30% CPU continuously inside this daemon — we are a
+    // background service, not a game client. Both env vars are cleared:
+    // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
+    // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
+    // Must run before QVulkanInstance::create() in vulkan_support.cpp.
+    qunsetenv("MANGOHUD");
+    qputenv("DISABLE_MANGOHUD", "1");
+
     // Register our layer-shell QPA plugin before QGuiApplication
     PhosphorShell::registerLayerShellPlugin();
 
