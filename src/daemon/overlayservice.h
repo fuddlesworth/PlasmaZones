@@ -246,21 +246,26 @@ public:
     void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
-     * @brief Pre-create PhosphorZones::Layout OSD QML windows for all connected screens.
+     * @brief Pre-create the unified NotificationOverlay window for all connected
+     * screens (layout-OSD path).
      *
-     * First-time QML compilation of LayoutOsd.qml takes ~100-300ms (component
-     * loading, scene graph creation, Wayland layer-shell registration).  Call
-     * this early (deferred from daemon start) so the first layout switch OSD
-     * appears instantly instead of blocking the event loop.
+     * First-time QML compilation of NotificationOverlay.qml takes ~100-300ms
+     * (component loading, scene graph creation, Wayland layer-shell
+     * registration). Call this early (deferred from daemon start) so the
+     * first layout switch OSD appears instantly instead of blocking the
+     * event loop. Functionally identical to @ref warmUpNavigationOsd —
+     * both legacy entry points share the same per-screen surface — but
+     * kept distinct for caller clarity.
      */
     void warmUpLayoutOsd();
 
     /**
-     * @brief Pre-create Navigation OSD QML windows for all connected screens.
+     * @brief Pre-create the unified NotificationOverlay window for all connected
+     * screens (navigation-OSD path).
      *
-     * Same rationale as warmUpLayoutOsd(): avoids ~100-300ms QML compilation
-     * delay on the first keyboard navigation action after daemon start or
-     * after the dismiss timer destroys the previous window.
+     * Same rationale and same surface as @ref warmUpLayoutOsd: avoids the
+     * ~100-300ms NotificationOverlay.qml compilation delay on the first
+     * keyboard navigation action after daemon start.
      */
     void warmUpNavigationOsd();
 
@@ -274,6 +279,15 @@ private:
      * OSDs they actually warmed. Idempotent via m_screenAddedConnected.
      */
     void ensureOsdScreenAddedConnected();
+
+    /**
+     * @brief Shared body of warmUpLayoutOsd / warmUpNavigationOsd.
+     *
+     * Both legacy entry points hit the same per-screen NotificationOverlay
+     * surface post-Phase-2 — they only differ in the log suffix used to
+     * record which path triggered the warm-up.
+     */
+    void warmUpNotifications(const char* logSuffix);
 
 public:
     // Navigation OSD (feedback for keyboard navigation)
@@ -506,8 +520,12 @@ private:
     // entry in the connection's slot table for the rest of the session).
     bool m_prepareForSleepConnected = false;
 
-    // Track screens with failed window creation to prevent log spam
-    QHash<QString, bool> m_navigationOsdCreationFailed;
+    // Track screens where notification-window creation has failed, so the
+    // spam-guard in createNotificationWindow only logs once per screen
+    // regardless of which OSD path (layout-osd or navigation-osd) tried to
+    // bring the surface up. Cleared in destroyAllWindowsForPhysicalScreen
+    // when a hot-plug cycle reattaches the same physical monitor.
+    QHash<QString, bool> m_notificationCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationActionKey; // "action:reason" composite key
     QString m_lastNavigationScreenId;

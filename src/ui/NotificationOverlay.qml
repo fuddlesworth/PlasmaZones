@@ -51,7 +51,10 @@ Window {
     property string mode: ""
     // ── Common properties (LayoutOsd + NavigationOsd) ─────────────────────
     property var zones: []
-    property int displayDuration: 1500 // overridden per-mode in show() if needed
+    // displayDuration is intentionally NOT propagated from this host — each
+    // content type has its own default (1500 ms for layout-osd, 1000 ms for
+    // navigation-osd) and the per-content binding is omitted in the
+    // Components below so those defaults remain authoritative.
     property color backgroundColor: "white"
     property color textColor: "black"
     property color highlightColor: "blue"
@@ -95,7 +98,12 @@ Window {
     // Forward show / hide to whichever content is currently loaded. C++
     // invokes via QMetaObject::invokeMethod(window, "show") — same path as
     // the per-mode standalone Windows, so osd.cpp's call site is unchanged.
+    // Window.visible is flipped here exactly once (on first show); after
+    // that the layer surface stays mapped for the daemon's lifetime so
+    // subsequent shows reuse the warmed VkSwapchainKHR — see the
+    // pre-extraction LayoutOsd.qml/NavigationOsd.qml for the same pattern.
     function show() {
+        visible = true;
         if (loader.item)
             loader.item.show();
 
@@ -109,8 +117,14 @@ Window {
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | ((loader.item && !loader.item.dismissed) ? 0 : Qt.WindowTransparentForInput)
     color: "transparent"
-    width: contentDesiredWidth
-    height: contentDesiredHeight
+    // Sensible defaults so the warmed-but-mode-unset surface attaches with
+    // a reasonable size. Both code paths (sizeAndCenterOsd for layout-osd,
+    // the inline path for navigation-osd) imperatively call setWidth /
+    // setHeight from C++ before show(), so these defaults are only ever
+    // observed during warm-up. Binding to contentDesiredWidth / Height here
+    // would fight with those imperative writes.
+    width: 240
+    height: 70
     // Start hidden; show() flips this once and never back. The layer surface
     // stays mapped after first show so the next show() reuses the warmed
     // Vulkan swapchain — see file-level comment.
@@ -143,7 +157,6 @@ Window {
         LayoutOsdContent {
             // Common
             zones: root.zones
-            displayDuration: root.displayDuration
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
@@ -180,7 +193,6 @@ Window {
         NavigationOsdContent {
             // Common
             zones: root.zones
-            displayDuration: root.displayDuration
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor

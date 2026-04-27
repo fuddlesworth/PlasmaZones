@@ -343,24 +343,33 @@ void OverlayService::ensureOsdScreenAddedConnected()
     m_screenAddedConnected = true;
 }
 
-void OverlayService::warmUpLayoutOsd()
+// Pre-create the per-screen NotificationOverlay surface for every effective
+// screen the manager knows about, then mark notifications warmed and ensure
+// the screenAdded hot-plug hook is installed. Shared body of warmUpLayoutOsd
+// and warmUpNavigationOsd — Phase-2 unification collapsed both onto a single
+// surface, so the two public entry points only differ in their log line.
+void OverlayService::warmUpNotifications(const char* logSuffix)
 {
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
-
     for (const QString& sid : effectiveIds) {
-        if (!(m_screenStates.contains(sid) && m_screenStates[sid].notificationWindow)) {
-            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
-                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
-            if (physScreen) {
-                createNotificationWindow(sid, physScreen);
-            }
+        if (m_screenStates.contains(sid) && m_screenStates[sid].notificationWindow) {
+            continue;
+        }
+        QScreen* physScreen =
+            m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
+        if (physScreen) {
+            createNotificationWindow(sid, physScreen);
         }
     }
     m_notificationsWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows (layout OSD path) for" << effectiveIds.size()
+    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows (" << logSuffix << ") for" << effectiveIds.size()
                       << "effective screens";
-
     ensureOsdScreenAddedConnected();
+}
+
+void OverlayService::warmUpLayoutOsd()
+{
+    warmUpNotifications("layout OSD path");
 }
 
 void OverlayService::warmUpNavigationOsd()
@@ -370,27 +379,20 @@ void OverlayService::warmUpNavigationOsd()
     // NavigationOsdContent via a Loader. Calling this is functionally the
     // same as calling warmUpLayoutOsd; both paths are kept so existing
     // signals.cpp call sites don't need to change.
-    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
-
-    for (const QString& sid : effectiveIds) {
-        if (!(m_screenStates.contains(sid) && m_screenStates[sid].notificationWindow)) {
-            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
-                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
-            if (physScreen) {
-                createNotificationWindow(sid, physScreen);
-            }
-        }
-    }
-    m_notificationsWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows (navigation OSD path) for" << effectiveIds.size()
-                      << "effective screens";
-
-    ensureOsdScreenAddedConnected();
+    warmUpNotifications("navigation OSD path");
 }
 
 void OverlayService::createNotificationWindow(const QString& screenId, QScreen* physScreen)
 {
     if (m_screenStates.contains(screenId) && m_screenStates[screenId].notificationSurface) {
+        return;
+    }
+    // Spam-guard: if a previous attempt on this screen failed (compositor
+    // refused the surface, layer-shell extension missing, etc.), don't
+    // retry on every OSD show — one warning per screen is enough. The
+    // sentinel is cleared in destroyAllWindowsForPhysicalScreen when the
+    // monitor is hot-plug-cycled, so reconnecting the screen does retry.
+    if (m_notificationCreationFailed.value(screenId, false)) {
         return;
     }
 
@@ -404,6 +406,9 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
     auto* surface =
         createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")), physScreen, role, "notification");
     if (!surface) {
+        qCWarning(lcOverlay) << "Failed to create notification window for screen=" << screenId
+                             << "— suppressing further attempts until screen is replugged";
+        m_notificationCreationFailed.insert(screenId, true);
         return;
     }
 
@@ -490,23 +495,16 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // not in map). The window stays alive across rapid navigation calls —
     // QML show() resets the animation and restarts the dismiss timer each
     // time. Surfaces are torn down only on screen-removal / shutdown via
-    // destroyNotificationWindow(); the dismiss path is QML-only.
+    // destroyNotificationWindow(); the dismiss path is QML-only. The
+    // create-failure spam-guard lives in createNotificationWindow itself.
     if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].notificationWindow)) {
-        // Only try to create if we haven't failed before (prevents log spam)
-        if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
-            createNotificationWindow(effectiveId, physScreen);
-        }
+        createNotificationWindow(effectiveId, physScreen);
     }
 
     const auto& navState = m_screenStates.value(effectiveId);
     auto* window = navState.notificationWindow;
     auto* navSurface = navState.notificationSurface;
     if (!window) {
-        // Only warn once per screen to prevent log spam
-        if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
-            qCWarning(lcOverlay) << "Failed to get notification window for navigation OSD on screen=" << effectiveId;
-            m_navigationOsdCreationFailed.insert(effectiveId, true);
-        }
         qCDebug(lcOverlay) << "No notification window for navigation OSD on screen=" << effectiveId;
         return;
     }

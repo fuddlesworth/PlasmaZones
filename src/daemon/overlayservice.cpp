@@ -819,16 +819,16 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         destroyLayoutPickerWindow();
     }
 
-    // Drop navigation-OSD "creation failed" sentinels for screen ids rooted
-    // on this physical screen. Without this, if the same physical monitor
-    // is reconnected (hot-plug cycle) it inherits the stale flag and we
-    // silently refuse to recreate the OSD. Matching is prefix-based because
-    // virtual-screen ids embed the physical id as the prefix.
+    // Drop notification-window "creation failed" sentinels for screen ids
+    // rooted on this physical screen. Without this, if the same physical
+    // monitor is reconnected (hot-plug cycle) it inherits the stale flag
+    // and we silently refuse to recreate the OSD. Matching is prefix-based
+    // because virtual-screen ids embed the physical id as the prefix.
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (!physId.isEmpty()) {
-        for (auto it = m_navigationOsdCreationFailed.begin(); it != m_navigationOsdCreationFailed.end();) {
+        for (auto it = m_notificationCreationFailed.begin(); it != m_notificationCreationFailed.end();) {
             if (it.key() == physId || it.key().startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator)) {
-                it = m_navigationOsdCreationFailed.erase(it);
+                it = m_notificationCreationFailed.erase(it);
             } else {
                 ++it;
             }
