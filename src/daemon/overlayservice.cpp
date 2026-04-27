@@ -35,6 +35,7 @@
 #include "pz_qml_i18n.h"
 #include "vulkan_support.h"
 
+#include <PhosphorAnimationLayer/SurfaceAnimator.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
@@ -116,6 +117,154 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
 
 } // namespace
 
+namespace {
+
+// ── Profile path constants ─────────────────────────────────────────────
+// Lifted as named statics so a typo within this file is impossible (the
+// compiler binds the symbol; the registry resolves the value once at
+// first call). Profile JSONs discovered through PhosphorProfileRegistry's
+// watcher path can still change the curve/duration these names resolve
+// to at runtime.
+const QString& osdShow()
+{
+    static const QString s = QStringLiteral("osd.show");
+    return s;
+}
+const QString& osdPop()
+{
+    static const QString s = QStringLiteral("osd.pop");
+    return s;
+}
+const QString& osdHide()
+{
+    static const QString s = QStringLiteral("osd.hide");
+    return s;
+}
+const QString& panelPopup()
+{
+    static const QString s = QStringLiteral("panel.popup");
+    return s;
+}
+const QString& widgetFadeOut()
+{
+    // Registered hide profile for ZoneSelector (panel.popup show +
+    // widget.fadeOut hide). The matching widget.fade is intentionally
+    // absent — no overlay uses it after the dead-default cleanup; if a
+    // future overlay needs a plain widget fade, register the path
+    // inline at the call site.
+    static const QString s = QStringLiteral("widget.fadeOut");
+    return s;
+}
+
+// ── Per-role Config builders ───────────────────────────────────────────
+// One factory per overlay role so adding/tweaking a 6th overlay touches
+// exactly one named function rather than appending to a 100-line
+// setupSurfaceAnimator. Each builder documents the visual shape it
+// encodes; setupSurfaceAnimator just wires the builder output to the
+// matching PzRole.
+//
+// **Profile-coupling caveat (osd.hide on the scale leg):** the OSD and
+// LayoutPicker configs reuse `osdHide` as the `hideScaleProfile`. That
+// means a user-tunable JSON edit to `osd.hide` (e.g. swapping its
+// easing for Spring physics to bounce the opacity) ALSO affects the
+// scale leg, because both legs resolve the same Profile path. Live-
+// reload's "drop a JSON, see it apply" UX is intentional, but profile
+// authors should know the two legs are coupled. If a future overlay
+// needs independent opacity/scale tuning, introduce a separate
+// `osd.hide-scale` profile and register it on `hideScaleProfile`
+// instead of reusing `osdHide`.
+
+namespace PAL = PhosphorAnimationLayer;
+
+/// Default config — empty. Surfaces that route through the animator
+/// without a registered config fall back to AnimatedValue's library
+/// default (150 ms OutCubic), same as a missing-profile lookup. Every
+/// Surface that goes through Surface::show()/hide() in this service has
+/// an explicit registration below; the empty default is documentation.
+PAL::SurfaceAnimator::Config buildDefaultConfig()
+{
+    return PAL::SurfaceAnimator::Config{};
+}
+
+/// LayoutOsd / NavigationOsd: identical fade-and-pop shape. The visual
+/// treatment is meant to read the same across the two OSDs, so a single
+/// shared config keeps tuning edits consistent. OutBack-overshoot scale
+/// pop preserved from the original QML hand-roll.
+PAL::SurfaceAnimator::Config buildOsdConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
+                                        .hideProfile = osdHide(),
+                                        .showScaleProfile = osdPop(),
+                                        .hideScaleProfile = osdHide(),
+                                        .showScaleFrom = 0.8,
+                                        .hideScaleTo = 0.9};
+}
+
+/// LayoutPicker: same osd shape as buildOsdConfig but with a softer
+/// scale envelope (0.9→1 instead of 0.8→1). The picker is a larger
+/// surface so the overshoot reads as a pop rather than a slam.
+PAL::SurfaceAnimator::Config buildLayoutPickerConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
+                                        .hideProfile = osdHide(),
+                                        .showScaleProfile = osdPop(),
+                                        .hideScaleProfile = osdHide(),
+                                        .showScaleFrom = 0.9,
+                                        .hideScaleTo = 0.95};
+}
+
+/// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
+/// the hide animation actually paints). Opacity-only — explicit empty
+/// scale fields suppress GCC's -Wmissing-field-initializers under
+/// designated init.
+PAL::SurfaceAnimator::Config buildZoneSelectorConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
+                                        .hideProfile = widgetFadeOut(),
+                                        .showScaleProfile = {},
+                                        .hideScaleProfile = {}};
+}
+
+/// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
+/// (keepMappedOnHide=false), so ~Surface synchronously cancels any
+/// in-flight beginHide before the hide animation can paint a frame.
+/// Registering a hideProfile here would be dead code; leave it empty.
+PAL::SurfaceAnimator::Config buildSnapAssistConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
+                                        .hideProfile = {},
+                                        .showScaleProfile = {},
+                                        .hideScaleProfile = {}};
+}
+
+} // namespace
+
+void OverlayService::setupSurfaceAnimator()
+{
+    namespace PAL = PhosphorAnimationLayer;
+
+    // Two existing surface types deliberately BYPASS this animator and
+    // therefore never read any config (default or per-role):
+    //   - Overlay (zone overlay rendering): hidden via direct
+    //     window->hide() in dismissOverlayWindow because the rapid
+    //     drag-mode path uses _idled property toggling rather than the
+    //     show/hide state machine.
+    //   - ShaderPreview (editor preview window): shown via direct
+    //     window->show() in showShaderPreview because the editor controls
+    //     visibility imperatively and re-creates on every open.
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(buildDefaultConfig());
+
+    // Profile names are the same paths PhosphorMotionAnimation in QML
+    // uses today, so the live-reload path (drop a JSON, see it apply on
+    // next show) automatically applies to the C++ side too.
+    const auto osdConfig = buildOsdConfig();
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
+    m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig());
+}
+
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                QObject* parent)
     : IOverlayService(parent)
@@ -125,8 +274,20 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_screenManager = screenManager;
     m_shaderRegistry = shaderRegistry;
 
-    m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(PhosphorLayer::SurfaceFactory::Deps{
-        m_transport.get(), m_screenProvider.get(), nullptr, QStringLiteral("plasmazones.overlay")});
+    // Phase-5 SurfaceAnimator. One instance drives every overlay's
+    // show/hide via Profile-resolved curves; per-Role configs install
+    // below in setupSurfaceAnimator(). Constructed BEFORE the
+    // SurfaceFactory because the factory's Deps captures the animator
+    // pointer; Surfaces produced after this point dispatch through it
+    // on every show/hide.
+    setupSurfaceAnimator();
+
+    m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(
+        PhosphorLayer::SurfaceFactory::Deps{.transport = m_transport.get(),
+                                            .screens = m_screenProvider.get(),
+                                            .engineProvider = nullptr,
+                                            .animator = m_surfaceAnimator.get(),
+                                            .loggingCategory = QStringLiteral("plasmazones.overlay")});
 
     const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     const QString pipelineCachePath =
@@ -335,27 +496,49 @@ OverlayService::~OverlayService()
     m_surfaceManager->drainDeferredDeletes();
 }
 
-PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,
-                                                           const PhosphorLayer::Role& role, const char* windowType,
-                                                           const QVariantMap& windowProperties,
-                                                           std::optional<PhosphorLayer::Anchors> anchorsOverride,
-                                                           std::optional<QMargins> marginsOverride)
+PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams params)
 {
-    if (!screen) {
-        qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << windowType;
+    if (!params.screen) {
+        qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << params.windowType;
         return nullptr;
     }
 
     PhosphorLayer::SurfaceConfig cfg;
-    cfg.role = role;
-    cfg.contentUrl = qmlUrl;
-    cfg.screen = screen;
-    cfg.windowProperties = windowProperties;
-    cfg.anchorsOverride = anchorsOverride;
-    cfg.marginsOverride = marginsOverride;
-    cfg.debugName = QString::fromUtf8(windowType);
+    cfg.role = std::move(params.role);
+    cfg.contentUrl = std::move(params.qmlUrl);
+    cfg.screen = params.screen;
+    cfg.windowProperties = std::move(params.windowProperties);
+    cfg.anchorsOverride = std::move(params.anchorsOverride);
+    cfg.marginsOverride = std::move(params.marginsOverride);
+    cfg.keepMappedOnHide = params.keepMappedOnHide;
+    cfg.debugName = QString::fromUtf8(params.windowType);
 
     return m_surfaceManager->createSurface(std::move(cfg), this);
+}
+
+PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& baseRole,
+                                                               const QString& scopePrefix, const QUrl& qmlUrl,
+                                                               QScreen* physScreen, const char* windowType)
+{
+    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
+                                        .screen = physScreen,
+                                        .role = baseRole.withScopePrefix(scopePrefix),
+                                        .windowType = windowType,
+                                        .keepMappedOnHide = true});
+    if (!surface) {
+        return nullptr;
+    }
+
+    // Wire the QML-side auto-dismiss signal to Surface::hide(). LayoutOsd
+    // and NavigationOsd both expose `signal dismissRequested()` driven by
+    // their internal Timer; LayoutPicker also uses the same name (post-#9
+    // rename) for backdrop-click dismissal. String-based connect is the
+    // only path because QML-defined signals aren't addressable via Qt5
+    // `&Class::signal` pointers.
+    if (auto* window = surface->window()) {
+        QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));
+    }
+    return surface;
 }
 
 void OverlayService::show()
@@ -842,6 +1025,21 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
                 ++it;
             }
         }
+    }
+
+    // Drop the dedup sentinel for this physical screen so a hot-plug cycle
+    // doesn't suppress the first navigation OSD on the reconnected monitor
+    // when it lands inside the implicit 200 ms timeout window. The dedup is
+    // keyed on the screenId at time-of-fire, and a removed-then-readded
+    // monitor reuses the same id — without this clear, a navigation action
+    // on the readded screen within 200 ms of the last action on the
+    // pre-removal incarnation gets silently swallowed.
+    if (!physId.isEmpty()
+        && (m_lastNavigationScreenId == physId
+            || m_lastNavigationScreenId.startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator))) {
+        m_lastNavigationActionKey.clear();
+        m_lastNavigationScreenId.clear();
+        m_lastNavigationTime.invalidate();
     }
 }
 

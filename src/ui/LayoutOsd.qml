@@ -6,7 +6,6 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -15,33 +14,22 @@ import org.plasmazones.common as QFZCommon
  * Provides visual feedback superior to text-only Plasma OSD
  */
 Window {
-    // contentWrapper
-    // Note: Escape shortcut removed - layer-shell overlay windows do not
-    // receive keyboard focus on Wayland (KeyboardInteractivityNone)
-    // Dismiss state used for input gating. True while the OSD is logically
-    // hidden (pre-first-show or after a full hide animation). When true, we
-    // bind Qt.WindowTransparentForInput into the window flags so the
-    // invisible-but-still-mapped layer surface doesn't eat clicks at its
-    // screen position. Toggled on discrete show/dismiss events — NOT tied
-    // to opacity — so the flag doesn't churn during the fade animation
-    // (which would cause repeated QWindow::setFlags() calls and potential
-    // input-region reconfiguration on every animation tick).
-    // (No signals — previously emitted dismissed() to a C++ slot that did
-    // nothing; both were removed in L3 v2. The flip of _osdDismissed at the
-    // end of hideAnimation's ScriptAction is the entire dismiss mechanism.)
-    // Hide the OSD with animation.
-    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland.
-    // We keep root.visible == true after the first show() for the window's entire
-    // lifetime (never cycling back to false in the hide animation), because Qt's
-    // Vulkan backend on Wayland layer-shell doesn't reliably reinitialize the
-    // VkSwapchainKHR after the wl_surface is torn down by a hide. The OSD's
-    // visual "hidden" state is entirely opacity-driven (contentWrapper.opacity
-    // goes to 0), not Qt-window-visibility-driven.
-    // Show animation. Opacity uses osd.show (plain OutCubic decel).
-    // Scale uses osd.pop (OutBack overshoot) to preserve the subtle
-    // "pop" the original design used — matching the pre-PhosphorMotion
-    // NumberAnimation { easing.type: Easing.OutBack; overshoot: 1.2 }
-    // shape. Do not collapse both onto a single profile.
+    // Phase 5: surface lifecycle + show/hide animations are entirely library-
+    // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
+    // PzRoles::LayoutOsd) drives Window.contentItem opacity + scale via its
+    // `osd.show` / `osd.pop` / `osd.hide` profiles; PhosphorLayer::Surface
+    // handles `Qt.WindowTransparentForInput` on the underlying QWindow during
+    // the hide cycle.
+    // root.visible flips to true on the first Surface::show() and stays true
+    // for the surface's lifetime (keepMappedOnHide=true). Qt's Vulkan backend
+    // on Wayland layer-shell doesn't reliably reinitialise the VkSwapchainKHR
+    // after the wl_surface is torn down, so the visual "hidden" state is
+    // driven by Window.contentItem opacity going to 0, not by toggling
+    // Qt-window visibility.
+    // Auto-dismiss is QML-side: dismissTimer fires dismissRequested() which
+    // C++ wires to Surface::hide(). Escape is not handled (layer-shell
+    // overlay windows do not receive keyboard focus when keyboard
+    // interactivity is None).
 
     id: root
 
@@ -105,136 +93,87 @@ Window {
     property bool locked: false
     property bool disabled: false
     property string disabledReason
-    // Initial value is true because the window is first created via
-    // OverlayService::warmUpLayoutOsd() with visible:false — at that point
-    // the layer surface isn't live yet, but setting the flag here is
-    // harmless and ensures the very first frame after show() has the
-    // correct input-accepting state.
-    property bool _osdDismissed: true
+    /// Idempotency latch for `dismissRequested`. The timer-fire path and the
+    /// MouseArea click path both want to dismiss; without this, a click
+    /// landing during the brief window between dismissTimer triggering and
+    /// `Qt.WindowTransparentForInput` actually flipping at the QWindow
+    /// level (the lib sets it inside the hide dispatch, which is async wrt
+    /// the QML event loop) double-fires. C++ then re-runs Surface::hide()
+    /// on a Hidden surface and logs `qCWarning` for every spurious click.
+    /// Reset on every restartDismissTimer() so a re-shown OSD dismisses
+    /// normally.
+    property bool _dismissed: false
 
-    // Show the OSD with animation
-    function show() {
-        // Stop any running animations to prevent conflicts
-        showAnimation.stop();
-        hideAnimation.stop();
-        dismissTimer.stop();
-        // Reset state for fresh animation (animate wrapper, not window)
-        contentWrapper.opacity = 0;
-        container.scale = 0.8;
-        root._osdDismissed = false;
-        root.visible = true;
-        showAnimation.start();
+    /// Auto-dismiss request emitted by the dismissTimer. C++ side hooks this
+    /// to OverlayService → Surface::hide() so the library can drive the
+    /// fade-out via the SurfaceAnimator.
+    signal dismissRequested()
+
+    /// Restart the auto-dismiss timer from C++ on every show. Replaces the
+    /// QML-internal `dismissTimer.restart()` that the old show() used to
+    /// call. The `_dismissed` latch reset is driven off the timer's
+    /// runningChanged transition (Connections block below) — that way any
+    /// path that restarts the timer (this helper today, or a hypothetical
+    /// future direct call) resets the latch automatically and a forgetful
+    /// caller can't desync the two.
+    function restartDismissTimer() {
         dismissTimer.restart();
     }
 
-    // After L3 v2, root.visible stays true for the window's entire lifetime
-    // once show() has been called; the original `if (root.visible)` guard
-    // became dead code after first show. We now gate on _osdDismissed
-    // instead: if we're already in the dismissed state, the hide animation
-    // is a no-op (another hide() mid-dismiss would just re-run the same
-    // fade-out against already-zero opacity). Also guards the pre-first-show
-    // case: warm-upped windows start with _osdDismissed == true, so an
-    // errant hide() before any show() short-circuits cleanly.
-    function hide() {
-        if (root._osdDismissed)
+    /// Internal: emit dismissRequested at most once per show cycle.
+    function _requestDismiss() {
+        if (_dismissed)
             return ;
 
-        showAnimation.stop();
-        dismissTimer.stop();
-        hideAnimation.start();
+        _dismissed = true;
+        root.dismissRequested();
     }
 
-    // To keep an invisible-but-Qt-visible window from eating clicks at its
-    // position, we toggle Qt.WindowTransparentForInput via a property binding on
-    // _osdDismissed. Qt Wayland translates this flag to wl_surface.set_input_region
-    // updates on the live surface — no surface recreation required.
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (root._osdDismissed ? Qt.WindowTransparentForInput : 0)
+    // Window configuration. Static flags — Phase 5 surface lifecycle owns
+    // `Qt.WindowTransparentForInput` on the underlying QWindow during hide.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
     width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
     height: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
-    // Start hidden, will be shown with animation
+    // Start hidden; first Surface::show() flips visible=true.
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
     // QWaylandWindow::setOpacity() is not implemented and logs warnings
     visible: false
 
-    // Auto-dismiss timer
+    // Auto-dismiss timer. Emits a signal that the C++ side hooks to
+    // Surface::hide() (which drives the library animator's beginHide).
     Timer {
         id: dismissTimer
 
         interval: root.displayDuration
-        onTriggered: root.hide()
+        onTriggered: root._requestDismiss()
     }
 
-    // durationOverride binds to root.fadeInDuration / fadeOutDuration so
-    // consumers that override those properties still drive the timing.
-    ParallelAnimation {
-        id: showAnimation
+    // Reset the dismiss latch when the timer (re)starts. Bound here
+    // rather than inline in restartDismissTimer so the reset is the
+    // timer's responsibility, not the helper's. Any path that calls
+    // dismissTimer.restart() — current or future — automatically resets
+    // the latch, preventing a forgetful caller from leaving the OSD
+    // permanently latched-as-dismissed for the rest of its lifetime.
+    Connections {
+        function onRunningChanged() {
+            if (dismissTimer.running)
+                root._dismissed = false;
 
-        PhosphorMotionAnimation {
-            target: contentWrapper
-            properties: "opacity"
-            from: 0
-            to: 1
-            profile: "osd.show"
-            durationOverride: root.fadeInDuration
         }
 
-        PhosphorMotionAnimation {
-            target: container
-            properties: "scale"
-            from: 0.8
-            to: 1
-            profile: "osd.pop"
-            durationOverride: root.fadeInDuration
-        }
-
+        target: dismissTimer
     }
 
-    // Hide animation
-    SequentialAnimation {
-        id: hideAnimation
-
-        ParallelAnimation {
-            PhosphorMotionAnimation {
-                target: contentWrapper
-                properties: "opacity"
-                to: 0
-                profile: "osd.hide"
-                durationOverride: root.fadeOutDuration
-            }
-
-            PhosphorMotionAnimation {
-                target: container
-                properties: "scale"
-                to: 0.9
-                profile: "osd.hide"
-                durationOverride: root.fadeOutDuration
-            }
-
-        }
-
-        ScriptAction {
-            script: {
-                // Do NOT set root.visible = false — see the Window flags
-                // comment at the top of this file for why. We flip
-                // _osdDismissed instead, which binds Qt.WindowTransparentForInput
-                // into the window flags so the (still Qt-visible) layer
-                // surface stops eating input at its screen position.
-                root._osdDismissed = true;
-            }
-        }
-
-    }
-
-    // Content wrapper - animates opacity instead of Window
-    // This avoids "This plugin does not support setting window opacity" on Wayland
+    // Content wrapper - opacity defaults to 1 now. Phase 5 SurfaceAnimator
+    // drives Window.contentItem opacity for show/hide; this child stays at
+    // 1 and inherits visibility from the parent fade.
     Item {
         id: contentWrapper
 
         Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
         anchors.fill: parent
-        opacity: 0
 
         // Shadow effect
         MultiEffect {
@@ -376,13 +315,15 @@ Window {
 
         }
 
-        // Click to dismiss. Gated on _osdDismissed so that in the post-hide
-        // transparent state we don't consume events at the Qt Quick level
-        // even if the wl_surface input region hasn't been updated yet.
+        // Click to dismiss. The QML-side `_dismissed` latch in
+        // `_requestDismiss()` collapses overlapping dismiss sources
+        // (timer-fire + click during the same show cycle) into a single
+        // dismissRequested signal. C++ then runs Surface::hide() exactly
+        // once, avoiding the spurious qCWarning storm a double-call would
+        // otherwise produce.
         MouseArea {
             anchors.fill: parent
-            enabled: !root._osdDismissed
-            onClicked: root.hide()
+            onClicked: root._requestDismiss()
         }
 
     }

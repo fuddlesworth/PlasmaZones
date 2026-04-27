@@ -241,6 +241,18 @@ target_link_libraries(test_animation_profile_publication
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorAnimation::PhosphorAnimation)
 add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_publication)
 
+# Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
+# per-instance scope construction in osd.cpp / selector.cpp /
+# snapassist.cpp so a divergence from the PzRoles base scopePrefix
+# doesn't silently fall back to the empty default config in release
+# builds. Replaces the debug-only Q_ASSERT_X in createZoneSelectorWindow
+# with a release-built check that covers every overlay role.
+add_executable(test_overlay_scope_prefixes daemon/test_overlay_scope_prefixes.cpp)
+target_link_libraries(test_overlay_scope_prefixes
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorLayer::PhosphorLayer
+            PhosphorAnimationLayer::PhosphorAnimationLayer)
+add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════

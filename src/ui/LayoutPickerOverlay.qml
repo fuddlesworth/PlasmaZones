@@ -5,7 +5,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -55,14 +54,36 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
-    // Mirror of LayoutOsd's `_osdDismissed` lifecycle. True while the picker is
-    // logically hidden — set on warm-up (window pre-created but not yet shown),
-    // cleared by show(), set again at the end of the hide animation. The Window
-    // flags binding folds in `Qt.WindowTransparentForInput` while this is true so
-    // an invisible-but-Qt-visible layer surface doesn't eat clicks at its screen
-    // position. Toggled on discrete show/dismiss events — NOT tied to opacity —
-    // so the flag doesn't churn during the fade.
-    property bool _pickerDismissed: true
+    /// Logically-shown state, written by C++ alongside Surface::show/hide so
+    /// the QML-side keyboard Shortcuts below can be disabled while the
+    /// surface is hidden. With keepMappedOnHide=true the QQuickWindow stays
+    /// Qt-visible across hide/show cycles, so QML Shortcuts attached to the
+    /// root remain registered with Qt's accelerator pipeline; without this
+    /// gate, a stray accelerator delivery (focus stealer, programmatic key
+    /// event) could trigger Enter/arrows on a logically-hidden picker.
+    property bool _shortcutsActive: false
+    /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
+    /// clicks during the keepMappedOnHide=true fade-out window can fire
+    /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
+    /// lands at the QWindow level (the lib sets it inside the hide dispatch,
+    /// async wrt the QML event loop). Without this, C++ runs Surface::hide()
+    /// on an already-Hidden surface and the library logs a `qCWarning` per
+    /// spurious click. Same shape as the latches in LayoutOsd.qml /
+    /// NavigationOsd.qml — the picker has no auto-dismiss timer, so the
+    /// reset is driven explicitly from C++: OverlayService::showLayoutPicker
+    /// writes `_dismissed = false` alongside `_shortcutsActive = true`
+    /// before calling `Surface::show()`. (QML's `on<Name>Changed` handler
+    /// form does not work for underscore-prefixed properties, so the
+    /// natural-looking binding-from-QML path isn't an option.)
+    property bool _dismissed: false
+    // Phase 5: surface lifecycle + show/hide animations are entirely library-
+    // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
+    // PzRoles::LayoutPicker) drives this Window's content opacity + container
+    // scale via its `osd.show` / `osd.pop` / `osd.hide` profiles; the
+    // PhosphorLayer::Surface state machine handles `Qt.WindowTransparentForInput`
+    // on the underlying QWindow during the hide cycle. The previous
+    // `_pickerDismissed` flag + `showAnimation` / `hideAnimation` blocks are
+    // gone.
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
@@ -86,31 +107,20 @@ Window {
 
     // Signals
     signal layoutSelected(string layoutId)
-    signal dismissed()
+    /// User-initiated dismiss request (backdrop click, Escape). C++ event
+    /// filter and the OverlayService::hideLayoutPicker slot translate this
+    /// into Surface::hide() — which then drives the library animator.
+    /// Named to match LayoutOsd / NavigationOsd for consistency across
+    /// dismissable overlays.
+    signal dismissRequested()
 
-    // Show with animation. After warm-up the window stays Qt-visible for its
-    // entire lifetime; show() flips _pickerDismissed off (so input is accepted
-    // again) and runs the fade-in animation. Mirrors LayoutOsd::show().
-    function show() {
-        showAnimation.stop();
-        hideAnimation.stop();
-        contentWrapper.opacity = 0;
-        container.scale = metrics.showScaleFrom;
-        root._pickerDismissed = false;
-        root.visible = true;
-        showAnimation.start();
-        root.requestActivate();
-    }
-
-    // Hide with animation. Surface stays alive for the next show; the dismiss
-    // ScriptAction flips _pickerDismissed back on so the window flags re-bind to
-    // include WindowTransparentForInput.
-    function hide() {
-        showAnimation.stop();
-        if (root._pickerDismissed)
+    /// Internal: emit dismissRequested at most once per show cycle.
+    function _requestDismiss() {
+        if (_dismissed)
             return ;
 
-        hideAnimation.start();
+        _dismissed = true;
+        root.dismissRequested();
     }
 
     function moveSelection(dx, dy) {
@@ -140,12 +150,12 @@ Window {
         }
     }
 
-    // Window configuration. The TransparentForInput flag is bound to the
-    // dismiss state so the layer surface — which we keep Qt-visible across
-    // hide/show cycles to avoid Wayland Vulkan-swapchain re-init cost — stops
-    // intercepting clicks while logically hidden. Mirrors LayoutOsd's flag
-    // binding.
-    flags: Qt.FramelessWindowHint | Qt.Tool | (root._pickerDismissed ? Qt.WindowTransparentForInput : 0)
+    // Window configuration. Static flags — Phase 5 surface lifecycle owns
+    // `Qt.WindowTransparentForInput` on the underlying QWindow during the
+    // hide cycle (Surface::Impl::drive sets the flag when keepMappedOnHide
+    // routes through beginHide). A QML binding here would fight the
+    // library's setFlag.
+    flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
     visible: false
 
@@ -160,119 +170,63 @@ Window {
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
         readonly property int previewWidth: 160
-        // Show/hide animation
-        readonly property int showDuration: Kirigami.Units.shortDuration
-        readonly property int hideDuration: Math.round(Kirigami.Units.shortDuration * 0.8)
-        readonly property real showScaleFrom: 0.9
-        readonly property real hideScaleTo: 0.95
-        readonly property real showOvershoot: 1.1
     }
 
-    // Scale uses osd.pop (OutBack overshoot) to preserve the
-    // "pop" feel from the pre-PhosphorMotion easing.type=OutBack
-    // overshoot=1.2 design.
-    ParallelAnimation {
-        id: showAnimation
-
-        PhosphorMotionAnimation {
-            target: contentWrapper
-            properties: "opacity"
-            from: 0
-            to: 1
-            profile: "osd.show"
-            durationOverride: metrics.showDuration
-        }
-
-        PhosphorMotionAnimation {
-            target: container
-            properties: "scale"
-            from: metrics.showScaleFrom
-            to: 1
-            profile: "osd.pop"
-            durationOverride: metrics.showDuration
-        }
-
-    }
-
-    // Hide animation
-    SequentialAnimation {
-        id: hideAnimation
-
-        ParallelAnimation {
-            PhosphorMotionAnimation {
-                target: contentWrapper
-                properties: "opacity"
-                to: 0
-                profile: "osd.hide"
-                durationOverride: metrics.hideDuration
-            }
-
-            PhosphorMotionAnimation {
-                target: container
-                properties: "scale"
-                to: metrics.hideScaleTo
-                profile: "osd.hide"
-                durationOverride: metrics.hideDuration
-            }
-
-        }
-
-        ScriptAction {
-            script: {
-                // Do NOT set root.visible = false — the surface stays Qt-
-                // visible for the daemon's lifetime so the next show() reuses
-                // the warmed Vulkan swapchain. _pickerDismissed flips the
-                // WindowTransparentForInput flag instead, so the still-mapped
-                // layer surface stops eating clicks at its screen position.
-                root._pickerDismissed = true;
-                root.dismissed();
-            }
-        }
-
-    }
-
-    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support)
+    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support).
+    // All Shortcuts gate on root._shortcutsActive — see the property doc for
+    // why this matters under keepMappedOnHide=true.
     Shortcut {
         sequence: "Return"
+        enabled: root._shortcutsActive
         onActivated: confirmSelection()
     }
 
     Shortcut {
         sequence: "Enter"
+        enabled: root._shortcutsActive
         onActivated: confirmSelection()
     }
 
     Shortcut {
         sequence: "Left"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(-1, 0)
     }
 
     Shortcut {
         sequence: "Right"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(1, 0)
     }
 
     Shortcut {
         sequence: "Up"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(0, -1)
     }
 
     Shortcut {
         sequence: "Down"
+        enabled: root._shortcutsActive
         onActivated: moveSelection(0, 1)
     }
 
-    // Content wrapper for opacity animation (avoid Wayland setOpacity warning)
+    // Content wrapper. Opacity defaults to 1 — the SurfaceAnimator drives
+    // window.contentItem opacity for show/hide so this child stays at 1
+    // and inherits visibility from the parent fade.
     Item {
         id: contentWrapper
 
         anchors.fill: parent
-        opacity: 0
 
-        // Backdrop — click outside to dismiss (transparent, no dim)
+        // Backdrop — click outside to dismiss (transparent, no dim). The
+        // C++ side hooks dismissRequested() to OverlayService::hideLayoutPicker,
+        // which calls Surface::hide() and drives the animator. Route through
+        // _requestDismiss so rapid clicks during the fade-out window collapse
+        // into a single dismissRequested per show cycle.
         MouseArea {
             anchors.fill: parent
-            onClicked: root.hide()
+            onClicked: root._requestDismiss()
             Accessible.name: i18n("Dismiss layout picker")
             Accessible.role: Accessible.Button
         }
