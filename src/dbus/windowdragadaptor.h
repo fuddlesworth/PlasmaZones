@@ -424,6 +424,7 @@ private:
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
+    QVector<ParsedTrigger> m_cachedDeactivationTriggers; // #249 — gates triggerHeld off while held
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
     QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;
 

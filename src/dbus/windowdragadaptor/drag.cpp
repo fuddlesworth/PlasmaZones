@@ -40,6 +40,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 
     // Pre-parse triggers to avoid QVariantMap unboxing on every dragMoved tick
     m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
+    m_cachedDeactivationTriggers = parseTriggers(m_settings->dragDeactivationTriggers());
     m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
     m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
     // Ensure no stale preview carries over from a prior drag.
@@ -468,6 +469,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap unboxing per tick.
     const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
 
+    // Deactivation triggers (#249) — empty list short-circuits. Holding any
+    // configured deactivation trigger forces the overlay off for the rest of
+    // this drag tick, regardless of activation/toggle state. Applied below
+    // after the toggle-mode logic resolves so a toggled-on overlay also hides
+    // while held without the toggle flipping.
+    const bool deactivateHeld =
+        !m_cachedDeactivationTriggers.isEmpty() && anyTriggerHeld(m_cachedDeactivationTriggers, mods, mouseButtons);
+
     // ── Autotile drag-insert preview (runs even when m_snapCancelled) ───────
     // This block is intentionally ABOVE the snap-cancelled early return because
     // the KWin effect calls callCancelSnap() when the cursor crosses from a snap
@@ -583,11 +592,20 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         activationActive = zoneActivationHeld;
     }
 
+    // Deactivation override (#249): suppress the overlay while a configured
+    // deactivation trigger is held. Applied after toggle-mode resolution so a
+    // toggled-on overlay also hides while held; releasing the deactivation
+    // trigger restores the prior toggle state without flipping it.
+    if (deactivateHeld) {
+        activationActive = false;
+    }
+
     // Log activation-state transitions so overlay show/hide churn can be traced.
     if (activationActive != m_lastLoggedActivationActive) {
         qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
                              << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
-                             << "triggerHeld=" << triggerHeld << "toggleActivation=" << m_settings->toggleActivation();
+                             << "triggerHeld=" << triggerHeld << "deactivateHeld=" << deactivateHeld
+                             << "toggleActivation=" << m_settings->toggleActivation();
         m_lastLoggedActivationActive = activationActive;
     }
 

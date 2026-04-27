@@ -27,6 +27,8 @@ SnappingBehaviorController::SnappingBehaviorController(Settings* settings, QObje
             Q_EMIT alwaysActivateOnDragChanged();
         }
     });
+    connect(m_settings, &Settings::dragDeactivationTriggersChanged, this,
+            &SnappingBehaviorController::dragDeactivationTriggersChanged);
     connect(m_settings, &Settings::zoneSpanTriggersChanged, this, &SnappingBehaviorController::zoneSpanTriggersChanged);
     connect(m_settings, &Settings::snapAssistTriggersChanged, this,
             &SnappingBehaviorController::snapAssistTriggersChanged);
@@ -45,6 +47,16 @@ QVariantList SnappingBehaviorController::dragActivationTriggers() const
 QVariantList SnappingBehaviorController::defaultDragActivationTriggers() const
 {
     return TriggerUtils::convertTriggersForQml(ConfigDefaults::dragActivationTriggers());
+}
+
+QVariantList SnappingBehaviorController::dragDeactivationTriggers() const
+{
+    return TriggerUtils::convertTriggersForQml(m_settings->dragDeactivationTriggers());
+}
+
+QVariantList SnappingBehaviorController::defaultDragDeactivationTriggers() const
+{
+    return TriggerUtils::convertTriggersForQml(ConfigDefaults::dragDeactivationTriggers());
 }
 
 QVariantList SnappingBehaviorController::zoneSpanTriggers() const
@@ -84,6 +96,14 @@ void SnappingBehaviorController::setDragActivationTriggers(const QVariantList& t
     const QVariantList converted = TriggerUtils::convertTriggersForStorage(triggers);
     if (m_settings->dragActivationTriggers() != converted) {
         m_settings->setDragActivationTriggers(converted);
+    }
+}
+
+void SnappingBehaviorController::setDragDeactivationTriggers(const QVariantList& triggers)
+{
+    const QVariantList converted = TriggerUtils::convertTriggersForStorage(triggers);
+    if (m_settings->dragDeactivationTriggers() != converted) {
+        m_settings->setDragDeactivationTriggers(converted);
     }
 }
 

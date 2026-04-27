@@ -37,6 +37,9 @@ class SnappingBehaviorController : public QObject
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
     Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
+    Q_PROPERTY(QVariantList dragDeactivationTriggers READ dragDeactivationTriggers WRITE setDragDeactivationTriggers
+                   NOTIFY dragDeactivationTriggersChanged)
+    Q_PROPERTY(QVariantList defaultDragDeactivationTriggers READ defaultDragDeactivationTriggers CONSTANT)
     Q_PROPERTY(
         QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
     Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
@@ -52,6 +55,8 @@ public:
     bool alwaysActivateOnDrag() const;
     QVariantList dragActivationTriggers() const;
     QVariantList defaultDragActivationTriggers() const;
+    QVariantList dragDeactivationTriggers() const;
+    QVariantList defaultDragDeactivationTriggers() const;
     QVariantList zoneSpanTriggers() const;
     QVariantList defaultZoneSpanTriggers() const;
     QVariantList snapAssistTriggers() const;
@@ -59,6 +64,7 @@ public:
 
     void setAlwaysActivateOnDrag(bool enabled);
     void setDragActivationTriggers(const QVariantList& triggers);
+    void setDragDeactivationTriggers(const QVariantList& triggers);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setSnapAssistTriggers(const QVariantList& triggers);
 
@@ -68,6 +74,7 @@ public:
 Q_SIGNALS:
     void alwaysActivateOnDragChanged();
     void dragActivationTriggersChanged();
+    void dragDeactivationTriggersChanged();
     void zoneSpanTriggersChanged();
     void snapAssistTriggersChanged();
 

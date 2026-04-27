@@ -695,6 +695,48 @@ private Q_SLOTS:
         Settings reloaded;
         QCOMPARE(reloaded.autoAssignAllLayouts(), true);
     }
+
+    /**
+     * Drag deactivation triggers (#249): default is empty (Esc still cancels),
+     * the setter emits the specific NOTIFY signal once per real change, and the
+     * value round-trips through save/reload via the snappingBehavior group.
+     */
+    void testDragDeactivationTriggers_defaultSetterRoundtrip()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY2(settings.dragDeactivationTriggers().isEmpty(),
+                 "Default deactivation list must be empty so existing Esc-cancel behavior is preserved on upgrade");
+
+        QSignalSpy specificSpy(&settings, &Settings::dragDeactivationTriggersChanged);
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(specificSpy.isValid());
+        QVERIFY(generalSpy.isValid());
+
+        // Right Mouse Button as the deactivation trigger (matches the FancyZones
+        // pattern the issue reporter referenced).
+        QVariantMap rmb;
+        rmb[ConfigDefaults::triggerModifierField()] = 0;
+        rmb[ConfigDefaults::triggerMouseButtonField()] = static_cast<int>(Qt::RightButton);
+        settings.setDragDeactivationTriggers({rmb});
+
+        QCOMPARE(settings.dragDeactivationTriggers().size(), 1);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+
+        // Idempotent: setting the same list must not re-emit
+        settings.setDragDeactivationTriggers({rmb});
+        QCOMPARE(specificSpy.count(), 1);
+
+        settings.save();
+
+        Settings reloaded;
+        const QVariantList loaded = reloaded.dragDeactivationTriggers();
+        QCOMPARE(loaded.size(), 1);
+        QCOMPARE(loaded.first().toMap().value(ConfigDefaults::triggerMouseButtonField()).toInt(),
+                 static_cast<int>(Qt::RightButton));
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

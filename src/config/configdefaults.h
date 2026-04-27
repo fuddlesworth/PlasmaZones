@@ -64,6 +64,16 @@ public:
     {
         return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
     }
+    static QVariantList dragDeactivationTriggers()
+    {
+        // Default: empty list — no extra deactivation trigger configured.
+        // Esc still cancels the drag entirely (existing behavior, #249).
+        // The "Deactivate while held" UI row only appears when
+        // alwaysActivateOnDrag is on, where this list lets the user pick a
+        // non-disruptive modifier or mouse button to suppress the overlay
+        // mid-drag.
+        return {};
+    }
     static bool toggleActivation()
     {
         return false;

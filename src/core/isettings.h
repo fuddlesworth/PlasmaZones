@@ -208,6 +208,7 @@ public:
 Q_SIGNALS:
     void settingsChanged();
     void dragActivationTriggersChanged();
+    void dragDeactivationTriggersChanged();
     void autotileDragInsertTriggersChanged();
     void autotileDragInsertToggleChanged();
     void zoneSpanEnabledChanged();

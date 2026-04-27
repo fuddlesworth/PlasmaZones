@@ -120,6 +120,12 @@ public:
 
     virtual QVariantList dragActivationTriggers() const = 0;
     virtual void setDragActivationTriggers(const QVariantList& triggers) = 0;
+    /// Sibling list of `dragActivationTriggers`. When the activation list
+    /// contains `DragModifier::AlwaysActive`, holding any deactivation trigger
+    /// suppresses the overlay for the rest of that drag (#249). Empty list =
+    /// no deactivation trigger configured (Esc still cancels).
+    virtual QVariantList dragDeactivationTriggers() const = 0;
+    virtual void setDragDeactivationTriggers(const QVariantList& triggers) = 0;
     virtual bool zoneSpanEnabled() const = 0;
     virtual void setZoneSpanEnabled(bool enabled) = 0;
     virtual DragModifier zoneSpanModifier() const = 0;

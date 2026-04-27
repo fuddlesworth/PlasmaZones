@@ -1158,6 +1158,25 @@ void Settings::setDragActivationTriggers(const QVariantList& triggers)
     Q_EMIT settingsChanged();
 }
 
+QVariantList Settings::dragDeactivationTriggers() const
+{
+    return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::deactivationTriggersKey())
+        .toList();
+}
+void Settings::setDragDeactivationTriggers(const QVariantList& triggers)
+{
+    // Same canonicalising-validator round-trip pattern as setDragActivationTriggers.
+    const QVariantList before = dragDeactivationTriggers();
+    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::deactivationTriggersKey(),
+                   triggers.mid(0, MaxTriggersPerAction));
+    const QVariantList after = dragDeactivationTriggers();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT dragDeactivationTriggersChanged();
+    Q_EMIT settingsChanged();
+}
+
 PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setZoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, zoneSpanEnabledChanged)
 

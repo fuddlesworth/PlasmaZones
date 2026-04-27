@@ -605,6 +605,11 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::deactivationTriggersKey(),
+         CD::dragDeactivationTriggers(),
+         QMetaType::QVariantList,
+         {},
+         canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
     };
     schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {

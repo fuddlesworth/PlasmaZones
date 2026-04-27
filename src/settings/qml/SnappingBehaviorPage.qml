@@ -102,6 +102,34 @@ Flickable {
 
                     }
 
+                    // Deactivation trigger (#249): only meaningful when "Activate on every drag"
+                    // is on. Holding any of these modifiers/mouse buttons during a drag
+                    // suppresses the overlay for that drag — Esc still cancels entirely.
+                    SettingsSeparator {
+                        visible: alwaysActivateSwitch.checked
+                    }
+
+                    SettingsRow {
+                        title: i18n("Deactivate while held")
+                        description: i18n("Hold a modifier or mouse button during a drag to hide the zone overlay. Esc still cancels the drag entirely.")
+                        visible: alwaysActivateSwitch.checked
+
+                        ModifierAndMouseCheckBoxes {
+                            id: dragDeactivationInput
+
+                            width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
+                            allowMultiple: true
+                            acceptMode: acceptModeAll
+                            triggers: root.settingsBridge.dragDeactivationTriggers
+                            defaultTriggers: root.settingsBridge.defaultDragDeactivationTriggers
+                            tooltipEnabled: false
+                            onTriggersModified: (triggers) => {
+                                root.settingsBridge.dragDeactivationTriggers = triggers;
+                            }
+                        }
+
+                    }
+
                 }
 
             }

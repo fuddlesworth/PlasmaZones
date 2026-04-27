@@ -58,10 +58,19 @@ public:
     }
     QVariantList dragActivationTriggers() const override
     {
-        return {};
+        return m_dragActivationTriggers;
     }
-    void setDragActivationTriggers(const QVariantList&) override
+    void setDragActivationTriggers(const QVariantList& triggers) override
     {
+        m_dragActivationTriggers = triggers;
+    }
+    QVariantList dragDeactivationTriggers() const override
+    {
+        return m_dragDeactivationTriggers;
+    }
+    void setDragDeactivationTriggers(const QVariantList& triggers) override
+    {
+        m_dragDeactivationTriggers = triggers;
     }
     bool zoneSpanEnabled() const override
     {
@@ -795,6 +804,8 @@ private:
     bool m_autoAssignAllLayouts = false;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
+    QVariantList m_dragActivationTriggers;
+    QVariantList m_dragDeactivationTriggers;
 };
 
 } // namespace PlasmaZones
