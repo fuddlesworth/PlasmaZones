@@ -261,17 +261,19 @@ Rectangle {
 
     }
 
-    // Border animation
+    // Border animation — half-duration profile for snappier border feedback
+    // (matches the original `duration: animationDuration / 2` pattern).
     Behavior on border.width {
         PhosphorMotionAnimation {
-            profile: "zone.highlight"
+            profile: "zone.highlight-border"
         }
 
     }
 
+    // Scale uses zone.highlight-pop for the OutBack overshoot=1.20 feel.
     Behavior on scale {
         PhosphorMotionAnimation {
-            profile: "zone.highlight"
+            profile: "zone.highlight-pop"
         }
 
     }

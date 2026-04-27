@@ -160,6 +160,7 @@ Window {
                             Behavior on color {
                                 PhosphorMotionAnimation {
                                     profile: "zone.snapIn"
+                                    durationOverride: 150
                                 }
 
                             }
@@ -167,6 +168,7 @@ Window {
                             Behavior on border.color {
                                 PhosphorMotionAnimation {
                                     profile: "zone.snapIn"
+                                    durationOverride: 150
                                 }
 
                             }

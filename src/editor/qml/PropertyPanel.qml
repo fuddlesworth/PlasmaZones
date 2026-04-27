@@ -365,6 +365,7 @@ Rectangle {
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "panel.slideIn"
+                                durationOverride: 100
                             }
 
                         }
@@ -372,6 +373,7 @@ Rectangle {
                         Behavior on border.width {
                             PhosphorMotionAnimation {
                                 profile: "panel.slideIn"
+                                durationOverride: 100
                             }
 
                         }
@@ -932,6 +934,7 @@ Rectangle {
     Behavior on opacity {
         PhosphorMotionAnimation {
             profile: "panel.slideIn"
+            durationOverride: Theme.animDuration
         }
 
     }
@@ -939,6 +942,7 @@ Rectangle {
     Behavior on Layout.preferredWidth {
         PhosphorMotionAnimation {
             profile: "panel.slideIn"
+            durationOverride: Theme.animDuration
         }
 
     }

@@ -73,6 +73,7 @@ Row {
                 Behavior on opacity {
                     PhosphorMotionAnimation {
                         profile: "widget.press"
+                        durationOverride: 150
                     }
 
                 }
@@ -96,6 +97,7 @@ Row {
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.press"
+                    durationOverride: 150
                 }
 
             }
@@ -103,6 +105,7 @@ Row {
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "widget.press"
+                    durationOverride: 150
                 }
 
             }

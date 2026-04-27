@@ -346,6 +346,7 @@ Item {
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: Kirigami.Units.shortDuration
             }
 
         }
@@ -353,6 +354,7 @@ Item {
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: Kirigami.Units.shortDuration
             }
 
         }
@@ -366,6 +368,7 @@ Item {
             Behavior on xScale {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }
@@ -373,6 +376,7 @@ Item {
             Behavior on yScale {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
             }

@@ -647,25 +647,29 @@ Item {
                 }
             }
 
-            // Smooth fade in/out
+            // Smooth fade in/out — was 150ms originally, restore that timing
+            // on top of the widget-out shape rather than the 50 ms cursor.drag
+            // profile (which is for cursor-tracking, not handle visibility).
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "cursor.drag"
+                    profile: "widget.hover"
                 }
 
             }
 
-            // Smooth hover transitions
+            // Smooth hover transitions — original was 100 ms.
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "cursor.drag"
+                    profile: "widget.hover"
+                    durationOverride: 100
                 }
 
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "cursor.drag"
+                    profile: "widget.hover"
+                    durationOverride: 100
                 }
 
             }

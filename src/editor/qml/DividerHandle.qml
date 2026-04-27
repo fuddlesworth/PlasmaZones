@@ -137,14 +137,14 @@ Rectangle {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: "cursor.drag"
+                        profile: "widget.hover"
                     }
 
                 }
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "cursor.drag"
+                        profile: "widget.hover"
                     }
 
                 }
@@ -166,7 +166,7 @@ Rectangle {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "cursor.drag"
+                profile: "widget.hover"
             }
 
         }
@@ -332,14 +332,16 @@ Rectangle {
 
     Behavior on color {
         PhosphorMotionAnimation {
-            profile: "cursor.drag"
+            profile: "widget.hover"
+            durationOverride: Theme.animDuration
         }
 
     }
 
     Behavior on border.color {
         PhosphorMotionAnimation {
-            profile: "cursor.drag"
+            profile: "widget.hover"
+            durationOverride: Theme.animDuration
         }
 
     }

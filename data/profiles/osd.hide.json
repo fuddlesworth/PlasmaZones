@@ -1,5 +1,5 @@
 {
   "name": "osd.hide",
   "duration": 200,
-  "curve": "osd-in"
+  "curve": "cubic-in"
 }

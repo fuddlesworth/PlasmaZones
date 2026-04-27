@@ -86,6 +86,7 @@ ToolBar {
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "panel.popup"
+                                durationOverride: Theme.animDuration
                             }
 
                         }
@@ -101,6 +102,7 @@ ToolBar {
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "panel.popup"
+                                durationOverride: Theme.animDuration
                             }
 
                         }
@@ -108,6 +110,7 @@ ToolBar {
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "panel.popup"
+                                durationOverride: Theme.animDuration
                             }
 
                         }
@@ -212,6 +215,7 @@ ToolBar {
                     Behavior on color {
                         PhosphorMotionAnimation {
                             profile: "panel.popup"
+                            durationOverride: Theme.animDuration
                         }
 
                     }
@@ -219,6 +223,7 @@ ToolBar {
                     Behavior on border.color {
                         PhosphorMotionAnimation {
                             profile: "panel.popup"
+                            durationOverride: Theme.animDuration
                         }
 
                     }

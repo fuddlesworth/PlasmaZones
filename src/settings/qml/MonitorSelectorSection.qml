@@ -168,6 +168,7 @@ ColumnLayout {
                 Behavior on color {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -175,6 +176,7 @@ ColumnLayout {
                 Behavior on border.color {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -273,6 +275,7 @@ ColumnLayout {
                     Behavior on color {
                         PhosphorMotionAnimation {
                             profile: "widget.hover"
+                            durationOverride: Kirigami.Units.shortDuration
                         }
 
                     }
@@ -280,6 +283,7 @@ ColumnLayout {
                     Behavior on border.color {
                         PhosphorMotionAnimation {
                             profile: "widget.hover"
+                            durationOverride: Kirigami.Units.shortDuration
                         }
 
                     }

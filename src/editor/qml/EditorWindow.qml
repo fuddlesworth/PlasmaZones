@@ -350,6 +350,7 @@ Window {
         Behavior on opacity {
             PhosphorMotionAnimation {
                 profile: "widget.fade"
+                durationOverride: 200
             }
 
         }
@@ -733,6 +734,7 @@ Window {
         Behavior on opacity {
             PhosphorMotionAnimation {
                 profile: "widget.fade"
+                durationOverride: 200
             }
 
         }

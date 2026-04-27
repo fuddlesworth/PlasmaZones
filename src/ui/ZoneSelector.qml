@@ -356,10 +356,12 @@ Rectangle {
         visible: root.layouts.length === 0 && root.selectorState !== "hidden"
     }
 
-    // Smooth slide animation
+    // Smooth slide animation. durationOverride preserves the original
+    // dynamic-duration logic — expanded mode slides slightly slower.
     Behavior on y {
         PhosphorMotionAnimation {
             profile: "panel.popup"
+            durationOverride: root.selectorState === "expanded" ? constants.expandedAnimationDuration : constants.animationDuration
         }
 
     }
@@ -367,6 +369,7 @@ Rectangle {
     Behavior on opacity {
         PhosphorMotionAnimation {
             profile: "panel.popup"
+            durationOverride: constants.animationDuration
         }
 
     }

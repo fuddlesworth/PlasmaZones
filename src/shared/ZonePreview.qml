@@ -254,26 +254,27 @@ Item {
             }
 
             Behavior on scale {
-                // OutBack overshoot for the scale-up pop — the badge
-                // profile preserves the pre-PR-344 zone-preview "pop"
-                // feel that was otherwise lost in the single-profile
-                // migration.
+                // OutBack overshoot=1.20 feel — restored faithfully via the
+                // osd-pop curve referenced through zone.highlight-pop.
                 PhosphorMotionAnimation {
-                    profile: "widget.badge"
+                    profile: "zone.highlight-pop"
                 }
 
             }
 
+            // Border feedback uses the half-duration zone.highlight-border
+            // profile so the border snaps in twice as fast as the fill —
+            // matches the pre-PR-344 `duration: animationDuration / 2` shape.
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight"
+                    profile: "zone.highlight-border"
                 }
 
             }
 
             Behavior on border.width {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight"
+                    profile: "zone.highlight-border"
                 }
 
             }

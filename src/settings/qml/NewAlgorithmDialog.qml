@@ -174,7 +174,8 @@ Kirigami.Dialog {
 
                                 Behavior on color {
                                     PhosphorMotionAnimation {
-                                        profile: "osd.show"
+                                        profile: "widget.fade"
+                                        durationOverride: 200
                                     }
 
                                 }

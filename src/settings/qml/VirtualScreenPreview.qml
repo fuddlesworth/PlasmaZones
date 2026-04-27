@@ -138,6 +138,7 @@ Rectangle {
                 Behavior on width {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -145,6 +146,7 @@ Rectangle {
                 Behavior on color {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -249,6 +251,7 @@ Rectangle {
                 Behavior on height {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -256,6 +259,7 @@ Rectangle {
                 Behavior on color {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
                     }
 
                 }

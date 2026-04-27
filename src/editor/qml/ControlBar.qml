@@ -428,7 +428,7 @@ ToolBar {
                 properties: "opacity"
                 from: 1
                 to: 0.4
-                profile: "widget.pulse"
+                profile: "widget.pulse-fast"
             }
 
             PhosphorMotionAnimation {
@@ -436,7 +436,7 @@ ToolBar {
                 properties: "opacity"
                 from: 0.4
                 to: 1
-                profile: "widget.pulse"
+                profile: "widget.pulse-fast"
             }
 
         }

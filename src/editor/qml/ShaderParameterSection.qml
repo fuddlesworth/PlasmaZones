@@ -63,6 +63,7 @@ ColumnLayout {
                 Behavior on rotation {
                     PhosphorMotionAnimation {
                         profile: "widget.accordion"
+                        durationOverride: Kirigami.Units.longDuration
                     }
 
                 }
@@ -187,6 +188,7 @@ ColumnLayout {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.accordion"
+                    durationOverride: Kirigami.Units.longDuration
                 }
 
             }
@@ -196,6 +198,7 @@ ColumnLayout {
         Behavior on implicitHeight {
             PhosphorMotionAnimation {
                 profile: "widget.accordion"
+                durationOverride: Kirigami.Units.longDuration
             }
 
         }

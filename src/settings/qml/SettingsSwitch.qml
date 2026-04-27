@@ -48,9 +48,12 @@ Item {
 
         }
 
+        // Color uses widget.toggle-color (no overshoot) — overshooting a
+        // colour interpolation produces clamped out-of-gamut intermediates.
+        // Position (Behavior on x above) keeps widget.toggle's overshoot.
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "widget.toggle"
+                profile: "widget.toggle-color"
             }
 
         }

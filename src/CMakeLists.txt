@@ -25,6 +25,8 @@ set(plasmazones_core_SRCS
     core/logging.cpp
     core/translationloader.h
     core/translationloader.cpp
+    core/animationbootstrap.h
+    core/animationbootstrap.cpp
     # wallpaperprovider moved to PhosphorShell
     core/enums.h
     core/interfaces.h

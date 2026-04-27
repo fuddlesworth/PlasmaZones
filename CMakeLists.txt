@@ -104,6 +104,15 @@ endif()
 if(NOT TARGET Qt6::ShaderToolsPrivate)
     find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 endif()
+# QuickPrivate is required by libs/phosphor-animation/qml — must be discovered
+# at top-level so the IMPORTED target is global and visible to every consumer
+# of `PhosphorAnimation::PhosphorAnimationQml`. Without this, Qt's static-QML-
+# plugin dependency walker emits "QuickPrivate target is mentioned as a
+# dependency … but not declared" when collecting transitive deps from the
+# `src/shared` static-plugin consumer.
+if(NOT TARGET Qt6::QuickPrivate)
+    find_package(Qt6QuickPrivate CONFIG REQUIRED)
+endif()
 
 # Optional: Qt6::ShaderTools for shader effects support
 # RenderNode shaders use raw GLSL - no Qt6::ShaderTools compilation needed

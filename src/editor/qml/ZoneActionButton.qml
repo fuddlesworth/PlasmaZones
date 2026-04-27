@@ -62,6 +62,7 @@ AbstractButton {
         Behavior on border.width {
             PhosphorMotionAnimation {
                 profile: "widget.press"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -69,6 +70,7 @@ AbstractButton {
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.press"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -76,6 +78,7 @@ AbstractButton {
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.press"
+                durationOverride: Theme.animDuration
             }
 
         }

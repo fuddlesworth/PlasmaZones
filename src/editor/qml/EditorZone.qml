@@ -507,6 +507,7 @@ Item {
 
             PhosphorMotionAnimation {
                 profile: "widget.dim"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -516,6 +517,7 @@ Item {
 
             PhosphorMotionAnimation {
                 profile: "widget.dim"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -639,6 +641,7 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }
@@ -648,6 +651,7 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }
@@ -657,6 +661,7 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }
@@ -666,6 +671,7 @@ Item {
 
         PhosphorMotionAnimation {
             profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }

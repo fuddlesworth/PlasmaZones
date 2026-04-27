@@ -440,7 +440,7 @@ ApplicationWindow {
             target: sidebar
             properties: "opacity"
             to: 0
-            profile: "widget.fade"
+            profile: "sidebar.fadeOut"
         }
 
         ScriptAction {
@@ -457,7 +457,7 @@ ApplicationWindow {
             target: sidebar
             properties: "opacity"
             to: 1
-            profile: "widget.fade"
+            profile: "sidebar.fadeIn"
         }
 
     }
@@ -683,7 +683,7 @@ ApplicationWindow {
 
                             Behavior on color {
                                 PhosphorMotionAnimation {
-                                    profile: "widget.tint"
+                                    profile: "widget.tint-fast"
                                 }
 
                             }
@@ -881,7 +881,7 @@ ApplicationWindow {
                                     properties: "opacity"
                                     from: 1
                                     to: 0.4
-                                    profile: "widget.pulse"
+                                    profile: "widget.pulse-slow"
                                 }
 
                                 PhosphorMotionAnimation {
@@ -889,7 +889,7 @@ ApplicationWindow {
                                     properties: "opacity"
                                     from: 0.4
                                     to: 1
-                                    profile: "widget.pulse"
+                                    profile: "widget.pulse-slow"
                                 }
 
                             }
@@ -1182,6 +1182,7 @@ ApplicationWindow {
                         from: 0
                         to: 1
                         profile: "widget.fade"
+                        durationOverride: 180
                     }
 
                 }
@@ -1226,6 +1227,7 @@ ApplicationWindow {
                         from: 0
                         to: 1
                         profile: "panel.popup"
+                        durationOverride: 200
                     }
 
                     SequentialAnimation {
@@ -1240,7 +1242,7 @@ ApplicationWindow {
                             properties: "opacity"
                             from: 1
                             to: 0
-                            profile: "widget.fade"
+                            profile: "widget.fadeOut"
                         }
 
                     }
@@ -1834,7 +1836,8 @@ ApplicationWindow {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "osd.show"
+                profile: "widget.fade"
+                durationOverride: 200
             }
 
         }

@@ -75,6 +75,7 @@ Item {
                 Behavior on xScale {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: 200
                     }
 
                 }
@@ -82,6 +83,7 @@ Item {
                 Behavior on yScale {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: 200
                     }
 
                 }
@@ -93,6 +95,7 @@ Item {
                 Behavior on y {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
+                        durationOverride: 200
                     }
 
                 }
@@ -156,6 +159,7 @@ Item {
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
@@ -163,6 +167,7 @@ Item {
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
@@ -170,6 +175,7 @@ Item {
         Behavior on border.width {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: 200
             }
 
         }

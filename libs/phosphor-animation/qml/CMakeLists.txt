@@ -18,7 +18,15 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml QuickTest Test)
 # The Qt6::QuickPrivate target provides the include path for these
 # headers — mirrors the Qt6WaylandClientPrivate pattern in src/.
 if(NOT TARGET Qt6::QuickPrivate)
-    find_package(Qt6QuickPrivate REQUIRED)
+    find_package(Qt6QuickPrivate CONFIG REQUIRED)
+endif()
+
+# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML module
+# resource prefix, the documented default. Setting it explicitly silences
+# the Qt6CoreMacros QTP0001 dev warning on the two qt_add_qml_module calls
+# below; the policy stays in scope for this directory's qml-module calls.
+if(POLICY CMP0090 OR COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
 endif()
 
 # Position-independent code is required for Qt's QML type-registration

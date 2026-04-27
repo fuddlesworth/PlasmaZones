@@ -236,6 +236,7 @@ Flickable {
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -272,6 +273,7 @@ Flickable {
                                         Behavior on border.color {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -279,6 +281,7 @@ Flickable {
                                         Behavior on border.width {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -343,6 +346,7 @@ Flickable {
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -364,6 +368,7 @@ Flickable {
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -375,6 +380,7 @@ Flickable {
                                 Behavior on color {
                                     PhosphorMotionAnimation {
                                         profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.shortDuration
                                     }
 
                                 }
@@ -382,6 +388,7 @@ Flickable {
                                 Behavior on border.width {
                                     PhosphorMotionAnimation {
                                         profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.shortDuration
                                     }
 
                                 }
@@ -393,6 +400,7 @@ Flickable {
                                     Behavior on y {
                                         PhosphorMotionAnimation {
                                             profile: "widget.reorder"
+                                            durationOverride: Kirigami.Units.shortDuration
                                         }
 
                                     }
@@ -402,6 +410,7 @@ Flickable {
                                 Behavior on scale {
                                     PhosphorMotionAnimation {
                                         profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.shortDuration
                                     }
 
                                 }
@@ -413,6 +422,7 @@ Flickable {
 
                                 PhosphorMotionAnimation {
                                     profile: "widget.reorder"
+                                    durationOverride: Kirigami.Units.longDuration
                                 }
 
                             }

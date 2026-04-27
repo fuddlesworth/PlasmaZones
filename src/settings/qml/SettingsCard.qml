@@ -178,6 +178,7 @@ Item {
                         Behavior on rotation {
                             PhosphorMotionAnimation {
                                 profile: "widget.hover"
+                                durationOverride: 200
                             }
 
                         }
@@ -233,6 +234,7 @@ Item {
                     properties: "height"
                     to: 0
                     profile: "widget.accordion"
+                    durationOverride: 200
                 }
 
             }
@@ -245,6 +247,7 @@ Item {
                     properties: "height"
                     to: contentColumn.implicitHeight
                     profile: "widget.accordion"
+                    durationOverride: 200
                 }
 
                 PhosphorMotionAnimation {
@@ -270,6 +273,7 @@ Item {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
+                    durationOverride: 200
                 }
 
             }
@@ -279,6 +283,7 @@ Item {
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
@@ -292,6 +297,7 @@ Item {
         Behavior on y {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
