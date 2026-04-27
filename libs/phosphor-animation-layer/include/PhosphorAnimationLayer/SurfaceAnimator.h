@@ -76,6 +76,19 @@ namespace PhosphorAnimationLayer {
  * overlap itself — the phosphor-layer side guarantees a clean cancel
  * point before each `beginShow` / `beginHide`.
  *
+ * ## Re-entrancy contract
+ *
+ * The animator's internal driver invokes a track's `onComplete`
+ * synchronously from inside its own tick loop. Consumers MUST NOT
+ * delete the SurfaceAnimator (or anything that owns it) from inside
+ * an `onComplete` callback — the tick loop continues iterating over
+ * the track map after invocation, and a destroyed animator strands
+ * the loop on freed memory. Deleting the *Surface* whose animation
+ * just completed is safe; the library cancels the animator's tracking
+ * entry on Surface destruction. If a callback genuinely needs to
+ * tear down the animator, defer the deletion via `QTimer::singleShot(0, ...)`
+ * or a `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`.
+ *
  * ## Lifetime
  *
  * Heap-allocated by the consumer (typically the daemon's OverlayService)

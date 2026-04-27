@@ -150,6 +150,11 @@ void OverlayService::setupSurfaceAnimator()
     // osd.pop / osd.hide combo to preserve the OutBack-overshoot scale
     // pop the original QML hand-rolled. ZoneSelector and SnapAssist are
     // opacity-only fades.
+    // hideScaleProfile reuses osdHide intentionally: the same Profile drives
+    // opacity 1→0 and scale 1→0.9 in parallel so the two legs share the
+    // OutCubic curve and stay frame-aligned. AnimatedValue resolves the
+    // path independently per leg; the registry's QHash lookup is cheap
+    // enough that the duplicate query is irrelevant.
     {
         PAL::SurfaceAnimator::Config c;
         c.showProfile = osdShow;

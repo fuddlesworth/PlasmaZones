@@ -137,8 +137,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // Hide the zone selector only for the specific virtual screen where snap assist is showing.
     // Snap assist now uses virtual-screen geometry (not full physical monitor coverage), so
     // selectors on adjacent virtual screens of the same physical monitor should remain visible.
-    if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-        selectorWindow->hide();
+    //
+    // Route through Surface::hide() so the SurfaceAnimator drives the fade-out
+    // and the keepMappedOnHide=true selector keeps its warmed Vulkan swapchain
+    // for the next drag-near-edge cycle. Calling QQuickWindow::hide() directly
+    // would unmap the wl_surface and defeat the warm-surface optimisation
+    // createZoneSelectorWindow opted into.
+    if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
+        selectorSurface->hide();
     }
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
@@ -284,9 +290,12 @@ void OverlayService::hideSnapAssist()
     }
     // Re-show the zone selector for the specific virtual screen that was hidden in showSnapAssist
     // (symmetric: showSnapAssist only hides the selector for the target VS, not all VS).
+    // Surface::show() pairs with the Surface::hide() in showSnapAssist so the
+    // SurfaceAnimator drives the fade-in and the keepMappedOnHide flag flip is
+    // reverted properly.
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-            selectorWindow->show();
+        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
+            selectorSurface->show();
         }
     }
 }
@@ -437,8 +446,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Hide the zone selector for this specific virtual screen to avoid overlap.
     // Only hide the selector keyed by resolvedId, not all selectors on the physical monitor.
-    if (auto* selectorWindow = m_screenStates.value(resolvedId).zoneSelectorWindow) {
-        selectorWindow->hide();
+    // Route through Surface::hide() so the SurfaceAnimator drives the fade-out;
+    // calling QQuickWindow::hide() directly would unmap the wl_surface and
+    // discard the swapchain that keepMappedOnHide=true was meant to preserve.
+    if (auto* selectorSurface = m_screenStates.value(resolvedId).zoneSelectorSurface) {
+        selectorSurface->hide();
     }
 
     // Reuse the warmed surface when it's already attached to the right screen —
@@ -576,10 +588,13 @@ void OverlayService::hideLayoutPicker()
     }
 
     // Re-show the zone selector that was hidden when layout picker was shown (line ~435).
+    // Surface::show() pairs with the Surface::hide() in showLayoutPicker so the
+    // SurfaceAnimator drives the fade-in and the keepMappedOnHide flag flip is
+    // reverted properly.
     const QString screenId = m_layoutPickerScreenId;
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-            selectorWindow->show();
+        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
+            selectorSurface->show();
         }
     }
 }

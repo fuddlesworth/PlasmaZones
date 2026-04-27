@@ -153,8 +153,7 @@ public:
         });
     }
 
-    /// Cancel any in-flight legs for a surface and fire its onComplete
-    /// callback if one was pending. Called both directly via
+    /// Cancel any in-flight legs for a surface. Called both directly via
     /// SurfaceAnimator::cancel and implicitly when beginShow/beginHide
     /// supersedes a still-running animation on the same surface.
     void cancelTracking(PhosphorLayer::Surface* surface)
@@ -168,17 +167,25 @@ public:
         // this matches the ISurfaceAnimator::cancel contract — "the
         // animator must call onComplete exactly once per
         // beginShow/beginHide; cancel is an explicitly non-completion
-        // termination". Order matters: cancel both legs BEFORE erasing
-        // so the leg-completion lambdas captured by the AnimatedValues
-        // don't observe a half-erased Track if a buggy curve impl ever
-        // re-enters via onValueChanged during teardown.
-        if (it->second.opacity) {
-            it->second.opacity->cancel();
-        }
-        if (it->second.scale) {
-            it->second.scale->cancel();
-        }
+        // termination".
+        //
+        // Move the AnimatedValues + the consumer's onComplete out of the
+        // tracking entry BEFORE erasing, then cancel through the local
+        // unique_ptrs. If a future change to AnimatedValue::cancel ever
+        // regresses the contract and fires spec.onComplete synchronously,
+        // legCompleted() would invalidate `it` mid-cancel — but we're
+        // already past the iterator; the local pointers are stable.
+        // Dropping the consumer's onComplete on the floor is the documented
+        // semantic for cancellation (cancel is non-completion).
+        auto opacity = std::move(it->second.opacity);
+        auto scale = std::move(it->second.scale);
         m_tracks.erase(it);
+        if (opacity) {
+            opacity->cancel();
+        }
+        if (scale) {
+            scale->cancel();
+        }
     }
 
     /// Look up the per-role config or fall back to default.
@@ -238,6 +245,19 @@ public:
                 const QString& opacityProfilePath, qreal fromScale, qreal toScale, const QString& scaleProfilePath,
                 ISurfaceAnimator::CompletionCallback onComplete)
     {
+        // Supersede any in-flight animation on this surface BEFORE the
+        // null-target check. If the caller hands us a null target while a
+        // prior animation is still tracked, leaving that entry behind would
+        // strand a unique_ptr<AnimatedValue> with a captured `surface` key
+        // that no future call clears (the next runLeg with a non-null
+        // target would re-cancel it, but a teardown sequence might not).
+        // The phosphor-layer side does this too (Surface::Impl::drive()
+        // calls animator().cancel before each beginShow / beginHide), but
+        // a consumer calling beginShow directly without going through the
+        // Surface dispatch (e.g. a custom transition orchestrator) still
+        // gets clean supersession.
+        cancelTracking(surface);
+
         if (!target) {
             qCWarning(lcSurfaceAnimator) << "runLeg called with null target — onComplete fires synchronously";
             if (onComplete) {
@@ -245,14 +265,6 @@ public:
             }
             return;
         }
-
-        // Supersede any in-flight animation on this surface. The
-        // phosphor-layer side does this too (Surface::Impl::drive() calls
-        // animator().cancel before each beginShow / beginHide), but a
-        // consumer calling beginShow directly without going through the
-        // Surface dispatch (e.g. a custom transition orchestrator) still
-        // gets clean supersession.
-        cancelTracking(surface);
 
         // Use the shared steady-clock — independent of QQuickWindow
         // rendering. QtQuickClock would tie the animation to
