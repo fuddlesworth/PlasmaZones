@@ -89,11 +89,16 @@ Window {
     property string sourceZoneId: ""
     property int windowCount: 1
     property color errorColor: "red"
-    // Re-export the loaded content's contentDesiredWidth/Height so
-    // overlayservice/osd.cpp's per-show resize path (which currently reads
-    // these on NavigationOsd's Window root) keeps working unchanged.
-    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : 1
-    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : 1
+    // Re-export the loaded content's contentDesiredWidth/Height — the C++
+    // OSD show paths read these via window->property("contentDesiredWidth")
+    // to size the layer surface (and to compute the matching layer-shell
+    // margins), and the Window itself binds width/height to them so the
+    // QML side stays self-consistent. Fallback values cover the warm-up
+    // window where mode="" → no content loaded; the surface is invisible
+    // at that point so the exact value doesn't matter, it just has to be
+    // a valid wl_surface size.
+    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : 240
+    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : 70
 
     // Forward show / hide to whichever content is currently loaded. C++
     // invokes via QMetaObject::invokeMethod(window, "show") — same path as
@@ -117,14 +122,14 @@ Window {
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | ((loader.item && !loader.item.dismissed) ? 0 : Qt.WindowTransparentForInput)
     color: "transparent"
-    // Sensible defaults so the warmed-but-mode-unset surface attaches with
-    // a reasonable size. Both code paths (sizeAndCenterOsd for layout-osd,
-    // the inline path for navigation-osd) imperatively call setWidth /
-    // setHeight from C++ before show(), so these defaults are only ever
-    // observed during warm-up. Binding to contentDesiredWidth / Height here
-    // would fight with those imperative writes.
-    width: 240
-    height: 70
+    // Bind to the content-driven desired size. C++ also reads these
+    // properties before show() and calls setWidth / setHeight with the
+    // same value (so the explicit write and the binding agree) and uses
+    // the value to compute matching wlr-layer-shell margins. The OSD
+    // body Items size themselves to fit their own contents, so neither
+    // QML nor C++ carries any hardcoded magic numbers.
+    width: contentDesiredWidth
+    height: contentDesiredHeight
     // Start hidden; show() flips this once and never back. The layer surface
     // stays mapped after first show so the next show() reuses the warmed
     // Vulkan swapchain — see file-level comment.

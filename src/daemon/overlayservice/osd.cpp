@@ -73,20 +73,53 @@ void centerLayerWindowOnScreen(PhosphorLayer::ITransportHandle* handle, const QR
     handle->setMargins(QMargins(targetCenterX, targetCenterY, rightMargin, bottomMargin));
 }
 
-// Calculate OSD size and center window. `surface` resolves the transport handle;
-// callers pass the state's notificationSurface (post-Phase-2 unification of
-// the layout-OSD and navigation-OSD surfaces onto NotificationOverlay.qml).
-void sizeAndCenterOsd(QQuickWindow* window, PhosphorLayer::Surface* surface, QScreen* physScreen,
-                      const QRect& targetGeom, qreal previewAspectRatio)
+// Read the QML-computed desired size from the host Window. Both OSD content
+// types (LayoutOsdContent, NavigationOsdContent) expose contentDesiredWidth /
+// contentDesiredHeight readonly properties measured from their own container
+// items; NotificationOverlay.qml re-exports those via the loader item.
+//
+// Fallbacks are belt-and-suspenders for the unlikely case that the property
+// can't be read (no loader.item, or QML metaobject lookup fails) — matching
+// the warm-up defaults baked into NotificationOverlay.qml.
+struct OsdContentSize
 {
-    constexpr int osdWidth = 280;
-    // Clamp AR to sane range to prevent absurd OSD sizes
-    const qreal safeAR = qBound(0.5, previewAspectRatio, 4.0);
-    const int osdHeight = static_cast<int>(200 / safeAR) + 80;
-    if (window) {
-        window->setWidth(osdWidth);
-        window->setHeight(osdHeight);
+    int width;
+    int height;
+};
+
+OsdContentSize readOsdContentSize(QQuickWindow* window)
+{
+    constexpr int kFallbackWidth = 240;
+    constexpr int kFallbackHeight = 70;
+    if (!window) {
+        return {kFallbackWidth, kFallbackHeight};
     }
+    const QVariant widthVar = window->property("contentDesiredWidth");
+    const QVariant heightVar = window->property("contentDesiredHeight");
+    const int width = (widthVar.isValid() && widthVar.toInt() > 0) ? widthVar.toInt() : kFallbackWidth;
+    const int height = (heightVar.isValid() && heightVar.toInt() > 0) ? heightVar.toInt() : kFallbackHeight;
+    return {width, height};
+}
+
+// Size the OSD window to its content-driven desired size and pin it via the
+// layer-shell transport. `surface` resolves the transport handle; callers
+// pass the state's notificationSurface (post-Phase-2 unification of the
+// layout-OSD and navigation-OSD surfaces onto NotificationOverlay.qml).
+//
+// Caller contract: every property the QML content type uses to compute its
+// own size MUST be written before this function runs. QQuickText measures
+// synchronously when its text property changes, and Item width / height
+// bindings re-evaluate eagerly on dependency change, so by the time we read
+// contentDesiredWidth / Height the QML side has settled.
+void sizeAndCenterOsd(QQuickWindow* window, PhosphorLayer::Surface* surface, QScreen* physScreen,
+                      const QRect& targetGeom)
+{
+    if (!window) {
+        return;
+    }
+    const auto [osdWidth, osdHeight] = readOsdContentSize(window);
+    window->setWidth(osdWidth);
+    window->setHeight(osdHeight);
     const QRect physGeom = physScreen ? physScreen->geometry() : targetGeom;
     centerLayerWindowOnScreen(surface ? surface->transport() : nullptr, physGeom, targetGeom, osdWidth, osdHeight);
 }
@@ -193,8 +226,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
                          : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full));
     writeFontProperties(window, m_settings);
 
-    qreal layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
+    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
@@ -236,7 +268,11 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     // showed the raw screen aspect (e.g. 0.93 for a 1600×1716 VS, nearly
     // square) while snap layouts on the same screen rendered at 9:16 — a
     // visibly inconsistent feel between the two OSD paths.
-    qreal layoutAR = aspectRatio;
+    //
+    // The class is the only AR information C++ needs to push — QML derives
+    // the numeric preview ratio from it (LayoutOsdContent.previewAspectRatio
+    // switch), and OSD outer size is content-driven, so no companion numeric
+    // is required here.
     {
         QString arClass = QStringLiteral("any");
         auto uuidOpt = Utils::parseUuid(id);
@@ -244,13 +280,10 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
                 arClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
-                layoutAR =
-                    PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
             }
         } else {
             const auto screenClass = PhosphorLayout::ScreenClassification::classify(aspectRatio);
             arClass = PhosphorLayout::ScreenClassification::toString(screenClass);
-            layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(screenClass, aspectRatio);
         }
         writeQmlProperty(window, QStringLiteral("aspectRatioClass"), arClass);
     }
@@ -266,7 +299,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("zones"), zones);
     writeFontProperties(window, m_settings);
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
+    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
@@ -300,7 +333,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
     writeFontProperties(window, m_settings);
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom, aspectRatio);
+    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
@@ -556,31 +589,17 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // Ensure the window is on the correct Wayland output (must come before sizing —
-    // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight)
+    // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight).
     assertWindowOnScreen(window, physScreen, navScreenGeom);
 
-    // Read the QML-computed desired size. NotificationOverlay.qml re-exports
-    // contentDesiredWidth/Height from the loaded NavigationOsdContent body,
-    // which in turn cascades from messageLabel's implicitWidth (QQuickText
-    // measures text synchronously when its text property changes, so by the
-    // time writeQmlProperty("reason", ...) above returns the binding has
-    // settled). Falls back to 240x70 if the property can't be read — same
-    // as the previous hardcoded value.
-    constexpr int kFallbackWidth = 240;
-    constexpr int kFallbackHeight = 70;
-    const QVariant widthVar = window->property("contentDesiredWidth");
-    const QVariant heightVar = window->property("contentDesiredHeight");
-    const int desiredWidth = widthVar.isValid() && widthVar.toInt() > 0 ? widthVar.toInt() : kFallbackWidth;
-    const int desiredHeight = heightVar.isValid() && heightVar.toInt() > 0 ? heightVar.toInt() : kFallbackHeight;
-
-    // Size and center: setWidth/setHeight AFTER assertWindowOnScreen so the final
-    // QWindow geometry matches the OSD size (same pattern as sizeAndCenterOsd for LayoutOsd)
-    const QRect screenGeom = navScreenGeom;
-    window->setWidth(desiredWidth);
-    window->setHeight(desiredHeight);
-    const QRect physGeom = physScreen ? physScreen->geometry() : screenGeom;
-    centerLayerWindowOnScreen(navSurface ? navSurface->transport() : nullptr, physGeom, screenGeom, desiredWidth,
-                              desiredHeight);
+    // Size + center via the shared helper, which reads the QML-computed
+    // contentDesiredWidth / contentDesiredHeight from NotificationOverlay's
+    // loaded NavigationOsdContent body. The binding has settled by now —
+    // QQuickText measures synchronously when text changes, so the binding
+    // chain message → messageLabel.implicitWidth → container.width →
+    // contentDesiredWidth is up-to-date as soon as the writeQmlProperty
+    // calls above return.
+    sizeAndCenterOsd(window, navSurface, physScreen, navScreenGeom);
 
     // Show with animation
     QMetaObject::invokeMethod(window, "show");
