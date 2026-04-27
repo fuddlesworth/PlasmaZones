@@ -409,10 +409,12 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenId)
 {
-    // Guard: if picker window already exists (visible or being set up), do nothing.
-    // Prevents double-trigger when shortcut fires before KeyboardInteractivityExclusive
-    // grabs the keyboard on Wayland, and avoids deleteLater() races with stale grabs.
-    if (m_layoutPickerWindow) {
+    // Guard: if picker is currently visible (mid-show or fully shown — the
+    // QML `_pickerDismissed` reflects the logical hide state), don't double-
+    // trigger. The surface stays Qt-visible across hide/show cycles so a
+    // bare `m_layoutPickerWindow` check is no longer the right signal — use
+    // the QML dismissed-flag instead.
+    if (m_layoutPickerWindow && !m_layoutPickerWindow->property("_pickerDismissed").toBool()) {
         return;
     }
 
@@ -436,13 +438,19 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         selectorWindow->hide();
     }
 
-    // Always destroy and recreate for fresh state. Pass the resolved geometry
-    // so the Surface attaches with correct virtual-screen anchors + margins
-    // (wlr-layer-shell doesn't let us reconfigure those post-attach).
-    destroyLayoutPickerWindow();
-    createLayoutPickerWindowFor(screen, screenGeom, resolvedId);
-    if (!m_layoutPickerWindow) {
-        return;
+    // Reuse the warmed surface when it's already attached to the right screen —
+    // wlr-layer-shell v3 anchors are immutable post-attach, so a screen change
+    // is the only thing that forces a destroy+recreate. On the same screen we
+    // just update properties + invoke QML show() and skip the ~50-100 ms
+    // Wayland-surface + Vulkan-swapchain init.
+    const bool reuseSurface =
+        m_layoutPickerSurface && m_layoutPickerScreen == screen && m_layoutPickerScreenId == resolvedId;
+    if (!reuseSurface) {
+        destroyLayoutPickerWindow();
+        createLayoutPickerWindowFor(screen, screenGeom, resolvedId);
+        if (!m_layoutPickerWindow) {
+            return;
+        }
     }
 
     m_layoutPickerScreen = screen;
@@ -495,30 +503,94 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Anchors + margins were baked into the Surface by createLayoutPickerWindowFor above
     // using screenGeom, so positioning is already correct.
-    assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
-    m_layoutPickerWindow->setWidth(screenGeom.width());
-    m_layoutPickerWindow->setHeight(screenGeom.height());
-    // The QML root exposes a show() function that sets visible=true AND plays
-    // the show animation (contentWrapper opacity 0→1, container scale-in).
-    // Calling surface->show() would only set visible=true and skip the
-    // animation, so invoke the QML function directly. Surface stays in
-    // Hidden state — that's fine, the destroy-on-hide lifecycle doesn't
-    // rely on the state flag.
+    if (!reuseSurface) {
+        assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
+        m_layoutPickerWindow->setWidth(screenGeom.width());
+        m_layoutPickerWindow->setHeight(screenGeom.height());
+    }
+
+    // Re-grab keyboard focus on every show. Layer-shell keyboard
+    // interactivity is mutable on the live wl_surface (snap-assist uses the
+    // same setter pattern at line ~199). Without the regrab the surface
+    // would still have `None` from the prior hide and would not receive
+    // arrow / Enter / Escape input.
+    if (m_layoutPickerSurface) {
+        if (auto* handle = m_layoutPickerSurface->transport()) {
+            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::Exclusive);
+        }
+    }
+
+    // The QML root exposes a show() function that flips `_pickerDismissed`
+    // to false (re-binding the WindowTransparentForInput flag off), sets
+    // visible=true, and plays the show animation (opacity 0→1, scale-in).
+    // Surface stays Qt-visible across hide/show cycles so the next show
+    // reuses the warmed Vulkan swapchain.
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
 
     qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
-                      << "active=" << activeId;
+                      << "active=" << activeId << "reuseSurface=" << reuseSurface;
 }
 
 void OverlayService::hideLayoutPicker()
 {
+    if (!m_layoutPickerWindow) {
+        return;
+    }
+
+    // Trigger QML hide animation. The animation's ScriptAction flips
+    // `_pickerDismissed` back on (re-binding WindowTransparentForInput) and
+    // emits dismissed() — but dismissed() is now connected to a Q_EMIT-only
+    // path in onLayoutPickerSelected / event-filter Escape paths, NOT to
+    // re-entry into hideLayoutPicker, so this stays a single-shot.
+    QMetaObject::invokeMethod(m_layoutPickerWindow, "hide");
+
+    // Drop keyboard interactivity so the still-mapped layer surface stops
+    // intercepting keyboard events while the hide animation is in flight
+    // and afterwards. Mirrors snap-assist's hide path (line ~393).
+    if (m_layoutPickerSurface) {
+        if (auto* handle = m_layoutPickerSurface->transport()) {
+            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
+        }
+    }
+
+    // Re-show the zone selector that was hidden when layout picker was shown (line ~435).
     const QString screenId = m_layoutPickerScreenId;
-    destroyLayoutPickerWindow();
-    // Re-show the zone selector that was hidden when layout picker was shown (line 322-324)
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
             selectorWindow->show();
         }
+    }
+}
+
+void OverlayService::warmUpLayoutPicker()
+{
+    if (m_layoutPickerSurface) {
+        return;
+    }
+    // Pre-create the picker on the primary screen so the first user-triggered
+    // show skips the ~50-100 ms Wayland surface + Vulkan swapchain init cost.
+    // If the user later opens the picker on a different screen, showLayoutPicker
+    // detects the screen mismatch and falls back to the destroy+recreate path —
+    // the warm surface still saved one cold start.
+    QScreen* screen = Utils::primaryScreen();
+    if (!screen) {
+        return;
+    }
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
+    if (!screenGeom.isValid()) {
+        screenGeom = screen->geometry();
+    }
+    createLayoutPickerWindowFor(screen, screenGeom, resolvedId);
+    if (m_layoutPickerSurface) {
+        // Pre-warmed surface starts with no keyboard grab — show() will
+        // promote to Exclusive when the user triggers the picker.
+        if (auto* handle = m_layoutPickerSurface->transport()) {
+            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
+        }
+        m_layoutPickerScreen = screen;
+        m_layoutPickerScreenId = resolvedId;
+        qCInfo(lcOverlay) << "Pre-warmed Layout Picker surface on screen=" << resolvedId;
     }
 }
 
@@ -581,20 +653,22 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
         }
     });
 
-    // Connect layoutSelected and dismissed signals from QML
+    // Connect layoutSelected and dismissed signals from QML.
+    // dismissed() is the QML-visible "user dismissed" event — fired at the
+    // end of the hide animation and from the event-filter Escape path. The
+    // C++ slot emits the public layoutPickerSelected/dismissed signals; it
+    // does NOT re-enter hideLayoutPicker (the QML hide() invocation already
+    // did the bookkeeping that called us).
     connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutPicker()));
 
-    // Belt-and-braces visibleChanged cleanup — mirrors the snap-assist
-    // pattern (line ~348 above) so if QML ever sets visible=false without
-    // emitting dismissed(), we still tear down instead of leaking the
-    // Surface + Vulkan swapchain. Without this, a future QML refactor that
-    // forgets the dismissed() emit silently leaks.
-    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
-        if (!visible && m_layoutPickerWindow) {
-            QTimer::singleShot(0, this, &OverlayService::hideLayoutPicker);
-        }
-    });
+    // No visibleChanged → hide hookup here. The post-warmup design keeps the
+    // Qt window `visible == true` for the surface's lifetime; the dismiss
+    // mechanism is the QML `_pickerDismissed` flag flipping the
+    // WindowTransparentForInput bit. A visibleChanged hook would either
+    // never fire (visible stays true) or, if a future QML refactor flips
+    // visible explicitly, would re-enter destroy on hide and reintroduce
+    // the slow path we're working around.
 
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);

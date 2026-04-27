@@ -294,6 +294,19 @@ public:
     void showLayoutPicker(const QString& screenId = QString());
     bool isLayoutPickerVisible() const;
 
+    /**
+     * @brief Pre-create the Layout Picker QML window on the primary screen.
+     *
+     * The picker's first show otherwise pays ~50-100 ms for Wayland layer-
+     * shell surface creation + Vulkan swapchain init + QML compilation.
+     * Pre-warming on daemon start moves that cost off the user's hot path
+     * so the very first picker invocation is instant. Subsequent shows on
+     * the same screen reuse the warmed surface; cross-screen shows fall
+     * back to destroy+recreate (wlr-layer-shell v3 anchors are immutable
+     * post-attach).
+     */
+    void warmUpLayoutPicker();
+
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 

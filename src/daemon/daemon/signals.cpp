@@ -451,6 +451,11 @@ void Daemon::connectLayoutSignals()
         QTimer::singleShot(0, this, [this]() {
             m_overlayService->warmUpLayoutOsd();
             m_overlayService->warmUpNavigationOsd();
+            // Pre-create the Layout Picker too. Without this the first user-
+            // triggered show of the picker pays a visible ~50-100 ms latency
+            // (Wayland surface + Vulkan swapchain + QML compilation) before
+            // the show animation even starts.
+            m_overlayService->warmUpLayoutPicker();
         });
     }
 
