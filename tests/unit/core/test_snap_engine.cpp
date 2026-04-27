@@ -5,6 +5,8 @@
 #include <QSignalSpy>
 #include <QLoggingCategory>
 
+#include <memory>
+
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -26,6 +28,7 @@ using namespace PhosphorSnapEngine;
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using StubSettingsSnap = StubSettings;
 
 class StubZoneDetectorSnap : public PhosphorZones::IZoneDetector
@@ -83,6 +86,14 @@ class TestSnapEngine : public QObject
     Q_OBJECT
 
 private:
+    // Isolates XDG_DATA_HOME / XDG_CONFIG_HOME under a temp dir so the
+    // LayoutRegistry's default "plasmazones/layouts" subdir resolves into
+    // the temp dir instead of ~/.local/share/plasmazones/layouts/.
+    // Without this every test run leaks a "TestLayout-<uuid>.json" into
+    // the user's real layouts dir — by April 2026 the directory had
+    // accumulated >100 stale TestLayouts from prior CI / dev test runs,
+    // showing up duplicated in the layout picker overlay.
+    std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
@@ -93,6 +104,7 @@ private Q_SLOTS:
 
     void init()
     {
+        m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
                                                             QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSnap(nullptr);
@@ -110,6 +122,7 @@ private Q_SLOTS:
         delete m_zoneDetector;
         delete m_settings;
         delete m_layoutManager;
+        m_guard.reset();
     }
 
     // =========================================================================
