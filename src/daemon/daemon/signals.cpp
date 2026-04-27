@@ -182,11 +182,16 @@ void Daemon::initializeAutotile()
             qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop
                              << "activity=" << activity;
 
-            // Context gate: if PlasmaZones is disabled for this screen/desktop/activity,
-            // show a visual OSD explaining why instead of silently ignoring the toggle.
+            // Context gate: if PlasmaZones is disabled for this screen/desktop/activity
+            // in the CURRENT mode, show a visual OSD explaining why instead of silently
+            // ignoring the toggle. Mode is resolved via the router so we describe the
+            // mode the user is actually trying to interact with.
             // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
             // direct feedback to an explicit user action, not a passive layout-switch OSD.
-            const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
+            const auto currentMode =
+                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+            const DisabledReason why =
+                contextDisabledReason(m_settings.get(), currentMode, screenId, desktop, activity);
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 return;

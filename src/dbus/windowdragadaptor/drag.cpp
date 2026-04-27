@@ -156,8 +156,8 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
     outScreenId = resolved.screenId;
-    if (isContextDisabled(m_settings, outScreenId, m_layoutManager->currentVirtualDesktop(),
-                          m_layoutManager->currentActivity())) {
+    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
+                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;

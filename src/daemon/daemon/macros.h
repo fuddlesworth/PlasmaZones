@@ -22,7 +22,8 @@
         const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);              \
         if (screenId.isEmpty() || !m_screenModeRouter || !m_screenModeRouter->isAutotileMode(screenId))                \
             return;                                                                                                    \
-        if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))                        \
+        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, currentDesktop(),  \
+                              currentActivity()))                                                                      \
             return;                                                                                                    \
         m_autotileEngine->setActiveScreenHint(screenId);                                                               \
         m_autotileEngine->engineCall;                                                                                  \

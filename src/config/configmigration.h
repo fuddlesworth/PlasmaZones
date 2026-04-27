@@ -21,7 +21,9 @@ namespace PlasmaZones {
 /// migrateIniToJson() (INI upgrades), and migrateV1ToV2() (schema upgrades).
 /// v1: flat groups (Activation, Display, Appearance, etc.)
 /// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
-inline constexpr int ConfigSchemaVersion = 2;
+/// v3: per-mode disable lists — Snapping.Behavior.Display.{Disabled*} relocates
+///     to Display.{Snapping,Autotile}Disabled{Monitors,Desktops,Activities}.
+inline constexpr int ConfigSchemaVersion = 3;
 
 /// A single schema migration step: transforms root JSON in-place from
 /// fromVersion to fromVersion+1, then stamps the new _version.
@@ -86,7 +88,7 @@ public:
     // Schema migration functions (one per version bump).
     // Public so the MigrationStep function pointers can reference them.
     static void migrateV1ToV2(QJsonObject& root);
-    // static void migrateV2ToV3(QJsonObject& root);  // future
+    static void migrateV2ToV3(QJsonObject& root);
 
 private:
     ConfigMigration() = default;

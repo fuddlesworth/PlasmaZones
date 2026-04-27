@@ -436,7 +436,10 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     // Screens where PlasmaZones is disabled show a "disabled" OSD instead.
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
-        const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
+        // Each screen's OSD describes whatever mode is currently active there.
+        const auto mode =
+            m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+        const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
         if (why != DisabledReason::NotDisabled) {
             showContextDisabledOsd(screenId, desktop, activity, why);
             continue;

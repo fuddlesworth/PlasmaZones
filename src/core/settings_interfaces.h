@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include "enums.h"
 #include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <QString>
 #include <QStringList>
 #include <QSet>
@@ -145,15 +146,21 @@ public:
     // Display settings
     virtual bool showZonesOnAllMonitors() const = 0;
     virtual void setShowZonesOnAllMonitors(bool show) = 0;
-    virtual QStringList disabledMonitors() const = 0;
-    virtual void setDisabledMonitors(const QStringList& screenIdOrNames) = 0;
-    virtual bool isMonitorDisabled(const QString& screenIdOrName) const = 0;
-    virtual QStringList disabledDesktops() const = 0;
-    virtual void setDisabledDesktops(const QStringList& entries) = 0;
-    virtual bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const = 0;
-    virtual QStringList disabledActivities() const = 0;
-    virtual void setDisabledActivities(const QStringList& entries) = 0;
-    virtual bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const = 0;
+    // Per-mode disable lists. The `mode` argument selects which list to read
+    // or write — disabling a monitor for snap leaves the autotile gate untouched
+    // and vice versa. Storage is `Display.{Snapping,Autotile}Disabled*`
+    // in the v3 schema.
+    virtual QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
+    virtual void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) = 0;
+    virtual bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const = 0;
+    virtual QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
+    virtual void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) = 0;
+    virtual bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                   int desktop) const = 0;
+    virtual QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
+    virtual void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) = 0;
+    virtual bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                    const QString& activityId) const = 0;
     virtual QStringList lockedScreens() const = 0;
     virtual void setLockedScreens(const QStringList& screens) = 0;
     virtual void setScreenLocked(const QString& screenIdOrName, bool locked) = 0;
@@ -398,36 +405,45 @@ enum class DisabledReason {
 };
 
 /**
- * @brief Determine *why* PlasmaZones is disabled for a given screen/desktop/activity.
+ * @brief Determine *why* PlasmaZones is disabled for a given screen/desktop/activity
+ *        in the given mode.
  *
  * Returns the highest-priority reason, or NotDisabled if the context is active.
  * Use this when you need the reason (e.g. for OSD messages); use isContextDisabled()
  * for simple gate checks.
+ *
+ * `mode` selects the per-mode disable list — pass Snapping when gating snap-side
+ * code paths (overlay, drag-drop, snap navigation), Autotile when gating autotile
+ * paths, or look up the screen's current mode via ScreenModeRouter::modeFor() for
+ * mode-agnostic call sites.
  */
-inline DisabledReason contextDisabledReason(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
-                                            const QString& activity)
+inline DisabledReason contextDisabledReason(const IZoneVisualizationSettings* s,
+                                            PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId,
+                                            int desktop, const QString& activity)
 {
     if (!s)
         return DisabledReason::NotDisabled;
-    if (s->isMonitorDisabled(screenId))
+    if (s->isMonitorDisabled(mode, screenId))
         return DisabledReason::MonitorDisabled;
-    if (desktop > 0 && s->isDesktopDisabled(screenId, desktop))
+    if (desktop > 0 && s->isDesktopDisabled(mode, screenId, desktop))
         return DisabledReason::DesktopDisabled;
-    if (!activity.isEmpty() && s->isActivityDisabled(screenId, activity))
+    if (!activity.isEmpty() && s->isActivityDisabled(mode, screenId, activity))
         return DisabledReason::ActivityDisabled;
     return DisabledReason::NotDisabled;
 }
 
 /**
- * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context.
+ * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context
+ *        in the given mode.
  *
  * Returns true if the screen is disabled, OR the desktop is disabled, OR the activity
- * is disabled. Use at every point where overlay/snapping/autotile is gated.
+ * is disabled — for the specified mode. Use at every point where overlay/snapping/autotile
+ * is gated.
  */
-inline bool isContextDisabled(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
-                              const QString& activity)
+inline bool isContextDisabled(const IZoneVisualizationSettings* s, PhosphorZones::AssignmentEntry::Mode mode,
+                              const QString& screenId, int desktop, const QString& activity)
 {
-    return contextDisabledReason(s, screenId, desktop, activity) != DisabledReason::NotDisabled;
+    return contextDisabledReason(s, mode, screenId, desktop, activity) != DisabledReason::NotDisabled;
 }
 
 /**

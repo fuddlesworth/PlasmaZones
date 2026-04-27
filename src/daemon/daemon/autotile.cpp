@@ -52,7 +52,8 @@ void Daemon::updateAutotileScreens()
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
         // Skip screens/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
+        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
+                              activity)) {
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);

@@ -198,6 +198,10 @@ add_executable(test_settings_perscreen config/test_settings_perscreen.cpp)
 target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
+add_executable(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
+target_link_libraries(test_settings_disable_per_mode PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settings_disable_per_mode COMMAND test_settings_disable_per_mode)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ — Virtual Screen Settings Tests (save/load round-trip, staged flow)
 # ═══════════════════════════════════════════════════════════════════════════════

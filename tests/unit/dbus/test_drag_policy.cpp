@@ -56,7 +56,7 @@ public:
         return m_snapEnabled;
     }
 
-    bool isMonitorDisabled(const QString&) const override
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
     {
         return m_monitorDisabled;
     }

@@ -379,7 +379,8 @@ void OverlayService::show()
         // Check both physical and effective (virtual) screen IDs
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), cursorScreen);
-            if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 return;
             }
         }
@@ -407,7 +408,8 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // Check both physical and effective (virtual) screen IDs
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
-            if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 return;
             }
         }
@@ -666,7 +668,8 @@ void OverlayService::hideDisabledAndRefresh()
     if (m_settings) {
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 destroyZoneSelectorWindow(screenId);
                 if (m_visible) {
                     destroyOverlayWindow(screenId);
@@ -678,7 +681,8 @@ void OverlayService::hideDisabledAndRefresh()
     // Update remaining (non-disabled) zone selector and overlay windows
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
+                              m_currentActivity)) {
             continue;
         }
         if (it.value().zoneSelectorWindow) {
@@ -766,7 +770,8 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
-            if (isContextDisabled(m_settings, vsId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, vsId, m_currentVirtualDesktop,
+                                  m_currentActivity)) {
                 continue;
             }
             QRect vsGeom = mgr->screenGeometry(vsId);
