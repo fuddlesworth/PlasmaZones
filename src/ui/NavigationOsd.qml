@@ -279,7 +279,9 @@ Window {
 
     // Show animation — see matching comment in LayoutOsd.qml for the
     // osd.show / osd.pop split rationale (preserves the OutBack scale
-    // overshoot from the pre-PhosphorMotion design).
+    // overshoot from the pre-PhosphorMotion design). durationOverride
+    // binds to root.fadeInDuration / fadeOutDuration so consumers that
+    // override those properties still drive the timing.
     ParallelAnimation {
         id: showAnimation
 
@@ -289,6 +291,7 @@ Window {
             from: 0
             to: 1
             profile: "osd.show"
+            durationOverride: root.fadeInDuration
         }
 
         PhosphorMotionAnimation {
@@ -297,6 +300,7 @@ Window {
             from: 0.8
             to: 1
             profile: "osd.pop"
+            durationOverride: root.fadeInDuration
         }
 
     }
@@ -311,6 +315,7 @@ Window {
                 properties: "opacity"
                 to: 0
                 profile: "osd.hide"
+                durationOverride: root.fadeOutDuration
             }
 
             PhosphorMotionAnimation {
@@ -318,6 +323,7 @@ Window {
                 properties: "scale"
                 to: 0.9
                 profile: "osd.hide"
+                durationOverride: root.fadeOutDuration
             }
 
         }

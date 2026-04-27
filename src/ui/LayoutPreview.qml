@@ -191,6 +191,7 @@ Rectangle {
         Behavior on opacity {
             PhosphorMotionAnimation {
                 profile: "zone.highlight"
+                durationOverride: constants.animationDuration
             }
 
         }
@@ -257,6 +258,7 @@ Rectangle {
     Behavior on color {
         PhosphorMotionAnimation {
             profile: "zone.highlight"
+            durationOverride: constants.animationDuration
         }
 
     }
@@ -266,6 +268,7 @@ Rectangle {
     Behavior on border.width {
         PhosphorMotionAnimation {
             profile: "zone.highlight-border"
+            durationOverride: constants.animationDuration / 2
         }
 
     }
@@ -274,6 +277,7 @@ Rectangle {
     Behavior on scale {
         PhosphorMotionAnimation {
             profile: "zone.highlight-pop"
+            durationOverride: constants.animationDuration
         }
 
     }

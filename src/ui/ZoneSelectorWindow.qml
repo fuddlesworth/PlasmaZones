@@ -179,6 +179,7 @@ Window {
             from: 0
             to: 1
             profile: "panel.popup"
+            durationOverride: animationConstants.shortDuration
         }
 
     }
@@ -186,11 +187,15 @@ Window {
     SequentialAnimation {
         id: hideAnimation
 
+        // Hide-out wants an InCubic-style accel curve. panel.popup is the
+        // shared decel/show profile; widget.fadeOut carries the cubic-in
+        // shape so the window's hide actually accelerates as it leaves.
         PhosphorMotionAnimation {
             target: contentWrapper
             properties: "opacity"
             to: 0
-            profile: "panel.popup"
+            profile: "widget.fadeOut"
+            durationOverride: animationConstants.shortDuration
         }
 
         ScriptAction {

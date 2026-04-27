@@ -221,6 +221,7 @@ Item {
                 Behavior on opacity {
                     PhosphorMotionAnimation {
                         profile: "widget.fade"
+                        durationOverride: root.animationDuration
                     }
 
                 }
@@ -238,10 +239,13 @@ Item {
                 onEntered: root.zoneHovered(index)
             }
 
-            // Animations
+            // Animations — durationOverride binds to root.animationDuration
+            // so consumer Items that override the default 150 ms (LayoutCard,
+            // AlgorithmPreview) still drive the timing here.
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "zone.highlight"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -249,6 +253,7 @@ Item {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "zone.highlight"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -258,6 +263,7 @@ Item {
                 // osd-pop curve referenced through zone.highlight-pop.
                 PhosphorMotionAnimation {
                     profile: "zone.highlight-pop"
+                    durationOverride: root.animationDuration
                 }
 
             }
@@ -268,6 +274,7 @@ Item {
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "zone.highlight-border"
+                    durationOverride: root.animationDuration / 2
                 }
 
             }
@@ -275,6 +282,7 @@ Item {
             Behavior on border.width {
                 PhosphorMotionAnimation {
                     profile: "zone.highlight-border"
+                    durationOverride: root.animationDuration / 2
                 }
 
             }

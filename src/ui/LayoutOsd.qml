@@ -37,6 +37,11 @@ Window {
     // VkSwapchainKHR after the wl_surface is torn down by a hide. The OSD's
     // visual "hidden" state is entirely opacity-driven (contentWrapper.opacity
     // goes to 0), not Qt-window-visibility-driven.
+    // Show animation. Opacity uses osd.show (plain OutCubic decel).
+    // Scale uses osd.pop (OutBack overshoot) to preserve the subtle
+    // "pop" the original design used — matching the pre-PhosphorMotion
+    // NumberAnimation { easing.type: Easing.OutBack; overshoot: 1.2 }
+    // shape. Do not collapse both onto a single profile.
 
     id: root
 
@@ -161,11 +166,8 @@ Window {
         onTriggered: root.hide()
     }
 
-    // Show animation. Opacity uses osd.show (plain OutCubic decel).
-    // Scale uses osd.pop (OutBack overshoot) to preserve the subtle
-    // "pop" the original design used — matching the pre-PhosphorMotion
-    // NumberAnimation { easing.type: Easing.OutBack; overshoot: 1.2 }
-    // shape. Do not collapse both onto a single profile.
+    // durationOverride binds to root.fadeInDuration / fadeOutDuration so
+    // consumers that override those properties still drive the timing.
     ParallelAnimation {
         id: showAnimation
 
@@ -175,6 +177,7 @@ Window {
             from: 0
             to: 1
             profile: "osd.show"
+            durationOverride: root.fadeInDuration
         }
 
         PhosphorMotionAnimation {
@@ -183,6 +186,7 @@ Window {
             from: 0.8
             to: 1
             profile: "osd.pop"
+            durationOverride: root.fadeInDuration
         }
 
     }
@@ -197,6 +201,7 @@ Window {
                 properties: "opacity"
                 to: 0
                 profile: "osd.hide"
+                durationOverride: root.fadeOutDuration
             }
 
             PhosphorMotionAnimation {
@@ -204,6 +209,7 @@ Window {
                 properties: "scale"
                 to: 0.9
                 profile: "osd.hide"
+                durationOverride: root.fadeOutDuration
             }
 
         }

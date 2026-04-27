@@ -209,6 +209,7 @@ Rectangle {
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "panel.popup"
+                durationOverride: constants.animationDuration
             }
 
         }
@@ -232,6 +233,7 @@ Rectangle {
         Behavior on opacity {
             PhosphorMotionAnimation {
                 profile: "panel.popup"
+                durationOverride: constants.animationDuration
             }
 
         }

@@ -712,6 +712,7 @@ ApplicationWindow {
                                 Behavior on opacity {
                                     PhosphorMotionAnimation {
                                         profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
@@ -744,6 +745,7 @@ ApplicationWindow {
                                 Behavior on opacity {
                                     PhosphorMotionAnimation {
                                         profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }

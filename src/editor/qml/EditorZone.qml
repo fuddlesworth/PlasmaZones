@@ -496,6 +496,7 @@ Item {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.fade"
+                    durationOverride: 100
                 }
 
             }

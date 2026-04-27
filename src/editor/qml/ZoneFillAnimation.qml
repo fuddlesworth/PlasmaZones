@@ -94,6 +94,7 @@ Item {
             properties: "visualX"
             to: fillAnimator.targetX
             profile: "zone.snapIn"
+            durationOverride: 150
         }
 
         PhosphorMotionAnimation {
@@ -101,6 +102,7 @@ Item {
             properties: "visualY"
             to: fillAnimator.targetY
             profile: "zone.snapIn"
+            durationOverride: 150
         }
 
         PhosphorMotionAnimation {
@@ -108,6 +110,7 @@ Item {
             properties: "visualWidth"
             to: fillAnimator.targetWidth
             profile: "zone.snapIn"
+            durationOverride: 150
         }
 
         PhosphorMotionAnimation {
@@ -115,6 +118,7 @@ Item {
             properties: "visualHeight"
             to: fillAnimator.targetHeight
             profile: "zone.snapIn"
+            durationOverride: 150
         }
 
     }

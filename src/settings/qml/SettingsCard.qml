@@ -222,11 +222,15 @@ Item {
             SequentialAnimation {
                 id: collapseAnim
 
+                // Fade-out wants an InCubic-style accel curve, not the
+                // widget.fade decel — restore via widget.fadeOut at the
+                // original 150 ms duration.
                 PhosphorMotionAnimation {
                     target: contentClip
                     properties: "opacity"
                     to: 0
-                    profile: "widget.fade"
+                    profile: "widget.fadeOut"
+                    durationOverride: 150
                 }
 
                 PhosphorMotionAnimation {

@@ -276,9 +276,11 @@ Item {
 
             }
 
+            // Opacity must not overshoot — widget.badge's curve has overshoot
+            // for the size pop, but for opacity that produces a clamped peak.
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "widget.badge"
+                    profile: "widget.fade"
                     durationOverride: root.shortAnimationDuration
                 }
 
