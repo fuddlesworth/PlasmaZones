@@ -33,6 +33,21 @@ import org.plasmazones.common as QFZCommon
 Item {
     // Keyboard handling. All Shortcuts gate on root._shortcutsActive — see
     // the property doc for why this matters under keepMappedOnHide=true.
+    // Escape originally relied on a C++ QObject::eventFilter on the picker
+    // QQuickWindow. That works reliably for SnapAssist (which destroys on
+    // hide) but on the keep-mapped picker the wl_surface lifecycle + the
+    // Qt.WindowTransparentForInput flip during hide leaves the eventFilter
+    // path inconsistent — KeyPress events don't always reach the QWindow
+    // on the warm path. SnapAssistOverlay uses a QML Shortcut and that
+    // path is robust against the same lifecycle, so use it here too.
+    // Escape is dismissed via the daemon's KGlobalAccel cancel-overlay
+    // shortcut — KWin's wlr-layer-shell does not deliver keyboard events
+    // to this layer surface in our Qt/KWin combination, so a QML
+    // `Shortcut { sequence: "Escape" }` would never fire (verified via
+    // Keys.onPressed diagnostic). See start.cpp's layoutPickerRequested
+    // handler, which calls WindowDragAdaptor::ensureCancelOverlayShortcut
+    // -Registered() so the picker piggybacks on cancelSnap()'s existing
+    // Escape grab. cancelSnap() dismisses the picker first when visible.
 
     id: root
 
@@ -159,19 +174,6 @@ Item {
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
         readonly property int previewWidth: 160
-    }
-
-    // Escape originally relied on a C++ QObject::eventFilter on the picker
-    // QQuickWindow. That works reliably for SnapAssist (which destroys on
-    // hide) but on the keep-mapped picker the wl_surface lifecycle + the
-    // Qt.WindowTransparentForInput flip during hide leaves the eventFilter
-    // path inconsistent — KeyPress events don't always reach the QWindow
-    // on the warm path. SnapAssistOverlay uses a QML Shortcut and that
-    // path is robust against the same lifecycle, so use it here too.
-    Shortcut {
-        sequence: "Escape"
-        enabled: root._shortcutsActive
-        onActivated: _requestDismiss()
     }
 
     Shortcut {
