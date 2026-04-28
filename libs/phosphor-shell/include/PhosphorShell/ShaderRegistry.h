@@ -121,7 +121,6 @@ public:
     ShaderInfo shader(const QString& id) const;
     Q_INVOKABLE QVariantMap shaderInfo(const QString& id) const;
     Q_INVOKABLE QUrl shaderUrl(const QString& id) const;
-    Q_INVOKABLE bool shadersEnabled() const;
 
     // ── Parameters & presets ──────────────────────────────────────────
 
@@ -132,6 +131,15 @@ public:
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
+
+    /// Always true — `Qt6::ShaderTools` is a hard build dependency of
+    /// `phosphor-shell`, so a built registry necessarily has shader
+    /// support. Kept as `Q_INVOKABLE` because QML callers historically
+    /// used it as a feature gate; new code can omit the check.
+    Q_INVOKABLE bool shadersEnabled() const
+    {
+        return true;
+    }
 
     // ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -181,7 +189,6 @@ private:
     class ShaderScanStrategy;
     QStringList performScan(const QStringList& directoriesInScanOrder);
 
-    void loadShadersFromPath(const QString& searchPath, bool isUserShader);
     void loadShaderFromDir(const QString& shaderDir, bool isUserShader);
     ShaderInfo loadShaderMetadata(const QString& shaderDir);
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
@@ -189,7 +196,6 @@ private:
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
     QHash<QString, ShaderInfo> m_shaders;
-    bool m_shadersEnabled = false;
     std::unique_ptr<ShaderScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 

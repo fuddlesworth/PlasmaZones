@@ -172,13 +172,17 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             // the reverse loop above). If this key was already claimed
             // by a higher-priority dir, the currently-scanned (lower-
             // priority) file is shadowed — record its path on the
-            // already-tracked entry so introspection (settings UIs)
-            // can show "this profile shadows the system default at
-            // /...". The shadowed entry is NOT registered with the
-            // sink; only the highest-priority claim is.
+            // already-tracked entry AND mirror onto the matching
+            // ParsedEntry so the sink sees it in commitBatch without a
+            // separate propagation pass. The shadowed entry is NOT
+            // registered with the sink; only the highest-priority claim is.
             if (auto existing = fresh.find(key); existing != fresh.end()) {
                 if (existing->systemSourcePath.isEmpty()) {
                     existing->systemSourcePath = parsed->sourcePath;
+                    auto pIt = freshParsedByKey.find(key);
+                    if (pIt != freshParsedByKey.end()) {
+                        pIt->systemSourcePath = parsed->sourcePath;
+                    }
                 }
                 continue;
             }
@@ -190,20 +194,6 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
             fresh.insert(key, trackedEntry);
 
             freshParsedByKey.insert(key, std::move(*parsed));
-        }
-    }
-
-    // Second pass — for entries whose `fresh` record acquired a
-    // systemSourcePath during the reverse-scan (because a lower-
-    // priority dir contained a file shadowed by this entry), propagate
-    // that metadata onto the matching `ParsedEntry` so the sink sees
-    // it in commitBatch.
-    for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it) {
-        if (!it->systemSourcePath.isEmpty()) {
-            auto pIt = freshParsedByKey.find(it.key());
-            if (pIt != freshParsedByKey.end()) {
-                pIt->systemSourcePath = it->systemSourcePath;
-            }
         }
     }
 

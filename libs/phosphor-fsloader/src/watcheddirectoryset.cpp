@@ -9,6 +9,7 @@
 #include <QFileSystemWatcher>
 #include <QLoggingCategory>
 #include <QStandardPaths>
+#include <QThread>
 
 namespace PhosphorFsLoader {
 
@@ -43,11 +44,46 @@ bool samePath(const QString& a, const QString& b)
 bool isForbiddenWatchRoot(const QString& path)
 {
     const QString cleaned = QDir::cleanPath(path);
-    if (cleaned.isEmpty() || samePath(cleaned, QDir::rootPath())) {
+    if (cleaned.isEmpty()) {
         return true;
     }
-    const QString home = QDir::cleanPath(QDir::homePath());
-    if (samePath(cleaned, home)) {
+    // Resolve symlinks. A target spelled `~/sym → $HOME` (or
+    // `/tmp/foo → ~/.cache`) cleans to itself but its inode is the
+    // forbidden root — without canonicalisation, QFileSystemWatcher
+    // would follow the symlink at the OS layer and watch the forbidden
+    // inode anyway. Empty when the path doesn't exist (canonical
+    // resolution requires every chain segment to exist) — the input's
+    // cleaned form remains the only check in that case.
+    const QString canonical = QFileInfo(path).canonicalFilePath();
+
+    // Compare a candidate forbidden root against `cleaned` AND `canonical`,
+    // and also against the candidate's canonical form so that two
+    // independent symlinks pointing at the same inode collapse onto the
+    // same forbidden-root verdict.
+    const auto matches = [&](const QString& candidate) {
+        if (candidate.isEmpty()) {
+            return false;
+        }
+        const QString cleanedCandidate = QDir::cleanPath(candidate);
+        if (samePath(cleaned, cleanedCandidate)) {
+            return true;
+        }
+        if (!canonical.isEmpty() && samePath(canonical, cleanedCandidate)) {
+            return true;
+        }
+        const QString canonicalCandidate = QFileInfo(candidate).canonicalFilePath();
+        if (!canonicalCandidate.isEmpty()) {
+            if (samePath(cleaned, canonicalCandidate)) {
+                return true;
+            }
+            if (!canonical.isEmpty() && samePath(canonical, canonicalCandidate)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (matches(QDir::rootPath()) || matches(QDir::homePath())) {
         return true;
     }
     // Also refuse to watch high-churn shared roots — a rescan fires for every
@@ -55,19 +91,14 @@ bool isForbiddenWatchRoot(const QString& path)
     // watching $HOME. GenericData/Config catch the obvious XDG roots; Temp,
     // Runtime, and Cache catch consumers whose target lives under
     // /tmp, /run/user/UID, or ~/.cache and where the climb would otherwise
-    // stop at the high-traffic root. samePath() is case-folded on macOS/Win
-    // so re-cased paths still trip the guard.
+    // stop at the high-traffic root.
     using QSP = QStandardPaths;
     static constexpr QSP::StandardLocation kForbidden[] = {
         QSP::GenericDataLocation, QSP::GenericConfigLocation, QSP::TempLocation,
         QSP::RuntimeLocation,     QSP::CacheLocation,         QSP::GenericCacheLocation,
     };
     for (const auto loc : kForbidden) {
-        const QString rootPath = QSP::writableLocation(loc);
-        if (rootPath.isEmpty()) {
-            continue;
-        }
-        if (samePath(cleaned, QDir::cleanPath(rootPath))) {
+        if (matches(QSP::writableLocation(loc))) {
             return true;
         }
     }
@@ -96,6 +127,8 @@ int WatchedDirectorySet::registerDirectory(const QString& directory, LiveReload 
 
 int WatchedDirectorySet::registerDirectories(const QStringList& directories, LiveReload liveReload)
 {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::registerDirectories",
+               "GUI-thread only — see class docs");
     // Empty input is a no-op — skip the rescan entirely. Callers that
     // want to force a rescan call `requestRescan()` / `rescanNow()`
     // directly; routing them here would just be an alias.
@@ -127,6 +160,8 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
 
 void WatchedDirectorySet::rescanNow()
 {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::rescanNow",
+               "GUI-thread only — see class docs");
     // Cancel any pending debounce — its rescan would just re-do work
     // we're about to perform synchronously below.
     m_debounceTimer.stop();
@@ -135,6 +170,8 @@ void WatchedDirectorySet::rescanNow()
 
 void WatchedDirectorySet::requestRescan()
 {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::requestRescan",
+               "GUI-thread only — see class docs");
     // A rescan may already be running on this thread (strategy's
     // commit step or a nested slot re-entered us via a signal). Starting
     // the debounce timer here would be a no-op — the timer is idle while

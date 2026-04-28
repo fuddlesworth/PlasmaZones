@@ -113,8 +113,6 @@ private:
 ShaderRegistry::ShaderRegistry(QObject* parent)
     : QObject(parent)
 {
-    // PhosphorShell always has shaders enabled (Qt6::ShaderTools is a build dep)
-    m_shadersEnabled = true;
     qCInfo(lcShaderRegistry) << "Shader effects enabled";
 
     m_strategy = std::make_unique<ShaderScanStrategy>(*this);
@@ -217,50 +215,58 @@ void ShaderRegistry::refresh()
 QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrder)
 {
     m_shaders.clear();
-
-    if (m_shadersEnabled) {
-        // Forward-iterate with last-write-wins (`m_shaders.insert`
-        // overwrites). Combined with the IScanStrategy convention —
-        // callers register dirs in `[system-lowest, ..., system-highest,
-        // user]` order — this yields the canonical XDG semantic
-        // `user > sys-highest > sys-mid > sys-lowest`. Equivalent shape
-        // to `JsonScanStrategy`'s reverse-iterate-first-wins; both are
-        // valid spellings of the same convention.
-        for (const QString& path : directoriesInScanOrder) {
-            loadShadersFromPath(path, false);
-        }
-    }
-
-    // Build the per-rescan watch list: every shader subdir AND its
-    // `*.frag`/`*.vert`/`*.glsl`/`*.json` files, plus top-level shared
-    // includes (common.glsl, audio.glsl, etc.). The base re-arms these
-    // every rescan to compensate for cmake --install's
-    // delete+recreate inode churn.
     QStringList desiredWatches;
-    for (const QString& dir : directoriesInScanOrder) {
-        QDir dirObj(dir);
+
+    // Reverse-iterate with first-registration-wins, matching the
+    // IScanStrategy convention used by `JsonScanStrategy` and
+    // `JsScanStrategy`. Caller registers dirs in
+    // `[system-lowest, ..., system-highest, user]` order; reversing
+    // here lets the user dir claim its shader IDs before the system
+    // dirs are touched, which yields the canonical XDG semantic
+    // `user > sys-highest > sys-mid > sys-lowest`.
+    //
+    // Single-pass enumeration: each subdir is dispatched to
+    // `loadShaderFromDir` and harvested for the per-rescan watch list
+    // in the same loop. The base re-arms `desiredWatches` every rescan
+    // to compensate for `cmake --install`'s delete+recreate inode
+    // churn.
+    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
+        const QString& searchPath = *dirIt;
+        QDir dirObj(searchPath);
         if (!dirObj.exists()) {
+            qCDebug(lcShaderRegistry) << "Search path does not exist:" << searchPath;
             continue;
         }
-        for (const QString& subdir : dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+
+        const int beforeCount = m_shaders.size();
+        const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString& subdir : subdirs) {
+            if (subdir == QLatin1String("none")) {
+                continue; // reserved sentinel for "no shader"
+            }
             const QString subPath = dirObj.filePath(subdir);
+            // Dispatch + watch-list harvest in one pass.
+            // `loadShaderFromDir` first-wins-skips on existing IDs (see
+            // its early-return when `m_shaders.contains`).
+            loadShaderFromDir(subPath, false);
             desiredWatches.append(subPath);
             QDir sub(subPath);
-            const QStringList shaderFiles =
-                sub.entryList(QStringList{QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"),
-                                          QStringLiteral("*.json")},
-                              QDir::Files);
+            const QStringList shaderFiles = sub.entryList({QStringLiteral("*.frag"), QStringLiteral("*.vert"),
+                                                           QStringLiteral("*.glsl"), QStringLiteral("*.json")},
+                                                          QDir::Files);
             for (const QString& file : shaderFiles) {
                 desiredWatches.append(sub.filePath(file));
             }
         }
-        // Top-level shared includes.
+        // Top-level shared includes (common.glsl, audio.glsl, etc.).
         const QStringList topFiles =
-            dirObj.entryList(QStringList{QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
+            dirObj.entryList({QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
         for (const QString& file : topFiles) {
             desiredWatches.append(dirObj.filePath(file));
         }
+        qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
     }
+
     return desiredWatches;
 }
 
@@ -272,27 +278,6 @@ void ShaderRegistry::reportShaderBakeStarted(const QString& shaderId)
 void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error)
 {
     Q_EMIT shaderCompilationFinished(shaderId, success, error);
-}
-
-void ShaderRegistry::loadShadersFromPath(const QString& searchPath, bool isUserShader)
-{
-    QDir dir(searchPath);
-    if (!dir.exists()) {
-        qCDebug(lcShaderRegistry) << "Search path does not exist:" << searchPath;
-        return;
-    }
-
-    const auto entries = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    const int beforeCount = m_shaders.size();
-
-    for (const QString& entry : entries) {
-        if (entry == QLatin1String("none")) {
-            continue; // Skip "none"
-        }
-        loadShaderFromDir(dir.filePath(entry), isUserShader);
-    }
-
-    qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
 }
 
 void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShader)
@@ -308,6 +293,15 @@ void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShad
 
     ShaderInfo info = loadShaderMetadata(shaderDir);
     info.isUserShader = isUserShader;
+
+    // First-registration-wins. `performScan` reverse-iterates so the
+    // user dir is processed first; a subsequent system shader with a
+    // colliding id is shadowed and silently skipped here.
+    if (m_shaders.contains(info.id)) {
+        qCDebug(lcShaderRegistry) << "Shader id=" << info.id << "already registered from a higher-priority dir; "
+                                  << "shadowed at=" << shaderDir;
+        return;
+    }
 
     // Multipass requires at least one buffer shader; treat missing as load failure
     if (info.isMultipass && info.bufferShaderPaths.isEmpty()) {
@@ -535,11 +529,6 @@ QUrl ShaderRegistry::shaderUrl(const QString& id) const
         return QUrl();
     }
     return m_shaders.value(id).shaderUrl;
-}
-
-bool ShaderRegistry::shadersEnabled() const
-{
-    return m_shadersEnabled;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

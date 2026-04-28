@@ -61,26 +61,32 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
 {
     Q_ASSERT(m_registry);
     // The subdirectory is appended to XDG data roots (system + user),
-    // so it must be relative and free of traversal segments. Developer
-    // error — assert rather than silently scan an unexpected path.
-    // Empty subdirectory is explicitly supported as "loader disabled".
-    Q_ASSERT_X(!m_subdirectory.startsWith(QLatin1Char('/')), "ScriptedAlgorithmLoader",
-               "subdirectory must be a relative XDG path, not absolute");
-    // Segment-based check — rejects `../` traversal but accepts benign
-    // names like `my..algo` or `..weird..` that the previous substring
-    // check banned. Q_ASSERT only fires in debug; the loader still
-    // appends to XDG roots in release, so paths that escape would be
-    // visible to the operator via the watcher's logged search paths.
-    Q_ASSERT_X(
-        ![&]() {
-            for (const auto& segment : m_subdirectory.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
-                if (segment == QLatin1String("..")) {
-                    return true;
-                }
+    // so it must be relative and free of traversal segments. Validated
+    // at runtime in BOTH debug and release: a malformed value disables
+    // the loader (subdirectory cleared to empty, which is the documented
+    // "loader disabled" sentinel) and logs a warning operators can grep
+    // for. Empty subdirectory is explicitly supported and short-circuits
+    // the validation.
+    const auto malformedReason = [](const QString& sub) -> const char* {
+        if (sub.isEmpty()) {
+            return nullptr;
+        }
+        if (sub.startsWith(QLatin1Char('/'))) {
+            return "absolute path";
+        }
+        for (const auto& segment : sub.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
+            if (segment == QLatin1String("..")) {
+                return "contains '..' traversal segment";
             }
-            return false;
-        }(),
-        "ScriptedAlgorithmLoader", "subdirectory must not contain '..' traversal segments");
+        }
+        return nullptr;
+    }(m_subdirectory);
+    if (malformedReason != nullptr) {
+        qCWarning(PhosphorTiles::lcTilesLib).nospace()
+            << "ScriptedAlgorithmLoader: subdirectory '" << m_subdirectory << "' rejected (" << malformedReason
+            << ") — loader disabled. Pass a relative XDG path or the empty string.";
+        m_subdirectory.clear();
+    }
 
     // Directory registration + the initial scan happen on the first
     // `scanAndRegister()` call. Deferring lets consumers connect their

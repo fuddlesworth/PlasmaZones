@@ -289,6 +289,105 @@ private Q_SLOTS:
         QCOMPARE(set.watchedAncestorForTest(leaf), QString());
     }
 
+    /// Two missing-sibling targets that climb to the SAME ancestor must
+    /// share that ancestor watch; promoting one of them (its tree
+    /// materialises) must NOT remove the ancestor watch as long as the
+    /// other still relies on it. The reference-counting branch in
+    /// `attachWatcherForDir` (iterates m_parentWatchFor values to check
+    /// "still needed") was uncovered before.
+    void testParentWatch_sharedAncestorRetainedWhilePeerStillNeedsIt()
+    {
+        const QString tmp = QDir::cleanPath(m_tmp->path());
+        const QString siblingA = tmp + QStringLiteral("/missing-a/leaf");
+        const QString siblingB = tmp + QStringLiteral("/missing-b/leaf");
+        QVERIFY(!QFileInfo::exists(siblingA));
+        QVERIFY(!QFileInfo::exists(siblingB));
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.setDebounceIntervalForTest(1);
+        set.registerDirectories({siblingA, siblingB}, LiveReload::On);
+
+        // Both targets climb to m_tmp.
+        QCOMPARE(set.hasParentWatchForTest(tmp), true);
+        QCOMPARE(set.watchedAncestorForTest(siblingA), tmp);
+        QCOMPARE(set.watchedAncestorForTest(siblingB), tmp);
+
+        // Materialise sibling A only and trigger a rescan — the
+        // promotion of A must not remove the m_tmp ancestor watch
+        // because B still relies on it.
+        QVERIFY(QDir().mkpath(siblingA));
+        set.rescanNow();
+
+        QCOMPARE(set.hasParentWatchForTest(tmp), true);
+        QCOMPARE(set.watchedAncestorForTest(siblingA), QString());
+        QCOMPARE(set.watchedAncestorForTest(siblingB), tmp);
+
+        // Now materialise sibling B too — the ancestor watch can finally
+        // be released (no peer needs it).
+        QVERIFY(QDir().mkpath(siblingB));
+        set.rescanNow();
+
+        QCOMPARE(set.hasParentWatchForTest(tmp), false);
+        QCOMPARE(set.watchedAncestorForTest(siblingB), QString());
+    }
+
+    /// `LiveReload::On` is documented as a one-way enable: a subsequent
+    /// `Off` must NOT disarm the watcher. After flipping on, edits keep
+    /// firing rescans even when the second registration passes Off.
+    void testLiveReload_oneWayEnable()
+    {
+        QTemporaryDir a;
+        QTemporaryDir b;
+        QVERIFY(a.isValid() && b.isValid());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.setDebounceIntervalForTest(1);
+        set.registerDirectory(a.path(), LiveReload::On);
+        // Second registration with Off — must not disarm watching.
+        set.registerDirectory(b.path(), LiveReload::Off);
+        const int baseline = strategy.scanCount;
+
+        // An edit in dir A should still fire a rescan because the
+        // watcher remains armed for A.
+        touchFile(a.filePath(QStringLiteral("after-off.txt")));
+
+        QSignalSpy spy(&set, &WatchedDirectorySet::rescanCompleted);
+        QVERIFY(spy.wait(500));
+        QVERIFY(strategy.scanCount > baseline);
+    }
+
+    /// `syncFileWatches` silently dedupes when a strategy reports a path
+    /// the base ALREADY watches via `attachWatcherForDir` (e.g. the
+    /// strategy reports a registered root directory). The base must not
+    /// log a "failed to add watch" warning in that case; covered here
+    /// indirectly by asserting the rescan completes cleanly.
+    void testSyncFileWatches_silentDedupeOfRegisteredRoot()
+    {
+        // Strategy reports the registered directory itself as a desired
+        // file watch. The base already added that path via
+        // attachWatcherForDir — case-1 dedupe path.
+        const QString dirPath = QDir::cleanPath(m_tmp->path());
+        RecordingStrategy strategy;
+        strategy.setReportedFiles({dirPath});
+
+        WatchedDirectorySet set(strategy);
+        set.setDebounceIntervalForTest(1);
+        set.registerDirectory(dirPath, LiveReload::On);
+
+        // Trigger a follow-up rescan to exercise the syncFileWatches
+        // re-arming path — first scan installs, second scan re-encounters.
+        touchFile(m_tmp->filePath(QStringLiteral("trigger.txt")));
+        QSignalSpy spy(&set, &WatchedDirectorySet::rescanCompleted);
+        QVERIFY(spy.wait(500));
+        // No assertion on internal state — the regression coverage is
+        // "this completed without QFileSystemWatcher complaining and
+        // without warnings". A failure surfaces as a noisy test log
+        // (the warning path) or a stuck rescan (failure to add).
+        QVERIFY(strategy.scanCount >= 2);
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
 };
