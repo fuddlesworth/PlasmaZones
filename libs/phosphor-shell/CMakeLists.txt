@@ -31,6 +31,15 @@ include(GenerateExportHeader)
 
 # These are likely already found by the parent project when built in-tree.
 find_package(Qt6 REQUIRED COMPONENTS Core Gui)
+
+# phosphor-fsloader — shared filesystem-loader scaffolding (used by
+# ShaderRegistry's WatchedDirectorySet + ShaderScanStrategy). find_package
+# is a no-op when building in-tree (parent CMakeLists adds the target
+# first); the explicit lookup lets the lib stand alone against an
+# installed PhosphorFsLoader.
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+endif()
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()
@@ -153,6 +162,7 @@ target_link_libraries(PhosphorShell
         Qt6::Core
         Qt6::Gui
     PRIVATE
+        PhosphorFsLoader::PhosphorFsLoader
         Qt6::GuiPrivate
         Qt6::WaylandClientPrivate
         Qt6::ShaderToolsPrivate

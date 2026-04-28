@@ -189,7 +189,7 @@ Daemon::Daemon(QObject* parent)
     // user's active animation settings and live-updates on edit.
     // Also populates the registry from user-authored JSON files under
     // the `plasmazones/` XDG namespace (consumer-agnostic loader
-    // delegates directory walking to phosphor-jsonloader).
+    // delegates directory walking to phosphor-fsloader).
     //
     // setupAnimationProfiles() also wires the daemon-owned
     // CurveRegistry into PhosphorCurve's QML static helper. Publication

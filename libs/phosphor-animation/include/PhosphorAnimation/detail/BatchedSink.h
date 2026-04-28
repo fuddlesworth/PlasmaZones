@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
-#include <PhosphorJsonLoader/ParsedEntry.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/ParsedEntry.h>
 
 #include <QtCore/QHash>
 #include <QtCore/QLoggingCategory>
@@ -62,7 +62,7 @@ namespace PhosphorAnimation::detail {
  *                  supplied `payloadEqual`.
  */
 template<typename Payload>
-class BatchedSink : public PhosphorJsonLoader::IDirectoryLoaderSink
+class BatchedSink : public PhosphorFsLoader::IDirectoryLoaderSink
 {
 public:
     /**
@@ -107,7 +107,7 @@ public:
      * silently drop the metadata-source check (Phase 1c+1d) or the
      * lastBatchChanged reset.
      */
-    void commitBatch(const QStringList& removedKeys, const QList<PhosphorJsonLoader::ParsedEntry>& currentEntries) final
+    void commitBatch(const QStringList& removedKeys, const QList<PhosphorFsLoader::ParsedEntry>& currentEntries) final
     {
         // Reset the per-batch change flag. Every add / remove /
         // payload-diff / source-metadata-diff flips it back to true.

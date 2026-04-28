@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -14,7 +14,7 @@
 #include <QTest>
 #include <QTimer>
 
-using namespace PhosphorJsonLoader;
+using namespace PhosphorFsLoader;
 
 namespace {
 

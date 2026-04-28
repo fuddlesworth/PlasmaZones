@@ -6,9 +6,9 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/detail/BatchedSink.h>
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/JsonEnvelopeValidator.h>
-#include <PhosphorJsonLoader/ParsedEntry.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/JsonEnvelopeValidator.h>
+#include <PhosphorFsLoader/ParsedEntry.h>
 
 #include <QDir>
 #include <QFileInfo>
@@ -65,7 +65,7 @@ struct CurvePayload
  * The curve-specific sink — knows the curve JSON schema, knows how to
  * turn it into a `shared_ptr<const Curve>`, and knows how to register /
  * unregister entries against `CurveRegistry`. The directory walk,
- * watching, and debounce live in `PhosphorJsonLoader::DirectoryLoader`;
+ * watching, and debounce live in `PhosphorFsLoader::DirectoryLoader`;
  * the diff / change-flag bookkeeping lives in `detail::BatchedSink`.
  */
 class CurveLoader::Sink : public detail::BatchedSink<detail::CurvePayload>
@@ -82,14 +82,14 @@ public:
     CurveRegistry* registry; ///< pinned at ctor — no per-call mutation
     QHash<QString, CurveLoader::Entry> entries; ///< name → entry (for entries() introspection)
 
-    std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
+    std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
         // Common envelope checks (read, parse, root-is-object,
         // non-empty `name`, name-matches-filename) live in the shared
         // helper. On success the helper hands back the parsed root with
         // `name` removed, so the schema-specific code below only deals
         // with curve-typed fields.
-        auto envelope = PhosphorJsonLoader::validateJsonEnvelope(filePath, lcCurveLoader());
+        auto envelope = PhosphorFsLoader::validateJsonEnvelope(filePath, lcCurveLoader());
         if (!envelope) {
             return std::nullopt;
         }
@@ -137,7 +137,7 @@ public:
 
         Payload payload{obj.value(QLatin1String("displayName")).toString(), std::move(curve), wireFormat};
 
-        PhosphorJsonLoader::ParsedEntry parsed;
+        PhosphorFsLoader::ParsedEntry parsed;
         parsed.key = name;
         parsed.sourcePath = filePath;
         parsed.payload = std::move(payload);
@@ -230,7 +230,7 @@ protected:
 CurveLoader::CurveLoader(CurveRegistry& registry, QObject* parent)
     : QObject(parent)
     , m_sink(std::make_unique<Sink>(registry, makeCurveLoaderOwnerTag()))
-    , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(*m_sink))
+    , m_loader(std::make_unique<PhosphorFsLoader::DirectoryLoader>(*m_sink))
 {
     // Gate `curvesChanged` on the per-batch change flag. DirectoryLoader
     // emits `entriesChanged` unconditionally on every rescan (tests and
@@ -239,7 +239,7 @@ CurveLoader::CurveLoader(CurveRegistry& registry, QObject* parent)
     // actually changed — re-parsing the same files a second time (e.g.
     // a `requestRescan()` with no content change) is invisible at this
     // layer. Matches the header's documented contract.
-    connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this, [this]() {
+    connect(m_loader.get(), &PhosphorFsLoader::DirectoryLoader::entriesChanged, this, [this]() {
         if (m_sink->lastBatchChanged) {
             Q_EMIT curvesChanged();
         }

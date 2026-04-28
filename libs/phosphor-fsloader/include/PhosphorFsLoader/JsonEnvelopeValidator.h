@@ -14,7 +14,7 @@
 #include <optional>
 #include <utility>
 
-namespace PhosphorJsonLoader {
+namespace PhosphorFsLoader {
 
 /**
  * @brief Result of a successful envelope validation.
@@ -129,4 +129,4 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     return JsonEnvelope{name, std::move(root)};
 }
 
-} // namespace PhosphorJsonLoader
+} // namespace PhosphorFsLoader

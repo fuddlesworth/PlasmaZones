@@ -5,7 +5,6 @@
 
 #include <phosphorshell_export.h>
 
-#include <QFileSystemWatcher>
 #include <QHash>
 #include <QImage>
 #include <QList>
@@ -15,11 +14,14 @@
 #include <QRect>
 #include <QSize>
 #include <QString>
-#include <QTimer>
 #include <QUrl>
 #include <QVariant>
 #include <array>
 #include <memory>
+
+namespace PhosphorFsLoader {
+class WatchedDirectorySet;
+}
 
 namespace PhosphorShell {
 
@@ -167,26 +169,22 @@ Q_SIGNALS:
     void shaderCompilationStarted(const QString& shaderId);
     void shaderCompilationFinished(const QString& shaderId, bool success, const QString& error);
 
-private Q_SLOTS:
-    void onShaderDirChanged(const QString& path);
-    void onShaderFileChanged(const QString& path);
-    void performDebouncedRefresh();
-
 private:
+    class ShaderScanStrategy;
+    QStringList performScan();
+
     void loadShadersFromPath(const QString& searchPath, bool isUserShader);
     void loadShaderFromDir(const QString& shaderDir, bool isUserShader);
     ShaderInfo loadShaderMetadata(const QString& shaderDir);
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
-    void setupFileWatcher();
-    void scheduleRefresh();
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
     QStringList m_searchPaths;
     QHash<QString, ShaderInfo> m_shaders;
     bool m_shadersEnabled = false;
-    QFileSystemWatcher* m_watcher = nullptr;
-    QTimer* m_refreshTimer = nullptr;
+    std::unique_ptr<ShaderScanStrategy> m_strategy;
+    std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;
@@ -208,8 +206,6 @@ private:
     static constexpr int CropCacheCapacity = 8;
     static std::array<WallpaperCropEntry, CropCacheCapacity> s_cachedWallpaperCrops;
     static int s_cachedWallpaperCropNextSlot;
-
-    static constexpr int RefreshDebounceMs = 500;
 };
 
 } // namespace PhosphorShell

@@ -6,6 +6,10 @@
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 #include "tileslogging.h"
+
+#include <PhosphorFsLoader/IScanStrategy.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -18,8 +22,31 @@
 
 namespace PhosphorTiles {
 
-// Single file-scope constant shared by loadFromDirectory() and reWatchFiles()
+// Per-directory cap shared by loadFromDirectory() and the validated-files
+// helper used by the scan strategy.
 static constexpr int MaxWatchedFilesPerDir = 100;
+
+/// Scan strategy backing the loader's `WatchedDirectorySet`. The strategy
+/// ignores the base's directory list and re-derives the algorithm
+/// directories from `m_subdirectory` on every rescan — XDG path
+/// resolution can change between rescans (e.g. user-dir creation) and
+/// the registry-side stale-script purge depends on a full re-walk.
+class ScriptedAlgorithmLoader::JsScanStrategy : public PhosphorFsLoader::IScanStrategy
+{
+public:
+    explicit JsScanStrategy(ScriptedAlgorithmLoader& loader)
+        : m_loader(&loader)
+    {
+    }
+
+    QStringList performScan(const QStringList&) override
+    {
+        return m_loader->performScan();
+    }
+
+private:
+    ScriptedAlgorithmLoader* m_loader;
+};
 
 ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, ITileAlgorithmRegistry* registry,
                                                  QObject* parent)
@@ -27,6 +54,8 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     , m_subdirectory(subdirectory)
     , m_registry(registry)
     , m_watchdog(std::make_shared<ScriptedAlgorithmWatchdog>())
+    , m_strategy(std::make_unique<JsScanStrategy>(*this))
+    , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
 {
     Q_ASSERT(m_registry);
     // The subdirectory is appended to XDG data roots (system + user),
@@ -37,9 +66,13 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
                "subdirectory must be a relative XDG path, not absolute");
     Q_ASSERT_X(!m_subdirectory.contains(QLatin1String("..")), "ScriptedAlgorithmLoader",
                "subdirectory must not contain '..' traversal");
-    // Lazy user directory creation — moved ensureUserDirectoryExists()
-    // to scanAndRegister() so it is only called when actually needed.
-    setupFileWatcher();
+
+    // Directory registration + the initial scan happen on the first
+    // `scanAndRegister()` call. Deferring lets consumers connect their
+    // `algorithmsChanged` slot before the empty→populated-set signal
+    // fires — the canonical daemon shape is `make_unique → connect →
+    // scanAndRegister` and a synchronous emit from inside the ctor
+    // would bypass the slot entirely.
 }
 
 ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
@@ -102,24 +135,6 @@ QStringList ScriptedAlgorithmLoader::algorithmDirectories() const
     return deduped;
 }
 
-void ScriptedAlgorithmLoader::watchDirectory(const QString& dirPath)
-{
-    if (!QDir(dirPath).exists()) {
-        return;
-    }
-    m_watcher->addPath(dirPath);
-
-    // Watch individual .js files so in-place content modifications trigger fileChanged.
-    // Directory-level inotify only fires for create/delete/rename, not in-place writes.
-    const QStringList validFiles = validatedJsFiles(dirPath, MaxWatchedFilesPerDir);
-    for (const QString& file : validFiles) {
-        m_watcher->addPath(file);
-    }
-
-    qCInfo(PhosphorTiles::lcTilesLib) << "Watching algorithm directory:" << dirPath
-                                      << "paths=" << m_watcher->files().size() + m_watcher->directories().size();
-}
-
 void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
 {
     const QString dirPath = userAlgorithmDir();
@@ -142,9 +157,26 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
 
 bool ScriptedAlgorithmLoader::scanAndRegister()
 {
-    // Lazily create user directory on first scan
+    // Lazily create user directory on first scan, then re-register the
+    // (possibly newly-existing) directory set with the watcher so the
+    // freshly-created user dir gets a direct watch instead of staying
+    // proxied via parent-watch.
     ensureUserDirectoryExists();
+    if (!m_subdirectory.isEmpty()) {
+        const QStringList dirs = algorithmDirectories();
+        if (!dirs.isEmpty()) {
+            m_watcher->registerDirectories(dirs, PhosphorFsLoader::LiveReload::On);
+        }
+    }
 
+    // Synchronous rescan via the strategy. Returns the change flag.
+    const QByteArray priorSignature = m_lastScriptSignature;
+    m_watcher->rescanNow();
+    return m_lastScriptSignature != priorSignature;
+}
+
+QStringList ScriptedAlgorithmLoader::performScan()
+{
     auto* registry = m_registry;
 
     // Track which script IDs we register in this scan
@@ -175,38 +207,21 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     // AlgorithmRegistry::unregisterAlgorithm() uses deleteLater(), so the
     // algorithm object lives until the event loop drains the deferred-delete
     // queue — safe for any in-flight signal handlers.
-    bool changed = false;
     for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
         if (!newScriptIds.contains(it.key())) {
             registry->unregisterAlgorithm(it.key());
             qCInfo(PhosphorTiles::lcTilesLib) << "Unregistered stale scripted algorithm:" << it.key();
-            changed = true;
         }
     }
 
-    // Also detect newly added or updated scripts (not just removals).
-    // NOTE: `changed` only tracks ID/path changes, not content edits —
-    // content change detection is handled by always emitting algorithmsChanged() below.
-    if (!changed) {
-        for (const QString& id : std::as_const(newScriptIds)) {
-            if (!oldScriptIdToPath.contains(id) || oldScriptIdToPath.value(id) != m_scriptIdToPath.value(id)) {
-                changed = true;
-                break;
-            }
-        }
-    }
-
-    qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size()
-                                      << "changed=" << changed;
+    qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size();
 
     // Emit only when the registered script set — id, path, size, mtime —
-    // actually differs from the last scan. Catches content-only edits
-    // (same IDs/paths, different body) that the `changed` flag above
-    // misses, while suppressing redundant emissions from no-op filesystem
-    // pokes (editor-save of an unrelated file in the watched dir, bare
-    // stat events, etc.). Downstream listeners (layout adaptor → D-Bus →
-    // every subscribed client) get one notification per real change
-    // instead of one per inotify wake.
+    // actually differs from the last scan. Suppresses redundant emissions
+    // from no-op filesystem pokes (editor-save of an unrelated file in
+    // the watched dir, lstat-only events, etc.). Downstream listeners
+    // (layout adaptor → D-Bus → every subscribed client) get one
+    // notification per real change instead of one per inotify wake.
     QCryptographicHash hasher(QCryptographicHash::Sha1);
     QList<QString> sortedIds = m_scriptIdToPath.keys();
     std::sort(sortedIds.begin(), sortedIds.end());
@@ -226,9 +241,18 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     if (signature != m_lastScriptSignature) {
         m_lastScriptSignature = signature;
         Q_EMIT algorithmsChanged();
-        return true;
     }
-    return changed;
+
+    // Tell the base which individual files to install per-file watches
+    // on. The base re-arms these every rescan, which closes the
+    // atomic-rename inode-replacement window the legacy followup timer
+    // used to cover.
+    QStringList desiredFileWatches;
+    desiredFileWatches.reserve(m_scriptIdToPath.size());
+    for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
+        desiredFileWatches.append(it.value());
+    }
+    return desiredFileWatches;
 }
 
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir)
@@ -294,107 +318,6 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
 
         qCInfo(PhosphorTiles::lcTilesLib)
             << "Registered scripted algorithm:" << scriptId << "from=" << fullPath << "user=" << isUserDir;
-    }
-}
-
-void ScriptedAlgorithmLoader::setupFileWatcher()
-{
-    m_watcher = new QFileSystemWatcher(this);
-
-    // Watch ALL algorithm directories (system + user).
-    // algorithmDirectories() already includes the writable user dir
-    // even if it was not returned by locateAll().
-    const QStringList allDirs = algorithmDirectories();
-    for (const QString& dir : allDirs) {
-        watchDirectory(dir);
-    }
-
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ScriptedAlgorithmLoader::onDirectoryChanged);
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &ScriptedAlgorithmLoader::onFileChanged);
-}
-
-void ScriptedAlgorithmLoader::onDirectoryChanged(const QString& path)
-{
-    qCInfo(PhosphorTiles::lcTilesLib) << "Algorithm directory change detected:" << path;
-    scheduleRefresh();
-}
-
-void ScriptedAlgorithmLoader::onFileChanged(const QString& path)
-{
-    qCInfo(PhosphorTiles::lcTilesLib) << "Algorithm file change detected:" << path;
-
-    // QFileSystemWatcher drops the watch after atomic rename (new inode).
-    // Re-add the path if the file still exists so future edits are caught.
-    if (QFile::exists(path) && m_watcher && !m_watcher->files().contains(path)) {
-        m_watcher->addPath(path);
-    }
-
-    scheduleRefresh();
-}
-
-void ScriptedAlgorithmLoader::scheduleRefresh()
-{
-    // Debounce rapid changes (e.g., editor auto-save, batch installs).
-    if (!m_refreshTimer) {
-        m_refreshTimer = new QTimer(this);
-        m_refreshTimer->setSingleShot(true);
-        m_refreshTimer->setInterval(RefreshDebounceMs);
-        connect(m_refreshTimer, &QTimer::timeout, this, &ScriptedAlgorithmLoader::performDebouncedRefresh);
-    }
-    m_refreshTimer->start();
-
-    // Lazily create the follow-up rescan timer the first time we schedule a
-    // refresh. It fires a second rescan FollowupRescanMs after the debounced
-    // rescan; edits that land inside the no-watcher window created by atomic
-    // replace (new inode between onFileChanged dropping the watch and
-    // reWatchFiles() re-adding it) would otherwise be missed until the next
-    // filesystem event.
-    if (!m_followupTimer) {
-        m_followupTimer = new QTimer(this);
-        m_followupTimer->setSingleShot(true);
-        m_followupTimer->setInterval(RefreshDebounceMs + FollowupRescanMs);
-        connect(m_followupTimer, &QTimer::timeout, this, &ScriptedAlgorithmLoader::performDebouncedRefresh);
-    }
-    m_followupTimer->start();
-}
-
-void ScriptedAlgorithmLoader::performDebouncedRefresh()
-{
-    qCInfo(PhosphorTiles::lcTilesLib) << "Algorithm directory changed, refreshing...";
-    // scanAndRegister() emits algorithmsChanged() internally when changed,
-    // so we do NOT re-emit here to avoid double signal emission.
-    scanAndRegister();
-    reWatchFiles();
-}
-
-void ScriptedAlgorithmLoader::reWatchFiles()
-{
-    if (!m_watcher) {
-        return;
-    }
-
-    // After a refresh (which may follow delete+recreate), re-add any
-    // .js files that lost their inotify watch due to inode replacement.
-    // algorithmDirectories() already includes the writable user dir.
-    // Build QSets once to avoid O(n^2) repeated contains() calls
-    const QSet<QString> watchedDirs(m_watcher->directories().cbegin(), m_watcher->directories().cend());
-    const QSet<QString> watchedFiles(m_watcher->files().cbegin(), m_watcher->files().cend());
-    const QStringList allDirs = algorithmDirectories();
-    for (const QString& dir : allDirs) {
-        if (!QDir(dir).exists()) {
-            continue;
-        }
-        // Re-watch the directory itself
-        if (!watchedDirs.contains(dir)) {
-            m_watcher->addPath(dir);
-        }
-        // Validate path containment and cap file count (same as loadFromDirectory)
-        const QStringList validFiles = validatedJsFiles(dir, MaxWatchedFilesPerDir);
-        for (const QString& file : validFiles) {
-            if (!watchedFiles.contains(file)) {
-                m_watcher->addPath(file);
-            }
-        }
     }
 }
 

@@ -7,9 +7,9 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/detail/BatchedSink.h>
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/JsonEnvelopeValidator.h>
-#include <PhosphorJsonLoader/ParsedEntry.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/JsonEnvelopeValidator.h>
+#include <PhosphorFsLoader/ParsedEntry.h>
 
 #include <QDir>
 #include <QJsonObject>
@@ -38,14 +38,14 @@ public:
     CurveRegistry* curveRegistry; ///< pinned at ctor — used by parseFile
     QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
 
-    std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
+    std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
         // Common envelope checks (read, parse, root-is-object,
         // non-empty `name`, name-matches-filename) live in the shared
         // helper. The helper strips `name` from the returned root, so
         // it can't leak into Profile::presetName — the two concepts
         // are distinct (registry path vs. user-assigned preset label).
-        auto envelope = PhosphorJsonLoader::validateJsonEnvelope(filePath, lcProfileLoader());
+        auto envelope = PhosphorFsLoader::validateJsonEnvelope(filePath, lcProfileLoader());
         if (!envelope) {
             return std::nullopt;
         }
@@ -54,7 +54,7 @@ public:
         // minDistance / sequenceMode / staggerInterval / presetName).
         const Profile profile = Profile::fromJson(envelope->root, *curveRegistry);
 
-        PhosphorJsonLoader::ParsedEntry parsed;
+        PhosphorFsLoader::ParsedEntry parsed;
         parsed.key = envelope->name;
         parsed.sourcePath = filePath;
         parsed.payload = profile;
@@ -127,13 +127,13 @@ ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, CurveRegistry& c
                              QObject* parent)
     : QObject(parent)
     , m_sink(std::make_unique<Sink>(registry, curveRegistry, ownerTag.isEmpty() ? defaultOwnerTag() : ownerTag))
-    , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(*m_sink))
+    , m_loader(std::make_unique<PhosphorFsLoader::DirectoryLoader>(*m_sink))
 {
     // Gate `profilesChanged` on the per-batch change flag — same
     // contract as CurveLoader::curvesChanged. DirectoryLoader emits
     // entriesChanged on every rescan, but ProfileLoader consumers only
     // care when the tracked set or a Profile's value actually changed.
-    connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this, [this]() {
+    connect(m_loader.get(), &PhosphorFsLoader::DirectoryLoader::entriesChanged, this, [this]() {
         if (m_sink->lastBatchChanged) {
             Q_EMIT profilesChanged();
         }

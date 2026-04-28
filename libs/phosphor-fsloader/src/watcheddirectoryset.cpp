@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IScanStrategy.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QDir>
 #include <QFileInfo>
@@ -9,12 +10,10 @@
 #include <QLoggingCategory>
 #include <QStandardPaths>
 
-#include <algorithm>
-
-namespace PhosphorJsonLoader {
+namespace PhosphorFsLoader {
 
 namespace {
-Q_LOGGING_CATEGORY(lcLoader, "phosphorjsonloader.directoryloader")
+Q_LOGGING_CATEGORY(lcWatcher, "phosphorfsloader.watcheddirset")
 
 /// Paths we refuse to install a `QFileSystemWatcher` on. If the "nearest
 /// existing ancestor" climb from `attachWatcherForDir` lands on one of
@@ -67,30 +66,29 @@ bool isForbiddenWatchRoot(const QString& path)
 }
 } // namespace
 
-DirectoryLoader::DirectoryLoader(IDirectoryLoaderSink& sink, QObject* parent)
+WatchedDirectorySet::WatchedDirectorySet(IScanStrategy& strategy, QObject* parent)
     : QObject(parent)
-    , m_sink(&sink)
+    , m_strategy(&strategy)
 {
     // Single-shot debounce coalesces the save-temp-rename storm most
     // editors produce (QSaveFile / most IDEs fire three events in the
     // same ~10 ms) into one rescan.
     m_debounceTimer.setSingleShot(true);
     m_debounceTimer.setInterval(50);
-    connect(&m_debounceTimer, &QTimer::timeout, this, &DirectoryLoader::rescanAll);
+    connect(&m_debounceTimer, &QTimer::timeout, this, &WatchedDirectorySet::rescanAll);
 }
 
-DirectoryLoader::~DirectoryLoader() = default;
+WatchedDirectorySet::~WatchedDirectorySet() = default;
 
-int DirectoryLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
+int WatchedDirectorySet::registerDirectory(const QString& directory, LiveReload liveReload)
 {
-    return loadFromDirectories(QStringList{directory}, liveReload);
+    return registerDirectories(QStringList{directory}, liveReload);
 }
 
-int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload)
+int WatchedDirectorySet::registerDirectories(const QStringList& directories, LiveReload liveReload)
 {
     // Register all directories first so the rescan sees the complete
-    // scan order and applies user-wins collision in one pass (instead
-    // of N passes each of which might emit its own batch).
+    // scan order in one pass.
     //
     // Canonicalise on insertion so two registrations of the same
     // directory under different spellings (`/foo/bar/` vs `/foo/bar`)
@@ -108,14 +106,22 @@ int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveRel
     }
 
     rescanAll();
-    return m_entries.size();
+    return m_directories.size();
 }
 
-void DirectoryLoader::requestRescan()
+void WatchedDirectorySet::rescanNow()
 {
-    // A rescan may already be running on this thread (sink's commitBatch
-    // or a nested slot re-entered us via a signal). Starting the
-    // debounce timer here would be a no-op — the timer is idle while
+    // Cancel any pending debounce — its rescan would just re-do work
+    // we're about to perform synchronously below.
+    m_debounceTimer.stop();
+    rescanAll();
+}
+
+void WatchedDirectorySet::requestRescan()
+{
+    // A rescan may already be running on this thread (strategy's
+    // commit step or a nested slot re-entered us via a signal). Starting
+    // the debounce timer here would be a no-op — the timer is idle while
     // rescanAll is executing — and the event that triggered this call
     // would be silently dropped because the rescan has already captured
     // the pre-event filesystem state. Defer to the end of rescanAll,
@@ -129,264 +135,71 @@ void DirectoryLoader::requestRescan()
     m_debounceTimer.start();
 }
 
-void DirectoryLoader::setDebounceIntervalForTest(int ms)
+QStringList WatchedDirectorySet::directories() const
+{
+    return m_directories;
+}
+
+void WatchedDirectorySet::setDebounceIntervalForTest(int ms)
 {
     m_debounceTimer.setInterval(ms);
 }
 
-void DirectoryLoader::setMaxEntriesForTest(int cap)
-{
-    m_maxEntries = cap;
-}
-
-QString DirectoryLoader::watchedAncestorForTest(const QString& target) const
+QString WatchedDirectorySet::watchedAncestorForTest(const QString& target) const
 {
     // Canonicalise the lookup key to match the insertion key used by
     // `attachWatcherForDir`, otherwise trailing-slash differences
-    // between the caller's test path and the loader's internal form
-    // would cause the accessor to spuriously return an empty string.
+    // between the caller's test path and the internal form would cause
+    // the accessor to spuriously return an empty string.
     return m_parentWatchFor.value(QDir::cleanPath(target));
 }
 
-bool DirectoryLoader::hasParentWatchForTest(const QString& path) const
+bool WatchedDirectorySet::hasParentWatchForTest(const QString& path) const
 {
     return m_watchedParents.contains(QDir::cleanPath(path));
 }
 
-int DirectoryLoader::registeredCount() const
-{
-    return m_entries.size();
-}
-
-QList<DirectoryLoader::Entry> DirectoryLoader::entries() const
-{
-    QList<Entry> sorted = m_entries.values();
-    std::sort(sorted.begin(), sorted.end(), [](const Entry& a, const Entry& b) {
-        return a.key < b.key;
-    });
-    return sorted;
-}
-
-void DirectoryLoader::rescanAll()
+void WatchedDirectorySet::rescanAll()
 {
     // Race guard — any `requestRescan` call delivered during this scan
-    // (e.g. from within the sink's `commitBatch`, or from a watcher
-    // event that fires while we're iterating the filesystem) is
-    // captured in `m_rescanRequestedWhileRunning` and replayed at the
-    // end of this function. Without it, the single-shot debounce timer
-    // is idle while this slot runs, so any `m_debounceTimer.start()`
-    // call from inside the nested stack is a no-op and the observed
-    // state can go stale until the next external event.
+    // (e.g. from within the strategy's commit step, or from a watcher
+    // event that fires while we're iterating) is captured in
+    // `m_rescanRequestedWhileRunning` and replayed at the end of this
+    // function. Without it, the single-shot debounce timer is idle
+    // while this slot runs, so any `m_debounceTimer.start()` call from
+    // inside the nested stack is a no-op and the observed state can go
+    // stale until the next external event.
     m_rescanInProgress = true;
     m_rescanRequestedWhileRunning = false;
 
     // If live-reload is enabled, the watcher needs a chance to promote
     // any parent-watched target that just materialised. Do this before
-    // the scan so a dir created between the last rescan and this one
-    // is fully wired.
+    // the strategy runs so a dir created between the last rescan and
+    // this one is fully wired.
     if (m_liveReloadEnabled) {
         for (const QString& dir : m_directories) {
             attachWatcherForDir(dir);
         }
     }
 
-    // Build the fresh set in REVERSE scan order — first-wins semantics.
-    //
-    // Callers register dirs system-first / user-last (per the public
-    // `loadFromDirectories` docstring); iterating in reverse lets the
-    // user dir claim its keys BEFORE the system dir is touched. A
-    // subsequent system file with a colliding key updates the
-    // already-claimed entry's `systemSourcePath` (records the shadowed
-    // file for restore-on-delete introspection) but does not overwrite
-    // the entry — so user-wins is preserved by construction.
-    //
-    // This matters for the entry-count cap: under the previous forward-
-    // iteration + overwrite model, a hostile-or-buggy system dir
-    // containing more than `m_maxEntries` files would trip the cap
-    // BEFORE the user dir was scanned, silently dropping every user
-    // override. Reverse-iteration drops *system* entries on cap-trip,
-    // never user overrides.
-    QHash<QString, Entry> fresh;
-    // Parsed entries accumulated by key. Keyed for O(1) first-wins.
-    QHash<QString, ParsedEntry> freshParsedByKey;
-
-    // Entry-count cap breaker: with reverse-iteration the surviving
-    // entries are the highest-priority (user-supplied) ones — system
-    // overflows get dropped first.
-    bool capTripped = false;
-
-    for (auto dirIt = m_directories.crbegin(); dirIt != m_directories.crend(); ++dirIt) {
-        const QString& directory = *dirIt;
-        if (capTripped) {
-            break;
-        }
-        QDir dir(directory);
-        if (!dir.exists()) {
-            qCDebug(lcLoader) << "rescan: directory does not exist (yet?)" << directory;
-            continue;
-        }
-        // Sort within each directory so duplicate-name resolution is
-        // deterministic across platforms (ext4/btrfs/APFS differ on
-        // entryList ordering).
-        QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-
-        // Track keys already seen within THIS directory so we can warn
-        // on intra-directory collisions (across directories is legitimate
-        // user-wins-over-system layering, which we handle below).
-        // Map value is the absolute path of the first file claiming the
-        // key so the warning can name both the winning file and the
-        // ignored file — anything less leaves the user hunting for the
-        // collision by grep.
-        //
-        // Lookup key is case-folded so rsync-from-macOS-APFS
-        // (case-insensitive) onto ext4 (case-sensitive) — where
-        // `Curve.json` and `curve.json` coexist on ext4 but collide on
-        // APFS — warns consistently on both platforms. The ORIGINAL
-        // case is still used for the registered entry key (sinks may
-        // care about case for display purposes) — only the collision
-        // check itself is case-folded.
-        QHash<QString, QString> keysInThisDir;
-
-        for (const QString& file : files) {
-            // Entry-count DoS guard — paired with the per-file byte cap
-            // below. A directory sprayed with tens of thousands of empty
-            // `*.json` files would otherwise parse every one of them on
-            // the GUI thread on every watcher fire. The cap short-circuits
-            // the scan as soon as the tracked-entries count reaches the
-            // configured maximum; later files (alphabetically) are
-            // silently dropped with one aggregate warning below.
-            if (freshParsedByKey.size() >= m_maxEntries) {
-                capTripped = true;
-                break;
-            }
-
-            const QString fullPath = dir.absoluteFilePath(file);
-
-            // DoS / foot-gun guard: untrusted same-user files should not
-            // be able to stall the GUI thread with a 2 GB blob. Stat
-            // first; skip + warn on oversize. Sinks that want a lower
-            // cap enforce their own on top of this.
-            const QFileInfo fileInfo(fullPath);
-            if (fileInfo.size() > kMaxFileBytes) {
-                qCWarning(lcLoader) << "Skipping oversized file" << fullPath << "(" << fileInfo.size() << "bytes, cap"
-                                    << kMaxFileBytes << ")";
-                continue;
-            }
-
-            auto parsed = m_sink->parseFile(fullPath);
-            if (!parsed) {
-                continue;
-            }
-            const QString key = parsed->key;
-            if (key.isEmpty()) {
-                qCWarning(lcLoader) << "parseFile returned entry with empty key from" << fullPath
-                                    << "— sinks must set ParsedEntry::key";
-                continue;
-            }
-
-            // Intra-directory duplicate: two files in the SAME dir with
-            // the same key (case-folded). Filesystem enumeration is
-            // alphabetic (we sort above), so the first-seen file wins
-            // deterministically. Warn naming BOTH files so the user can
-            // actually find the collision without grepping.
-            const QString foldedKey = key.toLower();
-            if (auto winnerIt = keysInThisDir.constFind(foldedKey); winnerIt != keysInThisDir.constEnd()) {
-                qCWarning(lcLoader).nospace()
-                    << "Duplicate key '" << key << "' within directory " << directory << " — kept '" << winnerIt.value()
-                    << "', ignored '" << fullPath << "' (winner is alphabetically first)";
-                continue;
-            }
-            keysInThisDir.insert(foldedKey, fullPath);
-
-            // Cross-directory: first-wins (we iterate user-first via
-            // the reverse loop above). If this key was already claimed
-            // by a higher-priority dir, the currently-scanned (lower-
-            // priority) file is shadowed — record its path on the
-            // already-tracked entry so introspection (settings UIs)
-            // can show "this profile shadows the system default at
-            // /...". The shadowed entry is NOT registered with the
-            // sink; only the highest-priority claim is.
-            if (auto existing = fresh.find(key); existing != fresh.end()) {
-                if (existing->systemSourcePath.isEmpty()) {
-                    existing->systemSourcePath = parsed->sourcePath;
-                }
-                continue;
-            }
-
-            Entry trackedEntry;
-            trackedEntry.key = key;
-            trackedEntry.sourcePath = parsed->sourcePath;
-            trackedEntry.systemSourcePath = parsed->systemSourcePath;
-            fresh.insert(key, trackedEntry);
-
-            freshParsedByKey.insert(key, std::move(*parsed));
-        }
-    }
-
-    // Second pass — for entries whose `fresh` record acquired a
-    // systemSourcePath during the reverse-scan (because a lower-
-    // priority dir contained a file shadowed by this entry), propagate
-    // that metadata onto the matching `ParsedEntry` so the sink sees
-    // it in commitBatch.
-    for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it) {
-        if (!it->systemSourcePath.isEmpty()) {
-            auto pIt = freshParsedByKey.find(it.key());
-            if (pIt != freshParsedByKey.end()) {
-                pIt->systemSourcePath = it->systemSourcePath;
-            }
-        }
-    }
-
-    if (capTripped) {
-        qCWarning(lcLoader).nospace()
-            << "DirectoryLoader: reached entry cap (" << m_maxEntries
-            << ") — later files skipped to protect the GUI thread. Raise kMaxEntries or prune the watched directories.";
-    }
-
-    // Materialise the final parsed-entry list from the hash. Sorting
-    // by key gives the sink a stable iteration order across platforms
-    // and Qt versions (QHash iteration order is randomised in Qt6).
-    QList<ParsedEntry> freshParsed;
-    freshParsed.reserve(freshParsedByKey.size());
-    for (auto it = freshParsedByKey.cbegin(); it != freshParsedByKey.cend(); ++it) {
-        freshParsed.append(it.value());
-    }
-    std::sort(freshParsed.begin(), freshParsed.end(), [](const ParsedEntry& a, const ParsedEntry& b) {
-        return a.key < b.key;
-    });
-
-    // Diff against the previous tracked set — anything that was
-    // registered before but is no longer on disk is a removal. The
-    // sink is responsible for unregistering these from the target
-    // registry so they don't linger as ghosts after a file delete.
-    QStringList removedKeys;
-    for (auto it = m_entries.constBegin(); it != m_entries.constEnd(); ++it) {
-        if (!fresh.contains(it.key())) {
-            removedKeys.append(it.key());
-        }
-    }
-
-    m_entries = std::move(fresh);
-
-    // Hand the batch to the sink — single call, so the sink can emit
-    // one bulk-reload signal on its registry instead of N per-key
-    // signals (QFileSystemWatcher delivers batches on multi-file
-    // saves; respecting that batching avoids N² re-evaluation cost
-    // on every bound consumer).
-    m_sink->commitBatch(removedKeys, freshParsed);
+    // Hand off to the strategy. It enumerates, parses, commits — and
+    // returns the absolute paths we should install per-path watches on
+    // after this rescan.
+    const QStringList desiredFileWatches = m_strategy->performScan(m_directories);
 
     // Arm per-file watches AFTER commit so the watch set exactly
-    // matches the current tracked set. QFileSystemWatcher auto-drops
-    // entries on atomic-rename saves (most editors), so we re-sync on
-    // every rescan — the add/remove diff makes this cheap.
+    // matches the strategy's view of "currently relevant" paths.
+    // QFileSystemWatcher auto-drops entries on atomic-rename saves
+    // (most editors), so we re-sync on every rescan — the add/remove
+    // diff makes this cheap.
     if (m_liveReloadEnabled) {
-        syncFileWatches();
+        syncFileWatches(desiredFileWatches);
     }
 
-    Q_EMIT entriesChanged();
+    Q_EMIT rescanCompleted();
 
     // Race-guard replay — clear the flag FIRST so a nested slot
-    // connected to `entriesChanged` or triggered via the timer re-entry
+    // connected to `rescanCompleted` or triggered via the timer re-entry
     // below still gets the guarded requestRescan() path on this stack
     // frame (rather than racing on a half-cleared flag). We then
     // re-arm the debounce timer to pick up any event that landed
@@ -398,20 +211,20 @@ void DirectoryLoader::rescanAll()
     }
 }
 
-void DirectoryLoader::syncFileWatches()
+void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
 {
     if (!m_watcher) {
         return;
     }
 
-    // Desired file-watch set = every currently-tracked source path.
     QSet<QString> desired;
-    desired.reserve(m_entries.size());
-    for (const auto& entry : std::as_const(m_entries)) {
-        desired.insert(entry.sourcePath);
+    desired.reserve(desiredPaths.size());
+    for (const QString& path : desiredPaths) {
+        desired.insert(path);
     }
 
-    // Drop watches for files no longer tracked (deleted between rescans).
+    // Drop watches for paths no longer relevant (deleted between rescans,
+    // or no longer reported by the strategy).
     for (auto it = m_watchedFiles.begin(); it != m_watchedFiles.end();) {
         if (!desired.contains(*it)) {
             m_watcher->removePath(*it);
@@ -431,16 +244,16 @@ void DirectoryLoader::syncFileWatches()
             m_watchedFiles.insert(path);
         } else if (!m_watchedFiles.contains(path)) {
             // addPath returned false AND we didn't already have it —
-            // means QFSW couldn't watch this file (permissions, inotify
+            // means QFSW couldn't watch this path (permissions, inotify
             // quota hit, path vanished between stat and addPath). Log
-            // once at debug so it shows up under lcLoader if the user
+            // once at debug so it shows up under lcWatcher if the user
             // is troubleshooting.
-            qCDebug(lcLoader) << "syncFileWatches: failed to add file watch for" << path;
+            qCDebug(lcWatcher) << "syncFileWatches: failed to add watch for" << path;
         }
     }
 }
 
-void DirectoryLoader::installWatcherIfNeeded()
+void WatchedDirectorySet::installWatcherIfNeeded()
 {
     if (m_watcher) {
         return;
@@ -457,7 +270,7 @@ void DirectoryLoader::installWatcherIfNeeded()
     });
 }
 
-void DirectoryLoader::attachWatcherForDir(const QString& directory)
+void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
 {
     if (!m_watcher) {
         return;
@@ -482,7 +295,7 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         // didn't exist either at the time) and installed the watch on
         // a grandparent / further ancestor. Removing `info.absolutePath()`
         // here would miss that case and leak the ancestor watch for the
-        // loader's lifetime, firing a rescan for every unrelated file
+        // set's lifetime, firing a rescan for every unrelated file
         // event in that tree.
         const auto watchedAncestorIt = m_parentWatchFor.constFind(targetKey);
         if (watchedAncestorIt != m_parentWatchFor.constEnd()) {
@@ -554,8 +367,8 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         int climbed = 0;
         while (!ancestor.isEmpty() && !QDir(ancestor).exists()) {
             if (++climbed > kMaxClimb) {
-                qCWarning(lcLoader) << "attachWatcherForDir: climb exceeded" << kMaxClimb << "levels for target"
-                                    << directory << "— aborting watcher installation";
+                qCWarning(lcWatcher) << "attachWatcherForDir: climb exceeded" << kMaxClimb << "levels for target"
+                                     << directory << "— aborting watcher installation";
                 return;
             }
             const QString next = QFileInfo(ancestor).absolutePath();
@@ -576,8 +389,8 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         // normalisation.
         ancestor = QDir::cleanPath(ancestor);
         if (isForbiddenWatchRoot(ancestor)) {
-            qCDebug(lcLoader) << "Refusing to watch forbidden ancestor" << ancestor << "for target" << directory
-                              << "— call requestRescan() after creating the directory tree.";
+            qCDebug(lcWatcher) << "Refusing to watch forbidden ancestor" << ancestor << "for target" << directory
+                               << "— call requestRescan() after creating the directory tree.";
             return;
         }
         if (!m_watchedParents.contains(ancestor)) {
@@ -596,7 +409,7 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
     }
 }
 
-void DirectoryLoader::onWatchedPathChanged()
+void WatchedDirectorySet::onWatchedPathChanged()
 {
     // Debounce — a single save typically fires 2-3 inotify events in
     // the same ~10 ms window (create temp → rename → fsync). The
@@ -604,4 +417,4 @@ void DirectoryLoader::onWatchedPathChanged()
     requestRescan();
 }
 
-} // namespace PhosphorJsonLoader
+} // namespace PhosphorFsLoader

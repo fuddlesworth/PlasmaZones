@@ -1,0 +1,73 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <QtCore/QString>
+#include <QtCore/QStringList>
+
+namespace PhosphorFsLoader {
+
+/**
+ * @brief Pluggable enumeration / parse / commit policy for `WatchedDirectorySet`.
+ *
+ * The base class owns *when* a rescan happens (the watcher, the
+ * 50 ms debounce, parent-watch promotion, the rescan-during-rescan race
+ * guard, and re-arming individual file watches after the scan). The
+ * strategy owns *what* a rescan means for one specific schema:
+ *
+ *   • Walking the directory (top-level `*.json`? subdirs with
+ *     `metadata.json`? `*.js` matching a regex? — fully strategy-defined).
+ *   • Parsing each entry into whatever the consumer's registry needs.
+ *   • Computing the cross-directory user-wins / first-wins layering, if
+ *     any — the base passes the registered directory list verbatim and
+ *     does not pre-merge.
+ *   • Committing to the consumer's registry (signals, replacement,
+ *     stale-entry purge).
+ *
+ * The single `performScan` callback is invoked by the base every time
+ * a rescan fires. Strategies are owned by the consumer (typically a
+ * Q-stable member); the base holds them by reference and never copies.
+ */
+class IScanStrategy
+{
+public:
+    virtual ~IScanStrategy() = default;
+
+    IScanStrategy(const IScanStrategy&) = delete;
+    IScanStrategy& operator=(const IScanStrategy&) = delete;
+
+    /**
+     * @brief Run a full rescan across the registered directories.
+     *
+     * Called from the base's `rescanAll` slot after parent-watch
+     * promotion has run. The strategy is free to do as much or as
+     * little work as it wants, including no-op early-exits when the
+     * filesystem state hasn't changed.
+     *
+     * @param directoriesInScanOrder  Registered directories in the
+     *                                order the consumer registered
+     *                                them. The base does not impose a
+     *                                user-first or system-first
+     *                                convention — strategies decide
+     *                                how to interpret the order
+     *                                (`DirectoryLoader` reverse-iterates
+     *                                for first-wins under the standard
+     *                                "system-first, user-last" caller
+     *                                convention).
+     *
+     * @return Absolute paths (files OR subdirectories) that the base
+     *         should install per-path watches on after this rescan.
+     *         Re-armed every rescan to compensate for
+     *         `QFileSystemWatcher`'s automatic-drop-on-atomic-rename
+     *         behaviour. May be empty — the consumer might rely
+     *         entirely on directory-level watches and not need
+     *         per-file resolution.
+     */
+    virtual QStringList performScan(const QStringList& directoriesInScanOrder) = 0;
+
+protected:
+    IScanStrategy() = default;
+};
+
+} // namespace PhosphorFsLoader

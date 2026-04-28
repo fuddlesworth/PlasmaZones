@@ -6,8 +6,9 @@
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QtCore/QHash>
 #include <QtCore/QObject>
@@ -23,11 +24,11 @@ class CurveRegistry;
 /**
  * @brief Opt-in policy for directory-scanning loaders.
  *
- * Thin re-export of `PhosphorJsonLoader::LiveReload` so the existing
+ * Thin re-export of `PhosphorFsLoader::LiveReload` so the existing
  * `PhosphorAnimation::LiveReload::On` call-sites keep compiling after
- * the directory-watching scaffolding moved into `phosphor-jsonloader`.
+ * the directory-watching scaffolding moved into `phosphor-fsloader`.
  */
-using LiveReload = PhosphorJsonLoader::LiveReload;
+using LiveReload = PhosphorFsLoader::LiveReload;
 
 /**
  * @brief Scans JSON curve-definition files and registers them with `CurveRegistry`.
@@ -39,7 +40,7 @@ using LiveReload = PhosphorJsonLoader::LiveReload;
  * "<consumer>/curves", LocateDirectory)` and hand the results here.
  *
  * The directory-walking, watching, debouncing, and user-wins-collision
- * bookkeeping is delegated to `PhosphorJsonLoader::DirectoryLoader`;
+ * bookkeeping is delegated to `PhosphorFsLoader::DirectoryLoader`;
  * this class is the curve-specific sink on top of that.
  *
  * ## File format (schema v1)
@@ -151,7 +152,7 @@ Q_SIGNALS:
 private:
     class Sink;
     std::unique_ptr<Sink> m_sink;
-    std::unique_ptr<PhosphorJsonLoader::DirectoryLoader> m_loader;
+    std::unique_ptr<PhosphorFsLoader::DirectoryLoader> m_loader;
 };
 
 } // namespace PhosphorAnimation

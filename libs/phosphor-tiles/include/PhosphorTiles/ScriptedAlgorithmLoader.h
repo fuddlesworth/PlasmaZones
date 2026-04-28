@@ -5,13 +5,15 @@
 
 #include <phosphortiles_export.h>
 #include <QByteArray>
-#include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
 #include <QString>
-#include <QTimer>
 
 #include <memory>
+
+namespace PhosphorFsLoader {
+class WatchedDirectorySet;
+}
 
 namespace PhosphorTiles {
 
@@ -83,18 +85,12 @@ Q_SIGNALS:
      */
     void algorithmsChanged();
 
-private Q_SLOTS:
-    void onDirectoryChanged(const QString& path);
-    void onFileChanged(const QString& path);
-    void performDebouncedRefresh();
-
 private:
-    void setupFileWatcher();
-    void reWatchFiles();
+    class JsScanStrategy;
+    QStringList performScan();
+
     void loadFromDirectory(const QString& dir, bool isUserDir);
-    void scheduleRefresh();
     QStringList algorithmDirectories() const;
-    void watchDirectory(const QString& dirPath);
     QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
 
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
@@ -110,13 +106,8 @@ private:
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
     std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
-    QFileSystemWatcher* m_watcher = nullptr;
-    QTimer* m_refreshTimer = nullptr;
-    /// Second follow-up rescan that fires @ref FollowupRescanMs after the
-    /// debounced rescan. Catches edits landed inside the no-watcher window
-    /// created by atomic replace (new inode) between onFileChanged dropping
-    /// the watch and reWatchFiles() re-adding it.
-    QTimer* m_followupTimer = nullptr;
+    std::unique_ptr<JsScanStrategy> m_strategy;
+    std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
     /// Signature of the last registered script set — sorted (id, path,
     /// size, mtime) digest. Used by scanAndRegister() to suppress
@@ -125,9 +116,6 @@ private:
     /// watched dir, lstat-only events, etc.), so downstream D-Bus fan-out
     /// stays quiet when nothing actually changed.
     QByteArray m_lastScriptSignature;
-
-    static constexpr int RefreshDebounceMs = 500;
-    static constexpr int FollowupRescanMs = 500;
 };
 
 } // namespace PhosphorTiles

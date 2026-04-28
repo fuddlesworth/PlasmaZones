@@ -7,8 +7,8 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 
 #include <QtCore/QHash>
 #include <QtCore/QObject>
@@ -34,7 +34,7 @@ class PhosphorProfileRegistry;
  *
  * Like `CurveLoader`, the directory-walking, watching, debouncing, and
  * user-wins-collision bookkeeping is delegated to
- * `PhosphorJsonLoader::DirectoryLoader`. This class is the profile-
+ * `PhosphorFsLoader::DirectoryLoader`. This class is the profile-
  * specific sink on top of that.
  *
  * ## File format (schema v1)
@@ -134,7 +134,7 @@ Q_SIGNALS:
 private:
     class Sink;
     std::unique_ptr<Sink> m_sink;
-    std::unique_ptr<PhosphorJsonLoader::DirectoryLoader> m_loader;
+    std::unique_ptr<PhosphorFsLoader::DirectoryLoader> m_loader;
 };
 
 } // namespace PhosphorAnimation
