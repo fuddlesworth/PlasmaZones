@@ -5,6 +5,7 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <QJsonDocument>
@@ -480,6 +481,21 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
     REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
     REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+
+    // Phase 6: shader profile tree (JSON blob round-trip via D-Bus)
+    if (concrete) {
+        m_getters[QStringLiteral("shaderProfileTree")] = [concrete]() {
+            return QString::fromUtf8(
+                QJsonDocument(concrete->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
+        };
+        m_setters[QStringLiteral("shaderProfileTree")] = [concrete](const QVariant& v) -> bool {
+            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            if (!doc.isObject())
+                return false;
+            concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
+            return true;
+        };
+    }
 
     // Autotile core settings (concrete Settings only)
     if (concrete) {

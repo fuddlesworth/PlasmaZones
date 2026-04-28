@@ -124,8 +124,6 @@ void AnimationShaderRegistry::refresh()
                 e.fragmentShaderPath = effectDir + QLatin1Char('/') + e.fragmentShaderPath;
             if (!e.vertexShaderPath.isEmpty())
                 e.vertexShaderPath = effectDir + QLatin1Char('/') + e.vertexShaderPath;
-            if (!e.kwinFragmentShaderPath.isEmpty())
-                e.kwinFragmentShaderPath = effectDir + QLatin1Char('/') + e.kwinFragmentShaderPath;
             if (!e.previewPath.isEmpty())
                 e.previewPath = effectDir + QLatin1Char('/') + e.previewPath;
 
