@@ -315,13 +315,15 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 public Q_SLOTS:
-    // hideLayoutOsd / hideNavigationOsd intentionally removed in the L3 v2
-    // refactor: the QML side's _osdDismissed property (bound into
-    // Qt.WindowTransparentForInput) is the sole mechanism for dismissing an
-    // OSD — no C++ slot needs to run in response, because destroying the
+    // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
+    // dismiss path: QML auto-dismiss timer → loaded content's
+    // dismissRequested() → host NotificationOverlay re-emits → wired by
+    // createWarmedOsdSurface to Surface::hide() → SurfaceAnimator::beginHide
+    // → PhosphorLayer::Surface flips Qt::WindowTransparentForInput on the
+    // still-mapped QWindow. No C++ slot runs on dismiss — destroying the
     // QQuickWindow would re-introduce the blocking ~QQuickWindow Vulkan
-    // teardown that the refactor is designed to avoid. Pre-warmed OSD
-    // windows are reused for the daemon's entire lifetime.
+    // teardown that the warm-surface design is meant to avoid. Pre-warmed
+    // OSD windows are reused for the daemon's entire lifetime.
     void hideLayoutPicker();
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 

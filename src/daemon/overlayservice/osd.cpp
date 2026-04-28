@@ -331,6 +331,17 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     // semi-transparent disabled overlay (CategoryBadge / Label both bind
     // to those properties even when disabled is true).
     //
+    // Geometry reuse: showDisabledOsd loads LayoutOsdContent, whose
+    // container is sized from previewContainer.width (~14·gridUnit) even
+    // though the visible content in disabled mode is just the reason text
+    // + dialog-cancel icon over the opaque overlay. This is intentional —
+    // the disabled OSD shares the same outer dimensions as the layout-OSD
+    // it replaces so the user perceives the "switch was blocked" state as
+    // a sibling of the regular layout-switch confirmation rather than a
+    // distinct, smaller toast. If a future design wants a tighter disabled
+    // card, route showDisabledOsd through a dedicated content type rather
+    // than a Loader-mode flag on LayoutOsdContent.
+    //
     // Cross-mode property note: the host's `success` / `action` /
     // `reason` (NavigationOsd-only) are NOT reset here. NavigationOsdContent
     // is unloaded the moment we wrote `mode = "layout-osd"` in
@@ -617,10 +628,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Update dedup state AFTER the Surface::show() + restartDismissTimer
     // dispatch. Every early-return above this point is a "no OSD shown"
-    // outcome that must not poison the next call's dedup window — and
-    // doing the writes here (instead of pre-show) means even an in-flight
-    // animator failure that downgraded show() to a no-op wouldn't poison
-    // the next legitimate call. Stored as effectiveId to match the dedup
+    // outcome that must not poison the next call's dedup window — keeping
+    // the writes here means a bail-out (no physScreen, no notification
+    // window, no layout/zones, etc.) leaves dedup state untouched and the
+    // next legitimate call goes through. Surface::show() itself is `void`,
+    // so a silent animator no-op after this point would still poison
+    // dedup; that's an animator-layer concern, not something the ordering
+    // here can guard against. Stored as effectiveId to match the dedup
     // check key at the top of this function and the prefix-matched clear
     // in destroyAllWindowsForPhysicalScreen.
     m_lastNavigationActionKey = actionKey;

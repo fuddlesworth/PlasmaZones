@@ -174,8 +174,10 @@ Window {
         }
         // Forward dismissRequested from whichever content is loaded —
         // onLoaded fires after the new item finishes property
-        // initialization, and Connections handles the case where the
-        // sourceComponent flips to a different mode.
+        // initialization. On a mode flip the Loader destroys the previous
+        // item, which severs this imperative `connect` automatically (the
+        // source QObject is gone), and the fresh onLoaded re-wires the
+        // signal on the new item. No explicit teardown needed.
         onLoaded: {
             if (loader.item)
                 loader.item.dismissRequested.connect(root.dismissRequested);

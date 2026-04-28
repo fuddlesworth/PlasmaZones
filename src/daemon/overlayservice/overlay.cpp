@@ -383,8 +383,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         marginsOverride = placement.margins;
     }
 
-    const auto role = PzRoles::Overlay.withScopePrefix(
-        QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role = PzRoles::makePerInstanceRole(PzRoles::Overlay, screenId, m_surfaceManager->nextScopeGeneration());
 
     // Try shader overlay first, fall back to standard overlay if it fails.
     QVariantMap initProps;
