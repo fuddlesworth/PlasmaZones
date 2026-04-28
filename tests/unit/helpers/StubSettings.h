@@ -648,6 +648,13 @@ public:
     void setAnimationStaggerInterval(int) override
     {
     }
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override
+    {
+        return {};
+    }
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
+    {
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override

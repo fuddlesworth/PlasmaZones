@@ -1,0 +1,19 @@
+{
+    "id": "pixelate",
+    "name": "Pixelate",
+    "description": "Progressive pixelation transition that dissolves into blocks",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometric",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "maxBlockSize",
+            "name": "Max Block Size",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.02,
+            "max": 0.3
+        }
+    ]
+}

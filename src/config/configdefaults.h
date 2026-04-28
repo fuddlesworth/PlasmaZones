@@ -925,6 +925,11 @@ public:
     /// function returning the composite value.
     static QString animationProfile(const PhosphorAnimation::CurveRegistry& registry);
 
+    static QString shaderProfileTree()
+    {
+        return QString();
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;
