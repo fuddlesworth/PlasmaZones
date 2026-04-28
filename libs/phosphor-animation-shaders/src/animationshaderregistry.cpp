@@ -40,6 +40,8 @@ void AnimationShaderRegistry::removeSearchPath(const QString& path)
 {
     if (!m_searchPaths.removeAll(path))
         return;
+    if (m_watcher && m_watcher->directories().contains(path))
+        m_watcher->removePath(path);
     scheduleRefresh();
 }
 

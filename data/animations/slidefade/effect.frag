@@ -4,7 +4,7 @@
 // Slide-fade transition — directional wipe with a soft alpha gradient
 // at the leading edge. iTime drives progress [0, 1].
 
-#version 330 core
+#version 450
 
 uniform float iTime;
 uniform vec2 iResolution;

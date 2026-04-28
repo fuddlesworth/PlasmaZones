@@ -5,7 +5,7 @@
 // iTime drives progress [0, 1]. The fragment shader outputs a mask;
 // actual scaling is handled by the compositor adapter.
 
-#version 330 core
+#version 450
 
 uniform float iTime;
 uniform vec2 iResolution;

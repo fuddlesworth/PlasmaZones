@@ -88,8 +88,6 @@ private Q_SLOTS:
     void performDebouncedRefresh();
 
 private:
-    void loadEffectsFromPath(const QString& searchPath, bool isUserEffect);
-    void loadEffectFromDir(const QString& effectDir, bool isUserEffect);
     void setupFileWatcher();
     void scheduleRefresh();
 

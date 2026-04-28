@@ -4,7 +4,7 @@
 // Morph transition — sine-based displacement field warps UV space
 // while cross-fading. iTime drives progress [0, 1].
 
-#version 330 core
+#version 450
 
 uniform float iTime;
 uniform vec2 iResolution;
@@ -28,8 +28,9 @@ void main()
         cos(uv.x * freq * 6.28318 + progress * 6.28318) * strength
     );
 
-    vec2 warpedUv = uv + warp;
+    vec2 warpedUv = clamp(uv + warp, 0.0, 1.0);
     float alpha = 1.0 - progress;
+    float warpMask = 1.0 - length(warp) * 2.0;
 
-    fragColor = vec4(1.0, 1.0, 1.0, alpha);
+    fragColor = vec4(warpedUv.x, warpedUv.y, warpMask, alpha);
 }

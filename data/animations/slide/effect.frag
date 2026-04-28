@@ -4,7 +4,7 @@
 // Slide transition — directional wipe. Direction parameter selects
 // the axis: 0=left, 1=right, 2=up, 3=down. iTime drives progress [0, 1].
 
-#version 330 core
+#version 450
 
 uniform float iTime;
 uniform vec2 iResolution;

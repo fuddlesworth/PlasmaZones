@@ -10,10 +10,10 @@
         {
             "id": "direction",
             "name": "Direction",
-            "type": "float",
-            "default": 0.0,
-            "min": 0.0,
-            "max": 3.0
+            "type": "int",
+            "default": 0,
+            "min": 0,
+            "max": 3
         },
         {
             "id": "parallax",

@@ -4,7 +4,7 @@
 // Pixelate transition — progressively increases pixel/block size while
 // fading. iTime drives progress [0, 1].
 
-#version 330 core
+#version 450
 
 uniform float iTime;
 uniform vec2 iResolution;
@@ -23,5 +23,5 @@ void main()
 
     float alpha = 1.0 - progress;
 
-    fragColor = vec4(1.0, 1.0, 1.0, alpha);
+    fragColor = vec4(cell.x, cell.y, 1.0, alpha);
 }

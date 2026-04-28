@@ -4,7 +4,7 @@
 // Dissolve transition — noise-based alpha fade between two states.
 // iTime drives progress [0, 1]. Grain parameter controls noise frequency.
 
-#version 330 core
+#version 450
 
 uniform float iTime;
 uniform vec2 iResolution;
