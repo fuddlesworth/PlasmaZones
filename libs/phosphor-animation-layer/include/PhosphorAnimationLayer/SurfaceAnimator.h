@@ -161,6 +161,10 @@ public:
         /// AnimationShaderRegistry. Empty → no shader transition.
         QString showShaderEffectId;
         QString hideShaderEffectId;
+        /// Optional profile paths for the shader time curve. When empty,
+        /// the shader leg reuses the opacity profile's curve and duration.
+        QString showShaderProfile;
+        QString hideShaderProfile;
     };
 
     /// Construct against an explicit registry with caller-supplied

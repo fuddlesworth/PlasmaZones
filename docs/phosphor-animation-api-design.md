@@ -1692,9 +1692,8 @@ Note: separate KWin variant shaders (`effect_kwin.frag`) are NOT
 needed. `PhosphorRendering::ShaderNodeRhi` handles texture binding
 and coordinate conventions at the RHI level — the same `effect.frag`
 source works on both the QtQuick and KWin paint paths. The
-`kwinFragmentShaderPath` field on `AnimationShaderEffect` exists as
-an escape hatch for rare effects that genuinely can't share source,
-not as a required per-pack file.
+`kwinFragmentShaderPath` field has been removed from
+`AnimationShaderEffect` — all effects use a single `fragmentShaderPath`.
 
 ### Parallel housekeeping (not phased — can run alongside any phase)
 

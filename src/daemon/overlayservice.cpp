@@ -247,6 +247,9 @@ void OverlayService::setupSurfaceAnimator()
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(buildDefaultConfig());
+    if (m_pendingShaderRegistry) {
+        m_surfaceAnimator->setAnimationShaderRegistry(m_pendingShaderRegistry);
+    }
 
     // Profile names are the same paths PhosphorMotionAnimation in QML
     // uses today, so the live-reload path (drop a JSON, see it apply on
@@ -804,6 +807,7 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
 
 void OverlayService::setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry)
 {
+    m_pendingShaderRegistry = registry;
     if (m_surfaceAnimator) {
         m_surfaceAnimator->setAnimationShaderRegistry(registry);
     }

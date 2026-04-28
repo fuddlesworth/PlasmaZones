@@ -466,6 +466,7 @@ private:
     /// time. MUST outlive m_surfaceFactory (the factory's Deps captures
     /// the animator pointer; surfaces it produces dispatch through it on
     /// every show/hide).
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_pendingShaderRegistry = nullptr;
     std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
 

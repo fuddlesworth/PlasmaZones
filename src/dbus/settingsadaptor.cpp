@@ -12,6 +12,7 @@
 #include <QJsonObject>
 #include <QColor>
 #include <QDBusVariant>
+#include <QStandardPaths>
 #include <functional>
 #include <optional>
 
@@ -495,7 +496,21 @@ void SettingsAdaptor::initializeRegistry()
             concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
             return true;
         };
+        m_schemas[QStringLiteral("shaderProfileTree")] = QStringLiteral("string");
     }
+
+    // Phase 6: shader search paths (read-only, for KWin effect registry population)
+    m_getters[QStringLiteral("animationShaderSearchPaths")] = []() {
+        QStringList paths =
+            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
+                                      QStandardPaths::LocateDirectory);
+        const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/animations");
+        if (!paths.contains(userDir))
+            paths.append(userDir);
+        return QVariant::fromValue(paths);
+    };
+    m_schemas[QStringLiteral("animationShaderSearchPaths")] = QStringLiteral("stringlist");
 
     // Autotile core settings (concrete Settings only)
     if (concrete) {

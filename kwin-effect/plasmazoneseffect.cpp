@@ -446,6 +446,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Also clean up caches that slotWindowClosed may have already cleared —
     // QHash::take/remove on missing keys is a no-op, so this is safe.
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, [this](KWin::EffectWindow* w) {
+        endShaderTransition(w);
         m_windowAnimator->removeAnimation(w);
         if (m_windowIdCache.contains(w)) {
             const QString cachedId = m_windowIdCache.take(w);
@@ -781,6 +782,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // The daemon clears its side in windowClosed().
     m_navigationHandler->setWindowFloating(getWindowId(w), false);
 
+    endShaderTransition(w);
     m_windowAnimator->removeAnimation(w);
 
     const QString closedWindowId = getWindowId(w);
@@ -1840,6 +1842,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationStaggerInterval = qBound(10, v.toInt(), 200);
     });
     loadShaderProfileFromDbus();
+    loadShaderRegistryFromDbus();
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });
@@ -4074,15 +4077,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             const qreal curDist = QPointF(cur.x() - from.x(), cur.y() - from.y()).manhattanLength()
                 + qAbs(cur.width() - from.width()) + qAbs(cur.height() - from.height());
             const qreal progress = (totalDist > 0.001) ? qBound(0.0, curDist / totalDist, 1.0) : 1.0;
+
+            KWin::ShaderBinder binder(sit->second.shader.get());
             sit->second.shader->setUniform(sit->second.iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
             sit->second.shader->setUniform(sit->second.iResolutionLoc, QVector2D(geo.width(), geo.height()));
-        } else {
-            endShaderTransition(w);
+            OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+            return;
         }
+        endShaderTransition(w);
     }
 
-    OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const QString& effectId)
@@ -4094,12 +4100,25 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const 
     if (!eff.isValid())
         return;
 
+    QFile shaderFile(eff.fragmentShaderPath);
+    if (!shaderFile.open(QIODevice::ReadOnly)) {
+        qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
+        return;
+    }
+    const QByteArray shaderSource = shaderFile.readAll();
+    if (shaderSource.isEmpty()) {
+        qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
+        return;
+    }
+
     auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
-                                                                        QFile(eff.fragmentShaderPath).readAll());
+                                                                        shaderSource);
     if (!shader || !shader->isValid()) {
         qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
         return;
     }
+
+    endShaderTransition(window);
 
     ShaderTransition transition;
     transition.iTimeLoc = shader->uniformLocation("iTime");
@@ -4126,6 +4145,16 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
         const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
         if (doc.isObject()) {
             m_shaderProfileTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+        }
+    });
+}
+
+void PlasmaZonesEffect::loadShaderRegistryFromDbus()
+{
+    loadSettingAsync(QStringLiteral("animationShaderSearchPaths"), [this](const QVariant& v) {
+        const QStringList paths = v.toStringList();
+        if (!paths.isEmpty()) {
+            m_animationShaderRegistry.addSearchPaths(paths);
         }
     });
 }

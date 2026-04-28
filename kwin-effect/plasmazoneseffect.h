@@ -487,7 +487,10 @@ private:
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
 
-    // Phase 6: per-window shader transitions via OffscreenEffect
+    // Phase 6: per-window shader transitions via OffscreenEffect.
+    // The registry is populated from the same search paths as the daemon's
+    // via loadShaderRegistryFromDbus(). Until then, effect lookups return
+    // invalid and shader transitions gracefully no-op.
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     struct ShaderTransition
@@ -500,6 +503,7 @@ private:
     void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
+    void loadShaderRegistryFromDbus();
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
