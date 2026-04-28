@@ -11,6 +11,9 @@
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/AutotilePreviewRender.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -73,9 +76,41 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     return preview;
 }
 
-void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                            PhosphorLayout::ILayoutSource* autotileSource)
+void appendAutotilePreviewsForCanvas(QVector<LayoutPreview>& list,
+                                     PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QSize canvas)
 {
+    // Aspect-aware path: bypass the AutotileLayoutSource cache (keyed on
+    // (id, windowCount), so it can't distinguish per-aspect previews) and
+    // call previewFromAlgorithm directly with the requested canvas. Used
+    // for per-screen pickers (layout picker, OSD, etc.) where the
+    // algorithm preview must match the live tiler's split decisions.
+    if (!algorithmRegistry) {
+        return;
+    }
+    const auto ids = algorithmRegistry->availableAlgorithms();
+    list.reserve(list.size() + ids.size());
+    for (const QString& id : ids) {
+        auto* algorithm = algorithmRegistry->algorithm(id);
+        if (!algorithm) {
+            continue;
+        }
+        list.append(PhosphorTiles::previewFromAlgorithm(id, algorithm, algorithm->defaultMaxWindows(),
+                                                        algorithmRegistry, canvas));
+    }
+}
+
+void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+                            PhosphorLayout::ILayoutSource* autotileSource, QSize canvas = {})
+{
+    // Aspect-aware callers go through the direct path so previews match
+    // their target screen's tiling. The cached source's key tuple
+    // (id, windowCount) doesn't include canvas, so reusing it across
+    // aspect classes would silently serve the wrong preview.
+    if (canvas.width() > 0 && canvas.height() > 0) {
+        appendAutotilePreviewsForCanvas(list, algorithmRegistry, canvas);
+        return;
+    }
+
     // Preferred path: a long-lived ILayoutSource (typically the
     // autotile source owned by the caller's LayoutSourceBundle) whose
     // internal preview cache is reused across calls. The bundle binds
@@ -163,7 +198,8 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
 QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               bool includeAutotile, const QStringList& customOrder,
-                                              PhosphorLayout::ILayoutSource* autotileSource)
+                                              PhosphorLayout::ILayoutSource* autotileSource,
+                                              QSize autotilePreviewCanvas)
 {
     QVector<LayoutPreview> list;
 
@@ -178,7 +214,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* lay
     }
 
     if (includeAutotile) {
-        appendAutotilePreviews(list, algorithmRegistry, autotileSource);
+        appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
     }
 
     sortPreviews(list, customOrder);
@@ -191,7 +227,8 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* lay
                                               const QString& screenId, int virtualDesktop, const QString& activity,
                                               bool includeManual, bool includeAutotile, qreal screenAspectRatio,
                                               bool filterByAspectRatio, const QStringList& customOrder,
-                                              PhosphorLayout::ILayoutSource* autotileSource)
+                                              PhosphorLayout::ILayoutSource* autotileSource,
+                                              QSize autotilePreviewCanvas)
 {
     QVector<LayoutPreview> list;
 
@@ -258,7 +295,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* lay
     }
 
     if (includeAutotile) {
-        appendAutotilePreviews(list, algorithmRegistry, autotileSource);
+        appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
     }
 
     sortPreviews(list, customOrder);

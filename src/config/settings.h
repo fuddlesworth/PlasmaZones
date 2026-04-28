@@ -7,6 +7,7 @@
 #include "../core/constants.h"
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -747,6 +748,9 @@ public:
     void setAnimationSequenceMode(int mode) override;
     int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
+
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

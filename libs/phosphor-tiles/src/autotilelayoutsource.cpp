@@ -64,7 +64,7 @@ QString cacheKey(const QString& algorithmId, int windowCount)
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
                                                    PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
-                                                   PhosphorTiles::ITileAlgorithmRegistry* registry)
+                                                   PhosphorTiles::ITileAlgorithmRegistry* registry, QSize canvasSize)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!algorithm || algorithmId.isEmpty()) {
@@ -84,7 +84,14 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
                                              << "— falling back to built-in defaults";
     }
 
-    const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
+    // Aspect-aware canvas: callers may pass the target screen's size so
+    // aspect-sensitive algorithms (BSP, fibonacci, …) split along the same
+    // axis the live tiler will. An empty / non-positive size falls back to
+    // the legacy square canvas — appropriate for screen-agnostic thumbnail
+    // contexts (settings list, generic layout picker).
+    const int canvasW = (canvasSize.width() > 0) ? canvasSize.width() : PreviewCanvasSize;
+    const int canvasH = (canvasSize.height() > 0) ? canvasSize.height() : PreviewCanvasSize;
+    const QRect canvas(0, 0, canvasW, canvasH);
 
     // Seed preview params from the supplied registry's configured values so
     // previews reflect the user's saved master-count / split-ratio / max-windows
@@ -148,13 +155,17 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
 
     preview.zones.reserve(rects.size());
     preview.zoneNumbers.reserve(rects.size());
+    // Normalise against the actual canvas dims, not PreviewCanvasSize.
+    // For square canvases the two are equal; for aspect-aware canvases
+    // (canvasSize passed in) they differ on at least one axis, and using
+    // the constant would emit relative coordinates > 1 along the longer
+    // axis, breaking renderers that clamp.
+    const qreal denomX = canvasW > 0 ? static_cast<qreal>(canvasW) : 1.0;
+    const qreal denomY = canvasH > 0 ? static_cast<qreal>(canvasH) : 1.0;
     for (int i = 0; i < rects.size(); ++i) {
         const QRect& r = rects[i];
-        // Normalise to 0..1 against the preview canvas so renderers can
-        // scale into any pixel rectangle (matches LayoutPreview's contract).
-        QRectF rel(static_cast<qreal>(r.x()) / PreviewCanvasSize, static_cast<qreal>(r.y()) / PreviewCanvasSize,
-                   static_cast<qreal>(r.width()) / PreviewCanvasSize,
-                   static_cast<qreal>(r.height()) / PreviewCanvasSize);
+        QRectF rel(static_cast<qreal>(r.x()) / denomX, static_cast<qreal>(r.y()) / denomY,
+                   static_cast<qreal>(r.width()) / denomX, static_cast<qreal>(r.height()) / denomY);
         preview.zones.append(rel);
         preview.zoneNumbers.append(i + 1);
     }
@@ -163,7 +174,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
 }
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
-                                                   PhosphorTiles::ITileAlgorithmRegistry* registry)
+                                                   PhosphorTiles::ITileAlgorithmRegistry* registry, QSize canvasSize)
 {
     if (!algorithm) {
         return {};
@@ -178,7 +189,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
             << "previewFromAlgorithm: algorithm not in registry — preview will have empty id";
         return {};
     }
-    return previewFromAlgorithm(id, algorithm, windowCount, registry);
+    return previewFromAlgorithm(id, algorithm, windowCount, registry, canvasSize);
 }
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
@@ -287,8 +298,7 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
         const QString key = cacheKey(id, windowCount);
         auto it = m_cache.constFind(key);
         if (it == m_cache.constEnd()) {
-            PhosphorLayout::LayoutPreview preview =
-                previewFromAlgorithm(id, algorithm, windowCount, m_registry);
+            PhosphorLayout::LayoutPreview preview = previewFromAlgorithm(id, algorithm, windowCount, m_registry);
             insertCacheEntry(key, preview);
             result.append(preview);
         } else {

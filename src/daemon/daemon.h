@@ -32,6 +32,10 @@ class CurveLoader;
 class ProfileLoader;
 }
 
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
+
 namespace PhosphorZones {
 class Layout;
 class LayoutRegistry;
@@ -195,6 +199,7 @@ private:
      * transparently.
      */
     void setupAnimationProfiles();
+    void setupAnimationShaderEffects();
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
@@ -550,6 +555,10 @@ private:
     /// as long as the loader.
     std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
     std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
+    /// Phase 6: animation shader effect discovery. Scans
+    /// `plasmazones/animations` from XDG data dirs and monitors for
+    /// user-dropped packs via QFileSystemWatcher.
+    std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
 
     /// Coalescing trampoline for the publish path — see
     /// `requestAnimationProfilePublish`. Single-shot, parented to the
