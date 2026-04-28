@@ -534,18 +534,18 @@ private:
      * than silently miscommit.
      *
      * Resolution order:
-     *  1. m_config.initialSize, if set and non-empty — caller-driven content
-     *     sizing. Positioned at the target screen's top-left so the wrapper
-     *     window starts on the intended output; the layer-shell anchor logic
+     *  1. m_config.initialSize, if non-empty — caller-driven content sizing.
+     *     Positioned at the target screen's top-left so the wrapper window
+     *     starts on the intended output; the layer-shell anchor logic
      *     (set_anchor + the compositor) places the actual surface.
      *  2. m_config.screen->geometry() — full-screen fallback. Preserves the
      *     pre-initialSize behaviour for callers that haven't opted in.
      */
     [[nodiscard]] QRect computeWarmupGeometry() const
     {
-        if (m_config.initialSize && !m_config.initialSize->isEmpty()) {
+        if (!m_config.initialSize.isEmpty()) {
             const QPoint origin = m_config.screen ? m_config.screen->geometry().topLeft() : QPoint(0, 0);
-            return QRect(origin, *m_config.initialSize);
+            return QRect(origin, m_config.initialSize);
         }
         if (m_config.screen) {
             return m_config.screen->geometry();

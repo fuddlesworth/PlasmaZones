@@ -508,9 +508,10 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     cfg.anchorsOverride = std::move(params.anchorsOverride);
     cfg.marginsOverride = std::move(params.marginsOverride);
     cfg.keepMappedOnHide = params.keepMappedOnHide;
-    if (!params.initialSize.isEmpty()) {
-        cfg.initialSize = params.initialSize;
-    }
+    // SurfaceConfig::initialSize uses isEmpty() as the "unset" sentinel —
+    // forwarding the param verbatim preserves that contract (empty here →
+    // empty there → fall back to screen geometry inside surface.cpp).
+    cfg.initialSize = params.initialSize;
     cfg.debugName = QString::fromUtf8(params.windowType);
 
     return m_surfaceManager->createSurface(std::move(cfg), this);
@@ -520,13 +521,16 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
                                                                QScreen* physScreen, const char* windowType)
 {
     // Warm-up size matches NotificationOverlay.qml's QML literal (240x70).
-    // Both per-show paths in osd.cpp imperatively resize via setWidth/setHeight
-    // to the loaded content's contentDesiredWidth/Height before Surface::show(),
-    // so the warm-up size only governs the size of the first Vulkan swapchain
-    // commit. Holding ~17 fullscreen swapchains (one per warmed overlay across
-    // virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary stack;
-    // a content-sized warm-up keeps the swapchain proportional to actual
-    // OSD content.
+    // This only governs the size of the warm-up commit — every per-show
+    // path in osd.cpp goes through assertWindowOnScreen + sizeAndCenterOsd,
+    // both of which still call setGeometry / setWidth / setHeight against
+    // the live window, so per-show swapchain resizes still happen on every
+    // show as before. What changes here is that the daemon stops paying for
+    // a full-screen swapchain for an OSD whose visible content is a tiny
+    // toast: holding ~17 fullscreen swapchains (one per warmed overlay
+    // across virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary
+    // stack, and a content-sized warm-up brings that down to the toast's
+    // own footprint.
     auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
                                         .screen = physScreen,
                                         .role = role,

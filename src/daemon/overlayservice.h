@@ -655,10 +655,11 @@ private:
         /// Initial swapchain size committed during warm-up. Empty (default)
         /// → screen geometry, which guarantees a non-zero buffer for every
         /// anchor configuration but allocates a full-screen Vulkan swapchain
-        /// (~25 MB at 4K × triple buffer on NVIDIA). Non-empty → small
-        /// content-sized warm-up (~1-2 MB swapchain). The eventual visible
-        /// size is still driven by per-show setWidth/setHeight; this only
-        /// governs the warm-up commit.
+        /// (~25 MB at 4K × triple buffer on NVIDIA). Non-empty → a swapchain
+        /// proportional to the passed size. The eventual visible size is
+        /// still driven by per-show setWidth/setHeight; this only governs
+        /// the warm-up commit. Forwarded verbatim to
+        /// SurfaceConfig::initialSize, including the empty-as-unset sentinel.
         QSize initialSize = {};
     };
 
