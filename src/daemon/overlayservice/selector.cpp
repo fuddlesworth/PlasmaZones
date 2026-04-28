@@ -20,6 +20,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
+#include <QVector>
 
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
@@ -99,6 +100,9 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             updateZoneSelectorWindow(screenId);
             window->setWidth(targetGeom.width());
             window->setHeight(targetGeom.height());
+            qCDebug(lcOverlay) << "showZoneSelector: screen=" << screenId << "targetGeom=" << targetGeom
+                               << "physScreenGeom=" << physScreen->geometry()
+                               << "windowSizeAfterSet=" << window->width() << "x" << window->height();
             // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup)
             // and clears Qt.WindowTransparentForInput so input routes again.
             surface->show();
@@ -234,6 +238,22 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             localY = localPos.y();
         }
 
+        // Selector hit-detection debug. Enable with:
+        //   QT_LOGGING_RULES="org.plasmazones.overlay.debug=true"
+        // Throttled to once per ~64 px cursor movement to keep the log readable
+        // while still showing geometry on every meaningful position change.
+        static QPoint sLastLoggedCursor(-1000000, -1000000);
+        const QPoint thisCursor(cursorX, cursorY);
+        const bool farMoved = std::abs(thisCursor.x() - sLastLoggedCursor.x()) > 64
+            || std::abs(thisCursor.y() - sLastLoggedCursor.y()) > 64;
+        if (farMoved && lcOverlay().isDebugEnabled()) {
+            sLastLoggedCursor = thisCursor;
+            qCDebug(lcOverlay) << "selector hit-test:"
+                               << "screen=" << cursorScreenId << "cursor(global)=" << thisCursor
+                               << "winGeom=" << winGeom << "windowSize=" << window->width() << "x" << window->height()
+                               << "local=(" << localX << "," << localY << ")";
+        }
+
         writeQmlProperty(window, QStringLiteral("cursorX"), localX);
         writeQmlProperty(window, QStringLiteral("cursorY"), localY);
 
@@ -254,6 +274,19 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         // Get grid position from QML - it knows exactly where the content is rendered
         int contentGridX = 0;
         int contentGridY = 0;
+        QSizeF gridActualSize;
+
+        // Per-cell actual positions, populated from the GridLayout's child
+        // items in declaration order. Computing positions from
+        // (cellWidth + indicatorSpacing) is wrong: when the GridLayout's
+        // explicit width (= scrollContentWidth, sized for `gridColumns`
+        // columns) exceeds the natural content width (when fewer cards than
+        // gridColumns are populated), Qt distributes the slack across the
+        // populated columns. Cards 1..N-1 then drift further right than the
+        // C++ math predicts, with cumulative error per card. Reading
+        // mapRectToItem on each cell is the only way to track this exactly.
+        QVector<QRectF> cellRectsInWindow;
+        cellRectsInWindow.reserve(layouts.size());
 
         if (auto* contentRoot = window->contentItem()) {
             if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
@@ -261,17 +294,101 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     gridItem->mapRectToItem(contentRoot, QRectF(0, 0, gridItem->width(), gridItem->height()));
                 contentGridX = qRound(gridRect.x());
                 contentGridY = qRound(gridRect.y());
+                gridActualSize = QSizeF(gridItem->width(), gridItem->height());
+
+                // Walk grid children, skipping the Repeater (zero-size
+                // sentinel) and any non-cell auxiliary items. The remaining
+                // entries are the layout-card delegates in model order, so
+                // cellRectsInWindow[i] corresponds to layouts[i].
+                const auto kids = gridItem->childItems();
+                for (QQuickItem* cell : kids) {
+                    if (!cell) {
+                        continue;
+                    }
+                    if (cell->width() <= 0 || cell->height() <= 0) {
+                        continue;
+                    }
+                    cellRectsInWindow.append(
+                        cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height())));
+                    if (cellRectsInWindow.size() >= layouts.size()) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (farMoved && lcOverlay().isDebugEnabled()) {
+            qCDebug(lcOverlay) << "selector layout:"
+                               << "columns=" << layout.columns << "rows=" << layout.rows
+                               << "cellWxH=" << layout.cellWidth << "x" << layout.cellHeight
+                               << "indicatorWxH=" << layout.indicatorWidth << "x" << layout.indicatorHeight
+                               << "spacing=" << layout.indicatorSpacing << "cardSidePad=" << layout.cardSidePadding
+                               << "cardTopMargin=" << layout.cardTopMargin << "gridOriginInWindow=(" << contentGridX
+                               << "," << contentGridY << ")"
+                               << "gridActualSize=" << gridActualSize << "predictedGridSize=("
+                               << layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing
+                               << "x"
+                               << layout.totalRows * layout.cellHeight
+                    + (layout.totalRows - 1) * layout.indicatorSpacing
+                               << ")";
+
+            // Walk the GridLayout's child cells and report where they ACTUALLY
+            // render relative to contentRoot. Compare against the per-card
+            // prediction emitted in the loop below — any divergence is the
+            // bug. Log only the first 8 cells to keep the journal sane.
+            if (auto* contentRoot = window->contentItem()) {
+                if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
+                    const auto kids = gridItem->childItems();
+                    const int dumped = std::min<int>(kids.size(), 8);
+                    for (int k = 0; k < dumped; ++k) {
+                        QQuickItem* cell = kids.at(k);
+                        if (!cell) {
+                            continue;
+                        }
+                        const QRectF cellRect =
+                            cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height()));
+                        qCDebug(lcOverlay) << "  actual cell[" << k << "]"
+                                           << "topLeftInWindow=(" << cellRect.x() << "," << cellRect.y() << ")"
+                                           << "size=" << cellRect.width() << "x" << cellRect.height();
+                    }
+                }
             }
         }
 
         // Check each layout indicator
         for (int i = 0; i < layouts.size(); ++i) {
-            int row = (layout.columns > 0) ? (i / layout.columns) : 0;
-            int col = (layout.columns > 0) ? (i % layout.columns) : 0;
-            // Cell origin includes card chrome; preview is offset by cardSidePadding horizontally
-            // and cardTopMargin vertically (matches Kirigami.Units.gridUnit in LayoutCard.qml)
-            int indicatorX = contentGridX + col * (layout.cellWidth + layout.indicatorSpacing) + layout.cardSidePadding;
-            int indicatorY = contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
+            int indicatorX;
+            int indicatorY;
+            if (i < cellRectsInWindow.size()) {
+                // Authoritative: read where QML actually rendered this card.
+                // The previewArea inside the LayoutCard is offset by
+                // cardSidePadding horizontally (anchors.horizontalCenter
+                // resolves to that within an Item of width
+                // indicatorWidth + 2*cardSidePadding) and cardTopMargin
+                // vertically (anchors.top + topMargin = Kirigami.Units.gridUnit
+                // in card mode).
+                const QRectF& cellRect = cellRectsInWindow.at(i);
+                indicatorX = qRound(cellRect.x()) + layout.cardSidePadding;
+                indicatorY = qRound(cellRect.y()) + layout.cardTopMargin;
+            } else {
+                // Fallback when QML traversal missed: derive from layout math.
+                // Hits the same drift bug as before, but only fires when the
+                // child enumeration produced fewer cells than expected (e.g.
+                // before the first frame is laid out).
+                int row = (layout.columns > 0) ? (i / layout.columns) : 0;
+                int col = (layout.columns > 0) ? (i % layout.columns) : 0;
+                indicatorX = contentGridX + col * (layout.cellWidth + layout.indicatorSpacing) + layout.cardSidePadding;
+                indicatorY = contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
+            }
+
+            if (farMoved && lcOverlay().isDebugEnabled()) {
+                qCDebug(lcOverlay) << "  card[" << i << "]"
+                                   << "indicator=(" << indicatorX << "," << indicatorY << ")"
+                                   << "size=" << layout.indicatorWidth << "x" << layout.indicatorHeight
+                                   << "containsCursor="
+                                   << (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth
+                                       && localY >= indicatorY && localY < indicatorY + layout.indicatorHeight);
+            }
 
             // Check if cursor is over this indicator
             if (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth && localY >= indicatorY
