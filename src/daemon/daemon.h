@@ -26,7 +26,7 @@ class PlasmaPanelSource;
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/qml/QtQuickClockManager.h>
+#include <PhosphorAnimationQml/QtQuickClockManager.h>
 #include <PhosphorConfig/IBackend.h>
 
 namespace PhosphorAnimation {
