@@ -509,11 +509,18 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         }
     }
 
-    // Reuse the warmed surface when it's already attached to the right screen —
-    // wlr-layer-shell v3 anchors are immutable post-attach, so a screen change
-    // is the only thing that forces a destroy+recreate. On the same screen we
-    // just update properties + invoke QML show() and skip the ~50-100 ms
-    // Wayland-surface + Vulkan-swapchain init.
+    // Reuse the warm Surface when one already exists for the right
+    // screen. With keepMappedOnHide=false the wl_surface is unmapped
+    // on each hide and a fresh wl_surface is attached on the next
+    // Surface::show — KWin sees that as an initial map and grants
+    // keyboard focus, so Escape works reliably without paying QQuick-
+    // Window+QRhi teardown each cycle. Tearing down the QRhi every
+    // hide stalled the daemon main loop ~10s on NVIDIA per the
+    // vkDestroyDevice deadlock; that's the bug we're working around.
+    //
+    // Screen mismatch still forces destroy+recreate — wlr-layer-shell
+    // anchors and output are immutable post-attach, and the role's
+    // per-instance scope contains the screenId.
     const bool reuseSurface =
         m_layoutPickerSurface && m_layoutPickerScreen == screen && m_layoutPickerScreenId == resolvedId;
     if (!reuseSurface) {
@@ -619,7 +626,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     m_layoutPickerWindow->requestActivate();
 
     qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
-                      << "active=" << activeId << "reuseSurface=" << reuseSurface;
+                      << "active=" << activeId;
 }
 
 void OverlayService::hideLayoutPicker()
@@ -628,20 +635,29 @@ void OverlayService::hideLayoutPicker()
         return;
     }
 
-    // Capture screenId before destroy clears m_layoutPickerScreenId — we
-    // need it for the zone-selector re-show below.
     const QString screenId = m_layoutPickerScreenId;
 
-    // Destroy the layer surface (matches SnapAssist's pattern). The
-    // previous keep-mapped + keyboard-interactivity-mutation approach
-    // broke focus on every show — see createLayoutPickerWindowFor's
-    // keepMappedOnHide=false comment for the full rationale.
-    destroyLayoutPickerWindow();
+    // Disable QML keyboard Shortcuts so any in-flight key events
+    // during the hide can't double-fire dismiss.
+    if (m_layoutPickerWindow) {
+        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), false);
+    }
 
-    // Re-show the zone selector that was hidden when layout picker was
-    // shown (line ~435). Skip the dispatch if the selector is already
-    // visible (a fresh drag may have re-shown it while the picker was
-    // up).
+    // Surface::hide with keepMappedOnHide=false unmaps the wl_surface
+    // (m_window->hide()) but keeps the QQuickWindow + QRhi alive. The
+    // SurfaceAnimator's beginHide is dispatched but the synchronous
+    // unmap means its frames don't paint — accepted trade-off vs.
+    // NVIDIA's multi-second vkDestroyDevice stall on full QQuickWindow
+    // teardown. See createLayoutPickerWindowFor's keepMappedOnHide
+    // comment for the full rationale.
+    //
+    // Surface stays alive for showLayoutPicker to reuse on next open.
+    // Reusing the QQuickWindow preserves the warm Vulkan swapchain and
+    // QML scene; a fresh wl_surface attach happens on the next
+    // m_window->show(), giving KWin a clean initial-map event so it
+    // grants keyboard focus.
+    m_layoutPickerSurface->hide();
+
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
             if (!selectorSurface->isLogicallyShown()) {
@@ -714,12 +730,26 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     const auto role =
         PzRoles::makePerInstanceRole(PzRoles::LayoutPicker, scopeId, m_surfaceManager->nextScopeGeneration());
 
-    // keepMappedOnHide=false: destroy the wl_surface on hide. The previous
-    // keep-mapped pattern was a perf optimisation, but it broke keyboard
-    // input on every show — see signals.cpp's warmUp comment for the
-    // full rationale. Match SnapAssist's destroy-on-hide pattern so each
-    // show maps a fresh surface with the role's keyboard_interactivity
-    // (Exclusive) at initial map.
+    // keepMappedOnHide=false: m_window->hide() during Surface::hide
+    // unmaps the wl_surface but keeps the QQuickWindow (and its QRhi
+    // / Vulkan device) alive. Three properties matter:
+    //   1. Fresh wl_surface attach on the next Surface::show grants
+    //      keyboard focus reliably — KWin's wlr-layer-shell evaluates
+    //      keyboard_interactivity at initial map only, and a freshly
+    //      attached wl_surface counts as initial.
+    //   2. No QRhi teardown on hide. NVIDIA's vkDestroyDevice can stall
+    //      the calling thread for up to ~18s on driver mutex cycles
+    //      (devtalk 319139 / 195793 / 366254). The earlier
+    //      destroy-on-hide approach triggered exactly that — second
+    //      and third opens of the picker stalled the daemon main loop
+    //      while the previous QQuickWindow's QRhi was being torn down,
+    //      delaying the next trigger by 10+ seconds.
+    //   3. Trade-off: SurfaceAnimator's beginHide can't paint frames —
+    //      the wl_surface unmaps synchronously and the compositor
+    //      never sees the fade. The picker dismisses instantly. The
+    //      pre-existing footgun warning in surface.cpp documents this;
+    //      we accept it because the alternative (Vulkan stall) breaks
+    //      input responsiveness for the entire daemon.
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")),
                                         .screen = screen,
                                         .role = role,
