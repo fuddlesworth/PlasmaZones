@@ -26,6 +26,16 @@ namespace PhosphorTiles {
 // helper used by the scan strategy.
 static constexpr int MaxWatchedFilesPerDir = 100;
 
+// Hard cap on scripts registered per rescan, summed across every
+// registered directory. Mirrors DirectoryLoader::kMaxEntries,
+// PhosphorShell::ShaderRegistry::kMaxShaders, and AnimationShaderRegistry::
+// kMaxEffects — same defensive rationale, identical magnitude — so all
+// four fsloader-backed registries cap at the same scale. The per-dir
+// MaxWatchedFilesPerDir above is the secondary guard; this is the
+// global one. Typical script counts are single digits; 10k is purely a
+// DoS guard.
+static constexpr int kMaxScripts = 10'000;
+
 /// Scan strategy backing the loader's `WatchedDirectorySet`. Forwards
 /// the base's registered directory list verbatim. The list is kept up
 /// to date by `scanAndRegister`, which calls `registerDirectories` with
@@ -215,15 +225,21 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
 
 void ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveReload)
 {
+    // Disabled-loader short-circuit. An empty subdirectory is the
+    // documented "loader disabled" sentinel, so check it BEFORE
+    // ensureUserDirectoryExists — otherwise the unconditional
+    // userAlgorithmDir() resolution inside the helper logs a misleading
+    // "Cannot determine user data directory" warning every time a
+    // disabled loader's owner pokes scanAndRegister.
+    if (m_subdirectory.isEmpty()) {
+        return;
+    }
+
     // Lazily create user directory on first scan, then re-register the
     // (possibly newly-existing) directory set with the watcher so the
     // freshly-created user dir gets a direct watch instead of staying
     // proxied via parent-watch.
     ensureUserDirectoryExists();
-
-    if (m_subdirectory.isEmpty()) {
-        return;
-    }
 
     // Replace the watcher's registered set with the freshly-resolved
     // XDG paths. Using `setDirectories` (rather than the append-only
@@ -281,7 +297,18 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // truthiness guard at the use-site.
     const QString userDir = userAlgorithmDir();
     const QString canonicalUserDir = QFileInfo(userDir).canonicalFilePath();
+    bool capTripped = false;
     for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
+        // Per-rescan script-count DoS guard. Reverse-iteration scans
+        // user-first / system-last, so a cap-trip drops *system* overflow
+        // rather than user overrides — matches the user-wins-on-cap-trip
+        // property JsonScanStrategy / ShaderRegistry / AnimationShaderRegistry
+        // enforce. Re-checked inside loadFromDirectory so a single dir
+        // dropping us at the cap stops mid-iteration too.
+        if (m_scriptIdToPath.size() >= kMaxScripts) {
+            capTripped = true;
+            break;
+        }
         const QString& dir = *dirIt;
         // Use canonical paths to handle symlinks and relative path differences.
         // Empty canonical (dir doesn't exist yet) cannot match a non-empty
@@ -290,6 +317,13 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
         const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
         const bool isUserDir = !canonicalUserDir.isEmpty() && canonicalDir == canonicalUserDir;
         loadFromDirectory(dir, isUserDir, canonicalUserDir);
+    }
+
+    if (capTripped) {
+        qCWarning(PhosphorTiles::lcTilesLib).nospace()
+            << "ScriptedAlgorithmLoader: reached script cap (" << kMaxScripts
+            << ") — later scripts skipped to protect the GUI thread. Prune the watched algorithm directories or raise "
+               "kMaxScripts.";
     }
 
     // Collect all newly registered script IDs
@@ -354,6 +388,13 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
     const QStringList validFiles = validatedJsFiles(dir, MaxWatchedFilesPerDir);
 
     for (const QString& fullPath : validFiles) {
+        // Mid-directory bail when the global cap was reached during this
+        // scan (e.g. a single user dir holding > kMaxScripts entries).
+        // The outer loop in performScan logs the warning once at the
+        // dir boundary; here we silently stop to keep log noise low.
+        if (m_scriptIdToPath.size() >= kMaxScripts) {
+            return;
+        }
         // Two layered checks, intentionally not redundant:
         //   • `validatedJsFiles` filters by `*.js` extension AND verifies
         //     symlink containment within `dir`'s canonical tree (path-

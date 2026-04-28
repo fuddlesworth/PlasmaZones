@@ -154,7 +154,26 @@ public:
     bool hasParentWatchForTest(const QString& path) const;
 
 Q_SIGNALS:
-    /// Fired after every rescan, coalesced by the 50 ms debounce.
+    /// Fired after every rescan, coalesced by the 50 ms debounce —
+    /// regardless of whether the discovered entry set or any underlying
+    /// payload actually changed.
+    ///
+    /// This is **deliberately** a "rescan completed" signal rather than
+    /// a "content changed" signal — the loader has no visibility into
+    /// the sink's payload semantics, so it cannot diff at this layer.
+    /// Sinks that need change-only consumer signals layer their own diff
+    /// on top: see `PhosphorAnimation::detail::BatchedSink::lastBatchChanged`,
+    /// which `CurveLoader` and `ProfileLoader` consume to gate
+    /// `curvesChanged` / `profilesChanged`.
+    ///
+    /// Tests and debug tooling rely on the per-rescan emission to observe
+    /// rescans without payload inspection — do not weaken this contract
+    /// without updating both the BatchedSink consumers and the test
+    /// suite. The three sister registries (`ShaderRegistry`,
+    /// `AnimationShaderRegistry`, `ScriptedAlgorithmLoader`) gate their
+    /// public content-changed signals at the registry level via SHA-1
+    /// signature or QHash diff because they own their parse output;
+    /// `DirectoryLoader` gates one layer up.
     void entriesChanged();
 
 private:

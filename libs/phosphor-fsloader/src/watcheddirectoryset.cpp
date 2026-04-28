@@ -191,6 +191,16 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
     }
     for (const QString& dir : canonical) {
         const QString cleaned = QDir::cleanPath(dir);
+        // Empty entries inside an otherwise non-empty list are not the
+        // same as an empty list (which the early-exit above already
+        // handles). Skip silently — appending "" to m_directories would
+        // surface forever in directories() and on every rescan as a
+        // "directory does not exist" debug log; the watch itself is
+        // refused by isForbiddenWatchRoot, so the only effect of letting
+        // it through would be permanent garbage in the registered set.
+        if (cleaned.isEmpty()) {
+            continue;
+        }
         if (!m_directories.contains(cleaned)) {
             m_directories.append(cleaned);
         }
@@ -224,6 +234,14 @@ int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveRelo
     canonicalSet.reserve(normalised.size());
     for (const QString& dir : normalised) {
         const QString c = QDir::cleanPath(dir);
+        // Empty entries are not legitimate directories — skip silently.
+        // Same rationale as the empty-entry filter in registerDirectories:
+        // letting "" through would leave permanent garbage in m_directories
+        // for the set's lifetime since isForbiddenWatchRoot refuses the
+        // watch but the m_directories list owns the entry forever.
+        if (c.isEmpty()) {
+            continue;
+        }
         if (canonicalSet.contains(c)) {
             continue;
         }
