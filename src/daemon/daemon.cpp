@@ -815,6 +815,13 @@ bool Daemon::init()
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
 
+    // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
+    // doesn't replay a ghost id into the TilingState (recalculateLayout would
+    // then tile N+1 windows for N actual windows).
+    connect(m_windowRegistry.get(), &WindowRegistry::windowDisappeared, this, [this](const QString& instanceId) {
+        pruneAutotileOrdersForWindow(instanceId);
+    });
+
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers
     // the same debounce → processPendingGeometryUpdates → reapply path; no separate delay needed.
