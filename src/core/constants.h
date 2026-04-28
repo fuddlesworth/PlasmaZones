@@ -5,7 +5,7 @@
 
 #include <PhosphorEngineApi/JsonKeys.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
-#include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorEngineApi/EngineTypes.h>
 
 #include <QColor>
 #include <QLatin1String>

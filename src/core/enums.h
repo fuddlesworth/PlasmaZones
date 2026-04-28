@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorEngineApi/EngineTypes.h>
 #include <PhosphorTiles/AutotileConstants.h>
 
 namespace PlasmaZones {
