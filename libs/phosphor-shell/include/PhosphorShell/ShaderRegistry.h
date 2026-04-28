@@ -122,13 +122,13 @@ public:
     /// default) to disable user/system differentiation — every shader will
     /// then report `isUserShader == false`.
     ///
-    /// Set this BEFORE the first `addSearchPaths` call so the initial
-    /// scan sees the right classification; the registry does not retain
-    /// raw shader paths after the rescan, so changing this later requires
-    /// an explicit `refresh()` to reclassify. Idempotent: passing the
-    /// same value twice is a no-op. Bidirectional: passing the empty
-    /// string clears the user-path designation, passing a non-empty
-    /// string sets or replaces it.
+    /// Order-independent: callable before OR after `addSearchPaths`. When
+    /// the value changes and at least one search path is already
+    /// registered, the call triggers a synchronous rescan so already-
+    /// discovered shaders get reclassified immediately. Idempotent:
+    /// passing the same value twice is a no-op. Bidirectional: passing
+    /// the empty string clears the user-path designation, passing a
+    /// non-empty string sets or replaces it.
     void setUserShaderPath(const QString& path);
 
     /// Current search paths.

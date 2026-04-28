@@ -183,10 +183,23 @@ QStringList ShaderRegistry::searchPaths() const
 
 void ShaderRegistry::setUserShaderPath(const QString& path)
 {
+    if (m_userShaderPath == path) {
+        return; // idempotent — same value, no work to do
+    }
     // Canonicalisation happens at compare time in `performScan` (so
     // callers that pass a path which doesn't exist yet still get the
     // right classification once it materialises). Store the raw input.
     m_userShaderPath = path;
+    // If search paths have already been registered, the prior scan baked
+    // in the OLD user-path classification — a synchronous rescan
+    // refreshes every shader's `isUserShader` flag against the new
+    // value. Without this, callers who set the user path AFTER
+    // `addSearchPaths` (against the documented order, but easy to slip
+    // up on) would silently get every shader flagged as system until an
+    // explicit `refresh()` ran.
+    if (m_watcher && !m_watcher->directories().isEmpty()) {
+        m_watcher->rescanNow();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

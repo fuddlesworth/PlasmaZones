@@ -231,29 +231,29 @@ bool ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveR
     if (m_subdirectory.isEmpty()) {
         return false;
     }
-    const QStringList dirs = algorithmDirectories();
-    if (dirs.isEmpty()) {
-        // Dirs collapsed to empty since the last scan (distro package
-        // uninstalled, user wiped ~/.local/share/<sub>, XDG_DATA_DIRS
-        // rewritten). Drive the diff path directly so any
-        // previously-registered scripts get unregistered — registering
-        // an empty list with the watcher is a no-op (it short-circuits
-        // before rescanAll), so without this explicit invocation
-        // those entries would stay as zombies in the registry forever.
-        // Strategy state — m_scriptIdToPath, m_lastScriptSignature, and
-        // the algorithmsChanged emit — is updated exactly the same way
-        // as on a populated rescan, just with no new entries.
-        performScan(QStringList{});
-        return m_lastScriptSignature != priorSignature;
-    }
 
-    // registerDirectories runs the strategy synchronously, which clears
-    // and rebuilds m_scriptIdToPath and updates m_lastScriptSignature
-    // exactly once. No follow-up rescanNow() — that would re-scan the
-    // same on-disk state we just captured, doubling the work and
-    // (worse) making the priorSignature comparison meaningless because
-    // it would be against the post-first-scan signature.
-    m_watcher->registerDirectories(dirs, liveReload);
+    // Replace the watcher's registered set with the freshly-resolved
+    // XDG paths. Using `setDirectories` (rather than the append-only
+    // `registerDirectories`) handles the dir-set-shrinks case correctly:
+    //
+    //   • If a system XDG entry disappeared (package uninstall) or the
+    //     user wiped ~/.local/share/<sub>, the missing dir is dropped
+    //     from `m_directories` and its watches are torn down — the
+    //     watcher won't keep firing rescans against the dead path.
+    //   • If `dirs` collapses to empty entirely, the strategy still
+    //     runs with an empty list, so any previously-registered scripts
+    //     get unregistered as stale (no zombie registry entries).
+    //   • If `dirs` is identical to the current set, the call is
+    //     effectively a rescan with no churn (added/removed sets both
+    //     empty, watches preserved).
+    //
+    // The strategy is invoked synchronously, which clears and rebuilds
+    // m_scriptIdToPath and updates m_lastScriptSignature exactly once.
+    // No follow-up rescanNow() — that would re-scan the same on-disk
+    // state we just captured, doubling the work and (worse) making the
+    // priorSignature comparison meaningless because it would be against
+    // the post-first-scan signature.
+    m_watcher->setDirectories(algorithmDirectories(), liveReload);
     return m_lastScriptSignature != priorSignature;
 }
 

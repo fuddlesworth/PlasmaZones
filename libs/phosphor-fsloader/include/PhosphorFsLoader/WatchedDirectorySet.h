@@ -91,12 +91,17 @@ public:
      * twice is a no-op on the second call. Triggers an immediate
      * synchronous rescan via the strategy.
      *
-     * `liveReload` is a one-way enable: once any call passes
-     * `LiveReload::On`, the set keeps watching for the rest of its
-     * lifetime. Subsequent `LiveReload::Off` calls do not disarm the
-     * watcher — they just skip arming new watches for the newly-added
-     * directory. Callers that need to stop watching should destroy and
-     * rebuild the set.
+     * `liveReload` is a **set-wide one-way enable**: once any call passes
+     * `LiveReload::On`, the watcher is created and persists for the rest
+     * of the set's lifetime. Subsequent `LiveReload::Off` calls do not
+     * skip watching for the new directory — the per-rescan re-attach loop
+     * (which exists to recover atomic-rename inode swaps) installs a
+     * watch for every directory in `m_directories` regardless of how it
+     * was registered. The flag's effect is therefore limited to the
+     * **immediate** post-registration window: an `Off` registration after
+     * a prior `On` call won't have a watch *until the next rescan
+     * completes*, but it will from then on. Callers that need to stop
+     * watching entirely should destroy and rebuild the set.
      *
      * @return The total number of registered directories after this call.
      */
@@ -109,9 +114,36 @@ public:
      * strategy on every rescan. The base does not impose a system-
      * first or user-first convention.
      *
-     * Same one-way `liveReload` semantics as `registerDirectory`.
+     * Same set-wide one-way `liveReload` semantics as `registerDirectory`.
      */
     int registerDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+
+    /**
+     * @brief Replace the registered directory set with @p directories.
+     *
+     * Unlike `registerDirectories` (append-only), this is a full replacement:
+     * directories present in the current set but not in @p directories are
+     * dropped, their direct watches are removed, and any ancestor proxy
+     * watches they alone depended on are released. Directories present in
+     * both sets are preserved (no churn). Directories new to the set are
+     * appended in @p directories' order.
+     *
+     * Use this when the underlying source-of-truth for the directory list
+     * is dynamic (e.g. XDG paths that change as packages install /
+     * uninstall) and the consumer needs to drop stale entries cleanly.
+     *
+     * The strategy is invoked synchronously with the post-replacement
+     * directory list. Per-file watches are re-synced from the strategy's
+     * return value, so files belonging only to dropped directories are
+     * cleaned up on the same call.
+     *
+     * Same set-wide one-way `liveReload` semantics as `registerDirectory`:
+     * passing `On` enables the watcher (if not already enabled), passing
+     * `Off` does not disarm it.
+     *
+     * @return The total number of registered directories after this call.
+     */
+    int setDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
 
     /**
      * @brief Trigger a debounced rescan of every registered directory.
@@ -140,6 +172,14 @@ public:
     void rescanNow();
 
     /// Currently-registered directories in registration order.
+    ///
+    /// Safe to call from any thread — the underlying QStringList is
+    /// implicitly shared, so the read produces an atomic snapshot of
+    /// the list as it was at the time of the call. The shader-warming
+    /// path forwards `ShaderRegistry::searchPaths()` (which proxies to
+    /// this) into a worker thread; production code is allowed to do the
+    /// same. Mutating callers (`registerDirectories`, `setDirectories`,
+    /// `requestRescan`, `rescanNow`) remain GUI-thread-only.
     QStringList directories() const;
 
     /// Test-only: override the debounce interval (default 50 ms).
@@ -175,6 +215,7 @@ private Q_SLOTS:
 private:
     void installWatcherIfNeeded();
     void attachWatcherForDir(const QString& directory);
+    void releaseAncestorWatchFor(const QString& targetKey);
     void onWatchedPathChanged();
     void syncFileWatches(const QStringList& desiredPaths);
 

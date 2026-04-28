@@ -208,6 +208,30 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     }
 
     if (capTripped) {
+        // System dirs may not have been fully scanned (cap trips on
+        // count, not on dir boundary). For surviving entries that
+        // previously recorded a system shadow, carry the prior
+        // `systemSourcePath` forward instead of clearing it — clearing
+        // would surface in `BatchedSink` as a metadata-only diff and
+        // cause the consumer signal to fan out spuriously every time
+        // the cap trips with no actual content change. The next un-
+        // tripped scan re-derives the path correctly; until then, the
+        // last successfully observed value is the best available
+        // estimate.
+        for (auto it = fresh.begin(); it != fresh.end(); ++it) {
+            if (!it->systemSourcePath.isEmpty()) {
+                continue; // shadowed in this scan; current value is authoritative
+            }
+            const auto prior = m_entries.constFind(it.key());
+            if (prior == m_entries.constEnd() || prior->systemSourcePath.isEmpty()) {
+                continue; // never had a shadow recorded
+            }
+            it->systemSourcePath = prior->systemSourcePath;
+            auto pIt = freshParsedByKey.find(it.key());
+            if (pIt != freshParsedByKey.end()) {
+                pIt->systemSourcePath = prior->systemSourcePath;
+            }
+        }
         qCWarning(lcLoader).nospace()
             << "DirectoryLoader: reached entry cap (" << m_maxEntries
             << ") — later files skipped to protect the GUI thread. Raise kMaxEntries or prune the watched directories.";

@@ -101,11 +101,13 @@ bool isForbiddenWatchRoot(const QString& path)
     // watching $HOME. GenericData/Config catch the obvious XDG roots; Temp,
     // Runtime, and Cache catch consumers whose target lives under
     // /tmp, /run/user/UID, or ~/.cache and where the climb would otherwise
-    // stop at the high-traffic root.
+    // stop at the high-traffic root. Documents/Downloads catch the
+    // user-data trees that aren't XDG-rooted but are still high-churn for
+    // most users (browser downloads, editor saves, etc.).
     using QSP = QStandardPaths;
     static constexpr QSP::StandardLocation kForbidden[] = {
-        QSP::GenericDataLocation, QSP::GenericConfigLocation, QSP::TempLocation,
-        QSP::RuntimeLocation,     QSP::CacheLocation,         QSP::GenericCacheLocation,
+        QSP::GenericDataLocation, QSP::GenericConfigLocation, QSP::TempLocation,      QSP::RuntimeLocation,
+        QSP::CacheLocation,       QSP::GenericCacheLocation,  QSP::DocumentsLocation, QSP::DownloadLocation,
     };
     for (const auto loc : kForbidden) {
         if (matches(QSP::writableLocation(loc))) {
@@ -167,6 +169,70 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
     return m_directories.size();
 }
 
+int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveReload liveReload)
+{
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::setDirectories",
+               "GUI-thread only — see class docs");
+
+    // Canonicalise + dedup the new set, preserving caller order. Same
+    // canonicalisation rule as `registerDirectories` so a setDirectories
+    // call followed by a registerDirectories call doesn't double-register
+    // the same path under two spellings.
+    QStringList canonical;
+    canonical.reserve(directories.size());
+    QSet<QString> canonicalSet;
+    canonicalSet.reserve(directories.size());
+    for (const QString& dir : directories) {
+        const QString c = QDir::cleanPath(dir);
+        if (canonicalSet.contains(c)) {
+            continue;
+        }
+        canonicalSet.insert(c);
+        canonical.append(c);
+    }
+
+    // Diff old vs new — anything in the prior set that's missing from the
+    // new set needs its watches torn down. Keep the diff against the
+    // pre-replacement m_directories so we don't drop watches for entries
+    // that survive the replacement.
+    QStringList removed;
+    for (const QString& existing : m_directories) {
+        if (!canonicalSet.contains(existing)) {
+            removed.append(existing);
+        }
+    }
+
+    m_directories = std::move(canonical);
+
+    // Tear down direct + ancestor watches for dropped dirs. Per-file
+    // watches are owned by the strategy and re-synced inside `rescanAll`
+    // below, so we don't clean them up here — the strategy's new
+    // `desiredFileWatches` return drives that.
+    if (m_watcher) {
+        for (const QString& dir : std::as_const(removed)) {
+            // Direct watch removal — silent no-op when the path wasn't
+            // directly watched (ancestor-proxied or never-existed targets).
+            if (m_watcher->directories().contains(dir)) {
+                m_watcher->removePath(dir);
+            }
+            // Ancestor back-reference cleanup. Same refcount-by-iteration
+            // shape as the promotion branch in `attachWatcherForDir` —
+            // factored into `releaseAncestorWatchFor`.
+            releaseAncestorWatchFor(dir);
+        }
+    }
+
+    if (liveReload == LiveReload::On) {
+        installWatcherIfNeeded();
+        for (const QString& dir : std::as_const(m_directories)) {
+            attachWatcherForDir(dir);
+        }
+    }
+
+    rescanAll();
+    return m_directories.size();
+}
+
 void WatchedDirectorySet::rescanNow()
 {
     Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::rescanNow",
@@ -211,6 +277,8 @@ void WatchedDirectorySet::setDebounceIntervalForTest(int ms)
 
 QString WatchedDirectorySet::watchedAncestorForTest(const QString& target) const
 {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::watchedAncestorForTest",
+               "GUI-thread only — see class docs");
     // Canonicalise the lookup key to match the insertion key used by
     // `attachWatcherForDir`, otherwise trailing-slash differences
     // between the caller's test path and the internal form would cause
@@ -220,6 +288,8 @@ QString WatchedDirectorySet::watchedAncestorForTest(const QString& target) const
 
 bool WatchedDirectorySet::hasParentWatchForTest(const QString& path) const
 {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::hasParentWatchForTest",
+               "GUI-thread only — see class docs");
     return m_watchedParents.contains(QDir::cleanPath(path));
 }
 
@@ -428,47 +498,12 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
         if (!m_watcher->directories().contains(directory)) {
             m_watcher->addPath(directory);
         }
-        // Promotion cleanup — look up the ancestor WE actually watched
-        // for this target. A prior `attachWatcherForDir` invocation may
-        // have climbed past the immediate parent (because the parent
-        // didn't exist either at the time) and installed the watch on
-        // a grandparent / further ancestor. Removing `info.absolutePath()`
-        // here would miss that case and leak the ancestor watch for the
-        // set's lifetime, firing a rescan for every unrelated file
-        // event in that tree.
-        const auto watchedAncestorIt = m_parentWatchFor.constFind(targetKey);
-        if (watchedAncestorIt != m_parentWatchFor.constEnd()) {
-            const QString watchedAncestor = watchedAncestorIt.value();
-            m_parentWatchFor.erase(watchedAncestorIt);
-            if (m_watchedParents.contains(watchedAncestor)) {
-                // Only remove the ancestor watch if no OTHER configured
-                // target still relies on it (multiple missing-sibling
-                // targets can share one climbed ancestor). Iterate the
-                // remaining `m_parentWatchFor` values — that map tracks
-                // exactly which other targets still need this ancestor.
-                //
-                // O(N) per promotion in the count of missing-target
-                // dirs sharing this ancestor. N is bounded by the
-                // consumer's registered-directory count (typical
-                // single-digit: one user dir, a handful of system
-                // dirs), so the linear sweep is preferable to a
-                // refcount mirror. If a future consumer registers
-                // hundreds of missing-target paths under one
-                // ancestor, swap this for a `QHash<ancestor, int>`
-                // refcount.
-                bool ancestorStillNeeded = false;
-                for (auto it = m_parentWatchFor.constBegin(); it != m_parentWatchFor.constEnd(); ++it) {
-                    if (it.value() == watchedAncestor) {
-                        ancestorStillNeeded = true;
-                        break;
-                    }
-                }
-                if (!ancestorStillNeeded) {
-                    m_watcher->removePath(watchedAncestor);
-                    m_watchedParents.remove(watchedAncestor);
-                }
-            }
-        }
+        // Promotion cleanup — release the ancestor watch we recorded
+        // for this target on a previous (target-not-yet-existing) call.
+        // The same shape is used by `setDirectories` when a target is
+        // dropped from the registered set; both call sites share
+        // `releaseAncestorWatchFor`.
+        releaseAncestorWatchFor(targetKey);
     } else {
         // Target doesn't exist (yet). Watch the nearest existing
         // ancestor as a proxy — when the ancestor changes (typically
@@ -558,6 +593,47 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
         // steady.
         m_parentWatchFor.insert(targetKey, ancestor);
     }
+}
+
+void WatchedDirectorySet::releaseAncestorWatchFor(const QString& targetKey)
+{
+    if (!m_watcher) {
+        return;
+    }
+    // Look up the ancestor WE actually watched for this target. The climb
+    // in `attachWatcherForDir` may land on a grandparent (or further) when
+    // the immediate parent doesn't exist either, so removing
+    // `info.absolutePath()` would miss that case and leak the ancestor
+    // watch for the set's lifetime — firing a rescan for every unrelated
+    // file event in that tree.
+    const auto it = m_parentWatchFor.constFind(targetKey);
+    if (it == m_parentWatchFor.constEnd()) {
+        return;
+    }
+    const QString watchedAncestor = it.value();
+    m_parentWatchFor.erase(it);
+    if (!m_watchedParents.contains(watchedAncestor)) {
+        return;
+    }
+    // Only remove the ancestor watch if no OTHER configured target still
+    // relies on it (multiple missing-sibling targets can share one
+    // climbed ancestor). Iterate the remaining `m_parentWatchFor` values
+    // — that map tracks exactly which other targets still need this
+    // ancestor.
+    //
+    // O(N) per release in the count of missing-target dirs sharing this
+    // ancestor. N is bounded by the consumer's registered-directory count
+    // (typical single-digit: one user dir, a handful of system dirs), so
+    // the linear sweep is preferable to a refcount mirror. If a future
+    // consumer registers hundreds of missing-target paths under one
+    // ancestor, swap this for a `QHash<ancestor, int>` refcount.
+    for (auto pit = m_parentWatchFor.constBegin(); pit != m_parentWatchFor.constEnd(); ++pit) {
+        if (pit.value() == watchedAncestor) {
+            return; // still needed by another target
+        }
+    }
+    m_watcher->removePath(watchedAncestor);
+    m_watchedParents.remove(watchedAncestor);
 }
 
 void WatchedDirectorySet::onWatchedPathChanged()

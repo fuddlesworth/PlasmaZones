@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -402,6 +403,126 @@ private Q_SLOTS:
         set.rescanNow();
         QCOMPARE(set.watchedAncestorForTest(target), QString());
         QCOMPARE(set.hasParentWatchForTest(tmp), false);
+    }
+
+    /// `setDirectories` is a full replacement: dirs in the prior set but
+    /// not in the new set get dropped (with their direct watches
+    /// removed), dirs in both are preserved untouched, dirs new to the
+    /// set are appended. The strategy sees the post-replacement order on
+    /// the synchronous rescan that follows.
+    void testSetDirectories_replacesAddsAndDrops()
+    {
+        QTemporaryDir a;
+        QTemporaryDir b;
+        QTemporaryDir c;
+        QVERIFY(a.isValid() && b.isValid() && c.isValid());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.registerDirectories({a.path(), b.path()}, LiveReload::Off);
+        QCOMPARE(set.directories().size(), 2);
+
+        // Replace {a, b} with {b, c} — `a` is dropped, `b` survives,
+        // `c` is appended.
+        set.setDirectories({b.path(), c.path()}, LiveReload::Off);
+
+        const QStringList listed = set.directories();
+        QCOMPARE(listed.size(), 2);
+        QCOMPARE(listed.at(0), QDir::cleanPath(b.path()));
+        QCOMPARE(listed.at(1), QDir::cleanPath(c.path()));
+        // The strategy's last-seen scan order matches the post-replacement
+        // directory list — `a` does not show up.
+        QCOMPARE(strategy.lastDirectories.size(), 2);
+        QCOMPARE(strategy.lastDirectories.at(0), QDir::cleanPath(b.path()));
+        QCOMPARE(strategy.lastDirectories.at(1), QDir::cleanPath(c.path()));
+    }
+
+    /// Replacing the set with an empty list still runs the strategy with
+    /// an empty list — that's how consumers signal "everything's gone,
+    /// drop your registered entries". Without going through this path
+    /// (the prior in-tree workaround called the strategy directly,
+    /// bypassing the watcher) the directory list would never shrink and
+    /// stale dirs would keep being scanned.
+    void testSetDirectories_emptyDrivesEmptyScan()
+    {
+        QTemporaryDir a;
+        QVERIFY(a.isValid());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(a.path(), LiveReload::Off);
+        QCOMPARE(set.directories().size(), 1);
+
+        set.setDirectories({}, LiveReload::Off);
+
+        QVERIFY(set.directories().isEmpty());
+        // The strategy's most recent scan must have been driven with an
+        // empty directory list — that's the contract that lets a
+        // consumer's strategy unregister stale entries.
+        QVERIFY(strategy.lastDirectories.isEmpty());
+        QVERIFY(strategy.scanCount >= 2); // initial register + post-set
+    }
+
+    /// When a target whose only watch is a parent-proxy is dropped via
+    /// `setDirectories`, the parent watch is released — unless another
+    /// surviving target still depends on it. Mirrors the shared-ancestor
+    /// refcounting tested for promotion, but on the drop path.
+    void testSetDirectories_releasesAncestorWatchOnDrop()
+    {
+        const QString tmp = QDir::cleanPath(m_tmp->path());
+        const QString siblingA = tmp + QStringLiteral("/missing-set-a/leaf");
+        const QString siblingB = tmp + QStringLiteral("/missing-set-b/leaf");
+        QVERIFY(!QFileInfo::exists(siblingA));
+        QVERIFY(!QFileInfo::exists(siblingB));
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.setDebounceIntervalForTest(1);
+        set.registerDirectories({siblingA, siblingB}, LiveReload::On);
+
+        // Both targets share the m_tmp ancestor watch.
+        QVERIFY(set.hasParentWatchForTest(tmp));
+        QCOMPARE(set.watchedAncestorForTest(siblingA), tmp);
+        QCOMPARE(set.watchedAncestorForTest(siblingB), tmp);
+
+        // Drop sibling A — the shared ancestor must survive because B
+        // still depends on it.
+        set.setDirectories({siblingB}, LiveReload::On);
+        QVERIFY(set.hasParentWatchForTest(tmp));
+        QCOMPARE(set.watchedAncestorForTest(siblingA), QString());
+        QCOMPARE(set.watchedAncestorForTest(siblingB), tmp);
+
+        // Drop sibling B too — now nothing needs the ancestor watch, so
+        // it must finally be released.
+        set.setDirectories({}, LiveReload::On);
+        QCOMPARE(set.hasParentWatchForTest(tmp), false);
+        QCOMPARE(set.watchedAncestorForTest(siblingB), QString());
+    }
+
+    /// $HOME-class forbidden roots include not just $HOME itself but also
+    /// the user-data roots that aren't XDG-rooted yet are still high-
+    /// churn for typical users (Documents, Downloads). Watching them
+    /// would otherwise trigger a full rescan for every browser download
+    /// or editor save in those trees.
+    void testForbiddenRoot_documentsLocationRefused()
+    {
+        const QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        if (documents.isEmpty()) {
+            QSKIP("Platform has no DocumentsLocation");
+        }
+        const QString uniqueLeaf =
+            QStringLiteral("phosphor-fsloader-doc-test-") + QString::number(QDateTime::currentMSecsSinceEpoch());
+        const QString neverExists = documents + QLatin1Char('/') + uniqueLeaf + QStringLiteral("/never/exists");
+        QVERIFY(!QFileInfo::exists(neverExists));
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(neverExists, LiveReload::On);
+
+        // Climb landed on Documents, which is now forbidden — no
+        // ancestor watch installed.
+        QCOMPARE(set.hasParentWatchForTest(documents), false);
+        QCOMPARE(set.watchedAncestorForTest(neverExists), QString());
     }
 
     /// `syncFileWatches` silently dedupes when a strategy reports a path
