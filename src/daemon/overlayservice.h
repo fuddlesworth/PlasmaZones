@@ -302,7 +302,7 @@ public:
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
-    bool isLayoutPickerVisible() const;
+    bool isLayoutPickerVisible() const override;
 
     /**
      * @brief Pre-create the Layout Picker QML window on the primary screen.
@@ -330,7 +330,7 @@ public Q_SLOTS:
     // QQuickWindow would re-introduce the blocking ~QQuickWindow Vulkan
     // teardown that the warm-surface design is meant to avoid. Pre-warmed
     // OSD windows are reused for the daemon's entire lifetime.
-    void hideLayoutPicker();
+    void hideLayoutPicker() override;
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML

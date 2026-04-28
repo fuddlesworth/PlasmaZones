@@ -230,6 +230,16 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
 
 void WindowDragAdaptor::cancelSnap()
 {
+    // Layout picker takes precedence: Escape on a visible picker should
+    // dismiss the picker, not also cancel any underlying drag. KGlobalAccel
+    // routes one action per key, so the picker-open path piggybacks on this
+    // same kCancelOverlayId binding rather than competing with a separate
+    // Escape registration that the OS-level grab would silently no-op.
+    if (m_overlayService && m_overlayService->isLayoutPickerVisible()) {
+        m_overlayService->hideLayoutPicker();
+        return;
+    }
+
     // Cancel any active autotile drag-insert preview so neighbours snap back
     // to their original order instead of sticking at the previewed position.
     cancelDragInsertIfActive();

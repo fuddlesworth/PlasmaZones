@@ -486,6 +486,19 @@ void Daemon::connectShortcutSignals()
 
     // PhosphorZones::Layout picker shortcut (interactive layout browser + resnap)
     // Capture screen name at open time so it's still valid after the picker closes.
+    //
+    // Escape handling: KWin's wlr-layer-shell does not deliver keyboard
+    // events to the picker's QQuickWindow on this Qt/KDE combination
+    // (verified via Keys.onPressed diagnostic — fires zero times for the
+    // duration of the picker). The QML Shortcut path is therefore unable
+    // to react to Escape. We register Escape via KGlobalAccel using the
+    // SAME id as the drag-cancel shortcut (`kCancelOverlayId`) so that:
+    //   1. KGlobalAccel doesn't see two distinct actions competing for
+    //      Escape — it only routes to one action per key, and the second
+    //      ad-hoc registration would otherwise be silently no-op'd.
+    //   2. cancelSnap() — the kCancelOverlayId callback — already
+    //      dismisses whichever overlay is visible; the picker-takes-
+    //      precedence ordering lives there.
     connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
         if (!m_unifiedLayoutController) {
             return;
@@ -498,6 +511,18 @@ void Daemon::connectShortcutSignals()
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
+        if (m_windowDragAdaptor) {
+            m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
+        }
+    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
+        // Only release the Escape grab if no drag is currently active —
+        // otherwise the in-progress drag's own cancel-overlay shortcut
+        // would be torn down underneath it. WindowDragAdaptor's drag-end
+        // path will release on its own when appropriate.
+        if (m_windowDragAdaptor && !m_windowDragAdaptor->isDragActive()) {
+            m_windowDragAdaptor->releaseCancelOverlayShortcut();
+        }
     });
     connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
         if (!m_unifiedLayoutController) {

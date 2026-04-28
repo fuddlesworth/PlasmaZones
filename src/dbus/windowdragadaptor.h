@@ -103,6 +103,39 @@ public:
         m_shortcutRegistrar = registrar;
     }
 
+    /**
+     * Register / unregister the cancel-overlay Escape shortcut on demand.
+     *
+     * Drag-active code paths register/unregister automatically as part of
+     * the drag lifecycle. The layout picker re-uses the same id
+     * (kCancelOverlayId) so KGlobalAccel never sees two distinct actions
+     * competing for Escape — once a key is granted, KGlobalAccel routes
+     * to a single action, and a second registration with a fresh id is
+     * silently no-op'd. cancelSnap() dismisses whichever overlay is
+     * visible (picker takes precedence over snap-assist over drag) so a
+     * single shared binding works for all consumers.
+     *
+     * Idempotent: calling register twice in a row is a no-op (Registry
+     * deduplicates same-id same-sequence binds).
+     */
+    void ensureCancelOverlayShortcutRegistered()
+    {
+        registerCancelOverlayShortcut();
+    }
+    void releaseCancelOverlayShortcut()
+    {
+        unregisterCancelOverlayShortcut();
+    }
+
+    /// Whether a drag is currently active (m_draggedWindowId non-empty).
+    /// Daemon uses this to gate the picker-dismissed Escape release on
+    /// drag state — releasing while a drag is in flight would tear down
+    /// the drag's own Escape grab.
+    bool isDragActive() const
+    {
+        return !m_draggedWindowId.isEmpty();
+    }
+
 public Q_SLOTS:
     /**
      * Begin a drag session — daemon-authoritative policy decision.
