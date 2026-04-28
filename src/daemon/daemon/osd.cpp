@@ -242,8 +242,23 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             // overlay expects `{zoneNumber, relativeGeometry:{x,y,w,h},
             // id, name, useCustomColors}` — we project the preview's zones
             // directly without going through a second preview-generation path.
+            //
+            // canvasSize: pass the target screen's available geometry so
+            // aspect-sensitive algorithms (BSP / fibonacci / spiral) split
+            // along the same axis the live tiler uses. Without this, BSP on
+            // a portrait VS shows a left/right split in the OSD while the
+            // tiler actually places windows top/bottom — preview lies. Use
+            // available geometry (panel-excluded) so it matches the rect
+            // the tiler computes against.
+            QSize previewCanvas;
+            if (m_screenManager) {
+                const QRect avail = m_screenManager->screenAvailableGeometry(screenId);
+                if (avail.isValid() && avail.width() > 0 && avail.height() > 0) {
+                    previewCanvas = avail.size();
+                }
+            }
             const PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(
-                algorithmId, algo, windowCount > 0 ? windowCount : -1, m_algorithmRegistry.get());
+                algorithmId, algo, windowCount > 0 ? windowCount : -1, m_algorithmRegistry.get(), previewCanvas);
             QVariantList zones;
             zones.reserve(preview.zones.size());
             for (int i = 0; i < preview.zones.size(); ++i) {
