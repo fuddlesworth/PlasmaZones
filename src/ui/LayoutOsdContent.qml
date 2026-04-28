@@ -85,7 +85,7 @@ Item {
     property bool fontStrikeout: false
     property bool locked: false
     property bool disabled: false
-    property string disabledReason
+    property string disabledReason: ""
     // Content-driven desired size, exposed for the unified host (which binds
     // its Window width/height to these readonly properties; C++ also reads
     // them after every property write to compute matching layer-shell margins).

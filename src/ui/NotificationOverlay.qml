@@ -39,6 +39,11 @@ import org.kde.kirigami as Kirigami
  */
 Window {
     // ── Mode selection ─────────────────────────────────────────────────────
+    // Per-mode Component definitions. Each Component's content explicitly
+    // wires only the root properties its content type understands —
+    // LayoutOsdContent never sees `success`/`action`, NavigationOsdContent
+    // never sees `layoutId`/`layoutName`. C++ writeQmlProperty calls flow
+    // root → binding → loader.item.
 
     id: root
 
@@ -91,11 +96,12 @@ Window {
     property color errorColor: Kirigami.Theme.negativeTextColor
     // Re-export the loaded content's contentDesiredWidth/Height — the C++
     // OSD show paths read these via window->property("contentDesiredWidth")
-    // to size the layer surface (and to compute matching layer-shell margins),
-    // and the Window itself binds width/height to them so the QML side
-    // stays self-consistent. Fallback values cover the warm-up window
-    // where mode="" → no content loaded; the surface is invisible at that
-    // point so the exact value doesn't matter.
+    // to size the layer surface (and to compute matching layer-shell margins).
+    // Fallback values cover the warm-up window where mode="" → no content
+    // loaded; the surface is invisible at that point so the exact value
+    // doesn't matter, but they MUST match osd.cpp's readOsdContentSize
+    // fallbacks so a missed property read doesn't size the surface to one
+    // value while QML measures another.
     readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : 240
     readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : 70
 
@@ -105,7 +111,8 @@ Window {
     /// `&Class::signal` pointers), so the dispatch chain
     ///   QML dismissTimer → loaded content dismissRequested → host dismissRequested
     ///     → Surface::hide() → SurfaceAnimator::beginHide
-    /// closes around the unified surface.
+    /// closes around the unified surface. Parameter-less by design — the
+    /// surface identity is implicit in the connection target.
     signal dismissRequested()
 
     /// Restart the loaded content's auto-dismiss timer. C++ invokes this
@@ -121,14 +128,29 @@ Window {
     // on the underlying QWindow during hide.
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
-    // Bind to the content-driven desired size — see contentDesiredWidth /
-    // contentDesiredHeight comment above for the rationale.
-    width: contentDesiredWidth
-    height: contentDesiredHeight
+    // Initial warm-up size only. C++ owns sizing imperatively post-warm-up:
+    // every show path measures contentDesiredWidth/Height after writing
+    // mode + per-mode properties, then calls QQuickWindow::setWidth/Height
+    // before Surface::show(). A QML binding to contentDesiredWidth here
+    // would be broken on the first imperative setWidth, leaving an
+    // ambiguous "binding sometimes drives size, sometimes doesn't" model.
+    // Keep these as plain literal initializers; surface is visible=false
+    // during warm-up so the value is cosmetic.
+    width: 240
+    height: 70
     // Start hidden; first Surface::show() flips visible=true. Subsequent
     // hides keep the layer surface mapped (keepMappedOnHide=true) so the
     // warmed Vulkan swapchain survives across show cycles.
     visible: false
+    // Catch typos in C++ mode writes ("layout-OSD" / "navigation_osd" / …)
+    // before they degrade silently to "no content shown". Production
+    // writers in osd.cpp use string constants, so this only fires under
+    // a regression — cheap to leave in.
+    onModeChanged: {
+        if (mode !== "" && mode !== "layout-osd" && mode !== "navigation-osd")
+            console.warn("NotificationOverlay: unknown mode =", mode);
+
+    }
 
     Loader {
         id: loader
@@ -155,11 +177,15 @@ Window {
         }
     }
 
-    // Per-mode Component definitions. Each Component's content explicitly
-    // wires only the root properties its content type understands —
-    // LayoutOsdContent never sees `success`/`action`, NavigationOsdContent
-    // never sees `layoutId`/`layoutName`. C++ writeQmlProperty calls flow
-    // root → binding → loader.item.
+    // Caveat: the loaded content is rebuilt from scratch on every mode
+    // flip, with bindings evaluated against root.* values current at item-
+    // creation time. C++ overwrites the per-mode properties immediately
+    // after the mode write, so the eventual visible state is correct —
+    // BUT property-changed handlers inside content (`on<Name>Changed`)
+    // will not fire if the new value matches the previous show's value.
+    // Don't rely on Changed handlers for run-once-per-show side effects;
+    // do that work via the C++ side (or via Component.onCompleted, which
+    // does fire on every recreation).
     Component {
         id: layoutOsdComp
 

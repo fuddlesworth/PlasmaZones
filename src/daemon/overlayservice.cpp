@@ -252,18 +252,13 @@ void OverlayService::setupSurfaceAnimator()
     // uses today, so the live-reload path (drop a JSON, see it apply on
     // next show) automatically applies to the C++ side too.
     //
-    // Phase-2 surface unification: LayoutOsd and NavigationOsd surfaces
-    // collapsed onto a single per-screen `PzRoles::Notification` surface
-    // (NotificationOverlay.qml). The legacy LayoutOsd / NavigationOsd
-    // registrations are kept for any external consumer that still
-    // creates a surface under those scope prefixes; the production
-    // OSD path resolves through the Notification key instead, which
-    // matches every `plasmazones-notification-*` scope via the
-    // animator's longest-prefix lookup.
-    const auto osdConfig = buildOsdConfig();
-    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, osdConfig);
-    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
-    m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
+    // Phase-2 surface unification: a single per-screen
+    // PzRoles::Notification surface (NotificationOverlay.qml) hosts both
+    // layout-OSD and navigation-OSD content via a Loader. Production
+    // surfaces are scoped `plasmazones-notification-{screenId}-{gen}`
+    // and resolve to this config via the animator's longest-prefix
+    // lookup.
+    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig());
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig());
     m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig());
     m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig());
@@ -1019,8 +1014,9 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     // because virtual-screen ids embed the physical id as the prefix.
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (!physId.isEmpty()) {
+        const QString vsPrefix = physId + PhosphorIdentity::VirtualScreenId::Separator;
         for (auto it = m_notificationCreationFailed.begin(); it != m_notificationCreationFailed.end();) {
-            if (it.key() == physId || it.key().startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator)) {
+            if (*it == physId || it->startsWith(vsPrefix)) {
                 it = m_notificationCreationFailed.erase(it);
             } else {
                 ++it;

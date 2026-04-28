@@ -340,16 +340,13 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 //     → Surface::Impl flips Qt::WindowTransparentForInput on the QWindow
 // No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
 // across the keepMappedOnHide=true lifecycle so the warmed Vulkan
-// swapchain survives. Pre-warmed by warmUpLayoutOsd / warmUpNavigationOsd
-// (both route through warmUpNotifications onto the same surface) and
-// reused for the daemon's lifetime; destroyNotificationWindow only fires
-// on screen-removal / shutdown.
+// swapchain survives. Pre-warmed by warmUpNotifications and reused for
+// the daemon's lifetime; destroyNotificationWindow only fires on
+// screen-removal / shutdown.
 
-// Shared hot-plug hook. Called from warmUpLayoutOsd AND warmUpNavigationOsd
-// (both legacy entry points route into the same unified-notification warmer
-// post-Phase-2). The single m_notificationsWarmed flag gates whether new
-// screens get a per-screen NotificationOverlay window — both legacy warmers
-// set it, so calling either one is sufficient to opt this daemon in.
+// Hot-plug hook installed by warmUpNotifications. The single
+// m_notificationsWarmed flag gates whether new screens get a per-screen
+// NotificationOverlay window after the initial warm-up.
 void OverlayService::ensureOsdScreenAddedConnected()
 {
     if (m_screenAddedConnected) {
@@ -373,10 +370,8 @@ void OverlayService::ensureOsdScreenAddedConnected()
 
 // Pre-create the per-screen NotificationOverlay surface for every effective
 // screen the manager knows about, then mark notifications warmed and ensure
-// the screenAdded hot-plug hook is installed. Shared body of warmUpLayoutOsd
-// and warmUpNavigationOsd — Phase-2 unification collapsed both onto a single
-// surface, so the two public entry points only differ in their log line.
-void OverlayService::warmUpNotifications(const char* logSuffix)
+// the screenAdded hot-plug hook is installed.
+void OverlayService::warmUpNotifications()
 {
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
     for (const QString& sid : effectiveIds) {
@@ -390,24 +385,8 @@ void OverlayService::warmUpNotifications(const char* logSuffix)
         }
     }
     m_notificationsWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows (" << logSuffix << ") for" << effectiveIds.size()
-                      << "effective screens";
+    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows for" << effectiveIds.size() << "effective screens";
     ensureOsdScreenAddedConnected();
-}
-
-void OverlayService::warmUpLayoutOsd()
-{
-    warmUpNotifications("layout OSD path");
-}
-
-void OverlayService::warmUpNavigationOsd()
-{
-    // Phase-2 unification: both legacy warmer entry points target the same
-    // per-screen NotificationOverlay surface that hosts LayoutOsdContent and
-    // NavigationOsdContent via a Loader. Calling this is functionally the
-    // same as calling warmUpLayoutOsd; both paths are kept so existing
-    // signals.cpp call sites don't need to change.
-    warmUpNotifications("navigation OSD path");
 }
 
 void OverlayService::createNotificationWindow(const QString& screenId, QScreen* physScreen)
@@ -420,7 +399,7 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
     // retry on every OSD show — one warning per screen is enough. The
     // sentinel is cleared in destroyAllWindowsForPhysicalScreen when the
     // monitor is hot-plug-cycled, so reconnecting the screen does retry.
-    if (m_notificationCreationFailed.value(screenId, false)) {
+    if (m_notificationCreationFailed.contains(screenId)) {
         return;
     }
 
@@ -439,7 +418,7 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create notification window for screen=" << screenId
                              << "— suppressing further attempts until screen is replugged";
-        m_notificationCreationFailed.insert(screenId, true);
+        m_notificationCreationFailed.insert(screenId);
         return;
     }
 
@@ -480,16 +459,18 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal)
+    // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
+    // The dedup state is updated only after we've decided to actually
+    // show — see the matching m_lastNavigation* writes below near
+    // navSurface->show(). A bail-out path further down (no physScreen,
+    // no layout, etc.) must NOT poison the dedup state, otherwise a
+    // failed show silently swallows the next legitimate call within 200 ms.
     const QString actionKey = action + QLatin1Char(':') + reason;
     if (actionKey == m_lastNavigationActionKey && screenId == m_lastNavigationScreenId && m_lastNavigationTime.isValid()
         && m_lastNavigationTime.elapsed() < 200) {
         qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
         return;
     }
-    m_lastNavigationActionKey = actionKey;
-    m_lastNavigationScreenId = screenId;
-    m_lastNavigationTime.restart();
 
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
@@ -601,6 +582,14 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // calls above return.
     sizeAndCenterOsd(window, navSurface, physScreen, navScreenGeom);
 
+    // Update dedup state only now — every early-return above this point
+    // is a "no OSD shown" outcome that must not poison the next call's
+    // dedup window. Pairs with the comment above the early-return at the
+    // top of this function.
+    m_lastNavigationActionKey = actionKey;
+    m_lastNavigationScreenId = screenId;
+    m_lastNavigationTime.restart();
+
     // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
     // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
@@ -612,7 +601,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 }
 
 // hideNavigationOsd removed together with hideLayoutOsd — see the comment
-// block above warmUpLayoutOsd() for the rationale. The m_lastNavigation*
+// block above warmUpNotifications() for the rationale. The m_lastNavigation*
 // dedup state is cleared implicitly by the 200 ms timeout check in
 // showNavigationOsd() itself (the OSD's ~1000 ms dismiss timer is far
 // longer than the dedup window, so any dismiss is always past the

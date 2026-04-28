@@ -450,8 +450,9 @@ void Daemon::connectLayoutSignals()
     // perceptible lag. Deferred so daemon init completes first.
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
-            m_overlayService->warmUpLayoutOsd();
-            m_overlayService->warmUpNavigationOsd();
+            // Single warm-up covers both layout-OSD and navigation-OSD —
+            // they share one per-screen surface (NotificationOverlay.qml).
+            m_overlayService->warmUpNotifications();
             // Pre-create the Layout Picker too. Without this the first user-
             // triggered show of the picker pays a visible ~50-100 ms latency
             // (Wayland surface + Vulkan swapchain + QML compilation) before

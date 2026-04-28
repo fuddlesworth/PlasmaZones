@@ -251,47 +251,28 @@ public:
 
     /**
      * @brief Pre-create the unified NotificationOverlay window for all connected
-     * screens (layout-OSD path).
+     * screens. Drives both the layout-OSD and navigation-OSD show paths since
+     * they share a single per-screen surface (Phase-2 unification).
      *
      * First-time QML compilation of NotificationOverlay.qml takes ~100-300ms
      * (component loading, scene graph creation, Wayland layer-shell
      * registration). Call this early (deferred from daemon start) so the
-     * first layout switch OSD appears instantly instead of blocking the
-     * event loop. Functionally identical to @ref warmUpNavigationOsd —
-     * both legacy entry points share the same per-screen surface — but
-     * kept distinct for caller clarity.
-     */
-    void warmUpLayoutOsd();
-
-    /**
-     * @brief Pre-create the unified NotificationOverlay window for all connected
-     * screens (navigation-OSD path).
+     * first layout switch OSD or keyboard navigation action appears
+     * instantly instead of blocking the event loop.
      *
-     * Same rationale and same surface as @ref warmUpLayoutOsd: avoids the
-     * ~100-300ms NotificationOverlay.qml compilation delay on the first
-     * keyboard navigation action after daemon start.
+     * Idempotent — subsequent calls are no-ops thanks to the
+     * m_notificationsWarmed latch and per-screen window guard.
      */
-    void warmUpNavigationOsd();
+    void warmUpNotifications();
 
 private:
     /**
-     * @brief Install the QGuiApplication::screenAdded hook once for both OSD
-     * warmers.
-     *
-     * Called from warmUpLayoutOsd AND warmUpNavigationOsd so consumers that
-     * only warm one kind still get hot-plug-triggered instances for the
-     * OSDs they actually warmed. Idempotent via m_screenAddedConnected.
+     * @brief Install the QGuiApplication::screenAdded hook for the
+     * notification overlay so hot-plugged monitors get a per-screen window
+     * after the initial warm-up. Idempotent via m_screenAddedConnected
+     * (lambdas can't use UniqueConnection).
      */
     void ensureOsdScreenAddedConnected();
-
-    /**
-     * @brief Shared body of warmUpLayoutOsd / warmUpNavigationOsd.
-     *
-     * Both legacy entry points hit the same per-screen NotificationOverlay
-     * surface post-Phase-2 — they only differ in the log suffix used to
-     * record which path triggered the warm-up.
-     */
-    void warmUpNotifications(const char* logSuffix);
 
 public:
     // Navigation OSD (feedback for keyboard navigation)
@@ -519,9 +500,9 @@ private:
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
     // "Notifications have been pre-warmed" flag. With LayoutOsd and
     // NavigationOsd unified onto a single per-screen NotificationOverlay
-    // surface, a single flag gates whether the screenAdded hot-plug lambda
-    // auto-creates the per-new-screen notification window. Either of the
-    // legacy public warmers (warmUpLayoutOsd / warmUpNavigationOsd) sets it.
+    // surface, this single flag gates whether the screenAdded hot-plug
+    // lambda auto-creates the per-new-screen notification window.
+    // Set by warmUpNotifications().
     bool m_notificationsWarmed = false;
 
     // Keep-alive is managed by m_surfaceManager (PhosphorSurfaces::SurfaceManager).
@@ -537,7 +518,7 @@ private:
     // regardless of which OSD path (layout-osd or navigation-osd) tried to
     // bring the surface up. Cleared in destroyAllWindowsForPhysicalScreen
     // when a hot-plug cycle reattaches the same physical monitor.
-    QHash<QString, bool> m_notificationCreationFailed;
+    QSet<QString> m_notificationCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationActionKey; // "action:reason" composite key
     QString m_lastNavigationScreenId;

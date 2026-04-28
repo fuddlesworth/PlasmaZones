@@ -790,11 +790,12 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
 
     // No visibleChanged → hide hookup here. The post-warmup design keeps the
     // Qt window `visible == true` for the surface's lifetime; the dismiss
-    // mechanism is the QML `_pickerDismissed` flag flipping the
-    // WindowTransparentForInput bit. A visibleChanged hook would either
-    // never fire (visible stays true) or, if a future QML refactor flips
-    // visible explicitly, would re-enter destroy on hide and reintroduce
-    // the slow path we're working around.
+    // mechanism is the dismissRequested signal above plus the library
+    // animator flipping Qt::WindowTransparentForInput on the still-mapped
+    // QWindow during hide. A visibleChanged hook would either never fire
+    // (visible stays true under keepMappedOnHide=true) or, if a future
+    // QML refactor flips visible explicitly, would re-enter destroy on
+    // hide and reintroduce the slow path we're working around.
 
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);

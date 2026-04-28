@@ -39,24 +39,16 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD base shape shared by PhosphorZones::Layout OSD and Navigation OSD. Both use the
-/// `FullscreenOverlay` primitive: AnchorAll so the compositor ignores
-/// x/y hints and honours the margins we write dynamically via the
-/// transport handle (see `centerLayerWindowOnScreen` in osd.cpp) to
-/// centre the OSD on-screen. No keyboard. Pre-warmed per screen at
-/// daemon start. Kept as a single source so a future tweak (e.g.
-/// exclusive-zone change, keyboard-mode flip) only needs updating once.
+/// OSD base shape used by the unified notification surface (and any
+/// future fullscreen-overlay-style surface). FullscreenOverlay primitive:
+/// AnchorAll so the compositor ignores x/y hints and honours the margins
+/// we write dynamically via the transport handle (see
+/// `centerLayerWindowOnScreen` in osd.cpp) to centre the OSD on-screen.
+/// No keyboard, click-through. Pre-warmed per screen at daemon start.
 inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverlay;
 
-/// PhosphorZones::Layout OSD (transient visual preview on layout switch).
-inline const PhosphorLayer::Role LayoutOsd = OsdBase.withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
-
-/// Navigation OSD (keyboard-nav feedback). Byte-identical to LayoutOsd
-/// aside from scope — intentionally sharing the same base.
-inline const PhosphorLayer::Role NavigationOsd = OsdBase.withScopePrefix(QStringLiteral("plasmazones-navigation-osd"));
-
 /// Unified notification surface — single per-screen wl_surface that hosts
-/// both LayoutOsd and NavigationOsd content via NotificationOverlay.qml's
+/// both layout-OSD and navigation-OSD content via NotificationOverlay.qml's
 /// mode-driven Loader. The two OSD modes share OsdBase (FullscreenOverlay,
 /// AnchorAll, no keyboard, click-through) and are never simultaneously
 /// visible, so a single Surface backs both. createNotificationWindow
