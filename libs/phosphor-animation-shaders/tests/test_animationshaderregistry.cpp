@@ -298,6 +298,43 @@ private Q_SLOTS:
         const AnimationShaderEffect e = registry.effect(QStringLiteral("slide"));
         QCOMPARE(e.fragmentShaderPath, effectDir + QStringLiteral("/slide.frag"));
     }
+
+    /// `availableEffects()` and `effectIds()` return entries sorted by
+    /// id. QHash iteration order is intentionally randomised in Qt6, so
+    /// without an explicit sort downstream consumers (settings UI, QML
+    /// pickers, snapshot tests) would see different ordering on every
+    /// process launch. The sister `PhosphorShell::ShaderRegistry`
+    /// applies the same sort for the same reason.
+    void testAvailableEffects_isSortedById()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        // Write effects whose dir-iteration order (alphabetic by
+        // subdir name) differs from the desired id-sort order. Effect
+        // ids alphabetise as "alpha", "kappa", "zulu"; subdir names
+        // sort as "one-zulu", "three-alpha", "two-kappa" — matching by
+        // id catches a hypothetical regression where the registry
+        // accidentally returned dir-iteration order instead.
+        writeMetadata(tmp.path() + QStringLiteral("/one-zulu"), QStringLiteral("zulu"));
+        writeMetadata(tmp.path() + QStringLiteral("/two-kappa"), QStringLiteral("kappa"));
+        writeMetadata(tmp.path() + QStringLiteral("/three-alpha"), QStringLiteral("alpha"));
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+
+        const QList<AnimationShaderEffect> effects = registry.availableEffects();
+        QCOMPARE(effects.size(), 3);
+        QCOMPARE(effects.at(0).id, QStringLiteral("alpha"));
+        QCOMPARE(effects.at(1).id, QStringLiteral("kappa"));
+        QCOMPARE(effects.at(2).id, QStringLiteral("zulu"));
+
+        const QStringList ids = registry.effectIds();
+        QCOMPARE(ids.size(), 3);
+        QCOMPARE(ids.at(0), QStringLiteral("alpha"));
+        QCOMPARE(ids.at(1), QStringLiteral("kappa"));
+        QCOMPARE(ids.at(2), QStringLiteral("zulu"));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderRegistry)

@@ -101,13 +101,16 @@ bool isForbiddenWatchRoot(const QString& path)
     // watching $HOME. GenericData/Config catch the obvious XDG roots; Temp,
     // Runtime, and Cache catch consumers whose target lives under
     // /tmp, /run/user/UID, or ~/.cache and where the climb would otherwise
-    // stop at the high-traffic root. Documents/Downloads catch the
-    // user-data trees that aren't XDG-rooted but are still high-churn for
-    // most users (browser downloads, editor saves, etc.).
+    // stop at the high-traffic root. Documents/Downloads/Music/Pictures/
+    // Movies/Templates/Desktop catch the user-content trees that aren't
+    // XDG-rooted but are still high-churn for most users (browser
+    // downloads, editor saves, image scanners, screenshot tools, etc.).
     using QSP = QStandardPaths;
     static constexpr QSP::StandardLocation kForbidden[] = {
         QSP::GenericDataLocation, QSP::GenericConfigLocation, QSP::TempLocation,      QSP::RuntimeLocation,
         QSP::CacheLocation,       QSP::GenericCacheLocation,  QSP::DocumentsLocation, QSP::DownloadLocation,
+        QSP::MusicLocation,       QSP::PicturesLocation,      QSP::MoviesLocation,    QSP::TemplatesLocation,
+        QSP::DesktopLocation,
     };
     for (const auto loc : kForbidden) {
         if (matches(QSP::writableLocation(loc))) {

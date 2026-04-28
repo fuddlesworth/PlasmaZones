@@ -14,10 +14,20 @@
 #include <QJsonParseError>
 #include <QLoggingCategory>
 
+#include <algorithm>
+
 namespace PhosphorAnimationShaders {
 
 namespace {
 Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
+
+/// Hard cap on effects discovered per rescan, summed across every
+/// registered search path. A pathological user dir with thousands of
+/// `metadata.json`-bearing subdirs would otherwise burn the GUI thread
+/// on every watcher fire. Mirrors `DirectoryLoader::kMaxEntries` — same
+/// defensive rationale, identical magnitude. Typical effect counts are
+/// single digits so this is purely a DoS guard.
+constexpr int kMaxEffects = 10'000;
 } // namespace
 
 /// Scan strategy backing the registry's `WatchedDirectorySet`. Walks
@@ -129,7 +139,17 @@ QStringList AnimationShaderRegistry::searchPaths() const
 
 QList<AnimationShaderEffect> AnimationShaderRegistry::availableEffects() const
 {
-    return m_effects.values();
+    // Sort by id for deterministic ordering. QHash iteration order is
+    // intentionally randomised in Qt6 — without the sort, downstream
+    // consumers (settings dropdowns, QML pickers, snapshot tests) see a
+    // different effect order on every process launch. Mirrors the sort
+    // in `PhosphorShell::ShaderRegistry::availableShaders` for consistency
+    // across both metadata.json-backed registries.
+    QList<AnimationShaderEffect> sorted = m_effects.values();
+    std::sort(sorted.begin(), sorted.end(), [](const AnimationShaderEffect& a, const AnimationShaderEffect& b) {
+        return a.id < b.id;
+    });
+    return sorted;
 }
 
 AnimationShaderEffect AnimationShaderRegistry::effect(const QString& id) const
@@ -144,7 +164,11 @@ bool AnimationShaderRegistry::hasEffect(const QString& id) const
 
 QStringList AnimationShaderRegistry::effectIds() const
 {
-    return m_effects.keys();
+    // Sort for the same reason as `availableEffects()` — QHash::keys()
+    // iteration order is randomised in Qt6.
+    QStringList ids = m_effects.keys();
+    std::sort(ids.begin(), ids.end());
+    return ids;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -182,7 +206,9 @@ QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesI
     // before the system dirs are touched, which yields the canonical
     // XDG semantic `user > sys-highest > sys-mid > sys-lowest` on id
     // collision.
-    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
+    bool capTripped = false;
+    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend() && !capTripped;
+         ++dirIt) {
         const QString& searchPath = *dirIt;
         QDir dirObj(searchPath);
         if (!dirObj.exists()) {
@@ -199,6 +225,14 @@ QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesI
 
         const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& subdir : subdirs) {
+            // Per-rescan effect-count DoS guard. Reverse-iteration scans
+            // user-first / system-last, so a cap-trip drops *system*
+            // overflow rather than user overrides — matches the
+            // user-wins-on-cap-trip property `JsonScanStrategy` enforces.
+            if (newEffects.size() >= kMaxEffects) {
+                capTripped = true;
+                break;
+            }
             const QString effectDir = dirObj.filePath(subdir);
             const QString metadataPath = effectDir + QStringLiteral("/metadata.json");
 
@@ -273,6 +307,12 @@ QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesI
 
             newEffects.insert(e.id, std::move(e));
         }
+    }
+
+    if (capTripped) {
+        qCWarning(lcRegistry).nospace() << "AnimationShaderRegistry: reached effect cap (" << kMaxEffects
+                                        << ") — later effects skipped to protect the GUI thread. Prune the watched "
+                                           "search paths or raise kMaxEffects.";
     }
 
     // Change-only emit — every rescan calls in here, but `effectsChanged`

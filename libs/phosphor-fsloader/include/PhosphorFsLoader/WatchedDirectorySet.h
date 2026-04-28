@@ -139,6 +139,14 @@ public:
      * completes*, but it will from then on. Callers that need to stop
      * watching entirely should destroy and rebuild the set.
      *
+     * The default is `Off` because this is the library primitive — tests,
+     * batch imports, and explicit-refresh consumers compose against it.
+     * Higher-level consumer wrappers (`PhosphorShell::ShaderRegistry`,
+     * `PhosphorAnimationShaders::AnimationShaderRegistry`,
+     * `ScriptedAlgorithmLoader`) flip the default to `On` because their
+     * production callers always want hot-reload — that override is the
+     * documented convention, not a drift.
+     *
      * @return The total number of registered directories after this call.
      */
     int registerDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);

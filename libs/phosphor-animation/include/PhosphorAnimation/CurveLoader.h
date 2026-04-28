@@ -111,8 +111,20 @@ public:
     /// each into the construction-time registry.
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
-    /// Scan multiple directories in order.
-    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    /// Scan multiple directories in caller-declared priority order.
+    ///
+    /// `RegistrationOrder::LowestPriorityFirst` (the default) takes input
+    /// in `[sys-lowest, ..., sys-highest, user]` order — the same shape
+    /// the daemon's curve-pack setup builds via
+    /// `std::reverse(locateAll(...))` + user-dir append. Pass
+    /// `HighestPriorityFirst` to feed `locateAll`'s natural output
+    /// (with the user dir prepended) directly without a manual
+    /// pre-reverse — the underlying `WatchedDirectorySet` normalises
+    /// before the strategy runs, so higher-priority entries always
+    /// override on key collision.
+    int loadFromDirectories(
+        const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 
     /// Load curves bundled at the library's install-prefix
     /// `phosphor-animation/curves/` data directory (path baked in at

@@ -75,6 +75,15 @@ public:
      * little work as it wants, including no-op early-exits when the
      * filesystem state hasn't changed.
      *
+     * Reentry-safe: a strategy may synchronously call
+     * `WatchedDirectorySet::requestRescan()` from inside its own
+     * `performScan` (e.g. from a slot wired to its own commit signal
+     * that fires while this scan is still on the stack). The base's
+     * race-guard captures the request and replays it after the
+     * outermost rescan returns; the inner scan does not deadlock or
+     * lose the event. Pinned by
+     * `test_watcheddirectoryset.cpp::testRescanRace_requestDuringScan`.
+     *
      * @param directoriesInScanOrder  Registered directories in the
      *                                base's canonical
      *                                `[lowest-priority, ..., highest-priority]`

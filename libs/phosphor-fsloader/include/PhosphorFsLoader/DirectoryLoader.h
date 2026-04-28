@@ -84,6 +84,12 @@ public:
      * `liveReload` is a one-way enable: once any call passes
      * `LiveReload::On`, the loader keeps watching for the rest of its
      * lifetime.
+     *
+     * The default is `Off` because this is a library primitive — tests
+     * and batch imports compose against it. Consumer wrappers above
+     * this (CurveLoader/ProfileLoader and the shader registries)
+     * inherit the default, but can override it via the explicit
+     * `LiveReload::On` argument production callers pass.
      */
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 

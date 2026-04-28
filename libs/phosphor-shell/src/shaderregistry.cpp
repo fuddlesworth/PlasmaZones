@@ -29,6 +29,17 @@ namespace PhosphorShell {
 
 Q_LOGGING_CATEGORY(lcShaderRegistry, "phosphorshell.shaderregistry")
 
+namespace {
+/// Hard cap on shaders discovered per rescan, summed across every
+/// registered search path. A pathological user dir with thousands of
+/// `metadata.json`-bearing subdirs would otherwise burn the GUI thread
+/// on every watcher fire. Mirrors `DirectoryLoader::kMaxEntries` and
+/// the sister `AnimationShaderRegistry`'s cap — same defensive
+/// rationale, identical magnitude. Typical shader counts are single
+/// digits so this is purely a DoS guard.
+constexpr int kMaxShaders = 10'000;
+} // namespace
+
 // Namespace UUID for generating deterministic shader IDs (UUID v5)
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
 
@@ -257,7 +268,9 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
     // in the same loop. The base re-arms `desiredWatches` every rescan
     // to compensate for `cmake --install`'s delete+recreate inode
     // churn.
-    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
+    bool capTripped = false;
+    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend() && !capTripped;
+         ++dirIt) {
         const QString& searchPath = *dirIt;
         QDir dirObj(searchPath);
         if (!dirObj.exists()) {
@@ -277,6 +290,15 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
         for (const QString& subdir : subdirs) {
             if (subdir == QLatin1String("none")) {
                 continue; // reserved sentinel for "no shader"
+            }
+            // Per-rescan shader-count DoS guard. Reverse-iteration
+            // scans user-first / system-last, so a cap-trip drops
+            // *system* overflow rather than user overrides — matches
+            // the user-wins-on-cap-trip property `JsonScanStrategy`
+            // enforces.
+            if (m_shaders.size() >= kMaxShaders) {
+                capTripped = true;
+                break;
             }
             const QString subPath = dirObj.filePath(subdir);
             // Dispatch + watch-list harvest in one pass.
@@ -299,6 +321,12 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
             desiredWatches.append(dirObj.filePath(file));
         }
         qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
+    }
+
+    if (capTripped) {
+        qCWarning(lcShaderRegistry).nospace() << "ShaderRegistry: reached shader cap (" << kMaxShaders
+                                              << ") — later shaders skipped to protect the GUI thread. Prune the "
+                                                 "watched search paths or raise kMaxShaders.";
     }
 
     // Change-only emit: hash a stable fingerprint of the discovered set

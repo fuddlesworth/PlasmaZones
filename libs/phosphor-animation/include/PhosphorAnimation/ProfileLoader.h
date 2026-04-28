@@ -100,7 +100,20 @@ public:
 
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
-    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    /// Scan multiple directories in caller-declared priority order.
+    ///
+    /// `RegistrationOrder::LowestPriorityFirst` (the default) takes input
+    /// in `[sys-lowest, ..., sys-highest, user]` order — the same shape
+    /// the daemon's profile-pack setup builds via
+    /// `std::reverse(locateAll(...))` + user-dir append. Pass
+    /// `HighestPriorityFirst` to feed `locateAll`'s natural output
+    /// (with the user dir prepended) directly without a manual
+    /// pre-reverse — the underlying `WatchedDirectorySet` normalises
+    /// before the strategy runs, so higher-priority entries always
+    /// override on key collision.
+    int loadFromDirectories(
+        const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 
     /// See `CurveLoader::loadLibraryBuiltins` — same semantics.
     int loadLibraryBuiltins(LiveReload liveReload = LiveReload::Off);

@@ -268,9 +268,10 @@ int CurveLoader::loadFromDirectory(const QString& directory, LiveReload liveRelo
     return m_loader->loadFromDirectory(directory, liveReload);
 }
 
-int CurveLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload)
+int CurveLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload,
+                                     PhosphorFsLoader::RegistrationOrder order)
 {
-    return m_loader->loadFromDirectories(directories, liveReload);
+    return m_loader->loadFromDirectories(directories, liveReload, order);
 }
 
 int CurveLoader::loadLibraryBuiltins(LiveReload liveReload)
