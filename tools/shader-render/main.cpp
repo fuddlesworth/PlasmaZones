@@ -38,11 +38,13 @@ namespace {
 QSize parseResolution(const QString& s)
 {
     const QStringList parts = s.split(QLatin1Char('x'), Qt::SkipEmptyParts);
-    if (parts.size() != 2) return QSize();
+    if (parts.size() != 2)
+        return QSize();
     bool okW = false, okH = false;
     const int w = parts[0].toInt(&okW);
     const int h = parts[1].toInt(&okH);
-    if (!okW || !okH || w <= 0 || h <= 0) return QSize();
+    if (!okW || !okH || w <= 0 || h <= 0)
+        return QSize();
     return QSize(w, h);
 }
 
@@ -72,22 +74,24 @@ QString defaultShaderDir()
     // Prefer in-tree data/shaders for development; fall back to
     // the installed location.
     const QString cwd = QDir(QStringLiteral("data/shaders")).absolutePath();
-    if (QDir(cwd).exists()) return cwd;
-    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation,
-                                               QStringLiteral("shaders"),
+    if (QDir(cwd).exists())
+        return cwd;
+    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation, QStringLiteral("shaders"),
                                                QStandardPaths::LocateDirectory);
-    if (!xdg.isEmpty()) return xdg;
+    if (!xdg.isEmpty())
+        return xdg;
     return QStringLiteral("/usr/share/plasmazones/shaders");
 }
 
 QString defaultLayoutDir()
 {
     const QString cwd = QDir(QStringLiteral("data/layouts")).absolutePath();
-    if (QDir(cwd).exists()) return cwd;
-    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation,
-                                               QStringLiteral("layouts"),
+    if (QDir(cwd).exists())
+        return cwd;
+    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation, QStringLiteral("layouts"),
                                                QStandardPaths::LocateDirectory);
-    if (!xdg.isEmpty()) return xdg;
+    if (!xdg.isEmpty())
+        return xdg;
     return QStringLiteral("/usr/share/plasmazones/layouts");
 }
 
@@ -110,44 +114,34 @@ int main(int argc, char* argv[])
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1"));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(
-        QStringLiteral("Headless offscreen renderer for PlasmaZones shaders."));
+    parser.setApplicationDescription(QStringLiteral("Headless offscreen renderer for PlasmaZones shaders."));
     parser.addHelpOption();
     parser.addVersionOption();
 
-    QCommandLineOption shaderOpt(
-        QStringList() << QStringLiteral("s") << QStringLiteral("shader"),
-        QStringLiteral("Shader id (e.g. \"neon-city\") or path to a metadata.json."),
-        QStringLiteral("shader"));
+    QCommandLineOption shaderOpt(QStringList() << QStringLiteral("s") << QStringLiteral("shader"),
+                                 QStringLiteral("Shader id (e.g. \"neon-city\") or path to a metadata.json."),
+                                 QStringLiteral("shader"));
     parser.addOption(shaderOpt);
 
-    QCommandLineOption layoutOpt(
-        QStringList() << QStringLiteral("l") << QStringLiteral("layout"),
-        QStringLiteral("Layout id (e.g. \"master-stack\") or path to a layout JSON. "
-                       "The shader renders inside the layout's zones."),
-        QStringLiteral("layout"),
-        QStringLiteral("master-stack"));
+    QCommandLineOption layoutOpt(QStringList() << QStringLiteral("l") << QStringLiteral("layout"),
+                                 QStringLiteral("Layout id (e.g. \"master-stack\") or path to a layout JSON. "
+                                                "The shader renders inside the layout's zones."),
+                                 QStringLiteral("layout"), QStringLiteral("master-stack"));
     parser.addOption(layoutOpt);
 
-    QCommandLineOption resolutionOpt(
-        QStringList() << QStringLiteral("r") << QStringLiteral("resolution"),
-        QStringLiteral("Render resolution as WxH pixels. Defaults to 1920x1080."),
-        QStringLiteral("WxH"),
-        QStringLiteral("1920x1080"));
+    QCommandLineOption resolutionOpt(QStringList() << QStringLiteral("r") << QStringLiteral("resolution"),
+                                     QStringLiteral("Render resolution as WxH pixels. Defaults to 1920x1080."),
+                                     QStringLiteral("WxH"), QStringLiteral("1920x1080"));
     parser.addOption(resolutionOpt);
 
-    QCommandLineOption framesOpt(
-        QStringLiteral("frames"),
-        QStringLiteral("Number of frames to render. Defaults to 150 (5 seconds at 30 fps)."),
-        QStringLiteral("N"),
-        QStringLiteral("150"));
+    QCommandLineOption framesOpt(QStringLiteral("frames"),
+                                 QStringLiteral("Number of frames to render. Defaults to 150 (5 seconds at 30 fps)."),
+                                 QStringLiteral("N"), QStringLiteral("150"));
     parser.addOption(framesOpt);
 
-    QCommandLineOption fpsOpt(
-        QStringLiteral("fps"),
-        QStringLiteral("Frame rate (also drives iTime advancement). Defaults to 30."),
-        QStringLiteral("FPS"),
-        QStringLiteral("30"));
+    QCommandLineOption fpsOpt(QStringLiteral("fps"),
+                              QStringLiteral("Frame rate (also drives iTime advancement). Defaults to 30."),
+                              QStringLiteral("FPS"), QStringLiteral("30"));
     parser.addOption(fpsOpt);
 
     QCommandLineOption outOpt(
@@ -157,34 +151,29 @@ int main(int argc, char* argv[])
         QStringLiteral("path"));
     parser.addOption(outOpt);
 
-    QCommandLineOption outputSizeOpt(
-        QStringLiteral("output-size"),
-        QStringLiteral("Output dimensions if different from --resolution. WxH format."),
-        QStringLiteral("WxH"));
+    QCommandLineOption outputSizeOpt(QStringLiteral("output-size"),
+                                     QStringLiteral("Output dimensions if different from --resolution. WxH format."),
+                                     QStringLiteral("WxH"));
     parser.addOption(outputSizeOpt);
 
-    QCommandLineOption audioModeOpt(
-        QStringLiteral("audio-mode"),
-        QStringLiteral("Audio spectrum source for audio-reactive shaders. "
-                       "One of: silent, sine, noise, sweep. Defaults to sine."),
-        QStringLiteral("mode"),
-        QStringLiteral("sine"));
+    QCommandLineOption audioModeOpt(QStringLiteral("audio-mode"),
+                                    QStringLiteral("Audio spectrum source for audio-reactive shaders. "
+                                                   "One of: silent, sine, noise, sweep. Defaults to sine."),
+                                    QStringLiteral("mode"), QStringLiteral("sine"));
     parser.addOption(audioModeOpt);
 
     QCommandLineOption shaderDirOpt(
         QStringLiteral("shader-dir"),
         QStringLiteral("Directory containing <id>/metadata.json. "
                        "Defaults to data/shaders/ in the cwd, then /usr/share/plasmazones/shaders/."),
-        QStringLiteral("path"),
-        defaultShaderDir());
+        QStringLiteral("path"), defaultShaderDir());
     parser.addOption(shaderDirOpt);
 
     QCommandLineOption layoutDirOpt(
         QStringLiteral("layout-dir"),
         QStringLiteral("Directory containing <id>.json layout files. "
                        "Defaults to data/layouts/ in the cwd, then /usr/share/plasmazones/layouts/."),
-        QStringLiteral("path"),
-        defaultLayoutDir());
+        QStringLiteral("path"), defaultLayoutDir());
     parser.addOption(layoutDirOpt);
 
     parser.process(app);
@@ -224,15 +213,13 @@ int main(int argc, char* argv[])
 
     const QString metadataPath = resolveShaderMetadata(shaderArg, shaderDir);
     if (!QFileInfo::exists(metadataPath)) {
-        std::cerr << "error: shader metadata not found: "
-                  << metadataPath.toStdString() << "\n";
+        std::cerr << "error: shader metadata not found: " << metadataPath.toStdString() << "\n";
         return 1;
     }
 
     const QString layoutPath = resolveLayoutPath(layoutArg, layoutDir);
     if (!QFileInfo::exists(layoutPath)) {
-        std::cerr << "error: layout not found: "
-                  << layoutPath.toStdString() << "\n";
+        std::cerr << "error: layout not found: " << layoutPath.toStdString() << "\n";
         return 1;
     }
 
@@ -246,15 +233,13 @@ int main(int argc, char* argv[])
     // ── Load metadata + layout ──────────────────────────────────
     PlasmaZones::ShaderRender::ShaderMetadata metadata;
     if (!PlasmaZones::ShaderRender::loadShaderMetadata(metadataPath, metadata)) {
-        std::cerr << "error: failed to load shader metadata: "
-                  << metadataPath.toStdString() << "\n";
+        std::cerr << "error: failed to load shader metadata: " << metadataPath.toStdString() << "\n";
         return 1;
     }
 
     QVector<PlasmaZones::ShaderRender::Zone> zones;
     if (!PlasmaZones::ShaderRender::loadLayoutZones(layoutPath, resolution, zones)) {
-        std::cerr << "error: failed to load layout: "
-                  << layoutPath.toStdString() << "\n";
+        std::cerr << "error: failed to load layout: " << layoutPath.toStdString() << "\n";
         return 1;
     }
 
@@ -277,8 +262,7 @@ int main(int argc, char* argv[])
     opts.audio = audio.get();
 
     PlasmaZones::ShaderRender::Renderer renderer;
-    PlasmaZones::ShaderRender::FrameSink* sink =
-        PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
+    PlasmaZones::ShaderRender::FrameSink* sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
     if (!sink) {
         std::cerr << "error: couldn't create output sink for " << outPath.toStdString() << "\n";
         return 1;
@@ -292,8 +276,7 @@ int main(int argc, char* argv[])
         return rc;
     }
 
-    std::cout << "wrote " << outPath.toStdString()
-              << " (" << frameCount << " frames @ "
-              << outputSize.width() << "x" << outputSize.height() << ")\n";
+    std::cout << "wrote " << outPath.toStdString() << " (" << frameCount << " frames @ " << outputSize.width() << "x"
+              << outputSize.height() << ")\n";
     return 0;
 }

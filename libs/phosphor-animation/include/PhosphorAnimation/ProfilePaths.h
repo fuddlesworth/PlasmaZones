@@ -134,6 +134,26 @@ PHOSPHORANIMATION_EXPORT extern const QString ShaderOpen;
 PHOSPHORANIMATION_EXPORT extern const QString ShaderClose;
 PHOSPHORANIMATION_EXPORT extern const QString ShaderSwitch;
 
+// widget.*  — generic UI widget animations.
+// Added in the PR-344 re-migration: the original QML call-site migration
+// collapsed ~60 distinct Behavior sites onto the single "global" profile,
+// destroying per-site timing + curve intent (OutBack spring on toggles,
+// badge overshoot, slow needs-save tint, etc.). This branch gives each
+// widget archetype its own path so library-supplied defaults can preserve
+// the original motion, and users can tune individual archetypes via JSON
+// files under `plasmazones/profiles/`.
+PHOSPHORANIMATION_EXPORT extern const QString Widget;
+PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic — card/list/row hover
+PHOSPHORANIMATION_EXPORT extern const QString WidgetPress; ///< 100 ms OutCubic — button press feedback
+PHOSPHORANIMATION_EXPORT extern const QString WidgetToggle; ///< 250 ms OutBack — toggle-switch knob slide (spring feel)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetBadge; ///< 200 ms OutBack — badge pop-in overshoot
+PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms Linear — slow background tint (needs-save, etc.)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetDim; ///< 200 ms OutCubic — generic dimension/layout change
+PHOSPHORANIMATION_EXPORT extern const QString WidgetFade; ///< 150 ms OutCubic — generic opacity fade
+PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 200 ms OutCubic — list reorder / drag-drop settle
+PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordion; ///< 250 ms OutCubic — expand/collapse section
+PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCubic — wizard/step progress indicators
+
 /**
  * @brief Full list of built-in paths, in taxonomy order.
  *

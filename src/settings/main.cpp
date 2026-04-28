@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../core/animationbootstrap.h"
 #include "../core/logging.h"
 #include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
@@ -48,6 +49,18 @@ bool activateRunningInstance(const QString& page)
 
 int main(int argc, char* argv[])
 {
+    // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
+    // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
+    // environment (e.g. set globally for games), and its NVIDIA stat-polling
+    // thread costs ~30% CPU continuously inside this process — we are a
+    // settings UI, not a game client. Both env vars are cleared:
+    // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
+    // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
+    // Must run before QGuiApplication construction (which initializes the
+    // QtQuick render path and may load the Vulkan ICD chain).
+    qunsetenv("MANGOHUD");
+    qputenv("DISABLE_MANGOHUD", "1");
+
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
@@ -87,6 +100,14 @@ int main(int argc, char* argv[])
     // Ensure INI→JSON migration has run (the daemon does this too, but the
     // settings app may start before the daemon on first upgrade).
     PlasmaZones::ConfigMigration::ensureJsonConfig();
+
+    // Bootstrap the per-process PhosphorProfileRegistry so QML
+    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve against the
+    // shipped data/profiles JSONs. Without this the registry stays empty in
+    // the settings process and every animation falls back to the library
+    // default 150 ms — see AnimationBootstrap docs for the full rationale.
+    // Must outlive the QML engine (Behavior bindings keep registry handles).
+    PlasmaZones::AnimationBootstrap animationBootstrap;
 
     PlasmaZones::SettingsController controller;
 

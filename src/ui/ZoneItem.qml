@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * Individual zone display component
@@ -55,16 +56,20 @@ Item {
             return zoneItem.borderColor;
         }
 
+        // Phase 4: zone highlight transitions use the user's active
+        // animation Profile via the "zone.highlight" registry path.
+        // Daemon publishes Settings::animationProfile() here; live-updates
+        // on settings edit with no daemon restart.
         Behavior on color {
-            ColorAnimation {
-                duration: 150
+            PhosphorMotionAnimation {
+                profile: "zone.highlight"
             }
 
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 150
+            PhosphorMotionAnimation {
+                profile: "zone.highlight"
             }
 
         }
@@ -99,8 +104,8 @@ Item {
             opacity: zoneItem.isHighlighted ? 1 : 0.7
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 150
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight"
                 }
 
             }
@@ -122,8 +127,8 @@ Item {
             visible: zoneItem.zoneName.length > 0
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 150
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight"
                 }
 
             }

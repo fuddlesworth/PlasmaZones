@@ -138,6 +138,8 @@ target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
 pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)
+target_compile_definitions(test_autotile_handoff PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 # Producer-side validator guard — ensures the JSON emitted by
 # AutotileEngine::applyTiling round-trips through TileRequestEntry
 # parsing and passes validationError(). Would have caught PR #326 C1.
@@ -196,6 +198,10 @@ add_executable(test_settings_perscreen config/test_settings_perscreen.cpp)
 target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
+add_executable(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
+target_link_libraries(test_settings_disable_per_mode PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settings_disable_per_mode COMMAND test_settings_disable_per_mode)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ — Virtual Screen Settings Tests (save/load round-trip, staged flow)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -219,6 +225,33 @@ add_test(NAME test_configbackend_json COMMAND test_configbackend_json)
 add_executable(test_configmigration config/test_configmigration.cpp)
 target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_configmigration COMMAND test_configmigration)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# daemon/ — Daemon-level Integration Tests (animation profile publication, etc.)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Daemon-level publication contract: ProfileLoader registers user JSON
+# under its owner tag, Settings publishes to the registry's `Global`
+# path under the empty/direct owner, and a loader-side `Global.json`
+# collision is silently skipped (Phase 1b inversion: Settings wins on
+# settings-driven paths). Mirrors the daemon's setupAnimationProfiles
+# without constructing a real Daemon (which requires D-Bus + KWin
+# binding — out of scope for unit tests).
+add_executable(test_animation_profile_publication daemon/test_animation_profile_publication.cpp)
+target_link_libraries(test_animation_profile_publication
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorAnimation::PhosphorAnimation)
+add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_publication)
+
+# Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
+# per-instance scope construction in osd.cpp / selector.cpp /
+# snapassist.cpp so a divergence from the PzRoles base scopePrefix
+# doesn't silently fall back to the empty default config in release
+# builds. Replaces the debug-only Q_ASSERT_X in createZoneSelectorWindow
+# with a release-built check that covers every overlay role.
+add_executable(test_overlay_scope_prefixes daemon/test_overlay_scope_prefixes.cpp)
+target_link_libraries(test_overlay_scope_prefixes
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorLayer::PhosphorLayer
+            PhosphorAnimationLayer::PhosphorAnimationLayer)
+add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Layout Tests (core, zones)
@@ -369,6 +402,28 @@ add_test(NAME test_autotile_adaptor_panel_gate COMMAND test_autotile_adaptor_pan
 add_executable(test_drag_policy dbus/test_drag_policy.cpp)
 target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
+
+# Truth-table guard for resolveActivationActive() — pins the per-tick
+# overlay-active decision (toggle latch + deactivation override + the
+# always-active gate that scopes deactivation to its UI surface, #249).
+add_executable(test_drag_activation dbus/test_drag_activation.cpp)
+target_link_libraries(test_drag_activation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_drag_activation COMMAND test_drag_activation)
+
+# Round-trip guard for the AlwaysActive sentinel handling shared by
+# TriggerUtils and SnappingBehaviorController (#249). Pins the cap-aware
+# merge that prevents the sentinel from being silently truncated when the
+# user already holds MAX activation triggers — without this, the
+# always-active toggle would quietly fail. Compiles the controller +
+# triggerutils sources directly because they live in the plasmazones-settings
+# executable rather than plasmazones_core.
+add_executable(test_snapping_behavior_controller
+    settings/test_snapping_behavior_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/snappingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/triggerutils.cpp
+)
+target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

@@ -137,8 +137,27 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // Hide the zone selector only for the specific virtual screen where snap assist is showing.
     // Snap assist now uses virtual-screen geometry (not full physical monitor coverage), so
     // selectors on adjacent virtual screens of the same physical monitor should remain visible.
-    if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-        selectorWindow->hide();
+    //
+    // Route through Surface::hide() so the SurfaceAnimator drives the fade-out
+    // and the keepMappedOnHide=true selector keeps its warmed Vulkan swapchain
+    // for the next drag-near-edge cycle. Calling QQuickWindow::hide() directly
+    // would unmap the wl_surface and defeat the warm-surface optimisation
+    // createZoneSelectorWindow opted into.
+    //
+    // Reset the QML hover state BEFORE hiding so when snap-assist later
+    // re-shows the selector via hideSnapAssist, autoScrollTimer doesn't
+    // tick on cursor coords frozen from the drag that triggered snap-assist
+    // — that would cause an unwanted edge-scroll the moment the selector
+    // reappears. Mirrors the reset hideZoneSelector does on the explicit-
+    // hide path.
+    {
+        const auto& selectorState = m_screenStates.value(screenId);
+        if (selectorState.zoneSelectorSurface) {
+            if (selectorState.zoneSelectorWindow) {
+                QMetaObject::invokeMethod(selectorState.zoneSelectorWindow, "resetCursorState");
+            }
+            selectorState.zoneSelectorSurface->hide();
+        }
     }
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
@@ -190,10 +209,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
 
-    // On reuse, restore exclusive keyboard grab via the mutable transport handle —
-    // it was released in onSnapAssistWindowSelected() to keep the desktop responsive
-    // during the D-Bus roundtrip. Fresh-create path already attaches with Exclusive
-    // via PzRoles::SnapAssist, so nothing extra to do there.
+    // On reuse, defensively re-assert the Exclusive keyboard grab. The fresh-
+    // create path always attaches with Exclusive via PzRoles::SnapAssist, but
+    // the grab is mutable on a live wl_surface; any external code path that
+    // ever drops it (today: none — but cheap insurance) would otherwise leave
+    // the reused window unable to receive Escape / Enter. Idempotent.
     if (reuseWindow && m_snapAssistSurface) {
         if (auto* handle = m_snapAssistSurface->transport()) {
             handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::Exclusive);
@@ -205,7 +225,16 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         m_snapAssistWindow->setWidth(screenGeom.width());
         m_snapAssistWindow->setHeight(screenGeom.height());
     }
-    if (m_snapAssistSurface) {
+    // Skip surface->show() when reusing an already-Shown surface. Surface
+    // treats Shown→Shown as a re-trigger and replays the panel.popup
+    // fade-in (cancel + fresh beginShow with fromOpacity=0). For the
+    // continuation pattern — user finishes one snap, the next snap-assist
+    // reuses the warmed window — that flash is a regression of the
+    // warm-surface optimisation. Property writes already updated the
+    // candidates/zones; nothing about the visual state needs to replay.
+    // First-show on a freshly-created surface (reuseWindow=false) and
+    // re-show on a previously-hidden surface both still dispatch normally.
+    if (m_snapAssistSurface && (!reuseWindow || !m_snapAssistSurface->isLogicallyShown())) {
         m_snapAssistSurface->show();
     }
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
@@ -263,13 +292,12 @@ bool OverlayService::eventFilter(QObject* obj, QEvent* event)
             return true;
         }
     }
-    if (obj == m_layoutPickerWindow && event->type() == QEvent::KeyPress) {
-        auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->key() == Qt::Key_Escape) {
-            QTimer::singleShot(0, this, &OverlayService::hideLayoutPicker);
-            return true;
-        }
-    }
+    // Layout picker Escape is handled by a QML Shortcut in
+    // LayoutPickerContent.qml that emits dismissRequested → hideLayoutPicker.
+    // The C++ event-filter path was unreliable under keepMappedOnHide=true:
+    // the Qt.WindowTransparentForInput flip during hide / show plus the
+    // mutated keyboard_interactivity state left KeyPress delivery
+    // intermittent on the warm path. Same pattern SnapAssistOverlay uses.
     return QObject::eventFilter(obj, event);
 }
 
@@ -277,22 +305,48 @@ void OverlayService::hideSnapAssist()
 {
     bool wasVisible = isSnapAssistVisible();
     const QString screenId = m_snapAssistScreenId;
-    m_thumbnailCache.clear();
+    // Don't clear m_thumbnailCache — it's keyed on KWin compositor handles
+    // (stable per-window for the lifetime of the window) and the cache is
+    // designed to be reused across continuation. Clearing on every dismiss
+    // forced full thumbnail recapture on every snap, defeating the cache.
+    // The cache naturally bounds itself: ~one entry per window the user
+    // has snap-assisted to in the current session, and entries don't go
+    // stale until KWin recycles a handle (rare).
     destroySnapAssistWindow();
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();
     }
     // Re-show the zone selector for the specific virtual screen that was hidden in showSnapAssist
     // (symmetric: showSnapAssist only hides the selector for the target VS, not all VS).
+    // Surface::show() pairs with the Surface::hide() in showSnapAssist so the
+    // SurfaceAnimator drives the fade-in and the keepMappedOnHide flag flip is
+    // reverted properly.
+    //
+    // Gate on Surface state: if a different code path (e.g. a fresh
+    // showZoneSelector triggered by a new drag) already re-showed the
+    // selector while snap-assist was visible, dispatching show() again would
+    // cancel + replay the fade-in on an already-visible surface — visually a
+    // "blip". Only re-show when the surface is genuinely Hidden.
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-            selectorWindow->show();
+        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
+            if (!selectorSurface->isLogicallyShown()) {
+                selectorSurface->show();
+            }
         }
     }
 }
 
 bool OverlayService::isSnapAssistVisible() const
 {
+    // Asymmetric with isLayoutPickerVisible (which reads Surface::state).
+    // SnapAssist uses keepMappedOnHide=false (destroy-on-hide), so the
+    // QQuickWindow isVisible flag IS the right "logically shown" signal —
+    // the window is destroyed when it's logically hidden, and isVisible
+    // tracks the live mapping state until then.
+    // The picker uses keepMappedOnHide=true and stays Qt-visible across
+    // logical hide cycles, so it must consult Surface state instead.
+    // Both encode the same intent ("is this overlay logically on screen?"),
+    // and both are correct for their respective lifecycle.
     return m_snapAssistWindow && m_snapAssistWindow->isVisible();
 }
 
@@ -324,11 +378,15 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
 
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
-    const auto role = PzRoles::SnapAssist.withScopePrefix(
-        QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::SnapAssist, scopeId, m_surfaceManager->nextScopeGeneration());
 
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")), screen, role,
-                                       "snap assist", QVariantMap(), anchorsOverride, marginsOverride);
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "snap assist",
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride});
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create snap assist overlay";
         return;
@@ -385,14 +443,15 @@ void OverlayService::destroySnapAssistWindow()
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson)
 {
-    // Release exclusive keyboard grab immediately so the desktop remains
-    // responsive while the D-Bus roundtrip to KWin processes the snap.
-    // The window stays visible for potential reuse by showSnapAssist() continuation.
-    if (m_snapAssistSurface) {
-        if (auto* handle = m_snapAssistSurface->transport()) {
-            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
-        }
-    }
+    // Keyboard interactivity stays Exclusive across selection: the window is
+    // either dismissed by hideSnapAssist() (keyboard grab is then dropped
+    // alongside the destroy) or reused by a continuation call to
+    // showSnapAssist (which re-grabs explicitly). Releasing here would leak
+    // the surface into a logically-shown-but-keyboard-unresponsive state if
+    // any failure path drops the dismiss/continuation call — Escape and
+    // Enter would silently no-op until the next show. The few-ms keyboard
+    // capture during the D-Bus roundtrip to KWin is invisible at human
+    // timescales; the failure-mode safety wins here.
 
     // Use the virtual-aware screen ID stored when snap assist was shown
     QString screenId = m_snapAssistScreenId;
@@ -409,10 +468,11 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenId)
 {
-    // Guard: if picker window already exists (visible or being set up), do nothing.
-    // Prevents double-trigger when shortcut fires before KeyboardInteractivityExclusive
-    // grabs the keyboard on Wayland, and avoids deleteLater() races with stale grabs.
-    if (m_layoutPickerWindow) {
+    // Guard: if picker is currently shown (Surface state is Shown), don't
+    // double-trigger. The surface stays Qt-visible across hide/show cycles
+    // (keepMappedOnHide), so the Surface state machine is the right signal
+    // for "logically visible" — not the QQuickWindow's isVisible().
+    if (m_layoutPickerSurface && m_layoutPickerSurface->isLogicallyShown()) {
         return;
     }
 
@@ -432,13 +492,29 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Hide the zone selector for this specific virtual screen to avoid overlap.
     // Only hide the selector keyed by resolvedId, not all selectors on the physical monitor.
-    if (auto* selectorWindow = m_screenStates.value(resolvedId).zoneSelectorWindow) {
-        selectorWindow->hide();
+    // Route through Surface::hide() so the SurfaceAnimator drives the fade-out;
+    // calling QQuickWindow::hide() directly would unmap the wl_surface and
+    // discard the swapchain that keepMappedOnHide=true was meant to preserve.
+    //
+    // Reset the QML hover state BEFORE hiding (same rationale as showSnapAssist):
+    // hideLayoutPicker re-shows the selector and autoScrollTimer would otherwise
+    // tick on stale drag-time cursor coords.
+    {
+        const auto& selectorState = m_screenStates.value(resolvedId);
+        if (selectorState.zoneSelectorSurface) {
+            if (selectorState.zoneSelectorWindow) {
+                QMetaObject::invokeMethod(selectorState.zoneSelectorWindow, "resetCursorState");
+            }
+            selectorState.zoneSelectorSurface->hide();
+        }
     }
 
-    // Always destroy and recreate for fresh state. Pass the resolved geometry
-    // so the Surface attaches with correct virtual-screen anchors + margins
-    // (wlr-layer-shell doesn't let us reconfigure those post-attach).
+    // Always destroy + recreate. Reusing a still-mapped Surface across
+    // hide/show would let a single keyboard_interactivity mutation be
+    // silently ignored by KWin's wlr-layer-shell impl (focus is only
+    // re-evaluated at initial map). A fresh per-show map gives Escape
+    // / arrows / Enter focus reliably, at the cost of one
+    // wl_surface attach + Vulkan swapchain init per open.
     destroyLayoutPickerWindow();
     createLayoutPickerWindowFor(screen, screenGeom, resolvedId);
     if (!m_layoutPickerWindow) {
@@ -448,8 +524,20 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     m_layoutPickerScreen = screen;
     m_layoutPickerScreenId = resolvedId;
 
-    // Build layouts list (use virtual-aware screen ID for correct layout resolution)
-    QVariantList layoutsList = buildLayoutsList(resolvedId);
+    // Build layouts list (use virtual-aware screen ID for correct layout
+    // resolution). Pass the screen's available geometry as the autotile
+    // preview canvas so algorithm thumbnails (BSP, fibonacci, …) split
+    // along the same axis the live tiler will. Without this, on a
+    // portrait VS the picker shows BSP as left/right while the tiler
+    // actually places windows top/bottom.
+    QSize autotileCanvas;
+    if (m_screenManager) {
+        const QRect avail = m_screenManager->screenAvailableGeometry(resolvedId);
+        if (avail.isValid() && avail.width() > 0 && avail.height() > 0) {
+            autotileCanvas = avail.size();
+        }
+    }
+    QVariantList layoutsList = buildLayoutsList(resolvedId, autotileCanvas);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         destroyLayoutPickerWindow();
@@ -474,6 +562,10 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("layouts"), layoutsList);
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("activeLayoutId"), activeId);
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("screenAspectRatio"), aspectRatio);
+    // Global "Auto-assign for all layouts" master toggle (#370) — see matching
+    // comment in selector_update.cpp.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("globalAutoAssign"),
+                     m_settings && m_settings->autoAssignAllLayouts());
     writeFontProperties(m_layoutPickerWindow, m_settings);
 
     // Push lock state so picker disables non-active layout interaction
@@ -491,16 +583,35 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Anchors + margins were baked into the Surface by createLayoutPickerWindowFor above
     // using screenGeom, so positioning is already correct.
+    //
+    // assertWindowOnScreen + setWidth/setHeight are run on every show, even
+    // on the reuse path — if the screen geometry changed between the warmed
+    // surface's creation and now (e.g. external resolution change while the
+    // picker was hidden), the cached dimensions would otherwise be stale.
+    // Both calls are idempotent when nothing changed (Qt skips the property
+    // notify when the new value matches the old), so the cost on the common
+    // unchanged-geometry path is a few comparisons.
     assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
     m_layoutPickerWindow->setWidth(screenGeom.width());
     m_layoutPickerWindow->setHeight(screenGeom.height());
-    // The QML root exposes a show() function that sets visible=true AND plays
-    // the show animation (contentWrapper opacity 0→1, container scale-in).
-    // Calling surface->show() would only set visible=true and skip the
-    // animation, so invoke the QML function directly. Surface stays in
-    // Hidden state — that's fine, the destroy-on-hide lifecycle doesn't
-    // rely on the state flag.
-    QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
+
+    // Activate the QML-side keyboard Shortcuts before show() so any
+    // accelerator events that race the show animation reach a picker
+    // that's expecting them.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), true);
+    // Reset the QML-side dismiss latch so multiple rapid backdrop
+    // clicks during the show animation collapse to one dismiss.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_dismissed"), false);
+
+    // The role's keyboard_interactivity (Exclusive — from
+    // CenteredModal) is applied at the surface's initial map by the
+    // LayerShellWindow ctor, so KWin grants keyboard focus on first
+    // map. requestActivate() asks Qt to make this the focused
+    // QWindow, which together with the layer-shell focus grant lands
+    // input on the QQuickWindow so QML Shortcuts (Escape, arrows,
+    // Enter) fire.
+    m_layoutPickerSurface->show();
+    m_layoutPickerWindow->requestActivate();
 
     qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
                       << "active=" << activeId;
@@ -508,19 +619,61 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
 void OverlayService::hideLayoutPicker()
 {
+    if (!m_layoutPickerSurface) {
+        // Always emit dismissed so the daemon's Escape-shortcut release
+        // path runs even on idempotent calls (defensive — multiple call
+        // sites converge on hideLayoutPicker).
+        Q_EMIT layoutPickerDismissed();
+        return;
+    }
+
+    // Capture screenId before destroy clears m_layoutPickerScreenId.
     const QString screenId = m_layoutPickerScreenId;
+
+    // Destroy the layer surface. Each show must remap a fresh
+    // wl_surface so KWin re-evaluates keyboard_interactivity at
+    // initial-map time — see createLayoutPickerWindowFor's
+    // destroy-on-hide comment for the rationale and trade-offs.
     destroyLayoutPickerWindow();
-    // Re-show the zone selector that was hidden when layout picker was shown (line 322-324)
+
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-            selectorWindow->show();
+        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
+            if (!selectorSurface->isLogicallyShown()) {
+                selectorSurface->show();
+            }
         }
     }
+
+    // Release the shared cancel-overlay Escape registration. cancelSnap()
+    // dismisses the picker when visible — see WindowDragAdaptor::cancelSnap
+    // and ensureCancelOverlayShortcutRegistered for the rationale.
+    Q_EMIT layoutPickerDismissed();
+}
+
+void OverlayService::warmUpLayoutPicker()
+{
+    // Intentional no-op. The picker used to be pre-warmed (a hidden
+    // wl_surface created at daemon start so the first user-triggered
+    // show skipped ~50-100 ms of Wayland + Vulkan + QML init), but that
+    // mapped the surface with keyboard_interactivity=None to keep the
+    // warm hidden surface from hijacking keys. KWin's wlr-layer-shell
+    // doesn't re-evaluate keyboard focus when interactivity is mutated
+    // to Exclusive on a still-mapped surface, so the picker never
+    // received KeyPress events on user-show — Escape, arrow keys, and
+    // Enter were all dead. Creating fresh per-show maps the surface
+    // with Exclusive at initial map, which KWin honours.
+    //
+    // Kept as a stub rather than removed so the signals.cpp call site
+    // and the public IOverlayService interface stay stable. Callers see
+    // a nominal no-op; the perf cost is amortised across each open.
 }
 
 bool OverlayService::isLayoutPickerVisible() const
 {
-    return m_layoutPickerWindow && m_layoutPickerWindow->isVisible();
+    // Phase 5 keepMappedOnHide: QQuickWindow.isVisible() stays true across
+    // logical hide/show cycles, so it's not a signal of "currently shown"
+    // anymore. Surface state machine is.
+    return m_layoutPickerSurface && m_layoutPickerSurface->isLogicallyShown();
 }
 
 void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
@@ -557,11 +710,28 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // reopens).
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
-    const auto role = PzRoles::LayoutPicker.withScopePrefix(
-        QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::LayoutPicker, scopeId, m_surfaceManager->nextScopeGeneration());
 
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, role,
-                                       "layout picker", QVariantMap(), anchorsOverride, marginsOverride);
+    // Destroy on hide: each show maps a fresh wl_surface so KWin's
+    // wlr-layer-shell evaluates keyboard_interactivity at "initial
+    // map" and grants Exclusive focus — required for Escape and the
+    // arrow-key navigation Shortcuts to fire. Keep-mapped variants
+    // (kbd-toggle dance, kbd None→Exclusive mutation) were tried and
+    // every one left Escape dead because KWin doesn't re-evaluate
+    // focus on already-mapped surfaces.
+    //
+    // Trade-off: the QQuickWindow + QRhi tear down on every dismiss.
+    // On the NVIDIA proprietary driver vkDestroyDevice can stall the
+    // calling thread (devtalk 319139 / 195793 / 366254). Picker is
+    // user-triggered and infrequent in typical use, so the stall is
+    // amortised; SnapAssist uses the same pattern.
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "layout picker",
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride});
     if (!surface) {
         return;
     }
@@ -577,23 +747,26 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
         }
     });
 
-    // Connect layoutSelected and dismissed signals from QML
+    // Connect layoutSelected and dismissRequested signals from QML.
+    // dismissRequested() is the QML-visible "user dismissed" event — fired
+    // from the backdrop MouseArea (and the C++ Escape event-filter path
+    // routes through hideLayoutPicker directly, not via this signal). Same
+    // signal name as LayoutOsd / NavigationOsd for consistency.
     connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
-    connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutPicker()));
+    connect(window, SIGNAL(dismissRequested()), this, SLOT(hideLayoutPicker()));
 
-    // Belt-and-braces visibleChanged cleanup — mirrors the snap-assist
-    // pattern (line ~348 above) so if QML ever sets visible=false without
-    // emitting dismissed(), we still tear down instead of leaking the
-    // Surface + Vulkan swapchain. Without this, a future QML refactor that
-    // forgets the dismissed() emit silently leaks.
-    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
-        if (!visible && m_layoutPickerWindow) {
-            QTimer::singleShot(0, this, &OverlayService::hideLayoutPicker);
-        }
-    });
+    // No visibleChanged → hide hookup here. The post-warmup design keeps the
+    // Qt window `visible == true` for the surface's lifetime; the dismiss
+    // mechanism is the dismissRequested signal above plus the library
+    // animator flipping Qt::WindowTransparentForInput on the still-mapped
+    // QWindow during hide. A visibleChanged hook would either never fire
+    // (visible stays true under keepMappedOnHide=true) or, if a future
+    // QML refactor flips visible explicitly, would re-enter destroy on
+    // hide and reintroduce the slow path we're working around.
 
-    // Install event filter for reliable Escape key handling on Wayland
-    window->installEventFilter(this);
+    // Escape is handled by the QML Shortcut in LayoutPickerContent.qml —
+    // no QObject event filter needed (the eventFilter path was unreliable
+    // under keepMappedOnHide=true; see eventFilter() comment).
 
     m_layoutPickerSurface = surface;
     m_layoutPickerWindow = window;

@@ -4,7 +4,7 @@
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
 #include "../snapadaptor.h"
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -89,7 +89,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     bool useOverlayZone = true;
     int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     QString curActivityDrop = m_layoutManager ? m_layoutManager->currentActivity() : QString();
-    if (releaseScreen && isContextDisabled(m_settings, releaseScreenId, curDesktopDrop, curActivityDrop)) {
+    if (releaseScreen
+        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, releaseScreenId, curDesktopDrop,
+                             curActivityDrop)) {
         useOverlayZone = false;
     }
 
@@ -100,21 +102,64 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         useOverlayZone = false;
     }
 
-    // Cross-screen drag: if the window was snapped on a different screen, clear
-    // its snap/float state NOW — before any new zone detection or snap logic runs.
-    // During drag, outputChanged's windowScreenChanged is skipped (drag owns state).
-    // This is the single point where cross-screen state cleanup happens.
-    if (capturedWasSnapped && m_windowTracking && releaseScreen) {
-        QString storedScreen = m_windowTracking->service()->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && storedScreen != releaseScreenId) {
-            m_windowTracking->snapEngine()->uncommitSnap(windowId);
-            // Preserve pre-tile geometry: it holds the correct free-floating dimensions
-            // from the original snap. Clearing it would cause tryStorePreSnapGeometry to
-            // store zone geometry (capturedOriginalGeometry is zone-sized for snapped windows).
-            // The existing entry's screen context may be stale, but validatedPreTileGeometry
-            // handles cross-screen adjustment (clamp + center) when restoring.
-            qCInfo(lcDbusWindow) << "Cross-screen drag: cleared snap state for" << windowId << "from" << storedScreen
-                                 << "to" << releaseScreenId;
+    // Cross-screen drag: when the window's owning engine differs from the
+    // engine that owns the release screen, run the IPlacementEngine handoff
+    // contract NOW — before any destination-side snap/tile logic runs.
+    // During drag, outputChanged's windowScreenChanged is skipped (drag owns
+    // state), so this is the single point where cross-screen ownership
+    // transfer happens.
+    //
+    // The release uses the contract so both source modes (snap zone, autotile
+    // tile) drop tracking via the same call; the receive only fires when the
+    // destination engine type differs from the source — same-mode cross-screen
+    // (snap→snap, autotile→autotile) is already handled by the receiving
+    // engine's normal commit / drag-insert paths below.
+    //
+    // Pre-tile / pre-float geometry captures are preserved by handoffRelease
+    // for the receiving side to consult on a future return handoff.
+    if (releaseScreen && m_windowTracking) {
+        auto* snapEngine = m_windowTracking->snapEngine();
+        const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
+        const QString autotileScreen =
+            m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
+        PhosphorEngineApi::IPlacementEngine* sourceEngine = nullptr;
+        QString sourceScreen;
+        if (!snapScreen.isEmpty() && snapScreen != releaseScreenId) {
+            sourceEngine = snapEngine;
+            sourceScreen = snapScreen;
+        } else if (!autotileScreen.isEmpty() && autotileScreen != releaseScreenId) {
+            sourceEngine = m_autotileEngine;
+            sourceScreen = autotileScreen;
+        }
+        if (sourceEngine) {
+            const bool destIsAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId);
+            PhosphorEngineApi::IPlacementEngine* destEngine = destIsAutotile ? m_autotileEngine : snapEngine;
+            const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
+
+            sourceEngine->handoffRelease(windowId);
+            qCInfo(lcDbusWindow) << "Cross-screen drag: released" << sourceEngine->engineId() << "state for" << windowId
+                                 << "from" << sourceScreen << "to" << releaseScreenId;
+
+            // Engine-type change: hand off to the destination so it can
+            // adopt the window. The committing snap/tile path below may
+            // still finalize the placement — handoffReceive only sets up
+            // tracking with the right floating disposition.
+            if (engineTypeChanged) {
+                PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+                ctx.windowId = windowId;
+                ctx.toScreenId = releaseScreenId;
+                ctx.fromEngineId = sourceEngine->engineId();
+                ctx.dropPos = QPoint(cursorX, cursorY);
+                ctx.sourceGeometry = capturedOriginalGeometry;
+                ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
+                if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
+                    // sourceZoneIds is informational for receiving engines —
+                    // populated from the pre-drop captured zone since
+                    // handoffRelease has already cleared live tracking.
+                    ctx.sourceZoneIds = QStringList{capturedZoneId};
+                }
+                destEngine->handoffReceive(ctx);
+            }
         }
     }
 
@@ -138,7 +183,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 QString::number(curMode) + QStringLiteral(":") + selectorScreenId, curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
-            && !isContextDisabled(m_settings, selectorScreenId, curDesktopDrop, curActivityDrop)) {
+            && !isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
+                                  curDesktopDrop, curActivityDrop)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();

@@ -7,6 +7,7 @@
 #include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
 #include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
@@ -30,6 +31,15 @@ class Zone;
 class LayoutRegistry;
 }
 
+namespace PhosphorTileEngine {
+class AutotileEngine;
+}
+
+namespace PhosphorSnapEngine {
+class SnapEngine;
+class SnapNavigationTargetResolver;
+}
+
 namespace PlasmaZones {
 
 using PhosphorProtocol::EmptyZoneList;
@@ -41,13 +51,10 @@ using PhosphorProtocol::WindowStateEntry;
 using PhosphorProtocol::WindowStateList;
 using PhosphorProtocol::ZoneGeometryRect;
 
-class AutotileEngine;
 class ScreenModeRouter;
-class SnapNavigationTargetResolver;
 
 class PersistenceWorker;
 class ISettings;
-class SnapEngine;
 class VirtualDesktopManager;
 class ZoneDetectionAdaptor;
 
@@ -57,7 +64,8 @@ class ZoneDetectionAdaptor;
  * Provides D-Bus interface: org.plasmazones.WindowTracking
  *  Window-zone assignment tracking
  */
-class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor,
+                                                 public PhosphorSnapEngine::INavigationStateProvider
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowTracking")
@@ -74,11 +82,18 @@ public:
      *
      * The KWin effect has reliable screen info on both X11 and Wayland.
      * Use this as a fallback when cursor screen is unavailable.
+     *
+     * Implementation: prefers the active window's current daemon-tracked
+     * screen assignment over the cached value. KWin only fires
+     * `windowActivated` on focus changes, so a window that gets dragged or
+     * snapped to a different VS without losing focus leaves
+     * `m_lastActiveScreenId` pointing at the OLD screen — which then
+     * misroutes shortcut handlers (e.g. the float shortcut going to the
+     * autotile engine for the source VS instead of the snap engine for the
+     * destination VS). Reading the live screenAssignment closes that gap
+     * without requiring a separate signal/cache invalidation path.
      */
-    QString lastActiveScreenName() const
-    {
-        return m_lastActiveScreenId;
-    }
+    Q_INVOKABLE QString lastActiveScreenName() const override;
 
     /**
      * @brief Last screen the cursor was on, reported by the KWin effect
@@ -87,7 +102,7 @@ public:
      * This is the primary source for shortcut screen detection on Wayland,
      * since QCursor::pos() is unreliable for background daemons.
      */
-    QString lastCursorScreenName() const
+    Q_INVOKABLE QString lastCursorScreenName() const override
     {
         return m_lastCursorScreenId;
     }
@@ -95,7 +110,7 @@ public:
     /**
      * @brief Get the last activated window's ID
      */
-    QString lastActiveWindowId() const
+    Q_INVOKABLE QString lastActiveWindowId() const override
     {
         return m_lastActiveWindowId;
     }
@@ -138,7 +153,7 @@ public:
     void setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
                     PhosphorEngineApi::PlacementEngineBase* autotileEngine);
 
-    SnapEngine* snapEngine() const;
+    PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
     /**
      * @brief Wire the daemon's central ScreenModeRouter.
@@ -316,7 +331,7 @@ public Q_SLOTS:
      * Returns an invalid QRect if the window has not pushed a geometry yet.
      * Used by daemon-local shortcut handlers.
      */
-    QRect frameGeometry(const QString& windowId) const;
+    Q_INVOKABLE QRect frameGeometry(const QString& windowId) const override;
 
     /**
      * Update cursor screen when cursor crosses to a different monitor
@@ -807,7 +822,7 @@ private:
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
     QPointer<PhosphorEngineApi::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine;
-    QPointer<SnapEngine> m_cachedSnapEngine; // Cached qobject_cast result from setEngines()
+    QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.

@@ -68,7 +68,18 @@ struct HasDBusStreaming<T,
 {
 };
 
-/// D-Bus struct for batch geometry entries: (siiii)
+/// D-Bus struct for batch geometry entries: (siiiis)
+///
+/// `screenId` is the daemon-authoritative target screen for this window after
+/// the geometry is applied. The compositor uses it to seed its per-window
+/// tracked-screen cache (m_trackedScreenPerWindow) without re-deriving from
+/// geometry.center() against m_virtualScreenDefs — eliminating a race during
+/// virtual-screen swap/rotate where the cache lags the daemon's authoritative
+/// move and a stale interpretation triggers a spurious cross-VS unsnap.
+///
+/// Empty `screenId` means "no authoritative answer; fall back to geometry-
+/// based resolution" (used by the autotile float-restore path which doesn't
+/// own snap state).
 struct WindowGeometryEntry
 {
     QString windowId;
@@ -76,6 +87,7 @@ struct WindowGeometryEntry
     int y = 0;
     int width = 0;
     int height = 0;
+    QString screenId; ///< target VS/physical screen (empty = fall back to geometry resolution)
 
     QRect toRect() const
     {
@@ -83,7 +95,11 @@ struct WindowGeometryEntry
     }
     static WindowGeometryEntry fromRect(const QString& id, const QRect& r)
     {
-        return {id, r.x(), r.y(), r.width(), r.height()};
+        return {id, r.x(), r.y(), r.width(), r.height(), QString()};
+    }
+    static WindowGeometryEntry fromRect(const QString& id, const QRect& r, const QString& screenId)
+    {
+        return {id, r.x(), r.y(), r.width(), r.height(), screenId};
     }
 };
 
@@ -133,7 +149,7 @@ struct SnapAllResultEntry
     }
     WindowGeometryEntry toGeometryEntry() const
     {
-        return {windowId, x, y, width, height};
+        return {windowId, x, y, width, height, QString()};
     }
 };
 

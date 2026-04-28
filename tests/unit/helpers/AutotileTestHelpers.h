@@ -9,7 +9,7 @@
 
 #include <memory>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -64,10 +64,10 @@ inline std::unique_ptr<PhosphorTiles::AlgorithmRegistry> scopedRegistry()
  * @param focusedWindow  Optional window ID to focus after all windows are opened.
  * @return Heap-allocated AutotileEngine (caller owns the pointer).
  */
-inline AutotileEngine* createEngineWithWindows(const QString& screen, int count,
-                                               const QString& focusedWindow = QString())
+inline PhosphorTileEngine::AutotileEngine* createEngineWithWindows(const QString& screen, int count,
+                                                                   const QString& focusedWindow = QString())
 {
-    auto* engine = new AutotileEngine(nullptr, nullptr, nullptr, testRegistry());
+    auto* engine = new PhosphorTileEngine::AutotileEngine(nullptr, nullptr, nullptr, testRegistry());
     engine->setAutotileScreens({screen});
 
     for (int i = 1; i <= count; ++i) {

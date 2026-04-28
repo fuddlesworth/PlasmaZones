@@ -5,7 +5,11 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
-#include <PhosphorEngineTypes/IAutotileSettings.h>
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
@@ -29,10 +33,12 @@ namespace PlasmaZones {
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
-class PLASMAZONES_EXPORT Settings : public ISettings, public PhosphorEngineApi::IAutotileSettings
+class PLASMAZONES_EXPORT Settings : public ISettings,
+                                    public PhosphorEngineApi::IAutotileSettings,
+                                    public PhosphorEngineApi::ISnapSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings)
+    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings PhosphorEngineApi::ISnapSettings)
 
 public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
@@ -55,9 +61,17 @@ public:
      * editor controller) already do this at startup.
      *
      * @param backend Non-owned backend pointer (must outlive this Settings)
+     * @param curveRegistry Non-owned curve registry pointer used for Profile
+     *                      JSON parsing. If nullptr, falls back to a local
+     *                      static registry (standalone tests). Must outlive
+     *                      this Settings. Supplying at construction time
+     *                      guarantees the initial `load()` resolves curves
+     *                      through the caller's registry, preserving
+     *                      `shared_ptr<const Curve>` identity across the
+     *                      Settings ↔ daemon boundary.
      * @param parent Parent QObject
      */
-    Settings(PhosphorConfig::IBackend* backend, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -73,17 +87,17 @@ public:
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
                    showZonesOnAllMonitorsChanged)
-    Q_PROPERTY(
-        QStringList disabledMonitors READ disabledMonitors WRITE setDisabledMonitors NOTIFY disabledMonitorsChanged)
-    Q_PROPERTY(
-        QStringList disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
-    Q_PROPERTY(QStringList disabledActivities READ disabledActivities WRITE setDisabledActivities NOTIFY
-                   disabledActivitiesChanged)
+    // Per-mode disable lists are not exposed as Q_PROPERTYs because their
+    // accessors take a Mode argument. QML / D-Bus consumers go through the
+    // mode-aware Q_INVOKABLEs on SettingsController and the per-mode
+    // registrations in SettingsAdaptor instead.
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
+    Q_PROPERTY(bool showOsdOnDesktopSwitch READ showOsdOnDesktopSwitch WRITE setShowOsdOnDesktopSwitch NOTIFY
+                   showOsdOnDesktopSwitchChanged)
     Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
@@ -138,6 +152,8 @@ public:
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
+                   autoAssignAllLayoutsChanged)
     Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
                    snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
@@ -446,21 +462,25 @@ public:
     // Display — PhosphorConfig::Store-backed.
     bool showZonesOnAllMonitors() const override;
     void setShowZonesOnAllMonitors(bool show) override;
-    QStringList disabledMonitors() const override;
-    void setDisabledMonitors(const QStringList& screenIdOrNames) override;
-    bool isMonitorDisabled(const QString& screenIdOrName) const override;
-    QStringList disabledDesktops() const override;
-    void setDisabledDesktops(const QStringList& entries) override;
-    bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const override;
-    QStringList disabledActivities() const override;
-    void setDisabledActivities(const QStringList& entries) override;
-    bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const override;
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) override;
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const override;
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override;
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                           int desktop) const override;
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override;
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                            const QString& activityId) const override;
     bool showZoneNumbers() const override;
     void setShowZoneNumbers(bool show) override;
     bool flashZonesOnSwitch() const override;
     void setFlashZonesOnSwitch(bool flash) override;
     bool showOsdOnLayoutSwitch() const override;
     void setShowOsdOnLayoutSwitch(bool show) override;
+    bool showOsdOnDesktopSwitch() const override;
+    void setShowOsdOnDesktopSwitch(bool show) override;
     bool showNavigationOsd() const override;
     void setShowNavigationOsd(bool show) override;
     OsdStyle osdStyle() const override;
@@ -547,6 +567,8 @@ public:
     void setStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
+    bool autoAssignAllLayouts() const override;
+    void setAutoAssignAllLayouts(bool enabled) override;
     bool snapAssistFeatureEnabled() const override;
     void setSnapAssistFeatureEnabled(bool enabled) override;
     bool snapAssistEnabled() const override;
@@ -642,15 +664,15 @@ public:
     bool autotileEnabled() const;
     void setAutotileEnabled(bool enabled);
     QString defaultAutotileAlgorithm() const override;
-    void setDefaultAutotileAlgorithm(const QString& algorithm);
+    void setDefaultAutotileAlgorithm(const QString& algorithm) override;
     qreal autotileSplitRatio() const override;
-    void setAutotileSplitRatio(qreal ratio);
+    void setAutotileSplitRatio(qreal ratio) override;
     qreal autotileSplitRatioStep() const override;
     void setAutotileSplitRatioStep(qreal step);
     int autotileMasterCount() const override;
-    void setAutotileMasterCount(int count);
+    void setAutotileMasterCount(int count) override;
     QVariantMap autotilePerAlgorithmSettings() const override;
-    void setAutotilePerAlgorithmSettings(const QVariantMap& settings);
+    void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override;
     int autotileInnerGap() const override;
     void setAutotileInnerGap(int gap);
     int autotileOuterGap() const override;
@@ -670,16 +692,12 @@ public:
     bool autotileSmartGaps() const override;
     void setAutotileSmartGaps(bool smart);
     int autotileMaxWindows() const override;
-    void setAutotileMaxWindows(int count);
+    void setAutotileMaxWindows(int count) override;
 
-    enum class AutotileInsertPosition {
-        End = 0,
-        AfterFocused = 1,
-        AsMaster = 2
-    };
-    AutotileInsertPosition autotileInsertPosition() const;
-    void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const override;
+    using AutotileInsertPosition = PhosphorTiles::AutotileInsertPosition;
+    PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const override;
+    void setAutotileInsertPosition(PhosphorTiles::AutotileInsertPosition position);
+    int autotileInsertPositionInt() const;
     void setAutotileInsertPositionInt(int position);
 
     QVariantList autotileDragInsertTriggers() const override;
@@ -707,8 +725,19 @@ public:
 
     // Animation Settings (applies to both snapping and autotiling geometry
     // changes) — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Phase 4 sub-commit 6: storage format migrated to a single Profile
+    // JSON blob; per-field accessors below are projections. The `animationProfile`
+    // getter / setter is the new canonical surface for consumers that want
+    // the whole Profile atomically (daemon's WindowAnimator config-reload path,
+    // plugin-authored profile presets).
     bool animationsEnabled() const override;
     void setAnimationsEnabled(bool enabled) override;
+    /// The single Profile blob backing every per-field accessor below.
+    /// Not a Q_PROPERTY — QML consumers that need the typed Profile
+    /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
+    /// returns a C++-only PhosphorAnimation::Profile value.
+    PhosphorAnimation::Profile animationProfile() const;
+    void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
     QString animationEasingCurve() const override;
@@ -719,6 +748,9 @@ public:
     void setAnimationSequenceMode(int mode) override;
     int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
+
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
@@ -741,7 +773,7 @@ public:
     void setAutotileUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
-    int autotileStickyWindowHandlingInt() const override;
+    int autotileStickyWindowHandlingInt() const;
     void setAutotileStickyWindowHandlingInt(int handling);
     AutotileDragBehavior autotileDragBehavior() const override;
     void setAutotileDragBehavior(AutotileDragBehavior behavior) override;
@@ -749,7 +781,7 @@ public:
     void setAutotileDragBehaviorInt(int behavior);
     AutotileOverflowBehavior autotileOverflowBehavior() const override;
     void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) override;
-    int autotileOverflowBehaviorInt() const override;
+    int autotileOverflowBehaviorInt() const;
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;
@@ -959,6 +991,15 @@ public:
     void applyAutotileBorderSystemColor();
 
 Q_SIGNALS:
+    /// Emitted when the whole animation Profile blob is replaced via
+    /// `setAnimationProfile`. Fires alongside every per-field *Changed
+    /// signal. Consumers that want to observe the Profile atomically
+    /// (e.g., daemon's WindowAnimator re-configuring its MotionSpec
+    /// defaults) prefer this signal; Q_PROPERTY consumers bound to the
+    /// per-field surface get re-triggered through the individual
+    /// signals per the existing NOTIFY wiring.
+    void animationProfileChanged();
+
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -980,6 +1021,41 @@ private:
     /// per-index NOTIFY signal.
     using ShortcutSignalFn = void (Settings::*)();
 
+    /// Member-function-pointer alias for the per-trigger-list NOTIFY signal
+    /// passed into @ref writeTriggerList.
+    using TriggerListSignalFn = void (Settings::*)();
+
+    /// Shared trigger-list setter used by the four "plain" setters
+    /// (activation, deactivation, snap-assist, autotile-insert). Caps at
+    /// @c MaxTriggersPerAction, round-trips through the schema's validator,
+    /// and only emits @p specificSignal + @c settingsChanged on a real change.
+    /// @c setZoneSpanTriggers does its own dance because it also synchronises
+    /// the legacy single-modifier key.
+    void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
+                          TriggerListSignalFn specificSignal);
+
+    /// Member-function-pointer alias for the three per-mode disable NOTIFY
+    /// signals passed into @ref writeDisableList. The signals carry the mode
+    /// that flipped so listeners only react to their own axis.
+    using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
+
+    /// Shared comma-list setter used by @ref setDisabledMonitors,
+    /// @ref setDisabledDesktops, and @ref setDisabledActivities. Reads under
+    /// @c displayGroup, writes the joined list, post-write compares against
+    /// the canonicalised form (the @c canonicalCommaList validator
+    /// trims/de-dupes/normalises whitespace), and only fires
+    /// @p signalFn + @c settingsChanged on a real change.
+    void writeDisableList(const QString& key, const QStringList& entries, PhosphorZones::AssignmentEntry::Mode mode,
+                          DisableModeSignalFn signalFn);
+
+    /// Shared getter for the three per-mode disable lists. Reads under
+    /// @c displayGroup and parses the comma-joined value into a list. The
+    /// monitor variant additionally resolves connector names to canonical
+    /// screen ids — that step lives in @ref disabledMonitors itself, not
+    /// here, because composite-keyed lists (desktop/activity) embed the
+    /// screen id and would need parsing the composite to canonicalise.
+    QStringList readDisableList(const QString& key) const;
+
     // ─── load() / save() helpers ────────────────────────────────────────
     // Only non-Store groups need dedicated helpers now. Store-backed groups
     // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
@@ -996,6 +1072,43 @@ private:
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
+
+    // Patch one field of the Profile JSON blob and emit the canonical
+    // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
+    //
+    // Hot path: per-field setters fired by settings-UI sliders at ~30 Hz.
+    // The helper consolidates the 5 near-identical animation field setters
+    // (duration / easing-curve / min-distance / sequence-mode / stagger-
+    // interval) so the merge contract (read existing blob → insert one
+    // field → write back, preserving every other on-disk key) is in one
+    // place rather than copy-pasted five times.
+    //
+    // T must be comparable (`operator==`) and convertible to QJsonValue
+    // (the QJsonObject::insert overload set covers int / double / bool /
+    // QString / QJsonValue / QJsonArray / QJsonObject).
+    //
+    // - @p jsonFieldName     The Profile JSON key (raw `const char*` —
+    //                        wrapped via `QLatin1String` at the insert site
+    //                        to satisfy Qt6's deleted raw-string ctor).
+    // - @p currentValue      What the corresponding getter returns BEFORE
+    //                        the write — supplied by the caller because the
+    //                        getter shape varies per field (int via
+    //                        `effectiveDuration`, QString via raw blob
+    //                        read for the curve case, etc.). The no-op
+    //                        guard short-circuits when `currentValue ==
+    //                        newValue` so a slider drag at constant value
+    //                        wakes no observers.
+    // - @p newValue          The post-clamp / post-resolve value to insert.
+    //                        Pre-processing (clamping for numeric setters,
+    //                        registry resolution for the easing setter)
+    //                        stays at the call site — the helper is a pure
+    //                        merge primitive, not a validator.
+    // - @p fieldChangedSignal The per-field NOTIFY pointer. Fires alongside
+    //                         animationProfileChanged + settingsChanged on
+    //                         every successful write.
+    template<typename T>
+    void patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
+                           void (Settings::*fieldChangedSignal)());
 
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
@@ -1059,6 +1172,16 @@ private:
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     // Animations are stored in m_store; no cached members here.
+
+    // Non-owned CurveRegistry for animation profile parsing. Injected
+    // at construction (daemon composition root); null for standalone
+    // Settings instances that fall back to a local static registry.
+    // Injection is constructor-only — there is no post-construction
+    // setter because `load()` runs during ctor and would leave cached
+    // Profile state parsed through the wrong registry if a setter ran
+    // after. Callers must pass the registry up front or accept the
+    // fallback contract.
+    PhosphorAnimation::CurveRegistry* m_curveRegistry = nullptr;
 
     // Additional Autotiling Settings
     // Autotiling (continued) stored in m_store.

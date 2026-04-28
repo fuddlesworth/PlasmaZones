@@ -248,10 +248,16 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Array of desktop names."/>
             </arg>
         </method>
+        <method name="getAvailableScreenIds">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the daemon's effective screen ids — one entry per physical monitor PLUS any virtual-screen subdivisions configured on top. Use this for screen enumeration in UI / settings panels; getAllScreenAssignments is the assignment-state readback and emits only screens with stored entries."/>
+            <arg name="screenIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Stable screen ids (e.g. &apos;{edid-uuid}&apos; for physical, &apos;{edid-uuid}/vs:0&apos; for virtual subdivisions). Order follows the daemon's effective-screen iteration."/>
+            </arg>
+        </method>
         <method name="getAllScreenAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. The JSON is a view of *stored* assignment state (suitable for round-trip back through setAllScreenAssignments) — synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead. Only screens with at least one stored entry (base or per-desktop) appear; for screen enumeration use getAvailableScreenIds."/>
             <arg name="assignmentsJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object mapping screens to layout IDs."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;mode&quot;}; screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead."/>
             </arg>
         </method>
         <!-- Quick Layout Slots (1-9) -->

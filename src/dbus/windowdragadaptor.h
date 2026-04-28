@@ -103,6 +103,39 @@ public:
         m_shortcutRegistrar = registrar;
     }
 
+    /**
+     * Register / unregister the cancel-overlay Escape shortcut on demand.
+     *
+     * Drag-active code paths register/unregister automatically as part of
+     * the drag lifecycle. The layout picker re-uses the same id
+     * (kCancelOverlayId) so KGlobalAccel never sees two distinct actions
+     * competing for Escape — once a key is granted, KGlobalAccel routes
+     * to a single action, and a second registration with a fresh id is
+     * silently no-op'd. cancelSnap() dismisses whichever overlay is
+     * visible (picker takes precedence over snap-assist over drag) so a
+     * single shared binding works for all consumers.
+     *
+     * Idempotent: calling register twice in a row is a no-op (Registry
+     * deduplicates same-id same-sequence binds).
+     */
+    void ensureCancelOverlayShortcutRegistered()
+    {
+        registerCancelOverlayShortcut();
+    }
+    void releaseCancelOverlayShortcut()
+    {
+        unregisterCancelOverlayShortcut();
+    }
+
+    /// Whether a drag is currently active (m_draggedWindowId non-empty).
+    /// Daemon uses this to gate the picker-dismissed Escape release on
+    /// drag state — releasing while a drag is in flight would tear down
+    /// the drag's own Escape grab.
+    bool isDragActive() const
+    {
+        return !m_draggedWindowId.isEmpty();
+    }
+
 public Q_SLOTS:
     /**
      * Begin a drag session — daemon-authoritative policy decision.
@@ -237,8 +270,14 @@ private:
     bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const;
     // Check if any trigger in a list matches current modifiers/mouse buttons
     bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
-    // Overload using pre-parsed triggers (hot path during drag)
-    bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Overload using pre-parsed triggers (hot path during drag). Pass
+    // @p excludeSentinel = true to skip entries whose modifier is the
+    // AlwaysActive sentinel — those match every tick by definition, so they
+    // are useless as a per-tick "user is holding the trigger" signal.
+    // dragMoved uses this so the activation cache can carry both the master
+    // always-active bit and user-configurable hold/toggle entries (#249).
+    bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons,
+                        bool excludeSentinel = false) const;
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 

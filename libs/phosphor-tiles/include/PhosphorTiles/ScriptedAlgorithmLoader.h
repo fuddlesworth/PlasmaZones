@@ -4,12 +4,11 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 #include <QByteArray>
-#include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
 #include <QString>
-#include <QTimer>
 
 #include <memory>
 
@@ -61,8 +60,24 @@ public:
      * Clears existing scripted algorithms from the registry, then rescans
      * all algorithm directories. System directories are loaded first so that
      * user directories can override by filename.
+     *
+     * @p liveReload defaults to `On` so production callers (daemon,
+     * editor, settings) get hot-reload by default. Pass `Off` from
+     * tests / batch-import contexts that want a one-shot scan with no
+     * background watcher attached. The flag is forwarded to the
+     * underlying `WatchedDirectorySet` and inherits its one-way-enable
+     * semantics: once any call passes `On`, the watcher stays armed
+     * for the loader's lifetime.
+     *
+     * Idempotent on the registry: a re-scan that resolves to an empty
+     * directory set still drives the diff path so previously-registered
+     * scripts get unregistered as stale.
+     *
+     * Change-detection is observable via the `algorithmsChanged` signal,
+     * which fires from inside the strategy when the on-disk script set
+     * differs from the previous scan's signature.
      */
-    bool scanAndRegister();
+    void scanAndRegister(PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
     /**
      * @brief Create the user algorithm directory if it does not exist
@@ -83,18 +98,12 @@ Q_SIGNALS:
      */
     void algorithmsChanged();
 
-private Q_SLOTS:
-    void onDirectoryChanged(const QString& path);
-    void onFileChanged(const QString& path);
-    void performDebouncedRefresh();
-
 private:
-    void setupFileWatcher();
-    void reWatchFiles();
-    void loadFromDirectory(const QString& dir, bool isUserDir);
-    void scheduleRefresh();
+    class JsScanStrategy;
+    QStringList performScan(const QStringList& directoriesInScanOrder);
+
+    void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir);
     QStringList algorithmDirectories() const;
-    void watchDirectory(const QString& dirPath);
     QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
 
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
@@ -110,13 +119,8 @@ private:
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
     std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
-    QFileSystemWatcher* m_watcher = nullptr;
-    QTimer* m_refreshTimer = nullptr;
-    /// Second follow-up rescan that fires @ref FollowupRescanMs after the
-    /// debounced rescan. Catches edits landed inside the no-watcher window
-    /// created by atomic replace (new inode) between onFileChanged dropping
-    /// the watch and reWatchFiles() re-adding it.
-    QTimer* m_followupTimer = nullptr;
+    std::unique_ptr<JsScanStrategy> m_strategy;
+    std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
     /// Signature of the last registered script set — sorted (id, path,
     /// size, mtime) digest. Used by scanAndRegister() to suppress
@@ -125,9 +129,6 @@ private:
     /// watched dir, lstat-only events, etc.), so downstream D-Bus fan-out
     /// stays quiet when nothing actually changed.
     QByteArray m_lastScriptSignature;
-
-    static constexpr int RefreshDebounceMs = 500;
-    static constexpr int FollowupRescanMs = 500;
 };
 
 } // namespace PhosphorTiles

@@ -99,7 +99,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (!physScreen) {
                 continue;
             }
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -112,7 +113,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     } else {
         for (auto* screen : Utils::allScreens()) {
             const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -381,8 +383,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         marginsOverride = placement.margins;
     }
 
-    const auto role = PzRoles::Overlay.withScopePrefix(
-        QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role = PzRoles::makePerInstanceRole(PzRoles::Overlay, screenId, m_surfaceManager->nextScopeGeneration());
 
     // Try shader overlay first, fall back to standard overlay if it fails.
     QVariantMap initProps;
@@ -396,8 +397,13 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
 
     PhosphorLayer::Surface* surface = nullptr;
     if (usingShader) {
-        surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), physScreen, role,
-                                     "shader overlay", initProps, anchorsOverride, marginsOverride);
+        surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")),
+                                      .screen = physScreen,
+                                      .role = role,
+                                      .windowType = "shader overlay",
+                                      .windowProperties = initProps,
+                                      .anchorsOverride = anchorsOverride,
+                                      .marginsOverride = marginsOverride});
         if (surface) {
             qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screenId;
         } else {
@@ -407,8 +413,13 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         }
     }
     if (!surface) {
-        surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), physScreen, role, "overlay",
-                                     initProps, anchorsOverride, marginsOverride);
+        surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")),
+                                      .screen = physScreen,
+                                      .role = role,
+                                      .windowType = "overlay",
+                                      .windowProperties = initProps,
+                                      .anchorsOverride = anchorsOverride,
+                                      .marginsOverride = marginsOverride});
         if (!surface) {
             return;
         }
@@ -485,7 +496,8 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     for (const QString& screenId : screensToRecreate)
         destroyOverlayWindow(screenId);
     for (const QString& screenId : screensToRecreate) {
-        if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+        if (!isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
+                               m_currentActivity)) {
             QScreen* physScreen = savedPhysScreens.value(screenId);
             if (!physScreen)
                 continue;
@@ -734,12 +746,13 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->labelsTextureHash = 0;
 
     // Erase the entry entirely if nothing else is keeping it alive. Per-screen
-    // state carries four surface pointers (overlay, zone selector, layout OSD,
-    // navigation OSD); only the overlay is cleared here. If the others are all
-    // null too, the entry is an empty husk that accumulates under hide()+show()
+    // state carries three surface pointers post-Phase-2 (overlay, zone selector,
+    // unified notification — the latter hosts both layout-OSD and nav-OSD
+    // content); only the overlay is cleared here. If the others are all null
+    // too, the entry is an empty husk that accumulates under hide()+show()
     // cycles. destroyAllWindowsForPhysicalScreen already erases, but hide()
     // used to leave husks behind — drop them here symmetrically.
-    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->layoutOsdSurface && !it->navigationOsdSurface) {
+    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->notificationSurface) {
         m_screenStates.erase(it);
     }
 }

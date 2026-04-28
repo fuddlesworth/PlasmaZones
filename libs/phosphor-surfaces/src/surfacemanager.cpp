@@ -230,6 +230,12 @@ void SurfaceManager::createKeepAlive()
     cfg.screen = screen;
     cfg.anchorsOverride = PhosphorLayer::AnchorNone;
     cfg.exclusiveZoneOverride = 0;
+    // Warm-up at the eventual 1x1 visible size so the Vulkan swapchain isn't
+    // first allocated at full-screen geometry and then resized — that costs
+    // a destroy+recreate cycle on NVIDIA's proprietary stack and pre-allocates
+    // ~25 MB at 4K for a surface whose only job is to keep the QSG/QRhi
+    // device + QML engine warm for subsequent overlays.
+    cfg.initialSize = QSize(1, 1);
 
     auto* surface = m_impl->config.surfaceFactory->create(std::move(cfg), this);
     if (!surface) {

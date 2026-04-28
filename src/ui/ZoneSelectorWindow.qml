@@ -18,6 +18,14 @@ Window {
     // KeyboardInteractivity::None (PzRoles::ZoneSelector) so the
     // compositor cannot grant it focus anyway. The call is a no-op
     // at best and may log warnings on strict compositors.
+    // Phase 5: surface lifecycle + show/hide animations are entirely library-
+    // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
+    // PzRoles::ZoneSelector) drives this Window's content opacity via its
+    // `panel.popup` / `widget.fadeOut` profiles; the PhosphorLayer::Surface
+    // state machine handles `Qt.WindowTransparentForInput` on the underlying
+    // QWindow during the hide cycle. The previous `_selectorDismissed` flag
+    // + `showAnimation` / `hideAnimation` blocks are gone.
+    // (Phase 5: showAnimation / hideAnimation removed — library drives.)
 
     id: root
 
@@ -25,6 +33,9 @@ Window {
     property var layouts: []
     property string activeLayoutId: ""
     property string hoveredLayoutId: ""
+    // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
+    // Forwarded into LayoutCard so the category badge shows effective state.
+    property bool globalAutoAssign: false
     // Selected zone tracking
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
@@ -134,67 +145,27 @@ Window {
         }
     }
 
-    function show() {
-        showAnimation.stop();
-        hideAnimation.stop();
-        contentWrapper.opacity = 0;
-        root.visible = true;
-        showAnimation.start();
-    }
-
-    function hide() {
-        showAnimation.stop();
-        // Reset cursor state so autoScrollTimer doesn't tick on stale
-        // coordinates between hide and the next show().
+    /// Reset transient hover state. C++ calls this from hideZoneSelector
+    /// before invoking Surface::hide() so the autoScrollTimer doesn't tick
+    /// on stale coordinates between hide and the next show().
+    function resetCursorState() {
         root.cursorX = -1;
         root.cursorY = -1;
-        if (root.visible)
-            hideAnimation.start();
-
     }
 
-    // Window configuration for overlay - QPA layer-shell plugin handles layering on Wayland
+    // Window configuration. Static flags — Phase 5 surface lifecycle owns
+    // `Qt.WindowTransparentForInput` on the underlying QWindow during hide.
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
     visible: false
 
-    // Animation constants
+    // Animation constants (kept for non-show/hide bindings inside this file
+    // that still reference shortDuration / normalDuration).
     QtObject {
         id: animationConstants
 
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
-    }
-
-    ParallelAnimation {
-        id: showAnimation
-
-        NumberAnimation {
-            target: contentWrapper
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: animationConstants.shortDuration
-            easing.type: Easing.OutCubic
-        }
-
-    }
-
-    SequentialAnimation {
-        id: hideAnimation
-
-        NumberAnimation {
-            target: contentWrapper
-            property: "opacity"
-            to: 0
-            duration: animationConstants.shortDuration
-            easing.type: Easing.InCubic
-        }
-
-        ScriptAction {
-            script: root.visible = false
-        }
-
     }
 
     // Auto-scroll constants for drag-based scrolling.
@@ -254,15 +225,15 @@ Window {
         }
     }
 
-    // Content wrapper for opacity animation — mirrors LayoutPickerOverlay
-    // pattern. Wrapping in an Item lets the show animation fade the visible
-    // tree from 0→1 without animating root.opacity (which would emit Wayland
-    // setOpacity warnings on layer-shell surfaces).
+    // Content wrapper. Opacity defaults to 1 — Phase 5 SurfaceAnimator
+    // drives Window.contentItem opacity for show/hide so this child stays
+    // at 1 and inherits visibility from the parent fade. Animating
+    // root.opacity directly would emit Wayland setOpacity warnings on
+    // layer-shell surfaces.
     Item {
         id: contentWrapper
 
         anchors.fill: parent
-        opacity: 0
 
         // Main container - uses States for proper anchor management
         // Conditional anchors with undefined don't reliably unset in QML
@@ -523,10 +494,10 @@ Window {
                                 layoutData: indicator.modelData
                                 isActive: indicator.isActive
                                 isSelected: indicator.hasSelectedZone
+                                globalAutoAssign: root.globalAutoAssign
                                 previewWidth: root.indicatorWidth
                                 previewHeight: root.indicatorHeight
                                 // Zone selector features
-                                showIndicatorBar: true
                                 showCardBackground: true
                                 interactive: !(root.locked && !indicator.isActive)
                                 selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1

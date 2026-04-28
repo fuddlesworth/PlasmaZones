@@ -20,27 +20,26 @@ namespace PhosphorTiles {
 class ITileAlgorithmRegistry;
 }
 
+namespace PhosphorTileEngine {
+class AutotileEngine;
+}
+
+namespace PhosphorSnapEngine {
+class SnapEngine;
+}
+
 namespace PlasmaZones {
 
-class AutotileEngine;
 class ISettings;
 class ScreenModeRouter;
-class SnapEngine;
 class VirtualDesktopManager;
 class WindowRegistry;
 class WindowTrackingService;
 
-/**
- * @brief Grouped result of createEngines().
- *
- * Returns concrete engine types so the daemon can wire adaptor construction
- * and engine-specific setup without immediately downcasting. The daemon
- * stores these as PlacementEngineBase* members for all subsequent code paths.
- */
 struct EngineSet
 {
-    std::unique_ptr<AutotileEngine> autotile;
-    std::unique_ptr<SnapEngine> snap;
+    std::unique_ptr<PhosphorTileEngine::AutotileEngine> autotile;
+    std::unique_ptr<PhosphorSnapEngine::SnapEngine> snap;
     std::unique_ptr<ScreenModeRouter> router;
 };
 

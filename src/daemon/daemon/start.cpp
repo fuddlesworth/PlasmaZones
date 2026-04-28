@@ -39,6 +39,8 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/WindowId.h>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -234,9 +236,18 @@ void Daemon::connectDesktopActivity()
         // removed (not available from desktopCountChanged). A future improvement could
         // use KDE's desktop UUIDs instead of 1-based numbers.
         if (m_settings) {
-            QStringList disabled = m_settings->disabledDesktops();
-            if (pruneDisabledDesktopEntries(disabled, newCount)) {
-                m_settings->setDisabledDesktops(disabled);
+            // Prune both per-mode lists — a stale entry in either side leaks
+            // gates on now-deleted desktops just as effectively.
+            bool changed = false;
+            for (const auto mode :
+                 {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                QStringList disabled = m_settings->disabledDesktops(mode);
+                if (pruneDisabledDesktopEntries(disabled, newCount)) {
+                    m_settings->setDisabledDesktops(mode, disabled);
+                    changed = true;
+                }
+            }
+            if (changed) {
                 m_settings->save();
             }
         }
@@ -282,11 +293,18 @@ void Daemon::connectDesktopActivity()
             const QStringList activities = m_activityManager->activities();
             const QSet<QString> validSet(activities.begin(), activities.end());
 
-            // Prune disabled-activity entries that reference removed activities
+            // Prune both per-mode disabled-activity lists.
             if (m_settings) {
-                QStringList disabled = m_settings->disabledActivities();
-                if (pruneDisabledActivityEntries(disabled, validSet)) {
-                    m_settings->setDisabledActivities(disabled);
+                bool changed = false;
+                for (const auto mode :
+                     {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                    QStringList disabled = m_settings->disabledActivities(mode);
+                    if (pruneDisabledActivityEntries(disabled, validSet)) {
+                        m_settings->setDisabledActivities(mode, disabled);
+                        changed = true;
+                    }
+                }
+                if (changed) {
                     m_settings->save();
                 }
             }
@@ -470,6 +488,19 @@ void Daemon::connectShortcutSignals()
 
     // PhosphorZones::Layout picker shortcut (interactive layout browser + resnap)
     // Capture screen name at open time so it's still valid after the picker closes.
+    //
+    // Escape handling: KWin's wlr-layer-shell does not deliver keyboard
+    // events to the picker's QQuickWindow on this Qt/KDE combination
+    // (verified via Keys.onPressed diagnostic — fires zero times for the
+    // duration of the picker). The QML Shortcut path is therefore unable
+    // to react to Escape. We register Escape via KGlobalAccel using the
+    // SAME id as the drag-cancel shortcut (`kCancelOverlayId`) so that:
+    //   1. KGlobalAccel doesn't see two distinct actions competing for
+    //      Escape — it only routes to one action per key, and the second
+    //      ad-hoc registration would otherwise be silently no-op'd.
+    //   2. cancelSnap() — the kCancelOverlayId callback — already
+    //      dismisses whichever overlay is visible; the picker-takes-
+    //      precedence ordering lives there.
     connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
         if (!m_unifiedLayoutController) {
             return;
@@ -482,6 +513,18 @@ void Daemon::connectShortcutSignals()
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
+        if (m_windowDragAdaptor) {
+            m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
+        }
+    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
+        // Only release the Escape grab if no drag is currently active —
+        // otherwise the in-progress drag's own cancel-overlay shortcut
+        // would be torn down underneath it. WindowDragAdaptor's drag-end
+        // path will release on its own when appropriate.
+        if (m_windowDragAdaptor && !m_windowDragAdaptor->isDragActive()) {
+            m_windowDragAdaptor->releaseCancelOverlayShortcut();
+        }
     });
     connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
         if (!m_unifiedLayoutController) {
@@ -625,6 +668,32 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
             && !keepIds.contains(it.key().screenId)) {
             it = m_lastAutotileOrders.erase(it);
         } else {
+            ++it;
+        }
+    }
+}
+
+void Daemon::pruneAutotileOrdersForWindow(const QString& instanceId)
+{
+    if (instanceId.isEmpty() || m_lastAutotileOrders.isEmpty()) {
+        return;
+    }
+    for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
+        QStringList& order = it.value();
+        const int before = order.size();
+        order.erase(std::remove_if(order.begin(), order.end(),
+                                   [&instanceId](const QString& wid) {
+                                       return PhosphorIdentity::WindowId::extractInstanceId(wid) == instanceId;
+                                   }),
+                    order.end());
+        if (order.isEmpty()) {
+            it = m_lastAutotileOrders.erase(it);
+        } else {
+            if (order.size() != before) {
+                qCDebug(lcDaemon) << "Pruned closed window" << instanceId
+                                  << "from saved autotile order for screen=" << it.key().screenId
+                                  << "desktop=" << it.key().desktop;
+            }
             ++it;
         }
     }

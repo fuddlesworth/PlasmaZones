@@ -171,24 +171,25 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
     return list;
 }
 
-bool isMonitorDisabledFor(const Settings* settings, const QString& screenName)
+bool isMonitorDisabledFor(const Settings* settings, PhosphorZones::AssignmentEntry::Mode mode,
+                          const QString& screenName)
 {
-    return settings && settings->isMonitorDisabled(screenName);
+    return settings && settings->isMonitorDisabled(mode, screenName);
 }
 
-void setMonitorDisabledFor(Settings* settings, const QString& screenName, bool disabled,
-                           const std::function<void()>& onChanged)
+void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+                           bool disabled, const std::function<void()>& onChanged)
 {
     if (!settings || screenName.isEmpty())
         return;
 
     QString id = Phosphor::Screens::ScreenIdentity::idForName(screenName);
-    QStringList list = settings->disabledMonitors();
+    QStringList list = settings->disabledMonitors(mode);
 
     if (disabled) {
         if (!list.contains(id)) {
             list.append(id);
-            settings->setDisabledMonitors(list);
+            settings->setDisabledMonitors(mode, list);
             if (onChanged)
                 onChanged();
         }
@@ -198,7 +199,7 @@ void setMonitorDisabledFor(Settings* settings, const QString& screenName, bool d
             changed |= list.removeAll(screenName) > 0;
         }
         if (changed) {
-            settings->setDisabledMonitors(list);
+            settings->setDisabledMonitors(mode, list);
             if (onChanged)
                 onChanged();
         }

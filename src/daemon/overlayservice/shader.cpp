@@ -456,13 +456,21 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     initProps.insert(QStringLiteral("isShaderOverlay"), true);
 
     // Unique-per-instance scope to avoid compositor-side rate limiting when the
-    // editor rapidly opens/closes the Shader Settings dialog.
+    // editor rapidly opens/closes the Shader Settings dialog. Routes through
+    // makePerInstanceRole so the per-instance prefix is guaranteed by
+    // construction to start with PzRoles::ShaderPreview's base — even though
+    // the SurfaceAnimator deliberately doesn't register a config for this
+    // role (editor-controlled imperative show/hide), keeping construction
+    // uniform across every per-instance role keeps a future migration cheap.
     const QString scopeId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
-    const auto role = PzRoles::ShaderPreview.withScopePrefix(
-        QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::ShaderPreview, scopeId, m_surfaceManager->nextScopeGeneration());
 
-    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, role,
-                                       "shader preview overlay", initProps);
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "shader preview overlay",
+                                        .windowProperties = initProps});
     if (!surface) {
         return;
     }

@@ -430,8 +430,8 @@ private:
     {
         QPointer<KWin::OutlinedBorderItem> item;
         QMetaObject::Connection geometryConnection;
-        QPointer<KWin::SurfaceItem> clippedSurface;
-        KWin::BorderRadius savedSurfaceRadius;
+        QPointer<KWin::Item> clippedContainer;
+        KWin::BorderRadius savedContainerRadius;
     };
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
@@ -636,6 +636,16 @@ private:
     };
     QHash<QString, CachedSnapRestore> m_snapRestoreCache;
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
+    /// True while a daemon-driven geometry apply (slotApplyGeometriesBatch / slotWindowsTileRequested)
+    /// is moving a window. Suppresses the windowFrameGeometryChanged crossing-detection paths so a
+    /// VS swap/rotate does not produce spurious "window moved between monitors" events. The daemon
+    /// emits virtualScreensChanged and the geometry batch in the same handler chain, but on the
+    /// effect side those D-Bus messages can race: the geometry change fires while m_virtualScreenDefs
+    /// still holds the pre-rotation regions, so the crossing comparison computes newScreenId from
+    /// stale config + new position and falsely concludes the window crossed VSes. The daemon is the
+    /// authoritative source of the window's intended VS during these applies, so the crossing check
+    /// is unsafe and must be skipped.
+    bool m_inDaemonGeometryApply = false;
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState

@@ -48,6 +48,12 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
+# phosphor-fsloader — shared filesystem-loader scaffolding (used by
+# ScriptedAlgorithmLoader's WatchedDirectorySet + JsScanStrategy).
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -133,6 +139,11 @@ target_link_libraries(PhosphorTiles
         Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorEngineTypes::PhosphorEngineTypes
+        # PhosphorFsLoader is publicly exposed via
+        # ScriptedAlgorithmLoader's `LiveReload` parameter — consumers
+        # including `<PhosphorTiles/ScriptedAlgorithmLoader.h>` need
+        # its headers on their include path.
+        PhosphorFsLoader::PhosphorFsLoader
 )
 
 set_target_properties(PhosphorTiles PROPERTIES

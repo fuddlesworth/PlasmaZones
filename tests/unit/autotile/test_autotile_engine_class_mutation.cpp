@@ -22,12 +22,13 @@
 #include <QSignalSpy>
 #include <QTest>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorTiles/TilingState.h>
 #include "core/windowregistry.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 namespace {
 

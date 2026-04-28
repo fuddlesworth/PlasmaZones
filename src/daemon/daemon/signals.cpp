@@ -26,7 +26,7 @@
 #include <PhosphorEngineApi/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -48,10 +48,18 @@ void Daemon::initializeAutotile()
         // fires for float, swap, window open/close, etc. which is too noisy)
         connect(m_autotileEngine.get(), &PlacementEngineBase::algorithmChanged, this,
                 [this](const QString& algorithmId) {
-                    // Only show OSD when actually in autotile mode — loadState() emits
-                    // algorithmChanged during startup even if we're in manual mode.
-                    // Defer OSD display (same rationale as autotileApplied handler above).
-                    if (m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
+                    // Suppress during startup: loadState() emits algorithmChanged from
+                    // finalizeStartup(), and finalizeStartup() is the authoritative
+                    // startup-OSD path (gated on showOsdOnDesktopSwitch via
+                    // showOsdForAllScreens). Letting this handler also fire would both
+                    // double-queue an OSD on the focused screen AND leak past
+                    // showOsdOnDesktopSwitch=false, since this branch gates only on
+                    // showOsdOnLayoutSwitch.
+                    //
+                    // Also gate on isAnyScreenAutotile() — loadState() may emit even
+                    // when no screen is in autotile mode, and a runtime algorithm
+                    // change is irrelevant in that case.
+                    if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                         && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
                         auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
                         QString displayName = algo ? algo->name() : algorithmId;
@@ -159,10 +167,14 @@ void Daemon::initializeAutotile()
             // Feature gate happens below, after the current mode is known,
             // so we can check the flag for the TARGET mode (not just autotile).
 
-            // Resolve focused screen
-            const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+            // Mode toggle is screen-targeted, not window-targeted: route off the
+            // cursor's screen, not the focused window's. Otherwise pressing the
+            // toggle while looking at vs:0 with a focused window on vs:1 silently
+            // flips vs:1 — exactly the "tried to swap modes for VS0 but VS1 was
+            // changing" symptom seen in production logs.
+            const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
             if (screenId.isEmpty()) {
-                qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveShortcutScreenId";
+                qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveCursorScreenId";
                 return;
             }
             int desktop = currentDesktop();
@@ -170,11 +182,16 @@ void Daemon::initializeAutotile()
             qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop
                              << "activity=" << activity;
 
-            // Context gate: if PlasmaZones is disabled for this screen/desktop/activity,
-            // show a visual OSD explaining why instead of silently ignoring the toggle.
+            // Context gate: if PlasmaZones is disabled for this screen/desktop/activity
+            // in the CURRENT mode, show a visual OSD explaining why instead of silently
+            // ignoring the toggle. Mode is resolved via the router so we describe the
+            // mode the user is actually trying to interact with.
             // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
             // direct feedback to an explicit user action, not a passive layout-switch OSD.
-            const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
+            const auto currentMode =
+                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+            const DisabledReason why =
+                contextDisabledReason(m_settings.get(), currentMode, screenId, desktop, activity);
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 return;
@@ -292,7 +309,7 @@ void Daemon::initializeAutotile()
             // to share the same screen, producing wrong results.
             // Windows that were autotile-only (never zone-snapped) get their
             // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
-            auto* concreteSnap = qobject_cast<SnapEngine*>(m_snapEngine.get());
+            auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
             if (applied && wasAutotile && !concreteSnap) {
                 if (m_snapEngine) {
                     qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
@@ -426,14 +443,27 @@ void Daemon::connectLayoutSignals()
     // Set initial layout filter
     updateLayoutFilter();
 
-    // Pre-warm PhosphorZones::Layout OSD QML windows unconditionally.
-    // First-time QML compilation of LayoutOsd.qml (~100-300ms) would otherwise
-    // block the event loop during the first layout switch (manual or autotile),
-    // causing perceptible lag.  Deferred so daemon init completes first.
+    // Pre-warm the per-screen NotificationOverlay surface unconditionally.
+    // First-time QML compilation of NotificationOverlay.qml (~100-300ms)
+    // would otherwise block the event loop during the first layout switch
+    // (manual or autotile) or first keyboard navigation action, causing
+    // perceptible lag. Deferred so daemon init completes first.
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
-            m_overlayService->warmUpLayoutOsd();
-            m_overlayService->warmUpNavigationOsd();
+            // Single warm-up covers both layout-OSD and navigation-OSD —
+            // they share one per-screen surface (NotificationOverlay.qml).
+            m_overlayService->warmUpNotifications();
+            // Layout Picker is intentionally NOT pre-warmed: the
+            // pre-warmed wl_surface gets initially mapped with
+            // keyboard_interactivity=None (so the warm hidden surface
+            // doesn't grab the keyboard), and KWin's wlr-layer-shell
+            // doesn't re-evaluate keyboard focus when interactivity is
+            // mutated to Exclusive on a still-mapped surface. Result:
+            // the picker never received KeyPress events on user-show
+            // and Escape didn't dismiss it. Creating fresh per-show
+            // makes the surface map with Exclusive from the start;
+            // KWin grants focus on initial map. ~50-100 ms first-show
+            // latency is back, but the picker is rare and user-triggered.
         });
     }
 
@@ -479,10 +509,11 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
-                // Defer OSD display (same rationale as autotileApplied — first-time QML
-                // compilation of LayoutOsd.qml blocks the event loop ~100-300ms).
-                // Capture layout ID (not raw pointer) to avoid use-after-free if the
-                // layout is ever replaced between now and next event loop pass.
+                // Defer OSD display (same rationale as autotileApplied — first-time
+                // QML compilation of NotificationOverlay.qml blocks the event loop
+                // ~100-300ms). Capture layout ID (not raw pointer) to avoid
+                // use-after-free if the layout is ever replaced between now and
+                // next event loop pass.
                 if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
                     QUuid layoutId = layout->id();
                     QString screenId = m_unifiedLayoutController->currentScreenName();
@@ -498,10 +529,11 @@ void Daemon::connectLayoutSignals()
                     m_overlayService->hideSnapAssist();
                 }
                 // Defer OSD display so QML window creation (first-time ~100-300ms for
-                // LayoutOsd.qml compilation + scene graph) doesn't block the daemon event
-                // loop while the effect is sending windowOpened D-Bus calls.  Without this,
-                // first toggle to autotile has perceptible lag because the daemon can't
-                // process incoming tiling requests until the OSD handler returns.
+                // NotificationOverlay.qml compilation + scene graph) doesn't block the
+                // daemon event loop while the effect is sending windowOpened D-Bus
+                // calls. Without this, first toggle to autotile has perceptible lag
+                // because the daemon can't process incoming tiling requests until the
+                // OSD handler returns.
                 if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_autotileEngine && m_overlayService) {
                     QString algorithmId = m_autotileEngine->algorithmId();
                     QString screenId = m_unifiedLayoutController->currentScreenName();
@@ -660,7 +692,10 @@ void Daemon::finalizeStartup()
 
     // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
     // The layoutApplied signal only fires for the focused screen; this covers the rest.
-    if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+    // Gated on the desktop-switch OSD toggle (not the layout-switch toggle): startup is
+    // a passive context change like a desktop switch, not an explicit user-driven layout
+    // change, so users who disable desktop-switch OSDs expect quiet startup too.
+    if (m_settings && m_settings->showOsdOnDesktopSwitch()) {
         showOsdForAllScreens(currentDesktop(), currentActivity());
     }
 }
@@ -733,6 +768,17 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         return;
     }
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    // Cross-engine handoff: this signal fires when autotile has just taken
+    // ownership of a window that may still be tracked by snap. handoffRelease
+    // is a no-op when the engine doesn't track the window, so we can call it
+    // unconditionally — that closes the loophole where snap thought the
+    // window was on the same screen ID as the autotile target (stale state
+    // mid-mode-switch) and the previous gated path skipped cleanup.
+    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(autotile screen"
+                         << screenId << ")";
+        m_snapEngine->handoffRelease(windowId);
+    }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);

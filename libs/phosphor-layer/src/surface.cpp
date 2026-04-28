@@ -4,18 +4,22 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/IQmlEngineProvider.h>
 #include <PhosphorLayer/IScreenProvider.h>
+#include <PhosphorLayer/ISurfaceAnimator.h>
 #include <PhosphorLayer/Surface.h>
+#include <PhosphorLayer/defaults/NoOpSurfaceAnimator.h>
 
 #include "internal.h"
 
 #include <QLatin1String>
 #include <QMetaObject>
+#include <QPoint>
 #include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRect>
 #include <QScreen>
 #include <QWindow>
 
@@ -27,6 +31,21 @@ SurfaceConfig::SurfaceConfig() = default;
 SurfaceConfig::~SurfaceConfig() = default;
 SurfaceConfig::SurfaceConfig(SurfaceConfig&&) noexcept = default;
 SurfaceConfig& SurfaceConfig::operator=(SurfaceConfig&&) noexcept = default;
+
+namespace {
+/// Library-wide fallback animator used whenever the consumer leaves
+/// `SurfaceFactory::Deps::animator` null. Shared across every Surface that
+/// opts in to the no-op default; stateless and thread-safe (every method
+/// is `const`-equivalent — calls onComplete synchronously, no per-instance
+/// data). A function-static keeps initialisation out of the dynamic-init
+/// phase so the dtor ordering at process shutdown can't accidentally call
+/// into it after Qt has been torn down.
+ISurfaceAnimator& noOpAnimator()
+{
+    static NoOpSurfaceAnimator s_instance;
+    return s_instance;
+}
+} // namespace
 
 ScreenProviderNotifier::ScreenProviderNotifier(QObject* parent)
     : QObject(parent)
@@ -64,6 +83,13 @@ public:
         , m_config(std::move(cfg))
         , m_deps(std::move(deps))
     {
+        // The "animator + keepMappedOnHide=false" combination is legitimate
+        // for consumers that destroy on hide (snap-assist style) and use the
+        // animator only for the show fade. A blanket constructor warning
+        // would false-positive for that pattern; the actual misuse — calling
+        // Surface::hide() expecting a visible fade-out under the unmap-on-
+        // hide policy — is detected at the hide call site (gated on
+        // m_hideFootgunWarned for once-per-surface diagnostics).
         // Subscribe to screen-removal so we never hand the transport a dangling
         // QScreen* after a hot-unplug. When the attached screen disappears we
         // null m_config.screen; the next finishAttach() falls back to the
@@ -81,6 +107,13 @@ public:
     ~Impl()
     {
         QObject::disconnect(m_screensChangedConnection);
+        // Cancel any in-flight animation BEFORE we tear the QQuickItem tree
+        // down. The animator may be holding a QPropertyAnimation or a Phase-3
+        // AnimatedValue<qreal> targeting `m_rootItem` / `m_window->contentItem()`
+        // — letting that survive into the destructor of the QQuickWindow it
+        // animates causes a "modify after delete" on the property setter when
+        // the next animation tick fires.
+        animator().cancel(m_q);
         // Ordered teardown: transport → component → window → engine. The component
         // holds a pointer into the engine and touches it in its dtor, so it must
         // go before the engine. The window hosts QML objects whose dtors also
@@ -157,6 +190,11 @@ public:
     /// evaluates with the latched intent when it loops back to the top.
     bool m_driving = false;
     bool m_intentPending = false; ///< A nested drive() latched a new intent
+    /// Once-per-surface flag for the "animator + unmap-on-hide" diagnostic.
+    /// Logged at the first Surface::hide() call where the combination would
+    /// drop animation frames; subsequent hides on the same surface stay
+    /// quiet so a hot dismiss path doesn't fill the journal.
+    bool m_hideFootgunWarned = false;
 
     QPointer<QQmlEngine> m_engine;
     EngineOwnership m_engineOwnership = EngineOwnership::None;
@@ -173,6 +211,29 @@ public:
     std::unique_ptr<QQmlComponent> m_component;
     std::unique_ptr<ITransportHandle> m_handle;
     QString m_failureReason;
+
+    // ── Animator helpers ──────────────────────────────────────────────
+    /// Resolve the injected animator or fall back to the library-wide no-op.
+    /// Always returns a valid reference — every dispatch site can call
+    /// `animator().beginShow(...)` without null-checking. The fallback is a
+    /// shared no-op singleton (see noOpAnimator()).
+    ISurfaceAnimator& animator() const
+    {
+        return m_deps.animator ? *m_deps.animator : noOpAnimator();
+    }
+
+    /// Resolve the QQuickItem the animator should drive: the explicit
+    /// item-rooted content, or the Window's contentItem for Window-rooted
+    /// QML. Both expose `opacity` / `scale` / transforms in the standard
+    /// QQuickItem property surface, so the animator implementation needs no
+    /// special-case for the two content shapes.
+    QQuickItem* animatorTarget() const
+    {
+        if (m_rootItem) {
+            return m_rootItem.data();
+        }
+        return m_window ? m_window->contentItem() : nullptr;
+    }
 
     // ── Public-API drivers ────────────────────────────────────────────
 
@@ -238,7 +299,64 @@ private:
                 break;
             case Intent::Hide:
                 if (m_state == State::Shown && m_window) {
-                    m_window->hide();
+                    // Cancel any in-flight show animation before starting the
+                    // hide path. The animator's per-surface state is keyed on
+                    // m_q — letting an in-flight beginShow finish onto a
+                    // window we've just unmapped writes a stale opacity into
+                    // a torn-down QQuickItem.
+                    animator().cancel(m_q);
+
+                    if (m_config.keepMappedOnHide) {
+                        // Phase-5 lifecycle: keep the wl_surface attached
+                        // across hide/show cycles. The animator drives the
+                        // QQuickItem's opacity to zero for the visual fade;
+                        // the still-mapped layer surface stops intercepting
+                        // clicks via WindowTransparentForInput. The QQuick-
+                        // Window stays Qt-visible for the surface's entire
+                        // lifetime (so the Vulkan swapchain survives).
+                        //
+                        // No-op completion callback. We've already
+                        // transitioned synchronously below; the animator's
+                        // onComplete is reserved for future
+                        // ScreenSurfaceRegistry teardown signalling.
+                        // Lifetime: the animator's per-Surface state is
+                        // cancelled in ~Impl, so the lambda only fires
+                        // while this Surface is alive — no capture needed.
+                        m_window->setFlag(Qt::WindowTransparentForInput, true);
+                        animator().beginHide(m_q, animatorTarget(), []() { });
+                    } else {
+                        // Pre-Phase-5 lifecycle: animator runs the visual
+                        // fade in parallel (synchronously for the no-op
+                        // default), then we unmap the wl_surface. The
+                        // ISurfaceAnimator contract is "beginHide fires
+                        // on every Shown→Hidden transition" — preserved
+                        // here so consumers can rely on the dispatch
+                        // count for bookkeeping (e.g. settling counters,
+                        // teardown gating). Most animators that *actually
+                        // animate* will want keepMappedOnHide=true —
+                        // synchronous unmap defeats the visual transition
+                        // because the compositor tears the surface down
+                        // before the animation is perceptible. Kept as
+                        // the default for callers that never opt in to
+                        // an animator. The per-surface footgun warning
+                        // surfaces the mismatch in the journal.
+                        if (m_deps.animator && !m_hideFootgunWarned) {
+                            m_hideFootgunWarned = true;
+                            qCWarning(lcPhosphorLayer)
+                                << "Surface" << m_config.effectiveDebugName()
+                                << "Surface::hide() dispatched beginHide on an animator but"
+                                << "keepMappedOnHide=false — wl_surface unmaps synchronously and the"
+                                << "fade-out frames will not paint. Set"
+                                << "SurfaceConfig::keepMappedOnHide=true if a visible fade-out is"
+                                << "desired, or destroy the surface instead of calling hide() if the"
+                                << "animator was wired only for show.";
+                        }
+                        // No capture needed — the animator's per-Surface
+                        // state is cancelled in ~Impl, so the lambda only
+                        // fires while this Surface is alive.
+                        animator().beginHide(m_q, animatorTarget(), []() { });
+                        m_window->hide();
+                    }
                     transitionTo(State::Hidden);
                 }
                 // Other states: already hidden-ish (Constructed/Warming/Hidden);
@@ -275,7 +393,25 @@ private:
             // The library cannot pick either for them (destroy-during-signal is
             // unsafe without consumer cooperation), so surface the event.
             if (m_state == State::Shown || m_state == State::Hidden) {
-                Q_EMIT m_q->screenLost();
+                // Defer the emission via QueuedConnection so consumer slots
+                // that respond by destroying the Surface (a documented
+                // valid response — the slot can't always know whether to
+                // wait for the screen to come back) don't re-enter library
+                // code on a dead `this`. onScreensChanged itself touches
+                // m_config, m_state, and m_deps after the emit point would
+                // run — synchronous emit + synchronous delete would UAF.
+                // Matches the pattern `failed()` uses for the same reason.
+                //
+                // Receiver-based queued invocation: Qt cancels the queued
+                // invocation when m_q is destroyed before dispatch, so the
+                // lambda body cannot run on a dead receiver. No QPointer
+                // null-check needed — that path is unreachable.
+                QMetaObject::invokeMethod(
+                    m_q,
+                    [q = m_q]() {
+                        Q_EMIT q->screenLost();
+                    },
+                    Qt::QueuedConnection);
             }
         }
     }
@@ -295,13 +431,55 @@ private:
             // Still loading — onComponentStatus() will re-enter drive() when ready.
             return;
         }
-        if (m_state == State::Hidden && m_intent == Intent::Show) {
+        if (m_intent == Intent::Show && (m_state == State::Hidden || m_state == State::Shown)) {
             if (!m_window) {
-                failWith(QStringLiteral("Internal error: Hidden state with no window"));
+                if (m_state == State::Hidden) {
+                    failWith(QStringLiteral("Internal error: Hidden state with no window"));
+                }
                 return;
             }
-            m_window->show();
-            transitionTo(State::Shown);
+            // Cancel any in-flight animation before kicking the new beginShow.
+            //   - Hidden → Shown: cancel a still-running beginHide so the
+            //     supersession doesn't keep driving opacity to 0 after we
+            //     set it back to 1.
+            //   - Shown  → Shown: cancel a still-running beginShow so a
+            //     rapid re-trigger (e.g. user switches layout while the
+            //     OSD's fade-in is in progress) doesn't double-drive the
+            //     same property.
+            animator().cancel(m_q);
+
+            // Dispatch beginShow BEFORE m_window->show(). runLeg sets the
+            // target's opacity (and optionally scale) to the computed
+            // fromOpacity synchronously on dispatch, so the QQuickItem's
+            // opacity is at 0 (or wherever a supersession left it)
+            // BEFORE the wl_surface maps. Without this ordering the cold-
+            // start path mapped the window with opacity=1.0 (QQuickItem
+            // default), giving the compositor a window to paint a single
+            // frame at the terminal value before the animator's
+            // setOpacity(0) lands — visible as a one-frame "flash" of the
+            // fully-opaque OSD prior to the fade-in. Always dispatch
+            // beginShow — the Shown→Shown path replays the visual fade so
+            // OSD-style consumers that re-show on every user trigger see
+            // the same animation each time.
+            // No capture needed — the animator's per-Surface state is
+            // cancelled in ~Impl, so the lambda only fires while this
+            // Surface is alive.
+            animator().beginShow(m_q, animatorTarget(), []() { });
+
+            if (m_state == State::Hidden) {
+                if (m_config.keepMappedOnHide) {
+                    // Window is already Qt-visible across the keepMappedOnHide
+                    // hide path; clearing TransparentForInput restores click
+                    // routing. m_window->show() is still called for the
+                    // first-show case where we go Constructed → Warming →
+                    // Hidden → Shown (Qt window not yet mapped at that point).
+                    m_window->setFlag(Qt::WindowTransparentForInput, false);
+                }
+                m_window->show();
+            }
+            if (m_state != State::Shown) {
+                transitionTo(State::Shown);
+            }
         }
         // Intent::Warm + state Hidden → nothing more to do; we're warmed.
     }
@@ -348,6 +526,34 @@ private:
     }
 
     /**
+     * Compute the warm-up geometry for the wrapper QQuickWindow.
+     *
+     * Returns an empty QRect when no usable size is available — the caller
+     * should skip setGeometry in that case. The window stays at Qt's default
+     * (likely zero-sized) and the layer-shell attach will fail loudly rather
+     * than silently miscommit.
+     *
+     * Resolution order:
+     *  1. m_config.initialSize, if non-empty — caller-driven content sizing.
+     *     Positioned at the target screen's top-left so the wrapper window
+     *     starts on the intended output; the layer-shell anchor logic
+     *     (set_anchor + the compositor) places the actual surface.
+     *  2. m_config.screen->geometry() — full-screen fallback. Preserves the
+     *     pre-initialSize behaviour for callers that haven't opted in.
+     */
+    [[nodiscard]] QRect computeWarmupGeometry() const
+    {
+        if (!m_config.initialSize.isEmpty()) {
+            const QPoint origin = m_config.screen ? m_config.screen->geometry().topLeft() : QPoint(0, 0);
+            return QRect(origin, m_config.initialSize);
+        }
+        if (m_config.screen) {
+            return m_config.screen->geometry();
+        }
+        return {};
+    }
+
+    /**
      * Lazily create a wrapper QQuickWindow for Item-rooted content.
      * Not called for Window-rooted QML — that case adopts the QML root.
      */
@@ -363,17 +569,16 @@ private:
         m_window->setColor(Qt::transparent);
         applyWindowProperties(m_window);
 
-        // Pre-size from the target screen so the transport sees a non-zero
-        // size at attach time. Same rationale as the QML-Window-root path:
-        // for partial-anchor layer surfaces (e.g. Top|Left only), a 0×0
-        // initial commit causes the compositor to echo back 0×0 and the
-        // surface stays stuck. Callers that want a different size call
-        // setWidth/setHeight between warmUp() and show().
-        if (m_config.screen) {
-            const QRect geo = m_config.screen->geometry();
-            if (!geo.isEmpty()) {
-                m_window->setGeometry(geo);
-            }
+        // Pre-size for the transport's first commit. Callers that pass
+        // SurfaceConfig::initialSize get a small swapchain matching the
+        // expected content; otherwise the window sizes to full screen, which
+        // guarantees a non-zero buffer for partial-anchor layer surfaces
+        // (e.g. Top|Left only — a 0×0 commit causes the compositor to echo
+        // back 0×0 and the surface stays stuck). Callers that want a
+        // different size call setWidth/setHeight between warmUp() and show().
+        const QRect warmupGeo = computeWarmupGeometry();
+        if (!warmupGeo.isEmpty()) {
+            m_window->setGeometry(warmupGeo);
         }
     }
 
@@ -462,19 +667,24 @@ private:
         if (!m_component || m_component->isLoading()) {
             return;
         }
-        // Latch self — failWith() defers its signals via QueuedConnection, but
-        // instantiateFromComponent() emits stateChanged(Hidden) synchronously
-        // via transitionTo(). A consumer slot on stateChanged that deletes
-        // the Surface would leave us touching `this` on return. Bail if gone.
-        QPointer<Surface> self = m_q;
         if (m_component->isError()) {
             failWith(m_component->errorString());
             return;
         }
+        // Synchronous-delete contract: instantiateFromComponent() emits
+        // stateChanged(Hidden) inline via transitionTo(), and afterward
+        // touches `this` (m_component->completeCreate()). A consumer that
+        // synchronously deletes the Surface from a non-failure stateChanged
+        // slot would UAF on completeCreate before we ever return here —
+        // a local QPointer guard at this layer cannot reach inside
+        // instantiateFromComponent's tail. The contract documented at
+        // Surface.h:185 (`stateChanged` → use `deleteLater()` for
+        // non-failure transitions; `failed`/`screenLost` are deferred and
+        // always delete-safe) is therefore load-bearing for synchronous
+        // deletes — we deliberately do NOT add a misleading half-defense
+        // here. failWith's signals are deferred (QueuedConnection above),
+        // so the failure return paths above never see a sync-delete.
         if (!instantiateFromComponent()) {
-            return;
-        }
-        if (!self) {
             return;
         }
         // Content ready — resume whatever intent was latched.
@@ -547,12 +757,13 @@ private:
             // AutomaticVisibility, so componentComplete still auto-shows.
             win->setVisibility(QWindow::Hidden);
 
-            // Sized first — see #2 above.
-            if (m_config.screen) {
-                const QRect geo = m_config.screen->geometry();
-                if (!geo.isEmpty()) {
-                    win->setGeometry(geo);
-                }
+            // Sized first — see #2 above. computeWarmupGeometry honours
+            // SurfaceConfig::initialSize so callers can opt into a small
+            // first commit (and thus a small Vulkan swapchain) instead of
+            // paying for the screen's full geometry.
+            const QRect warmupGeo = computeWarmupGeometry();
+            if (!warmupGeo.isEmpty()) {
+                win->setGeometry(warmupGeo);
             }
 
             // Attached second — see #1 above.
@@ -672,12 +883,13 @@ private:
         // runs after the current call stack unwinds — by which point we've
         // either returned to the consumer's event loop or been explicitly
         // torn down via ~Surface.
+        //
+        // Receiver-based queued invocation: Qt cancels the queued invocation
+        // when m_q is destroyed before dispatch, so the lambda body cannot
+        // run on a dead receiver. No QPointer null-check needed.
         QMetaObject::invokeMethod(
             m_q,
             [q = m_q, reason]() {
-                if (!q) {
-                    return;
-                }
                 Q_EMIT q->stateChanged(State::Failed);
                 Q_EMIT q->failed(reason);
             },
@@ -700,6 +912,11 @@ Surface::~Surface() = default;
 Surface::State Surface::state() const noexcept
 {
     return m_impl->m_state;
+}
+
+bool Surface::isLogicallyShown() const noexcept
+{
+    return m_impl->m_state == State::Shown;
 }
 
 const SurfaceConfig& Surface::config() const noexcept

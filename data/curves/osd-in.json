@@ -1,0 +1,11 @@
+{
+  "name": "osd-in",
+  "displayName": "OSD dismiss (ease-in)",
+  "typeId": "cubic-bezier",
+  "parameters": {
+    "x1": 0.32,
+    "y1": 0.00,
+    "x2": 0.67,
+    "y2": 0.00
+  }
+}

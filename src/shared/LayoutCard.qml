@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Shared layout card for rendering a single layout in grid/list views.
@@ -24,12 +25,15 @@ Item {
     property bool isSelected: false
     property bool isHovered: false
     property bool isRecommended: layoutData.recommended !== undefined ? layoutData.recommended : true
+    // When the global "Auto-assign for all layouts" master toggle is on (#370),
+    // every layout effectively auto-assigns. Parents pass it down so the badge
+    // reflects actual snap behavior even when the per-layout flag is off.
+    property bool globalAutoAssign: false
     // Dimensions (set by parent, no defaults)
     property real previewWidth
     property real previewHeight
     // Feature toggles
     property bool showCardBackground: false
-    property bool showIndicatorBar: false
     // ZonePreview passthrough
     property bool interactive: false
     property int selectedZoneIndex: -1
@@ -58,7 +62,12 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-    // Animation (defaults track Kirigami platform durations)
+    // DEPRECATED — vestigial Kirigami-duration passthroughs. Pre-PR-344
+    // QML animations referenced these to override Behavior durations
+    // per-instance; post-migration, durations come from the profile
+    // registry (see `PhosphorAnimation::ProfilePaths::Widget*`). Kept as
+    // no-op accepts so existing consumer QML (`AlgorithmPreview.qml`,
+    // `GeneralPage.qml`) does not fail to parse.
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
     // Label
@@ -135,15 +144,17 @@ Item {
         border.width: root.stateBorderWidth
 
         Behavior on color {
-            ColorAnimation {
-                duration: root.animationDuration
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: root.animationDuration
             }
 
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: root.animationDuration
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: root.animationDuration
             }
 
         }
@@ -198,58 +209,25 @@ Item {
             border.width: root.showCardBackground ? 0 : root.stateBorderWidth
 
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on border.width {
-                NumberAnimation {
-                    duration: root.shortAnimationDuration
-                }
-
-            }
-
-        }
-
-        // Left accent bar (zone selector mode)
-        Rectangle {
-            id: indicatorBar
-
-            visible: root.showIndicatorBar
-            anchors.left: previewBackground.left
-            anchors.top: previewBackground.top
-            anchors.bottom: previewBackground.bottom
-            anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
-            anchors.topMargin: Kirigami.Units.smallSpacing
-            anchors.bottomMargin: Kirigami.Units.smallSpacing
-            width: root.isActive ? Kirigami.Units.smallSpacing : 0
-            radius: Math.round(Kirigami.Units.smallSpacing / 2)
-            color: Kirigami.Theme.highlightColor
-            opacity: root.isActive ? 1 : 0
-
-            Behavior on width {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
-                }
-
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.hover"
+                    durationOverride: root.shortAnimationDuration
                 }
 
             }
@@ -283,26 +261,27 @@ Item {
             }
 
             Behavior on width {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: style.badgeOvershoot
+                PhosphorMotionAnimation {
+                    profile: "widget.badge"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on height {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: style.badgeOvershoot
+                PhosphorMotionAnimation {
+                    profile: "widget.badge"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
+            // Opacity must not overshoot — widget.badge's curve has overshoot
+            // for the size pop, but for opacity that produces a clamped peak.
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.shortAnimationDuration
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: root.shortAnimationDuration
                 }
 
             }
@@ -361,6 +340,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             category: root.layoutData.category !== undefined ? root.layoutData.category : 0
             autoAssign: root.layoutData.autoAssign === true
+            globalAutoAssign: root.globalAutoAssign
         }
 
         AspectRatioBadge {
@@ -390,17 +370,17 @@ Item {
             width: Math.min(implicitWidth, root.previewWidth - Kirigami.Units.gridUnit)
 
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: root.animationDuration
                 }
 
             }

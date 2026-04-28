@@ -18,12 +18,13 @@
 
 #include <PhosphorProtocol/WireTypes.h>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
 #include "dbus/autotileadaptor.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 namespace {
 /// Fire Phosphor::Screens::ScreenManager::panelGeometryReady directly on the instance. The signal

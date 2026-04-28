@@ -4,8 +4,8 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
@@ -13,6 +13,7 @@
 #include "../helpers/AutotileTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Unit tests for NavigationController (via AutotileEngine forwarding)

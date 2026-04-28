@@ -116,6 +116,10 @@ public:
     virtual bool isSnapAssistVisible() const = 0;
     virtual void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) = 0;
 
+    // Layout picker overlay (interactive layout browser)
+    virtual void hideLayoutPicker() = 0;
+    virtual bool isLayoutPickerVisible() const = 0;
+
 Q_SIGNALS:
     void visibilityChanged(bool visible);
     void zoneActivated(PhosphorZones::Zone* zone);
@@ -157,6 +161,15 @@ Q_SIGNALS:
      * @param layoutId The UUID of the selected layout
      */
     void layoutPickerSelected(const QString& layoutId);
+
+    /**
+     * @brief Emitted when the layout picker overlay is dismissed for any
+     * reason (selection, backdrop click, Escape, screen-removed teardown).
+     * Distinct from `layoutPickerSelected` (only fires on explicit pick).
+     * Daemon subscribes to release the shared cancel-overlay Escape
+     * registration that was active for the picker's lifetime.
+     */
+    void layoutPickerDismissed();
 
     /**
      * @brief Emitted when an autotile algorithm layout is selected from the zone selector

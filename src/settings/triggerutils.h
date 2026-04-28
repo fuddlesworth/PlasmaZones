@@ -30,4 +30,20 @@ bool hasAlwaysActiveTrigger(const QVariantList& triggers);
 /// state. Written to storage when the "Always active" toggle is turned on.
 QVariantList makeAlwaysActiveTriggerList();
 
+/// Drop every entry whose modifier is the AlwaysActive sentinel. Operates on
+/// storage-form (DragModifier enum) lists. The trigger widget never displays
+/// AlwaysActive — the master "Activate on every drag" toggle owns that bit
+/// — so any QML-facing surface and any re-merge on write strips first.
+QVariantList stripAlwaysActiveTrigger(const QVariantList& triggers);
+
+/// Prepend the AlwaysActive sentinel to a list of user-configured triggers
+/// and trim the user portion so the combined list fits within
+/// `ConfigDefaults::maxTriggersPerAction()`. Sentinel goes at the front so
+/// it survives `Settings::writeTriggerList`'s `.mid(0, MAX)` cap; if the
+/// user already has MAX entries, the trailing one is dropped (visible as a
+/// chip disappearing) instead of the sentinel being silently truncated —
+/// which would make the always-active toggle quietly fail. Input must NOT
+/// contain the sentinel; call `stripAlwaysActiveTrigger` first if unsure.
+QVariantList mergeAlwaysActiveTrigger(const QVariantList& nonSentinelTriggers);
+
 } // namespace PlasmaZones::TriggerUtils

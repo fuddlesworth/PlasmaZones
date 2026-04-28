@@ -25,6 +25,7 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 #include <QJsonObject>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -73,7 +74,8 @@ using ::PlasmaZones::IOrderingSettings;
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
 buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, bool includeAutotile = false,
-                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr);
+                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
+                       QSize autotilePreviewCanvas = {});
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -96,7 +98,8 @@ buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, const QString& screenId,
                        int virtualDesktop, const QString& activity, bool includeManual = true,
                        bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
-                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr);
+                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
+                       QSize autotilePreviewCanvas = {});
 
 /**
  * @brief Build a combined custom order list from settings

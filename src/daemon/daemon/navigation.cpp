@@ -223,7 +223,8 @@ void Daemon::handleIncreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
+    if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, currentDesktop(),
+                          currentActivity()))
         return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
@@ -236,7 +237,8 @@ void Daemon::handleDecreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
+    if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, currentDesktop(),
+                          currentActivity()))
         return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);

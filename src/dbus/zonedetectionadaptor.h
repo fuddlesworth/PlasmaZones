@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
@@ -34,7 +35,8 @@ class ISettings;
  *
  * Uses interface types for loose coupling
  */
-class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor,
+                                                public PhosphorSnapEngine::IZoneAdjacencyResolver
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.ZoneDetection")
@@ -55,8 +57,8 @@ public Q_SLOTS:
 
     // PhosphorZones::Zone navigation - get adjacent zone in a direction
     // direction: "left", "right", "up", "down"
-    QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
-                            const QString& screenId = QString());
+    Q_INVOKABLE QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                        const QString& screenId = QString()) const override;
 
     /**
      * @brief Get the first (edge) zone in a given direction
@@ -71,7 +73,8 @@ public Q_SLOTS:
      * @param direction Direction string ("left", "right", "up", "down")
      * @return PhosphorZones::Zone ID of the edge zone, or empty string if no zones available
      */
-    QString getFirstZoneInDirection(const QString& direction, const QString& screenId = QString());
+    Q_INVOKABLE QString getFirstZoneInDirection(const QString& direction,
+                                                const QString& screenId = QString()) const override;
 
     // Get zone info by zone number (1-indexed), optionally for a specific screen
     QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());

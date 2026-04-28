@@ -8,6 +8,8 @@
 
 #include <QTest>
 
+#include <limits>
+
 using PhosphorAnimation::Curve;
 using PhosphorAnimation::CurveRegistry;
 using PhosphorAnimation::Easing;
@@ -51,8 +53,22 @@ private Q_SLOTS:
         QVERIFY(filled.minDistance.has_value());
         QVERIFY(filled.sequenceMode.has_value());
         QVERIFY(filled.staggerInterval.has_value());
-        // curve stays null — runtime can substitute default Easing if needed.
-        QVERIFY(filled.curve == nullptr);
+        // curve is filled with a library-default OutCubic Easing — callers
+        // that pass through withDefaults() get a fully-populated Profile.
+        // The "curve left null" shape from before was a trap where
+        // downstream code still had to null-check.
+        QVERIFY(filled.curve != nullptr);
+        QCOMPARE(filled.curve->typeId(), QStringLiteral("bezier"));
+    }
+
+    void testWithDefaultsPreservesExistingCurve()
+    {
+        Profile p;
+        auto spring = std::make_shared<Spring>(Spring::bouncy());
+        p.curve = spring;
+        const Profile filled = p.withDefaults();
+        // An existing curve must not be replaced by the library default.
+        QCOMPARE(filled.curve.get(), spring.get());
     }
 
     // ─── Equality ───
@@ -235,6 +251,142 @@ private Q_SLOTS:
         obj.insert(QLatin1String("sequenceMode"), 99);
         const Profile p = Profile::fromJson(obj, CurveRegistry{});
         QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);
+    }
+
+    // ─── Input validation (H1) ───
+
+    void testFromJsonRejectsNegativeDuration()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), -150.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        // Negative duration rejected → duration stays unset → effective
+        // reads library default.
+        QVERIFY(!p.duration.has_value());
+        QCOMPARE(p.effectiveDuration(), Profile::DefaultDuration);
+    }
+
+    void testFromJsonRejectsZeroDuration()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), 0.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.duration.has_value());
+    }
+
+    void testFromJsonRejectsNonFiniteDuration()
+    {
+        // JSON parsers typically reject NaN/Infinity as JSON numbers,
+        // but QJsonValue::toDouble accepts a default that a caller
+        // could in theory coerce. Guard via the explicit isfinite()
+        // check — this covers any downstream where a malformed value
+        // sneaks in.
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), QJsonValue(std::numeric_limits<double>::infinity()));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.duration.has_value());
+    }
+
+    void testFromJsonRejectsAbsurdlyLargeDuration()
+    {
+        QJsonObject obj;
+        // Two hours — past the 1-hour sanity bound. Accepting would
+        // risk int-overflow via qRound() downstream.
+        obj.insert(QLatin1String("duration"), 2.0 * 60.0 * 60.0 * 1000.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.duration.has_value());
+    }
+
+    void testFromJsonAcceptsLargeButReasonableDuration()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("duration"), 5000.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.duration.has_value());
+        QCOMPARE(*p.duration, 5000.0);
+    }
+
+    void testFromJsonRejectsNegativeMinDistance()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), -5);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(!p.minDistance.has_value());
+        QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
+    }
+
+    void testFromJsonAcceptsZeroMinDistance()
+    {
+        // Zero = "no skip threshold" — the documented default. Must
+        // be accepted as a valid explicit setting distinct from
+        // "unset".
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), 0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.minDistance.has_value());
+        QCOMPARE(*p.minDistance, 0);
+    }
+
+    /// `QJsonValue::toInt(default)` returns `default` verbatim when
+    /// the value is a JSON Number-with-fractional-zero like `5.0`,
+    /// so a file written by a non-C++ serializer that emits the
+    /// integer as a double silently fell back to the library
+    /// default. The fix routes through `toDouble()` + `qRound()`.
+    /// Regression guard: a JSON double `5.0` must produce
+    /// `minDistance = 5`, not the library default.
+    void testFromJsonMinDistanceAcceptsWholeDouble()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("minDistance"), 5.0);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY2(p.minDistance.has_value(),
+                 "minDistance 5.0 must engage the optional (double silent-fallback regression)");
+        QCOMPARE(*p.minDistance, 5);
+    }
+
+    /// A non-string `presetName` (e.g. `"presetName": 42`) must NOT
+    /// engage the optional with an empty string. Previously
+    /// `toString()` on a non-string QJsonValue returned "" and the
+    /// optional ended up engaged-empty — semantically distinct from
+    /// "unset" (engaged-empty means "explicit empty override") and
+    /// so a malformed JSON silently mutated to an explicit override.
+    /// Fix: guard on `isString()` before assigning.
+    void testFromJsonRejectsNonStringPresetName()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("presetName"), 42);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY2(!p.presetName.has_value(),
+                 "non-string presetName must NOT engage the optional (not even with empty string)");
+
+        // Cross-check: boolean and object values also don't engage.
+        QJsonObject objBool;
+        objBool.insert(QLatin1String("presetName"), true);
+        QVERIFY(!Profile::fromJson(objBool, CurveRegistry{}).presetName.has_value());
+
+        QJsonObject objObj;
+        objObj.insert(QLatin1String("presetName"), QJsonObject{});
+        QVERIFY(!Profile::fromJson(objObj, CurveRegistry{}).presetName.has_value());
+    }
+
+    /// Sanity: a genuine string `presetName` DOES still engage the
+    /// optional — guards against a regression where the new
+    /// `isString()` check is over-tightened.
+    void testFromJsonAcceptsStringPresetName()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("presetName"), QStringLiteral("My Preset"));
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
+        QVERIFY(p.presetName.has_value());
+        QCOMPARE(*p.presetName, QStringLiteral("My Preset"));
+
+        // Empty string is also accepted — it's the documented
+        // engaged-empty override semantic.
+        QJsonObject objEmpty;
+        objEmpty.insert(QLatin1String("presetName"), QString());
+        const Profile pEmpty = Profile::fromJson(objEmpty, CurveRegistry{});
+        QVERIFY(pEmpty.presetName.has_value());
+        QVERIFY(pEmpty.presetName->isEmpty());
     }
 };
 

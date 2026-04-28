@@ -57,15 +57,13 @@ QImage buildLabelsImage(const QVector<Zone>& zones, const QSize& resolution)
 
     constexpr int kGridUnit = 8;
     for (const auto& z : zones) {
-        const QRectF px(z.rect.x() * resolution.width(),
-                        z.rect.y() * resolution.height(),
-                        z.rect.width() * resolution.width(),
-                        z.rect.height() * resolution.height());
-        if (px.width() <= 0 || px.height() <= 0) continue;
+        const QRectF px(z.rect.x() * resolution.width(), z.rect.y() * resolution.height(),
+                        z.rect.width() * resolution.width(), z.rect.height() * resolution.height());
+        if (px.width() <= 0 || px.height() <= 0)
+            continue;
 
         const QString text = QString::number(z.zoneNumber);
-        const qreal fontPixelSize = qMax<qreal>(kGridUnit,
-            qMin(px.width(), px.height()) * 0.25);
+        const qreal fontPixelSize = qMax<qreal>(kGridUnit, qMin(px.width(), px.height()) * 0.25);
         QFont font;
         font.setPixelSize(static_cast<int>(fontPixelSize));
         font.setWeight(QFont::Bold);
@@ -74,11 +72,9 @@ QImage buildLabelsImage(const QVector<Zone>& zones, const QSize& resolution)
         path.addText(0, 0, font, text);
         const QRectF textBounds = path.boundingRect();
         const QPointF center = px.center();
-        path.translate(center.x() - textBounds.center().x(),
-                       center.y() - textBounds.center().y());
+        path.translate(center.x() - textBounds.center().x(), center.y() - textBounds.center().y());
 
-        const QPen outlinePen(QColor(0, 0, 0, 200), 2.0,
-                              Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        const QPen outlinePen(QColor(0, 0, 0, 200), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         painter.setPen(outlinePen);
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
@@ -109,11 +105,19 @@ class RenderEffect : public PhosphorRendering::ShaderEffect
     Q_OBJECT
 public:
     explicit RenderEffect(QQuickItem* parent = nullptr)
-        : PhosphorRendering::ShaderEffect(parent) {}
+        : PhosphorRendering::ShaderEffect(parent)
+    {
+    }
     explicit RenderEffect(QQuickItem* parent, const QString& vertPath)
-        : PhosphorRendering::ShaderEffect(parent), m_vertexShaderPath(vertPath) {}
+        : PhosphorRendering::ShaderEffect(parent)
+        , m_vertexShaderPath(vertPath)
+    {
+    }
 
-    void setVertexShaderPath(const QString& p) { m_vertexShaderPath = p; }
+    void setVertexShaderPath(const QString& p)
+    {
+        m_vertexShaderPath = p;
+    }
 
     /// Set the zoneCount / highlightedCount values that zone-aware
     /// shaders key off via common.glsl's `zoneCount` uniform.  The
@@ -142,7 +146,8 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override
     {
         QSGNode* node = PhosphorRendering::ShaderEffect::updatePaintNode(oldNode, data);
-        if (!node) return node;
+        if (!node)
+            return node;
         auto* rhiNode = dynamic_cast<PhosphorRendering::ShaderNodeRhi*>(node);
         if (rhiNode) {
             if (!m_vertexLoaded && !m_vertexShaderPath.isEmpty()) {
@@ -168,17 +173,17 @@ protected:
         return node;
     }
 
-
 private:
     void ensureLabelsBinding(PhosphorRendering::ShaderNodeRhi* rhiNode)
     {
         QQuickWindow* w = window();
-        if (!w) return;
+        if (!w)
+            return;
         QRhi* rhi = w->rhi();
-        if (!rhi) return;
+        if (!rhi)
+            return;
 
-        const QSize target = m_labelsImage.size().isEmpty()
-            ? QSize(1, 1) : m_labelsImage.size();
+        const QSize target = m_labelsImage.size().isEmpty() ? QSize(1, 1) : m_labelsImage.size();
 
         if (!m_labelsTexture || m_labelsTexture->pixelSize() != target) {
             m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, target));
@@ -187,9 +192,8 @@ private:
                 return;
             }
             if (!m_labelsSampler) {
-                m_labelsSampler.reset(rhi->newSampler(
-                    QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                    QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+                m_labelsSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                      QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
                 if (!m_labelsSampler->create()) {
                     m_labelsSampler.reset();
                     return;
@@ -222,7 +226,6 @@ private:
         }
     }
 
-
     QString m_vertexShaderPath;
     bool m_vertexLoaded = false;
     int m_zoneCountTotal = 0;
@@ -233,7 +236,6 @@ private:
     std::unique_ptr<QRhiTexture> m_labelsTexture;
     std::unique_ptr<QRhiSampler> m_labelsSampler;
 };
-
 
 QVector<PlasmaZones::ZoneData> toRuntimeZones(const QVector<Zone>& srcZones)
 {
@@ -253,9 +255,7 @@ QVector<PlasmaZones::ZoneData> toRuntimeZones(const QVector<Zone>& srcZones)
     return out;
 }
 
-void seedShaderEffect(PhosphorRendering::ShaderEffect& effect,
-                      const ShaderMetadata& md,
-                      const QSize& resolution)
+void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetadata& md, const QSize& resolution)
 {
     effect.setIResolution(QSizeF(resolution));
     effect.setShaderSource(QUrl::fromLocalFile(md.fragmentShader));
@@ -269,9 +269,11 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect,
         effect.setBufferFeedback(md.bufferFeedback);
         effect.setBufferScale(md.bufferScale);
         effect.setBufferWrap(md.bufferWrap);
-        if (!md.bufferWraps.isEmpty()) effect.setBufferWraps(md.bufferWraps);
+        if (!md.bufferWraps.isEmpty())
+            effect.setBufferWraps(md.bufferWraps);
         effect.setBufferFilter(md.bufferFilter);
-        if (!md.bufferFilters.isEmpty()) effect.setBufferFilters(md.bufferFilters);
+        if (!md.bufferFilters.isEmpty())
+            effect.setBufferFilters(md.bufferFilters);
     }
     effect.setUseDepthBuffer(md.depthBuffer);
     effect.setUseWallpaper(md.wallpaper);
@@ -379,14 +381,12 @@ int Renderer::render(const RenderOptions& opts)
 
     // ── Offscreen render target: texture + depth + render pass ──
     std::unique_ptr<QRhiTexture> colorTex(rhi->newTexture(
-        QRhiTexture::RGBA8, physicalSize, 1,
-        QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
+        QRhiTexture::RGBA8, physicalSize, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     if (!colorTex->create()) {
         std::cerr << "Renderer::render: colour texture create() failed\n";
         return 1;
     }
-    std::unique_ptr<QRhiRenderBuffer> dsBuf(rhi->newRenderBuffer(
-        QRhiRenderBuffer::DepthStencil, physicalSize, 1));
+    std::unique_ptr<QRhiRenderBuffer> dsBuf(rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, physicalSize, 1));
     if (!dsBuf->create()) {
         std::cerr << "Renderer::render: depth buffer create() failed\n";
         return 1;
@@ -394,10 +394,8 @@ int Renderer::render(const RenderOptions& opts)
     QRhiColorAttachment colorAtt(colorTex.get());
     QRhiTextureRenderTargetDescription rtDesc(colorAtt);
     rtDesc.setDepthStencilBuffer(dsBuf.get());
-    std::unique_ptr<QRhiTextureRenderTarget> textureRT(
-        rhi->newTextureRenderTarget(rtDesc));
-    std::unique_ptr<QRhiRenderPassDescriptor> rpDesc(
-        textureRT->newCompatibleRenderPassDescriptor());
+    std::unique_ptr<QRhiTextureRenderTarget> textureRT(rhi->newTextureRenderTarget(rtDesc));
+    std::unique_ptr<QRhiRenderPassDescriptor> rpDesc(textureRT->newCompatibleRenderPassDescriptor());
     textureRT->setRenderPassDescriptor(rpDesc.get());
     if (!textureRT->create()) {
         std::cerr << "Renderer::render: texture render target create() failed\n";
@@ -415,8 +413,7 @@ int Renderer::render(const RenderOptions& opts)
     // anchored to it get 0x0 and the scene graph culls them.
     window->contentItem()->setSize(QSizeF(size));
 
-    auto* effect = new RenderEffect(window->contentItem(),
-                                    opts.metadata.vertexShader);
+    auto* effect = new RenderEffect(window->contentItem(), opts.metadata.vertexShader);
     effect->setSize(QSizeF(size));
     effect->setVisible(true);
     effect->setShaderIncludePaths(shaderIncludePaths());
@@ -434,7 +431,6 @@ int Renderer::render(const RenderOptions& opts)
         priv->layer()->setEnabled(true);
         priv->layer()->setTextureMirroring(QQuickShaderEffectSource::NoMirroring);
     }
-
 
     auto zoneExt = std::make_shared<PlasmaZones::ZoneUniformExtension>();
     auto runtimeZones = toRuntimeZones(opts.zones);
@@ -457,8 +453,7 @@ int Renderer::render(const RenderOptions& opts)
     // the first sign something went wrong.
     QObject::connect(effect, &ShaderEffect::statusChanged, [effect]() {
         if (effect->status() == ShaderEffect::Status::Error) {
-            std::cerr << "shader error: "
-                      << effect->errorLog().toStdString() << "\n";
+            std::cerr << "shader error: " << effect->errorLog().toStdString() << "\n";
         }
     });
 
@@ -476,13 +471,13 @@ int Renderer::render(const RenderOptions& opts)
     };
     for (int i = 0; i < 3; ++i) {
         warmup();
-        if (effect->status() == ShaderEffect::Status::Ready) break;
+        if (effect->status() == ShaderEffect::Status::Ready)
+            break;
     }
     if (effect->status() != ShaderEffect::Status::Ready) {
-        std::cerr << "warning: shader not Ready after warmup (status="
-                  << static_cast<int>(effect->status()) << "). Continuing anyway.\n";
+        std::cerr << "warning: shader not Ready after warmup (status=" << static_cast<int>(effect->status())
+                  << "). Continuing anyway.\n";
     }
-
 
     // Demo background: a subtle Plasma-Breeze-dark grey so the
     // shaders' alpha channel reads as something other than the
@@ -519,9 +514,7 @@ int Renderer::render(const RenderOptions& opts)
         effect->setITimeDelta(frameInterval);
 
         if (numZones > 0) {
-            const int slice = std::min(
-                (i * slicesTotal) / std::max(opts.frameCount, 1),
-                slicesTotal - 1);
+            const int slice = std::min((i * slicesTotal) / std::max(opts.frameCount, 1), slicesTotal - 1);
             if (slice != lastSlice) {
                 int highlightedCount = 0;
                 if (slice == 0) {
@@ -566,8 +559,7 @@ int Renderer::render(const RenderOptions& opts)
         batch->readBackTexture(readbackDesc, &readbackResult);
         QRhiCommandBuffer* cb = control->commandBuffer();
         if (!cb) {
-            std::cerr << "Renderer::render: control has no command buffer on frame "
-                      << i << "\n";
+            std::cerr << "Renderer::render: control has no command buffer on frame " << i << "\n";
             return 1;
         }
         cb->resourceUpdate(batch);
@@ -578,10 +570,8 @@ int Renderer::render(const RenderOptions& opts)
             return 1;
         }
 
-        QImage frame(reinterpret_cast<const uchar*>(readbackResult.data.constData()),
-                     physicalSize.width(), physicalSize.height(),
-                     physicalSize.width() * 4,
-                     QImage::Format_RGBA8888);
+        QImage frame(reinterpret_cast<const uchar*>(readbackResult.data.constData()), physicalSize.width(),
+                     physicalSize.height(), physicalSize.width() * 4, QImage::Format_RGBA8888);
         const QImage flipped = flipVertical(frame);
         QImage out = flipped;
         if (flipped.size() != size) {

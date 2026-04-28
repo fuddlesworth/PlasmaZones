@@ -4,15 +4,16 @@
 #include <QTest>
 #include <QCoreApplication>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
-#include "autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Tests that window order is preserved across autotile screen removal

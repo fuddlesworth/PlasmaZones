@@ -10,7 +10,7 @@
 #include "../config/configdefaults.h"
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
-#include "../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -182,9 +182,12 @@ QVector<WindowDragAdaptor::ParsedTrigger> WindowDragAdaptor::parseTriggers(const
 }
 
 bool WindowDragAdaptor::anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
-                                       int mouseButtons) const
+                                       int mouseButtons, bool excludeSentinel) const
 {
+    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
     for (const auto& pt : triggers) {
+        if (excludeSentinel && pt.modifier == alwaysActive)
+            continue;
         const bool modMatch = (pt.modifier == 0) || checkModifier(pt.modifier, mods);
         const bool btnMatch = (pt.mouseButton == 0) || (mouseButtons & pt.mouseButton) != 0;
         if (modMatch && btnMatch && (pt.modifier != 0 || pt.mouseButton != 0))
@@ -227,6 +230,16 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
 
 void WindowDragAdaptor::cancelSnap()
 {
+    // Layout picker takes precedence: Escape on a visible picker should
+    // dismiss the picker, not also cancel any underlying drag. KGlobalAccel
+    // routes one action per key, so the picker-open path piggybacks on this
+    // same kCancelOverlayId binding rather than competing with a separate
+    // Escape registration that the OS-level grab would silently no-op.
+    if (m_overlayService && m_overlayService->isLayoutPickerVisible()) {
+        m_overlayService->hideLayoutPicker();
+        return;
+    }
+
     // Cancel any active autotile drag-insert preview so neighbours snap back
     // to their original order instead of sticking at the previewed position.
     cancelDragInsertIfActive();
@@ -332,8 +345,8 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     QString selectorScreenId = resolved.screenId;
     QScreen* screen = resolved.qscreen;
     if (screen
-        && isContextDisabled(m_settings, selectorScreenId, m_layoutManager->currentVirtualDesktop(),
-                             m_layoutManager->currentActivity())) {
+        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
+                             m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_zoneSelectorShownOn.clear();

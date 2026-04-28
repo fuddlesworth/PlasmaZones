@@ -1,0 +1,5 @@
+{
+  "name": "zone.layoutSwitchOut",
+  "duration": 250,
+  "curve": "widget-out"
+}

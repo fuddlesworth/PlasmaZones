@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowdragadaptor.h"
+#include "dragactivation.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
 #include "../../config/configdefaults.h"
+#include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -154,8 +156,8 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
     outScreenId = resolved.screenId;
-    if (isContextDisabled(m_settings, outScreenId, m_layoutManager->currentVirtualDesktop(),
-                          m_layoutManager->currentActivity())) {
+    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
+                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
@@ -465,8 +467,23 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         mods = QGuiApplication::queryKeyboardModifiers();
     }
 
-    // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap unboxing per tick.
-    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
+    // Always-active bit: derived per-tick from the activation cache so the
+    // bypass path (autotile-only, never goes through dragStarted) can't carry
+    // a stale value into the inversion below. Cap is MaxTriggersPerAction (4)
+    // so the scan is essentially free.
+    const bool alwaysActiveOnDrag = std::any_of(m_cachedActivationTriggers.cbegin(), m_cachedActivationTriggers.cend(),
+                                                [](const ParsedTrigger& pt) {
+                                                    return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
+                                                });
+
+    // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap
+    // unboxing per tick. EXCLUDES the AlwaysActive sentinel — that bit is
+    // owned by alwaysActiveOnDrag above. Otherwise the inversion in
+    // always-active mode would read as "trigger always held" and the overlay
+    // would never show. The non-sentinel entries serve double duty: they
+    // activate the overlay when always-active is off, and deactivate it
+    // (hold or toggle) when always-active is on (#249).
+    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
 
     // ── Autotile drag-insert preview (runs even when m_snapCancelled) ───────
     // This block is intentionally ABOVE the snap-cancelled early return because
@@ -568,26 +585,24 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_overlayService->updateMousePosition(cursorX, cursorY);
     }
 
-    // Activation state: use the trigger check from above (already computed)
-    const bool zoneActivationHeld = triggerHeld;
-
-    // Toggle mode: detect rising edge (release→press) to flip overlay state
-    bool activationActive;
-    if (m_settings->toggleActivation()) {
-        if (zoneActivationHeld && !m_prevTriggerHeld) {
-            m_activationToggled = !m_activationToggled;
-        }
-        m_prevTriggerHeld = zoneActivationHeld;
-        activationActive = m_activationToggled;
-    } else {
-        activationActive = zoneActivationHeld;
-    }
+    // Resolve overlay state via the pure helper — keeps the truth table
+    // (toggle rising edge + always-active inversion) in one testable place.
+    // Adaptor stays as the I/O shell that feeds in current input state and
+    // persists the returned latches. In always-active mode the resolver
+    // inverts the active output so non-sentinel triggers become
+    // deactivate-while-held (hold mode) or toggle-off (toggle mode).
+    const ActivationDecision decision = resolveActivationActive(
+        triggerHeld, m_settings->toggleActivation(), alwaysActiveOnDrag, m_prevTriggerHeld, m_activationToggled);
+    m_prevTriggerHeld = decision.nextPrevTriggerHeld;
+    m_activationToggled = decision.nextActivationToggled;
+    bool activationActive = decision.active;
 
     // Log activation-state transitions so overlay show/hide churn can be traced.
     if (activationActive != m_lastLoggedActivationActive) {
         qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
                              << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
-                             << "triggerHeld=" << triggerHeld << "toggleActivation=" << m_settings->toggleActivation();
+                             << "triggerHeld=" << triggerHeld << "alwaysActive=" << alwaysActiveOnDrag
+                             << "toggleActivation=" << m_settings->toggleActivation();
         m_lastLoggedActivationActive = activationActive;
     }
 
@@ -607,17 +622,26 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Check all configured zone span triggers (multi-bind support)
     const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
 
-    // Conflict detection: warn once per drag when activation and zone span share a trigger
+    // Conflict detection: warn once per drag when activation and zone span
+    // can both fire on the same physical input. Runtime semantics are AND
+    // within an entry, with 0 acting as a wildcard for that field (see
+    // anyTriggerHeld). So (Ctrl, LMB) vs (Ctrl, RMB) is not a conflict —
+    // those triggers are mutually exclusive — but (Ctrl, 0) vs (Ctrl, RMB)
+    // IS, because the 0-button entry matches whenever Ctrl is held,
+    // including when Ctrl+RMB satisfies the zone-span entry too. Treat 0 as
+    // wildcard in both fields to catch these real overlaps.
     if (!m_modifierConflictWarned) {
         m_modifierConflictWarned = true;
         for (const auto& at : m_cachedActivationTriggers) {
             if (at.modifier == 0 && at.mouseButton == 0)
                 continue;
             for (const auto& st : m_cachedZoneSpanTriggers) {
-                if ((at.modifier != 0 && st.modifier == at.modifier)
-                    || (at.mouseButton != 0 && st.mouseButton == at.mouseButton)) {
-                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
-                                            << "(mod:" << at.modifier << "btn:" << at.mouseButton << ");"
+                const bool modOverlap = at.modifier == st.modifier || at.modifier == 0 || st.modifier == 0;
+                const bool btnOverlap = at.mouseButton == st.mouseButton || at.mouseButton == 0 || st.mouseButton == 0;
+                if (modOverlap && btnOverlap) {
+                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span can both match"
+                                            << "(activation mod:" << at.modifier << "btn:" << at.mouseButton
+                                            << "vs zone-span mod:" << st.modifier << "btn:" << st.mouseButton << ");"
                                             << "zone span takes priority when both match";
                 }
             }

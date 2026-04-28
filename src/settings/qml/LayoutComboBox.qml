@@ -413,6 +413,7 @@ ComboBox {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
                         autoAssign: modelData.layout && modelData.layout.autoAssign === true
+                        globalAutoAssign: root.appSettings && root.appSettings.autoAssignAllLayouts === true
                     }
 
                     // Aspect ratio badge

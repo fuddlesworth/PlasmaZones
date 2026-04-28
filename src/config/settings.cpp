@@ -12,6 +12,10 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+
+#include <PhosphorAnimation/CurveRegistry.h>
+
+#include <QJsonDocument>
 #include <QGuiApplication>
 #include <QMetaMethod>
 #include <QMetaProperty>
@@ -23,7 +27,7 @@
 #include <QSet>
 #include <QUuid>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "../autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -43,10 +47,11 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 }
 } // namespace
 
-Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
+Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
+    , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
     // file. Production entry points (daemon/main, settings/main, editor
@@ -54,6 +59,14 @@ Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     // startup, before instantiating the backend. The non-owning ctor is
     // used when callers share one backend across Settings + PhosphorZones::LayoutRegistry
     // + other components, so the migration responsibility lives with them.
+    //
+    // The curve registry is taken at construction (before load()) so the
+    // initial property snapshot parses Profile blobs through the caller's
+    // registry and preserves `shared_ptr<const Curve>` identity end-to-end.
+    // There is deliberately no post-construction setter — a late-set
+    // registry would leave already-parsed Profile state referencing
+    // curves built through the fallback registry, defeating the shared-
+    // curve cache without any mechanism for the cached state to notice.
     //
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
@@ -66,6 +79,17 @@ Settings::Settings(QObject* parent)
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
 {
+    // m_curveRegistry is left null; `animationProfile()` /
+    // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
+    // That fallback is a process-static CurveRegistry — NOT the daemon's
+    // injected instance — so `shared_ptr<const Curve>` identity is not
+    // preserved across the Settings ↔ daemon boundary when this ctor is
+    // used. The standalone settings app and tests both communicate with
+    // the daemon via disk / D-Bus config round-trips where identity was
+    // never going to survive anyway, so this is the expected path.
+    // qCDebug rather than qCWarning to avoid log-spam on every test
+    // fixture and standalone-settings launch.
+    qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
 }
 
@@ -118,6 +142,21 @@ void Settings::load()
             snapshot[i] = prop.read(this);
     }
 
+    // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
+    // argument, which Q_PROPERTY can't express). Snapshot them explicitly
+    // so the post-reparse re-emission below can fire the per-mode signals
+    // when an external write — daemon shortcut, D-Bus call, discard path —
+    // changes a list. Without this, QML consumers bound through the bridge
+    // never see cross-process disable-state changes until the page is
+    // re-rendered.
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    const QStringList snapMonitorsBefore = disabledMonitors(Mode::Snapping);
+    const QStringList autotileMonitorsBefore = disabledMonitors(Mode::Autotile);
+    const QStringList snapDesktopsBefore = disabledDesktops(Mode::Snapping);
+    const QStringList autotileDesktopsBefore = disabledDesktops(Mode::Autotile);
+    const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
+    const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
+
     m_configBackend->reparseConfiguration();
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -150,6 +189,22 @@ void Settings::load()
             notify.invoke(this, Qt::DirectConnection);
         }
     }
+
+    // Per-mode disable lists: emit each signal once if its list changed.
+    // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
+    // of by property index.
+    if (disabledMonitors(Mode::Snapping) != snapMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
+    if (disabledMonitors(Mode::Autotile) != autotileMonitorsBefore)
+        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
+    if (disabledDesktops(Mode::Snapping) != snapDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
+    if (disabledDesktops(Mode::Autotile) != autotileDesktopsBefore)
+        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
+    if (disabledActivities(Mode::Snapping) != snapActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
+    if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
+        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -163,6 +218,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
@@ -606,21 +662,351 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
 }
 
 // ── Animations (PhosphorConfig::Store-backed) ───────────────────────────────
-// Snapping + autotile geometry-change transitions. Clamp validators enforce
-// duration/min-distance/sequence-mode/stagger-interval ranges uniformly.
+// Snapping + autotile geometry-change transitions. Phase 4 sub-commit 6
+// migrated the on-disk format from five per-field keys to a single
+// Profile JSON blob (decision S — no backwards compat for the old
+// layout). Each per-field accessor now decomposes / composes the blob,
+// preserving the Q_PROPERTY + ISettings interface for QML and the
+// daemon's existing consumers.
+//
+// `animationsEnabled` stays as a standalone bool — it's an orthogonal
+// on/off toggle rather than part of the Profile concept.
 
 PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
-PZ_STORE_GET(int, animationDuration, animationsGroup, durationKey, int)
-PZ_STORE_SET_INT(setAnimationDuration, animationsGroup, durationKey, animationDurationChanged)
-PZ_STORE_GET(QString, animationEasingCurve, animationsGroup, easingCurveKey, QString)
-PZ_STORE_SET_STRING(setAnimationEasingCurve, animationsGroup, easingCurveKey, animationEasingCurveChanged)
-PZ_STORE_GET(int, animationMinDistance, animationsGroup, minDistanceKey, int)
-PZ_STORE_SET_INT(setAnimationMinDistance, animationsGroup, minDistanceKey, animationMinDistanceChanged)
-PZ_STORE_GET(int, animationSequenceMode, animationsGroup, sequenceModeKey, int)
-PZ_STORE_SET_INT(setAnimationSequenceMode, animationsGroup, sequenceModeKey, animationSequenceModeChanged)
-PZ_STORE_GET(int, animationStaggerInterval, animationsGroup, staggerIntervalKey, int)
-PZ_STORE_SET_INT(setAnimationStaggerInterval, animationsGroup, staggerIntervalKey, animationStaggerIntervalChanged)
+
+// Process-wide fallback registry for standalone Settings instances
+// constructed without an injected CurveRegistry (tests, settings-app
+// tools that don't share a registry with the daemon). Consolidated
+// here as a single function-local static so every fallback path
+// resolves curve wire-format strings through the same registry —
+// avoids the "two identical spring:14,0.6 strings resolve to different
+// shared_ptr<const Curve> instances" surprise that three separate
+// per-method statics introduced.
+static PhosphorAnimation::CurveRegistry& fallbackCurveRegistry()
+{
+    static PhosphorAnimation::CurveRegistry s_registry;
+    return s_registry;
+}
+
+namespace {
+/// Read the Profile JSON blob and return it as a mutable object.
+/// Malformed / absent blob returns an empty object — callers that then
+/// write back produce a minimal blob containing only the patched field.
+QJsonObject readProfileObject(const PhosphorConfig::Store& store)
+{
+    const QString json = store.read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    return doc.isObject() ? doc.object() : QJsonObject{};
+}
+
+/// Serialise @p obj and write it to the Profile blob key.
+void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
+{
+    const QString after = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    store.write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
+}
+} // namespace
+
+PhosphorAnimation::Profile Settings::animationProfile() const
+{
+    // Parse the stored JSON string through Profile::fromJson. Malformed
+    // blobs fall back to a default-constructed Profile (unset-optional
+    // fields) — Profile::effective* methods then substitute library
+    // defaults, matching the "garbage in disk → sensible defaults"
+    // invariant.
+    const QString json =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        return PhosphorAnimation::Profile{};
+    }
+    const PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
+    return PhosphorAnimation::Profile::fromJson(doc.object(), reg);
+}
+
+void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
+{
+    // Equality is a BYTE comparison against the current disk blob, not a
+    // semantic `Profile::operator==` check. The semantic comparison hits
+    // two traps in practice:
+    //
+    //   1. `Profile::fromJson` resolves the curve field through the
+    //      runtime `CurveRegistry`. Plugin-registered curves that aren't
+    //      loaded yet produce a null curve pointer, so two blobs that
+    //      reference different unresolved curves still compare equal
+    //      (both have null curves) — silently data-losing a user's
+    //      curve choice when the plugin arrives later.
+    //   2. Inversely, when the blob round-trips cleanly the new Profile
+    //      may differ slightly (e.g. `effective*` defaults vs unset
+    //      optionals) and the semantic `operator==` returns `false` even
+    //      though the on-disk bytes would be unchanged — firing a
+    //      signal storm every call.
+    //
+    // Byte-comparing the serialised form of the merged blob sidesteps
+    // both: the only thing that fires signals is a real change to what
+    // gets written to disk.
+    //
+    // Per-field signal emission still goes through the parsed prev /
+    // new Profiles because each `xxxChanged` signal describes an
+    // observable semantic field, not a blob identity. A blob-identity
+    // change with identical effective fields (e.g. curve precision
+    // canonicalisation) correctly fires `animationProfileChanged`
+    // without fanning out to the per-field signals.
+    const QString currentBytes =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+
+    // Merge: start from the stored blob and overlay every field the
+    // incoming Profile emitted. `Profile::toJson` only emits set-optional
+    // fields and a non-null curve — unset optionals are absent from the
+    // output. Those absent fields leave the corresponding on-disk key
+    // untouched, matching the partial-update semantics of the per-field
+    // setters: a caller that wants to "clear" a field sets it explicitly
+    // via a per-field setter or by constructing a Profile with the
+    // intended value, not by leaving it unset.
+    //
+    // The loop is additive only (no removes) so unknown on-disk keys —
+    // future schema extensions, third-party plugin fields — survive
+    // intact. Asymmetric removal would wipe them on the first aggregate
+    // setter call, and contradict the per-field setters' merge semantics.
+    QJsonObject merged = readProfileObject(*m_store);
+    const QJsonObject incoming = profile.toJson();
+    for (auto it = incoming.constBegin(); it != incoming.constEnd(); ++it) {
+        merged.insert(it.key(), it.value());
+    }
+
+    const QString newBytes = QString::fromUtf8(QJsonDocument(merged).toJson(QJsonDocument::Compact));
+    if (newBytes == currentBytes) {
+        // Nothing to write — skip both the store write and every signal.
+        // Guards the slider-drag-at-30-Hz signal-storm case: a value
+        // that serialises to the same bytes must not wake any observer.
+        return;
+    }
+
+    // Snapshot per-field effective values BEFORE the write so we can
+    // emit per-field signals only for fields whose semantic observable
+    // actually changed. Parses the PREVIOUS disk bytes through the same
+    // registry the runtime uses, matching the invariant that per-field
+    // `xxxChanged` signals describe what `animationDuration()` (etc.)
+    // will return before vs. after the write.
+    const PhosphorAnimation::Profile prev = animationProfile();
+    const int prevDuration = qRound(prev.effectiveDuration());
+    const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
+    const int prevMinDistance = prev.effectiveMinDistance();
+    const int prevSequenceMode = static_cast<int>(prev.effectiveSequenceMode());
+    const int prevStaggerInterval = prev.effectiveStaggerInterval();
+
+    writeProfileObject(*m_store, merged);
+
+    // Aggregate first — consumers that want to observe the Profile
+    // atomically (the daemon's fan-out hook) get one signal per call.
+    Q_EMIT animationProfileChanged();
+
+    // Per-field: only emit when the effective value actually differs.
+    if (qRound(profile.effectiveDuration()) != prevDuration) {
+        Q_EMIT animationDurationChanged();
+    }
+    const QString newCurveWire = profile.curve ? profile.curve->toString() : ConfigDefaults::animationEasingCurve();
+    if (newCurveWire != prevCurveWire) {
+        Q_EMIT animationEasingCurveChanged();
+    }
+    if (profile.effectiveMinDistance() != prevMinDistance) {
+        Q_EMIT animationMinDistanceChanged();
+    }
+    if (static_cast<int>(profile.effectiveSequenceMode()) != prevSequenceMode) {
+        Q_EMIT animationSequenceModeChanged();
+    }
+    if (profile.effectiveStaggerInterval() != prevStaggerInterval) {
+        Q_EMIT animationStaggerIntervalChanged();
+    }
+
+    Q_EMIT settingsChanged();
+}
+
+// ─── Per-field projections over the Profile blob ───────────────────────────
+// Each setter patches ONE field in the stored JSON blob directly rather
+// than round-tripping through Profile::toJson. Round-tripping would drop
+// any unresolved raw curve spec preserved by `setAnimationEasingCurve` —
+// `animationProfile()` goes through `CurveRegistry::tryCreate`, which nulls
+// the curve pointer on resolution failure, and `Profile::toJson` then omits
+// the null field. Patching the raw JSON blob leaves every field the setter
+// isn't touching exactly where it was.
+//
+// Getters route through `animationProfile()` for anything that needs the
+// `effective*` defaulting, and read the blob directly for the curve field
+// (so unresolved specs round-trip through the getter/setter pair).
+//
+// Hot path: settings-UI slider drag ~30 Hz. Per call: one read + one JSON
+// parse + one field-insert + one serialise + one store write. Acceptable.
+//
+// The shared merge primitive `patchProfileField` (declared in settings.h)
+// owns the read → guard → insert → write → emit-trio sequence so each
+// per-field setter is a one-liner over its type-specific pre-processing
+// (clamp for numerics, registry resolution for the curve string). The
+// helper is defined in this TU because it is consumed exclusively here;
+// keeping it private to settings.cpp keeps the .h surface compact.
+template<typename T>
+void Settings::patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
+                                 void (Settings::*fieldChangedSignal)())
+{
+    if (currentValue == newValue) {
+        // No-op guard — the setter contract requires that signals only
+        // fire when an observable changes. A slider drag at constant
+        // value wakes no observers.
+        return;
+    }
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(jsonFieldName), newValue);
+    writeProfileObject(*m_store, obj);
+    Q_EMIT(this->*fieldChangedSignal)();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
+}
+
+int Settings::animationDuration() const
+{
+    return qRound(animationProfile().effectiveDuration());
+}
+
+void Settings::setAnimationDuration(int duration)
+{
+    const int clamped =
+        qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldDuration, animationDuration(), clamped,
+                           &Settings::animationDurationChanged);
+}
+
+QString Settings::animationEasingCurve() const
+{
+    // Read the curve field directly from the Profile JSON blob so any
+    // wire-format string round-trips through the setter/getter — even
+    // unresolved specs (user plugin curve name not yet registered,
+    // hand-edited config with a typo). `animationProfile()` routes the
+    // curve through `CurveRegistry::tryCreate` which nulls the pointer
+    // on resolution failure; the raw string would then be lost on
+    // read-back. The runtime still gracefully falls back to the library
+    // default at animation time — persisting the raw string here just
+    // preserves the user's intent across restarts.
+    const QJsonObject obj = readProfileObject(*m_store);
+    const QString spec = obj.value(QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)).toString();
+    return spec.isEmpty() ? ConfigDefaults::animationEasingCurve() : spec;
+}
+
+void Settings::setAnimationEasingCurve(const QString& curve)
+{
+    // NOT routed through patchProfileField — the easing setter has a pre-
+    // resolution no-op-guard contract that the generic helper cannot
+    // express. Specifically: the original behaviour compares the raw
+    // CALLER string against the current stored string before resolution,
+    // so two consecutive `setAnimationEasingCurve("alias")` calls with
+    // the same alias short-circuit the second call regardless of
+    // canonicalisation. Routing through the helper would compare the
+    // post-resolution `toStore` against the current stored string — a
+    // strictly different no-op gate that would, in the alias-with-already-
+    // canonicalised-disk case, suppress signals the original would have
+    // fired. Preserving observable behaviour > sharing the merge code.
+    //
+    // The merge sequence (read → insert → write → emit-trio) IS
+    // duplicated relative to patchProfileField; that is intentional and
+    // documented here so a future "tidy this up" pass does not re-route
+    // through the helper without revisiting the no-op semantics first.
+
+    // Compare against the raw-stored wire string (same shape the getter
+    // returns) so no-op assignments short-circuit before any write.
+    if (animationEasingCurve() == curve) {
+        return;
+    }
+
+    // Resolution through the registry is informational only — it tunes
+    // the warning below and produces a canonical wire-form when the spec
+    // resolves. Either way, the blob keeps the caller's string intact so
+    // the user's edit round-trips cleanly through the Q_PROPERTY.
+    PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
+    auto resolved = reg.tryCreate(curve);
+    QString toStore;
+    if (resolved) {
+        // Known curve — store the canonical wire-format so a later
+        // read-back matches what the runtime sees (prevents spurious
+        // config rewrites when a user-supplied alias like "0.25,1.0,..."
+        // resolves to a slightly-different-precision canonical form).
+        toStore = resolved->toString();
+    } else {
+        qCWarning(lcConfig) << "setAnimationEasingCurve: curve spec" << curve
+                            << "did not resolve — persisting raw (library default will apply at animation time)";
+        toStore = curve;
+    }
+
+    QJsonObject obj = readProfileObject(*m_store);
+    obj.insert(QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve), toStore);
+    writeProfileObject(*m_store, obj);
+
+    Q_EMIT animationEasingCurveChanged();
+    Q_EMIT animationProfileChanged();
+    Q_EMIT settingsChanged();
+}
+
+int Settings::animationMinDistance() const
+{
+    return animationProfile().effectiveMinDistance();
+}
+
+void Settings::setAnimationMinDistance(int distance)
+{
+    const int clamped =
+        qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldMinDistance, animationMinDistance(), clamped,
+                           &Settings::animationMinDistanceChanged);
+}
+
+int Settings::animationSequenceMode() const
+{
+    return static_cast<int>(animationProfile().effectiveSequenceMode());
+}
+
+void Settings::setAnimationSequenceMode(int mode)
+{
+    const int clamped =
+        qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldSequenceMode, animationSequenceMode(), clamped,
+                           &Settings::animationSequenceModeChanged);
+}
+
+int Settings::animationStaggerInterval() const
+{
+    return animationProfile().effectiveStaggerInterval();
+}
+
+void Settings::setAnimationStaggerInterval(int ms)
+{
+    const int clamped =
+        qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
+    patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldStaggerInterval, animationStaggerInterval(), clamped,
+                           &Settings::animationStaggerIntervalChanged);
+}
+
+PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
+{
+    const QString json =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    if (json.isEmpty())
+        return {};
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject())
+        return {};
+    return PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+}
+
+void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
+{
+    const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+    const QString prev =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    if (json == prev)
+        return;
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(), json);
+    Q_EMIT shaderProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
@@ -671,12 +1057,59 @@ PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnA
 PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
                   showZonesOnAllMonitorsChanged)
 
-QStringList Settings::disabledMonitors() const
+// Per-mode disable lists. Storage is `Display.{Snapping,Autotile}Disabled*`
+// — pick the right key from `mode`. The connector-name resolution stays
+// PZ-side so consumers always see canonical screen ids.
+namespace {
+QString disabledMonitorsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledMonitorsKey()
+                                                            : ConfigDefaults::snappingDisabledMonitorsKey();
+}
+QString disabledDesktopsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledDesktopsKey()
+                                                            : ConfigDefaults::snappingDisabledDesktopsKey();
+}
+QString disabledActivitiesKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledActivitiesKey()
+                                                            : ConfigDefaults::snappingDisabledActivitiesKey();
+}
+} // namespace
+
+QStringList Settings::readDisableList(const QString& key) const
+{
+    return parseCommaList(m_store->read<QString>(ConfigDefaults::displayGroup(), key));
+}
+
+void Settings::writeDisableList(const QString& key, const QStringList& entries,
+                                PhosphorZones::AssignmentEntry::Mode mode, DisableModeSignalFn signalFn)
+{
+    // Post-write compare — the canonicalCommaList validator normalises
+    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
+    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
+    // and fire a spurious changed signal even though the canonical form is
+    // identical.
+    const QString before = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
+    m_store->write(ConfigDefaults::displayGroup(), key, entries.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*signalFn)(mode);
+    Q_EMIT settingsChanged();
+}
+
+QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const
 {
     // Resolve connector names → stable screen ids on every read. Stored
     // connector names stay human-readable; consumers see canonical ids.
-    QStringList entries = parseCommaList(
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey()));
+    // Desktop/activity getters intentionally skip this resolution because
+    // their composite keys (`screenId/desktop`, `screenId/activity`) embed
+    // the screen id in a non-isolatable way; the connector↔id matching is
+    // done at lookup time inside isDesktopDisabled / isActivityDisabled.
+    QStringList entries = readDisableList(disabledMonitorsKeyFor(mode));
     for (auto& name : entries) {
         if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
             const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
@@ -688,29 +1121,14 @@ QStringList Settings::disabledMonitors() const
     return entries;
 }
 
-void Settings::setDisabledMonitors(const QStringList& screenIdOrNames)
+void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
 {
-    // Post-write compare — the canonicalCommaList validator normalises
-    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
-    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
-    // and fire a spurious changed signal even though the canonical form is
-    // identical.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey());
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey(),
-                   screenIdOrNames.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT disabledMonitorsChanged();
-    Q_EMIT settingsChanged();
+    writeDisableList(disabledMonitorsKeyFor(mode), screenIdOrNames, mode, &Settings::disabledMonitorsChanged);
 }
 
-bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
+bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
 {
-    const QStringList entries = disabledMonitors();
+    const QStringList entries = disabledMonitors(mode);
     if (entries.contains(screenIdOrName)) {
         return true;
     }
@@ -730,35 +1148,26 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
     return false;
 }
 
-QStringList Settings::disabledDesktops() const
+// Composite keys (`screenId/desktop`) are returned verbatim — connector-name
+// resolution is deferred to isDesktopDisabled, which knows how to split the
+// composite and match either the connector or the resolved id segment.
+QStringList Settings::disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey()));
+    return readDisableList(disabledDesktopsKeyFor(mode));
 }
 
-void Settings::setDisabledDesktops(const QStringList& entries)
+void Settings::setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey());
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey(),
-                   entries.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT disabledDesktopsChanged();
-    Q_EMIT settingsChanged();
+    writeDisableList(disabledDesktopsKeyFor(mode), entries, mode, &Settings::disabledDesktopsChanged);
 }
 
-bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) const
+bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                 int desktop) const
 {
     if (desktop <= 0) {
         return false;
     }
-    const QStringList entries = disabledDesktops();
+    const QStringList entries = disabledDesktops(mode);
     QStringList namesToCheck = {screenIdOrName};
     if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
         const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
@@ -780,35 +1189,26 @@ bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) con
     return false;
 }
 
-QStringList Settings::disabledActivities() const
+// Composite keys (`screenId/activityUuid`) are returned verbatim — see the
+// comment on disabledDesktops for why connector-name resolution is deferred
+// to isActivityDisabled rather than applied per-read here.
+QStringList Settings::disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(),
-                                                 ConfigDefaults::disabledActivitiesKey()));
+    return readDisableList(disabledActivitiesKeyFor(mode));
 }
 
-void Settings::setDisabledActivities(const QStringList& entries)
+void Settings::setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey());
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey(),
-                   entries.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT disabledActivitiesChanged();
-    Q_EMIT settingsChanged();
+    writeDisableList(disabledActivitiesKeyFor(mode), entries, mode, &Settings::disabledActivitiesChanged);
 }
 
-bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const
+bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                  const QString& activityId) const
 {
     if (activityId.isEmpty()) {
         return false;
     }
-    const QStringList entries = disabledActivities();
+    const QStringList entries = disabledActivities(mode);
     QStringList namesToCheck = {screenIdOrName};
     if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
         const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
@@ -835,6 +1235,8 @@ PZ_STORE_GET(bool, flashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, b
 PZ_STORE_SET_BOOL(setFlashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, flashZonesOnSwitchChanged)
 PZ_STORE_GET(bool, showOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, bool)
 PZ_STORE_SET_BOOL(setShowOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, showOsdOnLayoutSwitchChanged)
+PZ_STORE_GET(bool, showOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, bool)
+PZ_STORE_SET_BOOL(setShowOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, showOsdOnDesktopSwitchChanged)
 PZ_STORE_GET(bool, showNavigationOsd, snappingEffectsGroup, navigationOsdKey, bool)
 PZ_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, showNavigationOsdChanged)
 
@@ -1134,26 +1536,34 @@ PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabled
 PZ_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
 PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
 
+// Shared helper for the three "plain" trigger-list setters (activation,
+// snap-assist, autotile-insert). Post-write compare — the schema's
+// canonicalTriggerList validator drops non-map entries, strips unknown keys,
+// and caps the list. A pre-write equality check against the stored canonical
+// form would fire a spurious changed signal whenever the caller passed a
+// list that canonicalises to the same value (e.g. extra keys, sub-cap
+// padding). zoneSpan keeps its own setter due to the legacy-modifier sync.
+void Settings::writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
+                                TriggerListSignalFn specificSignal)
+{
+    const QVariantList before = m_store->readVariant(group, key).toList();
+    m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
+    const QVariantList after = m_store->readVariant(group, key).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
 QVariantList Settings::dragActivationTriggers() const
 {
     return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
 }
 void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
-    // Post-write compare — the schema's canonicalTriggerList validator
-    // drops non-map entries, strips unknown keys, and caps the list. A
-    // pre-write equality check against the stored canonical form would fire
-    // a spurious changed signal whenever the caller passed a list that
-    // canonicalises to the same value (e.g. extra keys, sub-cap padding).
-    const QVariantList before = dragActivationTriggers();
-    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = dragActivationTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT dragActivationTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::dragActivationTriggersChanged);
 }
 
 PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
@@ -1340,6 +1750,9 @@ void Settings::setStickyWindowHandlingInt(int handling)
 PZ_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
 PZ_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
                   restoreWindowsToZonesOnLoginChanged)
+PZ_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
+PZ_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
+                  autoAssignAllLayoutsChanged)
 
 QString Settings::defaultLayoutId() const
 {
@@ -1371,17 +1784,8 @@ QVariantList Settings::snapAssistTriggers() const
 }
 void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 {
-    // Post-write compare — see setDragActivationTriggers for the
-    // canonicalisation rationale.
-    const QVariantList before = snapAssistTriggers();
-    m_store->write(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = snapAssistTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT snapAssistTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::snapAssistTriggersChanged);
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
@@ -1438,7 +1842,8 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
     // form (the schema validator would canonicalise on both sides anyway,
     // but avoiding the redundant write keeps the settingsChanged signal
     // from firing when a caller writes a semantically equal unsorted map).
-    const QVariantMap sanitized = AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(value));
+    const QVariantMap sanitized = PhosphorTileEngine::AutotileConfig::perAlgoToVariantMap(
+        PhosphorTileEngine::AutotileConfig::perAlgoFromVariantMap(value));
     if (autotilePerAlgorithmSettings() == sanitized) {
         return;
     }
@@ -1684,17 +2089,8 @@ QVariantList Settings::autotileDragInsertTriggers() const
 }
 void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
-    // Post-write compare — see setDragActivationTriggers for the
-    // canonicalisation rationale.
-    const QVariantList before = autotileDragInsertTriggers();
-    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(),
-                   triggers.mid(0, MaxTriggersPerAction));
-    const QVariantList after = autotileDragInsertTriggers();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT autotileDragInsertTriggersChanged();
-    Q_EMIT settingsChanged();
+    writeTriggerList(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::autotileDragInsertTriggersChanged);
 }
 
 PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)

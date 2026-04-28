@@ -1,0 +1,27 @@
+{
+    "id": "morph",
+    "name": "Morph",
+    "description": "Smooth warping morph transition using displacement fields",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometric",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "warpStrength",
+            "name": "Warp Strength",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "warpFrequency",
+            "name": "Warp Frequency",
+            "type": "float",
+            "default": 4.0,
+            "min": 1.0,
+            "max": 12.0
+        }
+    ]
+}

@@ -5,9 +5,9 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
-#include "autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -20,6 +20,7 @@
 #include <QJsonObject>
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Core AutotileEngine tests: construction, enable/disable, algorithm
@@ -244,7 +245,7 @@ private Q_SLOTS:
         original.focusFollowsMouse = true;
         original.respectMinimumSize = false;
         original.insertPosition = AutotileConfig::InsertPosition::AfterFocused;
-        original.overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        original.overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
 
         QJsonObject json = original.toJson();
         AutotileConfig restored = AutotileConfig::fromJson(json);
@@ -276,10 +277,10 @@ private Q_SLOTS:
         AutotileConfig b;
         QVERIFY(a == b);
 
-        b.overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        b.overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
         QVERIFY(a != b);
 
-        a.overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        a.overflowBehavior = PhosphorTiles::AutotileOverflowBehavior::Unlimited;
         QVERIFY(a == b);
     }
 

@@ -48,6 +48,8 @@ constexpr qreal MinSplitRatio = 0.1;
 constexpr qreal MaxSplitRatio = 0.9;
 constexpr int MinMasterCount = 1;
 constexpr int MaxMasterCount = 5;
+constexpr int DefaultInnerGap = 8;
+constexpr int DefaultOuterGap = 8;
 constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
 constexpr int MinZoneSizePx = 50;
@@ -149,15 +151,6 @@ inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 } // namespace AutotileJsonValues
 
-namespace WriteBackKeys {
-inline constexpr QLatin1String DefaultAutotileAlgorithm{"defaultAutotileAlgorithm"};
-inline constexpr QLatin1String AutotileSplitRatio{"autotileSplitRatio"};
-inline constexpr QLatin1String AutotileMasterCount{"autotileMasterCount"};
-inline constexpr QLatin1String AutotileMaxWindows{"autotileMaxWindows"};
-inline constexpr QLatin1String AutotilePerAlgorithmSettings{"autotilePerAlgorithmSettings"};
-inline constexpr QLatin1String ClearPerScreenAutotileSettings{"clearPerScreenAutotileSettings"};
-} // namespace WriteBackKeys
-
 /**
  * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`
  *        sites (e.g. `src/autotile/AutotileConfig.cpp`) resolve the value names
@@ -174,6 +167,12 @@ using AutotileJsonValues::OverflowUnlimited;
 enum class AutotileOverflowBehavior {
     Float = 0,
     Unlimited = 1
+};
+
+enum class AutotileInsertPosition {
+    End = 0,
+    AfterFocused = 1,
+    AsMaster = 2
 };
 
 enum class AutotileDragBehavior {

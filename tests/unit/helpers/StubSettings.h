@@ -6,6 +6,8 @@
 #include "config/configdefaults.h"
 #include "core/interfaces.h"
 
+#include <PhosphorSnapEngine/ISnapSettings.h>
+
 namespace PlasmaZones {
 
 /**
@@ -13,8 +15,15 @@ namespace PlasmaZones {
  *
  * Provides sensible defaults for all ISettings pure virtual methods.
  * The defaultLayoutId can be overridden via setTestDefaultLayoutId().
+ *
+ * Also inherits PhosphorEngineApi::ISnapSettings so SnapEngine's
+ * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
+ * via setEngineSettings(). The ISnapSettings methods (excludedApplications,
+ * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
+ * autoAssignAllLayouts) are already implemented for ISettings — the multiple
+ * inheritance just registers the second base so the cast resolves.
  */
-class StubSettings : public ISettings
+class StubSettings : public ISettings, public PhosphorEngineApi::ISnapSettings
 {
     // No Q_OBJECT — this stub has no signals/slots of its own.
     // ISettings::Q_OBJECT provides the meta-object system integration.
@@ -49,10 +58,11 @@ public:
     }
     QVariantList dragActivationTriggers() const override
     {
-        return {};
+        return m_dragActivationTriggers;
     }
-    void setDragActivationTriggers(const QVariantList&) override
+    void setDragActivationTriggers(const QVariantList& triggers) override
     {
+        m_dragActivationTriggers = triggers;
     }
     bool zoneSpanEnabled() const override
     {
@@ -91,36 +101,37 @@ public:
     void setShowZonesOnAllMonitors(bool) override
     {
     }
-    QStringList disabledMonitors() const override
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode) const override
     {
         return {};
     }
-    void setDisabledMonitors(const QStringList&) override
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
     {
     }
-    bool isMonitorDisabled(const QString&) const override
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
     {
         return false;
     }
-    QStringList disabledDesktops() const override
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode) const override
     {
         return {};
     }
-    void setDisabledDesktops(const QStringList&) override
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
     {
     }
-    bool isDesktopDisabled(const QString& /*screenIdOrName*/, int) const override
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/, int) const override
     {
         return false;
     }
-    QStringList disabledActivities() const override
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode) const override
     {
         return {};
     }
-    void setDisabledActivities(const QStringList&) override
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
     {
     }
-    bool isActivityDisabled(const QString& /*screenIdOrName*/, const QString&) const override
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/,
+                            const QString&) const override
     {
         return false;
     }
@@ -143,6 +154,13 @@ public:
         return false;
     }
     void setShowOsdOnLayoutSwitch(bool) override
+    {
+    }
+    bool showOsdOnDesktopSwitch() const override
+    {
+        return false;
+    }
+    void setShowOsdOnDesktopSwitch(bool) override
     {
     }
     bool showNavigationOsd() const override
@@ -530,6 +548,14 @@ public:
     void setRestoreWindowsToZonesOnLogin(bool) override
     {
     }
+    bool autoAssignAllLayouts() const override
+    {
+        return m_autoAssignAllLayouts;
+    }
+    void setAutoAssignAllLayouts(bool enabled) override
+    {
+        m_autoAssignAllLayouts = enabled;
+    }
     bool snapAssistFeatureEnabled() const override
     {
         return m_snapAssistFeatureEnabled;
@@ -620,6 +646,13 @@ public:
         return 50;
     }
     void setAnimationStaggerInterval(int) override
+    {
+    }
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override
+    {
+        return {};
+    }
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
     {
     }
 
@@ -768,8 +801,10 @@ private:
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;
+    bool m_autoAssignAllLayouts = false;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
+    QVariantList m_dragActivationTriggers;
 };
 
 } // namespace PlasmaZones

@@ -71,6 +71,11 @@ public:
     PZ_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     PZ_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
+    // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
+    // because the values gate the whole product (snap + autotile), not just
+    // snapping. v3 schema; in v2 these were under Snapping.Behavior.Display.
+    PZ_CONFIG_GROUP(displayGroup, "Display")
+
     // Tiling sub-groups
     PZ_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     PZ_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
@@ -192,16 +197,23 @@ public:
 
     // Snapping.Behavior.Display
     PZ_CONFIG_KEY(showOnAllMonitorsKey, "ShowOnAllMonitors")
-    PZ_CONFIG_KEY(disabledMonitorsKey, "DisabledMonitors")
-    PZ_CONFIG_KEY(disabledDesktopsKey, "DisabledDesktops")
-    PZ_CONFIG_KEY(disabledActivitiesKey, "DisabledActivities")
     PZ_CONFIG_KEY(filterByAspectRatioKey, "FilterByAspectRatio")
+
+    // Display — per-mode disable lists (v3+). Each pair is independent: disabling
+    // a monitor for snap leaves autotile gates untouched, and vice versa.
+    PZ_CONFIG_KEY(snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
+    PZ_CONFIG_KEY(autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
+    PZ_CONFIG_KEY(snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
+    PZ_CONFIG_KEY(autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
+    PZ_CONFIG_KEY(snappingDisabledActivitiesKey, "SnappingDisabledActivities")
+    PZ_CONFIG_KEY(autotileDisabledActivitiesKey, "AutotileDisabledActivities")
 
     // Snapping.Behavior.WindowHandling
     PZ_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")
     PZ_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     PZ_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     PZ_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
+    PZ_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     PZ_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     PZ_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
 
@@ -248,6 +260,7 @@ public:
     PZ_CONFIG_KEY(showNumbersKey, "ShowNumbers")
     PZ_CONFIG_KEY(flashOnSwitchKey, "FlashOnSwitch")
     PZ_CONFIG_KEY(osdOnLayoutSwitchKey, "OsdOnLayoutSwitch")
+    PZ_CONFIG_KEY(osdOnDesktopSwitchKey, "OsdOnDesktopSwitch")
     PZ_CONFIG_KEY(navigationOsdKey, "NavigationOsd")
     PZ_CONFIG_KEY(osdStyleKey, "OsdStyle")
     PZ_CONFIG_KEY(overlayDisplayModeKey, "OverlayDisplayMode")
@@ -368,11 +381,27 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // (uses enabledKey)
+    // Phase 4 sub-commit 6: animation fields migrated from 5 per-field
+    // keys (duration / easingCurve / minDistance / sequenceMode /
+    // staggerInterval) to a single Profile JSON blob under animationProfileKey.
+    // The v1 keys are folded into the Profile blob by `migrateV1ToV2`
+    // (see `configmigration.cpp`). The v1 key accessors are retained for
+    // that migration function only; no separate backwards-compat code
+    // exists within v2. The per-field accessor surface on Settings
+    // (animationDuration / etc.) is preserved and projects through the
+    // Profile blob at read/write time for QML Q_PROPERTY binding
+    // compatibility.
+    PZ_CONFIG_KEY(animationProfileKey, "Profile")
     PZ_CONFIG_KEY(durationKey, "Duration")
     PZ_CONFIG_KEY(easingCurveKey, "EasingCurve")
     PZ_CONFIG_KEY(minDistanceKey, "MinDistance")
     PZ_CONFIG_KEY(sequenceModeKey, "SequenceMode")
     PZ_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
+
+    // Phase 6: ShaderProfileTree JSON blob — per-event shader effect
+    // selection layered alongside the motion Profile (separate tree,
+    // same dot-path namespace — see design doc decision AA).
+    PZ_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
@@ -517,11 +546,34 @@ public:
     PZ_CONFIG_GROUP(v1AutotilingGroup, "Autotiling")
     PZ_CONFIG_GROUP(v1AutotileShortcutsGroup, "AutotileShortcuts")
     PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations") // = v2 animationsGroup
+    // v1 animation per-field keys — Phase-4 migration packs these into the
+    // v2 `Profile` JSON blob (see configmigration.cpp::migrateV1ToV2).
+    // The accessors exist solely so migration code is unambiguous about
+    // "reading legacy field" vs "reading new blob"; production reads after
+    // migration go through `Profile::JsonField*` constants.
+    PZ_CONFIG_KEY(v1AnimationsEnabledKey, "AnimationsEnabled")
+    PZ_CONFIG_KEY(v1AnimationDurationKey, "AnimationDuration")
+    PZ_CONFIG_KEY(v1AnimationEasingCurveKey, "AnimationEasingCurve")
+    PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
+    PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
+    PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
     PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
     PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
     PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
     PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
     PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // v2 legacy key accessors — used ONLY by migrateV2ToV3.
+    // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it
+    // still holds ShowOnAllMonitors and FilterByAspectRatio. Only the three
+    // disabled-* keys move out, so we name the keys with a v2 prefix; the
+    // migration walks the canonical snappingBehaviorDisplayGroup() dot-path
+    // (split on '.') to descend the JSON tree.
+    // ───────────────────────────────────────────────────────────────────────────
+    PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
+    PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
+    PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
 
 private:
     // Non-instantiable

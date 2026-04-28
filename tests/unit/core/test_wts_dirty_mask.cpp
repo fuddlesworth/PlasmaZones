@@ -33,7 +33,7 @@
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
@@ -43,6 +43,7 @@
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 class TestWtsDirtyMask : public QObject
@@ -72,7 +73,7 @@ private Q_SLOTS:
 
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings,
                                               m_virtualDesktopManager, m_parent);
-        m_snapState = new PhosphorZones::SnapState(QString(), nullptr);
+        m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
         // Construction leaves mask = DirtyAll; clear so subsequent mutator
         // tests start from a known-clean state and only assert on the
@@ -115,7 +116,7 @@ private Q_SLOTS:
 
         WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr, freshSettings,
                                     freshVirtualDesktopManager, &freshParent);
-        PhosphorZones::SnapState freshSnapState(QString(), nullptr);
+        PhosphorSnapEngine::SnapState freshSnapState(QString(), nullptr);
         fresh.setSnapState(&freshSnapState);
         QCOMPARE(fresh.peekDirty(), static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
         fresh.setSnapState(nullptr);
@@ -303,7 +304,7 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
-    PhosphorZones::SnapState* m_snapState = nullptr;
+    PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_layout = nullptr;
     WindowTrackingService* m_service = nullptr;
     QString m_zone1Id;

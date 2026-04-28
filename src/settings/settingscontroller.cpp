@@ -176,12 +176,20 @@ SettingsController::SettingsController(QObject* parent)
     // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
     m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
                                                                               m_localAlgorithmRegistry.get());
-    m_scriptLoader->scanAndRegister();
 
     // Algorithm-registry / scripted-loader surface. Owned via unique_ptr so
     // reverse-order destruction runs the service's dtor (which disconnects
     // its watchers) BEFORE m_scriptLoader and m_localAlgorithmRegistry
     // reset — the service holds raw-pointer borrows of both.
+    //
+    // Construct the service and wire all algorithmsChanged consumers
+    // BEFORE scanAndRegister so the canonical
+    //   make_unique → connect → scanAndRegister
+    // ordering holds — the empty→populated `algorithmsChanged` emit
+    // from the initial scan must reach every subscriber, otherwise a
+    // future consumer that relies on the transition (rather than
+    // querying availableAlgorithms() directly) silently misses initial
+    // population.
     m_algorithmService =
         std::make_unique<AlgorithmService>(&m_settings, m_localAlgorithmRegistry.get(), m_scriptLoader.get());
     connect(m_algorithmService.get(), &AlgorithmService::algorithmCreated, this, &SettingsController::algorithmCreated);
@@ -194,6 +202,8 @@ SettingsController::SettingsController(QObject* parent)
     // LayoutComboBox's model includes autotile entries from the registry.
     connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::layoutsChanged);
+
+    m_scriptLoader->scanAndRegister();
 
     // Listen for external settings changes from the daemon
     QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
@@ -300,6 +310,27 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         setNeedsSave(true);
     });
+
+    // Forward the per-mode disable signals from the underlying Settings up
+    // through the controller so QML bridges react regardless of write origin:
+    //   - in-process toggle in this UI (controller invokables → Settings setters)
+    //   - cross-process external write reflected via load() (daemon shortcut,
+    //     D-Bus call to SettingsAdaptor) — see Settings::load() for the
+    //     post-reparse emission of these signals
+    //   - ScreenHelper-mediated monitor toggle (the helper writes through to
+    //     Settings, which fires the underlying signal)
+    // Single forwarding point keeps the three modes' write paths symmetrical
+    // and avoids per-callsite Q_EMIT bookkeeping.
+    connect(&m_settings, &ISettings::disabledMonitorsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
+        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
+    });
+    connect(&m_settings, &ISettings::disabledDesktopsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
+        Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
+    });
+    connect(&m_settings, &ISettings::disabledActivitiesChanged, this,
+            [this](PhosphorZones::AssignmentEntry::Mode mode) {
+                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
+            });
 
     // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
@@ -1482,55 +1513,91 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // Screen helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool SettingsController::isMonitorDisabled(const QString& screenName) const
+// Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
+// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
+// every call through the helper keeps the cast explicit and gives us a single
+// place to add range-clamping if a future mode is introduced.
+//
+// SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
+// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
+// subclass forgets the override, every disable read/write would silently
+// land on the snapping list — exactly the mode confusion this whole
+// machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
+//
+// The previous implementation triggered Q_ASSERT(false) on the unexpected
+// path, but QML binding evaluation order during component construction can
+// run a `function on*Changed: isMonitorDisabled(name)` handler before the
+// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
+// takes effect, hard-crashing dev builds on what is otherwise transient
+// state. The warning is enough — the fallback to Snapping is the safest
+// choice (defaults to the more permissive of the two lists for reads,
+// avoids accidental writes to a list the user didn't intend).
+static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
-    return m_screenHelper.isMonitorDisabled(screenName);
+    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
+        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
+        qCWarning(PlasmaZones::lcCore)
+            << "modeFromViewMode: unexpected viewMode" << viewMode
+            << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
+    }
+    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
+        ? PhosphorZones::AssignmentEntry::Autotile
+        : PhosphorZones::AssignmentEntry::Snapping;
 }
 
-void SettingsController::setMonitorDisabled(const QString& screenName, bool disabled)
+bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
 {
-    m_screenHelper.setMonitorDisabled(screenName, disabled);
+    return m_screenHelper.isMonitorDisabled(modeFromViewMode(viewMode), screenName);
 }
 
-bool SettingsController::isDesktopDisabled(const QString& screenName, int desktop) const
+void SettingsController::setMonitorDisabled(int viewMode, const QString& screenName, bool disabled)
 {
-    return m_settings.isDesktopDisabled(screenName, desktop);
+    m_screenHelper.setMonitorDisabled(modeFromViewMode(viewMode), screenName, disabled);
 }
 
-void SettingsController::setDesktopDisabled(const QString& screenName, int desktop, bool disabled)
+bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const
 {
+    return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
+}
+
+void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
+{
+    // The disabledDesktopsChanged(viewMode) signal is fired by the
+    // m_settings → controller forward in the constructor — no manual emit
+    // needed here.
+    const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + QString::number(desktop);
-    QStringList entries = m_settings.disabledDesktops();
+    QStringList entries = m_settings.disabledDesktops(mode);
     if (disabled && !entries.contains(key)) {
         entries.append(key);
-        m_settings.setDisabledDesktops(entries);
+        m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
     } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledDesktops(entries);
+        m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
     }
 }
 
-bool SettingsController::isActivityDisabled(const QString& screenName, const QString& activityId) const
+bool SettingsController::isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const
 {
-    return m_settings.isActivityDisabled(screenName, activityId);
+    return m_settings.isActivityDisabled(modeFromViewMode(viewMode), screenName, activityId);
 }
 
-void SettingsController::setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled)
+void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
+                                             bool disabled)
 {
+    // See setDesktopDisabled — the per-mode signal is forwarded from
+    // m_settings via the connect set up in the constructor.
+    const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + activityId;
-    QStringList entries = m_settings.disabledActivities();
+    QStringList entries = m_settings.disabledActivities(mode);
     if (disabled && !entries.contains(key)) {
         entries.append(key);
-        m_settings.setDisabledActivities(entries);
+        m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged();
     } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledActivities(entries);
+        m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged();
     }
 }
 
@@ -1591,13 +1658,15 @@ void SettingsController::onVirtualDesktopsChanged()
 {
     refreshVirtualDesktops();
 
-    // Prune disabled-desktop entries that reference desktops beyond the new count.
-    // See start.cpp comment re: mid-range renumbering limitation.
-    QStringList disabled = m_settings.disabledDesktops();
-    if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
-        m_settings.setDisabledDesktops(disabled);
-        setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
+    // Prune both per-mode disabled-desktop lists — see start.cpp comment re:
+    // mid-range renumbering limitation. The per-mode disabledDesktopsChanged
+    // signal is forwarded from m_settings (see ctor); no manual emit here.
+    for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+        QStringList disabled = m_settings.disabledDesktops(mode);
+        if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
+            m_settings.setDisabledDesktops(mode, disabled);
+            setNeedsSave(true);
+        }
     }
 
     Q_EMIT virtualDesktopsChanged();
@@ -1617,11 +1686,13 @@ void SettingsController::onActivitiesChanged()
                 validIds.insert(id);
             }
         }
-        QStringList disabledActs = m_settings.disabledActivities();
-        if (pruneDisabledActivityEntries(disabledActs, validIds)) {
-            m_settings.setDisabledActivities(disabledActs);
-            setNeedsSave(true);
-            Q_EMIT disabledActivitiesChanged();
+        // Per-mode signal forwarded from m_settings (see ctor) — no manual emit.
+        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+            QStringList disabledActs = m_settings.disabledActivities(mode);
+            if (pruneDisabledActivityEntries(disabledActs, validIds)) {
+                m_settings.setDisabledActivities(mode, disabledActs);
+                setNeedsSave(true);
+            }
         }
     }
 

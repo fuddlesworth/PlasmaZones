@@ -242,8 +242,23 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             // overlay expects `{zoneNumber, relativeGeometry:{x,y,w,h},
             // id, name, useCustomColors}` — we project the preview's zones
             // directly without going through a second preview-generation path.
+            //
+            // canvasSize: pass the target screen's available geometry so
+            // aspect-sensitive algorithms (BSP / fibonacci / spiral) split
+            // along the same axis the live tiler uses. Without this, BSP on
+            // a portrait VS shows a left/right split in the OSD while the
+            // tiler actually places windows top/bottom — preview lies. Use
+            // available geometry (panel-excluded) so it matches the rect
+            // the tiler computes against.
+            QSize previewCanvas;
+            if (m_screenManager) {
+                const QRect avail = m_screenManager->screenAvailableGeometry(screenId);
+                if (avail.isValid() && avail.width() > 0 && avail.height() > 0) {
+                    previewCanvas = avail.size();
+                }
+            }
             const PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(
-                algorithmId, algo, windowCount > 0 ? windowCount : -1, m_algorithmRegistry.get());
+                algorithmId, algo, windowCount > 0 ? windowCount : -1, m_algorithmRegistry.get(), previewCanvas);
             QVariantList zones;
             zones.reserve(preview.zones.size());
             for (int i = 0; i < preview.zones.size(); ++i) {
@@ -278,8 +293,8 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
 
 void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId)
 {
-    // Defer OSD display so first-time QML compilation of LayoutOsd.qml (~100-300ms)
-    // doesn't block the daemon event loop during layout switches.
+    // Defer OSD display so first-time QML compilation of NotificationOverlay.qml
+    // (~100-300ms) doesn't block the daemon event loop during layout switches.
     QTimer::singleShot(0, this, [this, layoutId, screenId]() {
         PhosphorZones::Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {
@@ -417,7 +432,7 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     if (!m_running) {
         return;
     }
-    if (!m_settings || !m_settings->showOsdOnLayoutSwitch() || !m_overlayService || !m_layoutManager
+    if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
         || !m_screenManager) {
         return;
     }
@@ -436,7 +451,10 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     // Screens where PlasmaZones is disabled show a "disabled" OSD instead.
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
-        const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
+        // Each screen's OSD describes whatever mode is currently active there.
+        const auto mode =
+            m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+        const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
         if (why != DisabledReason::NotDisabled) {
             showContextDisabledOsd(screenId, desktop, activity, why);
             continue;

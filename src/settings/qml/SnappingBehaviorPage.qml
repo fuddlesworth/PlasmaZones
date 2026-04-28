@@ -61,11 +61,18 @@ Flickable {
                     SettingsSeparator {
                     }
 
+                    // The activation trigger list and the Hold/Toggle controls
+                    // serve dual purpose (#249): when "Activate on every drag"
+                    // is on, the same triggers DEACTIVATE the overlay (hold to
+                    // hide; toggle to flip off the implicitly-on overlay).
+                    // resolveActivationActive in the runtime mirrors this with
+                    // an inversion gated on alwaysActiveOnDrag.
                     SettingsRow {
-                        title: i18n("Hold to activate")
-                        description: i18n("Hold a modifier or mouse button to show zones while dragging")
-                        enabled: !alwaysActivateSwitch.checked
-                        opacity: enabled ? 1 : 0.4
+                        readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
+                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
+
+                        title: activeTitle
+                        description: activeDescription
 
                         ModifierAndMouseCheckBoxes {
                             id: dragActivationInput
@@ -87,10 +94,10 @@ Flickable {
                     }
 
                     SettingsRow {
+                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
+
                         title: i18n("Toggle mode")
-                        description: i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
-                        enabled: !alwaysActivateSwitch.checked
-                        opacity: enabled ? 1 : 0.4
+                        description: activeDescription
 
                         SettingsSwitch {
                             checked: appSettings.toggleActivation
@@ -336,6 +343,23 @@ Flickable {
                             accessibleName: i18n("Move new windows to last zone")
                             onToggled: function(newValue) {
                                 appSettings.moveNewWindowsToLastZone = newValue;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Auto-assign new windows for all layouts")
+                        description: i18n("Fill the first empty zone when a new window opens. When on, this overrides each layout's individual auto-assign toggle and applies to every layout.")
+
+                        SettingsSwitch {
+                            checked: appSettings.autoAssignAllLayouts
+                            accessibleName: i18n("Auto-assign new windows for all layouts")
+                            onToggled: function(newValue) {
+                                appSettings.autoAssignAllLayouts = newValue;
                             }
                         }
 

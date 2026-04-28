@@ -31,8 +31,8 @@
 #include "core/virtualdesktopmanager.h"
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
-#include "snap/SnapEngine.h"
-#include "snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
 
@@ -40,6 +40,7 @@
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // ─────────────────────────────────────────────────────────────────────────

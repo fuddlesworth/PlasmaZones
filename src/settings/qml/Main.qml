@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 ApplicationWindow {
     id: window
@@ -435,12 +436,11 @@ ApplicationWindow {
         property string pendingMode: ""
         property string pendingPage: ""
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 0
-            duration: 80
-            easing.type: Easing.InQuad
+            profile: "sidebar.fadeOut"
         }
 
         ScriptAction {
@@ -453,12 +453,11 @@ ApplicationWindow {
             }
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 1
-            duration: 120
-            easing.type: Easing.OutQuad
+            profile: "sidebar.fadeIn"
         }
 
     }
@@ -683,8 +682,8 @@ ApplicationWindow {
                             }
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 120
+                                PhosphorMotionAnimation {
+                                    profile: "widget.tint-fast"
                                 }
 
                             }
@@ -711,8 +710,9 @@ ApplicationWindow {
                                 }
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
@@ -743,8 +743,9 @@ ApplicationWindow {
                                 visible: !window.sidebarCompact
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
@@ -783,22 +784,20 @@ ApplicationWindow {
 
                                     }
 
-                                    NumberAnimation {
+                                    PhosphorMotionAnimation {
                                         target: dirtyBadge
-                                        property: "opacity"
+                                        properties: "opacity"
                                         from: 1
                                         to: 0.4
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.pulse"
                                     }
 
-                                    NumberAnimation {
+                                    PhosphorMotionAnimation {
                                         target: dirtyBadge
-                                        property: "opacity"
+                                        properties: "opacity"
                                         from: 0.4
                                         to: 1
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.pulse"
                                     }
 
                                 }
@@ -879,22 +878,20 @@ ApplicationWindow {
 
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 1
                                     to: 0.4
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.pulse-slow"
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 0.4
                                     to: 1
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.pulse-slow"
                                 }
 
                             }
@@ -938,17 +935,15 @@ ApplicationWindow {
             }
 
             Behavior on Layout.preferredWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    profile: "panel.slideIn"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    profile: "panel.slideIn"
                 }
 
             }
@@ -1181,15 +1176,15 @@ ApplicationWindow {
                         fadeIn.restart();
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: fadeIn
 
                         target: pageLoader.item
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 180
-                        easing.type: Easing.OutCubic
+                        profile: "widget.fade"
+                        durationOverride: 180
                     }
 
                 }
@@ -1226,15 +1221,15 @@ ApplicationWindow {
                         font.weight: Font.Medium
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: toastShow
 
                         target: toast
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                        profile: "panel.popup"
+                        durationOverride: 200
                     }
 
                     SequentialAnimation {
@@ -1244,13 +1239,12 @@ ApplicationWindow {
                             duration: 2000
                         }
 
-                        NumberAnimation {
+                        PhosphorMotionAnimation {
                             target: toast
-                            property: "opacity"
+                            properties: "opacity"
                             from: 1
                             to: 0
-                            duration: 400
-                            easing.type: Easing.InCubic
+                            profile: "widget.fadeOut"
                         }
 
                     }
@@ -1383,10 +1377,18 @@ ApplicationWindow {
                 }
 
                 MenuItem {
-                    text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
-                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
+                    readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
+                    readonly property bool globalAuto: appSettings.autoAssignAllLayouts === true
+
+                    // When the global "Auto-assign for all layouts" toggle is on (#370),
+                    // every layout effectively auto-assigns regardless of its per-layout flag,
+                    // so the per-layout toggle is preserved but disabled here. The label
+                    // points the user at the global setting that's overriding it.
+                    text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
+                    icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
                     visible: !layoutContextMenu.isAutotile
-                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+                    enabled: !globalAuto
+                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
                 }
 
                 // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --
@@ -1552,8 +1554,8 @@ ApplicationWindow {
                 color: settingsController.needsSave ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 300
+                    PhosphorMotionAnimation {
+                        profile: "widget.tint"
                     }
 
                 }
@@ -1630,9 +1632,8 @@ ApplicationWindow {
                 }
 
                 Behavior on implicitHeight {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.accordion"
                     }
 
                 }
@@ -1836,8 +1837,9 @@ ApplicationWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "widget.fade"
+                durationOverride: 200
             }
 
         }

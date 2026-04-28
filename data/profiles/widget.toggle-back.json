@@ -1,0 +1,5 @@
+{
+  "name": "widget.toggle-back",
+  "duration": 250,
+  "curve": "cubic-bezier:0.18,-0.50,0.40,1.40"
+}

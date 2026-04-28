@@ -36,7 +36,7 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.versionKey = ConfigKeys::versionKey();
     s.migrations = {
         {1, &ConfigMigration::migrateV1ToV2},
-        // {2, &ConfigMigration::migrateV2ToV3},
+        {2, &ConfigMigration::migrateV2ToV3},
     };
     return s;
 }
@@ -46,8 +46,9 @@ std::span<const MigrationStep> ConfigMigration::migrationSteps()
 {
     // Kept for callers/tests that want a flat list of PZ-native steps. Built
     // once lazily; the underlying function pointers never change at runtime.
-    static const std::array<MigrationStep, 1> s_steps{{
+    static const std::array<MigrationStep, 2> s_steps{{
         {1, &ConfigMigration::migrateV1ToV2},
+        {2, &ConfigMigration::migrateV2ToV3},
     }};
     return {s_steps.data(), s_steps.size()};
 }
@@ -433,6 +434,18 @@ void moveKey(const QJsonObject& src, const QString& srcKey, QJsonObject& dst, co
 
 void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 {
+    // Defense-in-depth idempotency guard. The PhosphorConfig::MigrationRunner
+    // already gates this function on `version == 1`, and `ensureJsonConfig`
+    // bails early when the on-disk version is >= ConfigSchemaVersion. But
+    // a direct caller (test harness, future tooling) that hands us a v2 doc
+    // would otherwise read the v2 `Animations` group as if it were v1,
+    // remove it, fail to find any v1 keys inside, and end up writing back
+    // an empty animations group — silently nuking the user's Profile blob.
+    // Bail out before touching the document.
+    if (root.value(ConfigKeys::versionKey()).toInt(0) >= 2) {
+        return;
+    }
+
     // ── Read all v1 groups (using ConfigKeys v1 accessors) ────────────────
     const QJsonObject v1Activation = root.value(ConfigKeys::v1ActivationGroup()).toObject();
     const QJsonObject v1Display = root.value(ConfigKeys::v1DisplayGroup()).toObject();
@@ -686,16 +699,107 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!shaders.isEmpty())
         root[QLatin1String("Shaders")] = shaders;
 
-    // ── Animations (key renames) ────────────────────────────────────────────
+    // ── Animations (key renames + Phase-4 Profile-blob packing) ────────────
+    // v1 stored five per-field animation keys + a standalone `AnimationsEnabled`
+    // bool. v2's Phase-4-restructure packs the five per-field values into a
+    // single `Profile` JSON blob (decision S) while keeping `Enabled` as an
+    // orthogonal bool. Preserve v1 users' customisation by composing the
+    // Profile blob inline here rather than dropping the fields.
+    //
+    // Both sides go through accessors: v2 via ConfigDefaults / Profile
+    // constants (per CLAUDE.md rule: no inline QStringLiteral for config
+    // keys) so a schema rename touches one accessor, and v1 via
+    // ConfigKeys::v1Animation*Key() so the migration is unambiguous about
+    // "reading legacy field" — the v1 shape is stable by definition but
+    // having a single source of truth keeps `grep "AnimationDuration"`
+    // returning one accessor declaration instead of N call-sites.
     QJsonObject animations;
-    moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, QLatin1String("Enabled"));
-    moveKey(v1Animations, QLatin1String("AnimationDuration"), animations, QLatin1String("Duration"));
-    moveKey(v1Animations, QLatin1String("AnimationEasingCurve"), animations, QLatin1String("EasingCurve"));
-    moveKey(v1Animations, QLatin1String("AnimationMinDistance"), animations, QLatin1String("MinDistance"));
-    moveKey(v1Animations, QLatin1String("AnimationSequenceMode"), animations, QLatin1String("SequenceMode"));
-    moveKey(v1Animations, QLatin1String("AnimationStaggerInterval"), animations, QLatin1String("StaggerInterval"));
+    moveKey(v1Animations, ConfigKeys::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
+
+    // Assemble Profile fields from the v1 keys (if present). We build
+    // the JSON shape directly using Profile's public field-name
+    // constants — matches `Profile::toJson` output without pulling
+    // phosphor-animation runtime objects into the migration path
+    // (which would bloat the daemon-startup dependency graph for a
+    // transient code path). Sharing the constants guarantees that a
+    // Profile field rename touches producer and migration together.
+    // Every clampable field goes through `qBound` against the
+    // ConfigDefaults Min/Max accessors. A v1 config with, say,
+    // `AnimationDuration=-50` or `AnimationStaggerInterval=600000` would
+    // otherwise land in the v2 blob verbatim — and `Profile::fromJson`
+    // rejects out-of-range values at load time with a warning, so the
+    // user silently loses their customisation AND the log gets noisy.
+    // Clamping at migration time prevents both: the stored value is
+    // always in-range, and `Profile::fromJson` accepts it cleanly.
+    QJsonObject profile;
+    if (v1Animations.contains(ConfigKeys::v1AnimationDurationKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationDurationKey()).toInt();
+        const int clamped = qBound(ConfigDefaults::animationDurationMin(), raw, ConfigDefaults::animationDurationMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] = clamped;
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationEasingCurveKey())) {
+        // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
+        // stack-local CurveRegistry so we store the canonical wire form
+        // (e.g. "0.33,1.00,0.68,1.00") in the Profile blob. Without this
+        // step, `Profile::fromJson` resolves the friendly name on read
+        // via the consumer's registry, but the first UI save then
+        // serialises the Curve back using `Curve::toString()` — which
+        // always emits canonical wire form — causing a spurious config
+        // rewrite on first post-migration interaction. Built-in curves
+        // auto-register via the CurveRegistry constructor, so no
+        // explicit registerBuiltins() call is needed here.
+        //
+        // Unknown specs (custom curve names from a v1 plugin that no
+        // longer exists, typos in hand-edited v1 configs) are DROPPED
+        // here rather than persisted. Persisting the raw string would
+        // make `Profile::fromJson` emit the "curve spec … did not
+        // resolve" warning on every daemon start forever; dropping the
+        // field lets the library-default OutCubic apply and silences
+        // the repeating diagnostic. The migration log below records
+        // the dropped spec so an operator investigating a silent
+        // curve change can find it.
+        const QString v1Curve = v1Animations.value(ConfigKeys::v1AnimationEasingCurveKey()).toString();
+        PhosphorAnimation::CurveRegistry registry;
+        if (const auto resolved = registry.tryCreate(v1Curve)) {
+            profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved->toString();
+        } else {
+            qInfo("migrateV1ToV2: dropping unresolved v1 curve spec '%s' — library default (OutCubic) will apply",
+                  qPrintable(v1Curve));
+        }
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationMinDistanceKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationMinDistanceKey()).toInt();
+        const int clamped =
+            qBound(ConfigDefaults::animationMinDistanceMin(), raw, ConfigDefaults::animationMinDistanceMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] = clamped;
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationSequenceModeKey())) {
+        // SequenceMode is a closed enum (AllAtOnce=0, Stagger=1 as of v2).
+        // Out-of-range values snap to the project default rather than
+        // clamping to the nearest bound — clamping would silently alias
+        // e.g. 999 onto Stagger, which is semantically different from
+        // "the user's setting is meaningless, use the default".
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationSequenceModeKey()).toInt();
+        const int resolved =
+            (raw >= ConfigDefaults::animationSequenceModeMin() && raw <= ConfigDefaults::animationSequenceModeMax())
+            ? raw
+            : ConfigDefaults::animationSequenceMode();
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] = resolved;
+    }
+    if (v1Animations.contains(ConfigKeys::v1AnimationStaggerIntervalKey())) {
+        const int raw = v1Animations.value(ConfigKeys::v1AnimationStaggerIntervalKey()).toInt();
+        const int clamped =
+            qBound(ConfigDefaults::animationStaggerIntervalMin(), raw, ConfigDefaults::animationStaggerIntervalMax());
+        profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
+    }
+    if (!profile.isEmpty()) {
+        // Stored as a JSON-encoded string under the animation-profile
+        // key — matches the schema's QMetaType::QString declaration.
+        animations[ConfigDefaults::animationProfileKey()] =
+            QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
+    }
     if (!animations.isEmpty())
-        root[QLatin1String("Animations")] = animations;
+        root[ConfigDefaults::animationsGroup()] = animations;
 
     // ── Shortcuts.Global (drop "Shortcut" suffix from some keys) ────────────
     QJsonObject globalShortcuts;
@@ -893,6 +997,107 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (allSideEffectsSucceeded) {
         root[ConfigKeys::versionKey()] = 2;
     }
+}
+
+// ── Schema migration: v2 → v3 ───────────────────────────────────────────────
+// Splits the single "this monitor / desktop / activity is disabled in PlasmaZones"
+// list into independent per-mode lists, and relocates them out of
+// Snapping.Behavior.Display (which historically gated both modes despite the
+// snapping-prefixed group name) into a mode-neutral Display group.
+//
+// Migration semantics: every entry in a v2 disabled list is copied into BOTH
+// the snapping and autotile lists in v3. Rationale: v2 didn't distinguish
+// modes, so the only safe interpretation of "the user disabled monitor X" is
+// "the user wanted X off in PlasmaZones, period" — preserve that intent in
+// both modes until the user explicitly re-enables one in the new UI.
+//
+// Side note: the v2 keys ShowOnAllMonitors and FilterByAspectRatio remain
+// in Snapping.Behavior.Display untouched — only the three Disabled* keys move.
+
+void ConfigMigration::migrateV2ToV3(QJsonObject& root)
+{
+    // Walk the canonical v2 dot-path Snapping.Behavior.Display by splitting
+    // the group accessor on '.' — this keeps the migration in lockstep with
+    // the schema instead of duplicating segment names as bare literals.
+    // The accessor still resolves to the v2 group because that group lives
+    // on past v3 (it continues to hold ShowOnAllMonitors and
+    // FilterByAspectRatio); only the three Disabled* keys move out.
+    const QStringList v2GroupSegments =
+        ConfigKeys::snappingBehaviorDisplayGroup().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    Q_ASSERT(v2GroupSegments.size() == 3);
+    const QString& snappingSeg = v2GroupSegments[0];
+    const QString& behaviorSeg = v2GroupSegments[1];
+    const QString& displaySeg = v2GroupSegments[2];
+
+    QJsonObject snapping = root.value(snappingSeg).toObject();
+    QJsonObject behavior = snapping.value(behaviorSeg).toObject();
+    QJsonObject v2Display = behavior.value(displaySeg).toObject();
+
+    // takeKey: read the v2 string value at @p key, drop the key from @p obj
+    // unconditionally if present (even when the value isn't a string — we
+    // don't want a hand-edited array or null lingering past the migration
+    // and looking like live v2 data on a v3-stamped config), and return
+    // the string representation when one is available.
+    auto takeKey = [](QJsonObject& obj, const QString& key) -> QString {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            return {};
+        }
+        const QJsonValue v = it.value();
+        QString result;
+        if (v.isString()) {
+            result = v.toString();
+        }
+        obj.erase(it);
+        return result;
+    };
+
+    const QString v2Monitors = takeKey(v2Display, ConfigKeys::v2DisabledMonitorsKey());
+    const QString v2Desktops = takeKey(v2Display, ConfigKeys::v2DisabledDesktopsKey());
+    const QString v2Activities = takeKey(v2Display, ConfigKeys::v2DisabledActivitiesKey());
+
+    // Write the duplicated lists into the new Display group. Skip empties so
+    // a clean v2 config with no disabled entries doesn't grow noise keys.
+    QJsonObject v3Display = root.value(ConfigKeys::displayGroup()).toObject();
+
+    auto writeIfNonEmpty = [&v3Display](const QString& key, const QString& value) {
+        if (!value.isEmpty()) {
+            v3Display[key] = value;
+        }
+    };
+
+    writeIfNonEmpty(ConfigKeys::snappingDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::autotileDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::snappingDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::autotileDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::snappingDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::autotileDisabledActivitiesKey(), v2Activities);
+
+    // Stitch the trimmed v2 Display object back into Snapping.Behavior, drop
+    // the Display sub-object entirely if it became empty (no ShowOnAllMonitors
+    // / FilterByAspectRatio either). Same for Snapping.Behavior itself.
+    if (v2Display.isEmpty()) {
+        behavior.remove(displaySeg);
+    } else {
+        behavior[displaySeg] = v2Display;
+    }
+    if (behavior.isEmpty()) {
+        snapping.remove(behaviorSeg);
+    } else {
+        snapping[behaviorSeg] = behavior;
+    }
+    if (snapping.isEmpty()) {
+        root.remove(snappingSeg);
+    } else {
+        root[snappingSeg] = snapping;
+    }
+
+    if (!v3Display.isEmpty()) {
+        root[ConfigKeys::displayGroup()] = v3Display;
+    }
+
+    // Stamp literal 3 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
+    root[ConfigKeys::versionKey()] = 3;
 }
 
 } // namespace PlasmaZones

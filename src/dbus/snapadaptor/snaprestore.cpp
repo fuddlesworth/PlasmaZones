@@ -8,7 +8,7 @@
 #include "../../core/windowtrackingservice.h"
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
-#include "../../snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 
 namespace PlasmaZones {
 

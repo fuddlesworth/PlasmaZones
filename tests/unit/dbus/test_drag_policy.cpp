@@ -30,13 +30,14 @@
 #include <QCoreApplication>
 #include <QObject>
 
-#include "autotile/AutotileEngine.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include "dbus/windowdragadaptor.h"
 
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 namespace {
 
@@ -55,7 +56,7 @@ public:
         return m_snapEnabled;
     }
 
-    bool isMonitorDisabled(const QString&) const override
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
     {
         return m_monitorDisabled;
     }

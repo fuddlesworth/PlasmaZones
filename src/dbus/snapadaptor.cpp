@@ -3,12 +3,13 @@
 
 #include "snapadaptor.h"
 #include "windowtrackingadaptor.h"
-#include "snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/logging.h"
 
 namespace PlasmaZones {
 
-SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings, QObject* parent)
+SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings,
+                         QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
     , m_adaptor(adaptor)
@@ -34,36 +35,36 @@ SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISe
     m_connections.reserve(7);
 
     // Navigation feedback (shared OSD path — both engines use the same signal)
-    m_connections.append(
-        connect(m_engine, &SnapEngine::navigationFeedback, adaptor, &WindowTrackingAdaptor::navigationFeedback));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::navigationFeedback, adaptor,
+                                 &WindowTrackingAdaptor::navigationFeedback));
 
     // Float state changes
-    m_connections.append(
-        connect(m_engine, &SnapEngine::windowFloatingChanged, adaptor, &WindowTrackingAdaptor::windowFloatingChanged));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::windowFloatingChanged, adaptor,
+                                 &WindowTrackingAdaptor::windowFloatingChanged));
 
     // Daemon-driven geometry application (used by autotile float restore via SnapEngine)
-    m_connections.append(connect(m_engine, &SnapEngine::applyGeometryRequested, adaptor,
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested, adaptor,
                                  &WindowTrackingAdaptor::applyGeometryRequested));
 
     // Snap-all-windows (effect collects candidates, daemon calculates)
-    m_connections.append(connect(m_engine, &SnapEngine::snapAllWindowsRequested, adaptor,
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::snapAllWindowsRequested, adaptor,
                                  &WindowTrackingAdaptor::snapAllWindowsRequested));
 
     // Batched resnap: emitBatchedResnap is called from the Daemon layer (autotile→snap
     // transition) which bypasses WTA navigation methods. Route through handleBatchedResnap
     // for proper bookkeeping (windowSnapped per entry) + applyGeometriesBatch emission.
-    m_connections.append(
-        connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, this, &SnapAdaptor::handleBatchedResnap));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::resnapToNewLayoutRequested, this,
+                                 &SnapAdaptor::handleBatchedResnap));
 
     // Batched geometry application: rotate / resnap / snap-all paths build
     // a WindowGeometryList and emit it here. WTA's applyGeometriesBatch
     // signal is the D-Bus surface.
-    m_connections.append(
-        connect(m_engine, &SnapEngine::applyGeometriesBatch, adaptor, &WindowTrackingAdaptor::applyGeometriesBatch));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometriesBatch, adaptor,
+                                 &WindowTrackingAdaptor::applyGeometriesBatch));
 
     // Window activation: focus-in-direction and cycle operations resolve a
     // target window and ask the KWin effect to raise/focus it.
-    m_connections.append(connect(m_engine, &SnapEngine::activateWindowRequested, adaptor,
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::activateWindowRequested, adaptor,
                                  &WindowTrackingAdaptor::activateWindowRequested));
 
     qCDebug(lcDbusWindow) << "SnapAdaptor initialized with" << m_connections.size() << "signal connections";
@@ -90,7 +91,7 @@ void SnapAdaptor::setScreenModeRouter(ScreenModeRouter* router)
     m_screenModeRouter = router;
 }
 
-SnapEngine* SnapAdaptor::engine() const
+PhosphorSnapEngine::SnapEngine* SnapAdaptor::engine() const
 {
     return m_engine;
 }

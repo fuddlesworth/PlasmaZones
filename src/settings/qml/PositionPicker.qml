@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Visual 3x3 position picker for zone selector placement
@@ -170,15 +171,17 @@ Item {
                             }
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 100
+                                PhosphorMotionAnimation {
+                                    profile: "widget.hover"
+                                    durationOverride: 100
                                 }
 
                             }
 
                             Behavior on border.color {
-                                ColorAnimation {
-                                    duration: 100
+                                PhosphorMotionAnimation {
+                                    profile: "widget.hover"
+                                    durationOverride: 100
                                 }
 
                             }

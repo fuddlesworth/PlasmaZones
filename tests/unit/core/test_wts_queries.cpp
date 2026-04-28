@@ -27,9 +27,9 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
-#include "snap/SnapEngine.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
@@ -39,6 +39,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================

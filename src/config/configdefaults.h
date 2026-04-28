@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QColor>
+#include <QHash>
 #include <QRectF>
 #include <QString>
 #include <QStringList>
@@ -18,6 +19,10 @@
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
 #include <PhosphorTiles/AutotileConstants.h>
+
+namespace PhosphorAnimation {
+class CurveRegistry;
+}
 
 namespace PlasmaZones {
 
@@ -103,14 +108,6 @@ public:
     {
         return false;
     }
-    static QStringList disabledDesktops()
-    {
-        return {};
-    }
-    static QStringList disabledActivities()
-    {
-        return {};
-    }
     static bool showNumbers()
     {
         return true;
@@ -120,6 +117,10 @@ public:
         return true;
     }
     static bool showOsdOnLayoutSwitch()
+    {
+        return true;
+    }
+    static bool showOsdOnDesktopSwitch()
     {
         return true;
     }
@@ -426,6 +427,10 @@ public:
     static bool restoreWindowsToZonesOnLogin()
     {
         return true;
+    }
+    static bool autoAssignAllLayouts()
+    {
+        return false;
     }
     static bool filterLayoutsByAspectRatio()
     {
@@ -907,6 +912,24 @@ public:
     {
         return 200;
     }
+    /// Default Profile JSON blob — the new Phase-4 storage format for
+    /// animation settings (decision S). Assembled from the per-field
+    /// defaults above so the library-default feel is unchanged from
+    /// the pre-migration surface. Serialized via `Profile::toJson` in
+    /// `settings.cpp`; stored as a string under
+    /// `animationsGroup/animationProfileKey`.
+    ///
+    /// This lives as a method (not a const) because `Profile::toJson`
+    /// is not constexpr and the ConfigDefaults convention for
+    /// composite defaults (e.g., `autotileDragInsertTriggers`) is a
+    /// function returning the composite value.
+    static QString animationProfile(const PhosphorAnimation::CurveRegistry& registry);
+
+    static QString shaderProfileTree()
+    {
+        return QString();
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 Flickable {
@@ -28,13 +29,15 @@ Flickable {
     property bool hideZeroBadge: false
     property bool _rebuilding: false
     property bool _movingLocally: false
-    property var _zoneCache: ({})
+    property var _zoneCache: ({
+    })
 
     function rebuildModel() {
         _rebuilding = true;
         orderModel.clear();
         let items = resolveOrder();
-        let cache = {};
+        let cache = {
+        };
         for (let i = 0; i < items.length; i++) {
             let item = items[i];
             let key = root.previewZonesKey;
@@ -231,9 +234,9 @@ Flickable {
                                         opacity: delegateHover.hovered ? 0.7 : 0.3
 
                                         Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -268,17 +271,17 @@ Flickable {
                                         }
 
                                         Behavior on border.color {
-                                            ColorAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
 
                                         Behavior on border.width {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -341,9 +344,9 @@ Flickable {
                                         Accessible.name: i18n("Move %1 up", delegateRoot.model.displayName)
 
                                         Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -363,9 +366,9 @@ Flickable {
                                         Accessible.name: i18n("Move %1 down", delegateRoot.model.displayName)
 
                                         Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "widget.reorder"
+                                                durationOverride: Kirigami.Units.shortDuration
                                             }
 
                                         }
@@ -375,17 +378,17 @@ Flickable {
                                 }
 
                                 Behavior on color {
-                                    ColorAnimation {
-                                        duration: Kirigami.Units.shortDuration
-                                        easing.type: Easing.OutCubic
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.shortDuration
                                     }
 
                                 }
 
                                 Behavior on border.width {
-                                    NumberAnimation {
-                                        duration: Kirigami.Units.shortDuration
-                                        easing.type: Easing.OutCubic
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.shortDuration
                                     }
 
                                 }
@@ -395,9 +398,9 @@ Flickable {
                                     y: delegateHover.hovered && !delegateContent.isDragging ? -1 : 0
 
                                     Behavior on y {
-                                        NumberAnimation {
-                                            duration: Kirigami.Units.shortDuration
-                                            easing.type: Easing.OutCubic
+                                        PhosphorMotionAnimation {
+                                            profile: "widget.reorder"
+                                            durationOverride: Kirigami.Units.shortDuration
                                         }
 
                                     }
@@ -405,9 +408,9 @@ Flickable {
                                 }
 
                                 Behavior on scale {
-                                    NumberAnimation {
-                                        duration: Kirigami.Units.shortDuration
-                                        easing.type: Easing.OutCubic
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.reorder"
+                                        durationOverride: Kirigami.Units.shortDuration
                                     }
 
                                 }
@@ -417,9 +420,9 @@ Flickable {
                             Behavior on y {
                                 enabled: !dragArea.drag.active
 
-                                NumberAnimation {
-                                    duration: Kirigami.Units.longDuration
-                                    easing.type: Easing.OutCubic
+                                PhosphorMotionAnimation {
+                                    profile: "widget.reorder"
+                                    durationOverride: Kirigami.Units.longDuration
                                 }
 
                             }

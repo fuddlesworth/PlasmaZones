@@ -104,6 +104,15 @@ endif()
 if(NOT TARGET Qt6::ShaderToolsPrivate)
     find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 endif()
+# QuickPrivate is required by libs/phosphor-animation/qml — must be discovered
+# at top-level so the IMPORTED target is global and visible to every consumer
+# of `PhosphorAnimation::PhosphorAnimationQml`. Without this, Qt's static-QML-
+# plugin dependency walker emits "QuickPrivate target is mentioned as a
+# dependency … but not declared" when collecting transitive deps from the
+# `src/shared` static-plugin consumer.
+if(NOT TARGET Qt6::QuickPrivate)
+    find_package(Qt6QuickPrivate CONFIG REQUIRED)
+endif()
 
 # Optional: Qt6::ShaderTools for shader effects support
 # RenderNode shaders use raw GLSL - no Qt6::ShaderTools compilation needed
@@ -318,6 +327,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
+add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
 add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline — needed by phosphor-screens
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
@@ -328,11 +338,20 @@ add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
+# PlasmaZones consumes the phosphor-animation QML module for shell UI
+# animations (Phase 4). Setting the flag BEFORE add_subdirectory picks
+# up the option() default; the QML subdirectory auto-enables
+# PHOSPHOR_ANIMATION_QUICK as a transitive dependency.
+set(PHOSPHOR_ANIMATION_QML ON CACHE BOOL "Build org.phosphor.animation QML module")
 add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
+add_subdirectory(libs/phosphor-animation-layer) # ISurfaceAnimator backed by phosphor-animation (Phase 5)
+add_subdirectory(libs/phosphor-animation-shaders) # shader-backed animation pipeline (Phase 6)
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
 add_subdirectory(libs/phosphor-engine-api)  # unified placement engine contracts (INTERFACE)
+add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
+add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 
 # Source directories
 add_subdirectory(src)
@@ -378,6 +397,55 @@ install(DIRECTORY data/layouts/
     FILES_MATCHING PATTERN "*.json"
 )
 
+# Install shared named curves. Profile JSONs reference these by name
+# (e.g. `"curve": "widget-out"`) so a single edit to a curve file
+# retunes every profile that uses it, and users can drop their own
+# JSON under ~/.local/share/plasmazones/curves/ to override a shipped
+# curve system-wide. The daemon's CurveLoader scans this path before
+# ProfileLoader runs.
+install(DIRECTORY data/curves/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/curves
+    FILES_MATCHING PATTERN "*.json"
+)
+
+# Install shell-opinionated animation profile defaults (per-path
+# PhosphorAnimation Profile blobs). The daemon's ProfileLoader scans
+# ${XDG_DATA_DIRS}/plasmazones/profiles at startup; user overrides at
+# ~/.local/share/plasmazones/profiles win over these.
+install(DIRECTORY data/profiles/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/profiles
+    FILES_MATCHING PATTERN "*.json"
+)
+
+# Build-time check: every `profile: "..."` string in the shipped QML
+# must correspond to a data/profiles/<name>.json file — otherwise the
+# registry silently falls back to library defaults at runtime and the
+# typo only surfaces via UX review. The custom target depends on every
+# shipped profile JSON + every QML file we scan, so it re-runs when
+# either side changes. Falls back to a no-op echo if python3 is
+# missing, so the check is advisory for distros that build without a
+# python interpreter (the daemon itself does not require one).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    file(GLOB _pz_profile_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/profiles/*.json")
+    file(GLOB _pz_curve_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/curves/*.json")
+    file(GLOB_RECURSE _pz_profile_qmls
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/editor/qml/*.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/settings/qml/*.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.qml"
+    )
+    add_custom_target(check-animation-profiles ALL
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
+                ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS ${_pz_profile_jsons} ${_pz_curve_jsons} ${_pz_profile_qmls}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
+        COMMENT "Verifying PhosphorAnimation profile names referenced in QML and curve refs in profiles"
+        VERBATIM
+    )
+endif()
+
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed)
 install(DIRECTORY data/shaders/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/shaders
@@ -388,6 +456,18 @@ install(DIRECTORY data/shaders/
     PATTERN "*.frag"
     PATTERN "*.png"
     PATTERN "*.svg"
+)
+
+# Install bundled animation transition shader packs. The daemon's
+# AnimationShaderRegistry scans ${XDG_DATA_DIRS}/plasmazones/animations
+# at startup; user overrides at ~/.local/share/plasmazones/animations win.
+install(DIRECTORY data/animations/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/animations
+    FILES_MATCHING
+    PATTERN "metadata.json"
+    PATTERN "*.frag"
+    PATTERN "*.vert"
+    PATTERN "*.png"
 )
 
 # Install bundled scripted tiling algorithms

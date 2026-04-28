@@ -121,10 +121,9 @@ Q_SIGNALS:
     /// Emitted when windows are released from engine management.
     void windowsReleased(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
-    /// Emitted when the engine wants to persist changed settings values.
-    /// The QVariantMap contains key-value pairs the daemon should write
-    /// to its settings store (e.g. {"autotileSplitRatio": 0.6}).
-    void settingsWriteBackRequested(const QVariantMap& values);
+    /// Emitted when the engine writes tuning values back to the settings
+    /// object and wants the daemon to persist them to disk.
+    void settingsPersistRequested();
 
 private:
     QHash<QString, UnmanagedEntry> m_unmanagedGeometries;

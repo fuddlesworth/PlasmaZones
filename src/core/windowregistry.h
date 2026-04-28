@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorEngineApi/IWindowRegistry.h>
 #include <QHash>
 #include <QMultiHash>
 #include <QObject>
@@ -63,7 +64,7 @@ struct WindowMetadata
  * This class is purely in-memory. It's owned by the daemon root and outlives
  * all consumers.
  */
-class PLASMAZONES_EXPORT WindowRegistry : public QObject
+class PLASMAZONES_EXPORT WindowRegistry : public QObject, public PhosphorEngineApi::IWindowRegistry
 {
     Q_OBJECT
 
@@ -113,7 +114,7 @@ public:
      * Use this in place of every PhosphorIdentity::WindowId::extractAppId(windowId) call site.
      * Unknown windows return QString() — callers must handle that case.
      */
-    QString appIdFor(const QString& instanceId) const;
+    Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
 
     /**
      * @brief All live instance ids whose current appId matches @p appId.
@@ -168,7 +169,7 @@ public:
      *
      * Thread safety: call only from the main (Qt event loop) thread.
      */
-    QString canonicalizeWindowId(const QString& rawWindowId);
+    Q_INVOKABLE QString canonicalizeWindowId(const QString& rawWindowId) override;
 
     /**
      * @brief Const-safe variant for read-only call sites.
@@ -177,7 +178,7 @@ public:
      * raw input otherwise. Never mutates state. Use in const methods that
      * want a best-effort lookup without committing to a canonical form.
      */
-    QString canonicalizeForLookup(const QString& rawWindowId) const;
+    Q_INVOKABLE QString canonicalizeForLookup(const QString& rawWindowId) const override;
 
     /**
      * @brief Release a window's canonical entry.

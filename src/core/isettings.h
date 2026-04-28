@@ -15,6 +15,8 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+
 #include <QColor>
 #include <QObject>
 #include <QString>
@@ -105,6 +107,8 @@ public:
     virtual void setAnimationSequenceMode(int mode) = 0;
     virtual int animationStaggerInterval() const = 0;
     virtual void setAnimationStaggerInterval(int ms) = 0;
+    virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
+    virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -216,12 +220,16 @@ Q_SIGNALS:
     void toggleActivationChanged();
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
-    void disabledMonitorsChanged();
-    void disabledDesktopsChanged();
-    void disabledActivitiesChanged();
+    // The per-mode disable signals carry the mode that flipped so listeners can
+    // re-read only the relevant list. Pre-v3 these were no-arg signals; the mode
+    // argument was added when the storage was split into per-mode lists.
+    void disabledMonitorsChanged(PhosphorZones::AssignmentEntry::Mode mode);
+    void disabledDesktopsChanged(PhosphorZones::AssignmentEntry::Mode mode);
+    void disabledActivitiesChanged(PhosphorZones::AssignmentEntry::Mode mode);
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
+    void showOsdOnDesktopSwitchChanged();
     void showNavigationOsdChanged();
     void osdStyleChanged();
     void overlayDisplayModeChanged();
@@ -257,6 +265,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
@@ -402,6 +411,7 @@ Q_SIGNALS:
     void animationMinDistanceChanged();
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
+    void shaderProfileTreeChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

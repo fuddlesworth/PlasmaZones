@@ -5,7 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "../snap/SnapState.h"
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>

@@ -504,9 +504,9 @@
         </signal>
         <signal name="applyGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>
-            <arg name="geometries" type="a(siiii)">
+            <arg name="geometries" type="a(siiiis)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
             </arg>
             <arg name="action" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, snap_all) for feedback."/>

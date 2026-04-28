@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Top bar component for the layout editor
@@ -83,9 +84,9 @@ ToolBar {
                         opacity: screenButton.isActive ? 1 : (screenButton.enabled ? 0.8 : 0.4)
 
                         Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.animDuration
-                                easing.type: Theme.animEasing
+                            PhosphorMotionAnimation {
+                                profile: "panel.popup"
+                                durationOverride: Theme.animDuration
                             }
 
                         }
@@ -99,17 +100,17 @@ ToolBar {
                         border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.animDuration
-                                easing.type: Theme.animEasing
+                            PhosphorMotionAnimation {
+                                profile: "panel.popup"
+                                durationOverride: Theme.animDuration
                             }
 
                         }
 
                         Behavior on border.color {
-                            ColorAnimation {
-                                duration: Theme.animDuration
-                                easing.type: Theme.animEasing
+                            PhosphorMotionAnimation {
+                                profile: "panel.popup"
+                                durationOverride: Theme.animDuration
                             }
 
                         }
@@ -212,17 +213,17 @@ ToolBar {
                     }
 
                     Behavior on color {
-                        ColorAnimation {
-                            duration: Theme.animDuration
-                            easing.type: Theme.animEasing
+                        PhosphorMotionAnimation {
+                            profile: "panel.popup"
+                            durationOverride: Theme.animDuration
                         }
 
                     }
 
                     Behavior on border.color {
-                        ColorAnimation {
-                            duration: Theme.animDuration
-                            easing.type: Theme.animEasing
+                        PhosphorMotionAnimation {
+                            profile: "panel.popup"
+                            durationOverride: Theme.animDuration
                         }
 
                     }

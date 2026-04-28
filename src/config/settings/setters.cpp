@@ -8,7 +8,7 @@
 #include "../../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "../../autotile/AutotileConfig.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
 
 namespace PlasmaZones {
 
