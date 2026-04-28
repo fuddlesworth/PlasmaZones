@@ -469,6 +469,10 @@ void Daemon::setupAnimationShaderEffects()
         m_animationShaderRegistry->addSearchPath(dir, dir == userAnimDir);
 
     m_animationShaderRegistry->refresh();
+
+    if (m_overlayService) {
+        m_overlayService->setAnimationShaderRegistry(m_animationShaderRegistry.get());
+    }
 }
 
 Daemon::~Daemon()

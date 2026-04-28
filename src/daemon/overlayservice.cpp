@@ -802,6 +802,13 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
     }
 }
 
+void OverlayService::setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry)
+{
+    if (m_surfaceAnimator) {
+        m_surfaceAnimator->setAnimationShaderRegistry(registry);
+    }
+}
+
 void OverlayService::updateSettings(ISettings* settings)
 {
     setSettings(settings);

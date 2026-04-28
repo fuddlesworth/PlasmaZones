@@ -53,6 +53,10 @@ namespace PhosphorSurfaces {
 class SurfaceManager;
 }
 
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
+
 namespace PlasmaZones {
 class WindowThumbnailService;
 class ShaderRegistry;
@@ -142,6 +146,7 @@ public:
 
     void updateLayout(PhosphorZones::Layout* layout) override;
     void updateSettings(ISettings* settings) override;
+    void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
     void updateGeometries() override;
 
     // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
