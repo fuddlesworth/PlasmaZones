@@ -7,6 +7,9 @@
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/StaggerTimer.h>
 
+#include <QFile>
+#include <QJsonDocument>
+
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <PhosphorIdentity/ScreenId.h>
@@ -147,7 +150,7 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
 }
 
 PlasmaZonesEffect::PlasmaZonesEffect()
-    : Effect()
+    : OffscreenEffect()
     , m_autotileHandler(std::make_unique<AutotileHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
@@ -1836,6 +1839,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationStaggerInterval"), [this](const QVariant& v) {
         m_cachedAnimationStaggerInterval = qBound(10, v.toInt(), 200);
     });
+    loadShaderProfileFromDbus();
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });
@@ -3462,6 +3466,13 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
         }
 
+        {
+            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
+            if (!shaderProfile.effectiveEffectId().isEmpty()) {
+                beginShaderTransition(window, shaderProfile.effectiveEffectId());
+            }
+        }
+
         repaintSnapRegions(window, oldFrame, geo);
         return;
     }
@@ -4050,7 +4061,73 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::WindowPaintData& data)
 {
     m_windowAnimator->applyTransform(w, data);
-    KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+
+    auto sit = m_shaderTransitions.find(w);
+    if (sit != m_shaderTransitions.end() && sit->second.shader) {
+        const auto* anim = m_windowAnimator->animationFor(w);
+        if (anim && anim->isAnimating()) {
+            const QRectF from = anim->from();
+            const QRectF to = anim->to();
+            const QRectF cur = anim->value();
+            const qreal totalDist = QPointF(to.x() - from.x(), to.y() - from.y()).manhattanLength()
+                + qAbs(to.width() - from.width()) + qAbs(to.height() - from.height());
+            const qreal curDist = QPointF(cur.x() - from.x(), cur.y() - from.y()).manhattanLength()
+                + qAbs(cur.width() - from.width()) + qAbs(cur.height() - from.height());
+            const qreal progress = (totalDist > 0.001) ? qBound(0.0, curDist / totalDist, 1.0) : 1.0;
+            sit->second.shader->setUniform(sit->second.iTimeLoc, static_cast<float>(progress));
+            const QRectF geo = w->frameGeometry();
+            sit->second.shader->setUniform(sit->second.iResolutionLoc, QVector2D(geo.width(), geo.height()));
+        } else {
+            endShaderTransition(w);
+        }
+    }
+
+    OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const QString& effectId)
+{
+    if (effectId.isEmpty() || !window)
+        return;
+
+    const auto eff = m_animationShaderRegistry.effect(effectId);
+    if (!eff.isValid())
+        return;
+
+    auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
+                                                                        QFile(eff.fragmentShaderPath).readAll());
+    if (!shader || !shader->isValid()) {
+        qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
+        return;
+    }
+
+    ShaderTransition transition;
+    transition.iTimeLoc = shader->uniformLocation("iTime");
+    transition.iResolutionLoc = shader->uniformLocation("iResolution");
+    transition.shader = std::move(shader);
+
+    redirect(window);
+    setShader(window, transition.shader.get());
+    m_shaderTransitions.emplace(window, std::move(transition));
+}
+
+void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
+{
+    if (!window)
+        return;
+    if (m_shaderTransitions.erase(window)) {
+        unredirect(window);
+    }
+}
+
+void PlasmaZonesEffect::loadShaderProfileFromDbus()
+{
+    loadSettingAsync(QStringLiteral("shaderProfileTree"), [this](const QVariant& v) {
+        const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+        if (doc.isObject()) {
+            m_shaderProfileTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+        }
+    });
 }
 
 } // namespace PlasmaZones

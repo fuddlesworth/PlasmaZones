@@ -10,9 +10,14 @@
 #include <trigger_parser.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <effect/offscreeneffect.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
 #include <QJsonArray>
@@ -79,7 +84,7 @@ class DragTracker;
  * - Keyboard modifier state via QGuiApplication
  * - Window move/resize state via isUserMove()
  */
-class PlasmaZonesEffect : public KWin::Effect
+class PlasmaZonesEffect : public KWin::OffscreenEffect
 {
     Q_OBJECT
 
@@ -481,6 +486,21 @@ private:
     /// time) outlives the animator on shutdown.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
+
+    // Phase 6: per-window shader transitions via OffscreenEffect
+    PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
+    PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    struct ShaderTransition
+    {
+        std::unique_ptr<KWin::GLShader> shader;
+        int iTimeLoc = -1;
+        int iResolutionLoc = -1;
+    };
+    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
+    void endShaderTransition(KWin::EffectWindow* window);
+    void loadShaderProfileFromDbus();
+
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
 
