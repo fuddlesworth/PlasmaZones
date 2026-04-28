@@ -528,8 +528,20 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     m_layoutPickerScreen = screen;
     m_layoutPickerScreenId = resolvedId;
 
-    // Build layouts list (use virtual-aware screen ID for correct layout resolution)
-    QVariantList layoutsList = buildLayoutsList(resolvedId);
+    // Build layouts list (use virtual-aware screen ID for correct layout
+    // resolution). Pass the screen's available geometry as the autotile
+    // preview canvas so algorithm thumbnails (BSP, fibonacci, …) split
+    // along the same axis the live tiler will. Without this, on a
+    // portrait VS the picker shows BSP as left/right while the tiler
+    // actually places windows top/bottom.
+    QSize autotileCanvas;
+    if (m_screenManager) {
+        const QRect avail = m_screenManager->screenAvailableGeometry(resolvedId);
+        if (avail.isValid() && avail.width() > 0 && avail.height() > 0) {
+            autotileCanvas = avail.size();
+        }
+    }
+    QVariantList layoutsList = buildLayoutsList(resolvedId, autotileCanvas);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         destroyLayoutPickerWindow();

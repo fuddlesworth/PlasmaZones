@@ -1093,14 +1093,15 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     return flags;
 }
 
-QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
+QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize autotilePreviewCanvas) const
 {
     const auto inc = resolvePerScreenLayoutInclude(screenId);
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
         inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
-        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource);
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
+        autotilePreviewCanvas);
     return PlasmaZones::toVariantList(entries);
 }
 

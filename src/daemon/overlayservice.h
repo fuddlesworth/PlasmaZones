@@ -409,7 +409,17 @@ private:
                                       PhosphorZones::Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
-    QVariantList buildLayoutsList(const QString& screenId = QString()) const;
+    /// Build the popup / picker layouts list for @p screenId.
+    ///
+    /// @p autotilePreviewCanvas — when non-empty, autotile algorithm
+    ///   previews are computed against this rect rather than the default
+    ///   square canvas. Pass the target screen's available geometry size
+    ///   when the consumer is per-screen (layout picker, OSD) so
+    ///   aspect-sensitive algorithms (BSP, fibonacci, …) preview along
+    ///   the same split axis the live tiler will render. Empty (default)
+    ///   keeps the legacy square-canvas behaviour for screen-agnostic
+    ///   consumers.
+    QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
     /// Per-screen layout-family filter used for the zone selector.
     /// `manual` enables PhosphorZones layout entries; `autotile` enables
     /// algorithm previews. Both default-true is "show everything"; the
