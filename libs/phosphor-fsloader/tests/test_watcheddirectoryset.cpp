@@ -115,9 +115,15 @@ private Q_SLOTS:
         QCOMPARE(strategy.scanCount, baseline + 1);
     }
 
-    /// requestRescan delivered DURING a scan (e.g. from inside
-    /// performScan via a nested signal) is replayed at the end of the
-    /// running scan rather than being silently dropped.
+    /// requestRescan delivered DURING a scan (synchronously, while
+    /// performScan is on the stack) is replayed at the end of the
+    /// running scan rather than being silently dropped. This is the
+    /// in-flight race-guard path: m_rescanInProgress is true at the
+    /// time of the call, so requestRescan must set the
+    /// m_rescanRequestedWhileRunning flag and rescanAll must re-arm
+    /// the debounce timer after returning. Without the guard, the
+    /// debounce timer is idle while rescanAll runs, m_debounceTimer.start()
+    /// is a no-op for the inner call, and the second scan never fires.
     void testRescanRace_requestDuringScan()
     {
         class ReentrantStrategy : public IScanStrategy
@@ -131,9 +137,12 @@ private Q_SLOTS:
                 ++scanCount;
                 if (!reentered && set) {
                     reentered = true;
-                    QTimer::singleShot(0, [this]() {
-                        set->requestRescan();
-                    });
+                    // Synchronous re-entry — the call lands while the
+                    // outer rescanAll is still on the stack and
+                    // m_rescanInProgress == true. Exercises the
+                    // race-guard branch (must set the deferred flag,
+                    // not start the debounce timer directly).
+                    set->requestRescan();
                 }
                 return {};
             }
@@ -145,8 +154,10 @@ private Q_SLOTS:
         strategy.set = &set;
         set.registerDirectory(m_tmp->path(), LiveReload::Off);
 
-        // Initial registration ran one scan; the singleShot inside it
-        // schedules a follow-up which must fire after the debounce.
+        // Initial registration ran scan #1; the synchronous
+        // requestRescan inside it triggered the race guard, which
+        // re-arms the debounce timer at the end of rescanAll. Wait for
+        // scan #2 to fire from that re-armed timer.
         QTRY_COMPARE_WITH_TIMEOUT(strategy.scanCount, 2, 1000);
     }
 

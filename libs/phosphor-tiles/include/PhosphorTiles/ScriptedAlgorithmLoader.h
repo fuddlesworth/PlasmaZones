@@ -87,7 +87,7 @@ Q_SIGNALS:
 
 private:
     class JsScanStrategy;
-    QStringList performScan();
+    QStringList performScan(const QStringList& directoriesInScanOrder);
 
     void loadFromDirectory(const QString& dir, bool isUserDir);
     QStringList algorithmDirectories() const;

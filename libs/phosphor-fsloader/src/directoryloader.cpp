@@ -79,7 +79,12 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
     // containing more than `m_maxEntries` files would trip the cap
     // BEFORE the user dir was scanned, silently dropping every user
     // override. Reverse-iteration drops *system* entries on cap-trip,
-    // never user overrides.
+    // never user overrides — assuming the user dir alone fits within
+    // the cap. If the user dir contains more than `m_maxEntries`
+    // files the cap trips during the user pass and system overrides
+    // are then never scanned at all (the warning below makes the
+    // pruning-or-bumping decision explicit). User-wins layering is
+    // never violated either way.
     QHash<QString, Entry> fresh;
     QHash<QString, ParsedEntry> freshParsedByKey;
 

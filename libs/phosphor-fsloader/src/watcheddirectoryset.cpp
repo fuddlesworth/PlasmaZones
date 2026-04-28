@@ -50,17 +50,26 @@ bool isForbiddenWatchRoot(const QString& path)
     if (samePath(cleaned, home)) {
         return true;
     }
-    // Also refuse to watch the GenericDataLocation / ConfigLocation
-    // roots themselves — a rescan fires for every unrelated app writing
-    // into those shared trees (GTK recently-used files, KDE session
-    // state, etc.), which is effectively equivalent to watching $HOME.
-    const QString genericData = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
-    if (samePath(cleaned, genericData)) {
-        return true;
-    }
-    const QString configLoc = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
-    if (samePath(cleaned, configLoc)) {
-        return true;
+    // Also refuse to watch high-churn shared roots — a rescan fires for every
+    // unrelated app writing into those trees, effectively equivalent to
+    // watching $HOME. GenericData/Config catch the obvious XDG roots; Temp,
+    // Runtime, and Cache catch consumers whose target lives under
+    // /tmp, /run/user/UID, or ~/.cache and where the climb would otherwise
+    // stop at the high-traffic root. samePath() is case-folded on macOS/Win
+    // so re-cased paths still trip the guard.
+    using QSP = QStandardPaths;
+    static constexpr QSP::StandardLocation kForbidden[] = {
+        QSP::GenericDataLocation, QSP::GenericConfigLocation, QSP::TempLocation,
+        QSP::RuntimeLocation,     QSP::CacheLocation,         QSP::GenericCacheLocation,
+    };
+    for (const auto loc : kForbidden) {
+        const QString rootPath = QSP::writableLocation(loc);
+        if (rootPath.isEmpty()) {
+            continue;
+        }
+        if (samePath(cleaned, QDir::cleanPath(rootPath))) {
+            return true;
+        }
     }
     return false;
 }
@@ -245,10 +254,13 @@ void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
         } else if (!m_watchedFiles.contains(path)) {
             // addPath returned false AND we didn't already have it —
             // means QFSW couldn't watch this path (permissions, inotify
-            // quota hit, path vanished between stat and addPath). Log
-            // once at debug so it shows up under lcWatcher if the user
-            // is troubleshooting.
-            qCDebug(lcWatcher) << "syncFileWatches: failed to add watch for" << path;
+            // quota hit, path vanished between stat and addPath). Warn
+            // because the most common production cause is hitting the
+            // inotify max_user_watches sysctl, which silently degrades
+            // hot-reload to "doesn't work" — users troubleshooting
+            // need this visible at default log levels.
+            qCWarning(lcWatcher) << "syncFileWatches: failed to add watch for" << path
+                                 << "— may be a permissions issue or inotify quota exhaustion";
         }
     }
 }
@@ -378,6 +390,8 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
             ancestor = next;
         }
         if (ancestor.isEmpty() || !QDir(ancestor).exists()) {
+            qCDebug(lcWatcher) << "attachWatcherForDir: no existing ancestor for" << directory
+                               << "— call requestRescan() after creating the directory tree.";
             return;
         }
         // Canonicalise the ancestor path — cleanPath collapses trailing

@@ -33,29 +33,27 @@ public:
     explicit ShaderRegistry(QObject* parent = nullptr)
         : PhosphorShell::ShaderRegistry(parent)
     {
-        // Register PlasmaZones-specific search paths
+        // Ensure user shader dir exists BEFORE registering — so the
+        // initial scan picks up any user-shipped shaders without an
+        // additional rescan, and so the watcher attaches a direct watch
+        // (vs. a parent-watch promotion).
         const QString userDir = userShaderDir();
+        QDir(userDir).mkpath(QStringLiteral("."));
+
         const QStringList systemDirs =
             QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
                                       QStandardPaths::LocateDirectory);
 
-        // System dirs first (lower priority), user dir last (overrides)
-        QStringList reversed = systemDirs;
-        std::reverse(reversed.begin(), reversed.end());
-        for (const QString& dir : std::as_const(reversed)) {
-            addSearchPath(dir);
-        }
+        // Build the full registration list once: system dirs first
+        // (lower priority), user dir last (last-writer-wins lets the
+        // user override bundled shaders). Single batched call so the
+        // base runs exactly one scan instead of N+1.
+        QStringList paths = systemDirs;
+        std::reverse(paths.begin(), paths.end());
         if (!systemDirs.contains(userDir)) {
-            addSearchPath(userDir);
+            paths.append(userDir);
         }
-
-        // Ensure user shader dir exists
-        QDir dir(userDir);
-        if (!dir.exists()) {
-            dir.mkpath(QStringLiteral("."));
-        }
-
-        refresh();
+        addSearchPaths(paths);
     }
 
     ~ShaderRegistry() override = default;

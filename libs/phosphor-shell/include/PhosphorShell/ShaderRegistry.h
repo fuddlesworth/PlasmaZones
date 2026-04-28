@@ -93,11 +93,19 @@ public:
 
     // ── Search paths ──────────────────────────────────────────────────
 
-    /// Add a directory to search for shader subdirectories.
+    /// Add a directory to search for shader subdirectories. Forwards to
+    /// the batched form so the underlying watcher only runs one initial
+    /// scan; prefer `addSearchPaths` directly when registering more than
+    /// one path during construction (avoids N redundant scans, one per
+    /// path).
     void addSearchPath(const QString& path);
 
-    /// Remove a previously added search path.
-    void removeSearchPath(const QString& path);
+    /// Add multiple search-path directories in one shot. Later paths take
+    /// priority over earlier ones on shader-id collision (last-writer-
+    /// wins, mirroring `addSearchPath` registration order). Prefer this
+    /// over a loop of `addSearchPath` calls — a single batched call runs
+    /// exactly one scan instead of N.
+    void addSearchPaths(const QStringList& paths);
 
     /// Current search paths.
     QStringList searchPaths() const;
@@ -171,7 +179,7 @@ Q_SIGNALS:
 
 private:
     class ShaderScanStrategy;
-    QStringList performScan();
+    QStringList performScan(const QStringList& directoriesInScanOrder);
 
     void loadShadersFromPath(const QString& searchPath, bool isUserShader);
     void loadShaderFromDir(const QString& shaderDir, bool isUserShader);

@@ -26,11 +26,13 @@ namespace PhosphorTiles {
 // helper used by the scan strategy.
 static constexpr int MaxWatchedFilesPerDir = 100;
 
-/// Scan strategy backing the loader's `WatchedDirectorySet`. The strategy
-/// ignores the base's directory list and re-derives the algorithm
-/// directories from `m_subdirectory` on every rescan — XDG path
-/// resolution can change between rescans (e.g. user-dir creation) and
-/// the registry-side stale-script purge depends on a full re-walk.
+/// Scan strategy backing the loader's `WatchedDirectorySet`. Forwards
+/// the base's registered directory list verbatim. The list is kept up
+/// to date by `scanAndRegister`, which calls `registerDirectories` with
+/// the freshly-resolved XDG paths on every invocation — so watcher-
+/// triggered rescans (file edits, parent-watch promotion) reuse the
+/// snapshot from the last `scanAndRegister` and avoid redundantly
+/// re-resolving XDG paths on every inotify wake.
 class ScriptedAlgorithmLoader::JsScanStrategy : public PhosphorFsLoader::IScanStrategy
 {
 public:
@@ -39,9 +41,9 @@ public:
     {
     }
 
-    QStringList performScan(const QStringList&) override
+    QStringList performScan(const QStringList& directoriesInScanOrder) override
     {
-        return m_loader->performScan();
+        return m_loader->performScan(directoriesInScanOrder);
     }
 
 private:
@@ -162,20 +164,33 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     // freshly-created user dir gets a direct watch instead of staying
     // proxied via parent-watch.
     ensureUserDirectoryExists();
-    if (!m_subdirectory.isEmpty()) {
-        const QStringList dirs = algorithmDirectories();
-        if (!dirs.isEmpty()) {
-            m_watcher->registerDirectories(dirs, PhosphorFsLoader::LiveReload::On);
-        }
+
+    // Snapshot the prior signature BEFORE any scan runs, so the
+    // returned bool reflects "did the registered script set change as a
+    // result of this scanAndRegister call" — not "did anything change
+    // between scan-1 and scan-2 of the same on-disk state" (which is
+    // what an after-scan capture would observe).
+    const QByteArray priorSignature = m_lastScriptSignature;
+
+    if (m_subdirectory.isEmpty()) {
+        return false;
+    }
+    const QStringList dirs = algorithmDirectories();
+    if (dirs.isEmpty()) {
+        return false;
     }
 
-    // Synchronous rescan via the strategy. Returns the change flag.
-    const QByteArray priorSignature = m_lastScriptSignature;
-    m_watcher->rescanNow();
+    // registerDirectories runs the strategy synchronously, which clears
+    // and rebuilds m_scriptIdToPath and updates m_lastScriptSignature
+    // exactly once. No follow-up rescanNow() — that would re-scan the
+    // same on-disk state we just captured, doubling the work and
+    // (worse) making the priorSignature comparison meaningless because
+    // it would be against the post-first-scan signature.
+    m_watcher->registerDirectories(dirs, PhosphorFsLoader::LiveReload::On);
     return m_lastScriptSignature != priorSignature;
 }
 
-QStringList ScriptedAlgorithmLoader::performScan()
+QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesInScanOrder)
 {
     auto* registry = m_registry;
 
@@ -186,10 +201,11 @@ QStringList ScriptedAlgorithmLoader::performScan()
     QHash<QString, QString> oldScriptIdToPath = m_scriptIdToPath;
     m_scriptIdToPath.clear();
 
-    // Find ALL algorithm directories across XDG data paths
-    QStringList dirs = algorithmDirectories();
-
-    // Reverse: system dirs first, user dirs last (user overrides system by same filename)
+    // Reverse: registration order is user-first (algorithmDirectories
+    // prepends the user dir). Iterate system-first / user-last so a
+    // user filename overrides a same-named bundled script via
+    // last-writer-wins in `loadFromDirectory`.
+    QStringList dirs = directoriesInScanOrder;
     std::reverse(dirs.begin(), dirs.end());
 
     const QString userDir = userAlgorithmDir();

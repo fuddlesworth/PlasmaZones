@@ -88,6 +88,10 @@ static QString shaderNameToUuid(const QString& name)
 /// Walks subdirectories of every registered search path, parses
 /// `metadata.json` per shader, and reports the file/subdir paths that
 /// the base must re-arm individual watches on after each rescan.
+///
+/// Forwards the base's directory list verbatim into the registry's own
+/// `performScan(dirs)` — `m_searchPaths` and the base's registered set
+/// are kept in lockstep by `addSearchPaths`, so either is authoritative.
 class ShaderRegistry::ShaderScanStrategy : public PhosphorFsLoader::IScanStrategy
 {
 public:
@@ -96,14 +100,9 @@ public:
     {
     }
 
-    QStringList performScan(const QStringList&) override
+    QStringList performScan(const QStringList& directoriesInScanOrder) override
     {
-        // Ignore the base's directory list and re-walk
-        // `m_reg->m_searchPaths` directly. The two are normally the same,
-        // but `removeSearchPath` removes from `m_searchPaths` only
-        // (the base has no `unregisterDirectory`) — so consulting the
-        // registry's own list keeps removal semantically correct.
-        return m_reg->performScan();
+        return m_reg->performScan(directoriesInScanOrder);
     }
 
 private:
@@ -135,21 +134,30 @@ ShaderRegistry::~ShaderRegistry() = default;
 
 void ShaderRegistry::addSearchPath(const QString& path)
 {
-    if (path.isEmpty() || m_searchPaths.contains(path)) {
-        return;
-    }
-    m_searchPaths.append(path);
-    // Register with the watcher set — its synchronous initial scan
-    // through the strategy populates `m_shaders` and emits
-    // `shadersChanged` via the connected `rescanCompleted` signal.
-    m_watcher->registerDirectory(path, PhosphorFsLoader::LiveReload::On);
-    qCInfo(lcShaderRegistry) << "Added search path:" << path;
+    addSearchPaths(QStringList{path});
 }
 
-void ShaderRegistry::removeSearchPath(const QString& path)
+void ShaderRegistry::addSearchPaths(const QStringList& paths)
 {
-    if (m_searchPaths.removeAll(path) > 0) {
-        qCInfo(lcShaderRegistry) << "Removed search path:" << path;
+    QStringList toRegister;
+    toRegister.reserve(paths.size());
+    for (const QString& path : paths) {
+        if (path.isEmpty() || m_searchPaths.contains(path)) {
+            continue;
+        }
+        m_searchPaths.append(path);
+        toRegister.append(path);
+    }
+    if (toRegister.isEmpty()) {
+        return;
+    }
+    // Single batched register — the watcher runs ONE synchronous scan
+    // for the whole batch, populates `m_shaders` via the strategy, and
+    // emits `shadersChanged` once. Avoids the N-rescans-on-startup
+    // amplification that a loop of single-path registrations would cause.
+    m_watcher->registerDirectories(toRegister, PhosphorFsLoader::LiveReload::On);
+    for (const QString& path : std::as_const(toRegister)) {
+        qCInfo(lcShaderRegistry) << "Added search path:" << path;
     }
 }
 
@@ -189,14 +197,14 @@ void ShaderRegistry::refresh()
     qCInfo(lcShaderRegistry) << "Total shaders=" << m_shaders.size();
 }
 
-QStringList ShaderRegistry::performScan()
+QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrder)
 {
     m_shaders.clear();
 
     if (m_shadersEnabled) {
         // Load from each search path in order.
         // Later paths can override earlier ones (same UUID = last writer wins).
-        for (const QString& path : std::as_const(m_searchPaths)) {
+        for (const QString& path : directoriesInScanOrder) {
             loadShadersFromPath(path, false);
         }
     }
@@ -207,7 +215,7 @@ QStringList ShaderRegistry::performScan()
     // every rescan to compensate for cmake --install's
     // delete+recreate inode churn.
     QStringList desiredWatches;
-    for (const QString& dir : std::as_const(m_searchPaths)) {
+    for (const QString& dir : directoriesInScanOrder) {
         QDir dirObj(dir);
         if (!dirObj.exists()) {
             continue;
