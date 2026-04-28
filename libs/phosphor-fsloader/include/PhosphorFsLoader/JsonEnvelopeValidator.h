@@ -32,10 +32,11 @@ struct JsonEnvelope
 };
 
 /**
- * @brief Validate the per-file envelope shared by every Phosphor JSON loader.
+ * @brief Validate the default envelope used by `DirectoryLoader` sinks.
  *
- * Every loader sink (CurveLoader, ProfileLoader, future shader / layout
- * pack loaders) starts its `parseFile` with the same boilerplate:
+ * Every `IDirectoryLoaderSink` whose schema follows the default
+ * `name == filename basename` envelope (CurveLoader and ProfileLoader
+ * today) starts its `parseFile` with the same boilerplate:
  *
  *   1. Open the file (skip on read error).
  *   2. Parse JSON (skip on malformed).
@@ -47,11 +48,15 @@ struct JsonEnvelope
  *      registers under the original key while the file on disk suggests
  *      a different identity).
  *
- * This helper consolidates all five steps. On success it returns the
- * parsed root with `"name"` stripped — sinks can pass `root` straight
- * into a schema-specific `fromJson` without re-handling the bookkeeping
- * field. On failure it logs a clear diagnostic at the supplied logging
- * category and returns `std::nullopt`.
+ * Loaders with a different envelope shape (e.g. `ShaderRegistry`, which
+ * keys by directory name and parses `metadata.json` with its own
+ * schema) do not use this helper — they roll their own parse pass.
+ *
+ * On success this returns the parsed root with `"name"` stripped —
+ * sinks can pass `root` straight into a schema-specific `fromJson`
+ * without re-handling the bookkeeping field. On failure it logs a clear
+ * diagnostic at the supplied logging category and returns
+ * `std::nullopt`.
  *
  * @param filePath  Absolute path to the JSON file. Used for the read,
  *                  for the `completeBaseName` diagnostic, and for log
