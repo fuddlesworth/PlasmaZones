@@ -11,6 +11,7 @@
 #include <QScreen>
 #include <QDBusConnection>
 #include <QDBusError>
+#include <QDir>
 #include <QFile>
 #include <QSet>
 #include <QThread>
@@ -191,7 +192,7 @@ Daemon::Daemon(QObject* parent)
     // user's active animation settings and live-updates on edit.
     // Also populates the registry from user-authored JSON files under
     // the `plasmazones/` XDG namespace (consumer-agnostic loader
-    // delegates directory walking to phosphor-jsonloader).
+    // delegates directory walking to phosphor-fsloader).
     //
     // setupAnimationProfiles() also wires the daemon-owned
     // CurveRegistry into PhosphorCurve's QML static helper. Publication
@@ -291,6 +292,19 @@ void Daemon::setupAnimationProfiles()
     if (!profileDirs.contains(userProfileDir)) {
         profileDirs.append(userProfileDir);
     }
+
+    // Materialise the user dirs eagerly so live-reload works on fresh
+    // installs. `WatchedDirectorySet`'s parent-watch climb refuses to
+    // attach a `QFileSystemWatcher` to forbidden ancestors (`$HOME`,
+    // `$XDG_DATA_HOME`, etc.) — without these dirs existing, the climb
+    // terminates at `~/.local/share` and NO watch is installed. The
+    // user could then drop `~/.local/share/plasmazones/profiles/foo.json`
+    // and live-reload would silently never fire until daemon restart.
+    // Mirrors `ScriptedAlgorithmLoader::ensureUserDirectoryExists` and
+    // the ShaderRegistry ctor's `mkpath`. Failures are non-fatal — the
+    // initial on-demand scan still works without a watch.
+    QDir().mkpath(userCurveDir);
+    QDir().mkpath(userProfileDir);
 
     // Construct loaders with NO initial load — the loadFromDirectories
     // calls below trigger the first scan AFTER every consumer signal is
@@ -456,6 +470,12 @@ void Daemon::setupAnimationShaderEffects()
 {
     m_animationShaderRegistry = std::make_unique<PhosphorAnimationShaders::AnimationShaderRegistry>(nullptr);
 
+    // System dirs from XDG_DATA_DIRS in descending priority. Reverse so
+    // the first registered is the lowest-priority system dir — the
+    // strategy reverse-iterates and applies first-registration-wins,
+    // which yields the canonical XDG semantic
+    // `user > sys-highest > ... > sys-lowest` after the user dir is
+    // appended last.
     QStringList animDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"), QStandardPaths::LocateDirectory);
     std::reverse(animDirs.begin(), animDirs.end());
@@ -465,10 +485,18 @@ void Daemon::setupAnimationShaderEffects()
     if (!animDirs.contains(userAnimDir))
         animDirs.append(userAnimDir);
 
-    for (const QString& dir : animDirs)
-        m_animationShaderRegistry->addSearchPath(dir, dir == userAnimDir);
+    // Materialise the user dir BEFORE registering so the watcher attaches
+    // a direct watch instead of a parent-watch proxy. Without this, on a
+    // fresh install (where `~/.local/share/plasmazones/animations` does
+    // not yet exist) the watcher would climb to the user data root —
+    // which is forbidden under the new fsloader rules — and silently
+    // disable live-reload until the user manually triggered a refresh.
+    // Mirrors the curve/profile/script setup pattern. Failures are non-
+    // fatal — the on-demand scan still runs without a watch.
+    QDir().mkpath(userAnimDir);
 
-    m_animationShaderRegistry->refresh();
+    m_animationShaderRegistry->setUserShaderPath(userAnimDir);
+    m_animationShaderRegistry->addSearchPaths(animDirs);
 
     if (m_overlayService) {
         m_overlayService->setAnimationShaderRegistry(m_animationShaderRegistry.get());

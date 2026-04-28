@@ -37,6 +37,10 @@ if(NOT TARGET PhosphorAnimation::PhosphorAnimation)
     find_package(PhosphorAnimation CONFIG REQUIRED)
 endif()
 
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_package(PhosphorFsLoader CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorAnimationShaders Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -87,6 +91,7 @@ target_link_libraries(PhosphorAnimationShaders
     PUBLIC
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
+        PhosphorFsLoader::PhosphorFsLoader
 )
 
 set_target_properties(PhosphorAnimationShaders PROPERTIES

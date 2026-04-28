@@ -61,13 +61,13 @@ include(GenerateExportHeader)
 # QPointF/QSizeF/QRect/QRectF + QColor/QTransform used across AnimatedValue<T>.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
 
-# phosphor-jsonloader — generic JSON-directory loader (CurveLoader /
-# ProfileLoader are thin sinks over it). find_package is a no-op when
-# building in-tree (the parent CMakeLists adds the target first); it
-# lets the lib stand alone against an installed PhosphorJsonLoader for
-# future `git subtree split` extraction.
-if(NOT TARGET PhosphorJsonLoader::PhosphorJsonLoader)
-    find_package(PhosphorJsonLoader 0.1.0 REQUIRED)
+# phosphor-fsloader — filesystem-backed loader scaffolding (CurveLoader /
+# ProfileLoader are thin sinks over its DirectoryLoader specialisation).
+# find_package is a no-op when building in-tree (the parent CMakeLists
+# adds the target first); it lets the lib stand alone against an
+# installed PhosphorFsLoader for future `git subtree split` extraction.
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
 endif()
 
 # Optional Qt Quick support — builds QtQuickClock for QML-side
@@ -199,7 +199,7 @@ target_link_libraries(PhosphorAnimation
     PUBLIC
         Qt6::Core
         Qt6::Gui
-        PhosphorJsonLoader::PhosphorJsonLoader
+        PhosphorFsLoader::PhosphorFsLoader
 )
 
 # Gate QtQuickClock + its Qt Quick dependency behind the opt-in

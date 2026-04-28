@@ -50,7 +50,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorJsonLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
 
 #include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"

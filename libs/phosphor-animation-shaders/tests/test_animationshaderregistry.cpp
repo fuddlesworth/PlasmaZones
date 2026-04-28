@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -13,6 +15,7 @@
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
+using PhosphorFsLoader::LiveReload;
 
 namespace {
 
@@ -61,8 +64,9 @@ private Q_SLOTS:
         writeMetadata(effectDir, QStringLiteral("dissolve"));
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        // addSearchPath now runs a synchronous scan via the underlying
+        // WatchedDirectorySet — no separate refresh() needed.
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
 
         QVERIFY(registry.hasEffect(QStringLiteral("dissolve")));
         const AnimationShaderEffect e = registry.effect(QStringLiteral("dissolve"));
@@ -81,8 +85,7 @@ private Q_SLOTS:
         writeMetadata(tmp.path() + QStringLiteral("/glitch"), QStringLiteral("glitch"));
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
 
         QCOMPARE(registry.availableEffects().size(), 3);
         QVERIFY(registry.hasEffect(QStringLiteral("dissolve")));
@@ -103,9 +106,11 @@ private Q_SLOTS:
                       QStringLiteral("user.frag"));
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(system.path());
-        registry.addSearchPath(user.path());
-        registry.refresh();
+        // Caller order is system-first / user-last per the public
+        // contract; the strategy reverse-iterates so user wins on
+        // collision. Single batched call avoids the N-rescans-on-startup
+        // amplification of a per-path loop.
+        registry.addSearchPaths({system.path(), user.path()}, LiveReload::Off);
 
         QCOMPARE(registry.availableEffects().size(), 1);
         const AnimationShaderEffect e = registry.effect(QStringLiteral("dissolve"));
@@ -126,8 +131,7 @@ private Q_SLOTS:
         file.write(QJsonDocument(obj).toJson());
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
 
         QVERIFY(registry.availableEffects().isEmpty());
     }
@@ -144,8 +148,7 @@ private Q_SLOTS:
         file.write("{ not valid json");
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
 
         QVERIFY(registry.availableEffects().isEmpty());
     }
@@ -153,8 +156,7 @@ private Q_SLOTS:
     void testSkipsMissingDirectory()
     {
         AnimationShaderRegistry registry;
-        registry.addSearchPath(QStringLiteral("/nonexistent/path/that/does/not/exist"));
-        registry.refresh();
+        registry.addSearchPath(QStringLiteral("/nonexistent/path/that/does/not/exist"), LiveReload::Off);
 
         QVERIFY(registry.availableEffects().isEmpty());
     }
@@ -165,8 +167,7 @@ private Q_SLOTS:
         QVERIFY(tmp.isValid());
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
         QVERIFY(registry.availableEffects().isEmpty());
 
         writeMetadata(tmp.path() + QStringLiteral("/morph"), QStringLiteral("morph"));
@@ -183,8 +184,7 @@ private Q_SLOTS:
         writeMetadata(tmp.path() + QStringLiteral("/dissolve"), QStringLiteral("dissolve"));
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
         QVERIFY(registry.hasEffect(QStringLiteral("dissolve")));
 
         QDir(tmp.path() + QStringLiteral("/dissolve")).removeRecursively();
@@ -193,43 +193,51 @@ private Q_SLOTS:
         QVERIFY(!registry.hasEffect(QStringLiteral("dissolve")));
     }
 
+    /// `effectsChanged` fires only on actual content change, not on
+    /// every rescan. The bespoke registry guarded its emit with
+    /// `if (newEffects != m_effects)`; the WatchedDirectorySet-backed
+    /// implementation preserves that contract — every rescan calls into
+    /// `performScan`, but the diff is what gates the emit.
     void testEffectsChangedSignal()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
 
-        writeMetadata(tmp.path() + QStringLiteral("/dissolve"), QStringLiteral("dissolve"));
-
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
+        // Initial registration with an empty dir — m_effects starts
+        // empty and stays empty, no diff, no emit. Spy attaches to
+        // observe subsequent transitions only.
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+        QVERIFY(registry.availableEffects().isEmpty());
 
         QSignalSpy spy(&registry, &AnimationShaderRegistry::effectsChanged);
+
+        // First content-change: an effect appears. Diff is non-empty,
+        // emit fires.
+        writeMetadata(tmp.path() + QStringLiteral("/dissolve"), QStringLiteral("dissolve"));
         registry.refresh();
         QCOMPARE(spy.count(), 1);
 
+        // Second refresh with the same on-disk content. Diff is empty,
+        // no emit.
         registry.refresh();
         QCOMPARE(spy.count(), 1);
-    }
-
-    void testRemoveSearchPath()
-    {
-        AnimationShaderRegistry registry;
-        registry.addSearchPath(QStringLiteral("/tmp/test-path"));
-        QCOMPARE(registry.searchPaths().size(), 1);
-
-        registry.removeSearchPath(QStringLiteral("/tmp/test-path"));
-        QVERIFY(registry.searchPaths().isEmpty());
     }
 
     void testAddDuplicateSearchPathIsNoop()
     {
         AnimationShaderRegistry registry;
-        registry.addSearchPath(QStringLiteral("/tmp/test-path"));
-        registry.addSearchPath(QStringLiteral("/tmp/test-path"));
+        registry.addSearchPath(QStringLiteral("/tmp/test-path"), LiveReload::Off);
+        registry.addSearchPath(QStringLiteral("/tmp/test-path"), LiveReload::Off);
         QCOMPARE(registry.searchPaths().size(), 1);
     }
 
-    void testIsUserEffectFromExplicitFlag()
+    /// `setUserShaderPath` classifies a registered dir as user vs system
+    /// for the `isUserEffect` flag. Order-independent: works whether
+    /// called before OR after `addSearchPaths`. The "after" case
+    /// triggers a synchronous reclassification rescan; the "before"
+    /// case bakes the right classification into the initial scan.
+    void testIsUserEffectFromUserShaderPath()
     {
         QTemporaryDir system;
         QTemporaryDir user;
@@ -240,9 +248,37 @@ private Q_SLOTS:
         writeMetadata(user.path() + QStringLiteral("/morph"), QStringLiteral("morph"));
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(system.path(), false);
-        registry.addSearchPath(user.path(), true);
-        registry.refresh();
+        // setUserShaderPath BEFORE addSearchPaths — initial scan sees
+        // the right classification.
+        registry.setUserShaderPath(user.path());
+        registry.addSearchPaths({system.path(), user.path()}, LiveReload::Off);
+
+        QVERIFY(!registry.effect(QStringLiteral("dissolve")).isUserEffect);
+        QVERIFY(registry.effect(QStringLiteral("morph")).isUserEffect);
+    }
+
+    /// Order-independence pinned: `setUserShaderPath` AFTER
+    /// `addSearchPaths` triggers a reclassification rescan so already-
+    /// discovered effects pick up the new flag.
+    void testSetUserShaderPath_reclassifiesAfterAddSearchPaths()
+    {
+        QTemporaryDir system;
+        QTemporaryDir user;
+        QVERIFY(system.isValid());
+        QVERIFY(user.isValid());
+
+        writeMetadata(system.path() + QStringLiteral("/dissolve"), QStringLiteral("dissolve"));
+        writeMetadata(user.path() + QStringLiteral("/morph"), QStringLiteral("morph"));
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPaths({system.path(), user.path()}, LiveReload::Off);
+
+        // Before the user-path is set, every effect is system.
+        QVERIFY(!registry.effect(QStringLiteral("dissolve")).isUserEffect);
+        QVERIFY(!registry.effect(QStringLiteral("morph")).isUserEffect);
+
+        // Set the user path AFTER registration — rescan reclassifies.
+        registry.setUserShaderPath(user.path());
 
         QVERIFY(!registry.effect(QStringLiteral("dissolve")).isUserEffect);
         QVERIFY(registry.effect(QStringLiteral("morph")).isUserEffect);
@@ -257,11 +293,47 @@ private Q_SLOTS:
         writeMetadata(effectDir, QStringLiteral("slide"), QStringLiteral("slide.frag"));
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path());
-        registry.refresh();
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
 
         const AnimationShaderEffect e = registry.effect(QStringLiteral("slide"));
         QCOMPARE(e.fragmentShaderPath, effectDir + QStringLiteral("/slide.frag"));
+    }
+
+    /// `availableEffects()` and `effectIds()` return entries sorted by
+    /// id. QHash iteration order is intentionally randomised in Qt6, so
+    /// without an explicit sort downstream consumers (settings UI, QML
+    /// pickers, snapshot tests) would see different ordering on every
+    /// process launch. The sister `PhosphorShell::ShaderRegistry`
+    /// applies the same sort for the same reason.
+    void testAvailableEffects_isSortedById()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        // Write effects whose dir-iteration order (alphabetic by
+        // subdir name) differs from the desired id-sort order. Effect
+        // ids alphabetise as "alpha", "kappa", "zulu"; subdir names
+        // sort as "one-zulu", "three-alpha", "two-kappa" — matching by
+        // id catches a hypothetical regression where the registry
+        // accidentally returned dir-iteration order instead.
+        writeMetadata(tmp.path() + QStringLiteral("/one-zulu"), QStringLiteral("zulu"));
+        writeMetadata(tmp.path() + QStringLiteral("/two-kappa"), QStringLiteral("kappa"));
+        writeMetadata(tmp.path() + QStringLiteral("/three-alpha"), QStringLiteral("alpha"));
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+
+        const QList<AnimationShaderEffect> effects = registry.availableEffects();
+        QCOMPARE(effects.size(), 3);
+        QCOMPARE(effects.at(0).id, QStringLiteral("alpha"));
+        QCOMPARE(effects.at(1).id, QStringLiteral("kappa"));
+        QCOMPARE(effects.at(2).id, QStringLiteral("zulu"));
+
+        const QStringList ids = registry.effectIds();
+        QCOMPARE(ids.size(), 3);
+        QCOMPARE(ids.at(0), QStringLiteral("alpha"));
+        QCOMPARE(ids.at(1), QStringLiteral("kappa"));
+        QCOMPARE(ids.at(2), QStringLiteral("zulu"));
     }
 };
 

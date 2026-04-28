@@ -7,8 +7,8 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 
 #include <QtCore/QHash>
 #include <QtCore/QObject>
@@ -34,7 +34,7 @@ class PhosphorProfileRegistry;
  *
  * Like `CurveLoader`, the directory-walking, watching, debouncing, and
  * user-wins-collision bookkeeping is delegated to
- * `PhosphorJsonLoader::DirectoryLoader`. This class is the profile-
+ * `PhosphorFsLoader::DirectoryLoader`. This class is the profile-
  * specific sink on top of that.
  *
  * ## File format (schema v1)
@@ -100,7 +100,20 @@ public:
 
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
-    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    /// Scan multiple directories in caller-declared priority order.
+    ///
+    /// `RegistrationOrder::LowestPriorityFirst` (the default) takes input
+    /// in `[sys-lowest, ..., sys-highest, user]` order — the same shape
+    /// the daemon's profile-pack setup builds via
+    /// `std::reverse(locateAll(...))` + user-dir append. Pass
+    /// `HighestPriorityFirst` to feed `locateAll`'s natural output
+    /// (with the user dir prepended) directly without a manual
+    /// pre-reverse — the underlying `WatchedDirectorySet` normalises
+    /// before the strategy runs, so higher-priority entries always
+    /// override on key collision.
+    int loadFromDirectories(
+        const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 
     /// See `CurveLoader::loadLibraryBuiltins` — same semantics.
     int loadLibraryBuiltins(LiveReload liveReload = LiveReload::Off);
@@ -134,7 +147,7 @@ Q_SIGNALS:
 private:
     class Sink;
     std::unique_ptr<Sink> m_sink;
-    std::unique_ptr<PhosphorJsonLoader::DirectoryLoader> m_loader;
+    std::unique_ptr<PhosphorFsLoader::DirectoryLoader> m_loader;
 };
 
 } // namespace PhosphorAnimation

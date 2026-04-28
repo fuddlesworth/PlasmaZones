@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
+
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
@@ -14,7 +16,7 @@
 #include <optional>
 #include <utility>
 
-namespace PhosphorJsonLoader {
+namespace PhosphorFsLoader {
 
 /**
  * @brief Result of a successful envelope validation.
@@ -32,10 +34,11 @@ struct JsonEnvelope
 };
 
 /**
- * @brief Validate the per-file envelope shared by every Phosphor JSON loader.
+ * @brief Validate the default envelope used by `DirectoryLoader` sinks.
  *
- * Every loader sink (CurveLoader, ProfileLoader, future shader / layout
- * pack loaders) starts its `parseFile` with the same boilerplate:
+ * Every `IDirectoryLoaderSink` whose schema follows the default
+ * `name == filename basename` envelope (CurveLoader and ProfileLoader
+ * today) starts its `parseFile` with the same boilerplate:
  *
  *   1. Open the file (skip on read error).
  *   2. Parse JSON (skip on malformed).
@@ -47,11 +50,15 @@ struct JsonEnvelope
  *      registers under the original key while the file on disk suggests
  *      a different identity).
  *
- * This helper consolidates all five steps. On success it returns the
- * parsed root with `"name"` stripped — sinks can pass `root` straight
- * into a schema-specific `fromJson` without re-handling the bookkeeping
- * field. On failure it logs a clear diagnostic at the supplied logging
- * category and returns `std::nullopt`.
+ * Loaders with a different envelope shape (e.g. `ShaderRegistry`, which
+ * keys by directory name and parses `metadata.json` with its own
+ * schema) do not use this helper — they roll their own parse pass.
+ *
+ * On success this returns the parsed root with `"name"` stripped —
+ * sinks can pass `root` straight into a schema-specific `fromJson`
+ * without re-handling the bookkeeping field. On failure it logs a clear
+ * diagnostic at the supplied logging category and returns
+ * `std::nullopt`.
  *
  * @param filePath  Absolute path to the JSON file. Used for the read,
  *                  for the `completeBaseName` diagnostic, and for log
@@ -68,17 +75,18 @@ struct JsonEnvelope
  */
 inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath, const QLoggingCategory& category)
 {
-    // 1 MiB is generous for any realistic Phosphor JSON envelope (curve
-    // packs, profile packs). A larger file is either a typo-pointed
-    // symlink at a multi-MB asset or a hand-crafted DoS — `readAll()`
-    // would otherwise pull the whole thing into memory before the JSON
-    // parser had a chance to reject it.
-    constexpr qint64 kMaxFileSize = 1 * 1024 * 1024;
-
+    // Single source of truth for the JSON-envelope size cap is
+    // `DirectoryLoader::kMaxFileBytes`. The loader applies it first via
+    // the default sink dispatch path; this helper enforces it again
+    // because `validateJsonEnvelope` is a public free function and may
+    // be called directly (without a loader stat in front of it). One
+    // extra `QFileInfo::size()` per direct call — microscopic compared
+    // with the alternative of letting a 2 GiB blob fall through to a
+    // caller that didn't stat itself.
     QFileInfo info(filePath);
-    if (info.exists() && info.size() > kMaxFileSize) {
+    if (info.exists() && info.size() > DirectoryLoader::kMaxFileBytes) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << info.size() << " exceeds limit "
-                                      << kMaxFileSize;
+                                      << DirectoryLoader::kMaxFileBytes;
         return std::nullopt;
     }
 
@@ -129,4 +137,4 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     return JsonEnvelope{name, std::move(root)};
 }
 
-} // namespace PhosphorJsonLoader
+} // namespace PhosphorFsLoader

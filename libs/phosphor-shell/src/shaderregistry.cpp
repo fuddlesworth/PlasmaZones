@@ -5,7 +5,12 @@
 #include <PhosphorShell/IWallpaperProvider.h>
 #include "shaderutils.h"
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IScanStrategy.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QColor>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -23,6 +28,17 @@
 namespace PhosphorShell {
 
 Q_LOGGING_CATEGORY(lcShaderRegistry, "phosphorshell.shaderregistry")
+
+namespace {
+/// Hard cap on shaders discovered per rescan, summed across every
+/// registered search path. A pathological user dir with thousands of
+/// `metadata.json`-bearing subdirs would otherwise burn the GUI thread
+/// on every watcher fire. Mirrors `DirectoryLoader::kMaxEntries` and
+/// the sister `AnimationShaderRegistry`'s cap — same defensive
+/// rationale, identical magnitude. Typical shader counts are single
+/// digits so this is purely a DoS guard.
+constexpr int kMaxShaders = 10'000;
+} // namespace
 
 // Namespace UUID for generating deterministic shader IDs (UUID v5)
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
@@ -81,15 +97,47 @@ static QString shaderNameToUuid(const QString& name)
 // Construction / Destruction
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Scan strategy backing the shader registry's `WatchedDirectorySet`.
+/// Walks subdirectories of every registered search path, parses
+/// `metadata.json` per shader, and reports the file/subdir paths that
+/// the base must re-arm individual watches on after each rescan.
+///
+/// The base's `WatchedDirectorySet::directories()` is the single source
+/// of truth for the registered search paths — `searchPaths()` forwards
+/// to it directly so callers always see the canonicalised, deduplicated
+/// list (no second member to keep in lockstep).
+class ShaderRegistry::ShaderScanStrategy : public PhosphorFsLoader::IScanStrategy
+{
+public:
+    explicit ShaderScanStrategy(ShaderRegistry& reg)
+        : m_reg(&reg)
+    {
+    }
+
+    QStringList performScan(const QStringList& directoriesInScanOrder) override
+    {
+        return m_reg->performScan(directoriesInScanOrder);
+    }
+
+private:
+    ShaderRegistry* m_reg;
+};
+
 ShaderRegistry::ShaderRegistry(QObject* parent)
     : QObject(parent)
 {
-    // PhosphorShell always has shaders enabled (Qt6::ShaderTools is a build dep)
-    m_shadersEnabled = true;
     qCInfo(lcShaderRegistry) << "Shader effects enabled";
 
-    // Do NOT call refresh/setupFileWatcher here — let the consumer call
-    // addSearchPath() then refresh() when ready.
+    m_strategy = std::make_unique<ShaderScanStrategy>(*this);
+    m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this);
+    // `shadersChanged` fires from inside `performScan` when the scan's
+    // signature differs from the previous one — NOT on every
+    // `rescanCompleted`. Wiring through the base would emit on every
+    // watcher fire regardless of content change, fanning settings-page
+    // redraws and `SettingsAdaptor::invalidateShaderCaches` calls across
+    // every unrelated editor save in any registered shader dir.
+    // Matches the change-only emit pattern used by `ScriptedAlgorithmLoader`
+    // (SHA-1 signature) and `AnimationShaderRegistry` (`QHash::operator!=`).
 }
 
 ShaderRegistry::~ShaderRegistry() = default;
@@ -98,25 +146,69 @@ ShaderRegistry::~ShaderRegistry() = default;
 // Search Paths
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShaderRegistry::addSearchPath(const QString& path)
+void ShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    if (path.isEmpty() || m_searchPaths.contains(path)) {
-        return;
-    }
-    m_searchPaths.append(path);
-    qCInfo(lcShaderRegistry) << "Added search path:" << path;
+    // Single-path: priority direction is irrelevant — forward with the
+    // canonical default. The `addSearchPaths` overload's `order`
+    // parameter only matters for multi-path batches.
+    addSearchPaths(QStringList{path}, liveReload, PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 }
 
-void ShaderRegistry::removeSearchPath(const QString& path)
+void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                    PhosphorFsLoader::RegistrationOrder order)
 {
-    if (m_searchPaths.removeAll(path) > 0) {
-        qCInfo(lcShaderRegistry) << "Removed search path:" << path;
+    // Pre-canonicalise + drop already-registered paths via the shared
+    // helper — keeps the log line below from spamming "Added search path:
+    // /foo/bar/" when /foo/bar is already registered (the base's
+    // `registerDirectories` is silent on dedup, so the filter has to
+    // run upstream). Sister registries (`AnimationShaderRegistry`) use
+    // the same helper for the same reason.
+    const QStringList toRegister =
+        PhosphorFsLoader::WatchedDirectorySet::filterNewSearchPaths(paths, m_watcher->directories());
+    if (toRegister.isEmpty()) {
+        return;
+    }
+    // Single batched register — the watcher runs ONE synchronous scan
+    // for the whole batch, populates `m_shaders` via the strategy, and
+    // emits `shadersChanged` once if the signature changed. Avoids the
+    // N-rescans-on-startup amplification a loop of single-path
+    // registrations would cause. The base normalises @p order into the
+    // canonical scan shape before the strategy runs.
+    m_watcher->registerDirectories(toRegister, liveReload, order);
+    for (const QString& path : std::as_const(toRegister)) {
+        qCInfo(lcShaderRegistry) << "Added search path:" << path;
     }
 }
 
 QStringList ShaderRegistry::searchPaths() const
 {
-    return m_searchPaths;
+    // Delegate to the watcher — it is the single source of truth.
+    // Keeping a parallel `m_searchPaths` member would be one canonical
+    // form away from drift (cleanPath vs raw input). Consumers that
+    // pass this list to bake workers (daemon's include-path resolution)
+    // see the same list the strategy was given.
+    return m_watcher->directories();
+}
+
+void ShaderRegistry::setUserShaderPath(const QString& path)
+{
+    if (m_userShaderPath == path) {
+        return; // idempotent — same value, no work to do
+    }
+    // Canonicalisation happens at compare time in `performScan` (so
+    // callers that pass a path which doesn't exist yet still get the
+    // right classification once it materialises). Store the raw input.
+    m_userShaderPath = path;
+    // If search paths have already been registered, the prior scan baked
+    // in the OLD user-path classification — a synchronous rescan
+    // refreshes every shader's `isUserShader` flag against the new
+    // value. Without this, callers who set the user path AFTER
+    // `addSearchPaths` (against the documented order, but easy to slip
+    // up on) would silently get every shader flagged as system until an
+    // explicit `refresh()` ran.
+    if (m_watcher && !m_watcher->directories().isEmpty()) {
+        m_watcher->rescanNow();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -135,160 +227,141 @@ bool ShaderRegistry::isNoneShader(const QString& id)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// File Watching
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void ShaderRegistry::setupFileWatcher()
-{
-    if (m_watcher) {
-        delete m_watcher;
-    }
-    m_watcher = new QFileSystemWatcher(this);
-
-    auto watchShaderDir = [this](const QString& dir) {
-        if (!QDir(dir).exists()) {
-            return;
-        }
-        m_watcher->addPath(dir);
-        QDir dirObj(dir);
-        for (const QString& subdir : dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            const QString subPath = dirObj.filePath(subdir);
-            m_watcher->addPath(subPath);
-            // Watch individual shader files so content modifications trigger fileChanged.
-            // Directory-level inotify only fires for create/delete/rename, not in-place writes.
-            QDir sub(subPath);
-            const QStringList shaderFiles =
-                sub.entryList(QStringList{QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"),
-                                          QStringLiteral("*.json")},
-                              QDir::Files);
-            for (const QString& file : shaderFiles) {
-                m_watcher->addPath(sub.filePath(file));
-            }
-        }
-        // Also watch top-level shared includes (common.glsl, audio.glsl, etc.)
-        const QStringList topFiles =
-            dirObj.entryList(QStringList{QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
-        for (const QString& file : topFiles) {
-            m_watcher->addPath(dirObj.filePath(file));
-        }
-        qCInfo(lcShaderRegistry) << "Watching shader directory=" << dir
-                                 << "paths=" << m_watcher->files().size() + m_watcher->directories().size();
-    };
-
-    for (const QString& dir : std::as_const(m_searchPaths)) {
-        watchShaderDir(dir);
-    }
-
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ShaderRegistry::onShaderDirChanged);
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &ShaderRegistry::onShaderFileChanged);
-}
-
-void ShaderRegistry::onShaderDirChanged(const QString& path)
-{
-    qCInfo(lcShaderRegistry) << "Shader directory change detected:" << path;
-    scheduleRefresh();
-}
-
-void ShaderRegistry::onShaderFileChanged(const QString& path)
-{
-    qCInfo(lcShaderRegistry) << "Shader file change detected:" << path;
-
-    // QFileSystemWatcher drops the watch after atomic rename (new inode).
-    // Re-add the path if the file still exists so future edits are caught.
-    if (QFile::exists(path) && m_watcher && !m_watcher->files().contains(path)) {
-        m_watcher->addPath(path);
-    }
-
-    scheduleRefresh();
-}
-
-void ShaderRegistry::scheduleRefresh()
-{
-    // Debounce rapid changes (e.g., editor auto-save, cmake --install batch)
-    if (!m_refreshTimer) {
-        m_refreshTimer = new QTimer(this);
-        m_refreshTimer->setSingleShot(true);
-        m_refreshTimer->setInterval(RefreshDebounceMs);
-        connect(m_refreshTimer, &QTimer::timeout, this, &ShaderRegistry::performDebouncedRefresh);
-    }
-
-    m_refreshTimer->start();
-}
-
-void ShaderRegistry::performDebouncedRefresh()
-{
-    qCInfo(lcShaderRegistry) << "Shader directory changed, refreshing...";
-    refresh();
-
-    // Re-watch after refresh — files may have new inodes after install
-    if (!m_watcher) {
-        return;
-    }
-
-    // After a refresh (which may follow delete+recreate installs), re-add any
-    // shader files AND subdirectories that lost their inotify watch due to
-    // inode replacement. cmake --install replaces entire directories, causing
-    // both directory and file watches to be dropped (new inodes).
-    for (const QString& dir : std::as_const(m_searchPaths)) {
-        if (!QDir(dir).exists()) {
-            continue;
-        }
-        // Re-watch the top-level shader directory itself
-        if (!m_watcher->directories().contains(dir)) {
-            m_watcher->addPath(dir);
-        }
-        QDir dirObj(dir);
-        for (const QString& subdir : dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            const QString subPath = dirObj.filePath(subdir);
-            // Re-watch subdirectory (lost after cmake --install replaces it)
-            if (!m_watcher->directories().contains(subPath)) {
-                m_watcher->addPath(subPath);
-            }
-            QDir sub(subPath);
-            const QStringList files = sub.entryList(QStringList{QStringLiteral("*.frag"), QStringLiteral("*.vert"),
-                                                                QStringLiteral("*.glsl"), QStringLiteral("*.json")},
-                                                    QDir::Files);
-            for (const QString& file : files) {
-                const QString fullPath = sub.filePath(file);
-                if (!m_watcher->files().contains(fullPath)) {
-                    m_watcher->addPath(fullPath);
-                }
-            }
-        }
-        const QStringList topFiles =
-            dirObj.entryList(QStringList{QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
-        for (const QString& file : topFiles) {
-            const QString fullPath = dirObj.filePath(file);
-            if (!m_watcher->files().contains(fullPath)) {
-                m_watcher->addPath(fullPath);
-            }
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Shader Discovery & Loading
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void ShaderRegistry::refresh()
 {
+    // Synchronous rescan — `m_watcher->rescanNow()` calls into
+    // `ShaderScanStrategy::performScan` on this stack, which clears and
+    // reloads `m_shaders` and returns the full watch list. The
+    // `rescanCompleted` signal connected in the constructor emits
+    // `shadersChanged` after the strategy returns.
     qCDebug(lcShaderRegistry) << "Refreshing shader registry";
+    m_watcher->rescanNow();
+    qCInfo(lcShaderRegistry) << "Total shaders=" << m_shaders.size();
+}
 
+QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrder)
+{
     m_shaders.clear();
+    QStringList desiredWatches;
 
-    if (m_shadersEnabled) {
-        // Load from each search path in order.
-        // Later paths can override earlier ones (same UUID = last writer wins).
-        for (const QString& path : std::as_const(m_searchPaths)) {
-            loadShadersFromPath(path, false);
+    // Resolve the user-shader path's canonical form ONCE per rescan
+    // (empty when no user path is configured or the configured path
+    // doesn't exist yet). Each iterated dir is canonicalised below and
+    // compared against this — match means the dir is the user path,
+    // and discovered shaders are flagged `isUserShader = true`.
+    const QString canonicalUserPath =
+        m_userShaderPath.isEmpty() ? QString() : QFileInfo(m_userShaderPath).canonicalFilePath();
+
+    // Reverse-iterate with first-registration-wins, matching the
+    // IScanStrategy convention used by `JsonScanStrategy` and
+    // `JsScanStrategy`. Caller registers dirs in
+    // `[system-lowest, ..., system-highest, user]` order; reversing
+    // here lets the user dir claim its shader IDs before the system
+    // dirs are touched, which yields the canonical XDG semantic
+    // `user > sys-highest > sys-mid > sys-lowest`.
+    //
+    // Single-pass enumeration: each subdir is dispatched to
+    // `loadShaderFromDir` and harvested for the per-rescan watch list
+    // in the same loop. The base re-arms `desiredWatches` every rescan
+    // to compensate for `cmake --install`'s delete+recreate inode
+    // churn.
+    bool capTripped = false;
+    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend() && !capTripped;
+         ++dirIt) {
+        const QString& searchPath = *dirIt;
+        QDir dirObj(searchPath);
+        if (!dirObj.exists()) {
+            qCDebug(lcShaderRegistry) << "Search path does not exist:" << searchPath;
+            continue;
         }
+
+        // Classify the iterated dir as user vs system. Empty
+        // `canonicalUserPath` (no user path configured, or user dir
+        // doesn't exist yet) yields `false` for every dir — preserving
+        // the legacy default before this knob existed.
+        const bool isUserDir =
+            !canonicalUserPath.isEmpty() && QFileInfo(searchPath).canonicalFilePath() == canonicalUserPath;
+
+        const int beforeCount = m_shaders.size();
+        const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString& subdir : subdirs) {
+            if (subdir == QLatin1String("none")) {
+                continue; // reserved sentinel for "no shader"
+            }
+            // Per-rescan shader-count DoS guard. Reverse-iteration
+            // scans user-first / system-last, so a cap-trip drops
+            // *system* overflow rather than user overrides — matches
+            // the user-wins-on-cap-trip property `JsonScanStrategy`
+            // enforces.
+            if (m_shaders.size() >= kMaxShaders) {
+                capTripped = true;
+                break;
+            }
+            const QString subPath = dirObj.filePath(subdir);
+            // Dispatch + watch-list harvest in one pass.
+            // `loadShaderFromDir` first-wins-skips on existing IDs (see
+            // its early-return when `m_shaders.contains`).
+            loadShaderFromDir(subPath, isUserDir);
+            desiredWatches.append(subPath);
+            QDir sub(subPath);
+            const QStringList shaderFiles = sub.entryList({QStringLiteral("*.frag"), QStringLiteral("*.vert"),
+                                                           QStringLiteral("*.glsl"), QStringLiteral("*.json")},
+                                                          QDir::Files);
+            for (const QString& file : shaderFiles) {
+                desiredWatches.append(sub.filePath(file));
+            }
+        }
+        // Top-level shared includes (common.glsl, audio.glsl, etc.).
+        const QStringList topFiles =
+            dirObj.entryList({QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
+        for (const QString& file : topFiles) {
+            desiredWatches.append(dirObj.filePath(file));
+        }
+        qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
     }
 
-    // Set up file watcher (re-creates if already exists)
-    setupFileWatcher();
+    if (capTripped) {
+        qCWarning(lcShaderRegistry).nospace() << "ShaderRegistry: reached shader cap (" << kMaxShaders
+                                              << ") — later shaders skipped to protect the GUI thread. Prune the "
+                                                 "watched search paths or raise kMaxShaders.";
+    }
 
-    qCInfo(lcShaderRegistry) << "Total shaders=" << m_shaders.size();
-    Q_EMIT shadersChanged();
+    // Change-only emit: hash a stable fingerprint of the discovered set
+    // and gate `shadersChanged` on a difference vs. the prior scan.
+    // Captures additions, removals, path renames, isUserShader flips
+    // (so `setUserShaderPath`-driven rescans propagate), and content
+    // edits (frag/vert mtime + size). Mirrors the SHA-1 signature shape
+    // already used by `ScriptedAlgorithmLoader` so the three loaders
+    // converge on one change-detection idiom.
+    QCryptographicHash hasher(QCryptographicHash::Sha1);
+    QList<QString> sortedIds = m_shaders.keys();
+    std::sort(sortedIds.begin(), sortedIds.end());
+    for (const QString& id : std::as_const(sortedIds)) {
+        const ShaderInfo& s = m_shaders.value(id);
+        hasher.addData(id.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(s.sourcePath.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(s.vertexShaderPath.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(s.isUserShader ? "u" : "s");
+        hasher.addData(QByteArrayView("|"));
+        const QFileInfo fragInfo(s.sourcePath);
+        hasher.addData(QByteArray::number(fragInfo.size()));
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
+        hasher.addData(QByteArrayView("\n"));
+    }
+    const QByteArray signature = hasher.result();
+    if (signature != m_lastShadersSignature) {
+        m_lastShadersSignature = signature;
+        Q_EMIT shadersChanged();
+    }
+
+    return desiredWatches;
 }
 
 void ShaderRegistry::reportShaderBakeStarted(const QString& shaderId)
@@ -301,40 +374,39 @@ void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool succ
     Q_EMIT shaderCompilationFinished(shaderId, success, error);
 }
 
-void ShaderRegistry::loadShadersFromPath(const QString& searchPath, bool isUserShader)
-{
-    QDir dir(searchPath);
-    if (!dir.exists()) {
-        qCDebug(lcShaderRegistry) << "Search path does not exist:" << searchPath;
-        return;
-    }
-
-    const auto entries = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    const int beforeCount = m_shaders.size();
-
-    for (const QString& entry : entries) {
-        if (entry == QLatin1String("none")) {
-            continue; // Skip "none"
-        }
-        loadShaderFromDir(dir.filePath(entry), isUserShader);
-    }
-
-    qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
-}
-
 void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShader)
 {
     QDir dir(shaderDir);
     const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
 
     // Metadata is required
-    if (!QFile::exists(metadataPath)) {
+    const QFileInfo metadataInfo(metadataPath);
+    if (!metadataInfo.exists()) {
         qCDebug(lcShaderRegistry) << "Skipping shader path=" << shaderDir << "reason=no metadata.json";
+        return;
+    }
+
+    // DoS guard: untrusted same-user metadata.json should not be able to
+    // stall the GUI thread with a 2 GB blob (`QFile::readAll` below).
+    // Reuse `DirectoryLoader::kMaxFileBytes` as the SSOT — same cap the
+    // sister `JsonScanStrategy` enforces on every loaded JSON file.
+    if (metadataInfo.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
+        qCWarning(lcShaderRegistry) << "Skipping oversized metadata.json:" << metadataPath << "(" << metadataInfo.size()
+                                    << "bytes, cap" << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes << ")";
         return;
     }
 
     ShaderInfo info = loadShaderMetadata(shaderDir);
     info.isUserShader = isUserShader;
+
+    // First-registration-wins. `performScan` reverse-iterates so the
+    // user dir is processed first; a subsequent system shader with a
+    // colliding id is shadowed and silently skipped here.
+    if (m_shaders.contains(info.id)) {
+        qCDebug(lcShaderRegistry) << "Shader id=" << info.id << "already registered from a higher-priority dir; "
+                                  << "shadowed at=" << shaderDir;
+        return;
+    }
 
     // Multipass requires at least one buffer shader; treat missing as load failure
     if (info.isMultipass && info.bufferShaderPaths.isEmpty()) {
@@ -518,13 +590,26 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    return m_shaders.values();
+    // Sort by id for deterministic ordering. QHash iteration order is
+    // intentionally randomised in Qt6 — without the sort, downstream
+    // consumers (the daemon's bake-warm loop, settings dropdowns,
+    // QML model assignments) see a different shader order on every
+    // process launch, which surfaces as flaky snapshot tests and
+    // visible UI reordering between sessions.
+    QList<ShaderInfo> sorted = m_shaders.values();
+    std::sort(sorted.begin(), sorted.end(), [](const ShaderInfo& a, const ShaderInfo& b) {
+        return a.id < b.id;
+    });
+    return sorted;
 }
 
 QVariantList ShaderRegistry::availableShadersVariant() const
 {
+    // Mirror availableShaders()'s sort — same rationale.
+    const QList<ShaderInfo> sorted = availableShaders();
     QVariantList result;
-    for (const ShaderInfo& info : m_shaders) {
+    result.reserve(sorted.size());
+    for (const ShaderInfo& info : sorted) {
         result.append(shaderInfoToVariantMap(info));
     }
     return result;
@@ -549,11 +634,6 @@ QUrl ShaderRegistry::shaderUrl(const QString& id) const
         return QUrl();
     }
     return m_shaders.value(id).shaderUrl;
-}
-
-bool ShaderRegistry::shadersEnabled() const
-{
-    return m_shadersEnabled;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

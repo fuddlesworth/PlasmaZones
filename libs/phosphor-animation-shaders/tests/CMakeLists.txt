@@ -13,6 +13,7 @@ function(pas_add_test _name)
             Qt6::Core
             PhosphorAnimationShaders::PhosphorAnimationShaders
             PhosphorAnimation::PhosphorAnimation
+            PhosphorFsLoader::PhosphorFsLoader
     )
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES
