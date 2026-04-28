@@ -6,14 +6,15 @@
 #include <PhosphorAnimationShaders/AnimationShaderEffect.h>
 #include <PhosphorAnimationShaders/phosphoranimationshaders_export.h>
 
-#include <QFileSystemWatcher>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QHash>
 #include <QList>
 #include <QObject>
-#include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QTimer>
+
+#include <memory>
 
 namespace PhosphorAnimationShaders {
 
@@ -43,18 +44,31 @@ namespace PhosphorAnimationShaders {
  *
  * ## Search path ordering
  *
- * Paths added later override earlier on id collision (user-wins-over-
- * system). Pass system paths first, user paths last.
+ * Caller registers paths in `[system-lowest, ..., system-highest, user]`
+ * order; the strategy reverse-iterates to apply first-registration-wins,
+ * yielding the canonical XDG semantic
+ * `user > sys-highest > sys-mid > sys-lowest` on id collision. Same
+ * convention as `PhosphorShell::ShaderRegistry` and the in-tree
+ * `JsonScanStrategy` / `JsScanStrategy`.
  *
  * ## Live reload
  *
- * `addSearchPath` installs a `QFileSystemWatcher` with 500 ms debounce.
- * User drops a new pack → registry picks it up on the next debounce
- * without a daemon restart.
+ * Backed by `PhosphorFsLoader::WatchedDirectorySet`. The first
+ * `addSearchPath[s]` call with `LiveReload::On` (the default) installs a
+ * `QFileSystemWatcher` with the standard 50 ms debounce, parent-watch
+ * promotion for missing user-data dirs (fresh-install hot-reload), per-
+ * file watches re-armed on every rescan (atomic-rename inode-swap
+ * recovery), and rescan-during-rescan race protection. Forbidden roots
+ * (`$HOME`, `/`, XDG data/config/cache/temp/runtime, Documents,
+ * Downloads) are refused — registering a target whose parent climbs onto
+ * one of those silently degrades to "no live reload until consumer
+ * `refresh()`" instead of carpet-rescanning the user's home directory.
  *
  * ## Thread safety
  *
- * GUI-thread only. Same contract as PhosphorShell::ShaderRegistry.
+ * GUI-thread only for mutating calls. `searchPaths()` is safe to read
+ * from worker threads (matches the cross-thread shader-warming readers
+ * in the daemon).
  */
 class PHOSPHORANIMATIONSHADERS_EXPORT AnimationShaderRegistry : public QObject
 {
@@ -66,8 +80,47 @@ public:
 
     // ── Search paths ──────────────────────────────────────────────────
 
-    void addSearchPath(const QString& path, bool isUserPath = false);
-    void removeSearchPath(const QString& path);
+    /// Add a single search-path directory. Forwards to the batched form
+    /// so the underlying watcher only runs one initial scan; prefer
+    /// `addSearchPaths` directly when registering more than one path
+    /// during construction (avoids N redundant scans, one per path).
+    ///
+    /// @p liveReload defaults to `On` so production callers get
+    /// hot-reload by default. Pass `Off` from tests / batch-import
+    /// contexts that want a one-shot scan with no background watcher.
+    /// Inherits the underlying `WatchedDirectorySet`'s set-wide one-way-
+    /// enable semantics: once any call passes `On`, the watcher stays
+    /// armed for the registry's lifetime.
+    void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+
+    /// Add multiple search-path directories in one shot. Caller order is
+    /// preserved; the strategy reverse-iterates so the LAST path takes
+    /// priority on id collision (system-first / user-last by convention).
+    /// Prefer this over a loop of `addSearchPath` calls — a single
+    /// batched call runs exactly one scan instead of N.
+    ///
+    /// Same `liveReload` semantics as the single-path overload.
+    void addSearchPaths(const QStringList& paths,
+                        PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+
+    /// Mark @p path as the "user" search path for `AnimationShaderEffect::isUserEffect`
+    /// classification. Stored as-given; the rescan canonicalises both this
+    /// path and each iterated search dir before comparing, so the input
+    /// can be either canonical or symlinked. Pass the empty string (the
+    /// default) to disable user/system differentiation — every effect will
+    /// then report `isUserEffect == false`.
+    ///
+    /// Order-independent: callable before OR after `addSearchPaths`. When
+    /// the value changes and at least one search path is already
+    /// registered, the call triggers a synchronous rescan so already-
+    /// discovered effects get reclassified immediately. Idempotent:
+    /// passing the same value twice is a no-op.
+    void setUserShaderPath(const QString& path);
+
+    /// Currently-registered search paths in registration order. Forwards
+    /// to the underlying `WatchedDirectorySet::directories()` — single
+    /// source of truth, no parallel member that could drift out of sync.
+    /// Safe to call from any thread (see class docs).
     QStringList searchPaths() const;
 
     // ── Lookup ────────────────────────────────────────────────────────
@@ -79,26 +132,27 @@ public:
 
     // ── Lifecycle ─────────────────────────────────────────────────────
 
+    /// Synchronous rescan — re-walks every search path on the calling
+    /// stack, replaces `m_effects`, and emits `effectsChanged` if the
+    /// post-rescan map differs from the pre-rescan map. Use after a
+    /// caller-mediated filesystem change that the watcher can't see
+    /// (e.g. a programmatic effect install via a separate process).
     Q_INVOKABLE void refresh();
 
 Q_SIGNALS:
     void effectsChanged();
 
-private Q_SLOTS:
-    void onDirChanged(const QString& path);
-    void performDebouncedRefresh();
-
 private:
-    void setupFileWatcher();
-    void scheduleRefresh();
+    class EffectScanStrategy;
+    QStringList performScan(const QStringList& directoriesInScanOrder);
 
-    QStringList m_searchPaths;
-    QSet<QString> m_userPaths;
     QHash<QString, AnimationShaderEffect> m_effects;
-    QFileSystemWatcher* m_watcher = nullptr;
-    QTimer* m_refreshTimer = nullptr;
-
-    static constexpr int RefreshDebounceMs = 500;
+    /// User-shader search path used to classify discovered effects as
+    /// user vs system. Compared against each iterated search dir's
+    /// canonical form on every rescan — see `setUserShaderPath`.
+    QString m_userShaderPath;
+    std::unique_ptr<EffectScanStrategy> m_strategy;
+    std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 };
 
 } // namespace PhosphorAnimationShaders

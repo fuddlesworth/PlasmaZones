@@ -3,8 +3,11 @@
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/IScanStrategy.h>
+
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -14,11 +17,44 @@ namespace PhosphorAnimationShaders {
 
 namespace {
 Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
-}
+} // namespace
+
+/// Scan strategy backing the registry's `WatchedDirectorySet`. Walks
+/// subdirectories under each registered search path, parses
+/// `metadata.json`, and reports the per-effect file paths the base must
+/// re-arm individual watches on after each rescan.
+///
+/// Mirrors `PhosphorShell::ShaderRegistry::ShaderScanStrategy` — same
+/// reverse-iterate / first-wins shape, same metadata.json convention. The
+/// difference is the parse target (`AnimationShaderEffect` vs the zone-
+/// shader `ShaderInfo`).
+class AnimationShaderRegistry::EffectScanStrategy : public PhosphorFsLoader::IScanStrategy
+{
+public:
+    explicit EffectScanStrategy(AnimationShaderRegistry& reg)
+        : m_reg(&reg)
+    {
+    }
+
+    QStringList performScan(const QStringList& directoriesInScanOrder) override
+    {
+        return m_reg->performScan(directoriesInScanOrder);
+    }
+
+private:
+    AnimationShaderRegistry* m_reg;
+};
 
 AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
     : QObject(parent)
+    , m_strategy(std::make_unique<EffectScanStrategy>(*this))
+    , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
 {
+    // Connection deliberately omitted — `effectsChanged` is emitted from
+    // inside `performScan` when the map diff is non-empty, NOT on every
+    // `rescanCompleted`. Wiring through the base would emit on every
+    // rescan regardless of content change, breaking the change-only
+    // contract documented on the signal.
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;
@@ -27,30 +63,68 @@ AnimationShaderRegistry::~AnimationShaderRegistry() = default;
 // Search paths
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AnimationShaderRegistry::addSearchPath(const QString& path, bool isUserPath)
+void AnimationShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    if (path.isEmpty() || m_searchPaths.contains(path))
-        return;
-    m_searchPaths.append(path);
-    if (isUserPath)
-        m_userPaths.insert(path);
-    setupFileWatcher();
-    scheduleRefresh();
+    addSearchPaths(QStringList{path}, liveReload);
 }
 
-void AnimationShaderRegistry::removeSearchPath(const QString& path)
+void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload)
 {
-    if (!m_searchPaths.removeAll(path))
+    // Filter empties + pre-canonicalise so dedup matches what the watcher
+    // will store internally — `WatchedDirectorySet` canonicalises via
+    // `QDir::cleanPath` on insertion. Doing it here too avoids the
+    // log-line spam from "Added search path: /foo/bar/" when /foo/bar is
+    // already registered under the slash-less spelling.
+    const QStringList alreadyRegistered = m_watcher->directories();
+    QStringList toRegister;
+    toRegister.reserve(paths.size());
+    for (const QString& path : paths) {
+        if (path.isEmpty()) {
+            continue;
+        }
+        const QString canonical = QDir::cleanPath(path);
+        if (alreadyRegistered.contains(canonical) || toRegister.contains(canonical)) {
+            continue;
+        }
+        toRegister.append(canonical);
+    }
+    if (toRegister.isEmpty()) {
         return;
-    m_userPaths.remove(path);
-    if (m_watcher && m_watcher->directories().contains(path))
-        m_watcher->removePath(path);
-    scheduleRefresh();
+    }
+    // Single batched register — one synchronous scan for the whole batch,
+    // populates `m_effects` via the strategy, fires `effectsChanged`
+    // exactly once if the diff is non-empty. Avoids the N-rescans-on-
+    // startup amplification a loop of single-path registrations would
+    // cause.
+    m_watcher->registerDirectories(toRegister, liveReload);
+    for (const QString& path : std::as_const(toRegister)) {
+        qCInfo(lcRegistry) << "Added search path:" << path;
+    }
+}
+
+void AnimationShaderRegistry::setUserShaderPath(const QString& path)
+{
+    if (m_userShaderPath == path) {
+        return; // idempotent — same value, no work to do
+    }
+    // Canonicalisation happens at compare time in `performScan` (so
+    // callers that pass a path which doesn't exist yet still get the
+    // right classification once it materialises). Store the raw input.
+    m_userShaderPath = path;
+    // If search paths have already been registered, the prior scan baked
+    // in the OLD user-path classification — a synchronous rescan
+    // refreshes every effect's `isUserEffect` flag against the new value.
+    // Without this, callers who set the user path AFTER `addSearchPaths`
+    // would silently get every effect flagged as system until an explicit
+    // `refresh()` ran.
+    if (!m_watcher->directories().isEmpty()) {
+        m_watcher->rescanNow();
+    }
 }
 
 QStringList AnimationShaderRegistry::searchPaths() const
 {
-    return m_searchPaths;
+    return m_watcher->directories();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -83,22 +157,65 @@ QStringList AnimationShaderRegistry::effectIds() const
 
 void AnimationShaderRegistry::refresh()
 {
+    // Synchronous rescan — `m_watcher->rescanNow()` calls into
+    // `EffectScanStrategy::performScan` on this stack, which rebuilds
+    // `m_effects` and emits `effectsChanged` if the map diff is non-
+    // empty. Bypasses the debounce timer.
+    qCDebug(lcRegistry) << "Refreshing animation shader registry";
+    m_watcher->rescanNow();
+}
+
+QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesInScanOrder)
+{
     QHash<QString, AnimationShaderEffect> newEffects;
+    QStringList desiredWatches;
 
-    for (const QString& searchPath : m_searchPaths) {
-        const bool isUserEffect = m_userPaths.contains(searchPath);
-        QDir dir(searchPath);
-        if (!dir.exists())
+    // Resolve the user-shader path's canonical form ONCE per rescan
+    // (empty when no user path is configured or the configured path
+    // doesn't exist yet). Each iterated dir is canonicalised below and
+    // compared against this — match means the dir is the user path, and
+    // discovered effects are flagged `isUserEffect = true`.
+    const QString canonicalUserPath =
+        m_userShaderPath.isEmpty() ? QString() : QFileInfo(m_userShaderPath).canonicalFilePath();
+
+    // Reverse-iterate with first-registration-wins, matching the
+    // IScanStrategy convention used by `JsonScanStrategy`,
+    // `JsScanStrategy`, and `PhosphorShell::ShaderRegistry`. Caller
+    // registers dirs in `[system-lowest, ..., system-highest, user]`
+    // order; reversing here lets the user dir claim its effect IDs
+    // before the system dirs are touched, which yields the canonical
+    // XDG semantic `user > sys-highest > sys-mid > sys-lowest` on id
+    // collision.
+    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
+        const QString& searchPath = *dirIt;
+        QDir dirObj(searchPath);
+        if (!dirObj.exists()) {
+            qCDebug(lcRegistry) << "Search path does not exist:" << searchPath;
             continue;
+        }
 
-        const QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        // Classify the iterated dir as user vs system. Empty
+        // `canonicalUserPath` (no user path configured, or user dir
+        // doesn't exist yet) yields `false` for every dir — preserving
+        // the legacy default before this knob existed.
+        const bool isUserDir =
+            !canonicalUserPath.isEmpty() && QFileInfo(searchPath).canonicalFilePath() == canonicalUserPath;
+
+        const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& subdir : subdirs) {
-            const QString effectDir = dir.absoluteFilePath(subdir);
+            const QString effectDir = dirObj.filePath(subdir);
             const QString metadataPath = effectDir + QStringLiteral("/metadata.json");
 
+            // Always re-arm the metadata.json watch even if parsing
+            // fails or the id collides — an edit that fixes a broken
+            // metadata.json is the most common way an effect transitions
+            // from invisible to visible, so we want to wake on it.
+            desiredWatches.append(metadataPath);
+
             QFile file(metadataPath);
-            if (!file.open(QIODevice::ReadOnly))
+            if (!file.open(QIODevice::ReadOnly)) {
                 continue;
+            }
 
             QJsonParseError parseError;
             const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
@@ -117,64 +234,49 @@ void AnimationShaderRegistry::refresh()
                 continue;
             }
 
-            e.sourceDir = effectDir;
-            e.isUserEffect = isUserEffect;
+            // First-registration-wins. `performScan` reverse-iterates so
+            // the user dir is processed first; a subsequent system effect
+            // with a colliding id is shadowed and silently skipped here.
+            if (newEffects.contains(e.id)) {
+                qCDebug(lcRegistry) << "Effect id=" << e.id
+                                    << "already registered from a higher-priority dir; shadowed at=" << effectDir;
+                continue;
+            }
 
-            if (!e.fragmentShaderPath.isEmpty())
+            e.sourceDir = effectDir;
+            e.isUserEffect = isUserDir;
+
+            if (!e.fragmentShaderPath.isEmpty()) {
                 e.fragmentShaderPath = effectDir + QLatin1Char('/') + e.fragmentShaderPath;
-            if (!e.vertexShaderPath.isEmpty())
+                desiredWatches.append(e.fragmentShaderPath);
+            }
+            if (!e.vertexShaderPath.isEmpty()) {
                 e.vertexShaderPath = effectDir + QLatin1Char('/') + e.vertexShaderPath;
-            if (!e.kwinFragmentShaderPath.isEmpty())
+                desiredWatches.append(e.vertexShaderPath);
+            }
+            if (!e.kwinFragmentShaderPath.isEmpty()) {
                 e.kwinFragmentShaderPath = effectDir + QLatin1Char('/') + e.kwinFragmentShaderPath;
-            if (!e.previewPath.isEmpty())
+                desiredWatches.append(e.kwinFragmentShaderPath);
+            }
+            if (!e.previewPath.isEmpty()) {
                 e.previewPath = effectDir + QLatin1Char('/') + e.previewPath;
+            }
 
             newEffects.insert(e.id, std::move(e));
         }
     }
 
+    // Change-only emit — every rescan calls in here, but `effectsChanged`
+    // only fires when the map diff is non-empty. Matches the legacy
+    // behaviour of the bespoke registry's `if (newEffects != m_effects)`
+    // guard that downstream tests (and the daemon's signal-driven
+    // consumers) rely on.
     if (newEffects != m_effects) {
         m_effects = std::move(newEffects);
         Q_EMIT effectsChanged();
     }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// File watching
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void AnimationShaderRegistry::setupFileWatcher()
-{
-    if (!m_watcher) {
-        m_watcher = new QFileSystemWatcher(this);
-        connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &AnimationShaderRegistry::onDirChanged);
-    }
-
-    for (const QString& path : m_searchPaths) {
-        if (QDir(path).exists() && !m_watcher->directories().contains(path))
-            m_watcher->addPath(path);
-    }
-}
-
-void AnimationShaderRegistry::onDirChanged(const QString& /*path*/)
-{
-    scheduleRefresh();
-}
-
-void AnimationShaderRegistry::scheduleRefresh()
-{
-    if (!m_refreshTimer) {
-        m_refreshTimer = new QTimer(this);
-        m_refreshTimer->setSingleShot(true);
-        m_refreshTimer->setInterval(RefreshDebounceMs);
-        connect(m_refreshTimer, &QTimer::timeout, this, &AnimationShaderRegistry::performDebouncedRefresh);
-    }
-    m_refreshTimer->start();
-}
-
-void AnimationShaderRegistry::performDebouncedRefresh()
-{
-    refresh();
+    return desiredWatches;
 }
 
 } // namespace PhosphorAnimationShaders

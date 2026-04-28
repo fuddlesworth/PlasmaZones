@@ -470,6 +470,12 @@ void Daemon::setupAnimationShaderEffects()
 {
     m_animationShaderRegistry = std::make_unique<PhosphorAnimationShaders::AnimationShaderRegistry>(nullptr);
 
+    // System dirs from XDG_DATA_DIRS in descending priority. Reverse so
+    // the first registered is the lowest-priority system dir — the
+    // strategy reverse-iterates and applies first-registration-wins,
+    // which yields the canonical XDG semantic
+    // `user > sys-highest > ... > sys-lowest` after the user dir is
+    // appended last.
     QStringList animDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"), QStandardPaths::LocateDirectory);
     std::reverse(animDirs.begin(), animDirs.end());
@@ -479,10 +485,27 @@ void Daemon::setupAnimationShaderEffects()
     if (!animDirs.contains(userAnimDir))
         animDirs.append(userAnimDir);
 
-    for (const QString& dir : animDirs)
-        m_animationShaderRegistry->addSearchPath(dir, dir == userAnimDir);
+    // Materialise the user dir BEFORE registering so the watcher attaches
+    // a direct watch instead of a parent-watch proxy. Without this, on a
+    // fresh install (where `~/.local/share/plasmazones/animations` does
+    // not yet exist) the watcher would climb to the user data root —
+    // which is forbidden under the new fsloader rules — and silently
+    // disable live-reload until the user manually triggered a refresh.
+    // Mirrors the curve/profile/script setup pattern. Failures are non-
+    // fatal — the on-demand scan still runs without a watch.
+    QDir().mkpath(userAnimDir);
 
-    m_animationShaderRegistry->refresh();
+    // Mark the user dir BEFORE the initial scan so discovered effects'
+    // `isUserEffect` flag is set correctly on first commit. Settings UI
+    // / QML pickers consume this to render the "user" badge — without
+    // the explicit mark, every effect would surface as system.
+    m_animationShaderRegistry->setUserShaderPath(userAnimDir);
+
+    // Single batched register — the underlying WatchedDirectorySet runs
+    // ONE synchronous scan for the whole batch, populates `m_effects`
+    // via the strategy, and emits `effectsChanged` once if non-empty.
+    // No follow-up `refresh()` — the registration path already scanned.
+    m_animationShaderRegistry->addSearchPaths(animDirs);
 }
 
 Daemon::~Daemon()
