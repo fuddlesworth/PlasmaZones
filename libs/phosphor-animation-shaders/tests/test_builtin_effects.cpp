@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QDir>
 #include <QFile>
 #include <QTest>
@@ -23,8 +25,9 @@ private Q_SLOTS:
             QSKIP("data/animations not found — running outside source tree");
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(dataDir);
-        registry.refresh();
+        // addSearchPath now runs a synchronous initial scan via the
+        // underlying WatchedDirectorySet — no separate refresh() needed.
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
 
         const QStringList expected = {
             QStringLiteral("dissolve"),  QStringLiteral("glitch"), QStringLiteral("morph"),
@@ -45,8 +48,9 @@ private Q_SLOTS:
             QSKIP("data/animations not found — running outside source tree");
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(dataDir);
-        registry.refresh();
+        // addSearchPath now runs a synchronous initial scan via the
+        // underlying WatchedDirectorySet — no separate refresh() needed.
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
 
         const auto effects = registry.availableEffects();
         for (const AnimationShaderEffect& e : effects) {
@@ -68,8 +72,9 @@ private Q_SLOTS:
             QSKIP("data/animations not found — running outside source tree");
 
         AnimationShaderRegistry registry;
-        registry.addSearchPath(dataDir);
-        registry.refresh();
+        // addSearchPath now runs a synchronous initial scan via the
+        // underlying WatchedDirectorySet — no separate refresh() needed.
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
 
         const AnimationShaderEffect e = registry.effect(QStringLiteral("dissolve"));
         QCOMPARE(e.parameters.size(), 2);

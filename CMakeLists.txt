@@ -327,6 +327,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
+add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
 add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline — needed by phosphor-screens
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
@@ -337,7 +338,6 @@ add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
-add_subdirectory(libs/phosphor-jsonloader) # generic JSON directory loader with watched / debounced reload
 # PlasmaZones consumes the phosphor-animation QML module for shell UI
 # animations (Phase 4). Setting the flag BEFORE add_subdirectory picks
 # up the option() default; the QML subdirectory auto-enables

@@ -6,8 +6,9 @@
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QtCore/QHash>
 #include <QtCore/QObject>
@@ -23,11 +24,11 @@ class CurveRegistry;
 /**
  * @brief Opt-in policy for directory-scanning loaders.
  *
- * Thin re-export of `PhosphorJsonLoader::LiveReload` so the existing
+ * Thin re-export of `PhosphorFsLoader::LiveReload` so the existing
  * `PhosphorAnimation::LiveReload::On` call-sites keep compiling after
- * the directory-watching scaffolding moved into `phosphor-jsonloader`.
+ * the directory-watching scaffolding moved into `phosphor-fsloader`.
  */
-using LiveReload = PhosphorJsonLoader::LiveReload;
+using LiveReload = PhosphorFsLoader::LiveReload;
 
 /**
  * @brief Scans JSON curve-definition files and registers them with `CurveRegistry`.
@@ -39,7 +40,7 @@ using LiveReload = PhosphorJsonLoader::LiveReload;
  * "<consumer>/curves", LocateDirectory)` and hand the results here.
  *
  * The directory-walking, watching, debouncing, and user-wins-collision
- * bookkeeping is delegated to `PhosphorJsonLoader::DirectoryLoader`;
+ * bookkeeping is delegated to `PhosphorFsLoader::DirectoryLoader`;
  * this class is the curve-specific sink on top of that.
  *
  * ## File format (schema v1)
@@ -110,8 +111,20 @@ public:
     /// each into the construction-time registry.
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
-    /// Scan multiple directories in order.
-    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    /// Scan multiple directories in caller-declared priority order.
+    ///
+    /// `RegistrationOrder::LowestPriorityFirst` (the default) takes input
+    /// in `[sys-lowest, ..., sys-highest, user]` order — the same shape
+    /// the daemon's curve-pack setup builds via
+    /// `std::reverse(locateAll(...))` + user-dir append. Pass
+    /// `HighestPriorityFirst` to feed `locateAll`'s natural output
+    /// (with the user dir prepended) directly without a manual
+    /// pre-reverse — the underlying `WatchedDirectorySet` normalises
+    /// before the strategy runs, so higher-priority entries always
+    /// override on key collision.
+    int loadFromDirectories(
+        const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 
     /// Load curves bundled at the library's install-prefix
     /// `phosphor-animation/curves/` data directory (path baked in at
@@ -151,7 +164,7 @@ Q_SIGNALS:
 private:
     class Sink;
     std::unique_ptr<Sink> m_sink;
-    std::unique_ptr<PhosphorJsonLoader::DirectoryLoader> m_loader;
+    std::unique_ptr<PhosphorFsLoader::DirectoryLoader> m_loader;
 };
 
 } // namespace PhosphorAnimation

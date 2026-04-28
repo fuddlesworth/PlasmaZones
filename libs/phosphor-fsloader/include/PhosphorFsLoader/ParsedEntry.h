@@ -7,7 +7,7 @@
 
 #include <any>
 
-namespace PhosphorJsonLoader {
+namespace PhosphorFsLoader {
 
 /**
  * @brief One parsed file's payload + metadata.
@@ -47,4 +47,4 @@ struct ParsedEntry
     std::any payload;
 };
 
-} // namespace PhosphorJsonLoader
+} // namespace PhosphorFsLoader

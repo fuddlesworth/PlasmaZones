@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorJsonLoader/DirectoryLoader.h>
-#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -14,7 +14,7 @@
 #include <QTest>
 #include <QTimer>
 
-using namespace PhosphorJsonLoader;
+using namespace PhosphorFsLoader;
 
 namespace {
 
@@ -610,6 +610,68 @@ private Q_SLOTS:
         // Cap honoured at exactly kTestCap entries total (the 3 user
         // files + 2 system files = 5).
         QCOMPARE(loader.registeredCount(), kTestCap);
+    }
+
+    /// When the entry-count cap trips during the user-dir pass, the
+    /// system dirs aren't fully scanned and surviving entries that
+    /// previously had a `systemSourcePath` recorded must NOT have it
+    /// cleared — clearing surfaces in `BatchedSink` as a metadata-only
+    /// diff and produces spurious consumer-signal fan-out for entries
+    /// whose payloads are actually unchanged. The fix is to carry the
+    /// prior `systemSourcePath` forward on cap-trip; the next un-tripped
+    /// scan will re-derive correctly.
+    void testCapTrip_preservesSystemSourcePath()
+    {
+        constexpr int kTestCap = 3;
+
+        QTemporaryDir systemDir;
+        QTemporaryDir userDir;
+        QVERIFY(systemDir.isValid() && userDir.isValid());
+
+        // Initial state: a user file shadowing a system file with the
+        // same key. Cap is generous enough for both passes.
+        const QString systemFile = systemDir.filePath(QStringLiteral("collide.json"));
+        const QString userFile = userDir.filePath(QStringLiteral("collide.json"));
+        writeJson(systemFile, QStringLiteral("collide"), QStringLiteral("from-system"));
+        writeJson(userFile, QStringLiteral("collide"), QStringLiteral("from-user"));
+
+        RecordingSink sink;
+        DirectoryLoader loader(sink);
+        loader.loadFromDirectories({systemDir.path(), userDir.path()}, LiveReload::Off);
+
+        const auto initialEntries = loader.entries();
+        QCOMPARE(initialEntries.size(), 1);
+        QCOMPARE(initialEntries.first().sourcePath, userFile);
+        QCOMPARE(initialEntries.first().systemSourcePath, systemFile);
+
+        // Now flood the user dir to trip the cap during the user pass.
+        // Reverse-iteration scans user first; with kTestCap=3 and 5
+        // user files, the cap trips before system is touched.
+        for (int i = 0; i < 5; ++i) {
+            writeJson(userDir.filePath(QStringLiteral("flood-%1.json").arg(i, 3, 10, QLatin1Char('0'))),
+                      QStringLiteral("flood-key-%1").arg(i, 3, 10, QLatin1Char('0')),
+                      QStringLiteral("from-user-flood-%1").arg(i));
+        }
+        loader.setMaxEntriesForTest(kTestCap);
+        loader.requestRescan();
+        QSignalSpy spy(&loader, &DirectoryLoader::entriesChanged);
+        QVERIFY(spy.wait(2000));
+
+        // The collide entry survived (alphabetic sort puts `collide`
+        // before `flood-*`). Its systemSourcePath must be preserved
+        // even though the system dir was never reached on this scan.
+        const auto afterEntries = loader.entries();
+        bool foundCollide = false;
+        for (const auto& e : afterEntries) {
+            if (e.key == QLatin1String("collide")) {
+                foundCollide = true;
+                QCOMPARE(e.sourcePath, userFile);
+                QVERIFY2(!e.systemSourcePath.isEmpty(),
+                         "systemSourcePath was cleared on cap-trip — would cause spurious metadata-diff signal");
+                QCOMPARE(e.systemSourcePath, systemFile);
+            }
+        }
+        QVERIFY(foundCollide);
     }
 
     /// Regression guard for the shared-ancestor preservation on

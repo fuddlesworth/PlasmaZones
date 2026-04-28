@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorJsonLoader/ParsedEntry.h>
+#include <PhosphorFsLoader/ParsedEntry.h>
 
 #include <QtCore/QList>
 #include <QtCore/QString>
@@ -11,7 +11,7 @@
 
 #include <optional>
 
-namespace PhosphorJsonLoader {
+namespace PhosphorFsLoader {
 
 /**
  * @brief Consumer-supplied strategy for a `DirectoryLoader`.
@@ -67,4 +67,4 @@ public:
     virtual void commitBatch(const QStringList& removedKeys, const QList<ParsedEntry>& currentEntries) = 0;
 };
 
-} // namespace PhosphorJsonLoader
+} // namespace PhosphorFsLoader

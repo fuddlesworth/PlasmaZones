@@ -176,12 +176,20 @@ SettingsController::SettingsController(QObject* parent)
     // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
     m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
                                                                               m_localAlgorithmRegistry.get());
-    m_scriptLoader->scanAndRegister();
 
     // Algorithm-registry / scripted-loader surface. Owned via unique_ptr so
     // reverse-order destruction runs the service's dtor (which disconnects
     // its watchers) BEFORE m_scriptLoader and m_localAlgorithmRegistry
     // reset — the service holds raw-pointer borrows of both.
+    //
+    // Construct the service and wire all algorithmsChanged consumers
+    // BEFORE scanAndRegister so the canonical
+    //   make_unique → connect → scanAndRegister
+    // ordering holds — the empty→populated `algorithmsChanged` emit
+    // from the initial scan must reach every subscriber, otherwise a
+    // future consumer that relies on the transition (rather than
+    // querying availableAlgorithms() directly) silently misses initial
+    // population.
     m_algorithmService =
         std::make_unique<AlgorithmService>(&m_settings, m_localAlgorithmRegistry.get(), m_scriptLoader.get());
     connect(m_algorithmService.get(), &AlgorithmService::algorithmCreated, this, &SettingsController::algorithmCreated);
@@ -194,6 +202,8 @@ SettingsController::SettingsController(QObject* parent)
     // LayoutComboBox's model includes autotile entries from the registry.
     connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::layoutsChanged);
+
+    m_scriptLoader->scanAndRegister();
 
     // Listen for external settings changes from the daemon
     QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
