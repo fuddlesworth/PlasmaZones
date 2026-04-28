@@ -22,8 +22,8 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/qml/PhosphorCurve.h>
-#include <PhosphorAnimation/qml/QtQuickClockManager.h>
+#include <PhosphorAnimationQml/PhosphorCurve.h>
+#include <PhosphorAnimationQml/QtQuickClockManager.h>
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
