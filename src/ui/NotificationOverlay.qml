@@ -116,12 +116,18 @@ Window {
     signal dismissRequested()
 
     /// Restart the loaded content's auto-dismiss timer. C++ invokes this
-    /// after every Surface::show() so the timer (re)starts. No-op if no
-    /// content is loaded (mode == "").
+    /// after every Surface::show() so the timer (re)starts. Production
+    /// callers always write `mode` before invoking this, so the warn
+    /// branch only trips under a regression where a future caller
+    /// invokes restartDismissTimer without a mode set — silently
+    /// no-oping the dismiss timer would leave the OSD visible
+    /// indefinitely until the next show, which is exactly the
+    /// foot-gun this guards against.
     function restartDismissTimer() {
         if (loader.item)
             loader.item.restartDismissTimer();
-
+        else
+            console.warn("NotificationOverlay.restartDismissTimer: no content loaded (mode =", JSON.stringify(root.mode), ") — auto-dismiss will not run");
     }
 
     // Static flags — Phase 5 surface lifecycle owns Qt.WindowTransparentForInput

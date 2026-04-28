@@ -48,6 +48,14 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
 /// we write dynamically via the transport handle (see
 /// `centerLayerWindowOnScreen` in osd.cpp) to centre the OSD on-screen.
 /// No keyboard, click-through. Pre-warmed per screen at daemon start.
+///
+/// Currently only consumed to derive @ref Notification (post-Phase-2
+/// LayoutOsd + NavigationOsd unification — both ride the Notification
+/// surface now). Preserved as a named OSD-shape primitive so future
+/// click-through fullscreen overlays (e.g. a separate alerts surface)
+/// can branch off the same protocol shape without re-typing the
+/// FullscreenOverlay reference and the "no keyboard, click-through"
+/// invariant inline.
 inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverlay;
 
 /// Unified notification surface — single per-screen wl_surface that hosts

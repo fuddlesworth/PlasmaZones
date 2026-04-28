@@ -236,6 +236,9 @@ Item {
         }
     }
 
+    Accessible.name: i18n("Navigation feedback")
+    Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
+
     // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
     // why the latch is needed (timer-fire and click both race to dismiss).
     OsdDismissable {
@@ -257,11 +260,14 @@ Item {
     }
 
     // Main container - matches LayoutOsd format exactly
+    // Accessible.name / .description live on the root Item so a screen
+    // reader sees the same a11y labels as LayoutOsdContent (which puts
+    // them on its root). Pre-fix the labels lived on this inner
+    // Rectangle, which was inconsistent with LayoutOsdContent and
+    // unreachable to anything walking the QObject tree from above.
     Rectangle {
         id: container
 
-        Accessible.name: i18n("Navigation feedback")
-        Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
         anchors.centerIn: parent
         // Text-only: size based on message content
         width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, 160)

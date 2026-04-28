@@ -73,6 +73,12 @@ Item {
     /// spurious click. Reset by C++ explicitly on every show (QML's
     /// `on<Name>Changed` handler form does not work for underscore-
     /// prefixed properties).
+    ///
+    /// Sibling latch — OsdDismissable.qml: same at-most-once-per-show
+    /// idempotency, but driven by a Timer (auto-dismiss) and reset on
+    /// the timer's `runningChanged` transition. The trigger surface and
+    /// reset mechanism differ enough that the two are deliberately
+    /// separate components; see OsdDismissable.qml for the rationale.
     property bool _dismissed: false
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.

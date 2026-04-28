@@ -473,7 +473,9 @@ private:
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
-    // PhosphorZones::Layout OSD and Navigation OSD windows are stored in m_screenStates
+    // Layout-OSD and Navigation-OSD content share a single per-screen
+    // PerScreenOverlayState::notificationWindow (NotificationOverlay.qml)
+    // post-Phase-2 unification — no separate per-mode window pointers.
 
     // Shader preview overlay (editor dialog)
     PhosphorLayer::Surface* m_shaderPreviewSurface = nullptr;
@@ -538,6 +540,37 @@ private:
     /// createWarmedOsdSurface.
     void createNotificationWindow(const QString& screenId, QScreen* physScreen);
     void destroyNotificationWindow(const QString& screenId);
+
+    /// Lazily create the per-screen NotificationOverlay window if missing,
+    /// then return a pointer to its PerScreenOverlayState (or nullptr if
+    /// creation failed — surface refused, layer-shell unavailable, etc.).
+    /// Single source of truth for the "ensure-notification-window" pattern
+    /// shared between prepareLayoutOsdWindow, showNavigationOsd, and the
+    /// screenAdded hot-plug lambda.
+    PerScreenOverlayState* ensureNotificationWindowFor(const QString& effectiveId, QScreen* physScreen);
+
+    /// Shared property-push for layout-OSD content. Used by both
+    /// showLayoutOsdImpl (PhosphorZones::Layout* path) and the
+    /// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
+    /// path). The struct lets the two callers diverge only on the values
+    /// they compute, not on the property-write sequence.
+    struct LayoutOsdContentParams
+    {
+        QString id; ///< layoutId — UUID for manual layouts, "autotile:..." for algorithms
+        QString name; ///< layoutName as shown in the OSD label
+        QVariantList zones; ///< pre-built zone variant list (empty for locked-with-no-zones)
+        int category = 0; ///< PhosphorZones::LayoutCategory enum value
+        bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
+        bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
+        bool locked = false; ///< draws lock badge + " (Locked)" suffix
+        qreal screenAspectRatio = 16.0 / 9.0;
+        QString aspectRatioClass = QStringLiteral("any");
+        bool showMasterDot = false;
+        bool producesOverlappingZones = false;
+        QString zoneNumberDisplay = QStringLiteral("all");
+        int masterCount = 1;
+    };
+    void pushLayoutOsdContent(QQuickWindow* window, const LayoutOsdContentParams& params);
 
     void destroyIfTypeMismatch(const QString& screenId);
     void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());

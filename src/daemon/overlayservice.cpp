@@ -522,11 +522,14 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         return nullptr;
     }
 
-    // Wire the QML-side auto-dismiss signal to Surface::hide(). LayoutOsd
-    // and NavigationOsd both expose `signal dismissRequested()` driven by
-    // their internal Timer; LayoutPicker also uses the same name (post-#9
-    // rename) for backdrop-click dismissal. String-based connect is the
-    // only path because QML-defined signals aren't addressable via Qt5
+    // Wire the QML-side auto-dismiss signal to Surface::hide(). The OSD
+    // content components (LayoutOsdContent, NavigationOsdContent) both
+    // expose `signal dismissRequested()` driven by their shared
+    // OsdDismissable timer; the unified NotificationOverlay host
+    // re-emits each loaded content's signal as its own dismissRequested.
+    // LayoutPickerOverlay uses the same name (post-#9 rename) for
+    // backdrop-click dismissal. String-based connect is the only path
+    // because QML-defined signals aren't addressable via Qt5
     // `&Class::signal` pointers.
     if (auto* window = surface->window()) {
         QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));

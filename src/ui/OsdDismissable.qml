@@ -15,6 +15,17 @@ import QtQuick
  * the timer keeps the latch in sync without the helper having to remember
  * to clear it.
  *
+ * Sibling latch — LayoutPickerContent.qml's `_dismissed` property + its
+ * private `_requestDismiss()`: same idempotency idea, but its dismiss
+ * source is user actions (Escape, backdrop click) rather than a timer.
+ * The reset is driven by an explicit C++ property write on every show,
+ * not by a `runningChanged` transition. The two latches are deliberately
+ * separate components — they share a contract (at most one dismiss per
+ * show cycle) but the trigger surface and reset mechanism differ enough
+ * that pulling them into a common base would obscure both. If a third
+ * dismissal-style content type ever appears, revisit factoring out a
+ * shared `DismissLatch { signal request(); function fire(); function reset() }`.
+ *
  * Usage from a content Item (e.g. LayoutOsdContent.qml):
  *
  *     OsdDismissable {
