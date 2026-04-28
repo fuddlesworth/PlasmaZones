@@ -98,7 +98,7 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         return false;
     if (kwinFragmentShaderPath != other.kwinFragmentShaderPath)
         return false;
-    if (previewPath != other.previewPath || isUserEffect != other.isUserEffect)
+    if (previewPath != other.previewPath)
         return false;
     if (parameters.size() != other.parameters.size())
         return false;

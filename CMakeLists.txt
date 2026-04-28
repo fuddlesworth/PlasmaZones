@@ -458,6 +458,18 @@ install(DIRECTORY data/shaders/
     PATTERN "*.svg"
 )
 
+# Install bundled animation transition shader packs. The daemon's
+# AnimationShaderRegistry scans ${XDG_DATA_DIRS}/plasmazones/animations
+# at startup; user overrides at ~/.local/share/plasmazones/animations win.
+install(DIRECTORY data/animations/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/animations
+    FILES_MATCHING
+    PATTERN "metadata.json"
+    PATTERN "*.frag"
+    PATTERN "*.vert"
+    PATTERN "*.png"
+)
+
 # Install bundled scripted tiling algorithms
 install(DIRECTORY data/algorithms/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms

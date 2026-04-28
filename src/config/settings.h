@@ -749,11 +749,8 @@ public:
     int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
 
-    /// Phase 6: per-event shader effect selection tree. Persisted as a
-    /// JSON blob alongside the animation Profile under the Animations
-    /// config group.
-    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const;
-    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree);
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
@@ -1002,7 +999,6 @@ Q_SIGNALS:
     /// per-field surface get re-triggered through the individual
     /// signals per the existing NOTIFY wiring.
     void animationProfileChanged();
-    void shaderProfileTreeChanged();
 
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();

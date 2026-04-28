@@ -466,7 +466,7 @@ void Daemon::setupAnimationShaderEffects()
         animDirs.append(userAnimDir);
 
     for (const QString& dir : animDirs)
-        m_animationShaderRegistry->addSearchPath(dir);
+        m_animationShaderRegistry->addSearchPath(dir, dir == userAnimDir);
 
     m_animationShaderRegistry->refresh();
 }

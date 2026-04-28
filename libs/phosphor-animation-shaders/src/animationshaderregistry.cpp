@@ -27,11 +27,13 @@ AnimationShaderRegistry::~AnimationShaderRegistry() = default;
 // Search paths
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AnimationShaderRegistry::addSearchPath(const QString& path)
+void AnimationShaderRegistry::addSearchPath(const QString& path, bool isUserPath)
 {
     if (path.isEmpty() || m_searchPaths.contains(path))
         return;
     m_searchPaths.append(path);
+    if (isUserPath)
+        m_userPaths.insert(path);
     setupFileWatcher();
     scheduleRefresh();
 }
@@ -40,6 +42,7 @@ void AnimationShaderRegistry::removeSearchPath(const QString& path)
 {
     if (!m_searchPaths.removeAll(path))
         return;
+    m_userPaths.remove(path);
     if (m_watcher && m_watcher->directories().contains(path))
         m_watcher->removePath(path);
     scheduleRefresh();
@@ -83,7 +86,7 @@ void AnimationShaderRegistry::refresh()
     QHash<QString, AnimationShaderEffect> newEffects;
 
     for (const QString& searchPath : m_searchPaths) {
-        const bool isUserEffect = m_searchPaths.indexOf(searchPath) == m_searchPaths.size() - 1;
+        const bool isUserEffect = m_userPaths.contains(searchPath);
         QDir dir(searchPath);
         if (!dir.exists())
             continue;

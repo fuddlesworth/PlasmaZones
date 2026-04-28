@@ -229,6 +229,25 @@ private Q_SLOTS:
         QCOMPARE(registry.searchPaths().size(), 1);
     }
 
+    void testIsUserEffectFromExplicitFlag()
+    {
+        QTemporaryDir system;
+        QTemporaryDir user;
+        QVERIFY(system.isValid());
+        QVERIFY(user.isValid());
+
+        writeMetadata(system.path() + QStringLiteral("/dissolve"), QStringLiteral("dissolve"));
+        writeMetadata(user.path() + QStringLiteral("/morph"), QStringLiteral("morph"));
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(system.path(), false);
+        registry.addSearchPath(user.path(), true);
+        registry.refresh();
+
+        QVERIFY(!registry.effect(QStringLiteral("dissolve")).isUserEffect);
+        QVERIFY(registry.effect(QStringLiteral("morph")).isUserEffect);
+    }
+
     void testResolvesAbsoluteShaderPaths()
     {
         QTemporaryDir tmp;

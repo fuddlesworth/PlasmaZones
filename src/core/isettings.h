@@ -15,6 +15,8 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+
 #include <QColor>
 #include <QObject>
 #include <QString>
@@ -105,6 +107,8 @@ public:
     virtual void setAnimationSequenceMode(int mode) = 0;
     virtual int animationStaggerInterval() const = 0;
     virtual void setAnimationStaggerInterval(int ms) = 0;
+    virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
+    virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -407,6 +411,7 @@ Q_SIGNALS:
     void animationMinDistanceChanged();
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
+    void shaderProfileTreeChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

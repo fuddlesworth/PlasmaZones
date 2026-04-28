@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -65,7 +66,7 @@ public:
 
     // ── Search paths ──────────────────────────────────────────────────
 
-    void addSearchPath(const QString& path);
+    void addSearchPath(const QString& path, bool isUserPath = false);
     void removeSearchPath(const QString& path);
     QStringList searchPaths() const;
 
@@ -92,6 +93,7 @@ private:
     void scheduleRefresh();
 
     QStringList m_searchPaths;
+    QSet<QString> m_userPaths;
     QHash<QString, AnimationShaderEffect> m_effects;
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;

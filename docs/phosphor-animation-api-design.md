@@ -1608,7 +1608,7 @@ PhosphorAnimationShaders namespace:
 | `slidefade` | Geometric  | direction, fadeWidth               |
 
 Each pack ships under `data/animations/<id>/` with `metadata.json` +
-`effect.frag` (GLSL 330, `iTime`-driven progress).
+`effect.frag` (GLSL 450, `iTime`-driven progress).
 
 #### Tests (55 cases across 5 executables)
 

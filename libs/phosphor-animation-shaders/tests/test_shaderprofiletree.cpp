@@ -207,6 +207,18 @@ private Q_SLOTS:
 
         const ShaderProfile resolved = tree.resolve(QStringLiteral("widget.toast.slideIn"));
         QCOMPARE(*resolved.effectId, QStringLiteral("dissolve"));
+        QCOMPARE(resolved.parameters->value(QStringLiteral("grain")).toDouble(), 0.3);
+    }
+
+    void testGlobalOverrideConsultedByResolve()
+    {
+        ShaderProfileTree tree;
+        ShaderProfile global;
+        global.effectId = QStringLiteral("glitch");
+        tree.setOverride(QStringLiteral("global"), global);
+
+        const ShaderProfile resolved = tree.resolve(PP::WindowOpen);
+        QCOMPARE(*resolved.effectId, QStringLiteral("glitch"));
     }
 };
 
