@@ -25,6 +25,12 @@ constexpr QLatin1String Description{"description"};
 constexpr QLatin1String ZoneCount{"zoneCount"};
 constexpr QLatin1String Zones{"zones"};
 constexpr QLatin1String IsAutotile{"isAutotile"};
+// PhosphorZones::LayoutCategory mirror — `isAutotile` is the canonical
+// boolean, but QML consumers (LayoutCard, CategoryBadge) read a numeric
+// `category` field (0 = Manual, 1 = Autotile) to match the
+// LayoutCategory enum used elsewhere. Emit both so QML doesn't need to
+// translate, and the C++ `isAutotile` consumer keeps its name.
+constexpr QLatin1String Category{"category"};
 constexpr QLatin1String IsSystem{"isSystem"};
 // Back-compat alias for isSystem. Older consumers historically read
 // isSystemEntry; emitting both for one release cycle; drop isSystemEntry
@@ -115,6 +121,7 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     }
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
+    json[K::Category] = preview.isAutotile() ? 1 : 0;
     json[K::IsSystem] = preview.isSystem;
     // Back-compat alias: emit alongside `isSystem` for one release cycle.
     json[K::IsSystemEntry] = preview.isSystem;
@@ -169,6 +176,7 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     }
     map[K::ZoneCount] = preview.zoneCount;
     map[K::IsAutotile] = preview.isAutotile();
+    map[K::Category] = preview.isAutotile() ? 1 : 0;
     map[K::IsSystem] = preview.isSystem;
     // Back-compat alias: emit alongside `isSystem` for one release cycle.
     map[K::IsSystemEntry] = preview.isSystem;
