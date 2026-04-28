@@ -1063,34 +1063,44 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
     destroyAllWindowsForPhysicalScreen(screen);
 }
 
+OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId) const
+{
+    // Both buildLayoutsList (populates the popup) and visibleLayoutCount
+    // (used by isNearTriggerEdge to size the keep-visible bar) go through
+    // here so the trigger geometry matches the rendered popup row count.
+    // If the resolver ever skips setting one of the fields, the struct's
+    // in-class defaults (both true) supply a safe "show everything"
+    // fallback rather than UB.
+    LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
+    if (!m_layoutManager) {
+        return flags;
+    }
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+        : screenId;
+    if (resolvedId.isEmpty()) {
+        return flags;
+    }
+    const QString assignmentId =
+        m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        flags.manual = false;
+        flags.autotile = true;
+    } else {
+        flags.manual = true;
+        flags.autotile = false;
+    }
+    return flags;
+}
+
 QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
 {
-    // Determine filter per-screen: check this screen's assignment to decide
-    // whether to show manual layouts, autotile algorithms, or both.
-    bool includeManual = m_includeManualLayouts;
-    bool includeAutotile = m_includeAutotileLayouts;
-    if (m_layoutManager) {
-        const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
-            ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
-            : screenId;
-        if (!resolvedId.isEmpty()) {
-            const QString assignmentId =
-                m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
-            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                includeManual = false;
-                includeAutotile = true;
-            } else {
-                includeManual = true;
-                includeAutotile = false;
-            }
-        }
-    }
+    const auto inc = resolvePerScreenLayoutInclude(screenId);
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual,
-        includeAutotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
+        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
-        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile),
-        m_autotileLayoutSource);
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource);
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -1112,10 +1122,18 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 
 int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
-    // Ordering doesn't affect count — skip custom order for performance
+    // Mirror buildLayoutsList's per-screen include resolution. Pre-fix the
+    // raw m_includeManualLayouts/m_includeAutotileLayouts flags were used
+    // here — both default true — so on screens where the popup actually
+    // showed only manual (or only autotile) layouts, this returned the
+    // sum of both, inflating the row count and blowing barHeight up to
+    // ~screen height. isNearTriggerEdge then kept the popup visible
+    // wherever the cursor was during the drag.
+    const auto inc = resolvePerScreenLayoutInclude(screenId);
+    // Ordering doesn't affect count — skip custom order for performance.
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity,
-        m_includeManualLayouts, m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
+        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();

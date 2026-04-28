@@ -410,6 +410,21 @@ private:
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
     QVariantList buildLayoutsList(const QString& screenId = QString()) const;
+    /// Per-screen layout-family filter used for the zone selector.
+    /// `manual` enables PhosphorZones layout entries; `autotile` enables
+    /// algorithm previews. Both default-true is "show everything"; the
+    /// resolver narrows to a single family when the screen has an
+    /// explicit assignment.
+    struct LayoutIncludeFlags
+    {
+        bool manual = true;
+        bool autotile = true;
+    };
+    /// Resolve the per-screen include filter. buildLayoutsList (the popup
+    /// model) and visibleLayoutCount (used by isNearTriggerEdge to size
+    /// the keep-visible bar) both go through here so the trigger geometry
+    /// matches the rendered popup row count.
+    LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId) const;
     QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, QScreen* screen,
                                  PhosphorZones::Layout* layout = nullptr) const;
     QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
