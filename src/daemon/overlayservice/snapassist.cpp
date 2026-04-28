@@ -292,13 +292,12 @@ bool OverlayService::eventFilter(QObject* obj, QEvent* event)
             return true;
         }
     }
-    if (obj == m_layoutPickerWindow && event->type() == QEvent::KeyPress) {
-        auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->key() == Qt::Key_Escape) {
-            QTimer::singleShot(0, this, &OverlayService::hideLayoutPicker);
-            return true;
-        }
-    }
+    // Layout picker Escape is handled by a QML Shortcut in
+    // LayoutPickerContent.qml that emits dismissRequested → hideLayoutPicker.
+    // The C++ event-filter path was unreliable under keepMappedOnHide=true:
+    // the Qt.WindowTransparentForInput flip during hide / show plus the
+    // mutated keyboard_interactivity state left KeyPress delivery
+    // intermittent on the warm path. Same pattern SnapAssistOverlay uses.
     return QObject::eventFilter(obj, event);
 }
 
@@ -809,8 +808,9 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // QML refactor flips visible explicitly, would re-enter destroy on
     // hide and reintroduce the slow path we're working around.
 
-    // Install event filter for reliable Escape key handling on Wayland
-    window->installEventFilter(this);
+    // Escape is handled by the QML Shortcut in LayoutPickerContent.qml —
+    // no QObject event filter needed (the eventFilter path was unreliable
+    // under keepMappedOnHide=true; see eventFilter() comment).
 
     m_layoutPickerSurface = surface;
     m_layoutPickerWindow = window;
