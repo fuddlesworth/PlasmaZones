@@ -52,6 +52,13 @@ private:
         QQuickWindow::setSceneGraphBackend(QStringLiteral("software"));
     }
 
+    /// Per-test clock manager. PhosphorAnimatedValueBase::resolveClock
+    /// reads through `QtQuickClockManager::defaultManager()` — we
+    /// publish this instance in init() so the QML wrappers under test
+    /// resolve through a fresh fixture-owned manager. Phase A3 of the
+    /// architecture refactor retired `QtQuickClockManager::instance()`.
+    std::unique_ptr<QtQuickClockManager> m_clockManager;
+
 private Q_SLOTS:
 
     void initTestCase()
@@ -64,7 +71,14 @@ private Q_SLOTS:
 
     void init()
     {
-        QtQuickClockManager::instance().clearForTest();
+        m_clockManager = std::make_unique<QtQuickClockManager>();
+        QtQuickClockManager::setDefaultManager(m_clockManager.get());
+    }
+
+    void cleanup()
+    {
+        QtQuickClockManager::setDefaultManager(nullptr);
+        m_clockManager.reset();
     }
 
     /// A shown QQuickWindow must drive `valueChanged` emits via its

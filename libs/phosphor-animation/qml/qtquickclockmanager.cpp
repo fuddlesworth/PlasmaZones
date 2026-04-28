@@ -10,6 +10,8 @@
 
 namespace PhosphorAnimation {
 
+std::atomic<QtQuickClockManager*> QtQuickClockManager::s_defaultManager{nullptr};
+
 QtQuickClockManager::QtQuickClockManager() = default;
 
 QtQuickClockManager::~QtQuickClockManager()
@@ -44,16 +46,19 @@ QtQuickClockManager::~QtQuickClockManager()
     m_entries.clear();
 }
 
-QtQuickClockManager& QtQuickClockManager::instance()
+void QtQuickClockManager::setDefaultManager(QtQuickClockManager* manager)
 {
-    // Meyers singleton — thread-safe init under C++17's static-local
-    // guarantee. The manager lives for the process lifetime; no
-    // destruction order concerns because the manager holds only
-    // QtQuickClock instances, which themselves tolerate destruction
-    // during process shutdown (their destructor handles the signal-
-    // disconnect + slot-join without external synchronisation).
-    static QtQuickClockManager sInstance;
-    return sInstance;
+    // Relaxed store: the publishing thread must have fully constructed
+    // *manager before calling this method, and the consumer-side
+    // load-and-use sequence is a single pointer dereference that needs
+    // no happens-before with any other memory. Matches the
+    // PhosphorCurve::setDefaultRegistry contract.
+    s_defaultManager.store(manager, std::memory_order_relaxed);
+}
+
+QtQuickClockManager* QtQuickClockManager::defaultManager()
+{
+    return s_defaultManager.load(std::memory_order_relaxed);
 }
 
 IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)

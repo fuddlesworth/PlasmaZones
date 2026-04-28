@@ -23,10 +23,26 @@ class TestPhosphorMotionAnimation : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Per-test registry. PhosphorMotionAnimation reads through
+    /// `PhosphorProfileRegistry::defaultRegistry()` — we publish this
+    /// instance in init() and clear in cleanup() so the global handle
+    /// is symmetric across tests. Phase A3 of the architecture refactor
+    /// retired the `PhosphorProfileRegistry::instance()` Meyers
+    /// singleton.
+    PhosphorProfileRegistry m_registry;
+
 private Q_SLOTS:
     void init()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_registry.clear();
+        PhosphorProfileRegistry::setDefaultRegistry(&m_registry);
+    }
+
+    void cleanup()
+    {
+        PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        m_registry.clear();
     }
 
     // ─── Profile dispatch (decision R) ───
@@ -59,7 +75,7 @@ private Q_SLOTS:
     {
         Profile registered;
         registered.duration = 400.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("x"), registered);
+        m_registry.registerProfile(QStringLiteral("x"), registered);
 
         PhosphorMotionAnimation a;
         a.setProfile(QStringLiteral("x"));
@@ -83,7 +99,7 @@ private Q_SLOTS:
 
         Profile p;
         p.duration = 200.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("later"), p);
+        m_registry.registerProfile(QStringLiteral("later"), p);
         QTRY_COMPARE(a.duration(), 200);
     }
 
@@ -94,7 +110,7 @@ private Q_SLOTS:
         PhosphorMotionAnimation a;
         Profile registered;
         registered.duration = 400.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("p"), registered);
+        m_registry.registerProfile(QStringLiteral("p"), registered);
         a.setProfile(QStringLiteral("p"));
         QCOMPARE(a.duration(), 400);
 
@@ -107,7 +123,7 @@ private Q_SLOTS:
         PhosphorMotionAnimation a;
         Profile registered;
         registered.duration = 400.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("p"), registered);
+        m_registry.registerProfile(QStringLiteral("p"), registered);
         a.setProfile(QStringLiteral("p"));
         a.setDurationOverride(200);
         QCOMPARE(a.duration(), 200);
@@ -122,7 +138,7 @@ private Q_SLOTS:
         PhosphorMotionAnimation a;
         Profile registered;
         registered.duration = 400.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("p"), registered);
+        m_registry.registerProfile(QStringLiteral("p"), registered);
         a.setProfile(QStringLiteral("p"));
 
         a.setDurationOverride(-50); // nonsensical — treat as "no override"
@@ -152,13 +168,13 @@ private Q_SLOTS:
 
         Profile p1;
         p1.duration = 400.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("a"), p1);
+        m_registry.registerProfile(QStringLiteral("a"), p1);
         a.setProfile(QStringLiteral("a"));
         QCOMPARE(a.duration(), 250); // override still wins
 
         Profile p2;
         p2.duration = 600.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("b"), p2);
+        m_registry.registerProfile(QStringLiteral("b"), p2);
         a.setProfile(QStringLiteral("b"));
         QCOMPARE(a.duration(), 250); // override still wins after rebind
     }
@@ -176,7 +192,7 @@ private Q_SLOTS:
         Profile p;
         p.duration = 600.0;
         all.insert(QStringLiteral("bulk"), p);
-        PhosphorProfileRegistry::instance().reloadAll(all);
+        m_registry.reloadAll(all);
 
         QTRY_COMPARE(a.duration(), 600);
     }
@@ -188,7 +204,7 @@ private Q_SLOTS:
     {
         Profile initial;
         initial.duration = 100.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("old"), initial);
+        m_registry.registerProfile(QStringLiteral("old"), initial);
 
         PhosphorMotionAnimation a;
         a.setProfile(QStringLiteral("old"));
@@ -202,7 +218,7 @@ private Q_SLOTS:
         // Updating the old registered path must not affect us now.
         Profile updated;
         updated.duration = 999.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("old"), updated);
+        m_registry.registerProfile(QStringLiteral("old"), updated);
         QCOMPARE(a.duration(), 500); // still the snapshot's value
     }
 
@@ -303,7 +319,7 @@ private Q_SLOTS:
         Profile p;
         p.curve = std::make_shared<Spring>(12.0, 0.6);
         p.duration = 250.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.spring"), p);
+        m_registry.registerProfile(QStringLiteral("test.spring"), p);
 
         PhosphorMotionAnimation a;
         a.setProfile(QStringLiteral("test.spring"));
@@ -344,7 +360,7 @@ private Q_SLOTS:
         Profile p;
         p.curve = std::make_shared<Easing>(Easing::fromString(QStringLiteral("elastic-out:1.0,0.3")));
         p.duration = 300.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.elastic"), p);
+        m_registry.registerProfile(QStringLiteral("test.elastic"), p);
 
         PhosphorMotionAnimation a;
         a.setProfile(QStringLiteral("test.elastic"));
@@ -403,7 +419,7 @@ private Q_SLOTS:
         // profileChanged emit fires here.
         Profile initial;
         initial.duration = 100.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("live"), initial);
+        m_registry.registerProfile(QStringLiteral("live"), initial);
 
         PhosphorMotionAnimation a;
         a.setProfile(QStringLiteral("live"));
@@ -423,7 +439,7 @@ private Q_SLOTS:
         // profileChanged(path), our queued lambda fires.
         Profile updated;
         updated.duration = 500.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("live"), updated);
+        m_registry.registerProfile(QStringLiteral("live"), updated);
         QTRY_COMPARE(a.duration(), 500);
         QVERIFY2(spy.count() >= 1, "profileChanged must fire when the bound profile is live-reloaded");
     }
@@ -435,7 +451,7 @@ private Q_SLOTS:
     {
         Profile initial;
         initial.duration = 100.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("bulk"), initial);
+        m_registry.registerProfile(QStringLiteral("bulk"), initial);
 
         PhosphorMotionAnimation a;
         a.setProfile(QStringLiteral("bulk"));
@@ -450,7 +466,7 @@ private Q_SLOTS:
         Profile updated;
         updated.duration = 600.0;
         all.insert(QStringLiteral("bulk"), updated);
-        PhosphorProfileRegistry::instance().reloadAll(all);
+        m_registry.reloadAll(all);
 
         QTRY_COMPARE(a.duration(), 600);
         QVERIFY2(spy.count() >= 1, "profileChanged must fire on reloadAll / profilesReloaded-triggered rebinds");

@@ -14,10 +14,19 @@ class TestPhosphorProfileRegistry : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Per-test-case registry. Each test method gets a freshly default-
+    /// constructed registry via init() — no shared global state, no
+    /// cleanup-from-prior-test contamination. Replaces the prior
+    /// `PhosphorProfileRegistry::instance()` Meyers singleton (Phase A3
+    /// of the architecture refactor: composition roots own registries
+    /// directly, tests follow the same DI pattern).
+    PhosphorProfileRegistry m_registry;
+
 private Q_SLOTS:
     void init()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_registry.clear();
     }
 
     /// Guarantees no registry state leaks between test methods even
@@ -25,19 +34,27 @@ private Q_SLOTS:
     /// comment in test_profileloader.cpp.
     void cleanup()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_registry.clear();
     }
 
-    void testSingletonIdentity()
+    /// Verify that the published default-registry handle round-trips —
+    /// composition roots use this pair to expose their owned registry
+    /// to QML, so a regression here would silently break every QML
+    /// `PhosphorMotionAnimation { profile: "<path>" }` lookup.
+    void testDefaultRegistryHandleRoundTrips()
     {
-        PhosphorProfileRegistry& a = PhosphorProfileRegistry::instance();
-        PhosphorProfileRegistry& b = PhosphorProfileRegistry::instance();
-        QCOMPARE(&a, &b);
+        QCOMPARE(PhosphorProfileRegistry::defaultRegistry(), nullptr);
+
+        PhosphorProfileRegistry::setDefaultRegistry(&m_registry);
+        QCOMPARE(PhosphorProfileRegistry::defaultRegistry(), &m_registry);
+
+        PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        QCOMPARE(PhosphorProfileRegistry::defaultRegistry(), nullptr);
     }
 
     void testEmptyRegistryResolvesToNullopt()
     {
-        auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("nope"));
+        auto resolved = m_registry.resolve(QStringLiteral("nope"));
         QVERIFY(!resolved.has_value());
     }
 
@@ -45,9 +62,9 @@ private Q_SLOTS:
     {
         Profile p;
         p.duration = 250.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("overlay.fade"), p);
+        m_registry.registerProfile(QStringLiteral("overlay.fade"), p);
 
-        auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("overlay.fade"));
+        auto resolved = m_registry.resolve(QStringLiteral("overlay.fade"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->effectiveDuration(), 250.0);
     }
@@ -57,9 +74,9 @@ private Q_SLOTS:
     /// settings update contract.
     void testRegisterFiresSignal()
     {
-        QSignalSpy spy(&PhosphorProfileRegistry::instance(), &PhosphorProfileRegistry::profileChanged);
+        QSignalSpy spy(&m_registry, &PhosphorProfileRegistry::profileChanged);
         Profile p;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("x"), p);
+        m_registry.registerProfile(QStringLiteral("x"), p);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("x"));
     }
@@ -68,11 +85,11 @@ private Q_SLOTS:
     /// consumer's cached resolved value is out of date.
     void testReplaceFiresSignal()
     {
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("x"), Profile{});
-        QSignalSpy spy(&PhosphorProfileRegistry::instance(), &PhosphorProfileRegistry::profileChanged);
+        m_registry.registerProfile(QStringLiteral("x"), Profile{});
+        QSignalSpy spy(&m_registry, &PhosphorProfileRegistry::profileChanged);
         Profile updated;
         updated.duration = 500.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("x"), updated);
+        m_registry.registerProfile(QStringLiteral("x"), updated);
         QCOMPARE(spy.count(), 1);
     }
 
@@ -80,11 +97,11 @@ private Q_SLOTS:
     /// path does not (nothing to invalidate).
     void testUnregisterFiresOnlyIfExisted()
     {
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("x"), Profile{});
-        QSignalSpy spy(&PhosphorProfileRegistry::instance(), &PhosphorProfileRegistry::profileChanged);
-        PhosphorProfileRegistry::instance().unregisterProfile(QStringLiteral("x"));
+        m_registry.registerProfile(QStringLiteral("x"), Profile{});
+        QSignalSpy spy(&m_registry, &PhosphorProfileRegistry::profileChanged);
+        m_registry.unregisterProfile(QStringLiteral("x"));
         QCOMPARE(spy.count(), 1);
-        PhosphorProfileRegistry::instance().unregisterProfile(QStringLiteral("not-there"));
+        m_registry.unregisterProfile(QStringLiteral("not-there"));
         QCOMPARE(spy.count(), 1); // unchanged
     }
 
@@ -98,28 +115,27 @@ private Q_SLOTS:
         withDuration.duration = 300.0;
         replacement.insert(QStringLiteral("b"), withDuration);
 
-        QSignalSpy changedSpy(&PhosphorProfileRegistry::instance(), &PhosphorProfileRegistry::profileChanged);
-        QSignalSpy reloadedSpy(&PhosphorProfileRegistry::instance(), &PhosphorProfileRegistry::profilesReloaded);
-        PhosphorProfileRegistry::instance().reloadAll(replacement);
+        QSignalSpy changedSpy(&m_registry, &PhosphorProfileRegistry::profileChanged);
+        QSignalSpy reloadedSpy(&m_registry, &PhosphorProfileRegistry::profilesReloaded);
+        m_registry.reloadAll(replacement);
 
         QCOMPARE(reloadedSpy.count(), 1);
         QCOMPARE(changedSpy.count(), 0); // bulk reload coalesces to one signal
-        QCOMPARE(PhosphorProfileRegistry::instance().profileCount(), 2);
-        QVERIFY(PhosphorProfileRegistry::instance().hasProfile(QStringLiteral("b")));
+        QCOMPARE(m_registry.profileCount(), 2);
+        QVERIFY(m_registry.hasProfile(QStringLiteral("b")));
     }
 
     void testProfileCountAndHasProfile()
     {
-        PhosphorProfileRegistry& r = PhosphorProfileRegistry::instance();
-        QCOMPARE(r.profileCount(), 0);
-        QVERIFY(!r.hasProfile(QStringLiteral("x")));
+        QCOMPARE(m_registry.profileCount(), 0);
+        QVERIFY(!m_registry.hasProfile(QStringLiteral("x")));
 
-        r.registerProfile(QStringLiteral("x"), Profile{});
-        QCOMPARE(r.profileCount(), 1);
-        QVERIFY(r.hasProfile(QStringLiteral("x")));
+        m_registry.registerProfile(QStringLiteral("x"), Profile{});
+        QCOMPARE(m_registry.profileCount(), 1);
+        QVERIFY(m_registry.hasProfile(QStringLiteral("x")));
 
-        r.registerProfile(QStringLiteral("y"), Profile{});
-        QCOMPARE(r.profileCount(), 2);
+        m_registry.registerProfile(QStringLiteral("y"), Profile{});
+        QCOMPARE(m_registry.profileCount(), 2);
     }
 
     /// `ownerReloaded(tag)` fires exactly once per partitioned-reload
@@ -129,7 +145,6 @@ private Q_SLOTS:
     /// signal individually.
     void testOwnerReloadedFiresOnceAfterPerPathBurst()
     {
-        PhosphorProfileRegistry& r = PhosphorProfileRegistry::instance();
         const QString tag = QStringLiteral("test-owner");
 
         QHash<QString, Profile> initial;
@@ -138,11 +153,11 @@ private Q_SLOTS:
         withDuration.duration = 200.0;
         initial.insert(QStringLiteral("a.two"), withDuration);
 
-        QSignalSpy changedSpy(&r, &PhosphorProfileRegistry::profileChanged);
-        QSignalSpy reloadedSpy(&r, &PhosphorProfileRegistry::ownerReloaded);
-        QSignalSpy bulkSpy(&r, &PhosphorProfileRegistry::profilesReloaded);
+        QSignalSpy changedSpy(&m_registry, &PhosphorProfileRegistry::profileChanged);
+        QSignalSpy reloadedSpy(&m_registry, &PhosphorProfileRegistry::ownerReloaded);
+        QSignalSpy bulkSpy(&m_registry, &PhosphorProfileRegistry::profilesReloaded);
 
-        r.reloadFromOwner(tag, initial);
+        m_registry.reloadFromOwner(tag, initial);
 
         QCOMPARE(changedSpy.count(), 2); // one per path that changed
         QCOMPARE(reloadedSpy.count(), 1); // one batch boundary signal
@@ -152,15 +167,15 @@ private Q_SLOTS:
         // No-op reload (same content): zero signals — including ownerReloaded.
         changedSpy.clear();
         reloadedSpy.clear();
-        r.reloadFromOwner(tag, initial);
+        m_registry.reloadFromOwner(tag, initial);
         QCOMPARE(changedSpy.count(), 0);
         QCOMPARE(reloadedSpy.count(), 0);
 
         // clearOwner also fires ownerReloaded after the per-path removals.
-        r.reloadFromOwner(tag, initial); // seed
+        m_registry.reloadFromOwner(tag, initial); // seed
         reloadedSpy.clear();
         changedSpy.clear();
-        r.clearOwner(tag);
+        m_registry.clearOwner(tag);
         QCOMPARE(changedSpy.count(), 2); // one per removed path
         QCOMPARE(reloadedSpy.count(), 1);
         QCOMPARE(reloadedSpy.first().at(0).toString(), tag);

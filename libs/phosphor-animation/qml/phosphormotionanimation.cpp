@@ -258,10 +258,20 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
 
     m_boundPath = path;
 
+    // Look up the registry the composition root published. Returns null
+    // when no composition root has called `setDefaultRegistry` yet —
+    // typical only in unit tests that exercise PhosphorMotionAnimation
+    // without a registry; production hosts always publish before QML
+    // bindings evaluate.
+    auto* registry = PhosphorProfileRegistry::defaultRegistry();
+    if (!registry) {
+        applyResolvedProfile(Profile{});
+        return;
+    }
+
     // Resolve now (may return nullopt if the path isn't registered yet
     // — startup race where the loader hasn't scanned XDG dirs).
-    auto& registry = PhosphorProfileRegistry::instance();
-    if (auto resolved = registry.resolve(path)) {
+    if (auto resolved = registry->resolve(path)) {
         applyResolvedProfile(*resolved);
     } else {
         // Keep the animation running at library-default profile until
@@ -287,13 +297,21 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
     // Forcing delivery through the receiver's event loop ensures the
     // setEasing call always runs on the thread that owns this object,
     // regardless of which thread publishes the registry update.
+    //
+    // The lambdas re-resolve the registry handle on each fire rather
+    // than capturing it, so a composition root that swapped its
+    // registry between subscribe and signal (only possible across
+    // teardown/reconstruction in tests) never dereferences a freed
+    // pointer — they read whatever pointer is currently published or
+    // bail when the handle is null.
     m_registryChangedConnection = connect(
-        &registry, &PhosphorProfileRegistry::profileChanged, this,
+        registry, &PhosphorProfileRegistry::profileChanged, this,
         [this](const QString& changedPath) {
             if (changedPath != m_boundPath) {
                 return;
             }
-            auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
+            auto* current = PhosphorProfileRegistry::defaultRegistry();
+            auto resolved = current ? current->resolve(m_boundPath) : std::optional<Profile>{};
             applyResolvedProfile(resolved.value_or(Profile{}));
             // Match the direct-setter semantics at setProfile() — a
             // QML author with `onProfileChanged: …` expects to see the
@@ -305,9 +323,10 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
         },
         Qt::QueuedConnection);
     m_registryReloadedConnection = connect(
-        &registry, &PhosphorProfileRegistry::profilesReloaded, this,
+        registry, &PhosphorProfileRegistry::profilesReloaded, this,
         [this]() {
-            auto resolved = PhosphorProfileRegistry::instance().resolve(m_boundPath);
+            auto* current = PhosphorProfileRegistry::defaultRegistry();
+            auto resolved = current ? current->resolve(m_boundPath) : std::optional<Profile>{};
             applyResolvedProfile(resolved.value_or(Profile{}));
             // Same rationale as above — reloadAll / clear must surface
             // as a profileChanged to QML observers, otherwise a wholesale

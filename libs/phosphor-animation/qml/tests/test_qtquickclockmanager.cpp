@@ -17,22 +17,36 @@ class TestQtQuickClockManager : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Per-test manager. Each test method gets a freshly default-
+    /// constructed instance via init() — no shared global state.
+    /// Replaces the prior `QtQuickClockManager::instance()` Meyers
+    /// singleton (Phase A3 of the architecture refactor).
+    std::unique_ptr<QtQuickClockManager> m_manager;
+
 private Q_SLOTS:
     void init()
     {
-        // Each test gets a clean manager. Production code must not
-        // call clearForTest (see class doc); tests are the one
-        // sanctioned caller.
-        QtQuickClockManager::instance().clearForTest();
+        m_manager = std::make_unique<QtQuickClockManager>();
     }
 
-    /// The manager is a process-wide singleton. Two `instance()` calls
-    /// return references to the same object.
-    void testSingletonIdentity()
+    void cleanup()
     {
-        QtQuickClockManager& a = QtQuickClockManager::instance();
-        QtQuickClockManager& b = QtQuickClockManager::instance();
-        QCOMPARE(&a, &b);
+        m_manager.reset();
+    }
+
+    /// Verify that the published default-manager handle round-trips —
+    /// composition roots use this pair to expose their owned manager
+    /// to QML.
+    void testDefaultManagerHandleRoundTrips()
+    {
+        QCOMPARE(QtQuickClockManager::defaultManager(), nullptr);
+
+        QtQuickClockManager::setDefaultManager(m_manager.get());
+        QCOMPARE(QtQuickClockManager::defaultManager(), m_manager.get());
+
+        QtQuickClockManager::setDefaultManager(nullptr);
+        QCOMPARE(QtQuickClockManager::defaultManager(), nullptr);
     }
 
     /// A null `QQuickWindow*` must return a null clock. Production
@@ -40,7 +54,7 @@ private Q_SLOTS:
     /// a window.
     void testNullWindowReturnsNull()
     {
-        QCOMPARE(QtQuickClockManager::instance().clockFor(nullptr), static_cast<IMotionClock*>(nullptr));
+        QCOMPARE(m_manager->clockFor(nullptr), static_cast<IMotionClock*>(nullptr));
     }
 
     /// The load-bearing invariant: two `clockFor` calls with the same
@@ -52,11 +66,11 @@ private Q_SLOTS:
     void testOneClockPerWindow()
     {
         auto window = std::make_unique<QQuickWindow>();
-        IMotionClock* first = QtQuickClockManager::instance().clockFor(window.get());
-        IMotionClock* second = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* first = m_manager->clockFor(window.get());
+        IMotionClock* second = m_manager->clockFor(window.get());
         QVERIFY(first != nullptr);
         QCOMPARE(first, second);
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+        QCOMPARE(m_manager->entryCount(), 1);
     }
 
     /// Two different windows get two different clocks.
@@ -64,12 +78,12 @@ private Q_SLOTS:
     {
         auto windowA = std::make_unique<QQuickWindow>();
         auto windowB = std::make_unique<QQuickWindow>();
-        IMotionClock* clockA = QtQuickClockManager::instance().clockFor(windowA.get());
-        IMotionClock* clockB = QtQuickClockManager::instance().clockFor(windowB.get());
+        IMotionClock* clockA = m_manager->clockFor(windowA.get());
+        IMotionClock* clockB = m_manager->clockFor(windowB.get());
         QVERIFY(clockA != nullptr);
         QVERIFY(clockB != nullptr);
         QVERIFY(clockA != clockB);
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 2);
+        QCOMPARE(m_manager->entryCount(), 2);
     }
 
     /// releaseClockFor evicts the entry — test-only teardown and
@@ -77,11 +91,11 @@ private Q_SLOTS:
     void testReleaseClockFor()
     {
         auto window = std::make_unique<QQuickWindow>();
-        QtQuickClockManager::instance().clockFor(window.get());
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+        m_manager->clockFor(window.get());
+        QCOMPARE(m_manager->entryCount(), 1);
 
-        QtQuickClockManager::instance().releaseClockFor(window.get());
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 0);
+        m_manager->releaseClockFor(window.get());
+        QCOMPARE(m_manager->entryCount(), 0);
     }
 
     /// Epoch identity must match IMotionClock::steadyClockEpoch — a
@@ -92,7 +106,7 @@ private Q_SLOTS:
     void testClockEpochIsSteady()
     {
         auto window = std::make_unique<QQuickWindow>();
-        IMotionClock* clock = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* clock = m_manager->clockFor(window.get());
         QVERIFY(clock);
         QCOMPARE(clock->epochIdentity(), IMotionClock::steadyClockEpoch());
     }
@@ -115,7 +129,7 @@ private Q_SLOTS:
     void testClockForReturnsSamePointerAcrossManyCalls()
     {
         auto window = std::make_unique<QQuickWindow>();
-        IMotionClock* first = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* first = m_manager->clockFor(window.get());
         QVERIFY(first);
 
         // A few hundred iterations: if the fix regressed and the
@@ -124,10 +138,10 @@ private Q_SLOTS:
         // eventually differ from `first` under a threaded racecondition.
         // Even on a single thread, we pin the simple invariant.
         for (int i = 0; i < 100; ++i) {
-            IMotionClock* again = QtQuickClockManager::instance().clockFor(window.get());
+            IMotionClock* again = m_manager->clockFor(window.get());
             QCOMPARE(again, first);
         }
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+        QCOMPARE(m_manager->entryCount(), 1);
     }
 
     /// `clockFor` after a `releaseClockFor` teardown must construct a
@@ -138,19 +152,19 @@ private Q_SLOTS:
     void testClockForAfterReleaseReconstructs()
     {
         auto window = std::make_unique<QQuickWindow>();
-        IMotionClock* first = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* first = m_manager->clockFor(window.get());
         QVERIFY(first);
 
-        QtQuickClockManager::instance().releaseClockFor(window.get());
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 0);
+        m_manager->releaseClockFor(window.get());
+        QCOMPARE(m_manager->entryCount(), 0);
 
         // Re-request — must construct a new clock. We can't
         // meaningfully compare pointers (allocator may coincidentally
         // reuse the address), but we CAN assert that entryCount went
         // back to 1 and the returned pointer is non-null.
-        IMotionClock* second = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* second = m_manager->clockFor(window.get());
         QVERIFY(second);
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+        QCOMPARE(m_manager->entryCount(), 1);
     }
 
     /// Regression guard for the eager-eviction-on-destroyed contract
@@ -170,16 +184,16 @@ private Q_SLOTS:
     void testWindowDestroyEvictsClock()
     {
         auto window = std::make_unique<QQuickWindow>();
-        IMotionClock* clock = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* clock = m_manager->clockFor(window.get());
         QVERIFY(clock);
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+        QCOMPARE(m_manager->entryCount(), 1);
 
         // Destroy the window — `~QObject` emits `destroyed`, which is
         // wired to `releaseClockFor` via DirectConnection so the
         // eviction runs synchronously on this stack frame.
         window.reset();
 
-        QCOMPARE(QtQuickClockManager::instance().entryCount(), 0);
+        QCOMPARE(m_manager->entryCount(), 0);
     }
 };
 

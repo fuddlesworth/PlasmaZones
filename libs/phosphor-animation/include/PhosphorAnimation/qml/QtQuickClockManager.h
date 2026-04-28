@@ -9,6 +9,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -23,7 +24,8 @@ class IMotionClock;
 class QtQuickClock;
 
 /**
- * @brief Per-process singleton that enforces "one QtQuickClock per QQuickWindow."
+ * @brief Enforces "one QtQuickClock per QQuickWindow" within a single
+ *        composition-root-owned manager instance.
  *
  * Phase 4 decision N. `QtQuickClock`'s class doc (Phase 3) established
  * the invariant: two clocks bound to the same `QQuickWindow` each
@@ -31,33 +33,45 @@ class QtQuickClock;
  * dispatch cost without producing different readings. The manager
  * reifies that invariant in code:
  *
- *   auto* clock = QtQuickClockManager::instance().clockFor(myWindow);
+ *   auto* clock = QtQuickClockManager::defaultManager()->clockFor(myWindow);
  *
  * returns the same `IMotionClock*` for every call with the same
  * `QQuickWindow*` for the lifetime of that window. When the window is
  * destroyed, the manager's internal `QPointer` bookkeeping drops the
  * entry on next access; the clock itself is owned by a `unique_ptr`
  * in the manager and destroyed when the window goes away or the
- * manager teardown runs (process exit).
+ * manager itself is destroyed (composition-root teardown).
+ *
+ * ## Ownership and DI
+ *
+ * The manager is created and owned by the composition root (daemon,
+ * editor, settings — each a separate process today). It is NOT a
+ * singleton: the composition root publishes its locally-owned manager
+ * via `setDefaultManager(...)` so QML callsites in that process resolve
+ * to the same instance. Tests construct their own local manager per
+ * fixture. The `setDefaultManager` / `defaultManager` pair mirrors
+ * `PhosphorCurve::setDefaultRegistry` — explicit DI handoff via a
+ * static handle, not a Meyers singleton.
  *
  * ## Consumer shape
  *
- * `PhosphorMotionAnimation` (Phase 4 sub-commit 4) looks up its clock
- * here from its enclosing `Item.window`. Direct C++ consumers of
- * `AnimatedValue<T>` from QML-adjacent code (a custom
- * `QQuickPaintedItem` that drives its own animations) call this to
- * obtain a clock without having to manage the one-per-window
- * bookkeeping.
+ * `PhosphorMotionAnimation` (Phase 4 sub-commit 4) and the
+ * `PhosphorAnimatedValueBase` family look up the manager via
+ * `defaultManager()` and call `clockFor` from the enclosing
+ * `Item.window`. Direct C++ consumers of `AnimatedValue<T>` from
+ * QML-adjacent code (a custom `QQuickPaintedItem` that drives its
+ * own animations) call this to obtain a clock without having to
+ * manage the one-per-window bookkeeping.
  *
  * The manager does **not** expose itself to QML — it's a C++-only
- * plumbing singleton. QML authors never need to see it; they write
+ * plumbing handle. QML authors never need to see it; they write
  * `PhosphorMotionAnimation` and the animation subclass wires the
  * clock behind their back.
  *
  * ## Thread safety
  *
- * `instance()` is callable from any thread. `clockFor()` MUST be
- * called on the thread that owns @p window (always the GUI thread
+ * `defaultManager()` is callable from any thread. `clockFor()` MUST
+ * be called on the thread that owns @p window (always the GUI thread
  * for a live `QQuickWindow`); it asserts this contract in debug
  * builds. The internal `std::mutex` guards the map mutation, but
  * the `QObject::connect(window, ...)` call the method performs
@@ -71,43 +85,36 @@ class QtQuickClock;
  *
  * ## Lifetime
  *
- * The manager itself is a process-wide singleton (Meyers) kept alive
- * for the entire process lifetime. It holds `unique_ptr<QtQuickClock>`
- * values keyed on raw `QQuickWindow*`. Eager eviction wires a
- * `QQuickWindow::destroyed` lambda at `clockFor` time; the lambda
- * drops the entry synchronously so a recycled `QQuickWindow*`
- * address never re-hits a stale clock.
+ * The manager holds `unique_ptr<QtQuickClock>` values keyed on raw
+ * `QQuickWindow*`. Eager eviction wires a `QQuickWindow::destroyed`
+ * lambda at `clockFor` time; the lambda drops the entry synchronously
+ * so a recycled `QQuickWindow*` address never re-hits a stale clock.
+ *
+ * The composition root owns the manager via `unique_ptr` (typically
+ * a member of the daemon / app object). The published default-handle
+ * pointer must be cleared (`setDefaultManager(nullptr)`) before the
+ * manager destructs so a successive composition (in tests, or a
+ * daemon reconfigure cycle) does not dangle.
  *
  * ## Process-exit edge cases
  *
- * Meyers singletons unwind during static destruction in reverse
- * construction order. Three hazards to be aware of:
+ * Even with composition-root ownership, two hazards remain:
  *
  *   1. **Dangling `destroyed` lambda.** Each `Entry` stores the
  *      `QMetaObject::Connection` for its window's `destroyed` signal.
- *      If a `QQuickWindow` somehow outlives this singleton (e.g., a
+ *      If a `QQuickWindow` somehow outlives this manager (e.g., a
  *      non-standard teardown where `QApplication` is destroyed AFTER
- *      statics, or an embedded shell that leaks a window), the
+ *      the manager, or an embedded shell that leaks a window), the
  *      destroyed signal would dispatch the DirectConnection lambda
  *      into an already-destroyed `this`, UAF on `m_mutex`. The
  *      destructor disconnects every stored connection under the lock
  *      to close this path.
  *
- *   2. **`clockFor` racing static destruction.** If another static
- *      destructor in the same process calls `clockFor()` while THIS
- *      singleton is mid-destruction, the mutex in the call would
- *      already be destroyed. There is no defence in code — the
- *      standard C++ static-destruction contract assumes no such
- *      reverse-order access. Consumers MUST NOT call `clockFor` from
- *      static destructors. The singleton is safe only for call sites
- *      reachable during normal (non-exit) execution.
- *
- *   3. **Meyers destruction vs. `QCoreApplication` lifetime.** The
- *      common `main()` shape — `QApplication app(argc, argv); … ;
- *      return app.exec();` — makes `QApplication` a stack local. Its
- *      destructor runs BEFORE main()'s statics unwind, so every
- *      QQuickWindow is gone before this singleton's destructor
- *      executes. Under that contract the hardening in (1) is a no-op.
+ *   2. **Common `main()` shape — `QApplication app(argc, argv); … ;
+ *      return app.exec();`** — makes `QApplication` a stack local.
+ *      Its destructor runs BEFORE main()'s statics unwind, so every
+ *      QQuickWindow is gone before any composition-root-owned manager
+ *      destructs. Under that contract the hardening in (1) is a no-op.
  *      Embedded hosts that heap-allocate QApp or wire their own exit
  *      path are the teardowns that actually exercise the disconnect
  *      loop.
@@ -123,9 +130,22 @@ class QtQuickClock;
 class PHOSPHORANIMATION_EXPORT QtQuickClockManager
 {
 public:
-    /// Process-wide singleton accessor. Meyers-scoped — thread-safe
-    /// initialisation under C++17's static-local init guarantees.
-    static QtQuickClockManager& instance();
+    QtQuickClockManager();
+    ~QtQuickClockManager();
+
+    /// Publish @p manager as the process-wide default for QML-side
+    /// consumers (`PhosphorAnimatedValueBase::resolveClock` /
+    /// `PhosphorMotionAnimation`) to look up. Called once by each
+    /// composition root after constructing its own manager; pass
+    /// `nullptr` on teardown to drop the handle before the manager
+    /// destructs.
+    static void setDefaultManager(QtQuickClockManager* manager);
+
+    /// Read-only view of the manager pointer published by
+    /// `setDefaultManager`. Returns `nullptr` when no composition root
+    /// has published yet — QML callsites then return a null clock and
+    /// fall back to library-default fixed-duration animation.
+    static QtQuickClockManager* defaultManager();
 
     /// Return the clock for @p window, constructing it on first call.
     /// Returns nullptr if @p window is nullptr. Subsequent calls with
@@ -166,13 +186,19 @@ public:
     /// clocks would UAF on their next advance).
     void clearForTest();
 
-    // Non-copyable — singleton.
+    // Non-copyable — owns a registry of unique window->clock entries.
     QtQuickClockManager(const QtQuickClockManager&) = delete;
     QtQuickClockManager& operator=(const QtQuickClockManager&) = delete;
 
 private:
-    QtQuickClockManager();
-    ~QtQuickClockManager();
+    /// Atomic for the same reason as `PhosphorProfileRegistry::s_defaultRegistry`:
+    /// concurrent QML loaders (multiple QQmlEngine instances on different
+    /// threads — a background-prerender shell is the canonical case)
+    /// cannot race on install-vs-read. Pointer loads are lock-free on
+    /// every platform Qt supports; `relaxed` ordering is sufficient
+    /// because the manager's own initialisation is synchronised by the
+    /// composition root's construction.
+    static std::atomic<QtQuickClockManager*> s_defaultManager;
 
     struct Entry
     {

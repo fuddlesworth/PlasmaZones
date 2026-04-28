@@ -51,6 +51,13 @@ class TestMotionAnimationBehavior : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Test-fixture-owned registry — published as the QML default
+    /// in initTestCase so QML `profile: "test.fade"` string bindings
+    /// resolve through it. Phase A3 of the architecture refactor
+    /// retired `PhosphorProfileRegistry::instance()`.
+    PhosphorProfileRegistry m_registry;
+
 private Q_SLOTS:
 
     void initTestCase()
@@ -59,19 +66,25 @@ private Q_SLOTS:
         // GPU drivers — same rationale as test_animatedvalue_realwindow.cpp.
         QQuickWindow::setSceneGraphBackend(QStringLiteral("software"));
 
-        // Register a deterministic test profile in the global
-        // PhosphorProfileRegistry so the QML `profile: "test.fade"`
-        // string-binding resolves to known values. Duration is short
-        // enough that the test completes quickly but long enough that
-        // we can observe an intermediate (not-yet-snapped) value.
+        // Publish the fixture's registry so QML `PhosphorMotionAnimation`
+        // resolution (via PhosphorProfileRegistry::defaultRegistry())
+        // points at this instance.
+        PhosphorProfileRegistry::setDefaultRegistry(&m_registry);
+
+        // Register a deterministic test profile so the QML
+        // `profile: "test.fade"` string-binding resolves to known
+        // values. Duration is short enough that the test completes
+        // quickly but long enough that we can observe an intermediate
+        // (not-yet-snapped) value.
         Profile p;
         p.duration = 200.0;
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.fade"), p);
+        m_registry.registerProfile(QStringLiteral("test.fade"), p);
     }
 
     void cleanupTestCase()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_registry.clear();
+        PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     }
 
     /// Behavior on x with a PhosphorMotionAnimation child must

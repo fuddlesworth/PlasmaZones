@@ -608,13 +608,8 @@ SurfaceAnimator::SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& reg
 {
 }
 
-SurfaceAnimator::SurfaceAnimator()
-    : SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry::instance(), Config{})
-{
-}
-
-SurfaceAnimator::SurfaceAnimator(Config defaults)
-    : SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry::instance(), std::move(defaults))
+SurfaceAnimator::SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry)
+    : SurfaceAnimator(registry, Config{})
 {
 }
 

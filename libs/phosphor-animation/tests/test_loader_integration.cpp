@@ -40,6 +40,11 @@ class TestLoaderIntegration : public QObject
     Q_OBJECT
 
 private:
+    /// Per-test profile registry. Phase A3 of the architecture refactor
+    /// retired `PhosphorProfileRegistry::instance()` — composition
+    /// roots and tests own their own.
+    PhosphorProfileRegistry m_profileRegistry;
+
     void writeFile(const QString& path, const QString& contents) const
     {
         QFile f(path);
@@ -52,9 +57,12 @@ private Q_SLOTS:
 
     void init()
     {
-        // Each test gets a clean process-wide profile registry. Tests
-        // are the sanctioned caller per the registry's class doc.
-        PhosphorProfileRegistry::instance().clear();
+        m_profileRegistry.clear();
+    }
+
+    void cleanup()
+    {
+        m_profileRegistry.clear();
     }
 
     /// Curves loaded BEFORE profiles — the first profile parse already
@@ -90,7 +98,7 @@ private Q_SLOTS:
         // SHARED registry — both loaders write/read here. This is the
         // contract the daemon's setupAnimationProfiles depends on.
         CurveRegistry curveRegistry;
-        auto& profileRegistry = PhosphorProfileRegistry::instance();
+        auto& profileRegistry = m_profileRegistry;
 
         CurveLoader curveLoader(curveRegistry);
         ProfileLoader profileLoader(profileRegistry, curveRegistry);
@@ -151,7 +159,7 @@ private Q_SLOTS:
         })"));
 
         CurveRegistry curveRegistry;
-        auto& profileRegistry = PhosphorProfileRegistry::instance();
+        auto& profileRegistry = m_profileRegistry;
 
         CurveLoader curveLoader(curveRegistry);
         ProfileLoader profileLoader(profileRegistry, curveRegistry);

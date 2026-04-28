@@ -5,7 +5,6 @@
 
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 
 #include <QStandardPaths>
@@ -55,8 +54,8 @@ AnimationBootstrap::AnimationBootstrap()
     }
 
     m_curveLoader = std::make_unique<CurveLoader>(*m_curveRegistry, nullptr);
-    m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(), *m_curveRegistry,
-                                                      kSecondaryProfilesOwnerTag, nullptr);
+    m_profileLoader =
+        std::make_unique<ProfileLoader>(m_profileRegistry, *m_curveRegistry, kSecondaryProfilesOwnerTag, nullptr);
 
     // Curves first so any profile JSON referencing a user-authored curve
     // resolves on first parse — same ordering rationale as Daemon::

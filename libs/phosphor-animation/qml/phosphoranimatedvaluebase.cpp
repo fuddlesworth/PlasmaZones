@@ -71,7 +71,16 @@ IMotionClock* PhosphorAnimatedValueBase::resolveClock() const
     if (!m_window) {
         return nullptr;
     }
-    return QtQuickClockManager::instance().clockFor(m_window.data());
+    auto* manager = QtQuickClockManager::defaultManager();
+    if (!manager) {
+        // No composition root has published a clock manager yet — return
+        // null so the AnimatedValue<T> falls back to its no-clock branch
+        // rather than crashing. Production composition roots publish
+        // before any QML engine starts evaluating bindings; this null
+        // path covers test fixtures that haven't wired a manager yet.
+        return nullptr;
+    }
+    return manager->clockFor(m_window.data());
 }
 
 void PhosphorAnimatedValueBase::connectSyncSignal()

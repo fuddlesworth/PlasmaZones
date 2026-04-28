@@ -14,12 +14,16 @@
 
 #include "../core/constants.h"
 
+#include <PhosphorAnimation/qml/PhosphorCurve.h>
+#include <PhosphorAnimation/qml/QtQuickClockManager.h>
+
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QScopeGuard>
 
 namespace {
 
@@ -108,6 +112,21 @@ int main(int argc, char* argv[])
     // default 150 ms — see AnimationBootstrap docs for the full rationale.
     // Must outlive the QML engine (Behavior bindings keep registry handles).
     PlasmaZones::AnimationBootstrap animationBootstrap;
+
+    // Publish the bootstrap-owned registries + a fresh clock manager as
+    // the QML-side defaults. Phase A3 of the architecture refactor
+    // retired the prior `PhosphorProfileRegistry::instance()` /
+    // `QtQuickClockManager::instance()` Meyers singletons — composition
+    // roots own and publish their own.
+    PhosphorAnimation::QtQuickClockManager clockManager;
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(animationBootstrap.curveRegistry());
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(animationBootstrap.profileRegistry());
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(&clockManager);
+    auto unpublishAnimationDefaults = qScopeGuard([] {
+        PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
+        PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+    });
 
     PlasmaZones::SettingsController controller;
 

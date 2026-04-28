@@ -51,9 +51,9 @@ namespace {
 /// registration policy ever changes (different roles registered, or
 /// different config shapes), this helper must change in lockstep —
 /// catching any divergence is the point of the test.
-std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon()
+std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimation::PhosphorProfileRegistry& registry)
 {
-    auto anim = std::make_unique<PAL::SurfaceAnimator>(PAL::SurfaceAnimator::Config{});
+    auto anim = std::make_unique<PAL::SurfaceAnimator>(registry, PAL::SurfaceAnimator::Config{});
 
     const PAL::SurfaceAnimator::Config osdConfig{.showProfile = QStringLiteral("osd.show"),
                                                  .hideProfile = QStringLiteral("osd.hide"),
@@ -130,7 +130,8 @@ private Q_SLOTS:
     /// surface post-Phase-2, so this test covers both modes.
     void notification_scope_resolves_to_registered_config()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 7);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
@@ -142,7 +143,8 @@ private Q_SLOTS:
     /// suffix must not affect the prefix-match outcome.
     void notification_scope_resolves_independent_of_screen_id()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("HDMI-A-1/vs:0"), 3);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
@@ -155,7 +157,8 @@ private Q_SLOTS:
     /// which did NOT prefix-match "plasmazones-zone-selector".
     void zone_selector_scope_resolves_to_panel_popup()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::ZoneSelector, QStringLiteral("DP-1/vs:0"), 12);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
@@ -164,7 +167,8 @@ private Q_SLOTS:
 
     void snap_assist_scope_resolves_to_panel_popup()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::SnapAssist, QStringLiteral("DP-1"), 5);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
@@ -174,7 +178,8 @@ private Q_SLOTS:
 
     void layout_picker_scope_resolves_to_softer_envelope()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::LayoutPicker, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
@@ -194,7 +199,8 @@ private Q_SLOTS:
     /// config (showScaleFrom 0.8), not the picker (0.9).
     void notification_does_not_cross_pollinate_to_layout_picker()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
         // OSD config has 0.8, picker has 0.9. Picking up the picker
@@ -209,7 +215,8 @@ private Q_SLOTS:
     /// should still work.
     void exact_base_scope_resolves()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         QCOMPARE(anim->configForRole(PzRoles::Notification).showProfile, QStringLiteral("osd.show"));
         QCOMPARE(anim->configForRole(PzRoles::ZoneSelector).showProfile, QStringLiteral("panel.popup"));
     }
@@ -219,7 +226,8 @@ private Q_SLOTS:
     /// where the prefix-match algorithm started doing partial matches.
     void unregistered_role_falls_back_to_default()
     {
-        const auto anim = buildAnimatorMatchingDaemon();
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
         // ShaderPreview is not registered with the animator
         // (setupSurfaceAnimator's documented exclusion list).
         const auto cfg = anim->configForRole(PzRoles::ShaderPreview);

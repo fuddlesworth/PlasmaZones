@@ -32,10 +32,24 @@ class TestPhosphorAnimatedTyped : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Per-test clock manager. Published as the QML default in init()
+    /// so PhosphorAnimatedValueBase::resolveClock resolves through this
+    /// fixture-owned instance. Phase A3 of the architecture refactor
+    /// retired `QtQuickClockManager::instance()`.
+    std::unique_ptr<QtQuickClockManager> m_clockManager;
+
 private Q_SLOTS:
     void init()
     {
-        QtQuickClockManager::instance().clearForTest();
+        m_clockManager = std::make_unique<QtQuickClockManager>();
+        QtQuickClockManager::setDefaultManager(m_clockManager.get());
+    }
+
+    void cleanup()
+    {
+        QtQuickClockManager::setDefaultManager(nullptr);
+        m_clockManager.reset();
     }
 
     // ─── Point ───

@@ -23,6 +23,7 @@
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/qml/PhosphorCurve.h>
+#include <PhosphorAnimation/qml/QtQuickClockManager.h>
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
@@ -97,6 +98,14 @@ Daemon::Daemon(QObject* parent)
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
                                                                       QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
+    // m_curveRegistry / m_profileRegistry are default-constructed (no
+    // init-list entries) — daemon.h declares them between m_layoutComputeService
+    // and m_clockManager, so the in-class default initialisation runs before
+    // any consumer below references them. m_clockManager owns its
+    // QtQuickClockManager via unique_ptr; the manager itself is published
+    // as the QML-side default in setupAnimationProfiles() below alongside
+    // the profile registry.
+    , m_clockManager(std::make_unique<PhosphorAnimation::QtQuickClockManager>())
     // Pass &m_curveRegistry into Settings so its initial load() resolves
     // Profile blobs through the daemon-owned registry. Requires
     // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
@@ -120,7 +129,8 @@ Daemon::Daemon(QObject* parent)
           },
           nullptr))
     , m_shaderRegistry(std::make_unique<ShaderRegistry>(nullptr))
-    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), nullptr))
+    , m_overlayService(
+          std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), &m_profileRegistry, nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
@@ -238,13 +248,12 @@ void Daemon::setupAnimationProfiles()
 {
     using namespace PhosphorAnimation;
 
-    // Wipe any entries left over from a previous Daemon instance. The
-    // PhosphorProfileRegistry is a process-global singleton (see its
-    // header for the rationale), so a Daemon rebuilt in the same
-    // process — typical in tests, occasionally in production on
-    // config reload — would otherwise inherit stale profiles from the
-    // prior instance, firing spurious profileChanged against bindings
-    // that have long since disappeared.
+    // Wipe any entries left over from prior wiring on this same daemon
+    // instance. The registry is a daemon-owned member, so a fresh
+    // Daemon construction always starts with an empty registry — but
+    // setupAnimationProfiles is also called on configure-reload paths
+    // where prior loaders may have populated the partitions; clearing
+    // here keeps the post-condition uniform.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -252,8 +261,9 @@ void Daemon::setupAnimationProfiles()
     // Wholesale `clear()` would also evict any other consumer's
     // entries if they happened to register before us — not a concern
     // in production today but the narrower scope is the correct
-    // contract for a shared registry.
-    auto& registry = PhosphorProfileRegistry::instance();
+    // contract for a registry that may be shared with other consumers
+    // in future multi-publisher configurations.
+    PhosphorProfileRegistry& registry = m_profileRegistry;
     registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
     for (const QString* path : kSettingsDrivenProfilePaths) {
         registry.unregisterProfile(*path);
@@ -326,8 +336,8 @@ void Daemon::setupAnimationProfiles()
     // `publishActiveAnimationProfile` are owned by the empty/direct
     // tag and survive untouched.
     m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
-    m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(), m_curveRegistry,
-                                                      kPlasmaZonesUserProfilesOwnerTag, nullptr);
+    m_profileLoader =
+        std::make_unique<ProfileLoader>(m_profileRegistry, m_curveRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
 
     // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
     // whose `curve` spec references a user-authored curve name that
@@ -402,6 +412,22 @@ void Daemon::setupAnimationProfiles()
     // across process-lifetime Daemon reconstruction (e.g. in tests).
     PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
 
+    // Publish the daemon-owned PhosphorProfileRegistry as the QML-side
+    // default — every `PhosphorMotionAnimation { profile: "<path>" }`
+    // in the overlay shell resolves through this pointer. Phase A3 of
+    // the architecture refactor: replaces the prior
+    // `PhosphorProfileRegistry::instance()` Meyers singleton with
+    // explicit composition-root publication. Cleared in `stop()` before
+    // the registry destructs.
+    PhosphorProfileRegistry::setDefaultRegistry(&m_profileRegistry);
+
+    // Publish the daemon-owned QtQuickClockManager as the QML-side
+    // default — `PhosphorAnimatedValueBase::resolveClock` in any
+    // `PhosphorAnimatedReal/Color/Point/Rect/Size` instance that the
+    // overlay shell instantiates resolves through this pointer.
+    // Cleared in `stop()` before the manager destructs.
+    QtQuickClockManager::setDefaultManager(m_clockManager.get());
+
     // Initial scans — order is curves-before-profiles so profile files
     // referencing user-authored curve names resolve on first parse
     // rather than waiting for the curveLoader→profileLoader rescan wire
@@ -455,7 +481,7 @@ void Daemon::publishActiveAnimationProfile()
     // This runs on the settings-slider hot path (~30 Hz during drag),
     // so O(1) `hasPath` is used instead of `entries()` which copies
     // and sorts the full tracked set on every tick.
-    auto& reg = PhosphorProfileRegistry::instance();
+    auto& reg = m_profileRegistry;
 
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
@@ -1210,15 +1236,16 @@ void Daemon::stop()
         return;
     }
 
-    // Null the QML static registry pointer before our m_curveRegistry
-    // member is destroyed (unique_ptr member destruction runs AFTER
-    // ~Daemon body but after stop() completes — tearing the static's
-    // borrowed pointer now guarantees no QML PhosphorCurve.fromString()
-    // call landing during teardown or in a subsequent Daemon instance
-    // dereferences freed memory.
+    // Null the QML static registry / manager pointers before our owned
+    // members are destroyed (unique_ptr / value-typed member destruction
+    // runs AFTER ~Daemon body completes — tearing the static borrowed
+    // pointers now guarantees no QML callsite landing during teardown
+    // or in a subsequent Daemon instance dereferences freed memory.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
 
-    // Tear down the process-global PhosphorProfileRegistry entries this
+    // Tear down the daemon-owned PhosphorProfileRegistry entries this
     // Daemon published so a later Daemon reconstruction (tests, or a
     // live reconfigure that tears down and rebuilds the daemon in
     // place) starts from a registry owning none of our entries. Mirrors
@@ -1239,7 +1266,7 @@ void Daemon::stop()
     //     `~Daemon` body where they'd fire path-change signals into a
     //     half-destroyed object during member destruction order.
     {
-        auto& profileRegistry = PhosphorAnimation::PhosphorProfileRegistry::instance();
+        auto& profileRegistry = m_profileRegistry;
         for (const QString* path : kSettingsDrivenProfilePaths) {
             profileRegistry.unregisterProfile(*path);
         }

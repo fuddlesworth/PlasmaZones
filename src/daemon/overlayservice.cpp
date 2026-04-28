@@ -35,6 +35,7 @@
 #include "pz_qml_i18n.h"
 #include "vulkan_support.h"
 
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimationLayer/SurfaceAnimator.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
@@ -233,7 +234,7 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig()
 
 } // namespace
 
-void OverlayService::setupSurfaceAnimator()
+void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry)
 {
     namespace PAL = PhosphorAnimationLayer;
 
@@ -246,7 +247,7 @@ void OverlayService::setupSurfaceAnimator()
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
-    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(buildDefaultConfig());
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
 
     // Profile names are the same paths PhosphorMotionAnimation in QML
     // uses today, so the live-reload path (drop a JSON, see it apply on
@@ -265,7 +266,7 @@ void OverlayService::setupSurfaceAnimator()
 }
 
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
-                               QObject* parent)
+                               PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
     : IOverlayService(parent)
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
     , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
@@ -273,13 +274,20 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_screenManager = screenManager;
     m_shaderRegistry = shaderRegistry;
 
+    // The profile registry is non-optional: SurfaceAnimator binds to it by
+    // reference. Composition roots own a single PhosphorProfileRegistry
+    // and thread it through every consumer — fail loud if the wiring is
+    // wrong rather than silently falling back to library defaults.
+    Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
+               "profileRegistry must not be null — composition root must own and inject the registry");
+
     // Phase-5 SurfaceAnimator. One instance drives every overlay's
     // show/hide via Profile-resolved curves; per-Role configs install
     // below in setupSurfaceAnimator(). Constructed BEFORE the
     // SurfaceFactory because the factory's Deps captures the animator
     // pointer; Surfaces produced after this point dispatch through it
     // on every show/hide.
-    setupSurfaceAnimator();
+    setupSurfaceAnimator(*profileRegistry);
 
     m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(
         PhosphorLayer::SurfaceFactory::Deps{.transport = m_transport.get(),
