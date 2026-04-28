@@ -5,6 +5,8 @@
 
 #include <phosphorshell_export.h>
 
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
+
 #include <QHash>
 #include <QImage>
 #include <QList>
@@ -18,10 +20,6 @@
 #include <QVariant>
 #include <array>
 #include <memory>
-
-namespace PhosphorFsLoader {
-class WatchedDirectorySet;
-}
 
 namespace PhosphorShell {
 
@@ -84,7 +82,7 @@ public:
 
         bool isValid() const
         {
-            return !id.isEmpty() && (ShaderRegistry::isNoneShader(id) || shaderUrl.isValid());
+            return !id.isEmpty() && (isNoneShader(id) || shaderUrl.isValid());
         }
     };
 
@@ -98,14 +96,24 @@ public:
     /// scan; prefer `addSearchPaths` directly when registering more than
     /// one path during construction (avoids N redundant scans, one per
     /// path).
-    void addSearchPath(const QString& path);
+    ///
+    /// @p liveReload defaults to `On` so production callers get
+    /// hot-reload by default. Pass `Off` from tests / batch-import
+    /// contexts that want a one-shot scan with no background watcher.
+    /// Inherits the underlying `WatchedDirectorySet`'s one-way-enable
+    /// semantics: once any call passes `On`, the watcher stays armed
+    /// for the registry's lifetime.
+    void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
     /// Add multiple search-path directories in one shot. Later paths take
     /// priority over earlier ones on shader-id collision (last-writer-
     /// wins, mirroring `addSearchPath` registration order). Prefer this
     /// over a loop of `addSearchPath` calls — a single batched call runs
     /// exactly one scan instead of N.
-    void addSearchPaths(const QStringList& paths);
+    ///
+    /// Same `liveReload` semantics as the single-path overload.
+    void addSearchPaths(const QStringList& paths,
+                        PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
     /// Mark @p path as the "user" search path for `ShaderInfo::isUserShader`
     /// classification. Stored as-given; the rescan canonicalises both this
@@ -117,8 +125,10 @@ public:
     /// Set this BEFORE the first `addSearchPaths` call so the initial
     /// scan sees the right classification; the registry does not retain
     /// raw shader paths after the rescan, so changing this later requires
-    /// an explicit `refresh()` to reclassify. Idempotent and one-way: a
-    /// subsequent empty argument clears the user-path designation.
+    /// an explicit `refresh()` to reclassify. Idempotent: passing the
+    /// same value twice is a no-op. Bidirectional: passing the empty
+    /// string clears the user-path designation, passing a non-empty
+    /// string sets or replaces it.
     void setUserShaderPath(const QString& path);
 
     /// Current search paths.

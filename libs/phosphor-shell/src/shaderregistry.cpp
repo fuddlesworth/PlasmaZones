@@ -131,12 +131,12 @@ ShaderRegistry::~ShaderRegistry() = default;
 // Search Paths
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShaderRegistry::addSearchPath(const QString& path)
+void ShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    addSearchPaths(QStringList{path});
+    addSearchPaths(QStringList{path}, liveReload);
 }
 
-void ShaderRegistry::addSearchPaths(const QStringList& paths)
+void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload)
 {
     // Filter empties and pre-canonicalise so dedup matches what the
     // watcher will store internally — `WatchedDirectorySet` canonicalises
@@ -165,7 +165,7 @@ void ShaderRegistry::addSearchPaths(const QStringList& paths)
     // for the whole batch, populates `m_shaders` via the strategy, and
     // emits `shadersChanged` once. Avoids the N-rescans-on-startup
     // amplification that a loop of single-path registrations would cause.
-    m_watcher->registerDirectories(toRegister, PhosphorFsLoader::LiveReload::On);
+    m_watcher->registerDirectories(toRegister, liveReload);
     for (const QString& path : std::as_const(toRegister)) {
         qCInfo(lcShaderRegistry) << "Added search path:" << path;
     }

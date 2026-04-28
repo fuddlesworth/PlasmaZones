@@ -158,7 +158,6 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
             m_directories.append(canonical);
         }
         if (liveReload == LiveReload::On) {
-            m_liveReloadEnabled = true;
             installWatcherIfNeeded();
             attachWatcherForDir(canonical);
         }
@@ -249,8 +248,11 @@ void WatchedDirectorySet::rescanAll()
     // If live-reload is enabled, the watcher needs a chance to promote
     // any parent-watched target that just materialised. Do this before
     // the strategy runs so a dir created between the last rescan and
-    // this one is fully wired.
-    if (m_liveReloadEnabled) {
+    // this one is fully wired. `m_watcher != nullptr` is the canonical
+    // "live-reload on" predicate — `installWatcherIfNeeded` only ever
+    // runs from the `LiveReload::On` branch in `registerDirectories`,
+    // and the watcher is never torn down for the set's lifetime.
+    if (m_watcher) {
         for (const QString& dir : m_directories) {
             attachWatcherForDir(dir);
         }
@@ -265,8 +267,10 @@ void WatchedDirectorySet::rescanAll()
     // matches the strategy's view of "currently relevant" paths.
     // QFileSystemWatcher auto-drops entries on atomic-rename saves
     // (most editors), so we re-sync on every rescan — the add/remove
-    // diff makes this cheap.
-    if (m_liveReloadEnabled) {
+    // diff makes this cheap. `syncFileWatches` itself null-checks
+    // `m_watcher`, but gating here saves the QSet allocation when
+    // live-reload is off.
+    if (m_watcher) {
         syncFileWatches(desiredFileWatches);
     }
 
@@ -442,6 +446,16 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
                 // targets can share one climbed ancestor). Iterate the
                 // remaining `m_parentWatchFor` values — that map tracks
                 // exactly which other targets still need this ancestor.
+                //
+                // O(N) per promotion in the count of missing-target
+                // dirs sharing this ancestor. N is bounded by the
+                // consumer's registered-directory count (typical
+                // single-digit: one user dir, a handful of system
+                // dirs), so the linear sweep is preferable to a
+                // refcount mirror. If a future consumer registers
+                // hundreds of missing-target paths under one
+                // ancestor, swap this for a `QHash<ancestor, int>`
+                // refcount.
                 bool ancestorStillNeeded = false;
                 for (auto it = m_parentWatchFor.constBegin(); it != m_parentWatchFor.constEnd(); ++it) {
                     if (it.value() == watchedAncestor) {

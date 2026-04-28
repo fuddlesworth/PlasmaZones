@@ -213,7 +213,7 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
     }
 }
 
-bool ScriptedAlgorithmLoader::scanAndRegister()
+bool ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveReload)
 {
     // Lazily create user directory on first scan, then re-register the
     // (possibly newly-existing) directory set with the watcher so the
@@ -233,7 +233,18 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     }
     const QStringList dirs = algorithmDirectories();
     if (dirs.isEmpty()) {
-        return false;
+        // Dirs collapsed to empty since the last scan (distro package
+        // uninstalled, user wiped ~/.local/share/<sub>, XDG_DATA_DIRS
+        // rewritten). Drive the diff path directly so any
+        // previously-registered scripts get unregistered — registering
+        // an empty list with the watcher is a no-op (it short-circuits
+        // before rescanAll), so without this explicit invocation
+        // those entries would stay as zombies in the registry forever.
+        // Strategy state — m_scriptIdToPath, m_lastScriptSignature, and
+        // the algorithmsChanged emit — is updated exactly the same way
+        // as on a populated rescan, just with no new entries.
+        performScan(QStringList{});
+        return m_lastScriptSignature != priorSignature;
     }
 
     // registerDirectories runs the strategy synchronously, which clears
@@ -242,7 +253,7 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     // same on-disk state we just captured, doubling the work and
     // (worse) making the priorSignature comparison meaningless because
     // it would be against the post-first-scan signature.
-    m_watcher->registerDirectories(dirs, PhosphorFsLoader::LiveReload::On);
+    m_watcher->registerDirectories(dirs, liveReload);
     return m_lastScriptSignature != priorSignature;
 }
 

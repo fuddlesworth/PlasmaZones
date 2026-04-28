@@ -231,6 +231,34 @@ private Q_SLOTS:
         loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
     }
 
+    /// Regression guard: passing `LiveReload::Off` disables the
+    /// background watcher and gives the caller a one-shot scan.
+    /// Verifies the new optional parameter on `scanAndRegister`
+    /// (a) compiles and (b) doesn't regress the basic scan path.
+    /// Tests that opt out of live-reload do so to avoid spurious
+    /// directoryChanged signals fighting with QSignalSpy timing.
+    void testScanAndRegister_liveReloadOff()
+    {
+        XdgEnvGuard envGuard;
+
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+        const QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(algoDir));
+
+        writeScript(algoDir, QStringLiteral("ephemeral.js"), validScript(QStringLiteral("Ephemeral")));
+
+        qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
+        qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
+
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"),
+                                                      PlasmaZones::TestHelpers::testRegistry());
+        loader.scanAndRegister(PhosphorFsLoader::LiveReload::Off);
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
+    }
+
     // =========================================================================
     // System-vs-system priority — the highest-priority XDG_DATA_DIRS entry
     // must win when two system dirs ship the same script id. Pre-fix, the

@@ -180,6 +180,10 @@ private:
 
     IScanStrategy* m_strategy = nullptr;
     QStringList m_directories; ///< registration order
+    /// Owns the underlying `QFileSystemWatcher` when live-reload is
+    /// enabled. `nullptr` is the canonical "live-reload off" state —
+    /// `m_watcher != nullptr` is the single source of truth, no
+    /// parallel `m_liveReloadEnabled` flag.
     QFileSystemWatcher* m_watcher = nullptr;
     QSet<QString> m_watchedParents; ///< parents watched for dir-creation
     /// Back-reference from a configured target directory whose own path
@@ -197,7 +201,6 @@ private:
     /// every rescan from the strategy's returned path list.
     QSet<QString> m_watchedFiles;
     QTimer m_debounceTimer;
-    bool m_liveReloadEnabled = false;
     /// Reentry depth — incremented at the top of every `rescanAll`, decremented
     /// at the bottom. A bool would clobber on nested invocations (a slot wired
     /// to `rescanCompleted` calling `registerDirectories` runs `rescanAll`

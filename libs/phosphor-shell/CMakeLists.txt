@@ -161,8 +161,12 @@ target_link_libraries(PhosphorShell
     PUBLIC
         Qt6::Core
         Qt6::Gui
-    PRIVATE
+        # PhosphorFsLoader is publicly exposed via ShaderRegistry's
+        # `LiveReload` parameter — consumers including
+        # `<PhosphorShell/ShaderRegistry.h>` need its headers on their
+        # include path.
         PhosphorFsLoader::PhosphorFsLoader
+    PRIVATE
         Qt6::GuiPrivate
         Qt6::WaylandClientPrivate
         Qt6::ShaderToolsPrivate

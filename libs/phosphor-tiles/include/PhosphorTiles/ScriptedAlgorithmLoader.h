@@ -4,16 +4,13 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+#include <PhosphorFsLoader/WatchedDirectorySet.h>
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
 #include <QString>
 
 #include <memory>
-
-namespace PhosphorFsLoader {
-class WatchedDirectorySet;
-}
 
 namespace PhosphorTiles {
 
@@ -63,8 +60,20 @@ public:
      * Clears existing scripted algorithms from the registry, then rescans
      * all algorithm directories. System directories are loaded first so that
      * user directories can override by filename.
+     *
+     * @p liveReload defaults to `On` so production callers (daemon,
+     * editor, settings) get hot-reload by default. Pass `Off` from
+     * tests / batch-import contexts that want a one-shot scan with no
+     * background watcher attached. The flag is forwarded to the
+     * underlying `WatchedDirectorySet` and inherits its one-way-enable
+     * semantics: once any call passes `On`, the watcher stays armed
+     * for the loader's lifetime.
+     *
+     * Idempotent on the registry: a re-scan that resolves to an empty
+     * directory set still drives the diff path so previously-registered
+     * scripts get unregistered as stale.
      */
-    bool scanAndRegister();
+    bool scanAndRegister(PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
     /**
      * @brief Create the user algorithm directory if it does not exist

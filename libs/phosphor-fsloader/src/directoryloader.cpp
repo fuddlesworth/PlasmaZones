@@ -112,13 +112,23 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         // key so the warning can name both the winning file and the
         // ignored file.
         //
-        // Lookup key is case-folded so rsync-from-macOS-APFS
-        // (case-insensitive) onto ext4 (case-sensitive) — where
-        // `Curve.json` and `curve.json` coexist on ext4 but collide on
-        // APFS — warns consistently on both platforms. The ORIGINAL
-        // case is still used for the registered entry key (sinks may
-        // care about case for display purposes) — only the collision
-        // check itself is case-folded.
+        // INTRA-directory only: lookup key is case-folded so
+        // rsync-from-macOS-APFS (case-insensitive) onto ext4
+        // (case-sensitive) — where `Curve.json` and `curve.json`
+        // coexist on ext4 but collide on APFS — warns consistently
+        // on both platforms. The ORIGINAL case is still used for the
+        // registered entry key (sinks may care about case for display
+        // purposes) — only the collision check itself is case-folded.
+        //
+        // Cross-directory layering uses the raw key, so user
+        // `Curve.json` (key="Foo") in one dir and system `curve.json`
+        // (key="foo") in another resolve to two distinct registry
+        // entries. That asymmetry is deliberate: case-folding
+        // cross-dir would risk silently dropping legitimate user
+        // overrides whose keys happen to differ only in case from a
+        // system entry, and the only realistic way to hit a mixed-
+        // sensitivity collision is rsync APFS → ext4 (already
+        // round-tripped via the intra-dir warning above).
         QHash<QString, QString> keysInThisDir;
 
         for (const QString& file : files) {

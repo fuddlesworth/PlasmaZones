@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
+
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
@@ -73,26 +75,18 @@ struct JsonEnvelope
  */
 inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath, const QLoggingCategory& category)
 {
-    // 1 MiB is generous for any realistic Phosphor JSON envelope (curve
-    // packs, profile packs). A larger file is either a typo-pointed
-    // symlink at a multi-MB asset or a hand-crafted DoS — `readAll()`
-    // would otherwise pull the whole thing into memory before the JSON
-    // parser had a chance to reject it.
-    //
-    // `DirectoryLoader::kMaxFileBytes` enforces the SAME 1 MiB cap on
-    // the loader side BEFORE this helper is ever called via the default
-    // sink dispatch path. The duplicate guard here is authoritative for
-    // direct callers (`validateJsonEnvelope` is a public free function)
-    // and belt-and-suspenders for the loader path. Keeping both costs
-    // one extra `QFileInfo::size()` stat — microscopic compared with
-    // the alternative of letting a 2 GiB blob fall through to direct
-    // callers that didn't stat themselves.
-    constexpr qint64 kMaxFileSize = 1 * 1024 * 1024;
-
+    // Single source of truth for the JSON-envelope size cap is
+    // `DirectoryLoader::kMaxFileBytes`. The loader applies it first via
+    // the default sink dispatch path; this helper enforces it again
+    // because `validateJsonEnvelope` is a public free function and may
+    // be called directly (without a loader stat in front of it). One
+    // extra `QFileInfo::size()` per direct call — microscopic compared
+    // with the alternative of letting a 2 GiB blob fall through to a
+    // caller that didn't stat itself.
     QFileInfo info(filePath);
-    if (info.exists() && info.size() > kMaxFileSize) {
+    if (info.exists() && info.size() > DirectoryLoader::kMaxFileBytes) {
         qCWarning(category).nospace() << "Skipping " << filePath << ": file size " << info.size() << " exceeds limit "
-                                      << kMaxFileSize;
+                                      << DirectoryLoader::kMaxFileBytes;
         return std::nullopt;
     }
 
