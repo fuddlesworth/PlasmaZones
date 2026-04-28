@@ -508,6 +508,9 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     cfg.anchorsOverride = std::move(params.anchorsOverride);
     cfg.marginsOverride = std::move(params.marginsOverride);
     cfg.keepMappedOnHide = params.keepMappedOnHide;
+    if (!params.initialSize.isEmpty()) {
+        cfg.initialSize = params.initialSize;
+    }
     cfg.debugName = QString::fromUtf8(params.windowType);
 
     return m_surfaceManager->createSurface(std::move(cfg), this);
@@ -516,8 +519,20 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
 PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
                                                                QScreen* physScreen, const char* windowType)
 {
-    auto* surface = createLayerSurface(
-        {.qmlUrl = qmlUrl, .screen = physScreen, .role = role, .windowType = windowType, .keepMappedOnHide = true});
+    // Warm-up size matches NotificationOverlay.qml's QML literal (240x70).
+    // Both per-show paths in osd.cpp imperatively resize via setWidth/setHeight
+    // to the loaded content's contentDesiredWidth/Height before Surface::show(),
+    // so the warm-up size only governs the size of the first Vulkan swapchain
+    // commit. Holding ~17 fullscreen swapchains (one per warmed overlay across
+    // virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary stack;
+    // a content-sized warm-up keeps the swapchain proportional to actual
+    // OSD content.
+    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
+                                        .screen = physScreen,
+                                        .role = role,
+                                        .windowType = windowType,
+                                        .keepMappedOnHide = true,
+                                        .initialSize = QSize(240, 70)});
     if (!surface) {
         return nullptr;
     }

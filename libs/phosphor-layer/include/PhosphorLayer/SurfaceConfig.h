@@ -7,6 +7,7 @@
 #include <PhosphorLayer/phosphorlayer_export.h>
 
 #include <QMargins>
+#include <QSize>
 #include <QString>
 #include <QUrl>
 #include <QVariantMap>
@@ -107,6 +108,26 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     /// Default `false` preserves the original lifecycle: hide() unmaps the
     /// window immediately and a future show() pays the reattach cost.
     bool keepMappedOnHide = false;
+
+    /// Initial size committed to the wl_surface during warm-up. Determines
+    /// the size of the first Vulkan swapchain Qt allocates.
+    ///
+    /// When unset (default), warm-up sizes the wrapper QQuickWindow to the
+    /// target screen's full geometry. That guarantees a non-zero buffer for
+    /// partial-anchor layer surfaces (see the "non-zero size BEFORE
+    /// completeCreate" invariant in surface.cpp::instantiateFromComponent),
+    /// but it costs a full-screen swapchain (~25 MB at 4K × 3 buffers on
+    /// NVIDIA) even when the eventual visible content is a small toast.
+    ///
+    /// When set, surface.cpp uses this as the warm-up geometry instead.
+    /// Subsequent imperative setWidth/setHeight calls still resize the
+    /// surface; this only governs the size of the first commit. Pass the
+    /// largest size the surface is expected to grow to in practice — that
+    /// way Qt avoids the "small swapchain → resize on first show" round
+    /// trip on NVIDIA, where swapchain resize is destroy + recreate.
+    ///
+    /// Must be non-empty when set. Empty is treated as "use the default".
+    std::optional<QSize> initialSize;
 
     /// Logged in state transitions. Defaults to Role::scopePrefix when empty.
     QString debugName;

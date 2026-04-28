@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <atomic>
 #include <memory>
@@ -651,6 +652,14 @@ private:
         std::optional<QMargins> marginsOverride =
             std::nullopt; ///< Overrides the role's margins (virtual-screen positioning).
         bool keepMappedOnHide = false; ///< See SurfaceConfig::keepMappedOnHide.
+        /// Initial swapchain size committed during warm-up. Empty (default)
+        /// → screen geometry, which guarantees a non-zero buffer for every
+        /// anchor configuration but allocates a full-screen Vulkan swapchain
+        /// (~25 MB at 4K × triple buffer on NVIDIA). Non-empty → small
+        /// content-sized warm-up (~1-2 MB swapchain). The eventual visible
+        /// size is still driven by per-show setWidth/setHeight; this only
+        /// governs the warm-up commit.
+        QSize initialSize = {};
     };
 
     /**
