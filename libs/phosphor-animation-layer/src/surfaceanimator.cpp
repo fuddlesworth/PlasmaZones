@@ -214,7 +214,7 @@ public:
             m_pendingDestroy.push_back(std::move(track.shaderTime));
         }
         if (track.shaderItem) {
-            delete track.shaderItem;
+            track.shaderItem->deleteLater();
             track.shaderItem = nullptr;
         }
     }
@@ -503,10 +503,6 @@ public:
                     },
                     /*onComplete=*/
                     [this, surface]() {
-                        auto sit = m_tracks.find(surface);
-                        if (sit != m_tracks.end()) {
-                            teardownShaderLeg(sit->second);
-                        }
                         legCompleted(surface);
                     }));
         }

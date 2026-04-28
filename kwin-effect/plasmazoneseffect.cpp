@@ -7,9 +7,6 @@
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/StaggerTimer.h>
 
-#include <QFile>
-#include <QJsonDocument>
-
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/WireTypes.h>
 #include <PhosphorIdentity/ScreenId.h>
@@ -24,6 +21,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
+#include <QFile>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QJsonArray>
@@ -4056,7 +4054,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         data.setTransformed();
     }
 
-    KWin::effects->prePaintWindow(view, w, data, presentTime);
+    OffscreenEffect::prePaintWindow(view, w, data, presentTime);
 }
 
 void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -4069,14 +4067,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     if (sit != m_shaderTransitions.end() && sit->second.shader) {
         const auto* anim = m_windowAnimator->animationFor(w);
         if (anim && anim->isAnimating()) {
-            const QRectF from = anim->from();
-            const QRectF to = anim->to();
-            const QRectF cur = anim->value();
-            const qreal totalDist = QPointF(to.x() - from.x(), to.y() - from.y()).manhattanLength()
-                + qAbs(to.width() - from.width()) + qAbs(to.height() - from.height());
-            const qreal curDist = QPointF(cur.x() - from.x(), cur.y() - from.y()).manhattanLength()
-                + qAbs(cur.width() - from.width()) + qAbs(cur.height() - from.height());
-            const qreal progress = (totalDist > 0.001) ? qBound(0.0, curDist / totalDist, 1.0) : 1.0;
+            const qreal progress = qBound(0.0, anim->state().value, 1.0);
 
             KWin::ShaderBinder binder(sit->second.shader.get());
             sit->second.shader->setUniform(sit->second.iTimeLoc, static_cast<float>(progress));
@@ -4134,8 +4125,10 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
 {
     if (!window)
         return;
-    if (m_shaderTransitions.erase(window)) {
+    auto it = m_shaderTransitions.find(window);
+    if (it != m_shaderTransitions.end()) {
         unredirect(window);
+        m_shaderTransitions.erase(it);
     }
 }
 
@@ -4152,7 +4145,14 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
 void PlasmaZonesEffect::loadShaderRegistryFromDbus()
 {
     loadSettingAsync(QStringLiteral("animationShaderSearchPaths"), [this](const QVariant& v) {
-        const QStringList paths = v.toStringList();
+        const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+        if (!doc.isArray())
+            return;
+        QStringList paths;
+        for (const auto& entry : doc.array()) {
+            if (entry.isString())
+                paths.append(entry.toString());
+        }
         if (!paths.isEmpty()) {
             m_animationShaderRegistry.addSearchPaths(paths);
         }

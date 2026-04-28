@@ -8,6 +8,7 @@
 #include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QColor>
@@ -499,7 +500,10 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("shaderProfileTree")] = QStringLiteral("string");
     }
 
-    // Phase 6: shader search paths (read-only, for KWin effect registry population)
+    // Phase 6: shader search paths (read-only, for KWin effect registry population).
+    // Serialized as a JSON array string — QStringList in QDBusVariant can
+    // deserialize as QDBusArgument on the receiving side, making toStringList()
+    // return empty.
     m_getters[QStringLiteral("animationShaderSearchPaths")] = []() {
         QStringList paths =
             QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
@@ -508,9 +512,9 @@ void SettingsAdaptor::initializeRegistry()
             + QStringLiteral("/plasmazones/animations");
         if (!paths.contains(userDir))
             paths.append(userDir);
-        return QVariant::fromValue(paths);
+        return QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact));
     };
-    m_schemas[QStringLiteral("animationShaderSearchPaths")] = QStringLiteral("stringlist");
+    m_schemas[QStringLiteral("animationShaderSearchPaths")] = QStringLiteral("string");
 
     // Autotile core settings (concrete Settings only)
     if (concrete) {

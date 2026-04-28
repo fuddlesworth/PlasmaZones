@@ -466,6 +466,9 @@ private:
     /// time. MUST outlive m_surfaceFactory (the factory's Deps captures
     /// the animator pointer; surfaces it produces dispatch through it on
     /// every show/hide).
+    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
+    /// this OverlayService because Daemon destroys m_overlayService
+    /// before m_animationShaderRegistry.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_pendingShaderRegistry = nullptr;
     std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
