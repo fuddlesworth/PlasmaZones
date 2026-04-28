@@ -27,10 +27,10 @@ import org.kde.kirigami as Kirigami
  *     loaded content's auto-dismiss timer (re)starts.
  *   - When the timer fires (or the user clicks the OSD body), the loaded
  *     content emits `dismissRequested`; this host re-emits it as its own
- *     `dismissRequested(string)` signal which OverlayService wires to
- *     `Surface::hide()`. The library animator drives the fade out and
- *     flips Qt.WindowTransparentForInput on the still-mapped layer
- *     surface.
+ *     parameter-less `dismissRequested()` signal which OverlayService
+ *     wires to `Surface::hide()`. The library animator drives the fade
+ *     out and flips Qt.WindowTransparentForInput on the still-mapped
+ *     layer surface.
  *
  * Window.visible flips to true on the first Surface::show() and stays true
  * for the surface's lifetime (keepMappedOnHide=true) — Qt's Vulkan backend
