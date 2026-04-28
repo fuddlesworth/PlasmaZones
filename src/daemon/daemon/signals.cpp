@@ -453,11 +453,17 @@ void Daemon::connectLayoutSignals()
             // Single warm-up covers both layout-OSD and navigation-OSD —
             // they share one per-screen surface (NotificationOverlay.qml).
             m_overlayService->warmUpNotifications();
-            // Pre-create the Layout Picker too. Without this the first user-
-            // triggered show of the picker pays a visible ~50-100 ms latency
-            // (Wayland surface + Vulkan swapchain + QML compilation) before
-            // the show animation even starts.
-            m_overlayService->warmUpLayoutPicker();
+            // Layout Picker is intentionally NOT pre-warmed: the
+            // pre-warmed wl_surface gets initially mapped with
+            // keyboard_interactivity=None (so the warm hidden surface
+            // doesn't grab the keyboard), and KWin's wlr-layer-shell
+            // doesn't re-evaluate keyboard focus when interactivity is
+            // mutated to Exclusive on a still-mapped surface. Result:
+            // the picker never received KeyPress events on user-show
+            // and Escape didn't dismiss it. Creating fresh per-show
+            // makes the surface map with Exclusive from the start;
+            // KWin grants focus on initial map. ~50-100 ms first-show
+            // latency is back, but the picker is rare and user-triggered.
         });
     }
 
