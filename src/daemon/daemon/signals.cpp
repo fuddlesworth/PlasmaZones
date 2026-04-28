@@ -443,14 +443,16 @@ void Daemon::connectLayoutSignals()
     // Set initial layout filter
     updateLayoutFilter();
 
-    // Pre-warm PhosphorZones::Layout OSD QML windows unconditionally.
-    // First-time QML compilation of LayoutOsd.qml (~100-300ms) would otherwise
-    // block the event loop during the first layout switch (manual or autotile),
-    // causing perceptible lag.  Deferred so daemon init completes first.
+    // Pre-warm the per-screen NotificationOverlay surface unconditionally.
+    // First-time QML compilation of NotificationOverlay.qml (~100-300ms)
+    // would otherwise block the event loop during the first layout switch
+    // (manual or autotile) or first keyboard navigation action, causing
+    // perceptible lag. Deferred so daemon init completes first.
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
-            m_overlayService->warmUpLayoutOsd();
-            m_overlayService->warmUpNavigationOsd();
+            // Single warm-up covers both layout-OSD and navigation-OSD —
+            // they share one per-screen surface (NotificationOverlay.qml).
+            m_overlayService->warmUpNotifications();
             // Pre-create the Layout Picker too. Without this the first user-
             // triggered show of the picker pays a visible ~50-100 ms latency
             // (Wayland surface + Vulkan swapchain + QML compilation) before
@@ -501,10 +503,11 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
-                // Defer OSD display (same rationale as autotileApplied — first-time QML
-                // compilation of LayoutOsd.qml blocks the event loop ~100-300ms).
-                // Capture layout ID (not raw pointer) to avoid use-after-free if the
-                // layout is ever replaced between now and next event loop pass.
+                // Defer OSD display (same rationale as autotileApplied — first-time
+                // QML compilation of NotificationOverlay.qml blocks the event loop
+                // ~100-300ms). Capture layout ID (not raw pointer) to avoid
+                // use-after-free if the layout is ever replaced between now and
+                // next event loop pass.
                 if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
                     QUuid layoutId = layout->id();
                     QString screenId = m_unifiedLayoutController->currentScreenName();
@@ -520,10 +523,11 @@ void Daemon::connectLayoutSignals()
                     m_overlayService->hideSnapAssist();
                 }
                 // Defer OSD display so QML window creation (first-time ~100-300ms for
-                // LayoutOsd.qml compilation + scene graph) doesn't block the daemon event
-                // loop while the effect is sending windowOpened D-Bus calls.  Without this,
-                // first toggle to autotile has perceptible lag because the daemon can't
-                // process incoming tiling requests until the OSD handler returns.
+                // NotificationOverlay.qml compilation + scene graph) doesn't block the
+                // daemon event loop while the effect is sending windowOpened D-Bus
+                // calls. Without this, first toggle to autotile has perceptible lag
+                // because the daemon can't process incoming tiling requests until the
+                // OSD handler returns.
                 if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_autotileEngine && m_overlayService) {
                     QString algorithmId = m_autotileEngine->algorithmId();
                     QString screenId = m_unifiedLayoutController->currentScreenName();

@@ -8,10 +8,10 @@
  *        OverlayService::setupSurfaceAnimator.
  *
  * Why this exists: every overlay surface gets a per-instance compositor
- * scope (e.g. `plasmazones-layout-osd-{screenId}-{gen}`) so wlr-layer-shell
+ * scope (e.g. `plasmazones-notification-{screenId}-{gen}`) so wlr-layer-shell
  * sees each Surface as a distinct scope. The SurfaceAnimator registers
  * per-Role configs against the BASE scope from PzRoles
- * (`plasmazones-layout-osd`) and looks up by longest-prefix-match against
+ * (`plasmazones-notification`) and looks up by longest-prefix-match against
  * the Surface's scope. If the per-instance scope literal in
  * `osd.cpp` / `selector.cpp` / `snapassist.cpp` ever diverges from the
  * matching PzRoles base, the lookup silently falls back to the empty
@@ -21,15 +21,16 @@
  *
  * The previous safety net was a single Q_ASSERT_X in
  * createZoneSelectorWindow — debug-only, and only covered ZoneSelector.
- * This test pins down the scope-construction policy for every overlay so
- * release builds don't silently degrade.
+ * Production now constructs every per-instance role via
+ * `PzRoles::makePerInstanceRole(base, id, gen)` so the prefix-match is
+ * guaranteed by construction; the tests below pin that helper's behavior
+ * against the registered configs so a future change to either side
+ * trips the test.
  *
- * Construction policy (must match the code paths it mirrors):
- *   - LayoutOsd:     `plasmazones-layout-osd-{id}-{gen}`        (osd.cpp:405)
- *   - NavigationOsd: `plasmazones-navigation-osd-{id}-{gen}`    (osd.cpp:405)
- *   - ZoneSelector:  `plasmazones-zone-selector-{id}-{gen}`     (selector.cpp:419)
- *   - SnapAssist:    `plasmazones-snap-assist-{id}-{gen}`       (snapassist.cpp:382)
- *   - LayoutPicker:  `plasmazones-layout-picker-{id}-{gen}`     (snapassist.cpp:746)
+ * Construction policy (centralized in pz_roles.h):
+ *   `<base.scopePrefix>-<screenId>-<generation>`
+ *   where base is one of PzRoles::{Notification, ZoneSelector,
+ *   SnapAssist, LayoutPicker}.
  */
 
 #include <QTest>
@@ -60,8 +61,7 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon()
                                                  .hideScaleProfile = QStringLiteral("osd.hide"),
                                                  .showScaleFrom = 0.8,
                                                  .hideScaleTo = 0.9};
-    anim->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
-    anim->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
+    anim->registerConfigForRole(PzRoles::Notification, osdConfig);
 
     const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = QStringLiteral("osd.show"),
                                                           .hideProfile = QStringLiteral("osd.hide"),
@@ -86,16 +86,18 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon()
     return anim;
 }
 
-/// Build a per-instance Role the way the daemon does — base role with a
-/// per-instance scope prefix that includes a screen id and generation
-/// counter. Mirrors the QStringLiteral arg-substitutions in
-/// createOsdWindowImpl / createZoneSelectorWindow / createSnapAssistWindowFor /
-/// createLayoutPickerWindowFor.
-PhosphorLayer::Role perInstanceRole(const PhosphorLayer::Role& base, const QString& family, const QString& screenId,
-                                    int generation)
+/// Build a per-instance Role the way the daemon does. Routes through the
+/// production helper `PzRoles::makePerInstanceRole` (used by
+/// createNotificationWindow / createZoneSelectorWindow /
+/// createSnapAssistWindowFor / createLayoutPickerWindowFor) so the test
+/// and production share a single source of truth for the per-instance
+/// scope construction policy. A regression in the helper itself is
+/// caught here; a regression in any production caller that bypasses the
+/// helper is caught by code review (no production caller hand-rolls the
+/// literal anymore).
+PhosphorLayer::Role perInstanceRole(const PhosphorLayer::Role& base, const QString& screenId, quint64 generation)
 {
-    const QString perInstance = QStringLiteral("plasmazones-%1-%2-%3").arg(family).arg(screenId).arg(generation);
-    return base.withScopePrefix(perInstance);
+    return PlasmaZones::PzRoles::makePerInstanceRole(base, screenId, generation);
 }
 
 } // namespace
@@ -113,32 +115,35 @@ private Q_SLOTS:
     /// don't also pick up.
     void pz_role_base_scope_prefixes_match_production_families()
     {
-        QCOMPARE(PzRoles::LayoutOsd.scopePrefix, QStringLiteral("plasmazones-layout-osd"));
-        QCOMPARE(PzRoles::NavigationOsd.scopePrefix, QStringLiteral("plasmazones-navigation-osd"));
+        QCOMPARE(PzRoles::Notification.scopePrefix, QStringLiteral("plasmazones-notification"));
         QCOMPARE(PzRoles::ZoneSelector.scopePrefix, QStringLiteral("plasmazones-zone-selector"));
         QCOMPARE(PzRoles::SnapAssist.scopePrefix, QStringLiteral("plasmazones-snap-assist"));
         QCOMPARE(PzRoles::LayoutPicker.scopePrefix, QStringLiteral("plasmazones-layout-picker"));
     }
 
-    /// Per-instance LayoutOsd role resolves to the registered osd config.
-    /// If `osd.cpp:405` ever stops constructing scopes that prefix-match
-    /// PzRoles::LayoutOsd.scopePrefix, configFor returns the empty default
-    /// and the OSD silently falls back to the library default profile.
-    void layout_osd_scope_resolves_to_registered_config()
+    /// Per-instance Notification role resolves to the registered osd
+    /// config. If `osd.cpp::createNotificationWindow` ever stops
+    /// constructing scopes that prefix-match
+    /// PzRoles::Notification.scopePrefix, configFor returns the empty
+    /// default and the OSD silently falls back to the library default
+    /// profile. Both layout-OSD and navigation-OSD content share this
+    /// surface post-Phase-2, so this test covers both modes.
+    void notification_scope_resolves_to_registered_config()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role = perInstanceRole(PzRoles::LayoutOsd, QStringLiteral("layout-osd"), QStringLiteral("DP-1"), 7);
+        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 7);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
         QCOMPARE(cfg.showScaleFrom, 0.8);
     }
 
-    void navigation_osd_scope_resolves_to_registered_config()
+    /// Different screen, different generation — the per-instance
+    /// suffix must not affect the prefix-match outcome.
+    void notification_scope_resolves_independent_of_screen_id()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::NavigationOsd, QStringLiteral("navigation-osd"), QStringLiteral("HDMI-A-1"), 3);
+        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("HDMI-A-1/vs:0"), 3);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
@@ -151,8 +156,7 @@ private Q_SLOTS:
     void zone_selector_scope_resolves_to_panel_popup()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::ZoneSelector, QStringLiteral("zone-selector"), QStringLiteral("DP-1/vs:0"), 12);
+        const auto role = perInstanceRole(PzRoles::ZoneSelector, QStringLiteral("DP-1/vs:0"), 12);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
         QCOMPARE(cfg.hideProfile, QStringLiteral("widget.fadeOut"));
@@ -161,8 +165,7 @@ private Q_SLOTS:
     void snap_assist_scope_resolves_to_panel_popup()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::SnapAssist, QStringLiteral("snap-assist"), QStringLiteral("DP-1"), 5);
+        const auto role = perInstanceRole(PzRoles::SnapAssist, QStringLiteral("DP-1"), 5);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
         // SnapAssist deliberately has empty hideProfile (destroy-on-hide).
@@ -172,8 +175,7 @@ private Q_SLOTS:
     void layout_picker_scope_resolves_to_softer_envelope()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::LayoutPicker, QStringLiteral("layout-picker"), QStringLiteral("DP-1"), 1);
+        const auto role = perInstanceRole(PzRoles::LayoutPicker, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
@@ -182,33 +184,33 @@ private Q_SLOTS:
         QCOMPARE(cfg.hideScaleTo, 0.95);
     }
 
-    /// Regression: LayoutOsd's prefix is a strict substring of
-    /// LayoutPicker's prefix WOULD be a hazard (`layout-osd` vs
-    /// `layout-picker`) — except they share `plasmazones-layout-` only,
-    /// and the longest-prefix-match algorithm requires a `-` boundary.
-    /// Verify the boundary check works: a per-instance LayoutOsd scope
-    /// must NEVER resolve to the LayoutPicker config. Pre-fix this was
-    /// the bug class that motivated the boundary check.
-    void layout_osd_does_not_cross_pollinate_to_layout_picker()
+    /// Regression: longest-prefix matching must respect `-` boundaries.
+    /// `plasmazones-notification` is NOT a prefix of any other role's
+    /// scope, but a future rename that introduces overlap (e.g. adding a
+    /// `plasmazones-notification-bar`) must not silently route to the
+    /// wrong config. Verify the boundary check works by using the same
+    /// kind of test the previous LayoutOsd/LayoutPicker pair exercised:
+    /// confirm a per-instance Notification scope picks up the OSD
+    /// config (showScaleFrom 0.8), not the picker (0.9).
+    void notification_does_not_cross_pollinate_to_layout_picker()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto osdRole =
-            perInstanceRole(PzRoles::LayoutOsd, QStringLiteral("layout-osd"), QStringLiteral("DP-1"), 1);
-        const auto cfg = anim->configForRole(osdRole);
+        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 1);
+        const auto cfg = anim->configForRole(role);
         // OSD config has 0.8, picker has 0.9. Picking up the picker
         // config here would mean the boundary check is broken.
         QCOMPARE(cfg.showScaleFrom, 0.8);
     }
 
     /// Regression: the bare base role (no per-instance suffix) must
-    /// also resolve. createOsdWindowImpl uses `withScopePrefix` to
+    /// also resolve. createNotificationWindow uses `withScopePrefix` to
     /// derive a per-instance role, but a future refactor that registers
     /// a base role directly (or a test that constructs one inline)
     /// should still work.
     void exact_base_scope_resolves()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        QCOMPARE(anim->configForRole(PzRoles::LayoutOsd).showProfile, QStringLiteral("osd.show"));
+        QCOMPARE(anim->configForRole(PzRoles::Notification).showProfile, QStringLiteral("osd.show"));
         QCOMPARE(anim->configForRole(PzRoles::ZoneSelector).showProfile, QStringLiteral("panel.popup"));
     }
 

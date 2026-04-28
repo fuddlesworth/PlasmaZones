@@ -278,8 +278,8 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
 
 void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId)
 {
-    // Defer OSD display so first-time QML compilation of LayoutOsd.qml (~100-300ms)
-    // doesn't block the daemon event loop during layout switches.
+    // Defer OSD display so first-time QML compilation of NotificationOverlay.qml
+    // (~100-300ms) doesn't block the daemon event loop during layout switches.
     QTimer::singleShot(0, this, [this, layoutId, screenId]() {
         PhosphorZones::Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {

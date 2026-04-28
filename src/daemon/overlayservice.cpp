@@ -65,24 +65,18 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
     if (state.zoneSelectorSurface) {
         state.zoneSelectorSurface->deleteLater();
     }
-    if (state.layoutOsdSurface) {
-        state.layoutOsdSurface->deleteLater();
-    }
-    if (state.navigationOsdSurface) {
-        state.navigationOsdSurface->deleteLater();
+    if (state.notificationSurface) {
+        state.notificationSurface->deleteLater();
     }
     state.overlaySurface = nullptr;
     state.zoneSelectorSurface = nullptr;
-    state.layoutOsdSurface = nullptr;
-    state.navigationOsdSurface = nullptr;
+    state.notificationSurface = nullptr;
     state.overlayWindow = nullptr;
     state.zoneSelectorWindow = nullptr;
-    state.layoutOsdWindow = nullptr;
-    state.navigationOsdWindow = nullptr;
+    state.notificationWindow = nullptr;
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
-    state.layoutOsdPhysScreen = nullptr;
-    state.navigationOsdPhysScreen = nullptr;
+    state.notificationPhysScreen = nullptr;
 }
 
 // Release every surface across the state map, then clear it.
@@ -257,9 +251,14 @@ void OverlayService::setupSurfaceAnimator()
     // Profile names are the same paths PhosphorMotionAnimation in QML
     // uses today, so the live-reload path (drop a JSON, see it apply on
     // next show) automatically applies to the C++ side too.
-    const auto osdConfig = buildOsdConfig();
-    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutOsd, osdConfig);
-    m_surfaceAnimator->registerConfigForRole(PzRoles::NavigationOsd, osdConfig);
+    //
+    // Phase-2 surface unification: a single per-screen
+    // PzRoles::Notification surface (NotificationOverlay.qml) hosts both
+    // layout-OSD and navigation-OSD content via a Loader. Production
+    // surfaces are scoped `plasmazones-notification-{screenId}-{gen}`
+    // and resolve to this config via the animator's longest-prefix
+    // lookup.
+    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig());
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig());
     m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig());
     m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig());
@@ -333,8 +332,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // not the bare "physId" key itself.
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyLayoutOsdWindow(physicalScreenId);
-                destroyNavigationOsdWindow(physicalScreenId);
+                destroyNotificationWindow(physicalScreenId);
                 m_screenStates.remove(physicalScreenId);
                 return;
             }
@@ -347,8 +345,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyLayoutOsdWindow(physicalScreenId);
-                destroyNavigationOsdWindow(physicalScreenId);
+                destroyNotificationWindow(physicalScreenId);
             }
 
             // Clear selected zone before destroying windows — the selection references
@@ -516,24 +513,23 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     return m_surfaceManager->createSurface(std::move(cfg), this);
 }
 
-PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& baseRole,
-                                                               const QString& scopePrefix, const QUrl& qmlUrl,
+PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
                                                                QScreen* physScreen, const char* windowType)
 {
-    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
-                                        .screen = physScreen,
-                                        .role = baseRole.withScopePrefix(scopePrefix),
-                                        .windowType = windowType,
-                                        .keepMappedOnHide = true});
+    auto* surface = createLayerSurface(
+        {.qmlUrl = qmlUrl, .screen = physScreen, .role = role, .windowType = windowType, .keepMappedOnHide = true});
     if (!surface) {
         return nullptr;
     }
 
-    // Wire the QML-side auto-dismiss signal to Surface::hide(). LayoutOsd
-    // and NavigationOsd both expose `signal dismissRequested()` driven by
-    // their internal Timer; LayoutPicker also uses the same name (post-#9
-    // rename) for backdrop-click dismissal. String-based connect is the
-    // only path because QML-defined signals aren't addressable via Qt5
+    // Wire the QML-side auto-dismiss signal to Surface::hide(). The OSD
+    // content components (LayoutOsdContent, NavigationOsdContent) both
+    // expose `signal dismissRequested()` driven by their shared
+    // OsdDismissable timer; the unified NotificationOverlay host
+    // re-emits each loaded content's signal as its own dismissRequested.
+    // LayoutPickerOverlay uses the same name (post-#9 rename) for
+    // backdrop-click dismissal. String-based connect is the only path
+    // because QML-defined signals aren't addressable via Qt5
     // `&Class::signal` pointers.
     if (auto* window = surface->window()) {
         QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));
@@ -985,11 +981,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     for (const QString& id : screenIds) {
         const auto& state = m_screenStates[id];
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || state.layoutOsdPhysScreen == screen || state.navigationOsdPhysScreen == screen) {
+            || state.notificationPhysScreen == screen) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
-            destroyLayoutOsdWindow(id);
-            destroyNavigationOsdWindow(id);
+            destroyNotificationWindow(id);
             // If every window for this screen-id was already released (or
             // this state entry never actually held any — e.g. an OSD
             // creation failed earlier), drop the empty shell so screen
@@ -997,7 +992,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // cleanupVirtualScreenStates semantics: the state entry is
             // meaningless without at least one live window.
             auto& s = m_screenStates[id];
-            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.layoutOsdSurface && !s.navigationOsdSurface) {
+            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.notificationSurface) {
                 m_screenStates.remove(id);
             }
         }
@@ -1011,16 +1006,17 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         destroyLayoutPickerWindow();
     }
 
-    // Drop navigation-OSD "creation failed" sentinels for screen ids rooted
-    // on this physical screen. Without this, if the same physical monitor
-    // is reconnected (hot-plug cycle) it inherits the stale flag and we
-    // silently refuse to recreate the OSD. Matching is prefix-based because
-    // virtual-screen ids embed the physical id as the prefix.
+    // Drop notification-window "creation failed" sentinels for screen ids
+    // rooted on this physical screen. Without this, if the same physical
+    // monitor is reconnected (hot-plug cycle) it inherits the stale flag
+    // and we silently refuse to recreate the OSD. Matching is prefix-based
+    // because virtual-screen ids embed the physical id as the prefix.
     const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (!physId.isEmpty()) {
-        for (auto it = m_navigationOsdCreationFailed.begin(); it != m_navigationOsdCreationFailed.end();) {
-            if (it.key() == physId || it.key().startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator)) {
-                it = m_navigationOsdCreationFailed.erase(it);
+        const QString vsPrefix = physId + PhosphorIdentity::VirtualScreenId::Separator;
+        for (auto it = m_notificationCreationFailed.begin(); it != m_notificationCreationFailed.end();) {
+            if (*it == physId || it->startsWith(vsPrefix)) {
+                it = m_notificationCreationFailed.erase(it);
             } else {
                 ++it;
             }

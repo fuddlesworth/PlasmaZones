@@ -24,19 +24,6 @@ namespace PlasmaZones {
 
 namespace {
 
-// Result of OSD window preparation
-struct OsdWindowSetup
-{
-    QQuickWindow* window = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 16.0 / 9.0;
-
-    explicit operator bool() const
-    {
-        return window != nullptr;
-    }
-};
-
 // Center an OSD/layer window within a screen geometry using layer surface margins.
 // physScreenGeom is the full physical screen; targetGeom is the area to center within
 // (same as physScreenGeom for physical screens, or a sub-region for virtual screens).
@@ -73,19 +60,53 @@ void centerLayerWindowOnScreen(PhosphorLayer::ITransportHandle* handle, const QR
     handle->setMargins(QMargins(targetCenterX, targetCenterY, rightMargin, bottomMargin));
 }
 
-// Calculate OSD size and center window. `surface` resolves the transport handle;
-// callers pass the state's layoutOsdSurface / navigationOsdSurface.
-void sizeAndCenterOsd(QQuickWindow* window, PhosphorLayer::Surface* surface, QScreen* physScreen,
-                      const QRect& targetGeom, qreal previewAspectRatio)
+// Read the QML-computed desired size from the host Window. Both OSD content
+// types (LayoutOsdContent, NavigationOsdContent) expose contentDesiredWidth /
+// contentDesiredHeight readonly properties measured from their own container
+// items; NotificationOverlay.qml re-exports those via the loader item.
+//
+// Fallbacks are belt-and-suspenders for the unlikely case that the property
+// can't be read (no loader.item, or QML metaobject lookup fails) — matching
+// the warm-up defaults baked into NotificationOverlay.qml.
+struct OsdContentSize
 {
-    constexpr int osdWidth = 280;
-    // Clamp AR to sane range to prevent absurd OSD sizes
-    const qreal safeAR = qBound(0.5, previewAspectRatio, 4.0);
-    const int osdHeight = static_cast<int>(200 / safeAR) + 80;
-    if (window) {
-        window->setWidth(osdWidth);
-        window->setHeight(osdHeight);
+    int width;
+    int height;
+};
+
+OsdContentSize readOsdContentSize(QQuickWindow* window)
+{
+    constexpr int kFallbackWidth = 240;
+    constexpr int kFallbackHeight = 70;
+    if (!window) {
+        return {kFallbackWidth, kFallbackHeight};
     }
+    const QVariant widthVar = window->property("contentDesiredWidth");
+    const QVariant heightVar = window->property("contentDesiredHeight");
+    const int width = (widthVar.isValid() && widthVar.toInt() > 0) ? widthVar.toInt() : kFallbackWidth;
+    const int height = (heightVar.isValid() && heightVar.toInt() > 0) ? heightVar.toInt() : kFallbackHeight;
+    return {width, height};
+}
+
+// Size the OSD window to its content-driven desired size and pin it via the
+// layer-shell transport. `surface` resolves the transport handle; callers
+// pass the state's notificationSurface (post-Phase-2 unification of the
+// layout-OSD and navigation-OSD surfaces onto NotificationOverlay.qml).
+//
+// Caller contract: every property the QML content type uses to compute its
+// own size MUST be written before this function runs. QQuickText measures
+// synchronously when its text property changes, and Item width / height
+// bindings re-evaluate eagerly on dependency change, so by the time we read
+// contentDesiredWidth / Height the QML side has settled.
+void sizeAndCenterOsd(QQuickWindow* window, PhosphorLayer::Surface* surface, QScreen* physScreen,
+                      const QRect& targetGeom)
+{
+    if (!window) {
+        return;
+    }
+    const auto [osdWidth, osdHeight] = readOsdContentSize(window);
+    window->setWidth(osdWidth);
+    window->setHeight(osdHeight);
     const QRect physGeom = physScreen ? physScreen->geometry() : targetGeom;
     centerLayerWindowOnScreen(surface ? surface->transport() : nullptr, physGeom, targetGeom, osdWidth, osdHeight);
 }
@@ -113,17 +134,20 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
 
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
-    if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].layoutOsdWindow)) {
-        createLayoutOsdWindow(effectiveId, physScreen);
-    }
-
-    const auto& state = m_screenStates.value(effectiveId);
-    window = state.layoutOsdWindow;
-    outSurface = state.layoutOsdSurface;
-    if (!window) {
-        qCWarning(lcOverlay) << "Failed to get layout OSD window";
+    auto* state = ensureNotificationWindowFor(effectiveId, physScreen);
+    if (!state || !state->notificationWindow) {
+        qCWarning(lcOverlay) << "Failed to get notification window for layout OSD";
         return false;
     }
+    window = state->notificationWindow;
+    outSurface = state->notificationSurface;
+
+    // Switch the unified host's Loader to LayoutOsdContent. Subsequent
+    // writeQmlProperty calls flow root → Component-bound binding →
+    // loader.item, so the layout-specific properties land on the freshly
+    // loaded content. The mode write is idempotent — repeated calls with
+    // the same mode are no-ops thanks to QML property equality guards.
+    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     assertWindowOnScreen(window, physScreen, screenGeom);
 
@@ -164,32 +188,24 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         return;
     }
 
-    resetOsdOverlayState(window);
-    writeQmlProperty(window, QStringLiteral("locked"), locked);
-    writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
-    writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
-    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
-                     PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass()));
-    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(PhosphorZones::LayoutCategory::Manual));
-    // Push the per-layout flag and the global "Auto-assign for all layouts"
-    // master toggle (#370) separately; CategoryBadge folds them into the
-    // effective state. Same convention as buildLayoutsList consumers
-    // (selector_update.cpp, snapassist.cpp).
-    writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
-    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
-    writeAutotileMetadata(window, false, false);
-    writeQmlProperty(window, QStringLiteral("zones"),
-                     layout->zones().isEmpty()
-                         ? QVariantList()
-                         : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full));
-    writeFontProperties(window, m_settings);
+    LayoutOsdContentParams p;
+    p.id = layout->id().toString();
+    p.name = layout->name();
+    p.zones = layout->zones().isEmpty()
+        ? QVariantList()
+        : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full);
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
+    p.autoAssign = layout->autoAssign();
+    p.globalAutoAssign = m_settings && m_settings->autoAssignAllLayouts();
+    p.locked = locked;
+    p.screenAspectRatio = aspectRatio;
+    p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
+    pushLayoutOsdContent(window, p);
 
-    qreal layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
-    // Phase 5: Surface::show() drives SurfaceAnimator (osd.show + osd.pop);
+    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
+    // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
-    // dismissRequested → surface->hide().
+    // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
@@ -213,12 +229,6 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         return;
     }
 
-    // Reset locked/disabled state — window is reused across show calls, so a prior
-    // showLockedLayoutOsd() or showDisabledOsd() would leave the overlay stuck on.
-    resetOsdOverlayState(window);
-    writeQmlProperty(window, QStringLiteral("layoutId"), id);
-    writeQmlProperty(window, QStringLiteral("layoutName"), name);
-    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     // Resolve aspectRatioClass.
     //
     // Snap layouts (UUID id): use the layout's tagged aspect-ratio class so a
@@ -232,40 +242,73 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     // showed the raw screen aspect (e.g. 0.93 for a 1600×1716 VS, nearly
     // square) while snap layouts on the same screen rendered at 9:16 — a
     // visibly inconsistent feel between the two OSD paths.
-    qreal layoutAR = aspectRatio;
-    {
-        QString arClass = QStringLiteral("any");
-        auto uuidOpt = Utils::parseUuid(id);
-        if (uuidOpt && m_layoutManager) {
-            PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
-            if (layout) {
-                arClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
-                layoutAR =
-                    PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-            }
-        } else {
-            const auto screenClass = PhosphorLayout::ScreenClassification::classify(aspectRatio);
-            arClass = PhosphorLayout::ScreenClassification::toString(screenClass);
-            layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(screenClass, aspectRatio);
+    //
+    // The class is the only AR information C++ needs to push — QML derives
+    // the numeric preview ratio from it (LayoutOsdContent.previewAspectRatio
+    // switch), and OSD outer size is content-driven, so no companion numeric
+    // is required here.
+    QString arClass = QStringLiteral("any");
+    auto uuidOpt = Utils::parseUuid(id);
+    if (uuidOpt && m_layoutManager) {
+        PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+        if (layout) {
+            arClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
         }
-        writeQmlProperty(window, QStringLiteral("aspectRatioClass"), arClass);
+    } else {
+        const auto screenClass = PhosphorLayout::ScreenClassification::classify(aspectRatio);
+        arClass = PhosphorLayout::ScreenClassification::toString(screenClass);
     }
-    writeQmlProperty(window, QStringLiteral("category"), category);
-    writeQmlProperty(window, QStringLiteral("autoAssign"), autoAssign);
+
+    LayoutOsdContentParams p;
+    p.id = id;
+    p.name = name;
+    p.zones = zones;
+    p.category = category;
+    p.autoAssign = autoAssign;
     // Forward the global master toggle (#370) only for manual layouts.
     // Autotile screens never reach calculateSnapToEmptyZone, so the global
     // flag has no effect on them and must not influence the badge.
     const bool isManual = category == static_cast<int>(PhosphorZones::LayoutCategory::Manual);
-    writeQmlProperty(window, QStringLiteral("globalAutoAssign"),
-                     isManual && m_settings && m_settings->autoAssignAllLayouts());
-    writeAutotileMetadata(window, showMasterDot, producesOverlappingZones, zoneNumberDisplay, masterCount);
-    writeQmlProperty(window, QStringLiteral("zones"), zones);
-    writeFontProperties(window, m_settings);
+    p.globalAutoAssign = isManual && m_settings && m_settings->autoAssignAllLayouts();
+    p.locked = false;
+    p.screenAspectRatio = aspectRatio;
+    p.aspectRatioClass = arClass;
+    p.showMasterDot = showMasterDot;
+    p.producesOverlappingZones = producesOverlappingZones;
+    p.zoneNumberDisplay = zoneNumberDisplay;
+    p.masterCount = masterCount;
+    pushLayoutOsdContent(window, p);
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
+    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
+}
+
+void OverlayService::pushLayoutOsdContent(QQuickWindow* window, const LayoutOsdContentParams& p)
+{
+    if (!window) {
+        return;
+    }
+    // Reset overlay-state flags first — the notification window is reused
+    // across show calls, so a prior showLockedLayoutOsd / showDisabledOsd
+    // would otherwise leave `locked` or `disabled` stuck on.
+    resetOsdOverlayState(window);
+    writeQmlProperty(window, QStringLiteral("locked"), p.locked);
+    writeQmlProperty(window, QStringLiteral("layoutId"), p.id);
+    writeQmlProperty(window, QStringLiteral("layoutName"), p.name);
+    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), p.screenAspectRatio);
+    writeQmlProperty(window, QStringLiteral("aspectRatioClass"), p.aspectRatioClass);
+    writeQmlProperty(window, QStringLiteral("category"), p.category);
+    // Per-layout flag + global "Auto-assign for all layouts" master toggle
+    // (#370). CategoryBadge folds them into the effective state. Same
+    // convention as buildLayoutsList consumers (selector_update.cpp,
+    // snapassist.cpp).
+    writeQmlProperty(window, QStringLiteral("autoAssign"), p.autoAssign);
+    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), p.globalAutoAssign);
+    writeAutotileMetadata(window, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
+    writeQmlProperty(window, QStringLiteral("zones"), p.zones);
+    writeFontProperties(window, m_settings);
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
@@ -279,174 +322,163 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
         return;
     }
 
-    // Reset overlay state then set disabled — locked is intentionally false
-    // (mutually exclusive with disabled, also enforced in QML).
-    // Clear all layout-specific properties so stale data from a prior showLayoutOsd()
-    // doesn't leak through the semi-transparent disabled overlay.
-    resetOsdOverlayState(window);
+    // Reset overlay state then set disabled. locked stays false (mutually
+    // exclusive with disabled; also enforced in QML). The disabled state
+    // and reason text live on `disabled` / `disabledReason`, not on the
+    // shared layout-OSD properties — but we still push empty/zero values
+    // into the layout-OSD slot via the shared content writer so stale
+    // data from a prior showLayoutOsd doesn't leak through the
+    // semi-transparent disabled overlay (CategoryBadge / Label both bind
+    // to those properties even when disabled is true).
+    //
+    // Geometry reuse: showDisabledOsd loads LayoutOsdContent, whose
+    // container is sized from previewContainer.width (~14·gridUnit) even
+    // though the visible content in disabled mode is just the reason text
+    // + dialog-cancel icon over the opaque overlay. This is intentional —
+    // the disabled OSD shares the same outer dimensions as the layout-OSD
+    // it replaces so the user perceives the "switch was blocked" state as
+    // a sibling of the regular layout-switch confirmation rather than a
+    // distinct, smaller toast. If a future design wants a tighter disabled
+    // card, route showDisabledOsd through a dedicated content type rather
+    // than a Loader-mode flag on LayoutOsdContent.
+    //
+    // Cross-mode property note: the host's `success` / `action` /
+    // `reason` (NavigationOsd-only) are NOT reset here. NavigationOsdContent
+    // is unloaded the moment we wrote `mode = "layout-osd"` in
+    // prepareLayoutOsdWindow, so its bindings to those properties are
+    // gone too. Keep this in mind if a future LayoutOsdContent ever
+    // grows a binding that touches navigation-mode properties — see the
+    // matching note in NotificationOverlay.qml's caveat block.
+    LayoutOsdContentParams p;
+    p.name = reason; // shown in nameLabel when disabled
+    p.screenAspectRatio = aspectRatio;
+    pushLayoutOsdContent(window, p);
     writeQmlProperty(window, QStringLiteral("disabled"), true);
     writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
-    writeQmlProperty(window, QStringLiteral("layoutId"), QString());
-    writeQmlProperty(window, QStringLiteral("layoutName"), reason);
-    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(window, QStringLiteral("aspectRatioClass"), QStringLiteral("any"));
-    writeQmlProperty(window, QStringLiteral("category"), 0);
-    writeQmlProperty(window, QStringLiteral("autoAssign"), false);
-    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), false);
-    writeAutotileMetadata(window, false, false);
-    writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
-    writeFontProperties(window, m_settings);
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom, aspectRatio);
+    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
 
-// hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to the QML
-// dismissed() signal) are intentionally gone. The Phase-5 dismiss path is:
-//   QML dismissTimer → dismissRequested() signal → Surface::hide() slot
+// hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to a QML
+// `dismissed()` signal) are intentionally gone. The Phase-5 dismiss path is:
+//   QML dismissTimer → loaded content `dismissRequested()` signal
+//     → host NotificationOverlay re-emits dismissRequested()
+//     → wired by createWarmedOsdSurface to Surface::hide() (string-based)
 //     → SurfaceAnimator::beginHide drives the visual fade
 //     → Surface::Impl flips Qt::WindowTransparentForInput on the QWindow
 // No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
 // across the keepMappedOnHide=true lifecycle so the warmed Vulkan
-// swapchain survives. Pre-warmed by warmUpLayoutOsd() / warmUpNavigationOsd()
-// and reused for the daemon's lifetime; destroyLayoutOsdWindow() /
-// destroyNavigationOsdWindow() only fire on screen-removal / shutdown.
+// swapchain survives. Pre-warmed by warmUpNotifications and reused for
+// the daemon's lifetime; destroyNotificationWindow only fires on
+// screen-removal / shutdown.
 
-// Shared hot-plug hook for both OSDs. Called from warmUpLayoutOsd AND
-// warmUpNavigationOsd so a caller that only warms one kind still gets
-// per-screen instances on hot-plug for whichever OSDs it actually warmed.
-// The per-OSD m_*OsdWarmed booleans inside the lambda gate which windows
-// actually get created, so warming only one kind doesn't force the other.
+// Hot-plug hook installed by warmUpNotifications. The single
+// m_notificationsWarmed flag gates whether new screens get a per-screen
+// NotificationOverlay window after the initial warm-up.
 void OverlayService::ensureOsdScreenAddedConnected()
 {
     if (m_screenAddedConnected) {
         return;
     }
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
+        if (!m_notificationsWarmed) {
+            return;
+        }
         auto* mgr2 = m_screenManager;
         const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
         const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
-        if (m_layoutOsdWarmed) {
-            for (const QString& sid : ids) {
-                if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-                    createLayoutOsdWindow(sid, screen);
-                }
-            }
-        }
-        if (m_navigationOsdWarmed) {
-            for (const QString& sid : ids) {
-                if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-                    createNavigationOsdWindow(sid, screen);
-                }
-            }
+        for (const QString& sid : ids) {
+            ensureNotificationWindowFor(sid, screen);
         }
     });
     m_screenAddedConnected = true;
 }
 
-void OverlayService::warmUpLayoutOsd()
+OverlayService::PerScreenOverlayState* OverlayService::ensureNotificationWindowFor(const QString& effectiveId,
+                                                                                   QScreen* physScreen)
+{
+    auto it = m_screenStates.find(effectiveId);
+    if (it == m_screenStates.end() || !it->notificationWindow) {
+        createNotificationWindow(effectiveId, physScreen);
+        it = m_screenStates.find(effectiveId);
+    }
+    return (it == m_screenStates.end()) ? nullptr : &it.value();
+}
+
+// Pre-create the per-screen NotificationOverlay surface for every effective
+// screen the manager knows about, then mark notifications warmed and ensure
+// the screenAdded hot-plug hook is installed.
+void OverlayService::warmUpNotifications()
 {
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
-
     for (const QString& sid : effectiveIds) {
-        if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
-                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
-            if (physScreen) {
-                createLayoutOsdWindow(sid, physScreen);
-            }
+        QScreen* physScreen =
+            m_screenManager ? m_screenManager->physicalQScreenFor(sid) : Utils::findScreenAtPosition(QPoint(0, 0));
+        if (physScreen) {
+            ensureNotificationWindowFor(sid, physScreen);
         }
     }
-    m_layoutOsdWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
-
+    m_notificationsWarmed = true;
+    qCInfo(lcOverlay) << "Pre-warmed NotificationOverlay windows for" << effectiveIds.size() << "effective screens";
     ensureOsdScreenAddedConnected();
 }
 
-void OverlayService::warmUpNavigationOsd()
+void OverlayService::createNotificationWindow(const QString& screenId, QScreen* physScreen)
 {
-    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
-
-    for (const QString& sid : effectiveIds) {
-        if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
-                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
-            if (physScreen) {
-                createNavigationOsdWindow(sid, physScreen);
-            }
-        }
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].notificationSurface) {
+        return;
     }
-    m_navigationOsdWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed Navigation OSD windows for" << effectiveIds.size() << "effective screens";
-
-    // Install the hot-plug hook even if the layout OSD warmer never ran —
-    // without this, a consumer that only warms the navigation OSD would
-    // silently miss navigation OSDs on later-added screens.
-    ensureOsdScreenAddedConnected();
-}
-
-bool OverlayService::createOsdWindowImpl(const QString& screenId, QScreen* physScreen,
-                                         const PhosphorLayer::Role& baseRole, const QString& scopeFamily,
-                                         const QUrl& qmlUrl, const char* windowType,
-                                         PhosphorLayer::Surface* PerScreenOverlayState::* surfaceField,
-                                         QQuickWindow* PerScreenOverlayState::* windowField,
-                                         QScreen* PerScreenOverlayState::* physScreenField)
-{
-    if (m_screenStates.contains(screenId) && m_screenStates[screenId].*surfaceField) {
-        return true; // Already created — treat as success for the create-if-absent contract.
+    // Spam-guard: if a previous attempt on this screen failed (compositor
+    // refused the surface, layer-shell extension missing, etc.), don't
+    // retry on every OSD show — one warning per screen is enough. The
+    // sentinel is cleared in destroyAllWindowsForPhysicalScreen when the
+    // monitor is hot-plug-cycled, so reconnecting the screen does retry.
+    if (m_notificationCreationFailed.contains(screenId)) {
+        return;
     }
 
-    // Phase 5: keepMappedOnHide=true (handled by createWarmedOsdSurface) so
-    // SurfaceAnimator drives opacity for the visual fade and the library
-    // handles Qt.WindowTransparentForInput on hide. The dismissRequested
-    // wiring is also done inside the helper.
-    const QString scopePrefix = QStringLiteral("plasmazones-%1-%2-%3")
-                                    .arg(scopeFamily)
-                                    .arg(screenId)
-                                    .arg(m_surfaceManager->nextScopeGeneration());
-    auto* surface = createWarmedOsdSurface(baseRole, scopePrefix, qmlUrl, physScreen, windowType);
+    // Phase 5: keepMappedOnHide=true and dismissRequested → Surface::hide()
+    // wiring are both done inside createWarmedOsdSurface. The per-instance
+    // scope prefix is derived from PzRoles::Notification's base prefix via
+    // `makePerInstanceRole` so the SurfaceAnimator's longest-prefix
+    // role-config lookup always matches, even if the base literal in
+    // pz_roles.h is renamed.
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::Notification, screenId, m_surfaceManager->nextScopeGeneration());
+    auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")), physScreen,
+                                           "notification");
     if (!surface) {
-        return false;
+        qCWarning(lcOverlay) << "Failed to create notification window for screen=" << screenId
+                             << "— suppressing further attempts until screen is replugged";
+        m_notificationCreationFailed.insert(screenId);
+        return;
     }
 
+    // The host Window's Loader instantiates LayoutOsdContent /
+    // NavigationOsdContent on demand when C++ writes the `mode` property
+    // before each show; the surface itself stays warmed for the daemon's
+    // lifetime so subsequent shows reuse the Vulkan swapchain.
     auto& state = m_screenStates[screenId];
-    state.*surfaceField = surface;
-    state.*windowField = surface->window();
-    state.*physScreenField = physScreen;
-    return true;
+    state.notificationSurface = surface;
+    state.notificationWindow = surface->window();
+    state.notificationPhysScreen = physScreen;
 }
 
-void OverlayService::destroyOsdWindowImpl(const QString& screenId,
-                                          PhosphorLayer::Surface* PerScreenOverlayState::* surfaceField,
-                                          QQuickWindow* PerScreenOverlayState::* windowField,
-                                          QScreen* PerScreenOverlayState::* physScreenField)
+void OverlayService::destroyNotificationWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it == m_screenStates.end()) {
         return;
     }
-    if (it.value().*surfaceField) {
-        (it.value().*surfaceField)->deleteLater();
-        it.value().*surfaceField = nullptr;
-        it.value().*windowField = nullptr;
+    if (it->notificationSurface) {
+        it->notificationSurface->deleteLater();
+        it->notificationSurface = nullptr;
+        it->notificationWindow = nullptr;
     }
-    it.value().*physScreenField = nullptr;
-}
-
-void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen)
-{
-    createOsdWindowImpl(screenId, physScreen, PzRoles::LayoutOsd, QStringLiteral("layout-osd"),
-                        QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), "layout OSD",
-                        &PerScreenOverlayState::layoutOsdSurface, &PerScreenOverlayState::layoutOsdWindow,
-                        &PerScreenOverlayState::layoutOsdPhysScreen);
-}
-
-void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
-{
-    destroyOsdWindowImpl(screenId, &PerScreenOverlayState::layoutOsdSurface, &PerScreenOverlayState::layoutOsdWindow,
-                         &PerScreenOverlayState::layoutOsdPhysScreen);
+    it->notificationPhysScreen = nullptr;
 }
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
@@ -462,17 +494,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal)
-    const QString actionKey = action + QLatin1Char(':') + reason;
-    if (actionKey == m_lastNavigationActionKey && screenId == m_lastNavigationScreenId && m_lastNavigationTime.isValid()
-        && m_lastNavigationTime.elapsed() < 200) {
-        qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
-        return;
-    }
-    m_lastNavigationActionKey = actionKey;
-    m_lastNavigationScreenId = screenId;
-    m_lastNavigationTime.restart();
-
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
@@ -487,6 +508,26 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
+
+    // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
+    // Keyed on effectiveId (resolved from physScreen if the caller passed an
+    // empty screenId) so two rapid calls with empty screenId on different
+    // physical screens don't dedup against each other, and so the hot-plug
+    // clear in destroyAllWindowsForPhysicalScreen — which prefix-matches on
+    // the physical id — can clear stale dedup state on screen replug.
+    //
+    // The dedup state is updated only after we've decided to actually
+    // show — see the matching m_lastNavigation* writes below near
+    // navSurface->show(). A bail-out path further down (no layout,
+    // no notification window, etc.) must NOT poison the dedup state,
+    // otherwise a failed show silently swallows the next legitimate call
+    // within 200 ms.
+    const QString actionKey = action + QLatin1Char(':') + reason;
+    if (actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
+        && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
+        qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
+        return;
+    }
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
@@ -504,32 +545,26 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    // Reuse existing window for this screen (create only if not in map).
-    // The window stays alive (keepMappedOnHide) across rapid navigation
-    // calls; Surface::show() re-dispatches beginShow on every call so the
-    // visual fade replays, and restartDismissTimer extends the auto-hide.
-    // Cleanup happens only on screen removal / shutdown, avoiding the
-    // Vulkan surface create/destroy churn that previously caused resource
-    // exhaustion and daemon freezes during rapid input.
-    if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].navigationOsdWindow)) {
-        // Only try to create if we haven't failed before (prevents log spam)
-        if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
-            createNavigationOsdWindow(effectiveId, physScreen);
-        }
-    }
-
-    const auto& navState = m_screenStates.value(effectiveId);
-    auto* window = navState.navigationOsdWindow;
-    auto* navSurface = navState.navigationOsdSurface;
-    if (!window) {
-        // Only warn once per screen to prevent log spam
-        if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
-            qCWarning(lcOverlay) << "Failed to get navigation OSD window for screen=" << effectiveId;
-            m_navigationOsdCreationFailed.insert(effectiveId, true);
-        }
-        qCDebug(lcOverlay) << "No navigation OSD window for screen=" << effectiveId;
+    // Reuse existing per-screen NotificationOverlay window (create only if
+    // not in map). The window stays alive (keepMappedOnHide=true) across
+    // rapid navigation calls; Surface::show() re-dispatches beginShow on
+    // every call so the visual fade replays, and restartDismissTimer
+    // extends the auto-hide. Cleanup happens only on screen removal /
+    // shutdown via destroyNotificationWindow; the dismiss path is QML
+    // → Surface::hide(). The create-failure spam-guard lives in
+    // createNotificationWindow itself.
+    auto* navState = ensureNotificationWindowFor(effectiveId, physScreen);
+    if (!navState || !navState->notificationWindow) {
+        qCDebug(lcOverlay) << "No notification window for navigation OSD on screen=" << effectiveId;
         return;
     }
+    auto* window = navState->notificationWindow;
+    auto* navSurface = navState->notificationSurface;
+
+    // Switch the unified host's Loader to NavigationOsdContent before the
+    // per-show property writes — see the matching write in
+    // prepareLayoutOsdWindow for the layout-OSD path.
+    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("navigation-osd"));
 
     // Process reason field - for rotation/resnap, extract window count
     // Format: "clockwise:N" or "counterclockwise:N" or "resnap:N" where N is window count
@@ -573,69 +608,53 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // Ensure the window is on the correct Wayland output (must come before sizing —
-    // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight)
+    // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight).
     assertWindowOnScreen(window, physScreen, navScreenGeom);
 
-    // Read the QML-computed desired size. The NavigationOsd.qml root Window
-    // exposes contentDesiredWidth/Height which cascade from messageLabel's
-    // implicitWidth (QQuickText measures text synchronously when its text
-    // property changes, so by the time writeQmlProperty("reason", ...) above
-    // returns the binding has settled). Falls back to 240x70 if the property
-    // can't be read — same as the previous hardcoded value.
-    constexpr int kFallbackWidth = 240;
-    constexpr int kFallbackHeight = 70;
-    const QVariant widthVar = window->property("contentDesiredWidth");
-    const QVariant heightVar = window->property("contentDesiredHeight");
-    const int desiredWidth = widthVar.isValid() && widthVar.toInt() > 0 ? widthVar.toInt() : kFallbackWidth;
-    const int desiredHeight = heightVar.isValid() && heightVar.toInt() > 0 ? heightVar.toInt() : kFallbackHeight;
-
-    // Size and center: setWidth/setHeight AFTER assertWindowOnScreen so the final
-    // QWindow geometry matches the OSD size (same pattern as sizeAndCenterOsd for LayoutOsd)
-    const QRect screenGeom = navScreenGeom;
-    window->setWidth(desiredWidth);
-    window->setHeight(desiredHeight);
-    const QRect physGeom = physScreen ? physScreen->geometry() : screenGeom;
-    centerLayerWindowOnScreen(navSurface ? navSurface->transport() : nullptr, physGeom, screenGeom, desiredWidth,
-                              desiredHeight);
+    // Size + center via the shared helper, which reads the QML-computed
+    // contentDesiredWidth / contentDesiredHeight from NotificationOverlay's
+    // loaded NavigationOsdContent body. The binding has settled by now —
+    // QQuickText measures synchronously when text changes, so the binding
+    // chain message → messageLabel.implicitWidth → container.width →
+    // contentDesiredWidth is up-to-date as soon as the writeQmlProperty
+    // calls above return.
+    sizeAndCenterOsd(window, navSurface, physScreen, navScreenGeom);
 
     // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
-    // dismissRequested → surface->hide().
+    // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
     navSurface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
+
+    // Update dedup state AFTER the Surface::show() + restartDismissTimer
+    // dispatch. Every early-return above this point is a "no OSD shown"
+    // outcome that must not poison the next call's dedup window — keeping
+    // the writes here means a bail-out (no physScreen, no notification
+    // window, no layout/zones, etc.) leaves dedup state untouched and the
+    // next legitimate call goes through. Surface::show() itself is `void`,
+    // so a silent animator no-op after this point would still poison
+    // dedup; that's an animator-layer concern, not something the ordering
+    // here can guard against. Stored as effectiveId to match the dedup
+    // check key at the top of this function and the prefix-matched clear
+    // in destroyAllWindowsForPhysicalScreen.
+    m_lastNavigationActionKey = actionKey;
+    m_lastNavigationScreenId = effectiveId;
+    m_lastNavigationTime.restart();
 
     qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action << "reason=" << reason
                       << "highlightedZones=" << highlightedZoneIds;
 }
 
 // hideNavigationOsd removed together with hideLayoutOsd — see the comment
-// block above warmUpLayoutOsd() for the rationale. The m_lastNavigation*
+// block above warmUpNotifications() for the rationale. The m_lastNavigation*
 // dedup state is cleared implicitly by the 200 ms timeout check in
 // showNavigationOsd() itself (the OSD's ~1000 ms dismiss timer is far
 // longer than the dedup window, so any dismiss is always past the
 // relevant timeout by the time it fires — no manual clear needed).
-
-void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen)
-{
-    // Phase 5: keepMappedOnHide + dismissRequested wiring done inside
-    // createWarmedOsdSurface (same rationale as createLayoutOsdWindow).
-    const bool ok =
-        createOsdWindowImpl(screenId, physScreen, PzRoles::NavigationOsd, QStringLiteral("navigation-osd"),
-                            QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), "navigation OSD",
-                            &PerScreenOverlayState::navigationOsdSurface, &PerScreenOverlayState::navigationOsdWindow,
-                            &PerScreenOverlayState::navigationOsdPhysScreen);
-    if (!ok) {
-        m_navigationOsdCreationFailed.insert(screenId, true);
-        return;
-    }
-    m_navigationOsdCreationFailed.remove(screenId);
-}
-
-void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
-{
-    destroyOsdWindowImpl(screenId, &PerScreenOverlayState::navigationOsdSurface,
-                         &PerScreenOverlayState::navigationOsdWindow, &PerScreenOverlayState::navigationOsdPhysScreen);
-    m_navigationOsdCreationFailed.remove(screenId);
-}
+//
+// The previous per-mode createNavigationOsdWindow / destroyNavigationOsdWindow
+// pair is gone post-Phase-2: navigation OSDs share the per-screen
+// NotificationOverlay surface created by createNotificationWindow above,
+// so a single create/destroy pair serves both OSD modes.
 
 } // namespace PlasmaZones

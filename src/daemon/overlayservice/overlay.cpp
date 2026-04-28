@@ -383,8 +383,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         marginsOverride = placement.margins;
     }
 
-    const auto role = PzRoles::Overlay.withScopePrefix(
-        QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role = PzRoles::makePerInstanceRole(PzRoles::Overlay, screenId, m_surfaceManager->nextScopeGeneration());
 
     // Try shader overlay first, fall back to standard overlay if it fails.
     QVariantMap initProps;
@@ -747,12 +746,13 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->labelsTextureHash = 0;
 
     // Erase the entry entirely if nothing else is keeping it alive. Per-screen
-    // state carries four surface pointers (overlay, zone selector, layout OSD,
-    // navigation OSD); only the overlay is cleared here. If the others are all
-    // null too, the entry is an empty husk that accumulates under hide()+show()
+    // state carries three surface pointers post-Phase-2 (overlay, zone selector,
+    // unified notification — the latter hosts both layout-OSD and nav-OSD
+    // content); only the overlay is cleared here. If the others are all null
+    // too, the entry is an empty husk that accumulates under hide()+show()
     // cycles. destroyAllWindowsForPhysicalScreen already erases, but hide()
     // used to leave husks behind — drop them here symmetrically.
-    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->layoutOsdSurface && !it->navigationOsdSurface) {
+    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->notificationSurface) {
         m_screenStates.erase(it);
     }
 }

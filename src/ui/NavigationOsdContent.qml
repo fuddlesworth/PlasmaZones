@@ -4,43 +4,41 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
- * Navigation OSD Window - Shows brief feedback when using keyboard navigation
- * to move or focus windows between zones
- * Auto-dismisses after ~1 second
+ * Navigation OSD content — Item-rooted body for use inside the unified
+ * NotificationOverlay host that swaps OSD modes via Loader.
+ *
+ * Phase 5: surface lifecycle + show/hide animations are driven entirely by
+ * PhosphorAnimationLayer::SurfaceAnimator (registered for the notification
+ * scope with the shared OSD config — `osd.show` / `osd.pop` / `osd.hide`).
+ * The library handles the visual fade by animating Window.contentItem
+ * opacity + scale on the host surface, and PhosphorLayer::Surface handles
+ * `Qt.WindowTransparentForInput` on the underlying QWindow during hide.
+ *
+ * This Item only owns:
+ *   - Data properties written by C++ (action, reason, zones, …)
+ *   - Computed messageText + container layout
+ *   - The auto-dismiss Timer + dismissRequested signal that C++ wires to
+ *     Surface::hide() (via the unified host's signal forwarding)
  */
-Window {
-    // Note: Accessible properties moved to container (Window doesn't support Accessible)
-    // contentWrapper
-    // (No signals — see matching comment in LayoutOsd.qml. The dismiss
-    // mechanism is the _osdDismissed flip in hideAnimation's ScriptAction.)
-    // Phase 5: surface lifecycle + show/hide animations are entirely library-
-    // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
-    // PzRoles::NavigationOsd, same shape as LayoutOsd) drives Window.contentItem
-    // opacity + scale via its `osd.show` / `osd.pop` / `osd.hide` profiles;
-    // PhosphorLayer::Surface handles `Qt.WindowTransparentForInput` on the
-    // underlying QWindow during the hide cycle.
-
+Item {
     id: root
 
-    // Navigation feedback data
+    // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
     property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
-    // Zone data
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
     property string sourceZoneId: "" // Source zone for move/swap operations
     property int windowCount: 1 // Number of windows affected (for rotation)
-    // Timing
+    // Auto-dismiss interval. Show/hide fade shapes are owned by the
+    // SurfaceAnimator's `osd.show` / `osd.pop` / `osd.hide` profile JSONs;
+    // tune the JSONs to adjust the appear/disappear feel rather than
+    // re-introducing per-window duration overrides here.
     property int displayDuration: 1000
-    // ms before auto-hide (shorter than layout OSD). Show/hide fade
-    // shapes are driven by the "osd.show" / "osd.hide" / "osd.pop"
-    // profile JSONs — tune those rather than re-introducing per-window
-    // duration overrides here.
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -172,40 +170,23 @@ Window {
             return i18n("Action completed");
         }
     }
-    // Content-driven desired size, exposed for C++ to read after writing
-    // action/reason/zones. Mirrors the width/height bindings below but stays
-    // live even when C++ later calls setWidth/setHeight (which detaches the
-    // Window width binding but leaves this readonly property intact). Used
-    // by OverlayService::showNavigationOsd to size the layer window based
-    // on the rendered message length rather than a hardcoded constant.
+    // Content-driven desired size, exposed for the unified host (which binds
+    // its Window width/height to these readonly properties; C++ also reads
+    // them after every property write to compute matching layer-shell margins).
     readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
     readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
-    /// Idempotency latch for `dismissRequested`. See LayoutOsd.qml for the
-    /// full rationale — the timer-fire and click paths can both attempt to
-    /// dismiss within the same show cycle; without the latch, C++ runs
-    /// Surface::hide() twice and the second call qCWarnings on the
-    /// already-Hidden state.
-    property bool _dismissed: false
 
-    /// Auto-dismiss request emitted by the dismissTimer. C++ side hooks this
-    /// to OverlayService → Surface::hide().
+    /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
+    /// The unified NotificationOverlay host re-emits this as its own
+    /// `dismissRequested` so OverlayService::createWarmedOsdSurface's
+    /// connect to Surface::hide() drives the library animator's beginHide.
     signal dismissRequested()
 
-    /// Restart the auto-dismiss timer from C++ on every show. The
-    /// `_dismissed` latch reset is driven off the timer's runningChanged
-    /// transition (Connections block below); see LayoutOsd.qml for the
-    /// full rationale.
+    /// Restart the auto-dismiss timer from C++ on every show. Forwards to
+    /// the shared OsdDismissable helper so the latch reset is driven off
+    /// the timer's runningChanged transition automatically.
     function restartDismissTimer() {
-        dismissTimer.restart();
-    }
-
-    /// Internal: emit dismissRequested at most once per show cycle.
-    function _requestDismiss() {
-        if (_dismissed)
-            return ;
-
-        _dismissed = true;
-        root.dismissRequested();
+        dismiss.restart();
     }
 
     // Helper function to normalize UUID format for comparison
@@ -255,96 +236,70 @@ Window {
         }
     }
 
-    // Window configuration — Phase 5 surface lifecycle owns
-    // Qt.WindowTransparentForInput on the underlying QWindow during hide.
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
-    color: "transparent"
-    // Size based on container (which is inside contentWrapper)
-    width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
-    height: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
-    // Start hidden; first Surface::show() flips visible=true.
-    visible: false
+    Accessible.name: i18n("Navigation feedback")
+    Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
 
-    // Auto-dismiss timer. Emits a signal that C++ hooks to Surface::hide().
-    Timer {
-        id: dismissTimer
+    // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
+    // why the latch is needed (timer-fire and click both race to dismiss).
+    OsdDismissable {
+        id: dismiss
 
         interval: root.displayDuration
-        onTriggered: root._requestDismiss()
+        onRequest: root.dismissRequested()
     }
 
-    // Reset the dismiss latch when the timer (re)starts. See LayoutOsd.qml
-    // for the rationale — the reset is the timer's responsibility, not
-    // the helper's, so any restart path keeps the latch in sync.
-    Connections {
-        function onRunningChanged() {
-            if (dismissTimer.running)
-                root._dismissed = false;
+    // Shadow effect
+    MultiEffect {
+        source: container
+        anchors.fill: container
+        shadowEnabled: true
+        shadowColor: Qt.rgba(0, 0, 0, 0.5)
+        shadowBlur: 1
+        shadowVerticalOffset: 4
+        shadowHorizontalOffset: 0
+    }
 
+    // Main container - matches LayoutOsd format exactly
+    // Accessible.name / .description live on the root Item so a screen
+    // reader sees the same a11y labels as LayoutOsdContent (which puts
+    // them on its root). Pre-fix the labels lived on this inner
+    // Rectangle, which was inconsistent with LayoutOsdContent and
+    // unreachable to anything walking the QObject tree from above.
+    Rectangle {
+        id: container
+
+        anchors.centerIn: parent
+        // Text-only: size based on message content
+        width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, 160)
+        height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
+        color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
+        radius: Kirigami.Units.gridUnit * 1.5
+        border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
+        border.width: 1
+
+        // Message label - informative text-based feedback
+        Label {
+            id: messageLabel
+
+            Accessible.name: root.messageText
+            anchors.top: parent.top
+            anchors.topMargin: Kirigami.Units.gridUnit * 1.5
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
+            text: root.messageText
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.3
+            font.weight: Font.Medium
+            color: root.success ? root.textColor : root.errorColor
+            horizontalAlignment: Text.AlignHCenter
         }
 
-        target: dismissTimer
     }
 
-    // Content wrapper. Opacity defaults to 1 — the SurfaceAnimator drives
-    // window.contentItem opacity for show/hide.
-    Item {
-        id: contentWrapper
-
+    // Click to dismiss. dismiss.fire() collapses timer-fire + click into
+    // a single dismissRequested per show cycle via the shared latch.
+    MouseArea {
         anchors.fill: parent
-
-        // Shadow effect
-        MultiEffect {
-            source: container
-            anchors.fill: container
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, 0.5)
-            shadowBlur: 1
-            shadowVerticalOffset: 4
-            shadowHorizontalOffset: 0
-        }
-
-        // Main container - matches LayoutOsd format exactly
-        Rectangle {
-            id: container
-
-            Accessible.name: i18n("Navigation feedback")
-            Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
-            anchors.centerIn: parent
-            // Text-only: size based on message content
-            width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, 160)
-            height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
-            color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)
-            radius: Kirigami.Units.gridUnit * 1.5
-            border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.15)
-            border.width: 1
-
-            // Message label - informative text-based feedback
-            Label {
-                id: messageLabel
-
-                Accessible.name: root.messageText
-                anchors.top: parent.top
-                anchors.topMargin: Kirigami.Units.gridUnit * 1.5
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
-                text: root.messageText
-                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.3
-                font.weight: Font.Medium
-                color: root.success ? textColor : errorColor
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-        }
-
-        // Click to dismiss. _requestDismiss collapses timer-fire + click
-        // into a single dismissRequested per show cycle (see LayoutOsd.qml
-        // for the full rationale).
-        MouseArea {
-            anchors.fill: parent
-            onClicked: root._requestDismiss()
-        }
-
+        onClicked: dismiss.fire()
     }
 
 }

@@ -379,8 +379,8 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
 
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
-    const auto role = PzRoles::SnapAssist.withScopePrefix(
-        QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::SnapAssist, scopeId, m_surfaceManager->nextScopeGeneration());
 
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")),
                                         .screen = screen,
@@ -750,8 +750,8 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // reopens).
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
-    const auto role = PzRoles::LayoutPicker.withScopePrefix(
-        QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::LayoutPicker, scopeId, m_surfaceManager->nextScopeGeneration());
 
     // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
     // across hide/show cycles; SurfaceAnimator drives opacity for the
@@ -790,11 +790,12 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
 
     // No visibleChanged → hide hookup here. The post-warmup design keeps the
     // Qt window `visible == true` for the surface's lifetime; the dismiss
-    // mechanism is the QML `_pickerDismissed` flag flipping the
-    // WindowTransparentForInput bit. A visibleChanged hook would either
-    // never fire (visible stays true) or, if a future QML refactor flips
-    // visible explicitly, would re-enter destroy on hide and reintroduce
-    // the slow path we're working around.
+    // mechanism is the dismissRequested signal above plus the library
+    // animator flipping Qt::WindowTransparentForInput on the still-mapped
+    // QWindow during hide. A visibleChanged hook would either never fire
+    // (visible stays true under keepMappedOnHide=true) or, if a future
+    // QML refactor flips visible explicitly, would re-enter destroy on
+    // hide and reintroduce the slow path we're working around.
 
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);

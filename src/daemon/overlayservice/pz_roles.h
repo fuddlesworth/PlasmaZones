@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <QString>
+#include <QStringView>
+
 #include <PhosphorLayer/Role.h>
 
 namespace PlasmaZones {
@@ -39,21 +42,31 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD base shape shared by PhosphorZones::Layout OSD and Navigation OSD. Both use the
-/// `FullscreenOverlay` primitive: AnchorAll so the compositor ignores
-/// x/y hints and honours the margins we write dynamically via the
-/// transport handle (see `centerLayerWindowOnScreen` in osd.cpp) to
-/// centre the OSD on-screen. No keyboard. Pre-warmed per screen at
-/// daemon start. Kept as a single source so a future tweak (e.g.
-/// exclusive-zone change, keyboard-mode flip) only needs updating once.
+/// OSD base shape used by the unified notification surface (and any
+/// future fullscreen-overlay-style surface). FullscreenOverlay primitive:
+/// AnchorAll so the compositor ignores x/y hints and honours the margins
+/// we write dynamically via the transport handle (see
+/// `centerLayerWindowOnScreen` in osd.cpp) to centre the OSD on-screen.
+/// No keyboard, click-through. Pre-warmed per screen at daemon start.
+///
+/// Currently only consumed to derive @ref Notification (post-Phase-2
+/// LayoutOsd + NavigationOsd unification — both ride the Notification
+/// surface now). Preserved as a named OSD-shape primitive so future
+/// click-through fullscreen overlays (e.g. a separate alerts surface)
+/// can branch off the same protocol shape without re-typing the
+/// FullscreenOverlay reference and the "no keyboard, click-through"
+/// invariant inline.
 inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverlay;
 
-/// PhosphorZones::Layout OSD (transient visual preview on layout switch).
-inline const PhosphorLayer::Role LayoutOsd = OsdBase.withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
-
-/// Navigation OSD (keyboard-nav feedback). Byte-identical to LayoutOsd
-/// aside from scope — intentionally sharing the same base.
-inline const PhosphorLayer::Role NavigationOsd = OsdBase.withScopePrefix(QStringLiteral("plasmazones-navigation-osd"));
+/// Unified notification surface — single per-screen wl_surface that hosts
+/// both layout-OSD and navigation-OSD content via NotificationOverlay.qml's
+/// mode-driven Loader. The two OSD modes share OsdBase (FullscreenOverlay,
+/// AnchorAll, no keyboard, click-through) and are never simultaneously
+/// visible, so a single Surface backs both. createNotificationWindow
+/// extends this prefix per-screen-and-generation; the SurfaceAnimator
+/// uses longest-prefix matching to apply the OSD config across all
+/// derived prefixes.
+inline const PhosphorLayer::Role Notification = OsdBase.withScopePrefix(QStringLiteral("plasmazones-notification"));
 
 /// Snap assist (post-snap window picker). Top layer, exclusive keyboard
 /// so Escape reliably dismisses. Singleton — one instance, re-targeted
@@ -72,6 +85,37 @@ inline const PhosphorLayer::Role LayoutPicker =
 /// by the caller.
 inline const PhosphorLayer::Role ShaderPreview =
     PhosphorLayer::Roles::FloatingOverlay.withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
+
+/// Build a per-instance Role from one of the base roles above by appending
+/// `-{screenId}-{generation}` to its base scope prefix. Single-source for
+/// the policy "per-instance scope prefix-matches the base role's prefix" so
+/// the SurfaceAnimator's longest-prefix lookup always resolves the
+/// registered config (see `setupSurfaceAnimator`).
+///
+/// Pre-existing failure modes this prevents:
+///  - Build the per-instance literal from scratch (e.g. typo
+///    "plasmazones-notif-..."), or
+///  - Pass `OsdBase` instead of the named family role and re-type the
+///    literal, then later rename the family role in this header.
+/// Either case made the longest-prefix match silently miss and the
+/// surface fell back to the library's empty default config.
+///
+/// @param base       Named base role (e.g. PzRoles::Notification).
+/// @param screenId   Effective screen id (physical or virtual).
+/// @param generation Monotonic per-process counter, e.g. from
+///                   `SurfaceManager::nextScopeGeneration()`.
+[[nodiscard]] inline PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base, QStringView screenId,
+                                                             quint64 generation)
+{
+    QString prefix;
+    prefix.reserve(base.scopePrefix.size() + 1 + screenId.size() + 1 + 20);
+    prefix.append(base.scopePrefix);
+    prefix.append(QLatin1Char('-'));
+    prefix.append(screenId);
+    prefix.append(QLatin1Char('-'));
+    prefix.append(QString::number(generation));
+    return base.withScopePrefix(std::move(prefix));
+}
 
 } // namespace PzRoles
 
