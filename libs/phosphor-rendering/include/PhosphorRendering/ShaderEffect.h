@@ -498,6 +498,19 @@ protected:
         return m_shaderDirty.exchange(false);
     }
 
+    /**
+     * @brief Factory hook for the render node updatePaintNode() will create.
+     *
+     * Default returns a plain ShaderNodeRhi. Subclasses that need an enriched
+     * node (e.g. ZoneShaderNodeRhi for zone-aware shaders with a labels
+     * texture binding) override this to return their own subclass — base
+     * updatePaintNode() will then drive that node through the same
+     * sync/render flow without subclasses having to duplicate it.
+     *
+     * Called only when oldNode is null. Ownership transfers to the scene graph.
+     */
+    virtual ShaderNodeRhi* createShaderNode();
+
     void setError(const QString& error);
     void setStatus(Status newStatus);
 

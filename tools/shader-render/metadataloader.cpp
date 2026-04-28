@@ -10,9 +10,19 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PlasmaZones::ShaderRender {
+
+Q_LOGGING_CATEGORY(lcMetadataLoader, "plasmazones.shader-render.metadata")
+
 namespace {
+
+// Default shader filenames the daemon also assumes when metadata.json omits
+// the explicit field. Kept here as named constants so a runtime convention
+// change has one place to update on the tool side.
+constexpr QLatin1String kDefaultFragmentShaderFilename{"effect.frag"};
+constexpr QLatin1String kDefaultVertexShaderFilename{"zone.vert"};
 
 QColor parseHexColor(const QString& hex)
 {
@@ -45,8 +55,10 @@ QString resolveRelative(const QString& metadataDir, const QString& maybeRelative
 // animation, etc.) so they render in their dormant/empty state.
 void seedParam(std::array<QVector4D, 8>& slots, int slot, double x)
 {
-    if (slot < 0 || slot >= 32)
+    if (slot < 0 || slot >= 32) {
+        qCWarning(lcMetadataLoader) << "param slot" << slot << "out of range [0, 32) — dropping";
         return;
+    }
     const auto value = static_cast<float>(x);
     auto& v = slots[slot / 4];
     switch (slot % 4) {
@@ -67,8 +79,10 @@ void seedParam(std::array<QVector4D, 8>& slots, int slot, double x)
 
 void seedColor(std::array<QColor, 16>& slots, int slot, const QColor& c)
 {
-    if (slot < 0 || slot >= 16)
+    if (slot < 0 || slot >= 16) {
+        qCWarning(lcMetadataLoader) << "color slot" << slot << "out of range [0, 16) — dropping";
         return;
+    }
     slots[slot] = c;
 }
 
@@ -97,9 +111,9 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
 
     // ── Shader source files (resolve absolute) ──────────────────
     out.fragmentShader = resolveRelative(
-        metadataDir, obj.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag")));
+        metadataDir, obj.value(QLatin1String("fragmentShader")).toString(kDefaultFragmentShaderFilename));
     out.vertexShader =
-        resolveRelative(metadataDir, obj.value(QLatin1String("vertexShader")).toString(QStringLiteral("zone.vert")));
+        resolveRelative(metadataDir, obj.value(QLatin1String("vertexShader")).toString(kDefaultVertexShaderFilename));
 
     if (out.fragmentShader.isEmpty())
         return false;
@@ -139,6 +153,7 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
             continue;
         const QJsonObject p = v.toObject();
         const QString type = p.value(QLatin1String("type")).toString(QStringLiteral("float"));
+        const QString id = p.value(QLatin1String("id")).toString();
         const int slot = p.value(QLatin1String("slot")).toInt(-1);
         if (slot < 0)
             continue;
@@ -150,9 +165,15 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
         } else if (type == QLatin1String("color")) {
             seedColor(out.customColors, slot,
                       parseHexColor(p.value(QLatin1String("default")).toString(QStringLiteral("#000000"))));
-        } else if (type == QLatin1String("image") && slot < 4) {
+        } else if (type == QLatin1String("image")) {
+            if (slot >= 4) {
+                qCWarning(lcMetadataLoader) << "image slot" << slot << "out of range [0, 4) — dropping" << id;
+                continue;
+            }
             out.userTextures[slot] = resolveRelative(metadataDir, p.value(QLatin1String("default")).toString());
             out.userTextureWraps[slot] = p.value(QLatin1String("wrap")).toString(QStringLiteral("clamp"));
+        } else {
+            qCWarning(lcMetadataLoader) << "parameter" << id << "has unsupported type" << type << "— dropping";
         }
     }
 

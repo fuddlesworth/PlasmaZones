@@ -572,6 +572,11 @@ void ShaderEffect::reloadShader()
 // Status Management
 // ============================================================================
 
+ShaderNodeRhi* ShaderEffect::createShaderNode()
+{
+    return new ShaderNodeRhi(this);
+}
+
 void ShaderEffect::setError(const QString& error)
 {
     if (m_errorLog != error) {
@@ -677,7 +682,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     if (!node) {
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
         m_renderNode = nullptr;
-        node = new ShaderNodeRhi(this);
+        node = createShaderNode();
         m_renderNode = node;
     }
 

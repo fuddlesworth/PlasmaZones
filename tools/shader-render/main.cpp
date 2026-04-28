@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
     QCommandLineOption outOpt(
         QStringList() << QStringLiteral("o") << QStringLiteral("out"),
         QStringLiteral("Output path. Extension picks the format: .webm/.mp4 = encoded video, "
-                       ".png = numbered sequence (out_0001.png, ...). Defaults to <shader>.webm."),
+                       ".png = numbered sequence (out_000001.png, ...). Defaults to <shader>.webm."),
         QStringLiteral("path"));
     parser.addOption(outOpt);
 
@@ -252,7 +252,6 @@ int main(int argc, char* argv[])
 
     // ── Render ──────────────────────────────────────────────────
     PlasmaZones::ShaderRender::RenderOptions opts;
-    opts.metadataPath = metadataPath;
     opts.metadata = metadata;
     opts.zones = zones;
     opts.resolution = resolution;
@@ -261,16 +260,15 @@ int main(int argc, char* argv[])
     opts.fps = fps;
     opts.audio = audio.get();
 
-    PlasmaZones::ShaderRender::Renderer renderer;
-    PlasmaZones::ShaderRender::FrameSink* sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
+    auto sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
     if (!sink) {
         std::cerr << "error: couldn't create output sink for " << outPath.toStdString() << "\n";
         return 1;
     }
-    opts.sink = sink;
+    opts.sink = sink.get();
 
+    PlasmaZones::ShaderRender::Renderer renderer;
     const int rc = renderer.render(opts);
-    delete sink;
     if (rc != 0) {
         std::cerr << "error: render failed (code " << rc << ")\n";
         return rc;

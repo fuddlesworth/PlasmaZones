@@ -21,10 +21,15 @@ QT_BEGIN_NAMESPACE
 class QSGNode;
 QT_END_NAMESPACE
 
-namespace PlasmaZones {
+// ZoneShaderNodeRhi and ZoneUniformExtension live in PhosphorRendering and
+// are surfaced into PlasmaZones via the using-declarations in
+// zoneshadercommon.h / zoneuniformextension.h. The zoneshadernoderhi.h /
+// zoneuniformextension.h shim headers are included transitively below — no
+// forward declarations needed (and they would conflict with the typedefs).
+#include "zoneshadernoderhi.h"
+#include "zoneuniformextension.h"
 
-class ZoneShaderNodeRhi;
-class ZoneUniformExtension;
+namespace PlasmaZones {
 
 /**
  * @brief QQuickItem for rendering zone overlays with custom shaders

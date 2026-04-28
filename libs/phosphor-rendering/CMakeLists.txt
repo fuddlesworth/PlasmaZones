@@ -45,12 +45,16 @@ set(phosphorrendering_SRCS
     src/shadernoderhiuniforms.cpp
     src/shadernoderhisetters.cpp
     src/shadereffect.cpp
+    src/zoneshadernoderhi.cpp
 )
 
 set(phosphorrendering_public_HDRS
     include/PhosphorRendering/ShaderCompiler.h
     include/PhosphorRendering/ShaderNodeRhi.h
     include/PhosphorRendering/ShaderEffect.h
+    include/PhosphorRendering/ZoneShaderCommon.h
+    include/PhosphorRendering/ZoneUniformExtension.h
+    include/PhosphorRendering/ZoneShaderNodeRhi.h
 )
 
 add_library(PhosphorRendering SHARED

@@ -47,25 +47,45 @@ struct ShaderMetadata
     QString bufferFilter = QStringLiteral("linear");
     QStringList bufferFilters;
 
-    // Default values seeded into the ShaderEffect.  Match
-    // ShaderEffect's internal init: customParams components are -1.0
-    // ("unset" sentinel) so the GLSL pattern
-    // `customParams[i].x >= 0.0 ? value : fallback` correctly takes
-    // the fallback path for slots the metadata doesn't define.
-    // Initializing to 0 (the std::array default) makes every unset
-    // parameter test as "set to zero" and silently overrides the
-    // shader's intended fallback.
+    // Default values seeded into the ShaderEffect.  Mirror ShaderEffect's
+    // internal init exactly so unset slots take the same code path the
+    // runtime takes:
+    //   * customParams components default to -1.0 ("unset" sentinel).  The
+    //     GLSL pattern `customParams[i].x >= 0.0 ? value : fallback` reads
+    //     0 as "set to zero" and skips the fallback — initializing to 0
+    //     would silently override every shader's intended default.
+    //   * customColors default to transparent black (0,0,0,0).  An invalid
+    //     QColor (the std::array default) doesn't match the runtime and
+    //     setCustomColorAt would happily forward it to the shader.
+    static constexpr QVector4D kUnsetParam{-1.0f, -1.0f, -1.0f, -1.0f};
     std::array<QVector4D, 8> customParams = {{
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
-        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
     }};
-    std::array<QColor, 16> customColors = {};
+    std::array<QColor, 16> customColors = {{
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+    }};
 
     // For shaders that declare image-typed parameters; absolute paths.
     std::array<QString, 4> userTextures = {};

@@ -29,7 +29,10 @@ namespace PlasmaZones::ShaderRender {
  *            Useful for verifying that bass / mid / treble buckets
  *            light up as expected.
  *
- * Bar count matches the runtime's CAVA default (256).
+ * Bar count matches the runtime's CAVA cap (PhosphorAudio::Defaults::MaxBars).
+ * Producing previews at the cap is fine: the shader tolerates any size up to
+ * the cap (it reads iAudioSpectrumSize), and 256 looks smooth for clip-style
+ * previews. Adjust if the runtime cap ever changes.
  */
 class AudioMock
 {
