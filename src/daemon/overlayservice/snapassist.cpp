@@ -598,39 +598,23 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     m_layoutPickerWindow->setWidth(screenGeom.width());
     m_layoutPickerWindow->setHeight(screenGeom.height());
 
-    // Re-grab keyboard focus on every show. Layer-shell keyboard
-    // interactivity is mutable on the live wl_surface (snap-assist uses the
-    // same setter pattern at line ~199). Without the regrab the surface
-    // would still have `None` from the prior hide and would not receive
-    // arrow / Enter / Escape input.
-    if (m_layoutPickerSurface) {
-        if (auto* handle = m_layoutPickerSurface->transport()) {
-            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::Exclusive);
-        }
-    }
-
     // Activate the QML-side keyboard Shortcuts before show() so any
     // accelerator events that race the show animation reach a picker
-    // that's expecting them. Cleared in hideLayoutPicker so a logically-
-    // hidden picker (still Qt-visible under keepMappedOnHide) doesn't
-    // silently respond to stray accelerator deliveries.
+    // that's expecting them. Still useful as a defensive gate even
+    // without keep-mapped: an in-flight Surface::show animation
+    // overlapping a fast key tap shouldn't silently drop the input.
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), true);
-    // Reset the QML-side dismiss latch (LayoutPickerOverlay.qml's
-    // `_dismissed`) so multiple rapid backdrop clicks during the
-    // upcoming show cycle collapse into a single dismissRequested.
-    // QML's `on<Name>Changed` handler form does not work for
-    // underscore-prefixed properties, so the latch reset is driven
-    // explicitly here rather than tied to `_shortcutsActive`'s change
-    // signal in QML.
+    // Reset the QML-side dismiss latch so multiple rapid backdrop
+    // clicks during the show animation collapse to one dismiss.
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_dismissed"), false);
 
     // Phase 5: Surface::show() drives the SurfaceAnimator (registered for
     // PzRoles::LayoutPicker with osd.show + osd.pop) which animates
-    // opacity 0→1 and scale 0.9→1 with overshoot. The library handles
-    // visible=true and clears Qt.WindowTransparentForInput so input
-    // routing returns. requestActivate() asks the compositor to focus
-    // the still-Wayland-mapped layer surface (Wayland's keyboard focus
-    // is otherwise gated by the keyboard_interactivity setter above).
+    // opacity 0→1 and scale 0.9→1 with overshoot. The role's keyboard
+    // interactivity (Exclusive — from CenteredModal) is applied at the
+    // surface's initial map by the LayerShellWindow ctor, so KWin
+    // grants keyboard focus on first map. requestActivate() asks Qt
+    // to make this the focused QWindow.
     m_layoutPickerSurface->show();
     m_layoutPickerWindow->requestActivate();
 
@@ -644,40 +628,20 @@ void OverlayService::hideLayoutPicker()
         return;
     }
 
-    // Disable the picker's QML-side keyboard Shortcuts before the surface
-    // transitions to Hidden. Under keepMappedOnHide the QQuickWindow stays
-    // Qt-visible, which means the Shortcuts remain registered with Qt's
-    // accelerator pipeline; gating them on a property C++ controls keeps
-    // a logically-hidden picker from responding to stray accelerator
-    // events.
-    if (m_layoutPickerWindow) {
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("_shortcutsActive"), false);
-    }
-
-    // Phase 5: Surface::hide() drives the SurfaceAnimator's beginHide
-    // (osd.hide profile, opacity 1→0, scale 1→0.95). With keepMappedOnHide
-    // the library does NOT call QQuickWindow::hide(); it flips
-    // Qt.WindowTransparentForInput so the still-mapped layer surface stops
-    // eating clicks. Re-entrancy is benign — Surface::hide is a no-op when
-    // already in Hidden state.
-    m_layoutPickerSurface->hide();
-
-    // Drop keyboard interactivity so the still-mapped layer surface stops
-    // intercepting keyboard events while the hide animation is in flight
-    // and afterwards. Snap-assist doesn't need an analogous step — it
-    // destroys on hide and the keyboard grab is dropped alongside the
-    // wl_surface teardown in ~Surface. The picker stays Qt-mapped under
-    // keepMappedOnHide=true, so we have to drop the grab explicitly.
-    if (auto* handle = m_layoutPickerSurface->transport()) {
-        handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
-    }
-
-    // Re-show the zone selector that was hidden when layout picker was shown (line ~435).
-    // Surface::show() pairs with the Surface::hide() in showLayoutPicker so the
-    // SurfaceAnimator drives the fade-in and the keepMappedOnHide flag flip is
-    // reverted properly. Same state-guard rationale as hideSnapAssist above —
-    // skip the dispatch if the selector is already visible.
+    // Capture screenId before destroy clears m_layoutPickerScreenId — we
+    // need it for the zone-selector re-show below.
     const QString screenId = m_layoutPickerScreenId;
+
+    // Destroy the layer surface (matches SnapAssist's pattern). The
+    // previous keep-mapped + keyboard-interactivity-mutation approach
+    // broke focus on every show — see createLayoutPickerWindowFor's
+    // keepMappedOnHide=false comment for the full rationale.
+    destroyLayoutPickerWindow();
+
+    // Re-show the zone selector that was hidden when layout picker was
+    // shown (line ~435). Skip the dispatch if the selector is already
+    // visible (a fresh drag may have re-shown it while the picker was
+    // up).
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
             if (!selectorSurface->isLogicallyShown()) {
@@ -689,34 +653,20 @@ void OverlayService::hideLayoutPicker()
 
 void OverlayService::warmUpLayoutPicker()
 {
-    if (m_layoutPickerSurface) {
-        return;
-    }
-    // Pre-create the picker on the primary screen so the first user-triggered
-    // show skips the ~50-100 ms Wayland surface + Vulkan swapchain init cost.
-    // If the user later opens the picker on a different screen, showLayoutPicker
-    // detects the screen mismatch and falls back to the destroy+recreate path —
-    // the warm surface still saved one cold start.
-    QScreen* screen = Utils::primaryScreen();
-    if (!screen) {
-        return;
-    }
-    const QString resolvedId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
-    createLayoutPickerWindowFor(screen, screenGeom, resolvedId);
-    if (m_layoutPickerSurface) {
-        // Pre-warmed surface starts with no keyboard grab — show() will
-        // promote to Exclusive when the user triggers the picker.
-        if (auto* handle = m_layoutPickerSurface->transport()) {
-            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
-        }
-        m_layoutPickerScreen = screen;
-        m_layoutPickerScreenId = resolvedId;
-        qCInfo(lcOverlay) << "Pre-warmed Layout Picker surface on screen=" << resolvedId;
-    }
+    // Intentional no-op. The picker used to be pre-warmed (a hidden
+    // wl_surface created at daemon start so the first user-triggered
+    // show skipped ~50-100 ms of Wayland + Vulkan + QML init), but that
+    // mapped the surface with keyboard_interactivity=None to keep the
+    // warm hidden surface from hijacking keys. KWin's wlr-layer-shell
+    // doesn't re-evaluate keyboard focus when interactivity is mutated
+    // to Exclusive on a still-mapped surface, so the picker never
+    // received KeyPress events on user-show — Escape, arrow keys, and
+    // Enter were all dead. Creating fresh per-show maps the surface
+    // with Exclusive at initial map, which KWin honours.
+    //
+    // Kept as a stub rather than removed so the signals.cpp call site
+    // and the public IOverlayService interface stay stable. Callers see
+    // a nominal no-op; the perf cost is amortised across each open.
 }
 
 bool OverlayService::isLayoutPickerVisible() const
@@ -764,18 +714,18 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     const auto role =
         PzRoles::makePerInstanceRole(PzRoles::LayoutPicker, scopeId, m_surfaceManager->nextScopeGeneration());
 
-    // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
-    // across hide/show cycles; SurfaceAnimator drives opacity for the
-    // visual fade and the library flips Qt::WindowTransparentForInput
-    // during the hide so the still-mapped layer surface stops eating
-    // clicks.
+    // keepMappedOnHide=false: destroy the wl_surface on hide. The previous
+    // keep-mapped pattern was a perf optimisation, but it broke keyboard
+    // input on every show — see signals.cpp's warmUp comment for the
+    // full rationale. Match SnapAssist's destroy-on-hide pattern so each
+    // show maps a fresh surface with the role's keyboard_interactivity
+    // (Exclusive) at initial map.
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")),
                                         .screen = screen,
                                         .role = role,
                                         .windowType = "layout picker",
                                         .anchorsOverride = anchorsOverride,
-                                        .marginsOverride = marginsOverride,
-                                        .keepMappedOnHide = true});
+                                        .marginsOverride = marginsOverride});
     if (!surface) {
         return;
     }
