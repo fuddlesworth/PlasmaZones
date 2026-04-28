@@ -181,6 +181,14 @@ QStringList ShaderRegistry::searchPaths() const
     return m_watcher->directories();
 }
 
+void ShaderRegistry::setUserShaderPath(const QString& path)
+{
+    // Canonicalisation happens at compare time in `performScan` (so
+    // callers that pass a path which doesn't exist yet still get the
+    // right classification once it materialises). Store the raw input.
+    m_userShaderPath = path;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shader Identity Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -217,6 +225,14 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
     m_shaders.clear();
     QStringList desiredWatches;
 
+    // Resolve the user-shader path's canonical form ONCE per rescan
+    // (empty when no user path is configured or the configured path
+    // doesn't exist yet). Each iterated dir is canonicalised below and
+    // compared against this — match means the dir is the user path,
+    // and discovered shaders are flagged `isUserShader = true`.
+    const QString canonicalUserPath =
+        m_userShaderPath.isEmpty() ? QString() : QFileInfo(m_userShaderPath).canonicalFilePath();
+
     // Reverse-iterate with first-registration-wins, matching the
     // IScanStrategy convention used by `JsonScanStrategy` and
     // `JsScanStrategy`. Caller registers dirs in
@@ -238,6 +254,13 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
             continue;
         }
 
+        // Classify the iterated dir as user vs system. Empty
+        // `canonicalUserPath` (no user path configured, or user dir
+        // doesn't exist yet) yields `false` for every dir — preserving
+        // the legacy default before this knob existed.
+        const bool isUserDir =
+            !canonicalUserPath.isEmpty() && QFileInfo(searchPath).canonicalFilePath() == canonicalUserPath;
+
         const int beforeCount = m_shaders.size();
         const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& subdir : subdirs) {
@@ -248,7 +271,7 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
             // Dispatch + watch-list harvest in one pass.
             // `loadShaderFromDir` first-wins-skips on existing IDs (see
             // its early-return when `m_shaders.contains`).
-            loadShaderFromDir(subPath, false);
+            loadShaderFromDir(subPath, isUserDir);
             desiredWatches.append(subPath);
             QDir sub(subPath);
             const QStringList shaderFiles = sub.entryList({QStringLiteral("*.frag"), QStringLiteral("*.vert"),

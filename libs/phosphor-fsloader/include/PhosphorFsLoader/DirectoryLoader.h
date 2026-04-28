@@ -96,6 +96,11 @@ public:
      * `setupAnimationProfiles` for the canonical pattern).
      *
      * Same one-way `liveReload` semantics as `loadFromDirectory`.
+     *
+     * Empty `directories` is a no-op: no scan runs and the return value
+     * is the count of entries currently tracked from PRIOR registrations
+     * (not zero). Callers needing "force a rescan with no new dirs"
+     * should use `requestRescan()` instead.
      */
     int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
 

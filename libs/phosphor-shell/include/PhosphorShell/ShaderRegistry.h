@@ -107,6 +107,20 @@ public:
     /// exactly one scan instead of N.
     void addSearchPaths(const QStringList& paths);
 
+    /// Mark @p path as the "user" search path for `ShaderInfo::isUserShader`
+    /// classification. Stored as-given; the rescan canonicalises both this
+    /// path and each iterated search dir before comparing, so the input
+    /// can be either canonical or symlinked. Pass the empty string (the
+    /// default) to disable user/system differentiation — every shader will
+    /// then report `isUserShader == false`.
+    ///
+    /// Set this BEFORE the first `addSearchPaths` call so the initial
+    /// scan sees the right classification; the registry does not retain
+    /// raw shader paths after the rescan, so changing this later requires
+    /// an explicit `refresh()` to reclassify. Idempotent and one-way: a
+    /// subsequent empty argument clears the user-path designation.
+    void setUserShaderPath(const QString& path);
+
     /// Current search paths.
     QStringList searchPaths() const;
 
@@ -196,6 +210,10 @@ private:
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
     QHash<QString, ShaderInfo> m_shaders;
+    /// User-shader search path used to classify discovered shaders as
+    /// user vs system. Compared against each iterated search dir's
+    /// canonical form on every rescan — see `setUserShaderPath`.
+    QString m_userShaderPath;
     std::unique_ptr<ShaderScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 

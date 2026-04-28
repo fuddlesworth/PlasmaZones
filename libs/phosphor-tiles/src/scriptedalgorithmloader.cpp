@@ -258,24 +258,31 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     m_scriptIdToPath.clear();
 
     // `algorithmDirectories()` returns dirs in [sys-lowest, ...,
-    // sys-highest, user] order (system-first / user-last). Reverse
-    // here gives [user, sys-highest, ..., sys-lowest] — matches
-    // `JsonScanStrategy::performScan`'s shape and lets first-
+    // sys-highest, user] order (system-first / user-last). Reverse-
+    // iterate here so we visit [user, sys-highest, ..., sys-lowest] —
+    // matches `JsonScanStrategy::performScan`'s shape and lets first-
     // registration-wins yield: user > sys-highest > sys-mid > ... >
-    // sys-lowest, which is the actual XDG semantic.
-    QStringList dirs = directoriesInScanOrder;
-    std::reverse(dirs.begin(), dirs.end());
+    // sys-lowest, which is the actual XDG semantic. `crbegin/crend`
+    // matches the strategy-convention used by `JsonScanStrategy` and
+    // `ShaderScanStrategy` and avoids the QStringList copy + std::reverse
+    // the previous shape needed.
 
+    // Resolve the user dir's canonical path ONCE. `loadFromDirectory`
+    // takes the canonical form as a parameter so the per-iteration
+    // duplicate-warning branch doesn't re-stat $HOME on every script
+    // dir. Empty when the user dir doesn't exist yet — handled by the
+    // truthiness guard at the use-site.
     const QString userDir = userAlgorithmDir();
     const QString canonicalUserDir = QFileInfo(userDir).canonicalFilePath();
-    for (const QString& dir : std::as_const(dirs)) {
+    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend(); ++dirIt) {
+        const QString& dir = *dirIt;
         // Use canonical paths to handle symlinks and relative path differences.
         // Empty canonical (dir doesn't exist yet) cannot match a non-empty
         // canonicalUserDir, and an empty canonicalUserDir cannot misclassify
         // an existing system dir as user.
         const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
         const bool isUserDir = !canonicalUserDir.isEmpty() && canonicalDir == canonicalUserDir;
-        loadFromDirectory(dir, isUserDir);
+        loadFromDirectory(dir, isUserDir, canonicalUserDir);
     }
 
     // Collect all newly registered script IDs
@@ -335,10 +342,8 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     return desiredFileWatches;
 }
 
-void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir)
+void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir)
 {
-    const QString canonicalUserDir = QFileInfo(userAlgorithmDir()).canonicalFilePath();
-
     const QStringList validFiles = validatedJsFiles(dir, MaxWatchedFilesPerDir);
 
     for (const QString& fullPath : validFiles) {

@@ -78,6 +78,15 @@ inline std::optional<JsonEnvelope> validateJsonEnvelope(const QString& filePath,
     // symlink at a multi-MB asset or a hand-crafted DoS — `readAll()`
     // would otherwise pull the whole thing into memory before the JSON
     // parser had a chance to reject it.
+    //
+    // `DirectoryLoader::kMaxFileBytes` enforces the SAME 1 MiB cap on
+    // the loader side BEFORE this helper is ever called via the default
+    // sink dispatch path. The duplicate guard here is authoritative for
+    // direct callers (`validateJsonEnvelope` is a public free function)
+    // and belt-and-suspenders for the loader path. Keeping both costs
+    // one extra `QFileInfo::size()` stat — microscopic compared with
+    // the alternative of letting a 2 GiB blob fall through to direct
+    // callers that didn't stat themselves.
     constexpr qint64 kMaxFileSize = 1 * 1024 * 1024;
 
     QFileInfo info(filePath);

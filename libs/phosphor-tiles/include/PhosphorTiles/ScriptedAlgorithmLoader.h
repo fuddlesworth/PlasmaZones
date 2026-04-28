@@ -89,7 +89,7 @@ private:
     class JsScanStrategy;
     QStringList performScan(const QStringList& directoriesInScanOrder);
 
-    void loadFromDirectory(const QString& dir, bool isUserDir);
+    void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir);
     QStringList algorithmDirectories() const;
     QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
 

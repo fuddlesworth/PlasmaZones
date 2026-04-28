@@ -198,7 +198,13 @@ private:
     QSet<QString> m_watchedFiles;
     QTimer m_debounceTimer;
     bool m_liveReloadEnabled = false;
-    bool m_rescanInProgress = false;
+    /// Reentry depth — incremented at the top of every `rescanAll`, decremented
+    /// at the bottom. A bool would clobber on nested invocations (a slot wired
+    /// to `rescanCompleted` calling `registerDirectories` runs `rescanAll`
+    /// synchronously while the outer is still on the stack). The replay branch
+    /// fires only when depth returns to zero, so a nested scan never strands
+    /// the outer scan's pending replay.
+    int m_rescanDepth = 0;
     bool m_rescanRequestedWhileRunning = false;
 };
 

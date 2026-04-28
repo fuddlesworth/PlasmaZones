@@ -358,6 +358,52 @@ private Q_SLOTS:
         QVERIFY(strategy.scanCount > baseline);
     }
 
+    /// A directory that's directly watched, then deleted, then recreated
+    /// must recover live-reload. On rmdir, `QFileSystemWatcher` auto-drops
+    /// the direct watch — the next rescan must re-attach (climbing onto
+    /// an ancestor since the target is gone). On mkdir-recreate, the
+    /// ancestor watch fires, and the next rescan promotes back to a
+    /// direct watch on the now-existing target.
+    void testDirectWatch_deleteThenRecreateRecovers()
+    {
+        // Build under m_tmp/leaf so the climb on rmdir lands on m_tmp
+        // (a non-forbidden ancestor — m_tmp itself is under
+        // QStandardPaths::TempLocation but the per-test subdir created
+        // by QTemporaryDir is NOT TempLocation itself, so the climb
+        // stops cleanly there).
+        const QString tmp = QDir::cleanPath(m_tmp->path());
+        const QString target = tmp + QStringLiteral("/leaf");
+        QVERIFY(QDir().mkpath(target));
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.setDebounceIntervalForTest(1);
+        set.registerDirectory(target, LiveReload::On);
+
+        // Initial state: target exists → direct watch installed, no
+        // ancestor back-reference.
+        QCOMPARE(set.watchedAncestorForTest(target), QString());
+
+        // rmdir the target. The watcher's directoryChanged on m_tmp
+        // (the parent) eventually delivers — we don't depend on that
+        // path though; an explicit rescanNow() exercises the recovery
+        // logic deterministically.
+        QVERIFY(QDir(target).removeRecursively());
+        QVERIFY(!QFileInfo::exists(target));
+        set.rescanNow();
+
+        // Climb landed on m_tmp; back-reference recorded.
+        QCOMPARE(set.watchedAncestorForTest(target), tmp);
+        QVERIFY(set.hasParentWatchForTest(tmp));
+
+        // Recreate the dir + rescan. Promotion to direct watch must
+        // remove the ancestor back-reference.
+        QVERIFY(QDir().mkpath(target));
+        set.rescanNow();
+        QCOMPARE(set.watchedAncestorForTest(target), QString());
+        QCOMPARE(set.hasParentWatchForTest(tmp), false);
+    }
+
     /// `syncFileWatches` silently dedupes when a strategy reports a path
     /// the base ALREADY watches via `attachWatcherForDir` (e.g. the
     /// strategy reports a registered root directory). The base must not

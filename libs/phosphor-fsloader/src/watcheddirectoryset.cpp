@@ -11,6 +11,8 @@
 #include <QStandardPaths>
 #include <QThread>
 
+#include <optional>
+
 namespace PhosphorFsLoader {
 
 namespace {
@@ -29,6 +31,14 @@ Q_LOGGING_CATEGORY(lcWatcher, "phosphorfsloader.watcheddirset")
 /// case-insensitive filesystems where it resolves to the same inode as
 /// the canonical `$HOME`. Without this a re-cased ancestor would slip
 /// past the byte-equal compare and end up watching `$HOME`.
+///
+/// Best-effort, platform-default only. Uses the OS family as a proxy for
+/// "the typical filesystem on this platform" — won't detect a
+/// case-sensitive HFSX volume on macOS or a case-insensitive exFAT mount
+/// on Linux. Symlink canonicalisation in `isForbiddenWatchRoot` covers
+/// the common foot-gun (deliberate `$HOME` symlink); the remaining
+/// edge cases require a stat-and-compare-inode path that nothing in
+/// the in-tree consumer set actually exercises.
 bool samePath(const QString& a, const QString& b)
 {
     if (a.isEmpty() || b.isEmpty()) {
@@ -172,14 +182,16 @@ void WatchedDirectorySet::requestRescan()
 {
     Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::requestRescan",
                "GUI-thread only — see class docs");
-    // A rescan may already be running on this thread (strategy's
-    // commit step or a nested slot re-entered us via a signal). Starting
-    // the debounce timer here would be a no-op — the timer is idle while
-    // rescanAll is executing — and the event that triggered this call
-    // would be silently dropped because the rescan has already captured
-    // the pre-event filesystem state. Defer to the end of rescanAll,
-    // which checks the flag and re-arms the timer for a follow-up scan.
-    if (m_rescanInProgress) {
+    // A rescan may already be running on this thread (strategy's commit step
+    // or a nested slot re-entered us via a signal — including the case where
+    // a `rescanCompleted` slot calls `registerDirectories`, which invokes
+    // `rescanAll` recursively). Starting the debounce timer here would be a
+    // no-op — the timer is idle while rescanAll is executing — and the event
+    // that triggered this call would be silently dropped because the rescan
+    // has already captured the pre-event filesystem state. Defer to the
+    // outermost rescanAll's exit, which checks the flag and re-arms the
+    // timer for a follow-up scan.
+    if (m_rescanDepth > 0) {
         m_rescanRequestedWhileRunning = true;
         return;
     }
@@ -217,13 +229,22 @@ void WatchedDirectorySet::rescanAll()
     // Race guard — any `requestRescan` call delivered during this scan
     // (e.g. from within the strategy's commit step, or from a watcher
     // event that fires while we're iterating) is captured in
-    // `m_rescanRequestedWhileRunning` and replayed at the end of this
-    // function. Without it, the single-shot debounce timer is idle
-    // while this slot runs, so any `m_debounceTimer.start()` call from
-    // inside the nested stack is a no-op and the observed state can go
-    // stale until the next external event.
-    m_rescanInProgress = true;
-    m_rescanRequestedWhileRunning = false;
+    // `m_rescanRequestedWhileRunning` and replayed at the end of the
+    // OUTERMOST rescan. Without it, the single-shot debounce timer is
+    // idle while this slot runs, so any `m_debounceTimer.start()` call
+    // from inside the nested stack is a no-op and the observed state
+    // can go stale until the next external event.
+    //
+    // Reentry depth — `m_rescanDepth` is incremented on entry and
+    // decremented on exit. The outermost entry resets the replay flag
+    // so a stale `true` left over from a prior outer scan doesn't
+    // re-fire. Only the outermost exit triggers the replay — nested
+    // exits leave `m_rescanRequestedWhileRunning` intact so the outer
+    // scan still sees pending work captured by inner iterations.
+    const int depth = ++m_rescanDepth;
+    if (depth == 1) {
+        m_rescanRequestedWhileRunning = false;
+    }
 
     // If live-reload is enabled, the watcher needs a chance to promote
     // any parent-watched target that just materialised. Do this before
@@ -253,18 +274,19 @@ void WatchedDirectorySet::rescanAll()
 
     // Race-guard replay. `Q_EMIT` is a synchronous call: every
     // `Qt::DirectConnection` slot wired to `rescanCompleted` runs
-    // before the line below clears `m_rescanInProgress`, so any
+    // before the line below decrements `m_rescanDepth`, so any
     // `requestRescan()` call from those slots still takes the guarded
     // path (sets `m_rescanRequestedWhileRunning`). Slots wired with
     // `Qt::QueuedConnection` run later, after the flag is cleared, and
     // will arm the debounce timer normally — that's also fine.
     //
-    // We clear `m_rescanInProgress` BEFORE re-arming the timer so the
+    // We decrement `m_rescanDepth` BEFORE re-arming the timer so the
     // single-shot timer's eventual `rescanAll` slot starts from a clean
-    // state, rather than seeing a stale "in progress" flag from the
-    // outer scan it's chained off.
-    m_rescanInProgress = false;
-    if (m_rescanRequestedWhileRunning) {
+    // state, rather than seeing a stale depth from the outer scan it's
+    // chained off. Replay only fires when the OUTERMOST scan exits —
+    // nested exits leave the work for the outer to drive.
+    --m_rescanDepth;
+    if (m_rescanDepth == 0 && m_rescanRequestedWhileRunning) {
         m_rescanRequestedWhileRunning = false;
         m_debounceTimer.start();
     }
@@ -298,14 +320,28 @@ void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
     // Qt silently drops the old inode from the watch set — the user's
     // new inode must be explicitly re-added. Cheapest correct shape is
     // "always try to add; trust QFSW to dedupe the no-op case".
-    const QStringList alreadyWatchedDirs = m_watcher->directories();
-    const QStringList alreadyWatchedFiles = m_watcher->files();
+    //
+    // Cached watcher state for the failure-path dedupe (case 1 below).
+    // Lazy-built so the steady-state success path doesn't allocate two
+    // QSets per rescan when nothing fails.
+    std::optional<QSet<QString>> alreadyWatchedDirs;
+    std::optional<QSet<QString>> alreadyWatchedFiles;
+    const auto ensureAlreadyWatchedCaches = [&]() {
+        if (alreadyWatchedDirs) {
+            return;
+        }
+        const QStringList dirs = m_watcher->directories();
+        const QStringList files = m_watcher->files();
+        alreadyWatchedDirs.emplace(dirs.cbegin(), dirs.cend());
+        alreadyWatchedFiles.emplace(files.cbegin(), files.cend());
+    };
+
     for (const QString& path : desired) {
         if (m_watcher->addPath(path)) {
             m_watchedFiles.insert(path);
         } else if (!m_watchedFiles.contains(path)) {
             // addPath returned false AND we didn't already have it in
-            // OUR file-watch set. Two cases:
+            // OUR file-watch set. Three cases:
             //
             //   1) Qt is already watching this path because the strategy
             //      reported one of the registered roots that
@@ -313,16 +349,25 @@ void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
             //      (strategies are *advised* not to do this, but this
             //      keeps a misbehaving strategy from producing a
             //      misleading log spam every rescan).
-            //   2) Genuinely unwatchable — permissions, OS-specific
+            //   2) Path vanished between the strategy's stat and
+            //      addPath (file deleted by another process during the
+            //      scan, common in CI runners with concurrent test
+            //      churn). Transient — debug-log only.
+            //   3) Genuinely unwatchable — permissions, OS-specific
             //      watch quota hit (Linux: inotify max_user_watches;
             //      macOS: kqueue file-descriptor limits; Windows:
-            //      ReadDirectoryChangesW handle exhaustion), or the
-            //      path vanished between stat and addPath. Warn —
+            //      ReadDirectoryChangesW handle exhaustion). Warn —
             //      hot-reload silently degrades to "doesn't work" and
             //      users troubleshooting need this visible at default
             //      log levels.
-            if (alreadyWatchedDirs.contains(path) || alreadyWatchedFiles.contains(path)) {
+            ensureAlreadyWatchedCaches();
+            if (alreadyWatchedDirs->contains(path) || alreadyWatchedFiles->contains(path)) {
                 continue; // case 1 — silent dedupe
+            }
+            if (!QFileInfo::exists(path)) {
+                qCDebug(lcWatcher) << "syncFileWatches: path vanished before addPath" << path
+                                   << "— transient, will re-arm on next rescan";
+                continue; // case 2 — transient miss
             }
             qCWarning(lcWatcher) << "syncFileWatches: failed to add watch for" << path
                                  << "— check permissions or filesystem-watcher quota (inotify on Linux, "

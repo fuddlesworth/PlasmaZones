@@ -11,6 +11,7 @@
 #include <QScreen>
 #include <QDBusConnection>
 #include <QDBusError>
+#include <QDir>
 #include <QFile>
 #include <QSet>
 #include <QThread>
@@ -288,6 +289,19 @@ void Daemon::setupAnimationProfiles()
     if (!profileDirs.contains(userProfileDir)) {
         profileDirs.append(userProfileDir);
     }
+
+    // Materialise the user dirs eagerly so live-reload works on fresh
+    // installs. `WatchedDirectorySet`'s parent-watch climb refuses to
+    // attach a `QFileSystemWatcher` to forbidden ancestors (`$HOME`,
+    // `$XDG_DATA_HOME`, etc.) — without these dirs existing, the climb
+    // terminates at `~/.local/share` and NO watch is installed. The
+    // user could then drop `~/.local/share/plasmazones/profiles/foo.json`
+    // and live-reload would silently never fire until daemon restart.
+    // Mirrors `ScriptedAlgorithmLoader::ensureUserDirectoryExists` and
+    // the ShaderRegistry ctor's `mkpath`. Failures are non-fatal — the
+    // initial on-demand scan still works without a watch.
+    QDir().mkpath(userCurveDir);
+    QDir().mkpath(userProfileDir);
 
     // Construct loaders with NO initial load — the loadFromDirectories
     // calls below trigger the first scan AFTER every consumer signal is

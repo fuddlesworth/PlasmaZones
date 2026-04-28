@@ -53,6 +53,12 @@ public:
         if (!systemDirs.contains(userDir)) {
             paths.append(userDir);
         }
+        // Mark the user dir BEFORE the initial scan so discovered
+        // shaders' `isUserShader` flag is set correctly on first commit.
+        // Settings UI / QML pickers consume this to render the "user"
+        // badge — without the explicit mark, every shader would surface
+        // as system.
+        setUserShaderPath(userDir);
         addSearchPaths(paths);
     }
 

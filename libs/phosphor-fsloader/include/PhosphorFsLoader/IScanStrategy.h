@@ -42,6 +42,17 @@ namespace PhosphorFsLoader {
  * (`user > sys-highest > sys-mid > ... > sys-lowest`) without any
  * per-strategy bookkeeping. New strategies should follow this shape
  * unless there is a documented reason to deviate.
+ *
+ * ## Emit semantics
+ *
+ * The base emits `WatchedDirectorySet::rescanCompleted` unconditionally
+ * on every rescan, regardless of whether any state changed — the base
+ * has no way to compare strategy-private payloads. Strategies that need
+ * change-only emit semantics MUST diff inside `performScan` and gate
+ * their own consumer-facing signal on the result (see
+ * `ScriptedAlgorithmLoader`'s SHA-1 signature for the canonical
+ * pattern, and the `BatchedSink<T>::lastBatchChanged` flag used by
+ * CurveLoader / ProfileLoader).
  */
 class IScanStrategy
 {
