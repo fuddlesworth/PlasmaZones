@@ -66,8 +66,21 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     // Empty subdirectory is explicitly supported as "loader disabled".
     Q_ASSERT_X(!m_subdirectory.startsWith(QLatin1Char('/')), "ScriptedAlgorithmLoader",
                "subdirectory must be a relative XDG path, not absolute");
-    Q_ASSERT_X(!m_subdirectory.contains(QLatin1String("..")), "ScriptedAlgorithmLoader",
-               "subdirectory must not contain '..' traversal");
+    // Segment-based check — rejects `../` traversal but accepts benign
+    // names like `my..algo` or `..weird..` that the previous substring
+    // check banned. Q_ASSERT only fires in debug; the loader still
+    // appends to XDG roots in release, so paths that escape would be
+    // visible to the operator via the watcher's logged search paths.
+    Q_ASSERT_X(
+        ![&]() {
+            for (const auto& segment : m_subdirectory.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
+                if (segment == QLatin1String("..")) {
+                    return true;
+                }
+            }
+            return false;
+        }(),
+        "ScriptedAlgorithmLoader", "subdirectory must not contain '..' traversal segments");
 
     // Directory registration + the initial scan happen on the first
     // `scanAndRegister()` call. Deferring lets consumers connect their
@@ -113,26 +126,63 @@ QStringList ScriptedAlgorithmLoader::algorithmDirectories() const
     if (m_subdirectory.isEmpty())
         return {};
 
-    QStringList dirs =
+    // `locateAll(GenericDataLocation, sub)` returns existing dirs in
+    // descending priority — writable user-dir first (if it has the
+    // subdirectory), then XDG_DATA_DIRS entries in spec order
+    // (most-important first).
+    QStringList rawDirs =
         QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, m_subdirectory, QStandardPaths::LocateDirectory);
 
     const QString userDir = userAlgorithmDir();
-    if (!userDir.isEmpty() && !dirs.contains(userDir)) {
-        dirs.prepend(userDir);
+
+    // Build the result in the convention `performScan` expects:
+    // **system-first (lowest XDG priority first), user-last**. After
+    // `performScan` reverse-iterates this list (matching
+    // `JsonScanStrategy`'s shape), the iteration order becomes
+    // `[user, sys-highest, ..., sys-lowest]` — first-registration-wins
+    // then yields user > sys-highest > sys-mid > sys-lowest, which
+    // is the actual XDG semantic.
+    //
+    // The previous shape was `[user, sys-highest, ..., sys-lowest]`
+    // followed by a plain `std::reverse` in `performScan`. That made
+    // `sys-LOWEST` win against `sys-highest` for system-vs-system
+    // collisions (a long-standing bug, predates this refactor).
+    QStringList systemDirs;
+    systemDirs.reserve(rawDirs.size());
+    for (const QString& dir : std::as_const(rawDirs)) {
+        if (!userDir.isEmpty() && QFileInfo(dir).canonicalFilePath() == QFileInfo(userDir).canonicalFilePath()) {
+            continue; // skip user dir here — appended explicitly below
+        }
+        systemDirs.append(dir);
+    }
+    // System dirs are currently in descending-priority order; reverse so
+    // the FIRST-iterated system dir (after performScan's reverse) is the
+    // highest-priority one.
+    std::reverse(systemDirs.begin(), systemDirs.end());
+
+    QStringList ordered = systemDirs;
+    if (!userDir.isEmpty()) {
+        ordered.append(userDir);
     }
 
-    // Deduplicate by canonical path — QStandardPaths::locateAll can return
-    // the same physical directory via different XDG_DATA_DIRS entries or symlinks,
-    // which causes scanAndRegister() to see duplicate registrations and mistakenly
-    // unregister valid algorithms as "stale" during refresh.
+    // Deduplicate by canonical path — `locateAll` can return the same
+    // physical directory twice via different XDG_DATA_DIRS entries or
+    // symlinks; without dedup, scanAndRegister sees redundant
+    // registrations and may mistakenly unregister valid algorithms as
+    // "stale" during refresh.
     QSet<QString> seen;
     QStringList deduped;
-    for (const QString& dir : std::as_const(dirs)) {
+    for (const QString& dir : std::as_const(ordered)) {
         const QString canonical = QFileInfo(dir).canonicalFilePath();
-        if (!canonical.isEmpty() && !seen.contains(canonical)) {
-            seen.insert(canonical);
-            deduped.append(dir);
+        // For not-yet-existing dirs (canonicalFilePath returns empty),
+        // dedup by cleanPath instead — typically only the user dir,
+        // and only when ensureUserDirectoryExists hasn't run yet.
+        const QString key = canonical.isEmpty() ? QDir::cleanPath(dir) : canonical;
+        if (key.isEmpty() || seen.contains(key)) {
+            continue;
         }
+        seen.insert(key);
+        deduped.append(dir);
     }
     return deduped;
 }
@@ -201,17 +251,25 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     QHash<QString, QString> oldScriptIdToPath = m_scriptIdToPath;
     m_scriptIdToPath.clear();
 
-    // Reverse: registration order is user-first (algorithmDirectories
-    // prepends the user dir). Iterate system-first / user-last so a
-    // user filename overrides a same-named bundled script via
-    // last-writer-wins in `loadFromDirectory`.
+    // `algorithmDirectories()` returns dirs in [sys-lowest, ...,
+    // sys-highest, user] order (system-first / user-last). Reverse
+    // here gives [user, sys-highest, ..., sys-lowest] — matches
+    // `JsonScanStrategy::performScan`'s shape and lets first-
+    // registration-wins yield: user > sys-highest > sys-mid > ... >
+    // sys-lowest, which is the actual XDG semantic.
     QStringList dirs = directoriesInScanOrder;
     std::reverse(dirs.begin(), dirs.end());
 
     const QString userDir = userAlgorithmDir();
+    const QString canonicalUserDir = QFileInfo(userDir).canonicalFilePath();
     for (const QString& dir : std::as_const(dirs)) {
-        // Use canonical paths to handle symlinks and relative path differences
-        loadFromDirectory(dir, QFileInfo(dir).canonicalFilePath() == QFileInfo(userDir).canonicalFilePath());
+        // Use canonical paths to handle symlinks and relative path differences.
+        // Empty canonical (dir doesn't exist yet) cannot match a non-empty
+        // canonicalUserDir, and an empty canonicalUserDir cannot misclassify
+        // an existing system dir as user.
+        const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
+        const bool isUserDir = !canonicalUserDir.isEmpty() && canonicalDir == canonicalUserDir;
+        loadFromDirectory(dir, isUserDir);
     }
 
     // Collect all newly registered script IDs
@@ -273,10 +331,19 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
 
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir)
 {
+    const QString canonicalUserDir = QFileInfo(userAlgorithmDir()).canonicalFilePath();
+
     const QStringList validFiles = validatedJsFiles(dir, MaxWatchedFilesPerDir);
 
     for (const QString& fullPath : validFiles) {
-        // Validate filename against whitelist to prevent injection via crafted filenames
+        // Two layered checks, intentionally not redundant:
+        //   • `validatedJsFiles` filters by `*.js` extension AND verifies
+        //     symlink containment within `dir`'s canonical tree (path-
+        //     traversal defense).
+        //   • The regex below restricts the BASENAME — the script id is
+        //     derived from it (`script:<basename>`), and a hostile name
+        //     like `; rm -rf /` would surface in logs / D-Bus / QML
+        //     contexts that don't shell-escape.
         static const QRegularExpression validIdRe(QStringLiteral("^[a-zA-Z0-9_-]+$"));
         const QString baseName = QFileInfo(fullPath).completeBaseName();
         if (!validIdRe.match(baseName).hasMatch()) {
@@ -304,29 +371,34 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         auto* registry = m_registry;
         algo->setUserScript(isUserDir);
 
-        // Duplicate detection is scoped to THIS scan. m_scriptIdToPath was
-        // cleared at the top of scanAndRegister, so a hit here means an
-        // earlier loadFromDirectory call in the same scan already
-        // registered this id. The registry itself still holds entries from
-        // previous scans — using registry->hasAlgorithm would incorrectly
-        // classify every system-script content edit as a duplicate on
-        // every rescan and skip re-registration, silently disabling hot-
-        // reload for system scripts.
+        // First-registration-wins, scoped to THIS scan. `m_scriptIdToPath`
+        // was cleared at the top of `scanAndRegister`, so a hit here means
+        // an EARLIER `loadFromDirectory` call in the same scan already
+        // registered this id. Combined with the dir order the strategy
+        // feeds us — `[user, sys-highest, ..., sys-lowest]` after the
+        // reverse in `performScan` — first-wins yields the correct XDG
+        // semantic: user > sys-highest > sys-mid > ... > sys-lowest.
         //
-        // For user-dir overrides of a bundled script: warn and fall
-        // through to registerAlgorithm, which replaces cleanly.
-        // For cross-system-dir duplicates (same id in two XDG roots):
-        // first registration wins, skip the rest.
+        // The warning text differentiates the cases by inspecting the
+        // EXISTING entry's directory (not the current iteration's
+        // `isUserDir`), since the more interesting signal is "user
+        // shadows a bundled script" — which now happens when the
+        // current iteration is a *system* dir, not user.
         if (m_scriptIdToPath.contains(scriptId)) {
-            if (isUserDir) {
-                qCWarning(PhosphorTiles::lcTilesLib)
-                    << "User script overrides bundled algorithm:" << scriptId << "from=" << fullPath;
+            const QString existingPath = m_scriptIdToPath.value(scriptId);
+            const bool existingIsUser = !canonicalUserDir.isEmpty()
+                && QFileInfo(existingPath).canonicalFilePath().startsWith(canonicalUserDir + QLatin1Char('/'));
+            if (existingIsUser && !isUserDir) {
+                qCInfo(PhosphorTiles::lcTilesLib).nospace()
+                    << "User script overrides bundled algorithm: " << scriptId << " — kept '" << existingPath
+                    << "', shadowed bundled '" << fullPath << "'";
             } else {
-                qCWarning(PhosphorTiles::lcTilesLib) << "Duplicate system script for algorithm:" << scriptId
-                                                     << "from=" << fullPath << "— skipping (first registration wins)";
-                delete algo;
-                continue;
+                qCWarning(PhosphorTiles::lcTilesLib).nospace()
+                    << "Duplicate algorithm '" << scriptId << "' — kept '" << existingPath << "', skipped '" << fullPath
+                    << "' (first registration wins)";
             }
+            delete algo;
+            continue;
         }
 
         registry->registerAlgorithm(scriptId, algo);

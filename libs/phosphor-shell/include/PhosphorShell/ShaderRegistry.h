@@ -188,7 +188,6 @@ private:
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
-    QStringList m_searchPaths;
     QHash<QString, ShaderInfo> m_shaders;
     bool m_shadersEnabled = false;
     std::unique_ptr<ShaderScanStrategy> m_strategy;

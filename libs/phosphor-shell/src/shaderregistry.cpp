@@ -89,9 +89,10 @@ static QString shaderNameToUuid(const QString& name)
 /// `metadata.json` per shader, and reports the file/subdir paths that
 /// the base must re-arm individual watches on after each rescan.
 ///
-/// Forwards the base's directory list verbatim into the registry's own
-/// `performScan(dirs)` — `m_searchPaths` and the base's registered set
-/// are kept in lockstep by `addSearchPaths`, so either is authoritative.
+/// The base's `WatchedDirectorySet::directories()` is the single source
+/// of truth for the registered search paths — `searchPaths()` forwards
+/// to it directly so callers always see the canonicalised, deduplicated
+/// list (no second member to keep in lockstep).
 class ShaderRegistry::ShaderScanStrategy : public PhosphorFsLoader::IScanStrategy
 {
 public:
@@ -139,14 +140,25 @@ void ShaderRegistry::addSearchPath(const QString& path)
 
 void ShaderRegistry::addSearchPaths(const QStringList& paths)
 {
+    // Filter empties and pre-canonicalise so dedup matches what the
+    // watcher will store internally — `WatchedDirectorySet` canonicalises
+    // via `QDir::cleanPath` on insertion, so two callers spelling the
+    // same path with and without a trailing slash collapse to one
+    // entry. Doing the same dedup HERE means we don't log
+    // "Added search path: /foo/bar/" when /foo/bar is already
+    // registered.
+    const QStringList alreadyRegistered = m_watcher->directories();
     QStringList toRegister;
     toRegister.reserve(paths.size());
     for (const QString& path : paths) {
-        if (path.isEmpty() || m_searchPaths.contains(path)) {
+        if (path.isEmpty()) {
             continue;
         }
-        m_searchPaths.append(path);
-        toRegister.append(path);
+        const QString canonical = QDir::cleanPath(path);
+        if (alreadyRegistered.contains(canonical) || toRegister.contains(canonical)) {
+            continue;
+        }
+        toRegister.append(canonical);
     }
     if (toRegister.isEmpty()) {
         return;
@@ -163,7 +175,12 @@ void ShaderRegistry::addSearchPaths(const QStringList& paths)
 
 QStringList ShaderRegistry::searchPaths() const
 {
-    return m_searchPaths;
+    // Delegate to the watcher — it is the single source of truth.
+    // Keeping a parallel `m_searchPaths` member would be one canonical
+    // form away from drift (cleanPath vs raw input). Consumers that
+    // pass this list to bake workers (daemon's include-path resolution)
+    // see the same list the strategy was given.
+    return m_watcher->directories();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -202,8 +219,13 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
     m_shaders.clear();
 
     if (m_shadersEnabled) {
-        // Load from each search path in order.
-        // Later paths can override earlier ones (same UUID = last writer wins).
+        // Forward-iterate with last-write-wins (`m_shaders.insert`
+        // overwrites). Combined with the IScanStrategy convention —
+        // callers register dirs in `[system-lowest, ..., system-highest,
+        // user]` order — this yields the canonical XDG semantic
+        // `user > sys-highest > sys-mid > sys-lowest`. Equivalent shape
+        // to `JsonScanStrategy`'s reverse-iterate-first-wins; both are
+        // valid spellings of the same convention.
         for (const QString& path : directoriesInScanOrder) {
             loadShadersFromPath(path, false);
         }
@@ -469,13 +491,26 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    return m_shaders.values();
+    // Sort by id for deterministic ordering. QHash iteration order is
+    // intentionally randomised in Qt6 — without the sort, downstream
+    // consumers (the daemon's bake-warm loop, settings dropdowns,
+    // QML model assignments) see a different shader order on every
+    // process launch, which surfaces as flaky snapshot tests and
+    // visible UI reordering between sessions.
+    QList<ShaderInfo> sorted = m_shaders.values();
+    std::sort(sorted.begin(), sorted.end(), [](const ShaderInfo& a, const ShaderInfo& b) {
+        return a.id < b.id;
+    });
+    return sorted;
 }
 
 QVariantList ShaderRegistry::availableShadersVariant() const
 {
+    // Mirror availableShaders()'s sort — same rationale.
+    const QList<ShaderInfo> sorted = availableShaders();
     QVariantList result;
-    for (const ShaderInfo& info : m_shaders) {
+    result.reserve(sorted.size());
+    for (const ShaderInfo& info : sorted) {
         result.append(shaderInfoToVariantMap(info));
     }
     return result;

@@ -10,6 +10,7 @@
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
@@ -190,6 +191,102 @@ private Q_SLOTS:
         QSignalSpy spy(&set, &WatchedDirectorySet::rescanCompleted);
         QVERIFY(spy.wait(2000));
         QVERIFY(strategy.scanCount > baseline);
+    }
+
+    /// Registering a target whose nearest existing ancestor is `$HOME`
+    /// (or another forbidden root: /, GenericData/Config/Cache/Temp/
+    /// Runtime locations) must NOT install a watch on that ancestor —
+    /// otherwise every unrelated file operation in the user's home
+    /// triggers a full rescan. The check fires both on the registered
+    /// target itself AND on the climbed ancestor.
+    void testForbiddenRoot_doesNotWatchHome()
+    {
+        // Build a path under $HOME that doesn't exist, where the climb
+        // would land directly on $HOME. We can't easily mutate
+        // QDir::homePath in-process portably, but a path of the form
+        // `$HOME/<fresh-uuid>/never/exists` will climb up missing
+        // segments and stop at $HOME — which `isForbiddenWatchRoot`
+        // rejects.
+        const QString home = QDir::homePath();
+        QVERIFY(!home.isEmpty());
+        const QString uniqueLeaf =
+            QStringLiteral("phosphor-fsloader-forbid-test-") + QString::number(QDateTime::currentMSecsSinceEpoch());
+        const QString neverExists = home + QLatin1Char('/') + uniqueLeaf + QStringLiteral("/never/exists");
+
+        // Sanity: this path must not exist.
+        QVERIFY(!QFileInfo::exists(neverExists));
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(neverExists, LiveReload::On);
+
+        // The strategy still ran (to produce the initial empty rescan)
+        // but no parent watch was installed on $HOME.
+        QCOMPARE(set.hasParentWatchForTest(home), false);
+        QCOMPARE(set.watchedAncestorForTest(neverExists), QString());
+    }
+
+    /// Registering `$HOME` directly must also be refused — the climb
+    /// branch and the direct-watch branch both gate on
+    /// `isForbiddenWatchRoot`. Without this the comment claiming "we
+    /// refuse to watch $HOME" only holds for the climb path.
+    void testForbiddenRoot_directRegistrationRefused()
+    {
+        const QString home = QDir::homePath();
+        QVERIFY(!home.isEmpty());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(home, LiveReload::On);
+
+        // The strategy ran (registered dirs include $HOME — that's
+        // fine, we still scan it on demand) but no direct watch was
+        // installed.
+        QCOMPARE(set.hasParentWatchForTest(home), false);
+        // No ancestor mapping either — direct registration doesn't
+        // populate `m_parentWatchFor`.
+        QCOMPARE(set.watchedAncestorForTest(home), QString());
+    }
+
+    /// When `attachWatcherForDir` climbs past missing intermediate
+    /// directories to land on a grandparent ancestor, then later the
+    /// target materialises, the watch on the climbed ancestor must
+    /// be cleaned up — and only via the `m_parentWatchFor` back-
+    /// reference, not via `info.absolutePath()`. The previous
+    /// implementation leaked the ancestor watch in this case;
+    /// regression coverage pins it.
+    void testParentWatch_grandparentCleanupOnPromotion()
+    {
+        // Build target = m_tmp/<uuid>/intermediate/leaf where neither
+        // the uuid dir nor the intermediate dir exists. The climb
+        // must land on m_tmp itself (a grandparent / further), not
+        // on `intermediate` (which doesn't exist).
+        const QString uniqueParent = m_tmp->filePath(QStringLiteral("uuid-pwt"));
+        const QString intermediate = uniqueParent + QStringLiteral("/intermediate");
+        const QString leaf = intermediate + QStringLiteral("/leaf");
+        QVERIFY(!QFileInfo::exists(uniqueParent));
+        QVERIFY(!QFileInfo::exists(intermediate));
+        QVERIFY(!QFileInfo::exists(leaf));
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.setDebounceIntervalForTest(1);
+        set.registerDirectory(leaf, LiveReload::On);
+
+        // The climb landed on m_tmp (the only existing ancestor).
+        const QString tmp = QDir::cleanPath(m_tmp->path());
+        QCOMPARE(set.hasParentWatchForTest(tmp), true);
+        QCOMPARE(set.watchedAncestorForTest(leaf), tmp);
+
+        // Materialise the full tree atomically and trigger a rescan —
+        // the watcher's promotion logic must remove the m_tmp ancestor
+        // watch (no other target needs it) and replace with a direct
+        // watch on `leaf`.
+        QVERIFY(QDir().mkpath(leaf));
+        set.rescanNow();
+
+        QCOMPARE(set.hasParentWatchForTest(tmp), false);
+        QCOMPARE(set.watchedAncestorForTest(leaf), QString());
     }
 
 private:

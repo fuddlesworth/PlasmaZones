@@ -96,6 +96,13 @@ int WatchedDirectorySet::registerDirectory(const QString& directory, LiveReload 
 
 int WatchedDirectorySet::registerDirectories(const QStringList& directories, LiveReload liveReload)
 {
+    // Empty input is a no-op — skip the rescan entirely. Callers that
+    // want to force a rescan call `requestRescan()` / `rescanNow()`
+    // directly; routing them here would just be an alias.
+    if (directories.isEmpty()) {
+        return m_directories.size();
+    }
+
     // Register all directories first so the rescan sees the complete
     // scan order in one pass.
     //
@@ -207,12 +214,18 @@ void WatchedDirectorySet::rescanAll()
 
     Q_EMIT rescanCompleted();
 
-    // Race-guard replay — clear the flag FIRST so a nested slot
-    // connected to `rescanCompleted` or triggered via the timer re-entry
-    // below still gets the guarded requestRescan() path on this stack
-    // frame (rather than racing on a half-cleared flag). We then
-    // re-arm the debounce timer to pick up any event that landed
-    // during the scan.
+    // Race-guard replay. `Q_EMIT` is a synchronous call: every
+    // `Qt::DirectConnection` slot wired to `rescanCompleted` runs
+    // before the line below clears `m_rescanInProgress`, so any
+    // `requestRescan()` call from those slots still takes the guarded
+    // path (sets `m_rescanRequestedWhileRunning`). Slots wired with
+    // `Qt::QueuedConnection` run later, after the flag is cleared, and
+    // will arm the debounce timer normally — that's also fine.
+    //
+    // We clear `m_rescanInProgress` BEFORE re-arming the timer so the
+    // single-shot timer's eventual `rescanAll` slot starts from a clean
+    // state, rather than seeing a stale "in progress" flag from the
+    // outer scan it's chained off.
     m_rescanInProgress = false;
     if (m_rescanRequestedWhileRunning) {
         m_rescanRequestedWhileRunning = false;
@@ -248,19 +261,35 @@ void WatchedDirectorySet::syncFileWatches(const QStringList& desiredPaths)
     // Qt silently drops the old inode from the watch set — the user's
     // new inode must be explicitly re-added. Cheapest correct shape is
     // "always try to add; trust QFSW to dedupe the no-op case".
+    const QStringList alreadyWatchedDirs = m_watcher->directories();
+    const QStringList alreadyWatchedFiles = m_watcher->files();
     for (const QString& path : desired) {
         if (m_watcher->addPath(path)) {
             m_watchedFiles.insert(path);
         } else if (!m_watchedFiles.contains(path)) {
-            // addPath returned false AND we didn't already have it —
-            // means QFSW couldn't watch this path (permissions, inotify
-            // quota hit, path vanished between stat and addPath). Warn
-            // because the most common production cause is hitting the
-            // inotify max_user_watches sysctl, which silently degrades
-            // hot-reload to "doesn't work" — users troubleshooting
-            // need this visible at default log levels.
+            // addPath returned false AND we didn't already have it in
+            // OUR file-watch set. Two cases:
+            //
+            //   1) Qt is already watching this path because the strategy
+            //      reported one of the registered roots that
+            //      `attachWatcherForDir` already added — silent dedupe
+            //      (strategies are *advised* not to do this, but this
+            //      keeps a misbehaving strategy from producing a
+            //      misleading log spam every rescan).
+            //   2) Genuinely unwatchable — permissions, OS-specific
+            //      watch quota hit (Linux: inotify max_user_watches;
+            //      macOS: kqueue file-descriptor limits; Windows:
+            //      ReadDirectoryChangesW handle exhaustion), or the
+            //      path vanished between stat and addPath. Warn —
+            //      hot-reload silently degrades to "doesn't work" and
+            //      users troubleshooting need this visible at default
+            //      log levels.
+            if (alreadyWatchedDirs.contains(path) || alreadyWatchedFiles.contains(path)) {
+                continue; // case 1 — silent dedupe
+            }
             qCWarning(lcWatcher) << "syncFileWatches: failed to add watch for" << path
-                                 << "— may be a permissions issue or inotify quota exhaustion";
+                                 << "— check permissions or filesystem-watcher quota (inotify on Linux, "
+                                    "kqueue/FSEvents on macOS, ReadDirectoryChangesW on Windows)";
         }
     }
 }
@@ -292,6 +321,18 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
     // duplicates (e.g. the same dir registered as both
     // `/a/b/profiles/` and `/a/b/profiles`) hash to the same bucket.
     const QString targetKey = QDir::cleanPath(directory);
+    // Refuse to watch the registered target itself if it resolves to a
+    // forbidden root (e.g. `$HOME`, `/`, an XDG_*Location root). The
+    // climb-onto-ancestor branch below has its own guard — duplicating
+    // it here means a misconfigured caller passing `$HOME` directly
+    // gets the same protection as one whose target's parent climb would
+    // land there. A misconfiguration here is silent-but-warned rather
+    // than a daemon-killing flood of rescan events.
+    if (isForbiddenWatchRoot(targetKey)) {
+        qCWarning(lcWatcher) << "Refusing to watch forbidden root" << directory
+                             << "— registered target resolves to $HOME, /, or an XDG data/config root";
+        return;
+    }
     const QFileInfo info(directory);
     if (info.exists() && info.isDir()) {
         // Target exists — watch it directly. If we were watching an

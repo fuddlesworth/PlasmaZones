@@ -28,6 +28,20 @@ namespace PhosphorFsLoader {
  * The single `performScan` callback is invoked by the base every time
  * a rescan fires. Strategies are owned by the consumer (typically a
  * Q-stable member); the base holds them by reference and never copies.
+ *
+ * ## Convention for cross-directory layering
+ *
+ * The base does not impose a layering convention, but the in-tree
+ * strategies all converge on:
+ *
+ *   • Caller registers directories in `[system-lowest-priority, ...,
+ *     system-highest-priority, user]` order.
+ *   • Strategy reverse-iterates and applies first-registration-wins.
+ *
+ * That combination yields the XDG semantic
+ * (`user > sys-highest > sys-mid > ... > sys-lowest`) without any
+ * per-strategy bookkeeping. New strategies should follow this shape
+ * unless there is a documented reason to deviate.
  */
 class IScanStrategy
 {
@@ -63,6 +77,13 @@ public:
      *         behaviour. May be empty — the consumer might rely
      *         entirely on directory-level watches and not need
      *         per-file resolution.
+     *
+     *         Strategies SHOULD NOT include the directories passed in
+     *         `directoriesInScanOrder` themselves — the base already
+     *         watches those directly via `attachWatcherForDir`. The
+     *         base silently dedupes if a strategy violates this, but
+     *         the contract keeps the watch set minimal and the
+     *         per-file diagnostics clean.
      */
     virtual QStringList performScan(const QStringList& directoriesInScanOrder) = 0;
 
