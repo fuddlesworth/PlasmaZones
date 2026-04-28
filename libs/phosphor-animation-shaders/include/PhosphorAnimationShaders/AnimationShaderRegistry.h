@@ -66,9 +66,17 @@ namespace PhosphorAnimationShaders {
  *
  * ## Thread safety
  *
- * GUI-thread only for mutating calls. `searchPaths()` is safe to read
- * from worker threads (matches the cross-thread shader-warming readers
- * in the daemon).
+ * GUI-thread only for both reads and mutations. `m_effects` is rebuilt
+ * on the GUI thread inside the rescan; the public lookup methods
+ * (`availableEffects`, `effect`, `hasEffect`, `effectIds`) read it
+ * without synchronisation, so concurrent worker-thread reads are racy.
+ *
+ * `searchPaths()` is the one exception: it returns a by-value snapshot
+ * of an implicitly-shared QStringList, so a GUI-thread caller can
+ * snapshot it and propagate the result to worker threads (matches the
+ * shader-warming path's contract). Calling `searchPaths()` *from* a
+ * worker thread concurrently with a GUI-thread mutation is a data race;
+ * snapshot on the GUI thread first.
  */
 class PHOSPHORANIMATIONSHADERS_EXPORT AnimationShaderRegistry : public QObject
 {
@@ -93,15 +101,22 @@ public:
     /// armed for the registry's lifetime.
     void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
-    /// Add multiple search-path directories in one shot. Caller order is
-    /// preserved; the strategy reverse-iterates so the LAST path takes
-    /// priority on id collision (system-first / user-last by convention).
+    /// Add multiple search-path directories in one shot. The strategy
+    /// applies first-registration-wins on id collision under the
+    /// canonical convention; @p order tells the base which end of @p paths
+    /// is highest-priority so it can normalise before the strategy runs.
+    /// Default `LowestPriorityFirst` matches `[sys-lowest, ..., sys-highest,
+    /// user]` (what the daemon's `setupAnimationShaderEffects` already
+    /// builds); pass `HighestPriorityFirst` to feed `locateAll`'s natural
+    /// output without a manual pre-reverse.
+    ///
     /// Prefer this over a loop of `addSearchPath` calls — a single
     /// batched call runs exactly one scan instead of N.
     ///
     /// Same `liveReload` semantics as the single-path overload.
-    void addSearchPaths(const QStringList& paths,
-                        PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+    void addSearchPaths(
+        const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 
     /// Mark @p path as the "user" search path for `AnimationShaderEffect::isUserEffect`
     /// classification. Stored as-given; the rescan canonicalises both this
@@ -115,6 +130,9 @@ public:
     /// registered, the call triggers a synchronous rescan so already-
     /// discovered effects get reclassified immediately. Idempotent:
     /// passing the same value twice is a no-op.
+    ///
+    /// GUI-thread only — when the path changes, the synchronous rescan
+    /// asserts the calling thread.
     void setUserShaderPath(const QString& path);
 
     /// Currently-registered search paths in registration order. Forwards

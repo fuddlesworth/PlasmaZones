@@ -213,7 +213,7 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
     }
 }
 
-bool ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveReload)
+void ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveReload)
 {
     // Lazily create user directory on first scan, then re-register the
     // (possibly newly-existing) directory set with the watcher so the
@@ -221,15 +221,8 @@ bool ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveR
     // proxied via parent-watch.
     ensureUserDirectoryExists();
 
-    // Snapshot the prior signature BEFORE any scan runs, so the
-    // returned bool reflects "did the registered script set change as a
-    // result of this scanAndRegister call" — not "did anything change
-    // between scan-1 and scan-2 of the same on-disk state" (which is
-    // what an after-scan capture would observe).
-    const QByteArray priorSignature = m_lastScriptSignature;
-
     if (m_subdirectory.isEmpty()) {
-        return false;
+        return;
     }
 
     // Replace the watcher's registered set with the freshly-resolved
@@ -248,13 +241,16 @@ bool ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveR
     //     empty, watches preserved).
     //
     // The strategy is invoked synchronously, which clears and rebuilds
-    // m_scriptIdToPath and updates m_lastScriptSignature exactly once.
-    // No follow-up rescanNow() — that would re-scan the same on-disk
-    // state we just captured, doubling the work and (worse) making the
-    // priorSignature comparison meaningless because it would be against
-    // the post-first-scan signature.
-    m_watcher->setDirectories(algorithmDirectories(), liveReload);
-    return m_lastScriptSignature != priorSignature;
+    // m_scriptIdToPath and updates m_lastScriptSignature exactly once;
+    // change-detection is exposed via the `algorithmsChanged` signal
+    // rather than a return value (no in-tree caller consumed the bool).
+    //
+    // `algorithmDirectories()` already produces the canonical
+    // `[sys-lowest, ..., sys-highest, user]` shape (it builds the list
+    // explicitly via locateAll-reverse + user-append), so
+    // `LowestPriorityFirst` is the literal-truth declaration.
+    m_watcher->setDirectories(algorithmDirectories(), liveReload,
+                              PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 }
 
 QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesInScanOrder)

@@ -5,10 +5,12 @@
 #include <PhosphorShell/IWallpaperProvider.h>
 #include "shaderutils.h"
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QColor>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -117,12 +119,14 @@ ShaderRegistry::ShaderRegistry(QObject* parent)
 
     m_strategy = std::make_unique<ShaderScanStrategy>(*this);
     m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this);
-    // Every rescan emits `shadersChanged` unconditionally — matches the
-    // legacy behaviour of `refresh()` always emitting on completion.
-    // Consumers that want change-only semantics layer their own diff on
-    // top.
-    connect(m_watcher.get(), &PhosphorFsLoader::WatchedDirectorySet::rescanCompleted, this,
-            &ShaderRegistry::shadersChanged);
+    // `shadersChanged` fires from inside `performScan` when the scan's
+    // signature differs from the previous one — NOT on every
+    // `rescanCompleted`. Wiring through the base would emit on every
+    // watcher fire regardless of content change, fanning settings-page
+    // redraws and `SettingsAdaptor::invalidateShaderCaches` calls across
+    // every unrelated editor save in any registered shader dir.
+    // Matches the change-only emit pattern used by `ScriptedAlgorithmLoader`
+    // (SHA-1 signature) and `AnimationShaderRegistry` (`QHash::operator!=`).
 }
 
 ShaderRegistry::~ShaderRegistry() = default;
@@ -133,39 +137,33 @@ ShaderRegistry::~ShaderRegistry() = default;
 
 void ShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    addSearchPaths(QStringList{path}, liveReload);
+    // Single-path: priority direction is irrelevant — forward with the
+    // canonical default. The `addSearchPaths` overload's `order`
+    // parameter only matters for multi-path batches.
+    addSearchPaths(QStringList{path}, liveReload, PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 }
 
-void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload)
+void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                    PhosphorFsLoader::RegistrationOrder order)
 {
-    // Filter empties and pre-canonicalise so dedup matches what the
-    // watcher will store internally — `WatchedDirectorySet` canonicalises
-    // via `QDir::cleanPath` on insertion, so two callers spelling the
-    // same path with and without a trailing slash collapse to one
-    // entry. Doing the same dedup HERE means we don't log
-    // "Added search path: /foo/bar/" when /foo/bar is already
-    // registered.
-    const QStringList alreadyRegistered = m_watcher->directories();
-    QStringList toRegister;
-    toRegister.reserve(paths.size());
-    for (const QString& path : paths) {
-        if (path.isEmpty()) {
-            continue;
-        }
-        const QString canonical = QDir::cleanPath(path);
-        if (alreadyRegistered.contains(canonical) || toRegister.contains(canonical)) {
-            continue;
-        }
-        toRegister.append(canonical);
-    }
+    // Pre-canonicalise + drop already-registered paths via the shared
+    // helper — keeps the log line below from spamming "Added search path:
+    // /foo/bar/" when /foo/bar is already registered (the base's
+    // `registerDirectories` is silent on dedup, so the filter has to
+    // run upstream). Sister registries (`AnimationShaderRegistry`) use
+    // the same helper for the same reason.
+    const QStringList toRegister =
+        PhosphorFsLoader::WatchedDirectorySet::filterNewSearchPaths(paths, m_watcher->directories());
     if (toRegister.isEmpty()) {
         return;
     }
     // Single batched register — the watcher runs ONE synchronous scan
     // for the whole batch, populates `m_shaders` via the strategy, and
-    // emits `shadersChanged` once. Avoids the N-rescans-on-startup
-    // amplification that a loop of single-path registrations would cause.
-    m_watcher->registerDirectories(toRegister, liveReload);
+    // emits `shadersChanged` once if the signature changed. Avoids the
+    // N-rescans-on-startup amplification a loop of single-path
+    // registrations would cause. The base normalises @p order into the
+    // canonical scan shape before the strategy runs.
+    m_watcher->registerDirectories(toRegister, liveReload, order);
     for (const QString& path : std::as_const(toRegister)) {
         qCInfo(lcShaderRegistry) << "Added search path:" << path;
     }
@@ -303,6 +301,38 @@ QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrde
         qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
     }
 
+    // Change-only emit: hash a stable fingerprint of the discovered set
+    // and gate `shadersChanged` on a difference vs. the prior scan.
+    // Captures additions, removals, path renames, isUserShader flips
+    // (so `setUserShaderPath`-driven rescans propagate), and content
+    // edits (frag/vert mtime + size). Mirrors the SHA-1 signature shape
+    // already used by `ScriptedAlgorithmLoader` so the three loaders
+    // converge on one change-detection idiom.
+    QCryptographicHash hasher(QCryptographicHash::Sha1);
+    QList<QString> sortedIds = m_shaders.keys();
+    std::sort(sortedIds.begin(), sortedIds.end());
+    for (const QString& id : std::as_const(sortedIds)) {
+        const ShaderInfo& s = m_shaders.value(id);
+        hasher.addData(id.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(s.sourcePath.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(s.vertexShaderPath.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(s.isUserShader ? "u" : "s");
+        hasher.addData(QByteArrayView("|"));
+        const QFileInfo fragInfo(s.sourcePath);
+        hasher.addData(QByteArray::number(fragInfo.size()));
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
+        hasher.addData(QByteArrayView("\n"));
+    }
+    const QByteArray signature = hasher.result();
+    if (signature != m_lastShadersSignature) {
+        m_lastShadersSignature = signature;
+        Q_EMIT shadersChanged();
+    }
+
     return desiredWatches;
 }
 
@@ -322,8 +352,19 @@ void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShad
     const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
 
     // Metadata is required
-    if (!QFile::exists(metadataPath)) {
+    const QFileInfo metadataInfo(metadataPath);
+    if (!metadataInfo.exists()) {
         qCDebug(lcShaderRegistry) << "Skipping shader path=" << shaderDir << "reason=no metadata.json";
+        return;
+    }
+
+    // DoS guard: untrusted same-user metadata.json should not be able to
+    // stall the GUI thread with a 2 GB blob (`QFile::readAll` below).
+    // Reuse `DirectoryLoader::kMaxFileBytes` as the SSOT — same cap the
+    // sister `JsonScanStrategy` enforces on every loaded JSON file.
+    if (metadataInfo.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
+        qCWarning(lcShaderRegistry) << "Skipping oversized metadata.json:" << metadataPath << "(" << metadataInfo.size()
+                                    << "bytes, cap" << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes << ")";
         return;
     }
 

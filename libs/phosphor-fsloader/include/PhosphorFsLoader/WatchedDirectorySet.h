@@ -37,6 +37,38 @@ enum class LiveReload : quint8 {
 };
 
 /**
+ * @brief Caller's declared priority direction for `registerDirectories` /
+ *        `setDirectories` input.
+ *
+ * Strategies in this library always see the **canonical** scan order:
+ * `[lowest-priority, ..., highest-priority]`, suitable for reverse-
+ * iterate-first-wins. The base normalises the caller's input into this
+ * shape before storing it in `m_directories` and handing it to the
+ * strategy, so the canonical convention is enforced once at the
+ * registration boundary instead of being repeated as a comment-driven
+ * contract every strategy author has to remember.
+ *
+ * Pick the value that matches how your input is **already** ordered — do
+ * NOT pre-reverse and then claim the opposite. Both spellings are
+ * equivalent; the enum's only job is to keep the next strategy author
+ * from silently inverting every override by feeding `locateAll`'s
+ * natural (highest-first) output as if it were the canonical
+ * (lowest-first) shape.
+ */
+enum class RegistrationOrder : quint8 {
+    /// `[sys-lowest, ..., sys-highest, user]` — the canonical strategy
+    /// view. The daemon's curve/profile/script setup explicitly builds
+    /// this shape via `std::reverse(locateAll(...))` + `userDir.append`.
+    /// Pass-through; the base stores the list verbatim.
+    LowestPriorityFirst,
+    /// `[user, sys-highest, ..., sys-lowest]` — the natural output of
+    /// `QStandardPaths::locateAll(GenericDataLocation, ...)` followed by
+    /// a `prepend(userDir)`. The base reverses internally before
+    /// storing, so the strategy still sees `LowestPriorityFirst`.
+    HighestPriorityFirst,
+};
+
+/**
  * @brief Watcher + debounce + rescan scaffolding for filesystem-backed loaders.
  *
  * Owns the cross-cutting plumbing every "scan a set of directories,
@@ -91,6 +123,10 @@ public:
      * twice is a no-op on the second call. Triggers an immediate
      * synchronous rescan via the strategy.
      *
+     * Single-path registration carries no priority direction (one entry
+     * has nothing to be priority-ordered against), so no `RegistrationOrder`
+     * parameter is needed.
+     *
      * `liveReload` is a **set-wide one-way enable**: once any call passes
      * `LiveReload::On`, the watcher is created and persists for the rest
      * of the set's lifetime. Subsequent `LiveReload::Off` calls do not
@@ -108,15 +144,19 @@ public:
     int registerDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
     /**
-     * @brief Register multiple directories in registration order.
+     * @brief Register multiple directories in caller-declared priority order.
      *
-     * The order is preserved verbatim and passed through to the
-     * strategy on every rescan. The base does not impose a system-
-     * first or user-first convention.
+     * The base normalises @p directories into the canonical
+     * `[lowest-priority, ..., highest-priority]` shape before storing
+     * — see `RegistrationOrder` for the two accepted input forms. The
+     * stored list is what `directories()` returns and what the strategy
+     * sees on every rescan, so all four in-tree strategies can rely on
+     * the same iteration shape regardless of which form the caller used.
      *
      * Same set-wide one-way `liveReload` semantics as `registerDirectory`.
      */
-    int registerDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    int registerDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+                            RegistrationOrder order = RegistrationOrder::LowestPriorityFirst);
 
     /**
      * @brief Replace the registered directory set with @p directories.
@@ -141,9 +181,15 @@ public:
      * passing `On` enables the watcher (if not already enabled), passing
      * `Off` does not disarm it.
      *
+     * Same `RegistrationOrder` semantics as `registerDirectories` —
+     * @p directories is normalised into the canonical
+     * `[lowest-priority, ..., highest-priority]` shape before being
+     * stored and passed to the strategy.
+     *
      * @return The total number of registered directories after this call.
      */
-    int setDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    int setDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+                       RegistrationOrder order = RegistrationOrder::LowestPriorityFirst);
 
     /**
      * @brief Trigger a debounced rescan of every registered directory.
@@ -173,14 +219,28 @@ public:
 
     /// Currently-registered directories in registration order.
     ///
-    /// Safe to call from any thread — the underlying QStringList is
-    /// implicitly shared, so the read produces an atomic snapshot of
-    /// the list as it was at the time of the call. The shader-warming
-    /// path forwards `ShaderRegistry::searchPaths()` (which proxies to
-    /// this) into a worker thread; production code is allowed to do the
-    /// same. Mutating callers (`registerDirectories`, `setDirectories`,
-    /// `requestRescan`, `rescanNow`) remain GUI-thread-only.
+    /// Intended to be called on the GUI thread. The returned QStringList
+    /// is a by-value, implicitly-shared snapshot — once obtained on the
+    /// GUI thread it can be propagated to worker threads safely (e.g.
+    /// captured into a `QtConcurrent::run` lambda for the shader-warming
+    /// path). Calling this method *concurrently with* a mutating call on
+    /// the GUI thread (`registerDirectories`, `setDirectories`,
+    /// `requestRescan`, `rescanNow`) is a data race on the underlying
+    /// QString refcounts; snapshot first, share later.
     QStringList directories() const;
+
+    /// Helper for consumers building search-path APIs on top of the set:
+    /// canonicalises (`QDir::cleanPath`) every entry in @p candidates,
+    /// drops empties, and returns the subset that is NOT already in
+    /// @p alreadyRegistered (and is not duplicated within @p candidates
+    /// itself). Preserves caller order.
+    ///
+    /// Both `addSearchPaths`-style entry points in `PhosphorShell::ShaderRegistry`
+    /// and `PhosphorAnimationShaders::AnimationShaderRegistry` use this
+    /// to skip log-line spam when the same path is registered twice (the
+    /// base's own `registerDirectories` is silent on dedup, so the log
+    /// has to be filtered upstream).
+    static QStringList filterNewSearchPaths(const QStringList& candidates, const QStringList& alreadyRegistered);
 
     /// Test-only: override the debounce interval (default 50 ms).
     ///

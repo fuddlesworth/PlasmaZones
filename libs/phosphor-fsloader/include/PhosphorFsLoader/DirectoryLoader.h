@@ -88,12 +88,16 @@ public:
     int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
     /**
-     * @brief Register multiple directories in order.
+     * @brief Register multiple directories in caller-declared priority order.
      *
-     * Later directories override earlier on key collision. Pass dirs
-     * in the "system-first, user-last" order (the reverse of
-     * `QStandardPaths::locateAll`'s natural output — see the daemon's
-     * `setupAnimationProfiles` for the canonical pattern).
+     * `RegistrationOrder::LowestPriorityFirst` (the default) takes input
+     * in `[sys-lowest, ..., sys-highest, user]` order — the same shape
+     * the daemon's `setupAnimationProfiles` already builds via
+     * `std::reverse(locateAll(...))` + user-dir append. Passing
+     * `HighestPriorityFirst` lets callers feed `locateAll`'s natural
+     * output (with the user dir prepended) directly without their own
+     * pre-reverse — the base normalises before the strategy runs, so
+     * higher-priority entries always override on key collision.
      *
      * Same one-way `liveReload` semantics as `loadFromDirectory`.
      *
@@ -102,7 +106,8 @@ public:
      * (not zero). Callers needing "force a rescan with no new dirs"
      * should use `requestRescan()` instead.
      */
-    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
+    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off,
+                            RegistrationOrder order = RegistrationOrder::LowestPriorityFirst);
 
     /// Trigger a debounced rescan. Forwards to the underlying
     /// `WatchedDirectorySet`.

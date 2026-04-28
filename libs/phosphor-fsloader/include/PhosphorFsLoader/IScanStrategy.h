@@ -31,17 +31,22 @@ namespace PhosphorFsLoader {
  *
  * ## Convention for cross-directory layering
  *
- * The base does not impose a layering convention, but the in-tree
- * strategies all converge on:
+ * The base **enforces** a canonical iteration shape so strategies don't
+ * have to negotiate it from comments:
  *
- *   • Caller registers directories in `[system-lowest-priority, ...,
- *     system-highest-priority, user]` order.
- *   • Strategy reverse-iterates and applies first-registration-wins.
+ *   • The base normalises every caller's input into
+ *     `[lowest-priority, ..., highest-priority]` order at the
+ *     registration boundary (`registerDirectories` /
+ *     `setDirectories` accept a `RegistrationOrder` enum so the
+ *     caller declares which form their input is already in; the base
+ *     reverses if needed).
+ *   • Strategies receive `directoriesInScanOrder` already in this
+ *     canonical shape and reverse-iterate with first-registration-wins.
  *
  * That combination yields the XDG semantic
  * (`user > sys-highest > sys-mid > ... > sys-lowest`) without any
- * per-strategy bookkeeping. New strategies should follow this shape
- * unless there is a documented reason to deviate.
+ * per-strategy bookkeeping. The canonical shape is the strategy's
+ * compile-time contract — implementations are free to assume it.
  *
  * ## Emit semantics
  *
@@ -71,15 +76,15 @@ public:
      * filesystem state hasn't changed.
      *
      * @param directoriesInScanOrder  Registered directories in the
-     *                                order the consumer registered
-     *                                them. The base does not impose a
-     *                                user-first or system-first
-     *                                convention — strategies decide
-     *                                how to interpret the order
-     *                                (`DirectoryLoader` reverse-iterates
-     *                                for first-wins under the standard
-     *                                "system-first, user-last" caller
-     *                                convention).
+     *                                base's canonical
+     *                                `[lowest-priority, ..., highest-priority]`
+     *                                shape (the base normalises here
+     *                                via the `RegistrationOrder`
+     *                                parameter on `registerDirectories`).
+     *                                Strategies reverse-iterate with
+     *                                first-registration-wins to apply
+     *                                the override, yielding
+     *                                `user > sys-highest > ... > sys-lowest`.
      *
      * @return Absolute paths (files OR subdirectories) that the base
      *         should install per-path watches on after this rescan.

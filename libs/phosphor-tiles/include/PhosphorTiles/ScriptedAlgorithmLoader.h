@@ -72,8 +72,12 @@ public:
      * Idempotent on the registry: a re-scan that resolves to an empty
      * directory set still drives the diff path so previously-registered
      * scripts get unregistered as stale.
+     *
+     * Change-detection is observable via the `algorithmsChanged` signal,
+     * which fires from inside the strategy when the on-disk script set
+     * differs from the previous scan's signature.
      */
-    bool scanAndRegister(PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+    void scanAndRegister(PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
     /**
      * @brief Create the user algorithm directory if it does not exist

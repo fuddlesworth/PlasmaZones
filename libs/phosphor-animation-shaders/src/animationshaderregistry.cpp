@@ -3,6 +3,7 @@
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/DirectoryLoader.h>
 #include <PhosphorFsLoader/IScanStrategy.h>
 
 #include <QDir>
@@ -65,29 +66,23 @@ AnimationShaderRegistry::~AnimationShaderRegistry() = default;
 
 void AnimationShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    addSearchPaths(QStringList{path}, liveReload);
+    // Single-path: priority direction is irrelevant — forward with the
+    // canonical default. The `addSearchPaths` overload's `order`
+    // parameter only matters for multi-path batches.
+    addSearchPaths(QStringList{path}, liveReload, PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 }
 
-void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload)
+void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                             PhosphorFsLoader::RegistrationOrder order)
 {
-    // Filter empties + pre-canonicalise so dedup matches what the watcher
-    // will store internally — `WatchedDirectorySet` canonicalises via
-    // `QDir::cleanPath` on insertion. Doing it here too avoids the
-    // log-line spam from "Added search path: /foo/bar/" when /foo/bar is
-    // already registered under the slash-less spelling.
-    const QStringList alreadyRegistered = m_watcher->directories();
-    QStringList toRegister;
-    toRegister.reserve(paths.size());
-    for (const QString& path : paths) {
-        if (path.isEmpty()) {
-            continue;
-        }
-        const QString canonical = QDir::cleanPath(path);
-        if (alreadyRegistered.contains(canonical) || toRegister.contains(canonical)) {
-            continue;
-        }
-        toRegister.append(canonical);
-    }
+    // Pre-canonicalise + drop already-registered paths via the shared
+    // helper — keeps the log line below from spamming "Added search path:
+    // /foo/bar/" when /foo/bar is already registered (the base's
+    // `registerDirectories` is silent on dedup, so the filter has to
+    // run upstream). Sister `PhosphorShell::ShaderRegistry` uses the
+    // same helper for the same reason.
+    const QStringList toRegister =
+        PhosphorFsLoader::WatchedDirectorySet::filterNewSearchPaths(paths, m_watcher->directories());
     if (toRegister.isEmpty()) {
         return;
     }
@@ -95,8 +90,9 @@ void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorF
     // populates `m_effects` via the strategy, fires `effectsChanged`
     // exactly once if the diff is non-empty. Avoids the N-rescans-on-
     // startup amplification a loop of single-path registrations would
-    // cause.
-    m_watcher->registerDirectories(toRegister, liveReload);
+    // cause. The base normalises @p order into the canonical scan shape
+    // before the strategy runs.
+    m_watcher->registerDirectories(toRegister, liveReload, order);
     for (const QString& path : std::as_const(toRegister)) {
         qCInfo(lcRegistry) << "Added search path:" << path;
     }
@@ -211,6 +207,19 @@ QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesI
             // metadata.json is the most common way an effect transitions
             // from invisible to visible, so we want to wake on it.
             desiredWatches.append(metadataPath);
+
+            // DoS guard: untrusted same-user metadata.json should not be
+            // able to stall the GUI thread with a 2 GB blob. Reuse
+            // `DirectoryLoader::kMaxFileBytes` as the SSOT — same cap
+            // the sister `JsonScanStrategy` enforces on every JSON file
+            // it loads.
+            const QFileInfo metadataInfo(metadataPath);
+            if (metadataInfo.exists() && metadataInfo.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
+                qCWarning(lcRegistry) << "Skipping oversized metadata.json:" << metadataPath << "("
+                                      << metadataInfo.size() << "bytes, cap"
+                                      << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes << ")";
+                continue;
+            }
 
             QFile file(metadataPath);
             if (!file.open(QIODevice::ReadOnly)) {

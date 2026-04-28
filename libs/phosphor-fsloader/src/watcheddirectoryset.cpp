@@ -134,10 +134,31 @@ WatchedDirectorySet::~WatchedDirectorySet() = default;
 
 int WatchedDirectorySet::registerDirectory(const QString& directory, LiveReload liveReload)
 {
-    return registerDirectories(QStringList{directory}, liveReload);
+    // Single-path: order is irrelevant (no priority comparison to make
+    // against zero peers). Forward with the canonical default.
+    return registerDirectories(QStringList{directory}, liveReload, RegistrationOrder::LowestPriorityFirst);
 }
 
-int WatchedDirectorySet::registerDirectories(const QStringList& directories, LiveReload liveReload)
+namespace {
+/// Reverse @p input when @p order says the caller passed
+/// `[highest, ..., lowest]`. The base stores everything internally as
+/// `[lowest, ..., highest]` so the strategy contract is uniform.
+QStringList normaliseToCanonical(const QStringList& input, RegistrationOrder order)
+{
+    if (order == RegistrationOrder::LowestPriorityFirst) {
+        return input;
+    }
+    QStringList reversed;
+    reversed.reserve(input.size());
+    for (auto it = input.crbegin(); it != input.crend(); ++it) {
+        reversed.append(*it);
+    }
+    return reversed;
+}
+} // namespace
+
+int WatchedDirectorySet::registerDirectories(const QStringList& directories, LiveReload liveReload,
+                                             RegistrationOrder order)
 {
     Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::registerDirectories",
                "GUI-thread only — see class docs");
@@ -148,20 +169,30 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
         return m_directories.size();
     }
 
+    // Normalise to the canonical `[lowest, ..., highest]` shape ONCE at
+    // the registration boundary so every strategy in the library sees
+    // the same iteration shape regardless of which `RegistrationOrder`
+    // the caller chose. Strategies remain free to reverse-iterate
+    // first-wins; the convention is now compile-time visible instead of
+    // a comment-driven contract.
+    const QStringList canonical = normaliseToCanonical(directories, order);
+
     // Register all directories first so the rescan sees the complete
     // scan order in one pass.
     //
     // Canonicalise on insertion so two registrations of the same
     // directory under different spellings (`/foo/bar/` vs `/foo/bar`)
     // collapse to one entry.
-    for (const QString& dir : directories) {
-        const QString canonical = QDir::cleanPath(dir);
-        if (!m_directories.contains(canonical)) {
-            m_directories.append(canonical);
+    if (liveReload == LiveReload::On) {
+        installWatcherIfNeeded();
+    }
+    for (const QString& dir : canonical) {
+        const QString cleaned = QDir::cleanPath(dir);
+        if (!m_directories.contains(cleaned)) {
+            m_directories.append(cleaned);
         }
         if (liveReload == LiveReload::On) {
-            installWatcherIfNeeded();
-            attachWatcherForDir(canonical);
+            attachWatcherForDir(cleaned);
         }
     }
 
@@ -169,20 +200,26 @@ int WatchedDirectorySet::registerDirectories(const QStringList& directories, Liv
     return m_directories.size();
 }
 
-int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveReload liveReload)
+int WatchedDirectorySet::setDirectories(const QStringList& directories, LiveReload liveReload, RegistrationOrder order)
 {
     Q_ASSERT_X(thread() == QThread::currentThread(), "WatchedDirectorySet::setDirectories",
                "GUI-thread only — see class docs");
 
-    // Canonicalise + dedup the new set, preserving caller order. Same
-    // canonicalisation rule as `registerDirectories` so a setDirectories
-    // call followed by a registerDirectories call doesn't double-register
-    // the same path under two spellings.
+    // Same normalisation pass as `registerDirectories` — strategies
+    // always see the canonical `[lowest, ..., highest]` iteration shape
+    // regardless of which `RegistrationOrder` the caller declared.
+    const QStringList normalised = normaliseToCanonical(directories, order);
+
+    // Canonicalise + dedup the new set, preserving the now-canonical
+    // priority order. Same path-spelling canonicalisation rule as
+    // `registerDirectories` so a `setDirectories` call followed by a
+    // `registerDirectories` call doesn't double-register the same path
+    // under two spellings.
     QStringList canonical;
-    canonical.reserve(directories.size());
+    canonical.reserve(normalised.size());
     QSet<QString> canonicalSet;
-    canonicalSet.reserve(directories.size());
-    for (const QString& dir : directories) {
+    canonicalSet.reserve(normalised.size());
+    for (const QString& dir : normalised) {
         const QString c = QDir::cleanPath(dir);
         if (canonicalSet.contains(c)) {
             continue;
@@ -268,6 +305,24 @@ void WatchedDirectorySet::requestRescan()
 QStringList WatchedDirectorySet::directories() const
 {
     return m_directories;
+}
+
+QStringList WatchedDirectorySet::filterNewSearchPaths(const QStringList& candidates,
+                                                      const QStringList& alreadyRegistered)
+{
+    QStringList result;
+    result.reserve(candidates.size());
+    for (const QString& path : candidates) {
+        if (path.isEmpty()) {
+            continue;
+        }
+        const QString canonical = QDir::cleanPath(path);
+        if (alreadyRegistered.contains(canonical) || result.contains(canonical)) {
+            continue;
+        }
+        result.append(canonical);
+    }
+    return result;
 }
 
 void WatchedDirectorySet::setDebounceIntervalForTest(int ms)

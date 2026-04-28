@@ -98,6 +98,82 @@ private Q_SLOTS:
         QCOMPARE(strategy.scanCount, 2);
     }
 
+    /// `RegistrationOrder::HighestPriorityFirst` reverses the input
+    /// before storing so the strategy always sees the canonical
+    /// `[lowest, ..., highest]` shape — this is the load-bearing
+    /// contract that lets every in-tree strategy reverse-iterate
+    /// first-wins without negotiating order from comments. A future
+    /// refactor that drops the normalisation here would silently invert
+    /// every override on `locateAll`-shaped input.
+    void testRegistrationOrder_highestPriorityFirstReversesToCanonical()
+    {
+        QTemporaryDir userDir;
+        QTemporaryDir sysHigh;
+        QTemporaryDir sysLow;
+        QVERIFY(userDir.isValid() && sysHigh.isValid() && sysLow.isValid());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        // Caller passes input in the natural `locateAll`-after-prepend
+        // order: user wins, then system dirs in descending priority.
+        set.registerDirectories({userDir.path(), sysHigh.path(), sysLow.path()}, LiveReload::Off,
+                                RegistrationOrder::HighestPriorityFirst);
+
+        // The strategy must see the reversed (canonical) shape: lowest
+        // priority first, user last.
+        QCOMPARE(strategy.lastDirectories.size(), 3);
+        QCOMPARE(strategy.lastDirectories.at(0), QDir::cleanPath(sysLow.path()));
+        QCOMPARE(strategy.lastDirectories.at(1), QDir::cleanPath(sysHigh.path()));
+        QCOMPARE(strategy.lastDirectories.at(2), QDir::cleanPath(userDir.path()));
+        // `directories()` reflects the stored (canonical) form too —
+        // consumers reading this back never observe the caller's
+        // pre-normalisation order.
+        QCOMPARE(set.directories(), strategy.lastDirectories);
+    }
+
+    /// `RegistrationOrder::LowestPriorityFirst` (the default) is a
+    /// pass-through. Pinned so a future "always reverse" refactor in
+    /// the base would surface here, not in downstream consumers.
+    void testRegistrationOrder_lowestPriorityFirstIsPassThrough()
+    {
+        QTemporaryDir sysLow;
+        QTemporaryDir sysHigh;
+        QTemporaryDir userDir;
+        QVERIFY(sysLow.isValid() && sysHigh.isValid() && userDir.isValid());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.registerDirectories({sysLow.path(), sysHigh.path(), userDir.path()}, LiveReload::Off,
+                                RegistrationOrder::LowestPriorityFirst);
+
+        QCOMPARE(strategy.lastDirectories.size(), 3);
+        QCOMPARE(strategy.lastDirectories.at(0), QDir::cleanPath(sysLow.path()));
+        QCOMPARE(strategy.lastDirectories.at(1), QDir::cleanPath(sysHigh.path()));
+        QCOMPARE(strategy.lastDirectories.at(2), QDir::cleanPath(userDir.path()));
+    }
+
+    /// `setDirectories` honours `RegistrationOrder` the same way
+    /// `registerDirectories` does — full-replacement callers (e.g.
+    /// `ScriptedAlgorithmLoader::scanAndRegister`) get the same
+    /// normalisation guarantee as append-only ones.
+    void testSetDirectories_honoursRegistrationOrder()
+    {
+        QTemporaryDir userDir;
+        QTemporaryDir sysHigh;
+        QTemporaryDir sysLow;
+        QVERIFY(userDir.isValid() && sysHigh.isValid() && sysLow.isValid());
+
+        RecordingStrategy strategy;
+        WatchedDirectorySet set(strategy);
+        set.setDirectories({userDir.path(), sysHigh.path(), sysLow.path()}, LiveReload::Off,
+                           RegistrationOrder::HighestPriorityFirst);
+
+        QCOMPARE(strategy.lastDirectories.size(), 3);
+        QCOMPARE(strategy.lastDirectories.at(0), QDir::cleanPath(sysLow.path()));
+        QCOMPARE(strategy.lastDirectories.at(1), QDir::cleanPath(sysHigh.path()));
+        QCOMPARE(strategy.lastDirectories.at(2), QDir::cleanPath(userDir.path()));
+    }
+
     /// Live-reload watcher fires the strategy on filesystem edits, the
     /// debounce coalesces a burst into one scan.
     void testLiveReload_coalescesBurst()

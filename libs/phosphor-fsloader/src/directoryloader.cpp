@@ -290,12 +290,12 @@ DirectoryLoader::~DirectoryLoader() = default;
 
 int DirectoryLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
 {
-    return loadFromDirectories(QStringList{directory}, liveReload);
+    return loadFromDirectories(QStringList{directory}, liveReload, RegistrationOrder::LowestPriorityFirst);
 }
 
-int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload)
+int DirectoryLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload, RegistrationOrder order)
 {
-    m_watcher->registerDirectories(directories, liveReload);
+    m_watcher->registerDirectories(directories, liveReload, order);
     return m_strategy->registeredCount();
 }
 

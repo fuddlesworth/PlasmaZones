@@ -32,6 +32,20 @@ class IWallpaperProvider;
 ///
 /// Unlike PlasmaZones' singleton, consumers create their own instances
 /// and register search paths explicitly.
+///
+/// ## Thread safety
+///
+/// GUI-thread only for both reads and mutations. The shader map
+/// (`m_shaders`) is rebuilt on the GUI thread inside the rescan; the
+/// public lookup methods (`availableShaders`, `shader`, `shaderInfo`,
+/// `shaderUrl`) read it without synchronisation.
+///
+/// `searchPaths()` is the one exception: it returns a by-value snapshot
+/// of an implicitly-shared QStringList, so a GUI-thread caller can
+/// snapshot it and propagate the result to worker threads (this is the
+/// shader-warming path's contract). Calling `searchPaths()` *from* a
+/// worker thread concurrently with a GUI-thread mutation is a data race;
+/// snapshot on the GUI thread first.
 class PHOSPHORSHELL_EXPORT ShaderRegistry : public QObject
 {
     Q_OBJECT
@@ -105,15 +119,22 @@ public:
     /// for the registry's lifetime.
     void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
 
-    /// Add multiple search-path directories in one shot. Later paths take
-    /// priority over earlier ones on shader-id collision (last-writer-
-    /// wins, mirroring `addSearchPath` registration order). Prefer this
-    /// over a loop of `addSearchPath` calls — a single batched call runs
-    /// exactly one scan instead of N.
+    /// Add multiple search-path directories in one shot. The strategy
+    /// applies first-registration-wins on shader-id collision under the
+    /// canonical convention; @p order tells the base which end of @p paths
+    /// is highest-priority so it can normalise before the strategy runs.
+    /// Default `LowestPriorityFirst` matches `[sys-lowest, ..., sys-highest,
+    /// user]` (what the daemon's `setupAnimationShaderEffects` already
+    /// builds); pass `HighestPriorityFirst` to feed `locateAll`'s natural
+    /// output without a manual pre-reverse.
+    ///
+    /// Prefer this over a loop of `addSearchPath` calls — a single
+    /// batched call runs exactly one scan instead of N.
     ///
     /// Same `liveReload` semantics as the single-path overload.
-    void addSearchPaths(const QStringList& paths,
-                        PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+    void addSearchPaths(
+        const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 
     /// Mark @p path as the "user" search path for `ShaderInfo::isUserShader`
     /// classification. Stored as-given; the rescan canonicalises both this
@@ -129,6 +150,9 @@ public:
     /// passing the same value twice is a no-op. Bidirectional: passing
     /// the empty string clears the user-path designation, passing a
     /// non-empty string sets or replaces it.
+    ///
+    /// GUI-thread only — when the path changes, the synchronous rescan
+    /// asserts the calling thread.
     void setUserShaderPath(const QString& path);
 
     /// Current search paths.
@@ -224,6 +248,14 @@ private:
     /// user vs system. Compared against each iterated search dir's
     /// canonical form on every rescan — see `setUserShaderPath`.
     QString m_userShaderPath;
+    /// SHA-1 over the discovered-shader set's identification + on-disk
+    /// fingerprint (id, paths, isUserShader, frag mtime+size). Used by
+    /// `performScan` to gate `shadersChanged` to actual content changes
+    /// — the same change-only-emit pattern the sister `JsScanStrategy`
+    /// and `AnimationShaderRegistry` consumers use, and a deliberate
+    /// improvement on the legacy "fire on every watcher event" shape
+    /// that fanned settings-page redraws across every editor save.
+    QByteArray m_lastShadersSignature;
     std::unique_ptr<ShaderScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 
