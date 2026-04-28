@@ -508,6 +508,10 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     cfg.anchorsOverride = std::move(params.anchorsOverride);
     cfg.marginsOverride = std::move(params.marginsOverride);
     cfg.keepMappedOnHide = params.keepMappedOnHide;
+    // SurfaceConfig::initialSize uses isEmpty() as the "unset" sentinel —
+    // forwarding the param verbatim preserves that contract (empty here →
+    // empty there → fall back to screen geometry inside surface.cpp).
+    cfg.initialSize = params.initialSize;
     cfg.debugName = QString::fromUtf8(params.windowType);
 
     return m_surfaceManager->createSurface(std::move(cfg), this);
@@ -516,8 +520,23 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
 PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
                                                                QScreen* physScreen, const char* windowType)
 {
-    auto* surface = createLayerSurface(
-        {.qmlUrl = qmlUrl, .screen = physScreen, .role = role, .windowType = windowType, .keepMappedOnHide = true});
+    // Warm-up size matches NotificationOverlay.qml's QML literal (240x70).
+    // This only governs the size of the warm-up commit — every per-show
+    // path in osd.cpp goes through assertWindowOnScreen + sizeAndCenterOsd,
+    // both of which still call setGeometry / setWidth / setHeight against
+    // the live window, so per-show swapchain resizes still happen on every
+    // show as before. What changes here is that the daemon stops paying for
+    // a full-screen swapchain for an OSD whose visible content is a tiny
+    // toast: holding ~17 fullscreen swapchains (one per warmed overlay
+    // across virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary
+    // stack, and a content-sized warm-up brings that down to the toast's
+    // own footprint.
+    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
+                                        .screen = physScreen,
+                                        .role = role,
+                                        .windowType = windowType,
+                                        .keepMappedOnHide = true,
+                                        .initialSize = QSize(240, 70)});
     if (!surface) {
         return nullptr;
     }

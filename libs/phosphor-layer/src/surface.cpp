@@ -12,12 +12,14 @@
 
 #include <QLatin1String>
 #include <QMetaObject>
+#include <QPoint>
 #include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRect>
 #include <QScreen>
 #include <QWindow>
 
@@ -524,6 +526,34 @@ private:
     }
 
     /**
+     * Compute the warm-up geometry for the wrapper QQuickWindow.
+     *
+     * Returns an empty QRect when no usable size is available — the caller
+     * should skip setGeometry in that case. The window stays at Qt's default
+     * (likely zero-sized) and the layer-shell attach will fail loudly rather
+     * than silently miscommit.
+     *
+     * Resolution order:
+     *  1. m_config.initialSize, if non-empty — caller-driven content sizing.
+     *     Positioned at the target screen's top-left so the wrapper window
+     *     starts on the intended output; the layer-shell anchor logic
+     *     (set_anchor + the compositor) places the actual surface.
+     *  2. m_config.screen->geometry() — full-screen fallback. Preserves the
+     *     pre-initialSize behaviour for callers that haven't opted in.
+     */
+    [[nodiscard]] QRect computeWarmupGeometry() const
+    {
+        if (!m_config.initialSize.isEmpty()) {
+            const QPoint origin = m_config.screen ? m_config.screen->geometry().topLeft() : QPoint(0, 0);
+            return QRect(origin, m_config.initialSize);
+        }
+        if (m_config.screen) {
+            return m_config.screen->geometry();
+        }
+        return {};
+    }
+
+    /**
      * Lazily create a wrapper QQuickWindow for Item-rooted content.
      * Not called for Window-rooted QML — that case adopts the QML root.
      */
@@ -539,17 +569,16 @@ private:
         m_window->setColor(Qt::transparent);
         applyWindowProperties(m_window);
 
-        // Pre-size from the target screen so the transport sees a non-zero
-        // size at attach time. Same rationale as the QML-Window-root path:
-        // for partial-anchor layer surfaces (e.g. Top|Left only), a 0×0
-        // initial commit causes the compositor to echo back 0×0 and the
-        // surface stays stuck. Callers that want a different size call
-        // setWidth/setHeight between warmUp() and show().
-        if (m_config.screen) {
-            const QRect geo = m_config.screen->geometry();
-            if (!geo.isEmpty()) {
-                m_window->setGeometry(geo);
-            }
+        // Pre-size for the transport's first commit. Callers that pass
+        // SurfaceConfig::initialSize get a small swapchain matching the
+        // expected content; otherwise the window sizes to full screen, which
+        // guarantees a non-zero buffer for partial-anchor layer surfaces
+        // (e.g. Top|Left only — a 0×0 commit causes the compositor to echo
+        // back 0×0 and the surface stays stuck). Callers that want a
+        // different size call setWidth/setHeight between warmUp() and show().
+        const QRect warmupGeo = computeWarmupGeometry();
+        if (!warmupGeo.isEmpty()) {
+            m_window->setGeometry(warmupGeo);
         }
     }
 
@@ -728,12 +757,13 @@ private:
             // AutomaticVisibility, so componentComplete still auto-shows.
             win->setVisibility(QWindow::Hidden);
 
-            // Sized first — see #2 above.
-            if (m_config.screen) {
-                const QRect geo = m_config.screen->geometry();
-                if (!geo.isEmpty()) {
-                    win->setGeometry(geo);
-                }
+            // Sized first — see #2 above. computeWarmupGeometry honours
+            // SurfaceConfig::initialSize so callers can opt into a small
+            // first commit (and thus a small Vulkan swapchain) instead of
+            // paying for the screen's full geometry.
+            const QRect warmupGeo = computeWarmupGeometry();
+            if (!warmupGeo.isEmpty()) {
+                win->setGeometry(warmupGeo);
             }
 
             // Attached second — see #1 above.

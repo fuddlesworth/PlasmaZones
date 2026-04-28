@@ -298,6 +298,65 @@ private Q_SLOTS:
         QVERIFY(rec.sizeAtAttach.height() > 0);
     }
 
+    void initialSizeSizesWindowAtWarmUp()
+    {
+        // Anti-regression for SurfaceConfig::initialSize (PR #381). Callers
+        // that opt into a content-sized warm-up to avoid full-screen Vulkan
+        // swapchain allocation must see the wrapper QQuickWindow attach at
+        // exactly the requested size, not the target screen's geometry.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        auto cfg = buildConfig(s.primary());
+        cfg.initialSize = QSize(240, 70);
+        auto* surface = f.create(std::move(cfg));
+        surface->warmUp();
+
+        QCOMPARE(t.m_attachRecords.size(), 1);
+        QCOMPARE(t.m_attachRecords.first().sizeAtAttach, QSize(240, 70));
+        QVERIFY(surface->window());
+        QCOMPARE(surface->window()->size(), QSize(240, 70));
+    }
+
+    void initialSizeEmptyFallsBackToScreenGeometry()
+    {
+        // The default `QSize{}` is the "unset" sentinel — pre-PR-#381
+        // behaviour (warm up at the target screen's full geometry) MUST
+        // remain the default for callers that do not opt in.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        auto cfg = buildConfig(s.primary());
+        // Default-constructed initialSize → isEmpty() → fall through.
+        QVERIFY(cfg.initialSize.isEmpty());
+        const QSize screenSize = s.primary()->geometry().size();
+        auto* surface = f.create(std::move(cfg));
+        surface->warmUp();
+
+        QCOMPARE(t.m_attachRecords.size(), 1);
+        QCOMPARE(t.m_attachRecords.first().sizeAtAttach, screenSize);
+    }
+
+    void initialSizePartiallyZeroIsTreatedAsUnset()
+    {
+        // Documented contract on SurfaceConfig::initialSize: any non-positive
+        // dimension counts as "unset" (matches QSize::isEmpty semantics).
+        // A partially-zero size silently falls back to screen geometry —
+        // pin that contract so a future refactor doesn't accidentally
+        // commit (0×N) to the wl_surface.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        auto cfg = buildConfig(s.primary());
+        cfg.initialSize = QSize(0, 100); // isEmpty() → true
+        const QSize screenSize = s.primary()->geometry().size();
+        auto* surface = f.create(std::move(cfg));
+        surface->warmUp();
+
+        QCOMPARE(t.m_attachRecords.size(), 1);
+        QCOMPARE(t.m_attachRecords.first().sizeAtAttach, screenSize);
+    }
+
     void compositorLostDoesNotCrashShownSurface()
     {
         // A Surface in Shown state must tolerate a compositor-lost pulse
