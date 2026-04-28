@@ -541,13 +541,24 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // across hide/show cycles; SurfaceAnimator drives the visual fade and
     // the library flips Qt::WindowTransparentForInput during the hide so
     // the still-mapped layer surface stops eating clicks.
+    //
+    // initialSize=screenGeom.size(): on virtual screens the warm-up's
+    // computeWarmupGeometry() defaults to physScreen->geometry() (the
+    // full physical output, e.g. 3200×1800 for two side-by-side VSes on
+    // one monitor), so the warm-up swapchain is sized for the entire
+    // monitor and then shrunk to the VS region on first show. With
+    // keepMappedOnHide=true the oversized swapchain persists across
+    // hide/show cycles. Sizing the warm-up directly to the VS rect cuts
+    // the swapchain footprint in half on per-monitor split setups and
+    // skips a resize cycle on first show.
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")),
                                         .screen = physScreen,
                                         .role = role,
                                         .windowType = "zone selector",
                                         .anchorsOverride = anchorsOverride,
                                         .marginsOverride = marginsOverride,
-                                        .keepMappedOnHide = true});
+                                        .keepMappedOnHide = true,
+                                        .initialSize = screenGeom.size()});
     if (!surface) {
         return;
     }
