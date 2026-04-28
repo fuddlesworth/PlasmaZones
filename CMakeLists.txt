@@ -345,6 +345,7 @@ add_subdirectory(libs/phosphor-jsonloader) # generic JSON directory loader with 
 set(PHOSPHOR_ANIMATION_QML ON CACHE BOOL "Build org.phosphor.animation QML module")
 add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
 add_subdirectory(libs/phosphor-animation-layer) # ISurfaceAnimator backed by phosphor-animation (Phase 5)
+add_subdirectory(libs/phosphor-animation-shaders) # shader-backed animation pipeline (Phase 6)
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants

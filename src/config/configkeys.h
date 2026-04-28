@@ -398,6 +398,11 @@ public:
     PZ_CONFIG_KEY(sequenceModeKey, "SequenceMode")
     PZ_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
 
+    // Phase 6: ShaderProfileTree JSON blob — per-event shader effect
+    // selection layered alongside the motion Profile (separate tree,
+    // same dot-path namespace — see design doc decision AA).
+    PZ_CONFIG_KEY(shaderProfileTreeKey, "ShaderProfileTree")
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
     // ═══════════════════════════════════════════════════════════════════════════

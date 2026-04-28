@@ -23,6 +23,8 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/qml/PhosphorCurve.h>
 
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+
 #include <array>
 
 #include "overlayservice.h"
@@ -198,6 +200,7 @@ Daemon::Daemon(QObject* parent)
     // states land together, rather than the static going live against
     // an empty registry for the brief window before loaders run.
     setupAnimationProfiles();
+    setupAnimationShaderEffects();
 }
 
 // Paths that follow the user's `Settings.animationProfile` slider
@@ -447,6 +450,25 @@ void Daemon::publishActiveAnimationProfile()
         }
         reg.registerProfile(*path, settingsProfile);
     }
+}
+
+void Daemon::setupAnimationShaderEffects()
+{
+    m_animationShaderRegistry = std::make_unique<PhosphorAnimationShaders::AnimationShaderRegistry>(nullptr);
+
+    QStringList animDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"), QStandardPaths::LocateDirectory);
+    std::reverse(animDirs.begin(), animDirs.end());
+
+    const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/plasmazones/animations");
+    if (!animDirs.contains(userAnimDir))
+        animDirs.append(userAnimDir);
+
+    for (const QString& dir : animDirs)
+        m_animationShaderRegistry->addSearchPath(dir);
+
+    m_animationShaderRegistry->refresh();
 }
 
 Daemon::~Daemon()
@@ -1205,6 +1227,7 @@ void Daemon::stop()
     // process-global PhosphorProfileRegistry shed those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
+    m_animationShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();

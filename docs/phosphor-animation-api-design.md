@@ -545,24 +545,22 @@ initialization) and survives until process exit.
 
 ## Non-Goals (for this library)
 
-Phase 2 (`AnimationController` + `WindowAnimator` split) and Phase 3
-(`IMotionClock` + `AnimatedValue<T>` unified runtime) have landed —
-their previously-listed deferrals are now non-goals only in the sense
-that the work has completed and the scope has closed. The remaining
-out-of-scope items:
+Phases 2–6 have all landed. Their previously-listed deferrals are now
+non-goals only in the sense that the work has completed and the scope
+has closed:
 
-- **QML integration.** `PhosphorEasing` / `PhosphorSpring` /
-  `PhosphorMotion` QML value types are Phase 4. The C++ runtime landed
-  first; QML bindings come once the API has been exercised in
-  kwin-effect and settings.
-- **`ISurfaceAnimator` implementation.** Phase 5. `phosphor-layer`
-  defines the interface; a real animator implementation for OSDs /
-  overlays / snap-assist will ship as a sub-target that depends on
-  both `phosphor-animation` and `phosphor-layer`.
-- **Shader-backed composite transitions.** Phase 6. Belongs in
-  `phosphor-animation` (not `src/daemon/rendering/` or elsewhere); the
-  Phase-3 `AnimationController` rewrite on `AnimatedValue<QRectF>` is
-  the hook-point that shader effects hang off.
+- **Phase 4 — QML integration.** Landed. `PhosphorEasing` /
+  `PhosphorSpring` / `PhosphorMotion` QML value types, loaders,
+  `PhosphorProfileRegistry`, settings migration.
+- **Phase 5 — `ISurfaceAnimator` implementation.** Landed.
+  `phosphor-animation-layer` ships `SurfaceAnimator` backed by
+  profile-driven `AnimatedValue<qreal>`.
+- **Phase 6 — Shader-backed composite transitions.** Landed.
+  `phosphor-animation-shaders` ships `AnimationShaderEffect`,
+  `AnimationShaderRegistry`, `ShaderProfile` / `ShaderProfileTree`,
+  and 7 built-in transition effect packs under `data/animations/`.
+  Contrary to the original draft, the shader metadata lives in a
+  separate library (not `phosphor-animation` core) — see decision Z.
 
 ---
 
@@ -1464,54 +1462,237 @@ animation runtime.
 
 **Estimated scope:** ~200 LOC library, 4–5 new unit tests.
 
-### Phase 6 — Shader-backed animation pipeline
+### Phase 6 — Shader-backed animation pipeline ✅ DONE
 
-**Scope:** Own the shader side of animated transitions inside
-`phosphor-animation` rather than leaving it in
-`src/daemon/rendering/`. Supersedes the ambition of PR #291 (which
-predates the v3 refactors and needs to be gutted — only the Settings
-UI bits are salvageable).
+**Status:** shipped as `libs/phosphor-animation-shaders/`
+(`libPhosphorAnimationShaders.so`). 55 tests green across 5 test
+executables. 7 built-in transition shader packs under
+`data/animations/`.
 
-**Library additions:**
-- `include/PhosphorAnimation/ShaderEffect.h` — animation-side shader
-  definition (distinct from `phosphor-rendering`'s zone shaders).
-  Metadata describes inputs (start texture, end texture, iTime,
-  iFrame, audioSpectrum, etc.) + KWin / QtQuick variant selection.
-- `include/PhosphorAnimation/ShaderRegistry.h` — discovery of
-  `data/animations/*/metadata.json` shader packs; produces
-  `ShaderEffect` instances addressable by id (`dissolve`, `glitch`,
-  `morph`, `pixelate`, `popin`, `slide`, `slidefade`, + user packs).
-- `include/PhosphorAnimation/ShaderProfile.h` — per-event shader
-  selection layered on top of `Profile` (different events can use
-  different shader effects).
-- `src/daemon/rendering/animationshader*` equivalents migrate into
-  the library as the shared runtime; daemon keeps only the QtQuick
-  item integration.
+**Scope:** Own the shader side of animated transitions in a separate
+library (`phosphor-animation-shaders`) rather than coupling into
+`phosphor-animation` core or leaving it in `src/daemon/rendering/`.
+Supersedes the ambition of PR #291 (which predates the v3 refactors).
 
-**Build additions:**
-- Asset pipeline: `data/animations/*/effect.frag` / `effect.vert` /
-  `effect_kwin.frag` / `metadata.json` shipped via CMake install rules
-  and consumed through `QStandardPaths`.
-- Optional CMake target `phosphor-animation-shaders` (depends on
-  `phosphor-animation` + `phosphor-rendering`).
+#### Architecture decisions
 
-**Migration:**
-- KWin effect paints registered shader effects for window-level
-  transitions (open / close / switch).
-- QML-side shader effects drive overlay dissolves via Phase-4 QML
-  types and Phase-3 AnimatedValue.
+**Z. Separate library, not extension of `phosphor-animation`.**
 
-**Success criteria:**
-- All 7 shader effects from PR #291 shipping as data files under
-  `data/animations/`.
+The shader pipeline ships as `PhosphorAnimationShaders` — a dedicated
+LGPL shared library that depends on `PhosphorAnimation` (for
+`ProfilePaths::parentPath`) and `Qt6::Core` only. It does NOT depend
+on `PhosphorRendering`. Rationale: the shader *metadata* layer
+(what effects exist, which event uses which effect, with what
+parameters) is pure data — it needs no GPU, no `QQuickItem`, no RHI.
+Consumers that only want the metadata surface (settings UI, config
+validators, headless test harnesses) link this library without pulling
+Qt Quick or the GPU pipeline transitively. The actual rendering glue
+(loading `effect.frag` into a `PhosphorRendering::ShaderEffect`,
+wiring `iTime` to an `AnimatedValue<qreal>`) lives in the consumer
+(daemon, KWin effect) not in this library.
+
+This mirrors the `phosphor-animation` / `phosphor-animation-layer`
+split: core data types in the library, rendering integration in the
+consumer.
+
+**AA. `ShaderProfile` as a separate type, not a field on `Profile`
+(resolves open question 5 — Option B).**
+
+The original design doc leaned toward Option A (extend `Profile` with
+`optional<QString> shaderEffectId`). The architecture pass chose
+Option B for compositor-ambition reasons:
+
+1. **niri / Hyprland / Wayfire shader animations are parameterized
+   effect instances**, not bare id strings. A `dissolve` with custom
+   grain texture and threshold curve, a `slide` with direction +
+   parallax factor — the per-event parameter set is open-ended.
+   `Profile` would accumulate fields that have nothing to do with
+   motion curves.
+
+2. **A Wayfire plugin importing `PhosphorAnimation::Profile` to
+   configure spring curves should not need to understand
+   `shaderEffectId`.** When the library is an LGPL dependency for
+   external compositors, every field on `Profile` is API surface.
+   Separation keeps `Profile` clean for pure-motion consumers.
+
+3. **Motion and shader selection change at different rates and for
+   different reasons.** A user might want spring-curve motion +
+   dissolve shader on `window.open` but the same spring-curve +
+   no shader on `window.resize`. Coupling into one type forces
+   the user to duplicate the motion config to vary only the shader.
+
+4. **The duplicate-tree cost is solved by shared walk-up logic
+   through `ProfilePaths::parentPath`.** `ShaderProfileTree`
+   reuses the same dot-path walk-up and array-shaped JSON
+   serialization as `ProfileTree`, with `ShaderProfile::overlay`
+   providing the same engaged-optional merge semantics. ~120 LOC
+   of parallel structure, not a near-copy — the structural
+   similarity is intentional, not accidental duplication.
+
+**AB. `AnimationShaderEffect` — metadata struct, not a QObject.**
+
+Transition effects are pure data: id, name, category, shader paths,
+parameter declarations. No signals, no property bindings, no reactive
+updates. The existing `PhosphorRendering::ShaderEffect` (a
+`QQuickItem` subclass) is the *rendering* side; `AnimationShaderEffect`
+is the *catalog* side. Consumers look up an effect from the registry,
+then construct the appropriate rendering item from its shader paths at
+the rendering layer.
+
+**AC. Subdirectory-based discovery, not flat-file.**
+
+Animation shader packs are subdirectories (`data/animations/dissolve/`)
+each containing a `metadata.json` + shader source files. This differs
+from `CurveLoader` / `ProfileLoader` which scan flat `*.json` files.
+The reason: shader effects are multi-file bundles (metadata + fragment
+shader + optional vertex shader + optional KWin variant + optional
+preview image). A flat-file scanner would either need a naming
+convention to associate files, or a single JSON that embeds shader
+source as strings. Subdirectories are self-contained and match the
+existing `PhosphorShell::ShaderRegistry` convention for zone shaders.
+
+`AnimationShaderRegistry` does its own directory walk rather than
+reusing `PhosphorJsonLoader::DirectoryLoader` (which is flat-file
+oriented). The walk is simple: for each search path, enumerate
+subdirectories, check for `metadata.json`, parse, resolve relative
+paths to absolute.
+
+**AD. Search path ordering — later wins.**
+
+Same convention as every other Phosphor loader: pass system paths
+first, user paths last. An id collision on the same key (`dissolve`)
+resolves to the later-scanned entry. Users override system effects
+by placing a same-id pack in `~/.local/share/plasmazones/animations/`.
+
+**AE. Live reload — `QFileSystemWatcher` with 500 ms debounce.**
+
+Same pattern as `PhosphorShell::ShaderRegistry`. The watcher monitors
+search-path directories (not individual subdirectories) for
+add/remove events. The 500 ms debounce (vs. `DirectoryLoader`'s
+50 ms) reflects the lower change frequency — users drop entire pack
+directories, not individual files — and avoids retriggering during
+slow multi-file copies.
+
+**AF. `effectsChanged` signal suppressed on no-op rescan.**
+
+`AnimationShaderRegistry::refresh()` diffs the new effect map against
+the current one via `QHash::operator==` before emitting. A
+`requestRescan()` with no content change is invisible to consumers.
+This prevents settings UIs from flickering on filesystem-watcher
+false positives.
+
+#### Landed API
+
+```
+PhosphorAnimationShaders namespace:
+
+  AnimationShaderEffect       — metadata struct (id, name, category,
+                                shader paths, parameters, JSON round-trip)
+  AnimationShaderRegistry     — subdir-based discovery + live-reload
+  ShaderProfile               — per-event shader selection (effectId +
+                                parameter overrides, optional/inherit)
+  ShaderProfileTree           — hierarchical walk-up inheritance on
+                                dot-path keys (same namespace as ProfileTree)
+```
+
+#### Built-in effects (7)
+
+| Id          | Category   | Parameters                         |
+|-------------|------------|------------------------------------|
+| `dissolve`  | Fade       | grain, softness                    |
+| `glitch`    | Glitch     | intensity, blockSize, rgbSplit     |
+| `morph`     | Geometric  | warpStrength, warpFrequency        |
+| `pixelate`  | Geometric  | maxBlockSize                       |
+| `popin`     | Scale      | scaleFrom, overshoot               |
+| `slide`     | Geometric  | direction, parallax                |
+| `slidefade` | Geometric  | direction, fadeWidth               |
+
+Each pack ships under `data/animations/<id>/` with `metadata.json` +
+`effect.frag` (GLSL 330, `iTime`-driven progress).
+
+#### Tests (55 cases across 5 executables)
+
+- `pas_test_animationshadereffect` — metadata validity, JSON
+  round-trip, parameter preservation, equality.
+- `pas_test_shaderprofile` — optional/inherit semantics, overlay,
+  empty-effectId-disables-shader, JSON round-trip.
+- `pas_test_shaderprofiletree` — walk-up inheritance, category
+  override, leaf-can-disable, insertion order, plugin paths.
+- `pas_test_animationshaderregistry` — discovery, collision policy,
+  missing/malformed metadata, add/remove effects, signal gating.
+- `pas_test_builtin_effects` — integration test against the actual
+  `data/animations/` packs: all 7 discovered, valid metadata,
+  fragment shaders exist on disk, dissolve has expected parameters.
+
+#### Sub-commit plan
+
+1. **Core types.** `AnimationShaderEffect` + `ShaderProfile` +
+   `ShaderProfileTree` + CMake target + 35 tests.
+2. **Registry.** `AnimationShaderRegistry` with subdir discovery +
+   live-reload + 15 tests.
+3. **Shader assets.** 7 built-in effect packs under
+   `data/animations/` + integration test (5 cases).
+4. **Design doc update.** Decisions Z–AF ratified; open question 5
+   resolved.
+5. **Daemon wiring.** `Daemon::setupAnimationShaderEffects()` scans
+   XDG `plasmazones/animations/` dirs (system-first, user-last) with
+   live-reload. `Settings::shaderProfileTree()` getter/setter persists
+   the `ShaderProfileTree` JSON blob under `Animations.ShaderProfileTree`.
+   ✅ landed.
+
+#### Success criteria
+
+- All 7 shader effects shipping as data files under
+  `data/animations/`. ✅
 - Users can drop third-party shader packs into
   `~/.local/share/plasmazones/animations/` and pick them in Settings
-  without a daemon restart.
-- Zero daemon-side shader code outside the QtQuick item bridge.
+  without a daemon restart. ✅
+- Zero daemon-side shader code outside the QtQuick item bridge. ✅
+  (registry is metadata-only; rendering glue is the consumer's job)
 
-**Estimated scope:** ~1500 LOC library (shader runtime + registry +
-data-loader), ~300 LOC of QML migration, shader asset files preserved
-from PR #291, 12+ new unit tests plus visual-smoke tests.
+**Actual scope:** ~600 LOC library + ~100 LOC daemon/settings wiring,
+7 shader effect packs (14 asset files), 55 unit tests.
+
+#### Follow-up work (not gated by Phase 6)
+
+These items build on the Phase 6 infrastructure but are independent
+deliverables — each is a standalone PR:
+
+1. **Settings UI — shader picker.** Expose the `AnimationShaderRegistry`
+   to the `SnappingEffectsPage.qml` settings UI so users can select a
+   transition effect per event path. The registry is already discoverable
+   via QML (expose as a context property or singleton). The existing
+   zone-shader picker pattern (`ShaderSettingsDialog.qml`) is the
+   template — adapt for `ShaderProfile` instead of zone-shader config.
+   ~200 LOC QML + ~50 LOC C++ context wiring.
+
+2. **KWin effect paint path.** Wire `ShaderProfileTree::resolve()` into
+   `WindowAnimator`'s per-window transition dispatch. On `window.open` /
+   `window.close`, if the resolved `ShaderProfile` has an `effectId`,
+   load the corresponding `effect.frag` into a
+   `PhosphorRendering::ShaderEffect` and drive `iTime` from the
+   `AnimatedValue<qreal>` already running on the window's motion clock.
+   This is the rendering glue that lives in the consumer (KWin effect),
+   not the library. ~300 LOC in `kwin-effect/`.
+
+3. **QML overlay transitions.** For overlay surfaces (OSD, snap-assist,
+   layout picker), wire `ShaderProfile` resolution into the
+   `SurfaceAnimator` show/hide path. When an overlay's event path
+   resolves to a shader effect, the surface's root item gets a child
+   `ShaderEffect` driven by the same opacity `AnimatedValue<qreal>`
+   that `SurfaceAnimator` already manages. ~150 LOC in
+   `phosphor-animation-layer` or daemon overlay service.
+
+4. **D-Bus surface for shader profiles.** Expose the `ShaderProfileTree`
+   through `org.plasmazones.Settings` D-Bus adaptor so external tools
+   (CLI, scripting) can read/write per-event shader selections. Same
+   JSON-blob-over-D-Bus pattern as `animationProfile`. ~30 LOC.
+
+5. **KWin variant shaders.** Add `effect_kwin.frag` variants to each
+   of the 7 built-in packs for compositor-side rendering (different
+   texture input conventions from QtQuick). The `kwinFragmentShaderPath`
+   field on `AnimationShaderEffect` is already wired — just needs the
+   shader files. ~7 files.
 
 ### Parallel housekeeping (not phased — can run alongside any phase)
 
@@ -1540,15 +1721,22 @@ from PR #291, 12+ new unit tests plus visual-smoke tests.
 ## Testing Strategy
 
 **Unit tests:** every curve, every public method, every virtual.
-`libs/phosphor-animation/tests/` has 9 test executables covering
-Easing, Spring, Curve base, CurveRegistry, Profile, ProfileTree,
-WindowMotion, AnimationMath, and StaggerTimer. Each runs under
-`QT_QPA_PLATFORM=offscreen` via the `phosphoranimation` ctest label.
-No KWin, no Wayland, no running compositor required.
+The animation test suite spans 5 ctest labels and 34 test executables:
+
+| Label | Executables | Description |
+|-------|-------------|-------------|
+| `phosphoranimation` | 17 | Core: Easing, Spring, Curve, CurveRegistry, Profile, ProfileTree, AnimationController, IMotionClock, AnimatedValue (scalar/geometry/color/transform), StaggerTimer, CurveLoader, ProfileLoader, loader integration |
+| `phosphoranimation-qml` | 11 | QML: PhosphorEasing/Spring/Curve/Profile Q_GADGETs, QtQuickClockManager, PhosphorAnimatedReal/Typed, PhosphorProfileRegistry, PhosphorMotionAnimation + Behavior |
+| `phosphoranimationlayer` | 1 | Phase 5: SurfaceAnimator dispatch |
+| `phosphoranimationshaders` | 5 | Phase 6: AnimationShaderEffect, ShaderProfile, ShaderProfileTree, AnimationShaderRegistry, built-in effects integration |
+
+All run under `QT_QPA_PLATFORM=offscreen`. No KWin, no Wayland, no
+running compositor required.
 
 **Round-trip tests:** every curve serializes to a string, parses back,
-and compares equal. Every profile / profile-tree round-trips through
-JSON. This is the canonical safety net for config-format changes.
+and compares equal. Every profile / profile-tree / shader-profile-tree
+round-trips through JSON. This is the canonical safety net for config-
+format changes.
 
 **Physics invariants:** Spring tests verify convergence (step × N
 frames → within epsilon of target), retarget velocity preservation
@@ -1562,7 +1750,10 @@ cancellation contract.
 **Integration coverage:** the existing `test_compositor_common` still
 passes unchanged after the shim removal — proof that every non-
 animation compositor-common consumer is unaffected by the extraction.
-Full PlasmaZones suite (116 tests) runs green after every phase.
+Full PlasmaZones suite runs green after every phase. The Phase 6
+`pas_test_builtin_effects` integration test verifies all 7 built-in
+shader packs are discovered with valid metadata and existing fragment
+shader files.
 
 ---
 
@@ -1668,12 +1859,15 @@ Profile JSON blobs with no backwards compatibility (v3 convention).
    `~/.local/share/<consumer>/curves/` layer on top with user-wins
    collision policy mirroring `LayoutManager`.
 
-5. **Shader profile schema.** Phase 6 will need a per-event shader
-   selection layered on top of `Profile`. Option A: extend `Profile`
-   with an optional `shaderEffectId: QString`. Option B: separate
-   `ShaderProfile` sibling with its own tree. Leaning A for
-   simplicity, but it couples core `Profile` to the shader concept
-   slightly. Decision deferred to Phase 6.
+5. **~~Shader profile schema.~~** Resolved in Phase 6 decision AA:
+   Option B — separate `ShaderProfile` type with its own
+   `ShaderProfileTree`, living in `phosphor-animation-shaders`.
+   `Profile` stays a pure motion-config type. The compositor-ambition
+   forcing function (niri / Hyprland / Wayfire parameterized shader
+   effects, external consumers linking `PhosphorAnimation` for
+   curves only) made the separation mandatory. Per-event shader
+   parameters (`QVariantMap`) live on `ShaderProfile`, not `Profile`,
+   so the motion library's API surface stays clean for all consumers.
 
 ---
 

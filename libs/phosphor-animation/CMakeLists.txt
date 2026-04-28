@@ -37,8 +37,8 @@
 #            sub-commit 6: Settings → Profile JSON blob migration  ✓
 #            sub-commit 7: daemon ProfileRegistry wiring           ✓
 #            (in-tree QML call-site migration deferred — housekeeping)
-#   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator) — planned
-#   Phase 6  Shader-backed animation pipeline                      — planned
+#   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator) ✓ landed
+#   Phase 6  Shader-backed animation pipeline                      — in progress
 
 cmake_minimum_required(VERSION 3.16)
 

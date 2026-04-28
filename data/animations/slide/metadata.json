@@ -1,0 +1,27 @@
+{
+    "id": "slide",
+    "name": "Slide",
+    "description": "Directional slide transition with configurable direction",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometric",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "direction",
+            "name": "Direction",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 3.0
+        },
+        {
+            "id": "parallax",
+            "name": "Parallax Factor",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 0.5
+        }
+    ]
+}

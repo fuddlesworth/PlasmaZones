@@ -984,6 +984,29 @@ void Settings::setAnimationStaggerInterval(int ms)
                            &Settings::animationStaggerIntervalChanged);
 }
 
+PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
+{
+    const QString json =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    if (json.isEmpty())
+        return {};
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject())
+        return {};
+    return PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+}
+
+void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
+{
+    const PhosphorAnimationShaders::ShaderProfileTree prev = shaderProfileTree();
+    if (tree == prev)
+        return;
+    const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(), json);
+    Q_EMIT shaderProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads

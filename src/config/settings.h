@@ -7,6 +7,7 @@
 #include "../core/constants.h"
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -748,6 +749,12 @@ public:
     int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
 
+    /// Phase 6: per-event shader effect selection tree. Persisted as a
+    /// JSON blob alongside the animation Profile under the Animations
+    /// config group.
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const;
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree);
+
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
@@ -995,6 +1002,7 @@ Q_SIGNALS:
     /// per-field surface get re-triggered through the individual
     /// signals per the existing NOTIFY wiring.
     void animationProfileChanged();
+    void shaderProfileTreeChanged();
 
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();
