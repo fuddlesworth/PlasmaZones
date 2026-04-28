@@ -998,10 +998,11 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
-    const PhosphorAnimationShaders::ShaderProfileTree prev = shaderProfileTree();
-    if (tree == prev)
-        return;
     const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+    const QString prev =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    if (json == prev)
+        return;
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(), json);
     Q_EMIT shaderProfileTreeChanged();
     Q_EMIT settingsChanged();

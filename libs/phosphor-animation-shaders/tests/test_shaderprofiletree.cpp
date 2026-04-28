@@ -85,6 +85,9 @@ private Q_SLOTS:
         const ShaderProfile resolved = tree.resolve(PP::WindowClose);
         QCOMPARE(*resolved.effectId, QStringLiteral("dissolve"));
         QCOMPARE(resolved.parameters->value(QStringLiteral("threshold")).toDouble(), 0.8);
+        // overlay replaces the entire parameter map — baseline's "grain"
+        // is NOT merged into the leaf's engaged map
+        QVERIFY(!resolved.parameters->contains(QStringLiteral("grain")));
     }
 
     void testResolveLeafCanExplicitlyDisableShader()
