@@ -530,10 +530,10 @@ private:
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
     /// Create / destroy the per-screen NotificationOverlay window that hosts
     /// both LayoutOsd and NavigationOsd content via NotificationOverlay.qml's
-    /// mode-driven Loader. Replaces the previous per-mode
-    /// createLayoutOsdWindow / createNavigationOsdWindow pair — Phase-2
-    /// surface unification (the two OSD types share PzRoles::OsdBase and are
-    /// never simultaneously visible). Phase-5 keepMappedOnHide=true and
+    /// mode-driven Loader. Single per-screen surface — Phase-2 unification
+    /// collapsed the two prior OSD-class surfaces (which shared
+    /// PzRoles::OsdBase and were never simultaneously visible) onto
+    /// PzRoles::Notification. Phase-5 keepMappedOnHide=true and
     /// dismissRequested → Surface::hide() wiring are done inside
     /// createWarmedOsdSurface.
     void createNotificationWindow(const QString& screenId, QScreen* physScreen);
@@ -635,26 +635,26 @@ private:
      * @brief Create a warmed OSD-style surface and wire its dismiss signal.
      *
      * Common pattern for createNotificationWindow (and the LayoutPicker
-     * surface in snapassist.cpp): (1) build a per-instance scope-prefixed
-     * Role from the base role, (2) call createLayerSurface with
-     * keepMappedOnHide=true, (3) string-connect the QML-side
-     * `dismissRequested()` signal to `Surface::hide()` so the auto-dismiss
-     * timer (or backdrop click for the picker) can drive the library
-     * animator without a C++ slot in the loop.
+     * surface in snapassist.cpp): (1) caller builds a per-instance
+     * scope-prefixed Role via @ref PzRoles::makePerInstanceRole,
+     * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
+     * (3) string-connects the QML-side `dismissRequested()` signal to
+     * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
+     * the picker) can drive the library animator without a C++ slot in
+     * the loop.
      *
      * Returns the warmed Surface on success; nullptr on failure (warning
      * logged inside createLayerSurface). Caller installs the surface +
      * window pointers into PerScreenOverlayState.
      *
-     * @param baseRole       Base role to scope-prefix (e.g. PzRoles::OsdBase).
-     * @param scopePrefix    Prefix string template after the base role's
-     *                       prefix (typically `"plasmazones-{kind}-{screenId}-{gen}"`).
+     * @param role           Fully-formed per-instance role (use
+     *                       PzRoles::makePerInstanceRole to build).
      * @param qmlUrl         QML file to load.
      * @param physScreen     Target physical screen.
      * @param windowType     Debug/telemetry label.
      */
-    PhosphorLayer::Surface* createWarmedOsdSurface(const PhosphorLayer::Role& baseRole, const QString& scopePrefix,
-                                                   const QUrl& qmlUrl, QScreen* physScreen, const char* windowType);
+    PhosphorLayer::Surface* createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
+                                                   QScreen* physScreen, const char* windowType);
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);

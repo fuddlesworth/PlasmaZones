@@ -21,14 +21,16 @@
  *
  * The previous safety net was a single Q_ASSERT_X in
  * createZoneSelectorWindow — debug-only, and only covered ZoneSelector.
- * This test pins down the scope-construction policy for every overlay so
- * release builds don't silently degrade.
+ * Production now constructs every per-instance role via
+ * `PzRoles::makePerInstanceRole(base, id, gen)` so the prefix-match is
+ * guaranteed by construction; the tests below pin that helper's behavior
+ * against the registered configs so a future change to either side
+ * trips the test.
  *
- * Construction policy (must match the code paths it mirrors):
- *   - Notification:  `plasmazones-notification-{id}-{gen}`        (osd.cpp)
- *   - ZoneSelector:  `plasmazones-zone-selector-{id}-{gen}`       (selector.cpp)
- *   - SnapAssist:    `plasmazones-snap-assist-{id}-{gen}`         (snapassist.cpp)
- *   - LayoutPicker:  `plasmazones-layout-picker-{id}-{gen}`       (snapassist.cpp)
+ * Construction policy (centralized in pz_roles.h):
+ *   `<base.scopePrefix>-<screenId>-<generation>`
+ *   where base is one of PzRoles::{Notification, ZoneSelector,
+ *   SnapAssist, LayoutPicker}.
  */
 
 #include <QTest>
@@ -84,16 +86,18 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon()
     return anim;
 }
 
-/// Build a per-instance Role the way the daemon does — base role with a
-/// per-instance scope prefix that includes a screen id and generation
-/// counter. Mirrors the QStringLiteral arg-substitutions in
+/// Build a per-instance Role the way the daemon does. Routes through the
+/// production helper `PzRoles::makePerInstanceRole` (used by
 /// createNotificationWindow / createZoneSelectorWindow /
-/// createSnapAssistWindowFor / createLayoutPickerWindowFor.
-PhosphorLayer::Role perInstanceRole(const PhosphorLayer::Role& base, const QString& family, const QString& screenId,
-                                    int generation)
+/// createSnapAssistWindowFor / createLayoutPickerWindowFor) so the test
+/// and production share a single source of truth for the per-instance
+/// scope construction policy. A regression in the helper itself is
+/// caught here; a regression in any production caller that bypasses the
+/// helper is caught by code review (no production caller hand-rolls the
+/// literal anymore).
+PhosphorLayer::Role perInstanceRole(const PhosphorLayer::Role& base, const QString& screenId, quint64 generation)
 {
-    const QString perInstance = QStringLiteral("plasmazones-%1-%2-%3").arg(family).arg(screenId).arg(generation);
-    return base.withScopePrefix(perInstance);
+    return PlasmaZones::PzRoles::makePerInstanceRole(base, screenId, generation);
 }
 
 } // namespace
@@ -127,8 +131,7 @@ private Q_SLOTS:
     void notification_scope_resolves_to_registered_config()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::Notification, QStringLiteral("notification"), QStringLiteral("DP-1"), 7);
+        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 7);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
@@ -140,8 +143,7 @@ private Q_SLOTS:
     void notification_scope_resolves_independent_of_screen_id()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::Notification, QStringLiteral("notification"), QStringLiteral("HDMI-A-1/vs:0"), 3);
+        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("HDMI-A-1/vs:0"), 3);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
@@ -154,8 +156,7 @@ private Q_SLOTS:
     void zone_selector_scope_resolves_to_panel_popup()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::ZoneSelector, QStringLiteral("zone-selector"), QStringLiteral("DP-1/vs:0"), 12);
+        const auto role = perInstanceRole(PzRoles::ZoneSelector, QStringLiteral("DP-1/vs:0"), 12);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
         QCOMPARE(cfg.hideProfile, QStringLiteral("widget.fadeOut"));
@@ -164,8 +165,7 @@ private Q_SLOTS:
     void snap_assist_scope_resolves_to_panel_popup()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::SnapAssist, QStringLiteral("snap-assist"), QStringLiteral("DP-1"), 5);
+        const auto role = perInstanceRole(PzRoles::SnapAssist, QStringLiteral("DP-1"), 5);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
         // SnapAssist deliberately has empty hideProfile (destroy-on-hide).
@@ -175,8 +175,7 @@ private Q_SLOTS:
     void layout_picker_scope_resolves_to_softer_envelope()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::LayoutPicker, QStringLiteral("layout-picker"), QStringLiteral("DP-1"), 1);
+        const auto role = perInstanceRole(PzRoles::LayoutPicker, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
@@ -196,8 +195,7 @@ private Q_SLOTS:
     void notification_does_not_cross_pollinate_to_layout_picker()
     {
         const auto anim = buildAnimatorMatchingDaemon();
-        const auto role =
-            perInstanceRole(PzRoles::Notification, QStringLiteral("notification"), QStringLiteral("DP-1"), 1);
+        const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
         // OSD config has 0.8, picker has 0.9. Picking up the picker
         // config here would mean the boundary check is broken.

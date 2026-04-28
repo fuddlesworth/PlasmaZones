@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <QString>
+#include <QStringView>
+
 #include <PhosphorLayer/Role.h>
 
 namespace PlasmaZones {
@@ -74,6 +77,37 @@ inline const PhosphorLayer::Role LayoutPicker =
 /// by the caller.
 inline const PhosphorLayer::Role ShaderPreview =
     PhosphorLayer::Roles::FloatingOverlay.withScopePrefix(QStringLiteral("plasmazones-shader-preview"));
+
+/// Build a per-instance Role from one of the base roles above by appending
+/// `-{screenId}-{generation}` to its base scope prefix. Single-source for
+/// the policy "per-instance scope prefix-matches the base role's prefix" so
+/// the SurfaceAnimator's longest-prefix lookup always resolves the
+/// registered config (see `setupSurfaceAnimator`).
+///
+/// Pre-existing failure modes this prevents:
+///  - Build the per-instance literal from scratch (e.g. typo
+///    "plasmazones-notif-..."), or
+///  - Pass `OsdBase` instead of the named family role and re-type the
+///    literal, then later rename the family role in this header.
+/// Either case made the longest-prefix match silently miss and the
+/// surface fell back to the library's empty default config.
+///
+/// @param base       Named base role (e.g. PzRoles::Notification).
+/// @param screenId   Effective screen id (physical or virtual).
+/// @param generation Monotonic per-process counter, e.g. from
+///                   `SurfaceManager::nextScopeGeneration()`.
+[[nodiscard]] inline PhosphorLayer::Role makePerInstanceRole(const PhosphorLayer::Role& base, QStringView screenId,
+                                                             quint64 generation)
+{
+    QString prefix;
+    prefix.reserve(base.scopePrefix.size() + 1 + screenId.size() + 1 + 20);
+    prefix.append(base.scopePrefix);
+    prefix.append(QLatin1Char('-'));
+    prefix.append(screenId);
+    prefix.append(QLatin1Char('-'));
+    prefix.append(QString::number(generation));
+    return base.withScopePrefix(std::move(prefix));
+}
 
 } // namespace PzRoles
 

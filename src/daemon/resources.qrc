@@ -8,6 +8,7 @@
         <file alias="ZoneSelector.qml">../ui/ZoneSelector.qml</file>
         <file alias="ZoneSelectorWindow.qml">../ui/ZoneSelectorWindow.qml</file>
         <file alias="LayoutPreview.qml">../ui/LayoutPreview.qml</file>
+        <file alias="OsdDismissable.qml">../ui/OsdDismissable.qml</file>
         <file alias="LayoutOsdContent.qml">../ui/LayoutOsdContent.qml</file>
         <file alias="NavigationOsdContent.qml">../ui/NavigationOsdContent.qml</file>
         <file alias="NotificationOverlay.qml">../ui/NotificationOverlay.qml</file>

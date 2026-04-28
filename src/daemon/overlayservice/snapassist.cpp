@@ -379,8 +379,8 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
 
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
-    const auto role = PzRoles::SnapAssist.withScopePrefix(
-        QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::SnapAssist, scopeId, m_surfaceManager->nextScopeGeneration());
 
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")),
                                         .screen = screen,
@@ -750,8 +750,8 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // reopens).
     const QString scopeId =
         resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
-    const auto role = PzRoles::LayoutPicker.withScopePrefix(
-        QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(m_surfaceManager->nextScopeGeneration()));
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::LayoutPicker, scopeId, m_surfaceManager->nextScopeGeneration());
 
     // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
     // across hide/show cycles; SurfaceAnimator drives opacity for the

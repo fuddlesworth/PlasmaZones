@@ -91,12 +91,6 @@ Item {
     // them after every property write to compute matching layer-shell margins).
     readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
     readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
-    /// Idempotency latch for `dismissRequested`. The timer-fire path and the
-    /// MouseArea click path can both attempt to dismiss within the same
-    /// show cycle; without the latch, C++ runs Surface::hide() twice and the
-    /// second call qCWarnings on the already-Hidden state. Reset on every
-    /// dismissTimer.restart() via the Connections block below.
-    property bool _dismissed: false
 
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified NotificationOverlay host re-emits this as its own
@@ -104,47 +98,22 @@ Item {
     /// connect to Surface::hide() drives the library animator's beginHide.
     signal dismissRequested()
 
-    /// Restart the auto-dismiss timer from C++ on every show. Replaces the
-    /// QML-internal `dismissTimer.restart()` that the old show() used to
-    /// call. Latch reset is driven off the timer's runningChanged
-    /// transition (Connections block below) — that way any path that
-    /// restarts the timer (this helper today, or a hypothetical future
-    /// direct call) resets the latch automatically.
+    /// Restart the auto-dismiss timer from C++ on every show. Forwards to
+    /// the shared OsdDismissable helper so the latch reset is driven off
+    /// the timer's runningChanged transition automatically.
     function restartDismissTimer() {
-        dismissTimer.restart();
-    }
-
-    /// Internal: emit dismissRequested at most once per show cycle.
-    function _requestDismiss() {
-        if (_dismissed)
-            return ;
-
-        _dismissed = true;
-        root.dismissRequested();
+        dismiss.restart();
     }
 
     Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
 
-    // Auto-dismiss timer. Emits a signal that C++ hooks to Surface::hide().
-    Timer {
-        id: dismissTimer
+    // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
+    // why the latch is needed (timer-fire and click both race to dismiss).
+    OsdDismissable {
+        id: dismiss
 
         interval: root.displayDuration
-        onTriggered: root._requestDismiss()
-    }
-
-    // Reset the dismiss latch when the timer (re)starts. See the matching
-    // block in NavigationOsdContent.qml for the rationale — the reset is
-    // the timer's responsibility so any restart path keeps the latch in
-    // sync without the helper having to remember to clear it.
-    Connections {
-        function onRunningChanged() {
-            if (dismissTimer.running)
-                root._dismissed = false;
-
-        }
-
-        target: dismissTimer
+        onRequest: root.dismissRequested()
     }
 
     // Shadow effect
@@ -287,11 +256,11 @@ Item {
 
     }
 
-    // Click to dismiss. _requestDismiss collapses timer-fire + click into
-    // a single dismissRequested per show cycle.
+    // Click to dismiss. dismiss.fire() collapses timer-fire + click into
+    // a single dismissRequested per show cycle via the shared latch.
     MouseArea {
         anchors.fill: parent
-        onClicked: root._requestDismiss()
+        onClicked: dismiss.fire()
     }
 
 }

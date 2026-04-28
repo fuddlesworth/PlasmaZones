@@ -404,17 +404,15 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
     }
 
     // Phase 5: keepMappedOnHide=true and dismissRequested → Surface::hide()
-    // wiring are both done inside createWarmedOsdSurface. Scope prefix kept
-    // as `plasmazones-notification` (rather than the legacy
-    // `plasmazones-layout-osd` / `plasmazones-navigation-osd` pair) so the
-    // compositor sees the post-unification surface as a single distinct
-    // identity per screen, AND so the SurfaceAnimator's longest-prefix
-    // role-config lookup matches PzRoles::Notification.
-    const QString scopePrefix =
-        QStringLiteral("plasmazones-notification-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
-    auto* surface =
-        createWarmedOsdSurface(PzRoles::OsdBase, scopePrefix, QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")),
-                               physScreen, "notification");
+    // wiring are both done inside createWarmedOsdSurface. The per-instance
+    // scope prefix is derived from PzRoles::Notification's base prefix via
+    // `makePerInstanceRole` so the SurfaceAnimator's longest-prefix
+    // role-config lookup always matches, even if the base literal in
+    // pz_roles.h is renamed.
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::Notification, screenId, m_surfaceManager->nextScopeGeneration());
+    auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")), physScreen,
+                                           "notification");
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create notification window for screen=" << screenId
                              << "— suppressing further attempts until screen is replugged";
@@ -459,19 +457,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
-    // The dedup state is updated only after we've decided to actually
-    // show — see the matching m_lastNavigation* writes below near
-    // navSurface->show(). A bail-out path further down (no physScreen,
-    // no layout, etc.) must NOT poison the dedup state, otherwise a
-    // failed show silently swallows the next legitimate call within 200 ms.
-    const QString actionKey = action + QLatin1Char(':') + reason;
-    if (actionKey == m_lastNavigationActionKey && screenId == m_lastNavigationScreenId && m_lastNavigationTime.isValid()
-        && m_lastNavigationTime.elapsed() < 200) {
-        qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
-        return;
-    }
-
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
@@ -486,6 +471,26 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
+
+    // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
+    // Keyed on effectiveId (resolved from physScreen if the caller passed an
+    // empty screenId) so two rapid calls with empty screenId on different
+    // physical screens don't dedup against each other, and so the hot-plug
+    // clear in destroyAllWindowsForPhysicalScreen — which prefix-matches on
+    // the physical id — can clear stale dedup state on screen replug.
+    //
+    // The dedup state is updated only after we've decided to actually
+    // show — see the matching m_lastNavigation* writes below near
+    // navSurface->show(). A bail-out path further down (no layout,
+    // no notification window, etc.) must NOT poison the dedup state,
+    // otherwise a failed show silently swallows the next legitimate call
+    // within 200 ms.
+    const QString actionKey = action + QLatin1Char(':') + reason;
+    if (actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
+        && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
+        qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
+        return;
+    }
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
@@ -585,9 +590,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Update dedup state only now — every early-return above this point
     // is a "no OSD shown" outcome that must not poison the next call's
     // dedup window. Pairs with the comment above the early-return at the
-    // top of this function.
+    // top of this function. Stored as effectiveId to match the dedup
+    // check key above and the prefix-matched clear in
+    // destroyAllWindowsForPhysicalScreen.
     m_lastNavigationActionKey = actionKey;
-    m_lastNavigationScreenId = screenId;
+    m_lastNavigationScreenId = effectiveId;
     m_lastNavigationTime.restart();
 
     // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);

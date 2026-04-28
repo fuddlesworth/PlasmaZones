@@ -513,15 +513,11 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     return m_surfaceManager->createSurface(std::move(cfg), this);
 }
 
-PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& baseRole,
-                                                               const QString& scopePrefix, const QUrl& qmlUrl,
+PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
                                                                QScreen* physScreen, const char* windowType)
 {
-    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
-                                        .screen = physScreen,
-                                        .role = baseRole.withScopePrefix(scopePrefix),
-                                        .windowType = windowType,
-                                        .keepMappedOnHide = true});
+    auto* surface = createLayerSurface(
+        {.qmlUrl = qmlUrl, .screen = physScreen, .role = role, .windowType = windowType, .keepMappedOnHide = true});
     if (!surface) {
         return nullptr;
     }

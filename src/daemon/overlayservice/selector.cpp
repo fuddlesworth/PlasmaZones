@@ -409,20 +409,16 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         marginsOverride = placement.margins;
     }
 
-    // Per-instance scope MUST keep the base ZoneSelector family prefix
-    // ("plasmazones-zone-selector") so SurfaceAnimator's longest-prefix
-    // match against the registered config (in setupSurfaceAnimator)
-    // succeeds. Pre-fix this used "plasmazones-selector-..." which did
-    // NOT start with the base scope, so configFor silently fell back to
-    // the empty default config and every show/hide ran on the library's
-    // 150 ms OutCubic fallback instead of panel.popup / widget.fadeOut.
-    const QString perInstanceScope =
-        QStringLiteral("plasmazones-zone-selector-%1-%2").arg(screenId).arg(m_surfaceManager->nextScopeGeneration());
-    Q_ASSERT_X(perInstanceScope.startsWith(PzRoles::ZoneSelector.scopePrefix), "createZoneSelectorWindow",
-               "per-instance scope must start with the base ZoneSelector scope so the SurfaceAnimator's "
-               "registered config resolves via prefix-match. If this fires, re-align the literal here with "
-               "PzRoles::ZoneSelector.scopePrefix in pz_roles.h.");
-    const auto role = PzRoles::ZoneSelector.withScopePrefix(perInstanceScope);
+    // makePerInstanceRole derives the per-instance scope by appending
+    // `-{screenId}-{gen}` to PzRoles::ZoneSelector's base prefix, so the
+    // longest-prefix match in SurfaceAnimator's configFor lookup is
+    // guaranteed by construction. Pre-fix the daemon hand-rolled the
+    // literal as "plasmazones-selector-..." which did NOT start with the
+    // base scope, and configFor silently fell back to the empty default
+    // config — every show/hide ran on the library's 150 ms OutCubic
+    // instead of panel.popup / widget.fadeOut.
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::ZoneSelector, screenId, m_surfaceManager->nextScopeGeneration());
 
     // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
     // across hide/show cycles; SurfaceAnimator drives the visual fade and
