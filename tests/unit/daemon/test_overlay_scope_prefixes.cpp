@@ -55,12 +55,18 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
 {
     auto anim = std::make_unique<PAL::SurfaceAnimator>(registry, PAL::SurfaceAnimator::Config{});
 
+    // Explicit empty shader fields suppress -Wmissing-field-initializers; mirrors the
+    // pattern in src/daemon/overlayservice.cpp's buildXxxConfig() helpers.
     const PAL::SurfaceAnimator::Config osdConfig{.showProfile = QStringLiteral("osd.show"),
                                                  .hideProfile = QStringLiteral("osd.hide"),
                                                  .showScaleProfile = QStringLiteral("osd.pop"),
                                                  .hideScaleProfile = QStringLiteral("osd.hide"),
                                                  .showScaleFrom = 0.8,
-                                                 .hideScaleTo = 0.9};
+                                                 .hideScaleTo = 0.9,
+                                                 .showShaderEffectId = {},
+                                                 .hideShaderEffectId = {},
+                                                 .showShaderProfile = {},
+                                                 .hideShaderProfile = {}};
     anim->registerConfigForRole(PzRoles::Notification, osdConfig);
 
     const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = QStringLiteral("osd.show"),
@@ -68,19 +74,31 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                           .showScaleProfile = QStringLiteral("osd.pop"),
                                                           .hideScaleProfile = QStringLiteral("osd.hide"),
                                                           .showScaleFrom = 0.9,
-                                                          .hideScaleTo = 0.95};
+                                                          .hideScaleTo = 0.95,
+                                                          .showShaderEffectId = {},
+                                                          .hideShaderEffectId = {},
+                                                          .showShaderProfile = {},
+                                                          .hideShaderProfile = {}};
     anim->registerConfigForRole(PzRoles::LayoutPicker, layoutPickerConfig);
 
     const PAL::SurfaceAnimator::Config zoneSelectorConfig{.showProfile = QStringLiteral("panel.popup"),
                                                           .hideProfile = QStringLiteral("widget.fadeOut"),
                                                           .showScaleProfile = {},
-                                                          .hideScaleProfile = {}};
+                                                          .hideScaleProfile = {},
+                                                          .showShaderEffectId = {},
+                                                          .hideShaderEffectId = {},
+                                                          .showShaderProfile = {},
+                                                          .hideShaderProfile = {}};
     anim->registerConfigForRole(PzRoles::ZoneSelector, zoneSelectorConfig);
 
     const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = QStringLiteral("panel.popup"),
                                                         .hideProfile = {},
                                                         .showScaleProfile = {},
-                                                        .hideScaleProfile = {}};
+                                                        .hideScaleProfile = {},
+                                                        .showShaderEffectId = {},
+                                                        .hideShaderEffectId = {},
+                                                        .showShaderProfile = {},
+                                                        .hideShaderProfile = {}};
     anim->registerConfigForRole(PzRoles::SnapAssist, snapAssistConfig);
 
     return anim;
