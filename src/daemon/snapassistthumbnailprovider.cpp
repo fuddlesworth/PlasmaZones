@@ -13,7 +13,12 @@ SnapAssistThumbnailProvider::SnapAssistThumbnailProvider()
 
 QImage SnapAssistThumbnailProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize)
 {
-    const QString handle = id.section(QLatin1Char('/'), 0, 0);
+    // QML strips the `image://<provider>/` prefix and hands us the path
+    // segment. Cache keys are normalised to the unbraced UUID form on
+    // insert; we apply the same normalisation here so a caller that
+    // hand-builds an `image://plasmazones-snapassist/{uuid}/N` URL still
+    // resolves to the same cache slot.
+    const QString handle = normaliseHandle(id.section(QLatin1Char('/'), 0, 0));
 
     QImage out;
     {
@@ -46,11 +51,12 @@ QString SnapAssistThumbnailProvider::insert(const QString& compositorHandle, QIm
     if (compositorHandle.isEmpty() || image.isNull()) {
         return QString();
     }
+    const QString key = normaliseHandle(compositorHandle);
     QMutexLocker lock(&m_mutex);
     const quint32 gen = ++m_generation;
-    const QString url = makeUrl(compositorHandle, gen);
+    const QString url = makeUrl(key, gen);
     auto* entry = new Entry{std::move(image), url};
-    m_cache.insert(compositorHandle, entry);
+    m_cache.insert(key, entry);
     return url;
 }
 
@@ -59,14 +65,23 @@ QString SnapAssistThumbnailProvider::urlFor(const QString& compositorHandle) con
     if (compositorHandle.isEmpty()) {
         return QString();
     }
+    const QString key = normaliseHandle(compositorHandle);
     QMutexLocker lock(&m_mutex);
-    Entry* cached = m_cache.object(compositorHandle);
+    Entry* cached = m_cache.object(key);
     return cached ? cached->url : QString();
 }
 
 QString SnapAssistThumbnailProvider::makeUrl(const QString& handle, quint32 generation)
 {
     return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(kProviderId), handle).arg(generation);
+}
+
+QString SnapAssistThumbnailProvider::normaliseHandle(const QString& handle)
+{
+    if (handle.size() >= 2 && handle.startsWith(QLatin1Char('{')) && handle.endsWith(QLatin1Char('}'))) {
+        return handle.mid(1, handle.size() - 2);
+    }
+    return handle;
 }
 
 } // namespace PlasmaZones

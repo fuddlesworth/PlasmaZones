@@ -325,6 +325,16 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     externalVulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
 #endif
 
+    // Construct the thumbnail provider eagerly so the borrowed @c m_thumbnailProvider
+    // pointer is non-null from this point onwards. The SurfaceManager (and
+    // its engine) is created next; the engineConfigurator releases ownership
+    // to the engine once it exists. Until then the unique_ptr keeps the
+    // provider alive — there is no longer any window where a D-Bus
+    // setSnapAssistThumbnail call would silently drop because the engine
+    // hasn't materialised yet.
+    m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
+    m_thumbnailProvider = m_thumbnailProviderOwned.get();
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
@@ -334,14 +344,16 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
                 // Bounded LRU cache + image provider for Snap Assist thumbnails.
-                // QQmlEngine::addImageProvider takes ownership of the provider
-                // and tears it down when the engine is destroyed; we keep a
-                // borrowed pointer for inserts on the daemon side. The engine
-                // outlives every QML element it spawns, so QML callbacks that
-                // hit requestImage are safe.
-                auto* provider = new SnapAssistThumbnailProvider();
-                engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::kProviderId), provider);
-                m_thumbnailProvider = provider;
+                // QQmlEngine::addImageProvider takes ownership; transfer the
+                // already-live provider out of the unique_ptr so the engine
+                // becomes the sole owner. The borrowed @c m_thumbnailProvider
+                // raw pointer remains valid for the engine's lifetime, which
+                // outlives every QML element it spawns, so QML callbacks
+                // that hit requestImage are safe.
+                if (m_thumbnailProviderOwned) {
+                    engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::kProviderId),
+                                            m_thumbnailProviderOwned.release());
+                }
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,

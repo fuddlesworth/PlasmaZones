@@ -31,10 +31,12 @@ namespace PlasmaZones {
  * `image://plasmazones-snapassist/<compositorHandle>/<generation>`. The
  * generation token is bumped from a single monotonic counter on every
  * @ref insert so QML's own QQuickPixmap cache re-fetches when a fresh capture
- * arrives. The compositor-handle segment is a braced UUID
- * (KWin EffectWindow::internalId.toString()) — `{xxxxxxxx-xxxx-...}` — which
- * contains no `/`, so a single split on the first separator recovers it
- * cleanly.
+ * arrives. Handles arrive from KWin in braced form
+ * (`{xxxxxxxx-xxxx-...}`); we normalise to the unbraced UUID form before
+ * composing the URL so the path component contains only RFC-3986
+ * unreserved characters and survives any QUrl percent-encoding policy
+ * change unchanged. Cache keys are stored in the same unbraced form so
+ * @ref insert and @ref urlFor accept either spelling from callers.
  *
  * @ref requestImage runs on Qt's image-loader worker thread; all reads and
  * writes go through @ref m_mutex.
@@ -80,6 +82,13 @@ private:
     };
 
     static QString makeUrl(const QString& handle, quint32 generation);
+
+    /// Normalise a handle to the unbraced UUID form used for cache keys and
+    /// URL paths. Accepts both `{xxxxxxxx-...}` and `xxxxxxxx-...` and
+    /// returns the input unchanged if it doesn't match the braced shape —
+    /// non-UUID handles still hash deterministically and round-trip through
+    /// the URL unchanged, which is enough for the provider's contract.
+    static QString normaliseHandle(const QString& handle);
 
     mutable QMutex m_mutex;
     QCache<QString, Entry> m_cache;

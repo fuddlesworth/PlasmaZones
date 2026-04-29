@@ -194,17 +194,9 @@ Window {
                                     cache: false
                                 }
 
-                                Image {
-                                    anchors.fill: parent
-                                    visible: !(candidate && candidate.thumbnail) && !!(candidate && candidate.iconPng)
-                                    fillMode: Image.PreserveAspectFit
-                                    source: (candidate && candidate.iconPng) ? candidate.iconPng : ""
-                                    cache: false
-                                }
-
                                 Kirigami.Icon {
                                     anchors.fill: parent
-                                    visible: !(candidate && candidate.thumbnail) && !(candidate && candidate.iconPng)
+                                    visible: !(candidate && candidate.thumbnail)
                                     source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
                                 }
 

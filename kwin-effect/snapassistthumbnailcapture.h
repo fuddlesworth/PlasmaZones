@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QQueue>
+#include <QSet>
 #include <QSize>
 #include <QUuid>
 #include <QVector>
@@ -87,8 +88,32 @@ private:
     /// icon path otherwise.
     void attemptCapture(Pending p, int delayMs, int retriesLeft);
 
+    /// Mark @p handle as posted to the daemon, evicting the oldest entry
+    /// if the bookkeeping set is at capacity. Called only after a thumbnail
+    /// successfully posts; failures leave the handle un-tracked so the next
+    /// snap-assist invocation will retry.
+    void markRecentlyPosted(const QUuid& handle);
+
+    /// True when @p handle was recently posted to the daemon and is
+    /// (probably) still resident in the daemon's bounded LRU cache.
+    /// Mirrors the daemon's @c SnapAssistThumbnailProvider::kCacheCapacity
+    /// so this side stays in sync with the daemon's eviction window.
+    bool wasRecentlyPosted(const QUuid& handle) const;
+
+    /// Mirror of the daemon-side LRU cap. Kept here as a literal — the
+    /// effect deliberately doesn't depend on the daemon's header. If the
+    /// daemon's capacity ever grows past this, the worst case is a spurious
+    /// re-capture; if the daemon's shrinks below this, we'll skip captures
+    /// the daemon has already evicted (cache miss → QML icon fallback). In
+    /// either direction the failure is bounded and self-correcting.
+    static constexpr int kRecentPostedCapacity = 24;
+
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;
+    /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
+    /// O(1) oldest-first eviction via the queue. Kept strictly in sync.
+    QSet<QUuid> m_recentlyPostedSet;
+    QQueue<QUuid> m_recentlyPostedOrder;
     bool m_busy = false;
 };
 

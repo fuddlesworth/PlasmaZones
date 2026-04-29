@@ -315,6 +315,13 @@ void OverlayService::hideSnapAssist()
     // lifetime) and reused across continuation. Eviction is now automatic
     // via QCache LRU pressure; clearing on every dismiss would only force
     // an expensive recapture on the very next snap.
+    //
+    // Drop the per-show mutable copy though: it's a stale snapshot of the
+    // last open's candidate list once the window is gone, and any
+    // late-arriving setSnapAssistThumbnail call between hide and the next
+    // show should land in the cache only — never mutate this list, since
+    // it'd be replaced wholesale on the next showSnapAssist anyway.
+    m_snapAssistCandidates.clear();
     destroySnapAssistWindow();
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();

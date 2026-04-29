@@ -204,17 +204,25 @@ void TestSnapAssistThumbnailProvider::requestImageHonoursRequestedSize()
 void TestSnapAssistThumbnailProvider::bracedUuidHandleLookup()
 {
     // Compositor handles arrive as braced UUIDs ("{xxxxxxxx-...}"). The
-    // provider keys the cache on the handle exactly as inserted; the URL
-    // path component arrives unencoded after Qt's QUrl round-trip
-    // (verified externally — QUrl::path() decodes %7B/%7D back to braces).
+    // provider normalises to the unbraced form internally so the URL path
+    // component contains only RFC-3986 unreserved characters and survives
+    // QUrl percent-encoding policy changes unchanged. Both braced and
+    // unbraced lookups must resolve to the same cache slot.
     SnapAssistThumbnailProvider p;
     const QUuid u = QUuid::createUuid();
-    const QString h = u.toString();
-    QVERIFY(h.startsWith(QLatin1Char('{')));
-    QVERIFY(h.endsWith(QLatin1Char('}')));
+    const QString braced = u.toString();
+    const QString unbraced = u.toString(QUuid::WithoutBraces);
+    QVERIFY(braced.startsWith(QLatin1Char('{')));
+    QVERIFY(braced.endsWith(QLatin1Char('}')));
 
-    const QString url = p.insert(h, solid(4, 4, Qt::yellow));
-    QVERIFY(url.contains(h)); // braced form survives URL composition
+    const QString url = p.insert(braced, solid(4, 4, Qt::yellow));
+    QVERIFY2(!url.contains(QLatin1Char('{')) && !url.contains(QLatin1Char('}')),
+             "URL must use the unbraced UUID form so QUrl percent-encoding can't break the round-trip.");
+    QVERIFY(url.contains(unbraced));
+
+    // Both spellings hit the same slot.
+    QCOMPARE(p.urlFor(braced), url);
+    QCOMPARE(p.urlFor(unbraced), url);
 
     const QString id = url.section(QLatin1Char('/'), 3, -1);
     QSize sz;
@@ -224,12 +232,15 @@ void TestSnapAssistThumbnailProvider::bracedUuidHandleLookup()
 void TestSnapAssistThumbnailProvider::urlEmbedsHandleAndGeneration()
 {
     SnapAssistThumbnailProvider p;
-    const QString h = brace(QUuid::createUuid());
-    const QString u1 = p.insert(h, solid(2, 2, Qt::red));
-    const QString u2 = p.insert(h, solid(2, 2, Qt::green));
+    const QUuid u = QUuid::createUuid();
+    const QString braced = u.toString();
+    const QString unbraced = u.toString(QUuid::WithoutBraces);
+
+    const QString u1 = p.insert(braced, solid(2, 2, Qt::red));
+    const QString u2 = p.insert(braced, solid(2, 2, Qt::green));
 
     const QString prefix = QStringLiteral("image://") + QString::fromLatin1(SnapAssistThumbnailProvider::kProviderId)
-        + QLatin1Char('/') + h + QLatin1Char('/');
+        + QLatin1Char('/') + unbraced + QLatin1Char('/');
     QVERIFY(u1.startsWith(prefix));
     QVERIFY(u2.startsWith(prefix));
 

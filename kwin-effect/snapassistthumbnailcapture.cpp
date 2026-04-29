@@ -53,17 +53,55 @@ SnapAssistThumbnailCapture::~SnapAssistThumbnailCapture() = default;
 
 void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& candidates, QSize maxSize)
 {
+    // Replace any pending queue from a prior snap-assist invocation. Capture
+    // is bounded by the daemon's QCache LRU; we additionally skip handles we
+    // posted recently, on the assumption the daemon still holds them. The
+    // assumption is allowed to be wrong — see comment on @c kRecentPostedCapacity
+    // for the bounded failure mode.
     m_queue.clear();
+    int skipped = 0;
     for (const auto& c : candidates) {
         if (c.internalId.isNull()) {
             continue;
         }
+        if (wasRecentlyPosted(c.internalId)) {
+            ++skipped;
+            continue;
+        }
         m_queue.enqueue({c.internalId, maxSize});
+    }
+    if (skipped > 0) {
+        qCDebug(lcSnapAssistCapture) << "captureCandidates: skipped" << skipped << "recently-posted of"
+                                     << candidates.size() << "; queued=" << m_queue.size();
     }
     if (m_queue.isEmpty() || m_busy) {
         return;
     }
     QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+}
+
+bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle) const
+{
+    return m_recentlyPostedSet.contains(handle);
+}
+
+void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
+{
+    if (m_recentlyPostedSet.contains(handle)) {
+        // Already tracked — leave the queue position alone. Re-touching here
+        // would require an O(n) lookup-and-erase to refresh recency, and the
+        // daemon's QCache already handles per-handle recency on its own
+        // insert path. Keeping insertion order stable means the eviction
+        // bound mirrors first-post time, which is what we need to match the
+        // daemon's "saw N distinct handles" budget.
+        return;
+    }
+    m_recentlyPostedSet.insert(handle);
+    m_recentlyPostedOrder.enqueue(handle);
+    while (m_recentlyPostedOrder.size() > kRecentPostedCapacity) {
+        const QUuid evicted = m_recentlyPostedOrder.dequeue();
+        m_recentlyPostedSet.remove(evicted);
+    }
 }
 
 void SnapAssistThumbnailCapture::ensureScene()
@@ -114,8 +152,17 @@ void SnapAssistThumbnailCapture::processNext()
 void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retriesLeft)
 {
     QTimer::singleShot(delayMs, this, [this, p, retriesLeft]() {
-        if (!m_scene) {
+        // Bail out if the scene was torn down between schedule and fire (Qt
+        // resource teardown during shutdown), or if it lost its root item
+        // (the QML scene failed to reload after a hot-resource update).
+        // Either way, drop @c m_busy and re-enter the queue loop so a future
+        // captureCandidates() can dispatch fresh work — leaving m_busy=true
+        // would silently wedge the queue forever.
+        if (!m_scene || !m_scene->rootItem()) {
+            qCDebug(lcSnapAssistCapture) << "attemptCapture: scene torn down — aborting" << p.internalId.toString();
+            m_queue.clear();
             m_busy = false;
+            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
             return;
         }
         m_scene->update();
@@ -137,6 +184,7 @@ void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retr
                 image = image.convertToFormat(QImage::Format_ARGB32);
             }
             postThumbnail(p.internalId, image);
+            markRecentlyPosted(p.internalId);
         } else {
             qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
                                          << "produced empty image after retry";

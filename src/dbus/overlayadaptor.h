@@ -7,6 +7,8 @@
 #include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QDBusContext>
+#include <QSet>
 #include <QString>
 
 namespace Phosphor::Screens {
@@ -38,7 +40,15 @@ class ISettings;
  *
  * Uses interface types for loose coupling
  */
-class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
+/**
+ * @brief D-Bus adaptor for overlay control operations.
+ *
+ * Inherits @c QDBusContext (in addition to @c QDBusAbstractAdaptor) so the
+ * @c setSnapAssistThumbnail entry can authenticate its caller — that method
+ * accepts an attacker-influenceable image payload from the unauthenticated
+ * session bus and only @c kwin_wayland is meant to invoke it.
+ */
+class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor, public QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")
@@ -87,6 +97,23 @@ Q_SIGNALS:
                          const PlasmaZones::SnapAssistCandidateList& candidates);
 
 private:
+    /**
+     * @brief Authorise the caller of @ref setSnapAssistThumbnail.
+     *
+     * The thumbnail-injection method is a UI-spoofing primitive in the
+     * wrong hands: any peer on the session bus could otherwise feed
+     * arbitrary 256² PNGs into the daemon's bounded thumbnail cache,
+     * keyed on a compositor handle leaked through the @c snapAssistShown
+     * signal. We bind the call to @c kwin_wayland by resolving the
+     * sender's bus name to a PID via @c GetConnectionUnixProcessID and
+     * checking @c /proc/<pid>/comm. Verified bus names are cached so
+     * the steady-state cost is one map lookup; @c NameOwnerChanged
+     * invalidates the cache.
+     *
+     * @return true if the sender has been authenticated as kwin.
+     */
+    bool authenticateKwinSender();
+
     IOverlayService* m_overlayService; // Interface type (DIP)
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
     // Narrow to IZoneLayoutRegistry — overlay adaptor only reads the active
@@ -94,6 +121,12 @@ private:
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry;
     Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
+
+    /// Set of session-bus unique names previously verified as belonging to
+    /// kwin_wayland. Populated lazily by @ref authenticateKwinSender. Entries
+    /// are evicted when @c NameOwnerChanged reports the name's owner went
+    /// away, so a PID reuse after kwin_wayland exits cannot inherit trust.
+    QSet<QString> m_trustedKwinSenders;
 };
 
 } // namespace PlasmaZones

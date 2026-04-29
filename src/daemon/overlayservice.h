@@ -538,13 +538,19 @@ private:
     QPointer<QScreen> m_snapAssistScreen;
     QString m_snapAssistScreenId;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
-    // Bounded LRU cache + QML image provider. Borrowed pointer — the provider
-    // is added to (and owned by) the QQmlEngine via engineConfigurator below;
-    // the engine outlives every QML reference into it. nullptr until the
-    // SurfaceManager finishes constructing the engine. Thumbnails arrive via
-    // the setSnapAssistThumbnail D-Bus method, which the kwin-effect drives
-    // from inside the compositor (org.kde.kwin's WindowThumbnail rendered
-    // through OffscreenQuickScene).
+    // Bounded LRU cache + QML image provider. Constructed eagerly in the
+    // OverlayService ctor (before the SurfaceManager) so @ref m_thumbnailProvider
+    // is non-null for the daemon's entire lifetime — the previous lazy
+    // pattern left a window between OverlayService construction and first
+    // surface creation where setSnapAssistThumbnail silently dropped. The
+    // owned unique_ptr releases ownership to the QQmlEngine the moment the
+    // engine is created (engineConfigurator below); after that the engine
+    // owns the provider and outlives every QML reference into it.
+    // @ref m_thumbnailProvider remains a borrowed raw pointer either way,
+    // valid for as long as `*this` is alive (member destruction order
+    // tears down the SurfaceManager-owned engine before this raw pointer
+    // becomes meaningful, so the use-after-free hazard is bounded).
+    std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
     // PhosphorZones::Layout Picker overlay (interactive layout browser)
     PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
