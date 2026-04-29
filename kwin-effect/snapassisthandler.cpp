@@ -3,7 +3,6 @@
 
 #include "snapassisthandler.h"
 #include "plasmazoneseffect.h"
-#include "autotilehandler.h"
 #include "kwin_compositor_bridge.h"
 #include "snapassistthumbnailcapture.h"
 
@@ -147,21 +146,30 @@ SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString
         SnapAssistFilter::buildCandidates(m_effect->compositorBridge(), excludeWindowId, screenId, snappedWindowIds);
 
     // KWin-specific: fill compositorHandle (internal UUID) for overlay window identification.
-    // Also apply KWin-specific filters the shared SnapAssistFilter can't know about:
-    //  - exclude windows managed by the autotile engine
-    //  - for virtual screens on the same physical monitor, include sibling VS candidates
-    //    but still drop autotile-managed ones (already handled above).
-    auto* autotile = m_effect->autotileHandler();
-    for (auto it = candidates.begin(); it != candidates.end();) {
-        if (autotile && autotile->isTrackedWindow(it->windowId)) {
-            it = candidates.erase(it);
-            continue;
-        }
-        auto* ew = KWinCompositorBridge::toEffectWindow(m_effect->compositorBridge()->findWindowById(it->windowId));
+    //
+    // Earlier revisions also dropped autotile-tracked candidates here via
+    // @c AutotileHandler::isTrackedWindow, but that flag tracks "we have notified
+    // autotile about this window at some point" — it is NOT a live "this window
+    // currently lives on an autotile screen" check. After a window moves from an
+    // autotile monitor to a manual-mode screen, the flag stays set until autotile's
+    // own bookkeeping catches up; using it here erased perfectly valid candidates
+    // (e.g. a window the user dragged off the autotile monitor onto vs:0) and
+    // stranded snap-assist with zero candidates on the manual screen.
+    //
+    // The screen-membership question is now answered authoritatively in
+    // SnapAssistFilter via @c VirtualScreenId::samePhysical(info.screenId, screenId):
+    // candidates are restricted to the target's physical monitor, and trigger
+    // sites gate on @c !isAutotileScreen(screenId), so by transitivity no
+    // surviving candidate is on an autotile monitor in normal flow.
+    //
+    // Sibling-VS inclusion (windows on the other VS of the same physical monitor
+    // still count as candidates) is also handled inside SnapAssistFilter, so it
+    // does NOT need to be re-applied here.
+    for (auto& c : candidates) {
+        auto* ew = KWinCompositorBridge::toEffectWindow(m_effect->compositorBridge()->findWindowById(c.windowId));
         if (ew) {
-            it->compositorHandle = ew->internalId().toString();
+            c.compositorHandle = ew->internalId().toString();
         }
-        ++it;
     }
     return candidates;
 }

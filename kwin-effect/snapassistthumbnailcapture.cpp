@@ -169,12 +169,18 @@ void SnapAssistThumbnailCapture::ensureScene()
         return;
     }
     // ExportMode::Image: bufferAsImage() returns a usable QImage after
-    // each render. setVisible(false) keeps the FBO alive without ever
-    // mapping the scene to an output. Disable automatic repaint — we
-    // drive update() explicitly once per capture so we know exactly
-    // which frame we're reading back.
+    // each render. Leave visibility at its default (true) — OffscreenQuickView's
+    // setVisible(false) calls releaseResources() on the underlying QQuickWindow,
+    // which tears down the scene graph and stops rendering. With visible=false
+    // m_scene->update() would no-op and bufferAsImage() returns null, so every
+    // candidate would post-empty and snap-assist would strand on icons. The
+    // window is offscreen by construction — there's no wl_surface mapping to
+    // worry about — so visible=true here just keeps the QSGRenderContext live
+    // for the WindowThumbnail QSGTextureNode to render against.
+    //
+    // Disable automatic repaint — we drive update() explicitly once per
+    // capture so we know exactly which frame we're reading back.
     m_scene = std::make_unique<KWin::OffscreenQuickScene>(KWin::OffscreenQuickView::ExportMode::Image);
-    m_scene->setVisible(false);
     m_scene->setAutomaticRepaint(false);
     const QUrl url = thumbnailQmlUrl();
     m_scene->setSource(url);
