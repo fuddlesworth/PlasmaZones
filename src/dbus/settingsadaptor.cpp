@@ -491,7 +491,10 @@ void SettingsAdaptor::initializeRegistry()
                 QJsonDocument(concrete->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
         };
         m_setters[QStringLiteral("shaderProfileTree")] = [concrete](const QVariant& v) -> bool {
-            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            const QString raw = v.toString();
+            if (raw.size() > 64 * 1024)
+                return false;
+            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
             if (!doc.isObject())
                 return false;
             concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));

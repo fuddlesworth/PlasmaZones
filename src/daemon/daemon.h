@@ -547,6 +547,14 @@ private:
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
+    /// Phase 6: animation shader effect discovery. Scans
+    /// `plasmazones/animations` from XDG data dirs and monitors for
+    /// user-dropped packs via QFileSystemWatcher. Declared BEFORE
+    /// m_overlayService (which holds a borrowed pointer via
+    /// m_pendingShaderRegistry) so reverse-order destruction tears
+    /// the service down before this registry.
+    std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
+
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
     /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG
     /// data dirs and register discovered entries with `CurveRegistry`
@@ -555,10 +563,6 @@ private:
     /// as long as the loader.
     std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
     std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
-    /// Phase 6: animation shader effect discovery. Scans
-    /// `plasmazones/animations` from XDG data dirs and monitors for
-    /// user-dropped packs via QFileSystemWatcher.
-    std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
 
     /// Coalescing trampoline for the publish path — see
     /// `requestAnimationProfilePublish`. Single-shot, parented to the

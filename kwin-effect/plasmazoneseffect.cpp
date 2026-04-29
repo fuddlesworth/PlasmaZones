@@ -3435,6 +3435,13 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(targetFrame);
         }
 
+        {
+            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
+            if (!shaderProfile.effectiveEffectId().isEmpty()) {
+                beginShaderTransition(window, shaderProfile.effectiveEffectId());
+            }
+        }
+
         if (m_windowAnimator->hasAnimation(window)) {
             if (m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
                 return; // Already animating to this target
@@ -3465,13 +3472,6 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             }
         } else {
             m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
-        }
-
-        {
-            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
-            if (!shaderProfile.effectiveEffectId().isEmpty()) {
-                beginShaderTransition(window, shaderProfile.effectiveEffectId());
-            }
         }
 
         repaintSnapRegions(window, oldFrame, geo);
@@ -4069,7 +4069,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         if (anim && anim->isAnimating()) {
             const qreal progress = qBound(0.0, anim->state().value, 1.0);
 
-            KWin::ShaderBinder binder(sit->second.shader.get());
+            KWin::ShaderBinder binder(sit->second.shader);
             sit->second.shader->setUniform(sit->second.iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
             sit->second.shader->setUniform(sit->second.iResolutionLoc, QVector2D(geo.width(), geo.height()));
@@ -4087,37 +4087,47 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const 
     if (effectId.isEmpty() || !window)
         return;
 
-    const auto eff = m_animationShaderRegistry.effect(effectId);
-    if (!eff.isValid())
-        return;
+    auto cacheIt = m_shaderCache.find(effectId);
+    if (cacheIt == m_shaderCache.end()) {
+        const auto eff = m_animationShaderRegistry.effect(effectId);
+        if (!eff.isValid())
+            return;
 
-    QFile shaderFile(eff.fragmentShaderPath);
-    if (!shaderFile.open(QIODevice::ReadOnly)) {
-        qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
-        return;
-    }
-    const QByteArray shaderSource = shaderFile.readAll();
-    if (shaderSource.isEmpty()) {
-        qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
-        return;
-    }
+        QFile shaderFile(eff.fragmentShaderPath);
+        if (!shaderFile.open(QIODevice::ReadOnly)) {
+            qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
+            return;
+        }
+        const QByteArray shaderSource = shaderFile.readAll();
+        if (shaderSource.isEmpty()) {
+            qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
+            return;
+        }
 
-    auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
-                                                                        shaderSource);
-    if (!shader || !shader->isValid()) {
-        qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
-        return;
+        auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
+                                                                            shaderSource);
+        if (!shader || !shader->isValid()) {
+            qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
+            return;
+        }
+
+        CachedShader cached;
+        cached.iTimeLoc = shader->uniformLocation("iTime");
+        cached.iResolutionLoc = shader->uniformLocation("iResolution");
+        cached.shader = std::move(shader);
+        cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
 
     endShaderTransition(window);
 
+    const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
-    transition.iTimeLoc = shader->uniformLocation("iTime");
-    transition.iResolutionLoc = shader->uniformLocation("iResolution");
-    transition.shader = std::move(shader);
+    transition.shader = cachedEntry.shader.get();
+    transition.iTimeLoc = cachedEntry.iTimeLoc;
+    transition.iResolutionLoc = cachedEntry.iResolutionLoc;
 
     redirect(window);
-    setShader(window, transition.shader.get());
+    setShader(window, transition.shader);
     m_shaderTransitions.emplace(window, std::move(transition));
 }
 
@@ -4154,6 +4164,7 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                 paths.append(entry.toString());
         }
         if (!paths.isEmpty()) {
+            m_shaderCache.clear();
             m_animationShaderRegistry.addSearchPaths(paths);
         }
     });

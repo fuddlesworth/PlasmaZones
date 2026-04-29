@@ -31,6 +31,7 @@
 #include <QRect>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <unordered_map>
 
@@ -493,13 +494,20 @@ private:
     // invalid and shader transitions gracefully no-op.
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
-    struct ShaderTransition
+    struct CachedShader
     {
         std::unique_ptr<KWin::GLShader> shader;
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
     };
+    struct ShaderTransition
+    {
+        KWin::GLShader* shader = nullptr;
+        int iTimeLoc = -1;
+        int iResolutionLoc = -1;
+    };
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    std::map<QString, CachedShader> m_shaderCache;
     void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();

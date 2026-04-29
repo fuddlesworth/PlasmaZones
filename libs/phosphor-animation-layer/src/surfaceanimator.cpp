@@ -406,7 +406,8 @@ public:
                     shaderItem->setHeight(target->height());
                     shaderItem->setITime(0.0);
                     shaderItem->setIResolution(QSizeF(target->width(), target->height()));
-                    shaderItem->setZ(1000);
+                    static constexpr qreal kShaderOverlayZ = 1000;
+                    shaderItem->setZ(kShaderOverlayZ);
                     it->second.shaderItem = shaderItem;
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
                 }

@@ -1266,6 +1266,9 @@ void Daemon::stop()
     // process-global PhosphorProfileRegistry shed those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
+    if (m_overlayService) {
+        m_overlayService->setAnimationShaderRegistry(nullptr);
+    }
     m_animationShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
