@@ -8,7 +8,7 @@
 namespace PhosphorShaders {
 
 /// Time wrap period for float32 precision preservation.
-/// See docs/phosphorshell-api-design.md for details.
+/// See docs/phosphorshaders-api-design.md for details.
 constexpr double kShaderTimeWrap = 1024.0;
 
 /// GPU uniform buffer layout following std140 rules (base region).

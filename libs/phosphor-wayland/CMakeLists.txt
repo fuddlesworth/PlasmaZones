@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShell — Wayland layer-shell integration (wlr-layer-shell-v1)
+# PhosphorWayland — Wayland layer-shell integration (wlr-layer-shell-v1)
 #
 # A Qt6/C++20 library that wraps zwlr_layer_shell_v1 behind a Qt-friendly
-# QPA shell-integration plugin (`phosphorshell-qpa`) plus a thin
+# QPA shell-integration plugin (`phosphorwayland-qpa`) plus a thin
 # `LayerSurface` helper for setting layer-surface properties on a
 # QWindow. The shader pipeline (BaseUniforms, IUniformExtension,
 # ShaderIncludeResolver, IWallpaperProvider, ShaderRegistry) lives
@@ -18,14 +18,14 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-# PhosphorShell's own version — used for SOVERSION. When split to a
+# PhosphorWayland's own version — used for SOVERSION. When split to a
 # standalone repo, this becomes the project() version.
-set(PHOSPHORSHELL_VERSION "0.1.0")
+set(PHOSPHORWAYLAND_VERSION "0.1.0")
 
 # When built as a subdirectory, inherit the parent project's settings.
 # When standalone, set our own.
 if(NOT PROJECT_VERSION)
-    project(PhosphorShell VERSION ${PHOSPHORSHELL_VERSION} LANGUAGES C CXX)
+    project(PhosphorWayland VERSION ${PHOSPHORWAYLAND_VERSION} LANGUAGES C CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_AUTOMOC ON)
@@ -68,7 +68,7 @@ add_custom_command(
             ${_ps_proto_dir}/wlr-layer-shell-unstable-v1.xml
             ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
     DEPENDS ${_ps_proto_dir}/wlr-layer-shell-unstable-v1.xml
-    COMMENT "PhosphorShell: generating wlr-layer-shell protocol code"
+    COMMENT "PhosphorWayland: generating wlr-layer-shell protocol code"
 )
 
 # Generated C code: skip PCH and unity build
@@ -81,16 +81,16 @@ set_source_files_properties(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PhosphorShell Library
+# PhosphorWayland Library
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # --- Public headers with Q_OBJECT (must be listed for AUTOMOC) ---
-set(phosphorshell_public_HDRS
-    include/PhosphorShell/LayerSurface.h
+set(phosphorwayland_public_HDRS
+    include/PhosphorWayland/LayerSurface.h
 )
 
 # --- Layer-shell sources ---
-set(phosphorshell_layershell_SRCS
+set(phosphorwayland_layershell_SRCS
     src/layersurface.cpp
     src/qpa/layershellintegration.cpp
     src/qpa/layershellintegration.h
@@ -100,16 +100,16 @@ set(phosphorshell_layershell_SRCS
     ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
 )
 
-add_library(PhosphorShell SHARED
-    ${phosphorshell_public_HDRS}
-    ${phosphorshell_layershell_SRCS}
+add_library(PhosphorWayland SHARED
+    ${phosphorwayland_public_HDRS}
+    ${phosphorwayland_layershell_SRCS}
 )
 
-add_library(PhosphorShell::PhosphorShell ALIAS PhosphorShell)
+add_library(PhosphorWayland::PhosphorWayland ALIAS PhosphorWayland)
 
-generate_export_header(PhosphorShell
-    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorshell_export.h
-    EXPORT_MACRO_NAME PHOSPHORSHELL_EXPORT
+generate_export_header(PhosphorWayland
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorwayland_export.h
+    EXPORT_MACRO_NAME PHOSPHORWAYLAND_EXPORT
 )
 
 # Resolve KDE_INSTALL_INCLUDEDIR here so INSTALL_INTERFACE can reference it.
@@ -122,7 +122,7 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
-target_include_directories(PhosphorShell
+target_include_directories(PhosphorWayland
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -133,15 +133,15 @@ target_include_directories(PhosphorShell
 )
 
 # C++20 as a PUBLIC target feature: CMAKE_CXX_STANDARD is only set by the
-# `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorShell is
+# `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorWayland is
 # the top-level project. When built as a subdirectory of PlasmaZones (or
 # any other parent) consumers inherit whatever standard the parent picked.
-# Declare the requirement on the target so find_package(PhosphorShell)
+# Declare the requirement on the target so find_package(PhosphorWayland)
 # consumers get the right compile-feature propagation regardless of build
 # configuration.
-target_compile_features(PhosphorShell PUBLIC cxx_std_20)
+target_compile_features(PhosphorWayland PUBLIC cxx_std_20)
 
-target_link_libraries(PhosphorShell
+target_link_libraries(PhosphorWayland
     PUBLIC
         Qt6::Core
         Qt6::Gui
@@ -151,8 +151,8 @@ target_link_libraries(PhosphorShell
         Wayland::Client
 )
 
-set_target_properties(PhosphorShell PROPERTIES
-    VERSION ${PHOSPHORSHELL_VERSION}
+set_target_properties(PhosphorWayland PROPERTIES
+    VERSION ${PHOSPHORWAYLAND_VERSION}
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
@@ -167,14 +167,14 @@ set_target_properties(PhosphorShell PROPERTIES
 # QPA Shell Integration Plugin (loaded at runtime by Qt)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-add_library(phosphorshell-qpa MODULE src/qpa/phosphorshellplugin.cpp)
-target_link_libraries(phosphorshell-qpa PRIVATE
-    PhosphorShell
+add_library(phosphorwayland-qpa MODULE src/qpa/phosphorwaylandplugin.cpp)
+target_link_libraries(phosphorwayland-qpa PRIVATE
+    PhosphorWayland
     Qt6::WaylandClientPrivate
     Wayland::Client
 )
-target_include_directories(phosphorshell-qpa PRIVATE ${_ps_gen_dir})
-set_target_properties(phosphorshell-qpa PROPERTIES
+target_include_directories(phosphorwayland-qpa PRIVATE ${_ps_gen_dir})
+set_target_properties(phosphorwayland-qpa PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins/wayland-shell-integration
 )
 
@@ -195,59 +195,59 @@ if(NOT DEFINED KDE_INSTALL_BINDIR)
 endif()
 
 # Library
-install(TARGETS PhosphorShell
-    EXPORT PhosphorShellTargets
+install(TARGETS PhosphorWayland
+    EXPORT PhosphorWaylandTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
-# Export the targets file so downstream find_package(PhosphorShell) works AND
+# Export the targets file so downstream find_package(PhosphorWayland) works AND
 # so dependent libraries (PhosphorRendering) can install their own export sets
-# that reference PhosphorShell::PhosphorShell. Without this, install(EXPORT) on
-# any consumer fails: "target requires target PhosphorShell that is not in any
+# that reference PhosphorWayland::PhosphorWayland. Without this, install(EXPORT) on
+# any consumer fails: "target requires target PhosphorWayland that is not in any
 # export set."
-install(EXPORT PhosphorShellTargets
-    FILE PhosphorShellTargets.cmake
-    NAMESPACE PhosphorShell::
-    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShell
+install(EXPORT PhosphorWaylandTargets
+    FILE PhosphorWaylandTargets.cmake
+    NAMESPACE PhosphorWayland::
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorWayland
 )
 
 # Generate and install a minimal find_package config so consumers can
-# `find_dependency(PhosphorShell)`.
+# `find_dependency(PhosphorWayland)`.
 include(CMakePackageConfigHelpers)
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake.in"
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfig.cmake.in"
 "@PACKAGE_INIT@\n"
 "include(CMakeFindDependencyMacro)\n"
 "find_dependency(Qt6 COMPONENTS Core Gui)\n"
-"include(\"\${CMAKE_CURRENT_LIST_DIR}/PhosphorShellTargets.cmake\")\n"
-"check_required_components(PhosphorShell)\n"
+"include(\"\${CMAKE_CURRENT_LIST_DIR}/PhosphorWaylandTargets.cmake\")\n"
+"check_required_components(PhosphorWayland)\n"
 )
 configure_package_config_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake"
-    INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShell
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfig.cmake"
+    INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorWayland
 )
 write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfigVersion.cmake"
-    VERSION ${PHOSPHORSHELL_VERSION}
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfigVersion.cmake"
+    VERSION ${PHOSPHORWAYLAND_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfigVersion.cmake"
-    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShell
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfigVersion.cmake"
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorWayland
 )
 
 # Public headers
-install(DIRECTORY include/PhosphorShell/
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShell
+install(DIRECTORY include/PhosphorWayland/
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorWayland
     FILES_MATCHING PATTERN "*.h"
 )
 
 # Export header
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorshell_export.h
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShell
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorwayland_export.h
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorWayland
 )
 
 # QPA plugin
@@ -257,12 +257,12 @@ if(NOT DEFINED QT6_INSTALL_PLUGINS)
         set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_LIBDIR}/qt6/plugins")
     endif()
 endif()
-install(TARGETS phosphorshell-qpa
+install(TARGETS phosphorwayland-qpa
     DESTINATION ${QT6_INSTALL_PLUGINS}/wayland-shell-integration
 )
 
 # Protocol XML (for downstream development)
 install(DIRECTORY protocols/
-    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorshell/protocols
+    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorwayland/protocols
     FILES_MATCHING PATTERN "*.xml"
 )

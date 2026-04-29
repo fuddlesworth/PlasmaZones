@@ -44,10 +44,10 @@ if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
     find_package(PhosphorIdentity CONFIG REQUIRED)
 endif()
 
-# PhosphorShell ships the wlr-layer-shell QPA integration. ScreenManager
+# PhosphorWayland ships the wlr-layer-shell QPA integration. ScreenManager
 # consumes it for the per-screen geometry sensor windows.
-if(NOT TARGET PhosphorShell::PhosphorShell)
-    find_package(PhosphorShell CONFIG REQUIRED)
+if(NOT TARGET PhosphorWayland::PhosphorWayland)
+    find_package(PhosphorWayland CONFIG REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -121,7 +121,7 @@ target_link_libraries(PhosphorScreens
         Qt6::DBus  # QDBusAbstractAdaptor in DBusScreenAdaptor.h public surface
         PhosphorIdentity::PhosphorIdentity
     PRIVATE
-        PhosphorShell::PhosphorShell  # LayerSurface for geometry sensors
+        PhosphorWayland::PhosphorWayland  # LayerSurface for geometry sensors
 )
 
 set_target_properties(PhosphorScreens PROPERTIES
@@ -176,7 +176,7 @@ write_basic_package_version_file(
     VERSION ${PHOSPHORSCREENS_VERSION}
     # SameMajorVersion matches every other phosphor-* library in this
     # tree (phosphor-identity, phosphor-layer, phosphor-animation,
-    # phosphor-tiles, phosphor-zones, phosphor-shell). Keep the policy
+    # phosphor-tiles, phosphor-zones, phosphor-wayland). Keep the policy
     # uniform across the family so consumers see one compatibility rule
     # rather than per-library divergence.
     COMPATIBILITY SameMajorVersion

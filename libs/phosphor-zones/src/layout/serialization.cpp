@@ -123,7 +123,7 @@ QJsonObject Layout::toJson() const
     // shader-refresh path that calls it when the active shader changes.
     // Keeping Layout decoupled from ShaderRegistry lets the core data type
     // eventually live in a standalone phosphor-zones library without
-    // pulling phosphor-shell into the dependency graph.
+    // pulling phosphor-wayland into the dependency graph.
     if (!m_shaderId.isEmpty()) {
         json[::PhosphorZones::ZoneJsonKeys::ShaderId] = m_shaderId;
     }

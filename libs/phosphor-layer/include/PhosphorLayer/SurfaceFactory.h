@@ -47,7 +47,7 @@ public:
      */
     struct Deps
     {
-        /// Required. Concrete transport implementation (e.g. PhosphorShellTransport).
+        /// Required. Concrete transport implementation (e.g. PhosphorWaylandTransport).
         ILayerShellTransport* transport = nullptr;
 
         /// Required. Source of truth for the QScreen set.

@@ -7,11 +7,11 @@
 # IUniformExtension contract, GLSL #include resolver, wallpaper-provider
 # abstraction, and the metadata-pack-driven ShaderRegistry. The
 # library is Wayland- and RHI-agnostic — phosphor-rendering builds on
-# top of the headers here, and phosphor-shell (the Wayland integration)
+# top of the headers here, and phosphor-wayland (the Wayland integration)
 # does not depend on it.
 #
 # Phase B1 of docs/phosphor-architecture-refactor-plan.md: extracted
-# from phosphor-shell so the layer-shell QPA and shader concerns can be
+# from phosphor-wayland so the layer-shell QPA and shader concerns can be
 # reasoned about independently. The eventual Phase C1 target
 # `MetadataPackScanStrategy<Payload>` will let ShaderRegistry and
 # AnimationShaderRegistry collapse onto the same pack-walker scaffold.

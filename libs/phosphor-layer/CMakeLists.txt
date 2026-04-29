@@ -8,7 +8,7 @@
 # injection, testable abstractions, and consumer-defined presets.
 #
 # Depends on Qt6 Core/Gui/Quick only. The default layer-shell transport
-# (PhosphorShellTransport) is added in a later phase; step 1 ships only
+# (PhosphorWaylandTransport) is added in a later phase; step 1 ships only
 # the abstract API + interfaces so consumers can start integrating now.
 
 cmake_minimum_required(VERSION 3.16)
@@ -28,12 +28,12 @@ include(GenerateExportHeader)
 # Build options
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# PhosphorShellTransport wraps PhosphorShell's wlr-layer-shell integration.
+# PhosphorWaylandTransport wraps PhosphorWayland's wlr-layer-shell integration.
 # Disable for minimal builds that only need XdgToplevelTransport (GNOME/
 # Mutter, nested sessions, environments without wlr-layer-shell). When OFF,
-# PhosphorShell is not a build-time dependency and the corresponding header
+# PhosphorWayland is not a build-time dependency and the corresponding header
 # / source are excluded entirely.
-option(PHOSPHORLAYER_WITH_PHOSPHORSHELL "Build PhosphorShellTransport (requires PhosphorShell)" ON)
+option(PHOSPHORLAYER_WITH_PHOSPHORWAYLAND "Build PhosphorWaylandTransport (requires PhosphorWayland)" ON)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dependencies
@@ -45,15 +45,15 @@ option(PHOSPHORLAYER_WITH_PHOSPHORSHELL "Build PhosphorShellTransport (requires 
 # (QWindow::visibility semantics, Q_DECLARE_FLAGS underlying-type handling)
 # that silently misbehave on older versions rather than failing to compile.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
-if(PHOSPHORLAYER_WITH_PHOSPHORSHELL)
-    # PhosphorShell provides the default ILayerShellTransport implementation.
-    # Listed as PUBLIC dep so downstream consumers using PhosphorShellTransport
-    # get PhosphorShell headers on their include path transitively.
-    find_package(PhosphorShell CONFIG QUIET)
-    if(NOT PhosphorShell_FOUND)
-        # In-tree build: PhosphorShell was added via add_subdirectory() before us.
-        if(NOT TARGET PhosphorShell::PhosphorShell)
-            message(FATAL_ERROR "PhosphorLayer: PHOSPHORLAYER_WITH_PHOSPHORSHELL=ON but PhosphorShell::PhosphorShell not found. Either install PhosphorShell, add it via add_subdirectory() before PhosphorLayer, or build with -DPHOSPHORLAYER_WITH_PHOSPHORSHELL=OFF for the xdg_toplevel-only path.")
+if(PHOSPHORLAYER_WITH_PHOSPHORWAYLAND)
+    # PhosphorWayland provides the default ILayerShellTransport implementation.
+    # Listed as PUBLIC dep so downstream consumers using PhosphorWaylandTransport
+    # get PhosphorWayland headers on their include path transitively.
+    find_package(PhosphorWayland CONFIG QUIET)
+    if(NOT PhosphorWayland_FOUND)
+        # In-tree build: PhosphorWayland was added via add_subdirectory() before us.
+        if(NOT TARGET PhosphorWayland::PhosphorWayland)
+            message(FATAL_ERROR "PhosphorLayer: PHOSPHORLAYER_WITH_PHOSPHORWAYLAND=ON but PhosphorWayland::PhosphorWayland not found. Either install PhosphorWayland, add it via add_subdirectory() before PhosphorLayer, or build with -DPHOSPHORLAYER_WITH_PHOSPHORWAYLAND=OFF for the xdg_toplevel-only path.")
         endif()
     endif()
 endif()
@@ -91,9 +91,9 @@ set(phosphorlayer_public_HDRS
     include/PhosphorLayer/defaults/NoOpSurfaceAnimator.h
 )
 
-if(PHOSPHORLAYER_WITH_PHOSPHORSHELL)
-    list(APPEND phosphorlayer_SRCS src/defaults/phosphorshelltransport.cpp)
-    list(APPEND phosphorlayer_public_HDRS include/PhosphorLayer/defaults/PhosphorShellTransport.h)
+if(PHOSPHORLAYER_WITH_PHOSPHORWAYLAND)
+    list(APPEND phosphorlayer_SRCS src/defaults/phosphorwaylandtransport.cpp)
+    list(APPEND phosphorlayer_public_HDRS include/PhosphorLayer/defaults/PhosphorWaylandTransport.h)
 endif()
 
 add_library(PhosphorLayer SHARED
@@ -146,14 +146,14 @@ target_link_libraries(PhosphorLayer
         Qt6::Quick
 )
 
-if(PHOSPHORLAYER_WITH_PHOSPHORSHELL)
-    # PUBLIC so consumers using PhosphorShellTransport transitively get the
-    # PhosphorShell include path + link. The transport's implementation file
-    # is the only TU that needs PhosphorShell; the public header forward-
-    # declares PhosphorShell::LayerSurface so consumers that don't construct
-    # a PhosphorShellTransport don't pay the include cost.
-    target_link_libraries(PhosphorLayer PUBLIC PhosphorShell::PhosphorShell)
-    target_compile_definitions(PhosphorLayer PUBLIC PHOSPHORLAYER_WITH_PHOSPHORSHELL=1)
+if(PHOSPHORLAYER_WITH_PHOSPHORWAYLAND)
+    # PUBLIC so consumers using PhosphorWaylandTransport transitively get the
+    # PhosphorWayland include path + link. The transport's implementation file
+    # is the only TU that needs PhosphorWayland; the public header forward-
+    # declares PhosphorWayland::LayerSurface so consumers that don't construct
+    # a PhosphorWaylandTransport don't pay the include cost.
+    target_link_libraries(PhosphorLayer PUBLIC PhosphorWayland::PhosphorWayland)
+    target_compile_definitions(PhosphorLayer PUBLIC PHOSPHORLAYER_WITH_PHOSPHORWAYLAND=1)
 endif()
 
 set_target_properties(PhosphorLayer PROPERTIES
@@ -212,15 +212,15 @@ install(DIRECTORY include/PhosphorLayer/defaults/
     FILES_MATCHING PATTERN "*.h"
 )
 
-if(NOT PHOSPHORLAYER_WITH_PHOSPHORSHELL)
-    # The DIRECTORY install above would have shipped PhosphorShellTransport.h
+if(NOT PHOSPHORLAYER_WITH_PHOSPHORWAYLAND)
+    # The DIRECTORY install above would have shipped PhosphorWaylandTransport.h
     # even though its implementation was excluded from the library. Remove it
     # from the install manifest after the fact — the header unconditionally
-    # pulls PhosphorShell symbols, so shipping it in a minimal build would
+    # pulls PhosphorWayland symbols, so shipping it in a minimal build would
     # break any consumer that #includes it expecting the target to resolve.
     install(CODE "
         file(REMOVE
-            \"\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults/PhosphorShellTransport.h\")
+            \"\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults/PhosphorWaylandTransport.h\")
     ")
 endif()
 

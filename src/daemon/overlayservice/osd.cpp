@@ -28,7 +28,7 @@ namespace {
 // physScreenGeom is the full physical screen; targetGeom is the area to center within
 // (same as physScreenGeom for physical screens, or a sub-region for virtual screens).
 // Writes through the PhosphorLayer transport handle — keeps the daemon off the
-// PhosphorShell API so OSDs can migrate to XdgToplevelTransport (or any future
+// PhosphorWayland API so OSDs can migrate to XdgToplevelTransport (or any future
 // transport) without edits here.
 void centerLayerWindowOnScreen(PhosphorLayer::ITransportHandle* handle, const QRect& physScreenGeom,
                                const QRect& targetGeom, int osdWidth, int osdHeight)

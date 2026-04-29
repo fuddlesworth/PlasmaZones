@@ -10,7 +10,7 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerSurface.h>
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -19,7 +19,7 @@
 #include <QTimer>
 #include <QWindow>
 
-using PhosphorShell::LayerSurface;
+using PhosphorWayland::LayerSurface;
 
 namespace Phosphor::Screens {
 
