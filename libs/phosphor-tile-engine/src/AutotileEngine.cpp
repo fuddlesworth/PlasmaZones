@@ -2874,9 +2874,12 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
 
     // Lightweight safety net: the algorithm handles min sizes directly, but
     // enforceWindowMinSizes catches any residual deficits from rounding or
-    // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable constraints).
-    // Skip for overlapping algorithms (Monocle, Cascade, Stair): zones intentionally
-    // overlap and removeZoneOverlaps would destroy the intended layout.
+    // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable
+    // constraints). Skip for any algorithm where producesOverlappingZones()
+    // is true (Monocle, Cascade, Stair, Deck, Paper, Spread, horizontal-deck
+    // and any future opt-in): zones intentionally overlap and the implicit
+    // removeZoneOverlaps inside enforceWindowMinSizes would destroy the
+    // intended layout.
     // minSizes is populated iff respectMin (see above); windowCount > 0 is
     // already guaranteed by the early return at the top of this function.
     if (respectMin && !algo->producesOverlappingZones()) {
@@ -2901,17 +2904,18 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // controls whether the algorithm reflows around min sizes, but it does
     // NOT change KWin's compositor-side enforcement, so we always need this
     // safety net. Position-only; never grows or shrinks zones (size changes
-    // are owned by enforceWindowMinSizes, which is unsafe for overlapping
-    // algorithms).
+    // are owned by enforceWindowMinSizes, which is unsafe for any algorithm
+    // where producesOverlappingZones() is true).
     //
-    // Post-clamp zones may overlap. For overlap stacks (Cascade/Stair) this
-    // is intentional and an offending shift just changes the visible offset
-    // slightly. For non-overlapping algorithms it can also occur when a
-    // window's min-size pressure shifts a zone leftward/upward into its
-    // neighbor; we deliberately do NOT re-run removeZoneOverlaps because it
-    // splits the overlap at the midpoint, moving the shifted zone back
-    // toward the edge it was just clamped away from — exactly re-introducing
-    // the overflow we just fixed.
+    // Post-clamp zones may overlap. For overlap stacks (any algo with
+    // producesOverlappingZones() true — Cascade, Stair, etc.) this is
+    // intentional and a shift just changes the visible offset slightly. For
+    // non-overlapping algorithms it can also occur when a window's min-size
+    // pressure shifts a zone leftward/upward into its neighbor; we
+    // deliberately do NOT re-run removeZoneOverlaps because it splits the
+    // overlap at the midpoint, moving the shifted zone back toward the edge
+    // it was just clamped away from — exactly re-introducing the overflow we
+    // just fixed.
     //
     // Most downstream consumers (applyTiling, geometry batch builders) index
     // calculatedZones by window position, so they're insensitive to overlap.

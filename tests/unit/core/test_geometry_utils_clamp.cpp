@@ -13,8 +13,8 @@
  * ejects the window from the layout.
  *
  * The clamp is a position-only shift — sizes are never changed (size changes
- * are owned by enforceWindowMinSizes, which is unsafe for overlapping
- * algorithms).
+ * are owned by enforceWindowMinSizes, which is unsafe for any algorithm
+ * where producesOverlappingZones() returns true).
  */
 
 #include <QRect>
@@ -258,8 +258,10 @@ private Q_SLOTS:
     void test_sizesPreservedAcrossAllShifts()
     {
         // Belt-and-suspenders: clamp must never change zone width/height,
-        // only x/y. This is the contract that lets it run safely on
-        // overlapping algorithms (Deck/Stair/Cascade/Monocle/Paper).
+        // only x/y. This is the contract that lets it run safely on any
+        // algorithm where producesOverlappingZones() returns true (Deck,
+        // Stair, Cascade, Monocle, Paper, Spread, horizontal-deck, and
+        // any future opt-in).
         QVector<QRect> zones = {
             QRect(2000, 0, 100, 600), // overflows right
             QRect(0, 800, 800, 200), // overflows bottom
@@ -284,8 +286,12 @@ private Q_SLOTS:
     {
         // minSizes covers only the first zone; the second has no minimum and
         // must be left untouched. Pre-PR #388, the size-mismatch early-return
-        // would have left BOTH zones untouched (the production bug — proven
-        // by zones[0] needing to actually grow here).
+        // would have left BOTH zones untouched — a latent guard that PR #388
+        // tightened up to share the tolerant-vector contract with
+        // clampZonesToScreen. (Not the production bug per se: the in-tree
+        // call site always passes equal-length vectors, so the early return
+        // never fired in production. This test locks in the new contract so
+        // the two functions don't drift.)
         //
         // Sizing: greedy stealer caps each steal at neighbor.width() / 3, so
         // pick a deficit ≤ donor/3 (here 100 ≤ 300) to verify enforcement

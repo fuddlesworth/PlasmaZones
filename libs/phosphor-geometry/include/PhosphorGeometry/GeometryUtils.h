@@ -40,13 +40,15 @@ PHOSPHORGEOMETRY_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const 
 // screen (default-constructed QRect) is a no-op.
 //
 // Why position-only: this runs after enforceWindowMinSizes, which is the only
-// path allowed to grow/shrink zones. For overlapping algorithms (Deck/Stair/
-// Cascade/Monocle/Paper) enforceWindowMinSizes is skipped because neighbor-
-// stealing would destroy intentional overlap; a pure position shift is the
-// only safe correction in that case. For non-overlapping algorithms a
-// remaining overflow means the constraint solver couldn't satisfy the layout
-// — shifting accepts that compromise rather than letting the window be
-// pushed onto an adjacent monitor by the compositor's min-size enforcement.
+// path allowed to grow/shrink zones. For any algorithm where
+// producesOverlappingZones() is true (Deck, Stair, Cascade, Monocle, Paper,
+// Spread, horizontal-deck — and any future algo opting in)
+// enforceWindowMinSizes is skipped because neighbor-stealing would destroy
+// intentional overlap; a pure position shift is the only safe correction in
+// that case. For non-overlapping algorithms a remaining overflow means the
+// constraint solver couldn't satisfy the layout — shifting accepts that
+// compromise rather than letting the window be pushed onto an adjacent
+// monitor by the compositor's min-size enforcement.
 PHOSPHORGEOMETRY_EXPORT void clampZonesToScreen(QVector<QRect>& zones, const QVector<QSize>& minSizes,
                                                 const QRect& screen);
 

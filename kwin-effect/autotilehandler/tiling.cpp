@@ -487,9 +487,14 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // resolves the VS region from screenGeometry(screenId); the effect side
     // has no reliable lookup for that here).
     //
-    // Keep the four shift formulas below in sync with
-    // PhosphorGeometry::clampZonesToScreen — same contract, different rect
-    // type (QRectF here, QRect there).
+    // Contract parity with PhosphorGeometry::clampZonesToScreen: both keep
+    // an "effective rect" inside the bounds. The two implementations
+    // intentionally use different size sources — daemon-side uses
+    // max(zone.size, declared minSize) because it runs *before* KWin
+    // enforces min size, while the effect runs *after* and reads the actual
+    // (already-enforced) frame size from `centered`. Same contract, different
+    // input source and rect type (QRectF here, QRect there). Keep the four
+    // shift formulas in sync at the contract level.
     if (auto* output = KWin::effects->screenAt(targetZone.center())) {
         const QRect screenGeo = output->geometry();
         // Use exclusive edges (x + width / y + height) since QRectF::right()
