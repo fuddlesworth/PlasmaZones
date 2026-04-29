@@ -110,8 +110,8 @@ ColumnLayout {
         id: floatSliderComponent
 
         RowLayout {
-            required property var paramData
-            required property var currentValue
+            readonly property var paramData: parent ? parent.paramData : null
+            readonly property var currentValue: parent ? parent.currentValue : 0
 
             spacing: Kirigami.Units.smallSpacing
 
@@ -137,8 +137,8 @@ ColumnLayout {
         id: intSliderComponent
 
         RowLayout {
-            required property var paramData
-            required property var currentValue
+            readonly property var paramData: parent ? parent.paramData : null
+            readonly property var currentValue: parent ? parent.currentValue : 0
 
             spacing: Kirigami.Units.smallSpacing
 
@@ -165,8 +165,8 @@ ColumnLayout {
         id: boolCheckComponent
 
         CheckBox {
-            required property var paramData
-            required property var currentValue
+            readonly property var paramData: parent ? parent.paramData : null
+            readonly property var currentValue: parent ? parent.currentValue : false
 
             checked: currentValue || false
             Accessible.name: paramData ? (paramData.name || paramData.id || "") : ""
