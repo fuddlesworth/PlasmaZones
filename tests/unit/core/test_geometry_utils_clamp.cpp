@@ -116,6 +116,23 @@ private Q_SLOTS:
         // Last zone fits within the VS without min-size pressure — untouched
         // (its right edge 2994+198 = 3192 ≤ 3200).
         QCOMPARE(zones[2], QRect(2994, 40, 198, 1700));
+        // The actual contract being defended: KWin will grow vesktop to its
+        // declared min size, and the resulting effective rect must stay
+        // inside the VS (otherwise it crosses to an adjacent monitor and
+        // gets ejected — the original bug). Lock in effective-rect bounds
+        // rather than just the integer that came out today.
+        const int effRight1 = zones[1].x() + minSizes[1].width();
+        const int effBottom1 = zones[1].y() + minSizes[1].height();
+        QVERIFY2(effRight1 <= screen.x() + screen.width(),
+                 qPrintable(QStringLiteral("effective right %1 must be <= VS right %2")
+                                .arg(effRight1)
+                                .arg(screen.x() + screen.width())));
+        QVERIFY2(effBottom1 <= screen.y() + screen.height(),
+                 qPrintable(QStringLiteral("effective bottom %1 must be <= VS bottom %2")
+                                .arg(effBottom1)
+                                .arg(screen.y() + screen.height())));
+        QVERIFY(zones[1].x() >= screen.x());
+        QVERIFY(zones[1].y() >= screen.y());
     }
 
     // ─── Right/bottom overflow ────────────────────────────────────────────

@@ -30,12 +30,14 @@ QRect snapToRect(const QRectF& rf)
 
 void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold, int innerGap)
 {
-    if (zones.size() != minSizes.size()) {
+    if (zones.isEmpty() || minSizes.isEmpty()) {
         return;
     }
+    // Tolerate minSizes shorter/longer than zones — see header doc. Aligned
+    // with clampZonesToScreen so callers don't need to special-case the two.
     for (int i = 0; i < zones.size(); ++i) {
         QRect& zone = zones[i];
-        const QSize& minSize = minSizes[i];
+        const QSize minSize = (i < minSizes.size()) ? minSizes[i] : QSize();
         if (minSize.isEmpty()) {
             continue;
         }

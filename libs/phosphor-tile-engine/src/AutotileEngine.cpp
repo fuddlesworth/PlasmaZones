@@ -2880,7 +2880,9 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable constraints).
     // Skip for overlapping algorithms (Monocle, Cascade, Stair): zones intentionally
     // overlap and removeZoneOverlaps would destroy the intended layout.
-    if (respectMin && !minSizes.isEmpty() && !algo->producesOverlappingZones()) {
+    // minSizes is populated iff respectMin (see above); windowCount > 0 is
+    // already guaranteed by the early return at the top of this function.
+    if (respectMin && !algo->producesOverlappingZones()) {
         const int threshold =
             effectiveInnerGap(screenId) + qMax(PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx, 12);
         const QVector<QRect> preEnforceZones = zones;
@@ -2903,9 +2905,19 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // NOT change KWin's compositor-side enforcement, so we always need this
     // safety net. Position-only; never grows or shrinks zones (size changes
     // are owned by enforceWindowMinSizes, which is unsafe for overlapping
-    // algorithms). For an overlap stack (Cascade/Stair), shifting only the
-    // offending zone may change the visible staircase offset slightly — that
-    // is a strictly preferable degradation to ejection.
+    // algorithms).
+    //
+    // Post-clamp zones may overlap. For overlap stacks (Cascade/Stair) this
+    // is intentional and an offending shift just changes the visible offset
+    // slightly. For non-overlapping algorithms it can also occur when a
+    // window's min-size pressure shifts a zone leftward/upward into its
+    // neighbor; we deliberately do NOT re-run removeZoneOverlaps because it
+    // splits the overlap at the midpoint, moving the shifted zone back
+    // toward the edge it was just clamped away from — exactly re-introducing
+    // the overflow we just fixed. Downstream consumers of the calculated
+    // zones index by window position rather than spatial lookup, so the
+    // overlap doesn't break correctness; it's a strictly preferable
+    // degradation to ejection.
     const QVector<QRect> preClampZones = zones;
     PhosphorGeometry::clampZonesToScreen(zones, windowMinSizes, screen);
     if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled()) && zones != preClampZones) {
