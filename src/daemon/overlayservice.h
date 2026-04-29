@@ -62,8 +62,8 @@ class AnimationShaderRegistry;
 }
 
 namespace PlasmaZones {
-class WindowThumbnailService;
 class ShaderRegistry;
+class SnapAssistThumbnailProvider;
 }
 namespace Phosphor::Screens {
 class ScreenManager;
@@ -308,7 +308,8 @@ public:
                         const SnapAssistCandidateList& candidates) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
-    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) override;
+    bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+                                const QByteArray& pixels) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
@@ -537,10 +538,48 @@ private:
     QQuickWindow* m_snapAssistWindow = nullptr;
     QPointer<QScreen> m_snapAssistScreen;
     QString m_snapAssistScreenId;
-    std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
-    QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
-    QHash<QString, QString> m_thumbnailCache; // compositorHandle -> dataUrl; reused across continuation
+    // Bounded LRU cache + QML image provider. Constructed eagerly in the
+    // OverlayService ctor (before the SurfaceManager) so @ref m_thumbnailProvider
+    // is non-null for the daemon's entire lifetime — the previous lazy
+    // pattern left a window between OverlayService construction and first
+    // surface creation where setSnapAssistThumbnail silently dropped. The
+    // owned unique_ptr releases ownership to the QQmlEngine the moment the
+    // engine is created (engineConfigurator below); after that the engine
+    // owns the provider and outlives every QML reference into it.
+    //
+    // Lifetime invariant — single-threaded teardown with no event-loop
+    // pumping during the destructor window. Concretely:
+    //
+    //   1. ~QQmlEngine body destroys the registered image providers —
+    //      the underlying SnapAssistThumbnailProvider object is freed
+    //      here.
+    //   2. ~QObject body emits `destroyed`; the lambda installed in
+    //      engineConfigurator fires and sets m_thumbnailProvider to
+    //      nullptr.
+    //
+    // Between (1) and (2) the borrowed raw pointer is briefly dangling
+    // — the lambda runs *after* the provider has been deleted because
+    // C++ destruction order is derived-then-base. Safety in this window
+    // rests on two independent facts, not on ordering:
+    //
+    //   - ~QQmlEngine does not pump the main-thread event loop, so no
+    //     posted D-Bus dispatch / QObject event can run on this thread
+    //     during the window. Same-thread readers physically cannot
+    //     witness the dangling pointer.
+    //   - Cross-thread reads go through QML's image-loader path
+    //     (requestImage); Qt drains in-flight image requests as part of
+    //     the engine teardown that destroys the providers, so no
+    //     worker-thread reader is in flight either.
+    //
+    // If the teardown invariant ever changes — SurfaceManager teardown
+    // moving to a worker thread, an engine-recreation path, or anything
+    // that pumps the event loop inside ~QQmlEngine — replace
+    // m_thumbnailProvider with std::atomic and serialise the lambda
+    // null-out against readers. The current safety is contract-level,
+    // not structural.
+    std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
+    SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
     // PhosphorZones::Layout Picker overlay (interactive layout browser)
     PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;
@@ -651,10 +690,11 @@ private:
      */
     void setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry);
 
-    /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
-    void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl);
-    /** Process next thumbnail in queue (sequential capture to avoid KWin overload). */
-    void processNextThumbnailCapture();
+    /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML.
+     *  @return true iff the image was inserted into the bounded LRU cache.
+     *          False if the provider was torn down (engine destroyed) or the
+     *          image was null after format conversion. */
+    bool updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland
