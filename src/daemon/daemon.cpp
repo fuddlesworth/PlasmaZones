@@ -22,7 +22,8 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/qml/PhosphorCurve.h>
+#include <PhosphorAnimationQml/PhosphorCurve.h>
+#include <PhosphorAnimationQml/QtQuickClockManager.h>
 
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
@@ -49,6 +50,7 @@
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
+#include "../core/animationbootstrap.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include "../config/configdefaults.h"
@@ -97,6 +99,14 @@ Daemon::Daemon(QObject* parent)
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
                                                                       QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
+    // m_curveRegistry / m_profileRegistry are default-constructed (no
+    // init-list entries) — daemon.h declares them between m_layoutComputeService
+    // and m_clockManager, so the in-class default initialisation runs before
+    // any consumer below references them. m_clockManager owns its
+    // QtQuickClockManager via unique_ptr; the manager itself is published
+    // as the QML-side default in setupAnimationProfiles() below alongside
+    // the profile registry.
+    , m_clockManager(std::make_unique<PhosphorAnimation::QtQuickClockManager>())
     // Pass &m_curveRegistry into Settings so its initial load() resolves
     // Profile blobs through the daemon-owned registry. Requires
     // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
@@ -120,7 +130,8 @@ Daemon::Daemon(QObject* parent)
           },
           nullptr))
     , m_shaderRegistry(std::make_unique<ShaderRegistry>(nullptr))
-    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), nullptr))
+    , m_overlayService(
+          std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), &m_profileRegistry, nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
@@ -238,13 +249,12 @@ void Daemon::setupAnimationProfiles()
 {
     using namespace PhosphorAnimation;
 
-    // Wipe any entries left over from a previous Daemon instance. The
-    // PhosphorProfileRegistry is a process-global singleton (see its
-    // header for the rationale), so a Daemon rebuilt in the same
-    // process — typical in tests, occasionally in production on
-    // config reload — would otherwise inherit stale profiles from the
-    // prior instance, firing spurious profileChanged against bindings
-    // that have long since disappeared.
+    // Wipe any entries left over from prior wiring on this same daemon
+    // instance. The registry is a daemon-owned member, so a fresh
+    // Daemon construction always starts with an empty registry — but
+    // setupAnimationProfiles is also called on configure-reload paths
+    // where prior loaders may have populated the partitions; clearing
+    // here keeps the post-condition uniform.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -252,98 +262,37 @@ void Daemon::setupAnimationProfiles()
     // Wholesale `clear()` would also evict any other consumer's
     // entries if they happened to register before us — not a concern
     // in production today but the narrower scope is the correct
-    // contract for a shared registry.
-    auto& registry = PhosphorProfileRegistry::instance();
+    // contract for a registry that may be shared with other consumers
+    // in future multi-publisher configurations.
+    PhosphorProfileRegistry& registry = m_profileRegistry;
     registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
     for (const QString* path : kSettingsDrivenProfilePaths) {
         registry.unregisterProfile(*path);
     }
 
-    // User-authored curve + profile packs. Consumer namespace is
-    // `plasmazones/` per the LayoutManager precedent — library-level
-    // CurveLoader / ProfileLoader are agnostic (decision U); the daemon
-    // picks PlasmaZones's namespace here.
+    // Discover XDG `plasmazones/{curves,profiles}` dirs, materialise the
+    // user-writable dirs, construct the loaders, and wire the
+    // curveLoader→profileLoader rescan. Shared with the secondary
+    // composition roots (settings / editor) via `AnimationBootstrap` —
+    // both paths funnel through `constructAnimationLoaders` so the
+    // dir-discovery and loader-construction logic only exists in one
+    // place. The owner tag here is daemon-specific so the registry's
+    // partitioned-ownership map keeps daemon-loaded user JSON entries
+    // distinct from any secondary process's loader entries (today
+    // they're separate processes, but the partitioning preserves the
+    // contract).
     //
-    // `QStandardPaths::locateAll` returns directories in priority order —
-    // the writable user location FIRST, system dirs AFTER. The loader
-    // iterates in caller-supplied order and lets later entries override
-    // earlier on key collision, so we reverse to achieve the standard
-    // "system first, user wins last" layering (decision X). Matches
-    // LayoutManager::loadLayouts (src/core/layoutmanager/persistence.cpp).
-    QStringList curveDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/curves"), QStandardPaths::LocateDirectory);
-    std::reverse(curveDirs.begin(), curveDirs.end());
-    QStringList profileDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/profiles"), QStandardPaths::LocateDirectory);
-    std::reverse(profileDirs.begin(), profileDirs.end());
-
-    // locateAll returns an empty list when none of the candidate dirs
-    // exist yet (fresh install). Unconditionally include the writable
-    // location so the loader can watch it via the parent-directory
-    // fallback — once the user drops a file there, the watcher fires
-    // and the loader picks it up without a daemon restart.
-    const QString userCurveDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/curves");
-    if (!curveDirs.contains(userCurveDir)) {
-        curveDirs.append(userCurveDir);
-    }
-    const QString userProfileDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/profiles");
-    if (!profileDirs.contains(userProfileDir)) {
-        profileDirs.append(userProfileDir);
-    }
-
-    // Materialise the user dirs eagerly so live-reload works on fresh
-    // installs. `WatchedDirectorySet`'s parent-watch climb refuses to
-    // attach a `QFileSystemWatcher` to forbidden ancestors (`$HOME`,
-    // `$XDG_DATA_HOME`, etc.) — without these dirs existing, the climb
-    // terminates at `~/.local/share` and NO watch is installed. The
-    // user could then drop `~/.local/share/plasmazones/profiles/foo.json`
-    // and live-reload would silently never fire until daemon restart.
-    // Mirrors `ScriptedAlgorithmLoader::ensureUserDirectoryExists` and
-    // the ShaderRegistry ctor's `mkpath`. Failures are non-fatal — the
-    // initial on-demand scan still works without a watch.
-    QDir().mkpath(userCurveDir);
-    QDir().mkpath(userProfileDir);
-
-    // Construct loaders with NO initial load — the loadFromDirectories
-    // calls below trigger the first scan AFTER every consumer signal is
-    // wired. A loader's initial-scan profilesChanged emit otherwise fires
-    // before the publishActiveAnimationProfile listener exists and is
-    // silently dropped — we'd still get a correct snapshot via the
-    // explicit publish call at the bottom, but the signal-driven path
-    // would be quietly broken until something else triggered a republish.
-    //
-    // Registry reference is captured at loader construction — this
-    // prevents any later async rescan from landing on a different
-    // registry than the one the daemon initialized against.
-    //
-    // ProfileLoader is bound to PhosphorProfileRegistry with a
-    // PlasmaZones-specific owner tag. Entries it registers are tagged
-    // `kPlasmaZonesUserProfilesOwnerTag` in the registry's partitioned-ownership
-    // map, so a rescan replaces ONLY the user's JSON-backed profiles;
-    // the daemon's settings-fanned profiles registered below via
-    // `publishActiveAnimationProfile` are owned by the empty/direct
-    // tag and survive untouched.
-    m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
-    m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(), m_curveRegistry,
-                                                      kPlasmaZonesUserProfilesOwnerTag, nullptr);
-
-    // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
-    // whose `curve` spec references a user-authored curve name that
-    // wasn't yet in CurveRegistry at parse time is stored with
-    // `curve = nullptr` (falls back to library default at animation
-    // time). When the user drops or edits a curve JSON AFTER the
-    // profile files were scanned, we need to re-parse every profile
-    // so the newly-available curve gets resolved. Without this wire,
-    // drop-order-matters: curves-before-profiles works, profiles-
-    // before-curves silently loses the curve reference until the
-    // profile file itself is touched.
-    //
-    // ProfileLoader::requestRescan goes through DirectoryLoader's
-    // debounced rescan path, so a curve-pack edit that changes many
-    // files coalesces into one profile rescan.
-    connect(m_curveLoader.get(), &CurveLoader::curvesChanged, m_profileLoader.get(), &ProfileLoader::requestRescan);
+    // The initial `loadFromDirectories` scan is deferred until AFTER
+    // the daemon's pre-scan signal wiring below — a loader's
+    // initial-scan emit otherwise fires before the
+    // publishActiveAnimationProfile listener is installed and is
+    // silently dropped. Triggered explicitly via
+    // `runInitialAnimationLoad` further down.
+    auto loaderHandles =
+        constructAnimationLoaders(m_curveRegistry, m_profileRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
+    m_curveLoader = std::move(loaderHandles.curveLoader);
+    m_profileLoader = std::move(loaderHandles.profileLoader);
+    const AnimationLoaderDirs loaderDirs = std::move(loaderHandles.dirs);
 
     // Connect BEFORE the initial scans below so any signal Settings
     // fires during load (or any signal the ProfileLoader fires during
@@ -402,18 +351,26 @@ void Daemon::setupAnimationProfiles()
     // across process-lifetime Daemon reconstruction (e.g. in tests).
     PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
 
-    // Initial scans — order is curves-before-profiles so profile files
-    // referencing user-authored curve names resolve on first parse
-    // rather than waiting for the curveLoader→profileLoader rescan wire
-    // to fire on the second pass.
-    //
-    // Library-level pack first (today a no-op — the library ships no
-    // bundled curves/profiles — but kept for future curve-pack additions).
-    m_curveLoader->loadLibraryBuiltins();
-    m_curveLoader->loadFromDirectories(curveDirs, LiveReload::On);
+    // Publish the daemon-owned PhosphorProfileRegistry as the QML-side
+    // default — every `PhosphorMotionAnimation { profile: "<path>" }`
+    // in the overlay shell resolves through this pointer. Phase A3 of
+    // the architecture refactor: replaces the prior
+    // `PhosphorProfileRegistry::instance()` Meyers singleton with
+    // explicit composition-root publication. Cleared in `stop()` before
+    // the registry destructs.
+    PhosphorProfileRegistry::setDefaultRegistry(&m_profileRegistry);
 
-    m_profileLoader->loadLibraryBuiltins();
-    m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
+    // Publish the daemon-owned QtQuickClockManager as the QML-side
+    // default — `PhosphorAnimatedValueBase::resolveClock` in any
+    // `PhosphorAnimatedReal/Color/Point/Rect/Size` instance that the
+    // overlay shell instantiates resolves through this pointer.
+    // Cleared in `stop()` before the manager destructs.
+    QtQuickClockManager::setDefaultManager(m_clockManager.get());
+
+    // Initial scans — curves-before-profiles ordering and library-builtins-
+    // before-disk-dirs are encoded in the helper so secondary composition
+    // roots get the same shape.
+    runInitialAnimationLoad(*m_curveLoader, *m_profileLoader, loaderDirs);
 
     // Final explicit publish covers the case where neither the Settings
     // nor the ProfileLoader emitted during the loads above (e.g. fresh
@@ -455,7 +412,7 @@ void Daemon::publishActiveAnimationProfile()
     // This runs on the settings-slider hot path (~30 Hz during drag),
     // so O(1) `hasPath` is used instead of `entries()` which copies
     // and sorts the full tracked set on every tick.
-    auto& reg = PhosphorProfileRegistry::instance();
+    auto& reg = m_profileRegistry;
 
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
@@ -1212,15 +1169,16 @@ void Daemon::stop()
         return;
     }
 
-    // Null the QML static registry pointer before our m_curveRegistry
-    // member is destroyed (unique_ptr member destruction runs AFTER
-    // ~Daemon body but after stop() completes — tearing the static's
-    // borrowed pointer now guarantees no QML PhosphorCurve.fromString()
-    // call landing during teardown or in a subsequent Daemon instance
-    // dereferences freed memory.
+    // Null the QML static registry / manager pointers before our owned
+    // members are destroyed (unique_ptr / value-typed member destruction
+    // runs AFTER ~Daemon body completes — tearing the static borrowed
+    // pointers now guarantees no QML callsite landing during teardown
+    // or in a subsequent Daemon instance dereferences freed memory.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
 
-    // Tear down the process-global PhosphorProfileRegistry entries this
+    // Tear down the daemon-owned PhosphorProfileRegistry entries this
     // Daemon published so a later Daemon reconstruction (tests, or a
     // live reconfigure that tears down and rebuilds the daemon in
     // place) starts from a registry owning none of our entries. Mirrors
@@ -1241,7 +1199,7 @@ void Daemon::stop()
     //     `~Daemon` body where they'd fire path-change signals into a
     //     half-destroyed object during member destruction order.
     {
-        auto& profileRegistry = PhosphorAnimation::PhosphorProfileRegistry::instance();
+        auto& profileRegistry = m_profileRegistry;
         for (const QString* path : kSettingsDrivenProfilePaths) {
             profileRegistry.unregisterProfile(*path);
         }

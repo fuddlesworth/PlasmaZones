@@ -21,6 +21,11 @@ class TestProfileLoader : public QObject
 
 private:
     CurveRegistry m_curveRegistry;
+    /// Per-test-fixture profile registry. Phase A3 of the architecture
+    /// refactor retired `m_profileRegistry` —
+    /// composition roots and tests own their own registries. Each test
+    /// method gets a freshly cleared registry via init() / cleanup().
+    PhosphorProfileRegistry m_profileRegistry;
     void writeFile(const QString& path, const QString& contents) const
     {
         QFile f(path);
@@ -32,28 +37,25 @@ private:
 private Q_SLOTS:
     void init()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_profileRegistry.clear();
     }
 
     /// Guarantees no registry state leaks between test methods even
-    /// when a test forgets to clean up after itself. Without this,
-    /// later tests (including tests in other executables that hit the
-    /// same process-singleton when run together) can see stale entries
-    /// from whichever prior test exited last. `init()` already clears
-    /// on entry, but pairing with `cleanup()` keeps the guarantee
-    /// end-to-end rather than entry-only.
+    /// when a test forgets to clean up after itself. `init()` already
+    /// clears on entry, but pairing with `cleanup()` keeps the
+    /// guarantee end-to-end rather than entry-only.
     void cleanup()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_profileRegistry.clear();
     }
 
     /// Missing directory is a no-op.
     void testMissingDirectoryIsNoOp()
     {
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         const int n = loader.loadFromDirectory(QStringLiteral("/no/such/dir"));
         QCOMPARE(n, 0);
-        QCOMPARE(PhosphorProfileRegistry::instance().profileCount(), 0);
+        QCOMPARE(m_profileRegistry.profileCount(), 0);
     }
 
     /// Valid profile JSON — path from name field, profile fields
@@ -69,10 +71,10 @@ private Q_SLOTS:
             "minDistance": 0
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 1);
 
-        auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("overlay.fade"));
+        auto resolved = m_profileRegistry.resolve(QStringLiteral("overlay.fade"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(0.0), 250.0);
         QVERIFY(resolved->curve);
@@ -86,7 +88,7 @@ private Q_SLOTS:
             "duration": 250
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
@@ -96,7 +98,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         writeFile(dir.filePath(QStringLiteral("broken.json")), QStringLiteral("{\"name\": \"x\", broken"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
@@ -117,10 +119,10 @@ private Q_SLOTS:
             "duration": 500
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectories({systemDir.path(), userDir.path()});
 
-        auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("x"));
+        auto resolved = m_profileRegistry.resolve(QStringLiteral("x"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(0.0), 500.0);
 
@@ -141,9 +143,9 @@ private Q_SLOTS:
             "duration": 150
         })"));
 
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
-        auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("overlay.fade"));
+        auto resolved = m_profileRegistry.resolve(QStringLiteral("overlay.fade"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->presetName.value_or(QString()), QStringLiteral("My Overlay Preset"));
     }
@@ -161,10 +163,10 @@ private Q_SLOTS:
             "duration": 123,
             "minDistance": 7
         })"));
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
 
-        auto resolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("a"));
+        auto resolved = m_profileRegistry.resolve(QStringLiteral("a"));
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(-1.0), 123.0);
         QCOMPARE(resolved->minDistance.value_or(-1), 7);
@@ -183,7 +185,7 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
 
         // Round-trip sanity: the registry reflects the new values.
-        auto reResolved = PhosphorProfileRegistry::instance().resolve(QStringLiteral("a"));
+        auto reResolved = m_profileRegistry.resolve(QStringLiteral("a"));
         QVERIFY(reResolved.has_value());
         QCOMPARE(reResolved->duration.value_or(-1.0), 456.0);
         QCOMPARE(reResolved->minDistance.value_or(-1), 9);
@@ -201,7 +203,7 @@ private Q_SLOTS:
             "duration": 200,
             "minDistance": 5
         })"));
-        ProfileLoader loader(PhosphorProfileRegistry::instance(), m_curveRegistry, QStringLiteral("test"));
+        ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
 
         // Attach spy AFTER initial load — only interested in the
@@ -220,7 +222,7 @@ private Q_SLOTS:
     /// blocker that caused daemon fan-out profiles to be evicted.
     void testLoaderDoesNotWipeDaemonDirectEntries()
     {
-        auto& reg = PhosphorProfileRegistry::instance();
+        auto& reg = m_profileRegistry;
 
         // Daemon publishes a "direct" (untagged) entry first.
         Profile daemonProfile;
@@ -251,7 +253,7 @@ private Q_SLOTS:
     /// actually exercises it.
     void testDeleteUserRestoresSystem()
     {
-        auto& reg = PhosphorProfileRegistry::instance();
+        auto& reg = m_profileRegistry;
 
         QTemporaryDir systemDir;
         QTemporaryDir userDir;

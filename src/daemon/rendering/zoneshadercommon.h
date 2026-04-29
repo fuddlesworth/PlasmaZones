@@ -18,6 +18,6 @@ using PhosphorRendering::ZoneData;
 using PhosphorRendering::ZoneDataSnapshot;
 using PhosphorRendering::ZoneRect;
 using PhosphorRendering::ZoneShaderUniforms;
-using PhosphorShell::kShaderTimeWrap;
+using PhosphorShaders::kShaderTimeWrap;
 
 } // namespace PlasmaZones

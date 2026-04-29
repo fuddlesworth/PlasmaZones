@@ -6,7 +6,7 @@
 # A Qt6/C++20 library for Shadertoy-compatible fragment shader rendering
 # with multipass buffer support, texture management, and uniform extensions.
 #
-# Depends on PhosphorShell for BaseUniforms, IUniformExtension, and
+# Depends on PhosphorShaders for BaseUniforms, IUniformExtension, and
 # ShaderIncludeResolver.
 
 cmake_minimum_required(VERSION 3.16)
@@ -106,7 +106,7 @@ target_link_libraries(PhosphorRendering
         Qt6::Core
         Qt6::Gui
         Qt6::Quick
-        PhosphorShell::PhosphorShell
+        PhosphorShaders::PhosphorShaders
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -168,10 +168,10 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorRendering/phosphorrendering_ex
 # CMake Package Config (for find_package(PhosphorRendering))
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# PhosphorShell exports its targets (PhosphorShell::PhosphorShell) and provides
-# a find_package config, so we can install our own export set unconditionally —
-# downstream `find_package(PhosphorRendering)` resolves the PhosphorShell
-# dependency through find_dependency() in our generated config.
+# PhosphorShaders exports its targets (PhosphorShaders::PhosphorShaders) and
+# provides a find_package config, so we can install our own export set
+# unconditionally — downstream `find_package(PhosphorRendering)` resolves the
+# PhosphorShaders dependency through find_dependency() in our generated config.
 
 include(CMakePackageConfigHelpers)
 

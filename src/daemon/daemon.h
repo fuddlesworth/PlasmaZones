@@ -25,6 +25,8 @@ class PlasmaPanelSource;
 }
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimationQml/QtQuickClockManager.h>
 #include <PhosphorConfig/IBackend.h>
 
 namespace PhosphorAnimation {
@@ -471,6 +473,28 @@ private:
     /// dangle into freed memory on process shutdown or successive
     /// Daemon constructions in tests.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
+    /// Per-daemon profile registry. Replaces the prior process-global
+    /// `PhosphorProfileRegistry::instance()` singleton — composition
+    /// roots own their own and publish via `setDefaultRegistry` so QML
+    /// callsites resolve through the same instance the daemon
+    /// populates from Settings + ProfileLoader.
+    ///
+    /// DECLARATION ORDER INVARIANT: must be declared BEFORE
+    /// `m_overlayService` (which takes a reference into its
+    /// SurfaceAnimator) and BEFORE `m_profileLoader` (which holds a
+    /// reference). Reverse-order destruction then tears the consumers
+    /// down before the registry itself, guaranteeing no UAF on the
+    /// service / loader teardown paths. The `setDefaultRegistry(nullptr)`
+    /// call in `stop()` clears the QML static handle before teardown.
+    PhosphorAnimation::PhosphorProfileRegistry m_profileRegistry;
+    /// Per-daemon QtQuickClock manager — replaces the prior process-
+    /// global `QtQuickClockManager::instance()` singleton. Published via
+    /// `setDefaultManager` so any `PhosphorAnimatedValueBase`-derived
+    /// QML type in the overlay shell resolves the same per-window
+    /// clocks as the C++ side. Owned over the daemon lifetime; the
+    /// destroy-time `setDefaultManager(nullptr)` call in `stop()` drops
+    /// the published handle before the unique_ptr destructs.
+    std::unique_ptr<PhosphorAnimation::QtQuickClockManager> m_clockManager;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
     // Single source of truth for live-window instance identity + metadata.

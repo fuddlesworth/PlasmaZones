@@ -6,6 +6,8 @@
 #include "../core/animationbootstrap.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include <PhosphorAnimationQml/PhosphorCurve.h>
+#include <PhosphorAnimationQml/QtQuickClockManager.h>
 #include <PhosphorShell/LayerShellPluginLoader.h>
 #include <PhosphorShell/LayerSurface.h>
 #include <PhosphorScreens/Resolver.h>
@@ -19,6 +21,7 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QLibrary>
+#include <QScopeGuard>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QCommandLineParser>
@@ -188,6 +191,21 @@ int main(int argc, char* argv[])
     // 150 ms regardless of the shipped profile data. Must outlive the QML
     // engine (Behavior bindings keep registry handles).
     PlasmaZones::AnimationBootstrap animationBootstrap;
+
+    // Publish the bootstrap-owned registries + a fresh clock manager as
+    // the QML-side defaults. Phase A3 of the architecture refactor
+    // retired the prior `PhosphorProfileRegistry::instance()` /
+    // `QtQuickClockManager::instance()` Meyers singletons — composition
+    // roots own and publish their own.
+    PhosphorAnimation::QtQuickClockManager clockManager;
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(animationBootstrap.curveRegistry());
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(animationBootstrap.profileRegistry());
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(&clockManager);
+    auto unpublishAnimationDefaults = qScopeGuard([] {
+        PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
+        PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+    });
 
     // Create the editor controller. This is cheap: wires up services and
     // loads local KConfig but does not make any blocking D-Bus calls to

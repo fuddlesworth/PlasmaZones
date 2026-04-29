@@ -85,19 +85,25 @@ class TestAnimationProfilePublication : public QObject
 {
     Q_OBJECT
 
+private:
+    /// Per-test-fixture profile registry, mirroring the daemon's owned
+    /// `m_profileRegistry`. Phase A3 of the architecture refactor
+    /// retired `PhosphorProfileRegistry::instance()`.
+    PhosphorProfileRegistry m_registry;
+
 private Q_SLOTS:
 
     void init()
     {
-        // Each test starts with a clean process-wide profile registry —
+        // Each test starts with a clean fixture-owned registry —
         // production code uses `clearOwner(...)` + `unregisterProfile(...)`
         // for narrow cleanup; tests get the full sledgehammer.
-        PhosphorProfileRegistry::instance().clear();
+        m_registry.clear();
     }
 
     void cleanup()
     {
-        PhosphorProfileRegistry::instance().clear();
+        m_registry.clear();
     }
 
     /// Invariant 1: a profile JSON dropped under the user dir BEFORE
@@ -122,11 +128,11 @@ private Q_SLOTS:
         // Build the daemon's loader plumbing — same shapes, no daemon
         // construction required.
         CurveRegistry curveRegistry;
-        ProfileLoader profileLoader(PhosphorProfileRegistry::instance(), curveRegistry, kLoaderOwnerTag);
+        ProfileLoader profileLoader(m_registry, curveRegistry, kLoaderOwnerTag);
         QCOMPARE(profileLoader.loadFromDirectory(profileDir), 1);
 
         // Registry now contains the user profile.
-        auto& registry = PhosphorProfileRegistry::instance();
+        auto& registry = m_registry;
         QVERIFY(registry.hasProfile(QStringLiteral("zone.highlight")));
 
         // The owner tag is the loader's — partitioning means this
@@ -152,7 +158,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        auto& registry = PhosphorProfileRegistry::instance();
+        auto& registry = m_registry;
 
         // Mirror the daemon's `publishActiveAnimationProfile` body:
         // every settings-driven path is registered with `registerProfile`
@@ -218,7 +224,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        auto& registry = PhosphorProfileRegistry::instance();
+        auto& registry = m_registry;
 
         // Step 1 — Settings publishes Global as direct-owned.
         Profile settingsProfile = settings.animationProfile();
@@ -245,7 +251,7 @@ private Q_SLOTS:
         })"));
 
         CurveRegistry curveRegistry;
-        ProfileLoader profileLoader(PhosphorProfileRegistry::instance(), curveRegistry, kLoaderOwnerTag);
+        ProfileLoader profileLoader(m_registry, curveRegistry, kLoaderOwnerTag);
         const int loaded = profileLoader.loadFromDirectory(profileDir);
         QCOMPARE(loaded, 1);
 

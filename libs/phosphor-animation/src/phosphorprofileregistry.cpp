@@ -5,14 +5,28 @@
 
 namespace PhosphorAnimation {
 
-PhosphorProfileRegistry::PhosphorProfileRegistry() = default;
+std::atomic<PhosphorProfileRegistry*> PhosphorProfileRegistry::s_defaultRegistry{nullptr};
+
+PhosphorProfileRegistry::PhosphorProfileRegistry(QObject* parent)
+    : QObject(parent)
+{
+}
 
 PhosphorProfileRegistry::~PhosphorProfileRegistry() = default;
 
-PhosphorProfileRegistry& PhosphorProfileRegistry::instance()
+void PhosphorProfileRegistry::setDefaultRegistry(PhosphorProfileRegistry* registry)
 {
-    static PhosphorProfileRegistry sInstance;
-    return sInstance;
+    // Relaxed store: the publishing thread must have fully constructed
+    // *registry before calling this method, and the consumer-side
+    // load-and-use sequence is a single pointer dereference that needs
+    // no happens-before with any other memory. Matches the
+    // PhosphorCurve::setDefaultRegistry contract.
+    s_defaultRegistry.store(registry, std::memory_order_relaxed);
+}
+
+PhosphorProfileRegistry* PhosphorProfileRegistry::defaultRegistry()
+{
+    return s_defaultRegistry.load(std::memory_order_relaxed);
 }
 
 std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) const

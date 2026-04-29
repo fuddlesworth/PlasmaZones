@@ -25,7 +25,7 @@ QT_BEGIN_NAMESPACE
 class QSGNode;
 QT_END_NAMESPACE
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 class IUniformExtension;
 }
 
@@ -140,8 +140,8 @@ public:
      * preserve its internal extension contract instead of having the call
      * silently no-op.
      */
-    virtual void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension);
-    std::shared_ptr<PhosphorShell::IUniformExtension> uniformExtension() const;
+    virtual void setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension);
+    std::shared_ptr<PhosphorShaders::IUniformExtension> uniformExtension() const;
 
     // ── Shadertoy uniforms ───────────────────────────────────────────
 
@@ -579,7 +579,7 @@ private:
     bool m_useDepthBuffer = false;
 
     // ── Uniform extension ────────────────────────────────────────────
-    std::shared_ptr<PhosphorShell::IUniformExtension> m_uniformExtension;
+    std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;
 
     // ── Status ───────────────────────────────────────────────────────
     Status m_status = Status::Null;

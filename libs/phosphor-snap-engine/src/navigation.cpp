@@ -7,7 +7,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
-#include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorEngineApi/EngineTypes.h>
 #include <PhosphorZones/Zone.h>
 
 namespace PhosphorSnapEngine {

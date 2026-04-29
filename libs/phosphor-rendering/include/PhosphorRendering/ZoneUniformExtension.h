@@ -4,7 +4,7 @@
 #pragma once
 
 #include <PhosphorRendering/ZoneShaderCommon.h>
-#include <PhosphorShell/IUniformExtension.h>
+#include <PhosphorShaders/IUniformExtension.h>
 
 #include <QMutex>
 #include <QMutexLocker>
@@ -29,7 +29,7 @@ namespace PhosphorRendering {
  * through prepare() before the next sync fires, so m_mutex serialises reads
  * and writes of m_data to prevent torn copies.
  */
-class ZoneUniformExtension : public PhosphorShell::IUniformExtension
+class ZoneUniformExtension : public PhosphorShaders::IUniformExtension
 {
 public:
     ZoneUniformExtension()
@@ -117,7 +117,7 @@ private:
                   "zoneParams must follow zoneBorderColors with no gap");
     // Verify ZoneExtensionData is binary-identical to the zone region of
     // ZoneShaderUniforms (BaseUniforms + this == ZoneShaderUniforms layout).
-    static_assert(sizeof(ZoneExtensionData) == sizeof(ZoneShaderUniforms) - sizeof(PhosphorShell::BaseUniforms),
+    static_assert(sizeof(ZoneExtensionData) == sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms),
                   "ZoneExtensionData size must match ZoneShaderUniforms zone region size");
 
     ZoneExtensionData m_data;

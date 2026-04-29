@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Pin Qt to the build minimum; without the version guard a consumer on
+# Qt 6.5 resolves find_package(PhosphorAnimationQml) cleanly and then
+# fails later with a cryptic missing-symbol at link time. The QML
+# wrappers also pull in QuickPrivate (private QQuickPropertyAnimation
+# header used by PhosphorMotionAnimation).
+find_dependency(Qt6 6.6 COMPONENTS Core Gui Quick Qml)
+find_dependency(Qt6QuickPrivate)
+
+# phosphor-animation — the motion runtime the QML wrappers expose.
+find_dependency(PhosphorAnimation 0.1.0)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorAnimationQmlTargets.cmake")
+
+check_required_components(PhosphorAnimationQml)

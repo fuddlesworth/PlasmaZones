@@ -3,12 +3,15 @@
 
 /// @file PhosphorShell.h
 /// Convenience umbrella header — includes all public PhosphorShell headers.
+///
+/// Phase B1 of docs/phosphor-architecture-refactor-plan.md migrated the
+/// shader-domain headers (BaseUniforms, IUniformExtension,
+/// ShaderIncludeResolver, IWallpaperProvider, ShaderRegistry →
+/// ShaderPackRegistry) to the sibling `phosphor-shaders` library.
+/// Consumers wanting those types should `#include
+/// <PhosphorShaders/...>` directly. What remains here is the Wayland
+/// layer-shell integration.
 
 #pragma once
 
 #include <PhosphorShell/LayerSurface>
-#include <PhosphorShell/ShaderRegistry>
-#include <PhosphorShell/ShaderIncludeResolver>
-#include <PhosphorShell/IUniformExtension>
-#include <PhosphorShell/IWallpaperProvider>
-// ShaderEffect excluded until Phase 2 implementation is complete.

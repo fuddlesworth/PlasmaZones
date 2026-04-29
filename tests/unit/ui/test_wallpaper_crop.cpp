@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <PhosphorShell/ShaderRegistry.h>
+#include <PhosphorShaders/ShaderPackRegistry.h>
 
 #include <QRect>
 #include <QSize>
 #include <QtTest/QtTest>
 
-using PhosphorShell::ShaderRegistry;
+using PhosphorShaders::ShaderPackRegistry;
 
-// Unit tests for ShaderRegistry::computeWallpaperCropRect.
+// Unit tests for ShaderPackRegistry::computeWallpaperCropRect.
 //
 // This is the pure geometry of the per-VS wallpaper crop introduced in
 // PR #333 — it mirrors the "cover" placement used by shaders/wallpaper.glsl
@@ -30,15 +30,15 @@ private Q_SLOTS:
         // Empty wallpaper size → invalid crop (caller falls back to full image).
         const QRect phys(0, 0, 1920, 1080);
         const QRect sub(0, 0, 960, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(QSize(), phys, sub), QRect());
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(QSize(0, 0), phys, sub), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(QSize(), phys, sub), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(QSize(0, 0), phys, sub), QRect());
     }
 
     void invalidRects()
     {
         const QSize wp(3840, 2160);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, QRect(), QRect(0, 0, 960, 1080)), QRect());
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, QRect(0, 0, 1920, 1080), QRect()), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, QRect(), QRect(0, 0, 960, 1080)), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, QRect(0, 0, 1920, 1080), QRect()), QRect());
     }
 
     void subEqualsPhys()
@@ -46,7 +46,7 @@ private Q_SLOTS:
         // subGeom == physGeom → caller should use full wallpaper, not a crop.
         const QSize wp(3840, 2160);
         const QRect phys(0, 0, 1920, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, phys), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, phys), QRect());
     }
 
     void subOutsidePhys()
@@ -55,7 +55,7 @@ private Q_SLOTS:
         const QSize wp(3840, 2160);
         const QRect phys(0, 0, 1920, 1080);
         const QRect sub(5000, 5000, 100, 100);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, sub), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, sub), QRect());
     }
 
     void subClampedCoversPhys()
@@ -64,7 +64,7 @@ private Q_SLOTS:
         const QSize wp(3840, 2160);
         const QRect phys(0, 0, 1920, 1080);
         const QRect sub(-100, -100, 2200, 1300);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, sub), QRect());
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, sub), QRect());
     }
 
     // ── Same-aspect wallpaper and screen (no cover letterbox) ─────────────
@@ -76,7 +76,7 @@ private Q_SLOTS:
         const QSize wp(3840, 2160);
         const QRect phys(0, 0, 1920, 1080);
         const QRect sub(0, 0, 960, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, sub), QRect(0, 0, 1920, 2160));
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, sub), QRect(0, 0, 1920, 2160));
     }
 
     void sameAspect_rightHalf()
@@ -85,7 +85,7 @@ private Q_SLOTS:
         const QSize wp(3840, 2160);
         const QRect phys(0, 0, 1920, 1080);
         const QRect sub(960, 0, 960, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, sub), QRect(1920, 0, 1920, 2160));
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, sub), QRect(1920, 0, 1920, 2160));
     }
 
     // ── Wide wallpaper, narrow screen (horizontal letterbox of wallpaper) ─
@@ -103,7 +103,7 @@ private Q_SLOTS:
         const QRect phys(0, 0, 5120, 1440);
         const QRect subRight(2560, 0, 2560, 1440);
         const QRect expected(1920, 540, 1920, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, subRight), expected);
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, subRight), expected);
     }
 
     void wallpaperWiderThanScreen_leftVS()
@@ -112,7 +112,7 @@ private Q_SLOTS:
         const QRect phys(0, 0, 5120, 1440);
         const QRect subLeft(0, 0, 2560, 1440);
         const QRect expected(0, 540, 1920, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, subLeft), expected);
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, subLeft), expected);
     }
 
     // ── Tall wallpaper, wide screen (vertical letterbox of wallpaper) ─────
@@ -129,7 +129,7 @@ private Q_SLOTS:
         const QRect phys(0, 0, 4000, 1000);
         const QRect subRight(2000, 0, 2000, 1000);
         const QRect expected(1000, 750, 1000, 500);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, subRight), expected);
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, subRight), expected);
     }
 
     // ── Non-(0,0) physical origin (multi-monitor compositor coords) ───────
@@ -143,7 +143,7 @@ private Q_SLOTS:
         const QSize wp(3840, 2160);
         const QRect phys(1920, 0, 1920, 1080);
         const QRect sub(2880, 0, 960, 1080);
-        QCOMPARE(ShaderRegistry::computeWallpaperCropRect(wp, phys, sub), QRect(1920, 0, 1920, 2160));
+        QCOMPARE(ShaderPackRegistry::computeWallpaperCropRect(wp, phys, sub), QRect(1920, 0, 1920, 2160));
     }
 
     // ── Tiling/seam guarantee: adjacent VSes must abut exactly ────────────
@@ -154,8 +154,8 @@ private Q_SLOTS:
         const QRect phys(0, 0, 1920, 1080);
         const QRect left(0, 0, 960, 1080);
         const QRect right(960, 0, 960, 1080);
-        const QRect cL = ShaderRegistry::computeWallpaperCropRect(wp, phys, left);
-        const QRect cR = ShaderRegistry::computeWallpaperCropRect(wp, phys, right);
+        const QRect cL = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, left);
+        const QRect cR = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, right);
         QVERIFY(cL.isValid());
         QVERIFY(cR.isValid());
         // Left crop's right edge must equal right crop's left edge — no gap,
@@ -173,8 +173,8 @@ private Q_SLOTS:
         const QRect phys(0, 0, 1920, 1080);
         const QRect left(0, 0, 641, 1080);
         const QRect right(641, 0, 1279, 1080);
-        const QRect cL = ShaderRegistry::computeWallpaperCropRect(wp, phys, left);
-        const QRect cR = ShaderRegistry::computeWallpaperCropRect(wp, phys, right);
+        const QRect cL = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, left);
+        const QRect cR = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, right);
         QVERIFY(cL.isValid());
         QVERIFY(cR.isValid());
         QCOMPARE(cL.x() + cL.width(), cR.x());
@@ -187,9 +187,9 @@ private Q_SLOTS:
         const QRect a(0, 0, 640, 1080);
         const QRect b(640, 0, 640, 1080);
         const QRect c(1280, 0, 640, 1080);
-        const QRect cA = ShaderRegistry::computeWallpaperCropRect(wp, phys, a);
-        const QRect cB = ShaderRegistry::computeWallpaperCropRect(wp, phys, b);
-        const QRect cC = ShaderRegistry::computeWallpaperCropRect(wp, phys, c);
+        const QRect cA = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, a);
+        const QRect cB = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, b);
+        const QRect cC = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, c);
         QVERIFY(cA.isValid() && cB.isValid() && cC.isValid());
         QCOMPARE(cA.x() + cA.width(), cB.x());
         QCOMPARE(cB.x() + cB.width(), cC.x());
@@ -215,7 +215,7 @@ private Q_SLOTS:
             {{3840, 2160}, {0, 0, 1920, 1080}, {100, 100, 800, 600}},
         };
         for (const Case& c : cases) {
-            const QRect crop = ShaderRegistry::computeWallpaperCropRect(c.wp, c.phys, c.sub);
+            const QRect crop = ShaderPackRegistry::computeWallpaperCropRect(c.wp, c.phys, c.sub);
             QVERIFY2(crop.isValid(),
                      qPrintable(QStringLiteral("invalid crop for sub=%1").arg(QDebug::toString(c.sub))));
             const double cropAspect = static_cast<double>(crop.width()) / crop.height();
@@ -239,7 +239,7 @@ private Q_SLOTS:
         };
         const QRect wpBounds(QPoint(0, 0), wp);
         for (const QRect& sub : subs) {
-            const QRect crop = ShaderRegistry::computeWallpaperCropRect(wp, phys, sub);
+            const QRect crop = ShaderPackRegistry::computeWallpaperCropRect(wp, phys, sub);
             QVERIFY(crop.isValid());
             QVERIFY(wpBounds.contains(crop));
         }

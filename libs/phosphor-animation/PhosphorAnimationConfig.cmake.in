@@ -13,18 +13,9 @@ find_dependency(Qt6 6.6 COMPONENTS Core Gui)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorAnimationTargets.cmake")
 
-# QML component — opt-in via `find_package(PhosphorAnimation COMPONENTS QML)`.
-# The QML targets are installed separately (only when PHOSPHOR_ANIMATION_QML_INSTALL
-# was ON at build time); the exported CMake file is optional so core-only
-# consumers don't require Qt Quick / Qml to find_package successfully.
-if("QML" IN_LIST PhosphorAnimation_FIND_COMPONENTS)
-    find_dependency(Qt6 6.6 COMPONENTS Quick Qml)
-    if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/PhosphorAnimationQmlTargets.cmake")
-        include("${CMAKE_CURRENT_LIST_DIR}/PhosphorAnimationQmlTargets.cmake")
-        set(PhosphorAnimation_QML_FOUND TRUE)
-    else()
-        set(PhosphorAnimation_QML_FOUND FALSE)
-    endif()
-endif()
+# QML wrappers (PhosphorEasing / Spring / Curve / Profile / animated-value
+# Q_GADGETs / PhosphorMotionAnimation / org.phosphor.animation module) live
+# in the sibling phosphor-animation-qml library since Phase A1; consumers
+# that need them call `find_package(PhosphorAnimationQml)` separately.
 
 check_required_components(PhosphorAnimation)

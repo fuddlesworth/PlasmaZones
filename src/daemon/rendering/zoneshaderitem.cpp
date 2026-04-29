@@ -68,7 +68,7 @@ PhosphorRendering::ShaderNodeRhi* ZoneShaderItem::createShaderNode()
 // Refuse external uniform-extension replacement
 // ============================================================================
 
-void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension)
+void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension)
 {
     // The zone UBO layout is load-bearing: ZoneShaderNodeRhi installs a
     // ZoneUniformExtension whose byte layout matches common.glsl's zone
