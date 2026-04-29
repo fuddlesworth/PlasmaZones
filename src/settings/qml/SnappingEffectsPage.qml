@@ -10,6 +10,7 @@ Flickable {
     id: root
 
     readonly property var settingsBridge: settingsController.snappingEffectsPage
+    readonly property var animBridge: settingsController.animationPage
 
     contentHeight: content.implicitHeight
     clip: true
@@ -44,15 +45,13 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.enableBlur
                             accessibleName: i18n("Enable blur behind zones")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.enableBlur = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Zone numbers")
@@ -61,15 +60,13 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.showZoneNumbers
                             accessibleName: i18n("Show zone numbers")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.showZoneNumbers = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Flash on layout switch")
@@ -78,17 +75,13 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.flashZonesOnSwitch
                             accessibleName: i18n("Flash zones on layout switch")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.flashZonesOnSwitch = newValue;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -106,7 +99,7 @@ Flickable {
                 showToggle: true
                 toggleChecked: appSettings.enableShaderEffects
                 collapsible: true
-                onToggleClicked: (checked) => {
+                onToggleClicked: checked => {
                     return appSettings.enableShaderEffects = checked;
                 }
 
@@ -123,15 +116,13 @@ Flickable {
                             value: appSettings.shaderFrameRate
                             valueSuffix: " fps"
                             labelWidth: 55
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.shaderFrameRate = Math.round(value);
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Audio spectrum")
@@ -143,11 +134,10 @@ Flickable {
                             enabled: root.settingsBridge.cavaAvailable
                             checked: appSettings.enableAudioVisualizer
                             accessibleName: i18n("Enable CAVA audio spectrum")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.enableAudioVisualizer = newValue;
                             }
                         }
-
                     }
 
                     Kirigami.InlineMessage {
@@ -157,8 +147,7 @@ Flickable {
                         visible: !root.settingsBridge.cavaAvailable && shaderCard.toggleChecked
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Spectrum bars")
@@ -172,19 +161,167 @@ Flickable {
                             value: appSettings.audioSpectrumBarCount
                             valueSuffix: ""
                             labelWidth: 55
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.audioSpectrumBarCount = Math.round(value);
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
+        // =================================================================
+        // WINDOW TRANSITIONS (Phase 6 — shader-backed animation effects)
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: transitionsCard.implicitHeight
+
+            SettingsCard {
+                id: transitionsCard
+
+                anchors.fill: parent
+                headerText: i18n("Window Transitions")
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: i18n("Select a shader transition effect for each event category. Effects are applied during overlay show/hide and window snap animations.")
+                        wrapMode: Text.WordWrap
+                        color: Kirigami.Theme.disabledTextColor
+                        font: Kirigami.Theme.smallFont
+                    }
+
+                    SettingsSeparator {}
+
+                    TransitionEffectRow {
+                        eventPath: "zone.snapIn"
+                        eventLabel: i18n("Zone Snap In")
+                        eventDescription: i18n("When a window snaps into a zone")
+                    }
+
+                    SettingsSeparator {}
+
+                    TransitionEffectRow {
+                        eventPath: "zone.snapOut"
+                        eventLabel: i18n("Zone Snap Out")
+                        eventDescription: i18n("When a window leaves a zone")
+                    }
+
+                    SettingsSeparator {}
+
+                    TransitionEffectRow {
+                        eventPath: "osd.show"
+                        eventLabel: i18n("OSD Show")
+                        eventDescription: i18n("When the on-screen display appears")
+                    }
+
+                    SettingsSeparator {}
+
+                    TransitionEffectRow {
+                        eventPath: "osd.hide"
+                        eventLabel: i18n("OSD Hide")
+                        eventDescription: i18n("When the on-screen display disappears")
+                    }
+
+                    SettingsSeparator {}
+
+                    TransitionEffectRow {
+                        eventPath: "zone.highlight"
+                        eventLabel: i18n("Zone Highlight")
+                        eventDescription: i18n("When zones highlight during drag")
+                    }
+
+                    SettingsSeparator {}
+
+                    TransitionEffectRow {
+                        eventPath: "zone.layoutSwitchIn"
+                        eventLabel: i18n("Layout Switch In")
+                        eventDescription: i18n("When switching to a new zone layout")
+                    }
+                }
+            }
+        }
     }
 
+    component TransitionEffectRow: SettingsRow {
+        id: effectRow
+
+        required property string eventPath
+        required property string eventLabel
+        required property string eventDescription
+
+        title: effectRow.eventLabel
+        description: effectRow.eventDescription
+
+        RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            ComboBox {
+                id: effectCombo
+
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                Accessible.name: i18n("Transition effect for %1", effectRow.eventLabel)
+
+                model: {
+                    var items = [
+                        {
+                            text: i18n("None"),
+                            value: ""
+                        }
+                    ];
+                    var effects = root.animBridge.availableTransitionEffects;
+                    for (var i = 0; i < effects.length; i++) {
+                        items.push({
+                            text: effects[i].name,
+                            value: effects[i].id
+                        });
+                    }
+                    return items;
+                }
+
+                textRole: "text"
+                valueRole: "value"
+
+                Component.onCompleted: refreshSelection()
+
+                function refreshSelection() {
+                    var current = root.animBridge.effectForPath(effectRow.eventPath);
+                    for (var i = 0; i < model.length; i++) {
+                        if (model[i].value === current) {
+                            currentIndex = i;
+                            return;
+                        }
+                    }
+                    currentIndex = 0;
+                }
+
+                onActivated: {
+                    var selected = model[currentIndex].value;
+                    if (selected === "") {
+                        root.animBridge.clearEffectForPath(effectRow.eventPath);
+                    } else {
+                        root.animBridge.setEffectForPath(effectRow.eventPath, selected);
+                    }
+                }
+            }
+
+            Label {
+                text: root.animBridge.parentChainForEvent(effectRow.eventPath)
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                visible: text.length > 0
+            }
+        }
+
+        Connections {
+            target: appSettings
+            function onShaderProfileTreeChanged() {
+                effectCombo.refreshSelection();
+            }
+        }
+    }
 }
