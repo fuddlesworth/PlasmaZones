@@ -54,6 +54,12 @@ ApplicationWindow {
         "hasChildren": true,
         "hasDividerAfter": true
     }, {
+        "name": "animations",
+        "label": i18n("Animations"),
+        "iconName": "media-playback-start",
+        "hasChildren": true,
+        "hasDividerAfter": false
+    }, {
         "name": "exclusions",
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
@@ -115,6 +121,29 @@ ApplicationWindow {
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }],
+        "animations": [{
+            "name": "animations-snap",
+            "label": i18n("Snap"),
+            "iconName": "window-snap"
+        }, {
+            "name": "animations-layout",
+            "label": i18n("Layout Switch"),
+            "iconName": "view-grid",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-zonehighlight",
+            "label": i18n("Zone Highlight"),
+            "iconName": "highlight"
+        }, {
+            "name": "animations-osd",
+            "label": i18n("OSD"),
+            "iconName": "dialog-information",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-effects"
+        }],
         "tiling": [{
             "name": "tiling-appearance",
             "label": i18n("Appearance"),
@@ -152,6 +181,11 @@ ApplicationWindow {
         "snapping-behavior": "SnappingBehaviorPage.qml",
         "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
         "snapping-effects": "SnappingEffectsPage.qml",
+        "animations-snap": "AnimationsSnapPage.qml",
+        "animations-layout": "AnimationsLayoutPage.qml",
+        "animations-zonehighlight": "AnimationsZoneHighlightPage.qml",
+        "animations-osd": "AnimationsOsdPage.qml",
+        "animations-shaders": "AnimationsShadersPage.qml",
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",

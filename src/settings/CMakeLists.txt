@@ -80,7 +80,13 @@ qt_add_qml_module(plasmazones-settings
         qml/CurveThumbnail.qml
         qml/CurveEditorDialog.qml
         qml/SpringPreview.qml
+        qml/AnimationEventCard.qml
         qml/AnimationShaderParamEditor.qml
+        qml/AnimationsSnapPage.qml
+        qml/AnimationsOsdPage.qml
+        qml/AnimationsLayoutPage.qml
+        qml/AnimationsZoneHighlightPage.qml
+        qml/AnimationsShadersPage.qml
         qml/EasingCurve.js
         qml/SpringPhysics.js
         qml/SnappingBehaviorPage.qml
