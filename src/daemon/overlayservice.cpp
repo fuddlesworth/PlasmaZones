@@ -42,7 +42,7 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
-#include <PhosphorLayer/defaults/PhosphorShellTransport.h>
+#include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 #include <QQuickItem>
 #include "overlayservice/pz_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -289,7 +289,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                                PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
     : IOverlayService(parent)
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
-    , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
+    , m_transport(std::make_unique<PhosphorLayer::PhosphorWaylandTransport>())
 {
     m_screenManager = screenManager;
     m_shaderRegistry = shaderRegistry;

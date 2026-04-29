@@ -7,7 +7,7 @@
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
 #include "wlr_layer_shell_protocol.h"
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
 class LayerShellIntegration;
 
@@ -60,4 +60,4 @@ private:
     uint64_t m_globalRemovedCallbackId = 0;
 };
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland

@@ -39,6 +39,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 set(phosphorfsloader_SRCS
     src/directoryloader.cpp
+    src/metadatapackregistrybase.cpp
+    src/metadatapackscanstrategy.cpp
     src/watcheddirectoryset.cpp
 )
 
@@ -47,6 +49,8 @@ set(phosphorfsloader_public_HDRS
     include/PhosphorFsLoader/IDirectoryLoaderSink.h
     include/PhosphorFsLoader/IScanStrategy.h
     include/PhosphorFsLoader/JsonEnvelopeValidator.h
+    include/PhosphorFsLoader/MetadataPackRegistryBase.h
+    include/PhosphorFsLoader/MetadataPackScanStrategy.h
     include/PhosphorFsLoader/ParsedEntry.h
     include/PhosphorFsLoader/WatchedDirectorySet.h
 )

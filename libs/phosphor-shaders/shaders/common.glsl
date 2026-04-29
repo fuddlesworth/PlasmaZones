@@ -12,8 +12,8 @@
 //
 // Bindings: 0 = UBO. Channels (2-5) in multipass.glsl.
 
-#ifndef PHOSPHORSHELL_COMMON_GLSL
-#define PHOSPHORSHELL_COMMON_GLSL
+#ifndef PHOSPHORSHADERS_COMMON_GLSL
+#define PHOSPHORSHADERS_COMMON_GLSL
 
 layout(std140, binding = 0) uniform ShaderUniforms {
     // ── PhosphorShaders::BaseUniforms (672 bytes) ──────────────────────
@@ -204,4 +204,4 @@ float angularNoise(float angle, float freq, float seed) {
     return noise2D(circlePos + seed);
 }
 
-#endif // PHOSPHORSHELL_COMMON_GLSL
+#endif // PHOSPHORSHADERS_COMMON_GLSL

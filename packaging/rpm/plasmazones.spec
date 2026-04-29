@@ -169,7 +169,7 @@ echo ""
 %{_libdir}/libPhosphorIdentity.so*
 %{_libdir}/libPhosphorTiles.so*
 %{_libdir}/libPhosphorConfig.so*
-%{_libdir}/libPhosphorShell.so*
+%{_libdir}/libPhosphorWayland.so*
 %{_libdir}/libPhosphorRendering.so*
 %{_libdir}/libPhosphorLayer.so*
 %{_libdir}/libplasmazones_core.so*
@@ -178,8 +178,8 @@ echo ""
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
-# Layer-shell QPA plugin (PhosphorShell)
-%{_libdir}/qt6/plugins/wayland-shell-integration/phosphorshell-qpa.so
+# Layer-shell QPA plugin (PhosphorWayland)
+%{_libdir}/qt6/plugins/wayland-shell-integration/phosphorwayland-qpa.so
 
 # PhosphorLayoutApi development headers and CMake config
 %{_includedir}/PhosphorLayoutApi/
@@ -201,11 +201,11 @@ echo ""
 %{_includedir}/PhosphorConfig/
 %{_libdir}/cmake/PhosphorConfig/
 
-# PhosphorShell development headers, CMake config, and runtime data
-# (bundled shaders + wayland protocol XMLs installed to _datadir/phosphorshell/).
-%{_includedir}/PhosphorShell/
-%{_libdir}/cmake/PhosphorShell/
-%{_datadir}/phosphorshell/
+# PhosphorWayland development headers, CMake config, and runtime data
+# (bundled shaders + wayland protocol XMLs installed to _datadir/phosphorwayland/).
+%{_includedir}/PhosphorWayland/
+%{_libdir}/cmake/PhosphorWayland/
+%{_datadir}/phosphorwayland/
 
 # PhosphorRendering development headers and CMake config
 %{_includedir}/PhosphorRendering/

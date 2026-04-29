@@ -7,12 +7,12 @@
 //
 // Requires common.glsl (for iTextureResolution UBO field).
 
-#ifndef PHOSPHORSHELL_TEXTURES_GLSL
-#define PHOSPHORSHELL_TEXTURES_GLSL
+#ifndef PHOSPHORSHADERS_TEXTURES_GLSL
+#define PHOSPHORSHADERS_TEXTURES_GLSL
 
 layout(binding = 7)  uniform sampler2D uTexture0;
 layout(binding = 8)  uniform sampler2D uTexture1;
 layout(binding = 9)  uniform sampler2D uTexture2;
 layout(binding = 10) uniform sampler2D uTexture3;
 
-#endif // PHOSPHORSHELL_TEXTURES_GLSL
+#endif // PHOSPHORSHADERS_TEXTURES_GLSL

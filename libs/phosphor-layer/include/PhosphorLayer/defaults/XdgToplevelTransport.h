@@ -28,11 +28,11 @@ namespace PhosphorLayer {
  * - Keyboard interactivity: forced to OnDemand. `Exclusive` and `None`
  *   cannot be expressed through xdg_toplevel alone.
  *
- * Use via @ref SurfaceFactory::Deps when `PhosphorShellTransport::
+ * Use via @ref SurfaceFactory::Deps when `PhosphorWaylandTransport::
  * isSupported()` returns false. Typically consumers probe at startup:
  *
  * @code
- *     auto plasma = std::make_unique<PhosphorShellTransport>();
+ *     auto plasma = std::make_unique<PhosphorWaylandTransport>();
  *     std::unique_ptr<ILayerShellTransport> transport = plasma->isSupported()
  *         ? std::move(plasma)
  *         : std::unique_ptr<ILayerShellTransport>(new XdgToplevelTransport);

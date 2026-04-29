@@ -10,16 +10,16 @@
 #include <QCoreApplication>
 #include <QThread>
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
-#include <phosphorshell_export.h>
+#include <phosphorwayland_export.h>
 #include "wlr_layer_shell_protocol.h"
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
 /// QPA shell integration plugin that binds zwlr_layer_shell_v1 and creates
 /// layer surfaces for windows marked with the _ps_layer_shell property.
 /// For regular (non-layer-shell) windows, delegates to Qt's built-in xdg-shell
 /// integration so they get proper xdg_toplevel/xdg_popup roles.
-class PHOSPHORSHELL_EXPORT LayerShellIntegration : public QtWaylandClient::QWaylandShellIntegration
+class PHOSPHORWAYLAND_EXPORT LayerShellIntegration : public QtWaylandClient::QWaylandShellIntegration
 {
 public:
     Q_DISABLE_COPY_MOVE(LayerShellIntegration)
@@ -100,4 +100,4 @@ private:
     static LayerShellIntegration* s_instance;
 };
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland

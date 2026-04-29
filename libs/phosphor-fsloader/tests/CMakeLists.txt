@@ -27,4 +27,5 @@ function(pfl_add_test _name)
 endfunction()
 
 pfl_add_test(pfl_test_directoryloader test_directoryloader.cpp)
+pfl_add_test(pfl_test_metadatapackscanstrategy test_metadatapackscanstrategy.cpp)
 pfl_add_test(pfl_test_watcheddirectoryset test_watcheddirectoryset.cpp)

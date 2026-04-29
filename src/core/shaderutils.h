@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <PhosphorShaders/ShaderPackRegistry.h> // pulls in phosphorshaders_export.h
+#include <PhosphorShaders/ShaderRegistry.h> // pulls in phosphorshaders_export.h
 
 // PhosphorShaders has the canonical implementations in its internal shaderutils.h.
 // Re-declare identical inline functions here for PlasmaZones code that hasn't

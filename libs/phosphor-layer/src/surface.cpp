@@ -706,7 +706,7 @@ private:
         //    fully destroyed. Doing it before makes the first attempt a
         //    layer_surface with no stale role to clean up.
         //
-        // 2) Non-zero size BEFORE completeCreate: PhosphorShell's
+        // 2) Non-zero size BEFORE completeCreate: PhosphorWayland's
         //    computeLayerSize sends zwlr_layer_surface_v1::set_size(w, h)
         //    derived from QWindow::size(). For partial anchors that are
         //    NOT doubly-anchored on either axis (e.g. zone selector at

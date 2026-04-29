@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerSurface.h>
 #include "qpa/layershellintegration.h"
 
 #include <QGuiApplication>
@@ -9,9 +9,9 @@
 #include <QHash>
 #include <QThread>
 
-Q_LOGGING_CATEGORY(lcLayerSurface, "phosphorshell.layersurface")
+Q_LOGGING_CATEGORY(lcLayerSurface, "phosphorwayland.layersurface")
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
 using SurfaceRegistry = QHash<QWindow*, LayerSurface*>;
 Q_GLOBAL_STATIC(SurfaceRegistry, s_surfaces)
@@ -19,7 +19,7 @@ Q_GLOBAL_STATIC(SurfaceRegistry, s_surfaces)
 LayerSurface::LayerSurface(QWindow* window)
     : QObject(window)
     , m_window(window)
-    , m_scope(QStringLiteral("phosphorshell"))
+    , m_scope(QStringLiteral("phosphorwayland"))
 {
     window->setProperty(LayerSurfaceProps::IsLayerShell, true);
     window->setProperty(LayerSurfaceProps::Surface, QVariant::fromValue(this));
@@ -255,4 +255,4 @@ std::pair<uint32_t, uint32_t> LayerSurface::computeLayerSize(Anchors anchors, co
     return {w, h};
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland

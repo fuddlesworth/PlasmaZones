@@ -3,7 +3,7 @@
 
 #include "layershellintegration.h"
 #include "layershellwindow.h"
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerSurface.h>
 
 #include <algorithm>
 #include <cstring>
@@ -13,9 +13,9 @@
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 #include <QtWaylandClient/private/qwaylandshellintegrationfactory_p.h>
 
-Q_LOGGING_CATEGORY(lcLayerShellIntegration, "phosphorshell.qpa.layershell")
+Q_LOGGING_CATEGORY(lcLayerShellIntegration, "phosphorwayland.qpa.layershell")
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
 LayerShellIntegration* LayerShellIntegration::s_instance = nullptr;
 
@@ -130,7 +130,7 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         //   v4: on_demand keyboard interactivity — we use this
         //   v5: set_exclusive_edge — we do NOT use this
         // Capping at v4 avoids negotiation issues with older compositors
-        // while supporting all features PhosphorShell needs.
+        // while supporting all features PhosphorWayland needs.
         static constexpr uint32_t kMaxBindVersion = 4;
         uint32_t bindVersion = qMin(version, kMaxBindVersion);
         self->m_layerShell = static_cast<struct zwlr_layer_shell_v1*>(
@@ -189,4 +189,4 @@ void LayerShellIntegration::removeGlobalRemovedCallback(CallbackId id)
                                    m_globalRemovedCallbacks.end());
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland

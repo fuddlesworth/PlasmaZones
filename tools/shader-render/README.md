@@ -32,7 +32,7 @@ cmake -B build -DBUILD_TOOLS=ON
 cmake --build build --target plasmazones-shader-render
 ```
 
-It links `Qt6::Quick`, `PhosphorRendering`, and `PhosphorShell`.
+It links `Qt6::Quick`, `PhosphorRendering`, and `PhosphorWayland`.
 For headless CI it works under software Vulkan
 (`VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json)`),
 or fall back to OpenGL with `QSG_RHI_BACKEND=opengl`.
@@ -147,7 +147,7 @@ Known gaps to verify on first run:
 `ZoneUniformExtension` header. The right long-term fix is to
 extract `ZoneUniformExtension` (and the `ZoneShaderUniforms` UBO
 struct) into a small reusable library — probably
-`libs/phosphor-shell/` since the extension is the canonical
+`libs/phosphor-wayland/` since the extension is the canonical
 example of `IUniformExtension`. Until then, this header coupling
 is the trade-off for not duplicating the UBO layout, which would
 be a worse failure mode (silent visual drift between docs and
