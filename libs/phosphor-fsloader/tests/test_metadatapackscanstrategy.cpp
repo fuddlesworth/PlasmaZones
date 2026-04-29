@@ -580,6 +580,39 @@ private Q_SLOTS:
         QVERIFY(!strategy.contains(QStringLiteral("none-pkg")));
     }
 
+    /// Setting the user path *after* `registerDirectories` must
+    /// reclassify already-discovered entries — the prior scan baked in
+    /// the OLD (empty) user path, so every entry was `isUser=false`.
+    /// `MetadataPackRegistryBase::setUserPath` triggers a synchronous
+    /// rescan when directories are registered; we drive the strategy
+    /// through `WatchedDirectorySet` directly here so the test pins
+    /// the strategy contract independently of the base wrapper.
+    void testSetUserPathReclassifiesAfterRegistration()
+    {
+        const QString userDir = m_tmp->filePath(QStringLiteral("user"));
+        QVERIFY(QDir().mkpath(userDir));
+        writeMetadata(userDir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 1);
+
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
+        WatchedDirectorySet set(strategy);
+
+        // First scan with no user path configured — entry should be
+        // classified as system.
+        set.registerDirectory(userDir, LiveReload::Off);
+        QCOMPARE(strategy.size(), 1);
+        QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).isUser, false);
+
+        // Set the user path now. The strategy reads `m_userPath` at the
+        // top of every `performScan`, so a subsequent rescan picks up
+        // the new value and reclassifies. This mirrors the production
+        // wrapper's `setUserPath` → `rescanNow` sequence.
+        strategy.setUserPath(userDir);
+        set.rescanNow();
+
+        QCOMPARE(strategy.size(), 1);
+        QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).isUser, true);
+    }
+
     /// Entries with malformed (unparseable) `metadata.json` are
     /// skipped, not registered. Pinned alongside the parser-nullopt
     /// case — different rejection path (JSON layer vs schema layer)

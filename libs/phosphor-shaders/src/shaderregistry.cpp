@@ -329,30 +329,45 @@ void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::Shad
     h.addData(QByteArrayView("|"));
     h.addData(s.vertexShaderPath.toUtf8());
     h.addData(QByteArrayView("|"));
-    const QFileInfo fragInfo(s.sourcePath);
-    h.addData(QByteArray::number(fragInfo.size()));
-    h.addData(QByteArrayView("|"));
-    h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
-    h.addData(QByteArrayView("|"));
-    // Vertex shader mtime+size — symmetrical with the frag/buffer
-    // treatment below. QFileInfo on a non-existent path returns size 0
-    // and an invalid lastModified, so the signature stays deterministic
-    // when the resolved vertex shader file doesn't exist on disk.
+
+    // QFileInfo on a missing file returns size 0 and an invalid mtime,
+    // and `lastModified().toMSecsSinceEpoch()` on an invalid datetime
+    // is implementation-defined. Use an explicit "missing" sentinel
+    // for absent files so the hash format is stable rather than
+    // implementation-defined; on-disk files contribute size+mtime.
+    auto contributeFileFp = [&h](const QString& path) {
+        const QFileInfo fi(path);
+        if (fi.exists()) {
+            h.addData(QByteArray::number(fi.size()));
+            h.addData(QByteArrayView("|"));
+            h.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            h.addData(QByteArrayView("missing"));
+        }
+        h.addData(QByteArrayView("|"));
+    };
+    // Frag is guaranteed to exist (the parser rejects payloads whose
+    // `sourcePath` is missing); the helper still routes through
+    // `exists()` to keep the hash format uniform across all source
+    // files.
+    contributeFileFp(s.sourcePath);
+    // Vertex shader mtime+size — symmetrical with frag and buffer
+    // shaders. The default `zone.vert` is shared across packs and may
+    // resolve to a path that doesn't exist for a pack that ships its
+    // own vertex shader at a different name; the missing-sentinel
+    // branch covers that case deterministically.
     if (!s.vertexShaderPath.isEmpty()) {
-        const QFileInfo vertInfo(s.vertexShaderPath);
-        h.addData(QByteArray::number(vertInfo.size()));
-        h.addData(QByteArrayView("|"));
-        h.addData(QByteArray::number(vertInfo.lastModified().toMSecsSinceEpoch()));
-        h.addData(QByteArrayView("|"));
+        contributeFileFp(s.vertexShaderPath);
     }
+    // Buffer-pass shaders (multipass). The parser validates existence
+    // for multipass packs and clears the list otherwise, but
+    // non-multipass packs still get the default `buffer.frag` path
+    // appended unconditionally and that file may not exist — route
+    // through the helper so the hash format stays uniform.
     for (const QString& bp : s.bufferShaderPaths) {
         h.addData(bp.toUtf8());
         h.addData(QByteArrayView("|"));
-        const QFileInfo bi(bp);
-        h.addData(QByteArray::number(bi.size()));
-        h.addData(QByteArrayView("|"));
-        h.addData(QByteArray::number(bi.lastModified().toMSecsSinceEpoch()));
-        h.addData(QByteArrayView("|"));
+        contributeFileFp(bp);
     }
 }
 
@@ -394,6 +409,13 @@ ShaderRegistry::ShaderRegistry(QObject* parent)
     : MetadataPackRegistryBase(lcShaderRegistry(), buildScanStrategy(this), parent)
     , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
 {
+    // The static_cast above is safe by construction (`buildScanStrategy`
+    // is the only path that populates the base's strategy slot, and it
+    // always produces a `ScanStrategy`). Pin that invariant in debug
+    // builds via dynamic_cast so a future refactor that diverts the
+    // strategy slot fails loudly instead of silently UB-ing on lookup.
+    Q_ASSERT_X(dynamic_cast<ScanStrategy*>(strategy()) != nullptr, "ShaderRegistry",
+               "buildScanStrategy must return a MetadataPackScanStrategy<ShaderInfo>");
 }
 
 ShaderRegistry::~ShaderRegistry() = default;

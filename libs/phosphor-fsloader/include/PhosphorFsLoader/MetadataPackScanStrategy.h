@@ -177,10 +177,9 @@ class MetadataPackScanStrategy : public IScanStrategy
 public:
     /// Hard cap on entries discovered per rescan, summed across every
     /// registered search path. Mirrors `DirectoryLoader::kMaxEntries`
-    /// and the per-consumer caps the two registries hard-coded
-    /// (`kMaxShaders`, `kMaxEffects` = 10'000 each). Typical pack
-    /// counts are single digits — the cap is purely a DoS guard
-    /// against pathological user dirs with thousands of
+    /// — every fsloader-backed registry caps at the same scale.
+    /// Typical pack counts are single digits; the cap is purely a DoS
+    /// guard against pathological user dirs with thousands of
     /// metadata.json-bearing subdirs.
     static constexpr int kDefaultMaxEntries = 10'000;
 
@@ -303,9 +302,15 @@ public:
     }
 
     /// Per-rescan entry cap. Default: `kDefaultMaxEntries`.
+    ///
+    /// Negative values are a programming error — the cap loop casts to
+    /// `size_t` for the comparison, and a negative cast wraps to
+    /// `SIZE_MAX` and silently disables the guard. Asserted in debug
+    /// builds and clamped to zero in release so the wrap can't happen.
     void setMaxEntries(int cap)
     {
-        m_maxEntries = cap;
+        Q_ASSERT_X(cap >= 0, "MetadataPackScanStrategy::setMaxEntries", "cap must be non-negative");
+        m_maxEntries = std::max(0, cap);
     }
 
     /// Optional: the logging category to emit warnings under (cap
@@ -354,6 +359,17 @@ public:
             return a.id < b.id;
         });
         return sorted;
+    }
+
+    /// Live entry ids in lexicographic order. Cheaper than `packs()`
+    /// when the consumer only needs the keys (no per-payload copy);
+    /// the strategy already maintains the canonical sort, so consumers
+    /// should call this rather than `packsById().keys()` + `std::sort`.
+    QStringList packIds() const
+    {
+        QStringList ids = m_packs.keys();
+        std::sort(ids.begin(), ids.end());
+        return ids;
     }
 
     /// Lookup by id. Returns a default-constructed `Payload` if the id
@@ -440,7 +456,9 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     // Resolve the user path's canonical form once per rescan. Empty
     // (no user path configured, or the path doesn't exist yet) yields
     // `false` for every dir — the iterated-dir compare below short-
-    // circuits when this is empty.
+    // circuits when this is empty. Canonicalised once here, then
+    // compared per-search-path inside the OUTER loop only — the inner
+    // subdir loop never canonicalises, so cost stays O(searchPaths).
     const QString canonicalUserPath = m_userPath.isEmpty() ? QString() : QFileInfo(m_userPath).canonicalFilePath();
 
     bool capTripped = false;

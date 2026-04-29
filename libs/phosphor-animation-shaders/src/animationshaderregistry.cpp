@@ -8,6 +8,7 @@
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -23,34 +24,29 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// Parse one already-validated metadata.json root into an
 /// AnimationShaderEffect. The strategy already ran the file-existence,
 /// size-cap, and JSON-object-root checks before invoking us; we own only
-/// the schema-specific bits — directory-relative path resolution,
-/// `isUserEffect` stamping, and minimum-viable validation.
-///
-/// Return `std::nullopt` to skip the entry silently. Returning an effect
-/// with an empty `id` also skips it (the strategy checks).
+/// the schema-specific bits — directory-relative path resolution and
+/// `isUserEffect` stamping. The strategy itself rejects empty-id
+/// payloads with a warning, so we don't double-check here.
 std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const QJsonObject& root, bool isUserDir)
 {
     AnimationShaderEffect e = AnimationShaderEffect::fromJson(root);
-    if (e.id.isEmpty()) {
-        // The strategy logs the empty-id case at warning level — return
-        // nullopt so we don't double-emit.
-        return std::nullopt;
-    }
-
     e.sourceDir = effectDir;
     e.isUserEffect = isUserDir;
 
-    // Resolve directory-relative paths to absolute. The bare strings in
-    // metadata.json are file names inside `effectDir`; consumers expect
-    // absolute paths.
+    // Resolve directory-relative paths via QDir::filePath, which returns
+    // absolute inputs unchanged — keeps schema tolerance symmetric with
+    // PhosphorShaders::ShaderRegistry's parser. Naive string concat
+    // would mangle absolute paths from a metadata.json into invalid
+    // double-rooted forms.
+    const QDir dir(effectDir);
     if (!e.fragmentShaderPath.isEmpty()) {
-        e.fragmentShaderPath = effectDir + QLatin1Char('/') + e.fragmentShaderPath;
+        e.fragmentShaderPath = dir.filePath(e.fragmentShaderPath);
     }
     if (!e.vertexShaderPath.isEmpty()) {
-        e.vertexShaderPath = effectDir + QLatin1Char('/') + e.vertexShaderPath;
+        e.vertexShaderPath = dir.filePath(e.vertexShaderPath);
     }
     if (!e.previewPath.isEmpty()) {
-        e.previewPath = effectDir + QLatin1Char('/') + e.previewPath;
+        e.previewPath = dir.filePath(e.previewPath);
     }
 
     return e;
@@ -92,23 +88,32 @@ void contributeSignature(QCryptographicHash& h, const AnimationShaderEffect& e)
     h.addData(QByteArrayView("|"));
     h.addData(e.sourceDir.toUtf8());
     h.addData(QByteArrayView("|"));
-    if (!e.fragmentShaderPath.isEmpty()) {
-        const QFileInfo fragInfo(e.fragmentShaderPath);
-        h.addData(QByteArray::number(fragInfo.size()));
+    // QFileInfo on a missing file returns size 0 and an invalid mtime,
+    // and `lastModified().toMSecsSinceEpoch()` on an invalid datetime
+    // is implementation-defined. The signature would still be stable
+    // *while the file stays absent*, but a flickering file would muddy
+    // change-detection diagnostics. Feed an explicit "missing" sentinel
+    // when the file isn't there; on-disk files contribute size+mtime.
+    auto contributeFileFp = [&h](const QString& path) {
+        if (path.isEmpty()) {
+            return;
+        }
+        const QFileInfo fi(path);
+        if (fi.exists()) {
+            h.addData(QByteArray::number(fi.size()));
+            h.addData(QByteArrayView("|"));
+            h.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            h.addData(QByteArrayView("missing"));
+        }
         h.addData(QByteArrayView("|"));
-        h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
-        h.addData(QByteArrayView("|"));
-    }
-    // Vertex shader mtime+size — symmetrical with the frag treatment
-    // above. `effectWatchPaths` watches the vertex shader so a content
-    // edit fires the rescan; without this mix-in the SHA-1 signature
+    };
+    contributeFileFp(e.fragmentShaderPath);
+    // Vertex shader mtime+size — symmetrical with the frag treatment.
+    // `effectWatchPaths` watches the vertex shader so a content edit
+    // fires the rescan; without this mix-in the SHA-1 signature
     // wouldn't shift and `effectsChanged` would be silenced.
-    if (!e.vertexShaderPath.isEmpty()) {
-        const QFileInfo vertInfo(e.vertexShaderPath);
-        h.addData(QByteArray::number(vertInfo.size()));
-        h.addData(QByteArrayView("|"));
-        h.addData(QByteArray::number(vertInfo.lastModified().toMSecsSinceEpoch()));
-    }
+    contributeFileFp(e.vertexShaderPath);
 }
 
 } // namespace
@@ -129,6 +134,13 @@ AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
     : MetadataPackRegistryBase(lcRegistry(), buildScanStrategy(this), parent)
     , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
 {
+    // The static_cast above is safe by construction (`buildScanStrategy`
+    // is the only path that populates the base's strategy slot, and it
+    // always produces a `ScanStrategy`). Pin that invariant in debug
+    // builds via dynamic_cast so a future refactor that diverts the
+    // strategy slot fails loudly instead of silently UB-ing on lookup.
+    Q_ASSERT_X(dynamic_cast<ScanStrategy*>(strategy()) != nullptr, "AnimationShaderRegistry",
+               "buildScanStrategy must return a MetadataPackScanStrategy<AnimationShaderEffect>");
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;
@@ -161,9 +173,7 @@ bool AnimationShaderRegistry::hasEffect(const QString& id) const
 
 QStringList AnimationShaderRegistry::effectIds() const
 {
-    QStringList ids = m_typedStrategy->packsById().keys();
-    std::sort(ids.begin(), ids.end());
-    return ids;
+    return m_typedStrategy->packIds();
 }
 
 } // namespace PhosphorAnimationShaders
