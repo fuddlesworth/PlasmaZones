@@ -178,7 +178,7 @@ private Q_SLOTS:
 
     void testWindowGeometryToRect()
     {
-        PhosphorProtocol::WindowGeometryEntry entry{QStringLiteral("win|1"), 10, 20, 300, 400};
+        PhosphorProtocol::WindowGeometryEntry entry{QStringLiteral("win|1"), 10, 20, 300, 400, QString()};
         QRect rect = entry.toRect();
         QCOMPARE(rect, QRect(10, 20, 300, 400));
     }

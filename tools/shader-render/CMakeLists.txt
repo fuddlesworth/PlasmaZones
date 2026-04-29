@@ -35,6 +35,7 @@ set(shader_render_SRCS
     audiomock.cpp
     encoder.h
     encoder.cpp
+    colorutil.h
 )
 
 add_executable(plasmazones-shader-render ${shader_render_SRCS})
@@ -48,6 +49,7 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::QuickPrivate
     PhosphorRendering
     PhosphorWayland
+    PhosphorAudio
 )
 
 # The tool reuses the daemon's ZoneUniformExtension header so the
@@ -69,4 +71,33 @@ if(INSTALL_SHADER_RENDER_TOOL)
     include(GNUInstallDirs)
     install(TARGETS plasmazones-shader-render
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+# ─────────────────────────────────────────────────────────────────
+# Tests for the loaders. Pure data parsers — no GPU, no scene graph
+# — so they run anywhere ctest does. Compiled only when tools are
+# enabled to keep the bare default build small.
+# ─────────────────────────────────────────────────────────────────
+if(BUILD_TESTING)
+    find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Test)
+
+    add_executable(test_shader_render_layoutloader
+        tests/test_layoutloader.cpp
+        layoutloader.cpp
+        layoutloader.h)
+    set_target_properties(test_shader_render_layoutloader PROPERTIES AUTOMOC ON)
+    target_link_libraries(test_shader_render_layoutloader PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui)
+    target_compile_features(test_shader_render_layoutloader PRIVATE cxx_std_20)
+    add_test(NAME test_shader_render_layoutloader COMMAND test_shader_render_layoutloader)
+
+    add_executable(test_shader_render_metadataloader
+        tests/test_metadataloader.cpp
+        metadataloader.cpp
+        metadataloader.h)
+    set_target_properties(test_shader_render_metadataloader PROPERTIES AUTOMOC ON)
+    target_link_libraries(test_shader_render_metadataloader PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui)
+    target_compile_features(test_shader_render_metadataloader PRIVATE cxx_std_20)
+    add_test(NAME test_shader_render_metadataloader COMMAND test_shader_render_metadataloader)
 endif()

@@ -22,7 +22,7 @@ private Q_SLOTS:
 
     void testWindowGeometryToRect()
     {
-        WindowGeometryEntry e{QStringLiteral("w"), 5, 10, 100, 200};
+        WindowGeometryEntry e{QStringLiteral("w"), 5, 10, 100, 200, QString()};
         QCOMPARE(e.toRect(), QRect(5, 10, 100, 200));
     }
 

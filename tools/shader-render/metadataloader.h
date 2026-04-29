@@ -47,16 +47,45 @@ struct ShaderMetadata
     QString bufferFilter = QStringLiteral("linear");
     QStringList bufferFilters;
 
-    // Default values seeded into the ShaderEffect:
-    //
-    //   customParams[0..7]  — vec4 array, x = float/int/bool slot value
-    //   customColors[0..15] — color array
-    //
-    // Slots are filled per the metadata "parameters" entries.  Anything
-    // unset stays at the ShaderEffect's "unset sentinel" (-1.0 vec4 /
-    // transparent black) so the shader can detect it.
-    std::array<QVector4D, 8> customParams = {};
-    std::array<QColor, 16> customColors = {};
+    // Default values seeded into the ShaderEffect.  Mirror ShaderEffect's
+    // internal init exactly so unset slots take the same code path the
+    // runtime takes:
+    //   * customParams components default to -1.0 ("unset" sentinel).  The
+    //     GLSL pattern `customParams[i].x >= 0.0 ? value : fallback` reads
+    //     0 as "set to zero" and skips the fallback — initializing to 0
+    //     would silently override every shader's intended default.
+    //   * customColors default to transparent black (0,0,0,0).  An invalid
+    //     QColor (the std::array default) doesn't match the runtime and
+    //     setCustomColorAt would happily forward it to the shader.
+    static constexpr QVector4D kUnsetParam{-1.0f, -1.0f, -1.0f, -1.0f};
+    std::array<QVector4D, 8> customParams = {{
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+        kUnsetParam,
+    }};
+    std::array<QColor, 16> customColors = {{
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+    }};
 
     // For shaders that declare image-typed parameters; absolute paths.
     std::array<QString, 4> userTextures = {};
@@ -66,13 +95,20 @@ struct ShaderMetadata
 /**
  * @brief Parse data/shaders/<id>/metadata.json into ShaderMetadata.
  *
- * Returns false if the file is missing, malformed, or doesn't declare
- * a fragment shader.  All path fields are resolved absolute against
- * the metadata.json's directory.
+ * Returns false if the file is missing, malformed, doesn't declare a
+ * fragment shader, or the declared fragment shader does not exist on
+ * disk. All path fields are resolved absolute against the metadata.json's
+ * directory.
  *
- * Parameter slot resolution mirrors the daemon: float/int/bool go into
- * customParams[slot].x, color → customColors[slot], image →
- * userTextures[slot] with wrap mode in userTextureWraps.
+ * Parameter slot resolution mirrors the daemon's flat 0–31 slot index:
+ *   * float / int / bool — slot S → customParams[S/4].(x|y|z|w)[S%4]
+ *     (8 vec4s × 4 channels = 32 distinct float slots)
+ *   * color — slot S → customColors[S] (16 slots)
+ *   * image — slot S → userTextures[S] / userTextureWraps[S] (4 slots)
+ *
+ * Parameters without a `slot` field are skipped silently (treated as
+ * UI-only metadata). Parameters with an explicitly invalid slot
+ * (negative or out-of-range for the type) are dropped with a warning.
  */
 bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out);
 
