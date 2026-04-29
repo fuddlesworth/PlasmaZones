@@ -634,6 +634,17 @@ private:
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
     /** @brief Prune m_lastAutotileOrders for old virtual screen IDs that no longer exist */
     void pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId);
+    /**
+     * @brief Drop a closed window from every saved autotile order.
+     *
+     * Without this, a window that closes while the screen is in manual mode
+     * stays in m_lastAutotileOrders. On the next manual→autotile toggle,
+     * seedAutotileOrderForScreen feeds the stale id back through
+     * setInitialWindowOrder; setActiveScreens replays it into the TilingState
+     * and recalculateLayout tiles a phantom window. Match by instance id —
+     * saved entries are canonical "appId|instanceId" composites.
+     */
+    void pruneAutotileOrdersForWindow(const QString& instanceId);
 
     bool m_running = false;
     int m_suppressResnapOsd = 0;

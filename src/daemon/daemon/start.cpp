@@ -39,6 +39,8 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/WindowId.h>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -666,6 +668,32 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
             && !keepIds.contains(it.key().screenId)) {
             it = m_lastAutotileOrders.erase(it);
         } else {
+            ++it;
+        }
+    }
+}
+
+void Daemon::pruneAutotileOrdersForWindow(const QString& instanceId)
+{
+    if (instanceId.isEmpty() || m_lastAutotileOrders.isEmpty()) {
+        return;
+    }
+    for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
+        QStringList& order = it.value();
+        const int before = order.size();
+        order.erase(std::remove_if(order.begin(), order.end(),
+                                   [&instanceId](const QString& wid) {
+                                       return PhosphorIdentity::WindowId::extractInstanceId(wid) == instanceId;
+                                   }),
+                    order.end());
+        if (order.isEmpty()) {
+            it = m_lastAutotileOrders.erase(it);
+        } else {
+            if (order.size() != before) {
+                qCDebug(lcDaemon) << "Pruned closed window" << instanceId
+                                  << "from saved autotile order for screen=" << it.key().screenId
+                                  << "desktop=" << it.key().desktop;
+            }
             ++it;
         }
     }
