@@ -153,10 +153,33 @@ protected:
         if (!zoneNode)
             return node;
 
-        if (!m_vertexLoaded && !m_vertexShaderPath.isEmpty()) {
+        // The scene graph can destroy and recreate the render node (e.g. on
+        // releaseResources / window hide). Detecting a pointer change resets
+        // the per-node "already pushed" flags so the new node gets the vertex
+        // shader and labels image re-applied — without this, the new node
+        // would render without them and the shader would silently misbehave.
+        // m_labelsDirty is forced even with an empty image so the node's
+        // 1×1 transparent fallback gets bound at slot 1 — leaving the slot
+        // unbound would render the SRB pipeline without uZoneLabels.
+        if (zoneNode != m_lastZoneNode) {
+            m_vertexLoaded = false;
+            m_vertexLoadFailed = false;
+            m_labelsDirty = true;
+            m_lastZoneNode = zoneNode;
+        }
+
+        if (!m_vertexLoaded && !m_vertexLoadFailed && !m_vertexShaderPath.isEmpty()) {
             if (zoneNode->loadVertexShader(m_vertexShaderPath)) {
                 zoneNode->invalidateShader();
                 m_vertexLoaded = true;
+            } else {
+                // Latch the failure so we don't retry every frame. The base
+                // ShaderNodeRhi already logs the underlying load error; this
+                // line just clarifies that the tool is giving up after one
+                // attempt rather than spinning silently.
+                qCWarning(lcRenderer) << "vertex shader load failed for" << m_vertexShaderPath
+                                      << "— continuing with the default fullscreen vertex stage";
+                m_vertexLoadFailed = true;
             }
         }
         zoneNode->setZoneCounts(m_zoneCountTotal, m_zoneCountHighlighted);
@@ -170,10 +193,12 @@ protected:
 private:
     QString m_vertexShaderPath;
     bool m_vertexLoaded = false;
+    bool m_vertexLoadFailed = false;
     int m_zoneCountTotal = 0;
     int m_zoneCountHighlighted = 0;
     QImage m_labelsImage;
     bool m_labelsDirty = false;
+    PhosphorRendering::ZoneShaderNodeRhi* m_lastZoneNode = nullptr;
 };
 
 QVector<PhosphorRendering::ZoneData> toRuntimeZones(const QVector<Zone>& srcZones)
@@ -219,7 +244,17 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetad
             effect.setBufferFilters(md.bufferFilters);
     }
     effect.setUseDepthBuffer(md.depthBuffer);
-    effect.setUseWallpaper(md.wallpaper);
+    if (md.wallpaper) {
+        // The daemon binds the actual wallpaper texture before the shader
+        // runs; the tool has no compositor to ask. Forcing useWallpaper=false
+        // pins previews to a deterministic no-wallpaper code path rather than
+        // having shaders sample an unbound (= garbage on Vulkan / impl-default
+        // 0 on OpenGL) wallpaper texture and read as a different image every
+        // backend.
+        qCWarning(lcRenderer) << "shader" << md.id << "declares wallpaper=true but tool doesn't bind a wallpaper —"
+                              << "preview uses the no-wallpaper render path";
+    }
+    effect.setUseWallpaper(false);
 
     for (int i = 0; i < 8; ++i) {
         effect.setCustomParamAt(i, md.customParams[i]);
@@ -434,7 +469,13 @@ int Renderer::render(const RenderOptions& opts)
     auto control = std::make_unique<QQuickRenderControl>();
     auto window = std::make_unique<QQuickWindow>(control.get());
 
-    window->setColor(Qt::transparent);
+    // Demo background: a subtle Plasma-Breeze-dark grey so the shaders'
+    // alpha channel reads as something other than the file viewer's
+    // checkerboard. Most shaders render semi-transparent content; with a
+    // transparent clear the result looks black-on-black for non-vivid
+    // bands. Set once before warmup so every captured frame uses the same
+    // clear colour.
+    window->setColor(QColor(QStringLiteral("#31363b")));
     window->resize(size);
     window->setGeometry(0, 0, size.width(), size.height());
 
@@ -520,13 +561,6 @@ int Renderer::render(const RenderOptions& opts)
     });
 
     runWarmup(control.get(), effect);
-
-    // Demo background: a subtle Plasma-Breeze-dark grey so the shaders'
-    // alpha channel reads as something other than the file viewer's
-    // checkerboard. Most shaders render semi-transparent content; with a
-    // transparent clear the result looked black-on-black for non-vivid
-    // bands. Picked to be visibly NOT black without dominating the shader.
-    window->setColor(QColor(QStringLiteral("#31363b")));
 
     // ── Frame loop ───────────────────────────────────────────────
     QVector<float> spectrum;

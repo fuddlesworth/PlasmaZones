@@ -117,6 +117,13 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
 
     if (out.fragmentShader.isEmpty())
         return false;
+    // Validate at the boundary: a metadata.json that points at a missing
+    // fragment shader fails the loader rather than silently propagating a
+    // bad path that would surface later as an opaque shader-compile error.
+    if (!QFileInfo::exists(out.fragmentShader)) {
+        qCWarning(lcMetadataLoader) << "fragment shader not found:" << out.fragmentShader;
+        return false;
+    }
 
     out.multipass = obj.value(QLatin1String("multipass")).toBool(false);
     out.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
@@ -154,9 +161,17 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
         const QJsonObject p = v.toObject();
         const QString type = p.value(QLatin1String("type")).toString(QStringLiteral("float"));
         const QString id = p.value(QLatin1String("id")).toString();
-        const int slot = p.value(QLatin1String("slot")).toInt(-1);
-        if (slot < 0)
+        // A missing slot field is intentional — UI-only metadata that
+        // doesn't get pushed to the shader. An explicit negative slot is
+        // a metadata error and gets logged so authoring mistakes don't
+        // silently disappear.
+        if (!p.contains(QLatin1String("slot")))
             continue;
+        const int slot = p.value(QLatin1String("slot")).toInt(-1);
+        if (slot < 0) {
+            qCWarning(lcMetadataLoader) << "parameter" << id << "has negative slot" << slot << "— dropping";
+            continue;
+        }
 
         if (type == QLatin1String("float") || type == QLatin1String("int")) {
             seedParam(out.customParams, slot, p.value(QLatin1String("default")).toDouble(0.0));

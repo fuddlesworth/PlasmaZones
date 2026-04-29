@@ -55,12 +55,21 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         return;
     }
 
+    // Pick the target size up-front: a non-empty staged image dictates,
+    // otherwise the 1×1 transparent fallback. Used both for the first-init
+    // allocation and the resize branch — without this, the first upload of
+    // an N×M image would allocate a 1×1 texture and immediately throw it
+    // away in the resize branch on the same call.
+    const QSize targetSize = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
+        ? m_labelsImage.size()
+        : QSize(1, 1);
+
     // Initialize labels texture resources on first use. Only flip
     // m_labelsInitialized after BOTH resources create successfully — otherwise
     // a transient RHI failure (device lost, OOM) would leave the init block
     // skipped forever while m_labelsTextureDirty stays set.
     if (!m_labelsInitialized) {
-        std::unique_ptr<QRhiTexture> tex(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        std::unique_ptr<QRhiTexture> tex(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
         if (!tex->create()) {
             return; // retry next frame
         }
@@ -73,12 +82,7 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         m_labelsSampler = std::move(sam);
         m_labelsInitialized = true;
         setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
-    }
-
-    const QSize targetSize = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
-        ? m_labelsImage.size()
-        : QSize(1, 1);
-    if (m_labelsTexture->pixelSize() != targetSize) {
+    } else if (m_labelsTexture->pixelSize() != targetSize) {
         std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
         if (!resized->create()) {
             return; // keep dirty; retry next frame with old texture still bound

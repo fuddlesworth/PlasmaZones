@@ -201,6 +201,85 @@ private Q_SLOTS:
         PlasmaZones::ShaderRender::ShaderMetadata md;
         QVERIFY(!PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
     }
+
+    void missingFragmentShaderKeyFailsWhenDefaultAbsent()
+    {
+        // When fragmentShader is absent the loader falls back to the daemon's
+        // default name (effect.frag). If that file isn't on disk either, the
+        // loader must reject at the boundary rather than silently propagate a
+        // path that surfaces later as an opaque shader-compile error.
+        QTemporaryDir dir;
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({"id": "test"})"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(!PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+    }
+
+    void missingFragmentShaderKeySucceedsWhenDefaultExists()
+    {
+        // Symmetric guard: with the default file present, an omitted key
+        // resolves cleanly to <dir>/effect.frag and the loader succeeds.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({"id": "test"})"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QVERIFY(md.fragmentShader.endsWith(QStringLiteral("effect.frag")));
+    }
+
+    void negativeSlotIsDropped()
+    {
+        // An explicit negative slot is a metadata error and is dropped
+        // (with a warning, not asserted on here). Adjacent valid slots
+        // must remain untouched.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("zone.vert"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "vertexShader": "zone.vert",
+            "parameters": [
+                {"id": "good", "type": "float", "slot": 0,  "default": 4.0},
+                {"id": "bad",  "type": "float", "slot": -3, "default": 9.0}
+            ]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QCOMPARE(md.customParams[0].x(), 4.0f);
+        // The negative slot wrote nothing — sentinel preserved on neighbours.
+        QCOMPARE(md.customParams[0].y(), -1.0f);
+        QCOMPARE(md.customParams[7].w(), -1.0f);
+    }
+
+    void missingSlotFieldIsSilentlySkipped()
+    {
+        // A parameter without a slot field is treated as UI-only metadata
+        // (no shader push), distinct from an explicit negative which is a
+        // metadata error. Verifies no slot is touched.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("zone.vert"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "vertexShader": "zone.vert",
+            "parameters": [
+                {"id": "uiOnly", "type": "float", "default": 5.0}
+            ]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        for (const auto& v : md.customParams) {
+            QCOMPARE(v.x(), -1.0f);
+            QCOMPARE(v.y(), -1.0f);
+            QCOMPARE(v.z(), -1.0f);
+            QCOMPARE(v.w(), -1.0f);
+        }
+    }
 };
 
 QTEST_GUILESS_MAIN(TestMetadataLoader)

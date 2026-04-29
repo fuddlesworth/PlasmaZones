@@ -132,6 +132,26 @@ private Q_SLOTS:
         QVERIFY(
             !PlasmaZones::ShaderRender::loadLayoutZones(QStringLiteral("/nonexistent/path.json"), QSize(1, 1), zones));
     }
+
+    void missingRelativeGeometryDefaultsToZeroRect()
+    {
+        // A zone object with no relativeGeometry pins the current behaviour:
+        // the entry is still appended with a (0,0,0,0) rect. Catches
+        // accidental future drift toward "skip silently" or "reject the
+        // whole file" without forcing either decision now.
+        QTemporaryDir dir;
+        const QString path = writeLayoutJson(dir, QStringLiteral(R"({
+            "zones": [
+                {"zoneNumber": 1}
+            ]
+        })"));
+
+        QVector<PlasmaZones::ShaderRender::Zone> zones;
+        QVERIFY(PlasmaZones::ShaderRender::loadLayoutZones(path, QSize(1, 1), zones));
+        QCOMPARE(zones.size(), 1);
+        QCOMPARE(zones[0].rect, QRectF(0.0, 0.0, 0.0, 0.0));
+        QCOMPARE(zones[0].zoneNumber, 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestLayoutLoader)

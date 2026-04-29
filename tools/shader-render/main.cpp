@@ -197,6 +197,20 @@ int main(int argc, char* argv[])
         }
     }
 
+    // Aspect-ratio mismatch silently stretches the frame (encoder uses
+    // IgnoreAspectRatio). For batch jobs writing the docs site this is a
+    // footgun — warn at the boundary so authors notice before regenerating
+    // dozens of clips.
+    if (outputSize != resolution) {
+        const double srcAspect = static_cast<double>(resolution.width()) / resolution.height();
+        const double dstAspect = static_cast<double>(outputSize.width()) / outputSize.height();
+        if (!qFuzzyCompare(srcAspect + 1.0, dstAspect + 1.0)) {
+            std::cerr << "warning: --resolution " << resolution.width() << "x" << resolution.height() << " (aspect "
+                      << srcAspect << ") differs from --output-size " << outputSize.width() << "x"
+                      << outputSize.height() << " (aspect " << dstAspect << ") — frames will be stretched\n";
+        }
+    }
+
     bool framesOk = false, fpsOk = false;
     const int frameCount = parser.value(framesOpt).toInt(&framesOk);
     const int fps = parser.value(fpsOpt).toInt(&fpsOk);
@@ -255,7 +269,6 @@ int main(int argc, char* argv[])
     opts.metadata = metadata;
     opts.zones = zones;
     opts.resolution = resolution;
-    opts.outputSize = outputSize;
     opts.frameCount = frameCount;
     opts.fps = fps;
     opts.audio = audio.get();

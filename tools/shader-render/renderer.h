@@ -19,11 +19,13 @@ struct RenderOptions
     ShaderMetadata metadata; ///< Parsed metadata; fragment/buffer paths absolute.
     QVector<Zone> zones; ///< Normalized 0-1 rects + colors (loadLayoutZones).
     QSize resolution; ///< Render target size (passed to the shader as iResolution).
-    QSize outputSize; ///< Final encoded size; the sink scales if different.
     int frameCount = 150;
     int fps = 30;
     AudioMock* audio = nullptr; ///< Per-frame spectrum source. Borrowed.
-    FrameSink* sink = nullptr; ///< Per-frame output destination. Borrowed.
+    FrameSink* sink = nullptr; ///< Per-frame output destination. The sink owns the
+                               ///< output-size resize (PNG and ffmpeg sinks both
+                               ///< honour --output-size); the renderer hands it
+                               ///< unscaled frames at @c resolution. Borrowed.
 };
 
 /**

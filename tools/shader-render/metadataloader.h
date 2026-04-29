@@ -95,13 +95,20 @@ struct ShaderMetadata
 /**
  * @brief Parse data/shaders/<id>/metadata.json into ShaderMetadata.
  *
- * Returns false if the file is missing, malformed, or doesn't declare
- * a fragment shader.  All path fields are resolved absolute against
- * the metadata.json's directory.
+ * Returns false if the file is missing, malformed, doesn't declare a
+ * fragment shader, or the declared fragment shader does not exist on
+ * disk. All path fields are resolved absolute against the metadata.json's
+ * directory.
  *
- * Parameter slot resolution mirrors the daemon: float/int/bool go into
- * customParams[slot].x, color → customColors[slot], image →
- * userTextures[slot] with wrap mode in userTextureWraps.
+ * Parameter slot resolution mirrors the daemon's flat 0–31 slot index:
+ *   * float / int / bool — slot S → customParams[S/4].(x|y|z|w)[S%4]
+ *     (8 vec4s × 4 channels = 32 distinct float slots)
+ *   * color — slot S → customColors[S] (16 slots)
+ *   * image — slot S → userTextures[S] / userTextureWraps[S] (4 slots)
+ *
+ * Parameters without a `slot` field are skipped silently (treated as
+ * UI-only metadata). Parameters with an explicitly invalid slot
+ * (negative or out-of-range for the type) are dropped with a warning.
  */
 bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out);
 
