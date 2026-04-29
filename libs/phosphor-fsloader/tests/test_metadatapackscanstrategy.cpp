@@ -757,22 +757,27 @@ private Q_SLOTS:
         set.registerDirectory(dir, LiveReload::Off);
 
         QVERIFY(reentered);
-        // Outer + inner each landed in OnCommit. The re-entrant inner
-        // scan sees identical filesystem state, but it observes its own
-        // first scan (m_signatureSeeded=false on the first invocation,
-        // already true on the second) — so the inner counts as a
-        // "first scan with content" and increments commits. The outer
-        // had already incremented before re-entering.
+        // Trace: the outer scan computes signature S1, stores it, and
+        // calls OnCommit (commits == 1). OnCommit re-enters via
+        // `rescanNow()`, which is a direct synchronous call into
+        // `rescanAll` with no reentry guard (`requestRescan` is the
+        // path that defers; `rescanNow` does not). The inner scan
+        // observes identical filesystem state and recomputes the same
+        // signature S1; `m_signatureSeeded` is already true (set by
+        // the outer just before its OnCommit call), so the inner
+        // takes the `signature != m_lastSignature` branch, finds
+        // them equal, and does NOT fire OnCommit again.
         //
-        // The contract being pinned here is NOT the commit count
-        // specifically (that's an artefact of the ordering); it is that
-        // re-entry doesn't crash, doesn't strand the outer scan's
-        // m_packs in a half-mutated state, and that the registry
-        // settles to size==1 with the correct payload visible.
+        // The contract being pinned here is twofold: re-entry doesn't
+        // crash or strand the outer's `m_packs` half-mutated, and
+        // change-only emit semantics survive the recursion (a
+        // re-entrant scan with identical content does not re-fire
+        // OnCommit). Tightened from `>= 1` to `== 1` after the
+        // recursion path was traced — the loose form would mask a
+        // regression that re-fired OnCommit on the inner scan.
         QCOMPARE(strategy.size(), 1);
         QVERIFY(strategy.contains(QStringLiteral("pkg-a")));
-        // commits ≥ 1 (outer) and the inner re-entry didn't deadlock.
-        QVERIFY(commits >= 1);
+        QCOMPARE(commits, 1);
     }
 
     /// Entries with malformed (unparseable) `metadata.json` are

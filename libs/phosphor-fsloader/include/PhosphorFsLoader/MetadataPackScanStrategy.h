@@ -53,21 +53,38 @@ namespace PhosphorFsLoader {
  *      user dirs first, so cap-trip never violates user-wins layering).
  *   5. SHA-1 signature over the sorted-by-id entry set. The strategy
  *      contributes `id` + `isUser` + `metadata.json` size+mtime per entry,
- *      AND mixes the size+mtime of every distinct watched file (the
+ *      AND mixes path|size|mtime per distinct watched file (the
  *      `metadata.json` itself, plus everything `PerEntryWatchPaths` and
- *      `PerDirectoryWatchPaths` returned) in lex-sorted order. The
- *      "watch list = signature scope" invariant means: any file the
- *      strategy is watching contributes to the signature, so any file
- *      change the watcher fires on translates to an `OnCommit` (modulo
- *      mtime/size shifting, which POSIX guarantees on content-changing
- *      writes). Without this auto-mix, an edit to a watched file the
- *      caller's `SignatureContrib` doesn't enumerate (a top-level
- *      shared `*.glsl` include, a per-pack `helpers.glsl`, etc.) would
- *      fire the rescan but leave the signature stable — `OnCommit`
- *      would be silenced and consumers would hold stale state.
+ *      `PerDirectoryWatchPaths` returned) in lex-sorted order. Mixing
+ *      the path string is load-bearing: a file moving from a sys-dir
+ *      to the user-dir without any byte change must still register as
+ *      a layering shift, since the `isUser` classification on the
+ *      winning entry has flipped. The "watch list = signature scope"
+ *      invariant means: any file the strategy is watching contributes
+ *      to the signature, so any file change the watcher fires on
+ *      translates to an `OnCommit` (modulo mtime/size shifting, which
+ *      POSIX guarantees on content-changing writes). Without this
+ *      auto-mix, an edit to a watched file the caller's
+ *      `SignatureContrib` doesn't enumerate (a top-level shared
+ *      `*.glsl` include, a per-pack `helpers.glsl`, etc.) would fire
+ *      the rescan but leave the signature stable — `OnCommit` would
+ *      be silenced and consumers would hold stale state.
  *      `OnCommit` fires only when the signature differs from the previous
  *      scan, giving the consumer change-only emit semantics on top of
  *      `WatchedDirectorySet`'s unconditional `rescanCompleted`.
+ *
+ *      One known wrinkle: `metadata.json` files that fail validation
+ *      (parse error, oversized, empty `id`, parser declined) are still
+ *      added to the watch set so a fix-up edit re-fires the rescan.
+ *      That means an in-place edit of a still-broken file shifts the
+ *      watch-set fingerprint and trips `OnCommit` even though no
+ *      *visible* state changed. Consumers gating their public signal
+ *      on `OnCommit` will emit a spurious "changed" event in that
+ *      case; `availableShaders()` / `availableEffects()` reflect the
+ *      truth — the spurious wakeup is harmless beyond a redundant
+ *      QML rebind. A subdir-walk that's bounded only by the
+ *      filesystem (see `kDefaultMaxEntries`) makes pinning this
+ *      stricter not worth the loop bookkeeping.
  *   6. Sorted-by-id accessor (`packs()`) so QHash randomisation never
  *      surfaces in downstream UI / snapshot tests.
  *   7. `isUser` classification per entry, derived from a caller-supplied
@@ -180,12 +197,22 @@ class MetadataPackScanStrategy : public IScanStrategy
                   "MetadataPackScanStrategy<Payload> requires Payload to expose a public 'QString id' member.");
 
 public:
-    /// Hard cap on entries discovered per rescan, summed across every
-    /// registered search path. Mirrors `DirectoryLoader::kMaxEntries`
-    /// — every fsloader-backed registry caps at the same scale.
-    /// Typical pack counts are single digits; the cap is purely a DoS
-    /// guard against pathological user dirs with thousands of
-    /// metadata.json-bearing subdirs.
+    /// Hard cap on **successfully parsed** entries discovered per rescan,
+    /// summed across every registered search path. Mirrors
+    /// `DirectoryLoader::kMaxEntries` — every fsloader-backed registry
+    /// caps at the same scale. Typical pack counts are single digits; the
+    /// cap is purely a DoS guard against pathological user dirs with
+    /// thousands of metadata.json-bearing subdirs.
+    ///
+    /// Note: the cap does **not** bound the number of subdirs iterated.
+    /// A search path with N subdirs that all lack a valid `metadata.json`
+    /// will still loop through all N (each one stat'd, then skipped) —
+    /// the cap protects against parsed-payload blowup, not directory-
+    /// walk blowup. The bounded-iteration guarantee comes from
+    /// `WatchedDirectorySet`'s forbidden-root check (which prevents
+    /// `$HOME` and friends from being registered) and from caller-side
+    /// path discipline. If a future caller registers an
+    /// untrusted-tree-of-subdirs they must apply their own iteration cap.
     static constexpr int kDefaultMaxEntries = 10'000;
 
     /// Parse one `metadata.json` into a payload. The strategy already
@@ -301,6 +328,17 @@ public:
      * `isUser`. The path does not need to exist at the time of the
      * call — `canonicalFilePath` resolves once it materialises and
      * subsequent rescans pick up the classification.
+     *
+     * Setting this directly on the strategy does **not** trigger a
+     * rescan — the new value takes effect on the next scan, whenever
+     * that fires. Production consumers reach the strategy through
+     * `MetadataPackRegistryBase::setUserPath`, which orchestrates a
+     * synchronous `rescanNow()` after forwarding the value, so existing
+     * pack classifications refresh immediately. Direct strategy access
+     * (e.g. tests using `static_cast<ScanStrategy*>(strategy())`)
+     * bypasses that orchestration; pair the call with an explicit
+     * `WatchedDirectorySet::rescanNow()` if immediate reclassification
+     * is required.
      */
     void setUserPath(const QString& path)
     {
@@ -319,21 +357,21 @@ public:
         m_maxEntries = std::max(0, cap);
     }
 
-    /// Optional: the logging category to emit warnings under (cap
-    /// trip, oversized metadata.json, parse error, missing id). When
-    /// nullptr, the strategy uses its own internal category. Both
-    /// real consumers pass their own so log output keeps its
-    /// per-registry filterability.
+    /// Override the logging category used for the strategy's own
+    /// warnings (cap trip, oversized metadata.json, parse error, missing
+    /// id). Defaults to an internal `phosphorfsloader.metadatapackscan`
+    /// category — the override exists so each consumer's log output
+    /// keeps its per-registry filterability.
     ///
     /// Stored as a borrowed pointer; @p cat must outlive the strategy.
-    /// The standard caller pattern — `setLoggingCategory(&lcMyRegistry())`
+    /// The standard caller pattern — `setLoggingCategory(lcMyRegistry())`
     /// where `lcMyRegistry` is defined via `Q_LOGGING_CATEGORY` — gives
-    /// a static-lifetime category and trivially satisfies this. Passing
-    /// a stack-allocated or transient category yields a UAF on the next
-    /// rescan.
-    void setLoggingCategory(const QLoggingCategory* cat)
+    /// a static-lifetime category and trivially satisfies this. Reference
+    /// (not pointer) parameter mirrors `MetadataPackRegistryBase`'s
+    /// ctor and makes "always non-null" a compile-time guarantee.
+    void setLoggingCategory(const QLoggingCategory& cat)
     {
-        m_loggingCat = cat;
+        m_loggingCat = &cat;
     }
 
     /**
@@ -348,9 +386,13 @@ public:
      *
      * @return Per-rescan watch paths: every iterated subdir's
      *         `metadata.json`, plus everything `PerEntryWatchPaths`
-     *         and `PerDirectoryWatchPaths` returned. Does NOT include
-     *         the registered search paths themselves — the base
-     *         already watches those directly.
+     *         and `PerDirectoryWatchPaths` returned. Lex-sorted and
+     *         deduplicated (the same canonical form already used
+     *         internally for the signature pass) so callers can rely
+     *         on stable ordering across rescans regardless of which
+     *         search-path / subdir-traversal interleaving produced
+     *         each entry. Does NOT include the registered search
+     *         paths themselves — the base already watches those directly.
      */
     QStringList performScan(const QStringList& directoriesInScanOrder) override;
 
@@ -692,7 +734,15 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
         m_onCommit();
     }
 
-    return desiredWatches;
+    // Return the deduped + lex-sorted watch set rather than the raw
+    // append-order `desiredWatches`. The caller (`WatchedDirectorySet`)
+    // dedupes again internally via `QSet<QString> m_watchedFiles`, so
+    // this isn't a correctness fix — but the strategy already paid for
+    // dedup + sort during the signature pass, so handing the cleaned
+    // list back saves the watcher its own dedup pass and removes a
+    // class of "watcher diagnostics in nondeterministic order" from
+    // the system. Costs nothing.
+    return sortedWatches;
 }
 
 } // namespace PhosphorFsLoader

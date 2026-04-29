@@ -32,6 +32,19 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// in the strategy still mixes a "missing" sentinel for absent files,
 /// so a frag materialising on disk shifts the signature and fires
 /// `effectsChanged`.
+///
+/// Caveat: the watch-set auto-fingerprint only covers paths that
+/// `effectWatchPaths` actually returns (see below) — and that callback
+/// only contributes the resolved frag / vert paths when the metadata
+/// declared them in the first place. A pack whose `metadata.json`
+/// **omits** the field entirely will not have a "missing" watch entry
+/// to flip when a `effect.frag` later appears on disk; the change is
+/// invisible to the strategy until something else triggers a rescan
+/// (e.g. an edit to the `metadata.json` itself, which is always
+/// watched). In practice an effect whose metadata never named its
+/// frag is unreachable through the normal kwin pipeline, so the
+/// missed wakeup is academic — but flagged here so a future schema
+/// change that defaults the field can pin the contract.
 std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const QJsonObject& root, bool isUserDir)
 {
     AnimationShaderEffect e = AnimationShaderEffect::fromJson(root);
@@ -88,7 +101,7 @@ AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
         Q_EMIT self->effectsChanged();
     });
     strategy->setPerEntryWatchPaths(effectWatchPaths);
-    strategy->setLoggingCategory(&lcRegistry());
+    strategy->setLoggingCategory(lcRegistry());
     return strategy;
 }
 

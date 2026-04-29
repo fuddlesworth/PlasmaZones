@@ -349,7 +349,7 @@ std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrate
     strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
     strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
     strategy->setPerSubdirSkip(shaderSubdirSkip);
-    strategy->setLoggingCategory(&lcShaderRegistry());
+    strategy->setLoggingCategory(lcShaderRegistry());
     return strategy;
 }
 
