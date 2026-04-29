@@ -4,20 +4,20 @@
 #include "layershellintegration.h"
 #include <QtWaylandClient/private/qwaylandshellintegrationplugin_p.h>
 
-class PhosphorShellPlugin : public QtWaylandClient::QWaylandShellIntegrationPlugin
+class PhosphorWaylandPlugin : public QtWaylandClient::QWaylandShellIntegrationPlugin
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID QWaylandShellIntegrationFactoryInterface_iid FILE "phosphorshell.json")
+    Q_PLUGIN_METADATA(IID QWaylandShellIntegrationFactoryInterface_iid FILE "phosphorwayland.json")
 
 public:
     QtWaylandClient::QWaylandShellIntegration* create(const QString& key, const QStringList& paramList) override
     {
         Q_UNUSED(paramList)
-        if (key == QLatin1String("phosphorshell")) {
-            return new PhosphorShell::LayerShellIntegration();
+        if (key == QLatin1String("phosphorwayland")) {
+            return new PhosphorWayland::LayerShellIntegration();
         }
         return nullptr;
     }
 };
 
-#include "phosphorshellplugin.moc"
+#include "phosphorwaylandplugin.moc"

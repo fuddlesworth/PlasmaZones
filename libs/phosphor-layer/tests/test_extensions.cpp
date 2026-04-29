@@ -225,7 +225,7 @@ private Q_SLOTS:
 
     void xdgTransport_lateRegistrantAfterFireInvokesImmediately()
     {
-        // Anti-regression for the symmetry-with-PhosphorShellTransport fix:
+        // Anti-regression for the symmetry-with-PhosphorWaylandTransport fix:
         // callbacks registered AFTER the broadcaster has already fired must
         // invoke immediately so a late consumer still sees the event.
         //

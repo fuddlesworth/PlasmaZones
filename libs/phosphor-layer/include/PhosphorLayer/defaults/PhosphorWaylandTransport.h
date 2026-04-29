@@ -12,16 +12,16 @@ namespace PhosphorLayer {
 
 /**
  * @brief Default transport: binds surfaces to wlr-layer-shell via
- * PhosphorShell's LayerSurface class.
+ * PhosphorWayland's LayerSurface class.
  *
  * Stateless — isSupported() proxies to LayerSurface::isSupported(), and
  * attach() creates exactly one LayerSurface per QWindow.
  *
- * Compositor-lost detection: PhosphorShell's QPA plugin owns the
+ * Compositor-lost detection: PhosphorWayland's QPA plugin owns the
  * wlr-layer-shell global-removal signal but does not expose it through
  * a public API, so this transport currently fires compositor-lost
  * callbacks on `QGuiApplication::aboutToQuit` only (clean exit). Mid-
- * session compositor crashes are not detected until PhosphorShell gains
+ * session compositor crashes are not detected until PhosphorWayland gains
  * a public global-removal accessor.
  *
  * Thread-safe: addCompositorLostCallback() may be called from any thread.
@@ -29,11 +29,11 @@ namespace PhosphorLayer {
  * are invoked outside the internal mutex, so callbacks may freely
  * re-enter the transport without deadlocking.
  */
-class PHOSPHORLAYER_EXPORT PhosphorShellTransport : public ILayerShellTransport
+class PHOSPHORLAYER_EXPORT PhosphorWaylandTransport : public ILayerShellTransport
 {
 public:
-    PhosphorShellTransport();
-    ~PhosphorShellTransport() override;
+    PhosphorWaylandTransport();
+    ~PhosphorWaylandTransport() override;
 
     bool isSupported() const override;
     std::unique_ptr<ITransportHandle> attach(QQuickWindow* win, const TransportAttachArgs& args) override;

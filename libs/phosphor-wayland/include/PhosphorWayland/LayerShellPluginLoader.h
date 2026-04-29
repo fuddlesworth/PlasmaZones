@@ -7,9 +7,9 @@
 #include <QFile>
 #include <QString>
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
-/// Call before QGuiApplication to register the phosphorshell QPA plugin.
+/// Call before QGuiApplication to register the phosphorwayland QPA plugin.
 /// Lightweight header — does not pull in Qt Wayland private headers.
 /// Respects any existing QT_WAYLAND_SHELL_INTEGRATION value (e.g. for debugging).
 /// Only sets the env var when WAYLAND_DISPLAY is set (proves a compositor is running).
@@ -31,7 +31,7 @@ inline void registerLayerShellPlugin()
         // (e.g. COSMIC) or systemd socket-activation setups may not set
         // WAYLAND_DISPLAY but the socket exists at the default path.
         if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")) {
-            qputenv("QT_WAYLAND_SHELL_INTEGRATION", "phosphorshell");
+            qputenv("QT_WAYLAND_SHELL_INTEGRATION", "phosphorwayland");
         } else {
             // Fallback: check for common Wayland sockets. Compositors may use any
             // socket name (wayland-0, wayland-1 for nested sessions, or custom names).
@@ -42,11 +42,11 @@ inline void registerLayerShellPlugin()
                 const QString runtimePath = QString::fromUtf8(runtimeDir);
                 if (QFile::exists(runtimePath + QStringLiteral("/wayland-0"))
                     || QFile::exists(runtimePath + QStringLiteral("/wayland-1"))) {
-                    qputenv("QT_WAYLAND_SHELL_INTEGRATION", "phosphorshell");
+                    qputenv("QT_WAYLAND_SHELL_INTEGRATION", "phosphorwayland");
                 }
             }
         }
     }
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland

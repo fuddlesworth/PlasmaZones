@@ -14,8 +14,8 @@ qt_policy(SET QTP0004 NEW)
 add_subdirectory(shared)
 add_subdirectory(compositor-common)
 
-# Wayland layer-shell protocol code generation moved to PhosphorShell library.
-# PlasmaZones uses PhosphorShell::LayerSurface via compatibility wrappers in core/.
+# Wayland layer-shell protocol code generation moved to PhosphorWayland library.
+# PlasmaZones uses PhosphorWayland::LayerSurface via compatibility wrappers in core/.
 
 # Core library sources
 set(plasmazones_core_SRCS
@@ -82,7 +82,7 @@ set(plasmazones_core_SRCS
     common/layoutbundlebuilder.h
     core/supportreport.cpp
     core/supportreport.h
-    # layersurface moved to PhosphorShell; shaderregistry/params moved to PhosphorShaders
+    # layersurface moved to PhosphorWayland; shaderregistry/params moved to PhosphorShaders
     core/single_instance_service.cpp
     core/single_instance_service.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
@@ -181,9 +181,9 @@ generate_export_header(plasmazones_core
     EXPORT_MACRO_NAME PLASMAZONES_EXPORT
 )
 
-# Layer-shell: implementation moved to PhosphorShell library.
+# Layer-shell: implementation moved to PhosphorWayland library.
 # The compatibility wrappers (core/qpa/*.h) are header-only — no sources to compile.
-# PhosphorShell provides the QPA plugin, protocol code, and LayerSurface implementation.
+# PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 set_source_files_properties(
     config/configdefaults.cpp
     # Exclude from unity build to avoid forward-declaration conflicts
@@ -192,7 +192,7 @@ set_source_files_properties(
     dbus/windowdragadaptor/drop.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
-# PhosphorShaders + PhosphorShell headers are available via PUBLIC link dependencies
+# PhosphorShaders + PhosphorWayland headers are available via PUBLIC link dependencies
 
 target_link_libraries(plasmazones_core
     PUBLIC
@@ -218,7 +218,7 @@ target_link_libraries(plasmazones_core
         PhosphorProtocol::PhosphorProtocol
         PhosphorScreens::PhosphorScreens
         PhosphorShaders::PhosphorShaders
-        PhosphorShell::PhosphorShell
+        PhosphorWayland::PhosphorWayland
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones
     PRIVATE
@@ -312,11 +312,11 @@ install(TARGETS plasmazones_core
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Layer Shell Qt Plugin — now provided by PhosphorShell library
+# Layer Shell Qt Plugin — now provided by PhosphorWayland library
 # ═══════════════════════════════════════════════════════════════════════════════
-# The QPA plugin (phosphorshell-qpa) is built and installed by libs/phosphor-shell/CMakeLists.txt.
-# PlasmaZones::registerLayerShellPlugin() forwards to PhosphorShell::registerLayerShellPlugin()
-# which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorshell.
+# The QPA plugin (phosphorwayland-qpa) is built and installed by libs/phosphor-wayland/CMakeLists.txt.
+# PlasmaZones::registerLayerShellPlugin() forwards to PhosphorWayland::registerLayerShellPlugin()
+# which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rendering Library (ZoneShaderItem, shared between daemon and editor)

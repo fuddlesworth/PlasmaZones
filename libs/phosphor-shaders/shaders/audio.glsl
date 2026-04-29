@@ -7,8 +7,8 @@
 //   #include <common.glsl>
 //   #include <audio.glsl>
 
-#ifndef PHOSPHORSHELL_AUDIO_GLSL
-#define PHOSPHORSHELL_AUDIO_GLSL
+#ifndef PHOSPHORSHADERS_AUDIO_GLSL
+#define PHOSPHORSHADERS_AUDIO_GLSL
 
 // Audio spectrum texture (binding 6). 1D: bar index = x, y=0. R = bar value 0-1.
 // Only valid when iAudioSpectrumSize > 0. Include <audio.glsl> for helpers.

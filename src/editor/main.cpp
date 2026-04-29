@@ -8,8 +8,8 @@
 #include "../core/logging.h"
 #include <PhosphorAnimationQml/PhosphorCurve.h>
 #include <PhosphorAnimationQml/QtQuickClockManager.h>
-#include <PhosphorShell/LayerShellPluginLoader.h>
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerShellPluginLoader.h>
+#include <PhosphorWayland/LayerSurface.h>
 #include <PhosphorScreens/Resolver.h>
 #include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     qputenv("DISABLE_MANGOHUD", "1");
 
     // Register our layer-shell QPA plugin before QGuiApplication
-    PhosphorShell::registerLayerShellPlugin();
+    PhosphorWayland::registerLayerShellPlugin();
 
     // Read rendering backend preference and set graphics API BEFORE QGuiApplication.
     // Must match daemon's backend so shader previews render identically.
@@ -110,14 +110,14 @@ int main(int argc, char* argv[])
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
-    qRegisterMetaType<PhosphorShell::LayerSurface*>();
+    qRegisterMetaType<PhosphorWayland::LayerSurface*>();
 
     // Verify the layer-shell QPA plugin loaded successfully. If not, shader preview
     // overlays will be created as xdg_toplevel (wrong stacking/anchoring).
-    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorShell::LayerSurface::isSupported()) {
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorWayland::LayerSurface::isSupported()) {
         qCCritical(lcEditor) << "Layer-shell QPA plugin did not initialize —"
                              << "shader preview overlays will use xdg_toplevel (wrong stacking)."
-                             << "Check that phosphorshell-qpa.so is installed to Qt's"
+                             << "Check that phosphorwayland-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// PlasmaZones ShaderRegistry — wraps PhosphorShaders::ShaderPackRegistry with
+// PlasmaZones ShaderRegistry — wraps PhosphorShaders::ShaderRegistry with
 // hardcoded plasmazones shader paths and QML-side Q_INVOKABLE helpers.
 //
 // Per-process ownership: composition roots (daemon) own one via unique_ptr
@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include <PhosphorShaders/ShaderPackRegistry.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include "plasmazones_export.h"
 
@@ -25,13 +25,13 @@ namespace PlasmaZones {
 /// PlasmaZones-specific ShaderRegistry that adds:
 /// - Hardcoded system/user shader paths (plasmazones/shaders)
 /// - userShadersEnabled(), userShaderDirectory(), openUserShaderDirectory()
-class PLASMAZONES_EXPORT ShaderRegistry : public PhosphorShaders::ShaderPackRegistry
+class PLASMAZONES_EXPORT ShaderRegistry : public PhosphorShaders::ShaderRegistry
 {
     Q_OBJECT
 
 public:
     explicit ShaderRegistry(QObject* parent = nullptr)
-        : PhosphorShaders::ShaderPackRegistry(parent)
+        : PhosphorShaders::ShaderRegistry(parent)
     {
         // Ensure user shader dir exists BEFORE registering — so the
         // initial scan picks up any user-shipped shaders without an

@@ -89,8 +89,8 @@ public:
 /**
  * @brief Abstracts the layer-shell protocol binding.
  *
- * Default implementation: PhosphorShellTransport (provided in a later
- * phase, wraps PhosphorShell::LayerSurface). Tests inject a MockTransport
+ * Default implementation: PhosphorWaylandTransport (provided in a later
+ * phase, wraps PhosphorWayland::LayerSurface). Tests inject a MockTransport
  * and exercise the full lifecycle without Wayland.
  */
 class PHOSPHORLAYER_EXPORT ILayerShellTransport
