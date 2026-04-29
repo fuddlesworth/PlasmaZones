@@ -42,16 +42,20 @@ class QtQuickClock;
  * in the manager and destroyed when the window goes away or the
  * manager itself is destroyed (composition-root teardown).
  *
- * ## Ownership and DI
+ * ## Ownership: composition-root DI bridged through a QML service locator
  *
  * The manager is created and owned by the composition root (daemon,
  * editor, settings — each a separate process today). It is NOT a
- * singleton: the composition root publishes its locally-owned manager
- * via `setDefaultManager(...)` so QML callsites in that process resolve
- * to the same instance. Tests construct their own local manager per
- * fixture. The `setDefaultManager` / `defaultManager` pair mirrors
- * `PhosphorCurve::setDefaultRegistry` — explicit DI handoff via a
- * static handle, not a Meyers singleton.
+ * Meyers singleton — its lifetime is bounded by the composition root,
+ * not by the first call.
+ *
+ * QML consumers can't be handed the manager via constructor injection
+ * (`PhosphorAnimatedValueBase`-derived types are created by the QML
+ * engine), so the composition root publishes its locally-owned manager
+ * via `setDefaultManager(...)` and `defaultManager()` reads it back —
+ * a process-wide service locator narrowly scoped to the QML bridge.
+ * Tests construct their own local manager per fixture and skip the
+ * static. Same pattern as `PhosphorCurve::setDefaultRegistry`.
  *
  * ## Consumer shape
  *

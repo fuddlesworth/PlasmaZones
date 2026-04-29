@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShaders — shader-domain primitives, registry and QML facade.
+# PhosphorShaders — shader-domain primitives and registry.
 #
 # Shadertoy-compatible UBO layout (BaseUniforms), the consumer-side
 # IUniformExtension contract, GLSL #include resolver, wallpaper-provider
@@ -16,9 +16,13 @@
 # `MetadataPackScanStrategy<Payload>` will let ShaderPackRegistry and
 # AnimationShaderRegistry collapse onto the same pack-walker scaffold.
 #
-# Depends on Qt6 Core+Gui+Qml (Gui for QImage in the wallpaper cache,
-# Qml for the Phosphor.Shaders QML module declaration) and
-# PhosphorFsLoader for WatchedDirectorySet.
+# Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
+# PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
+# downstream PlasmaZones code exposes ShaderPackRegistry to QML via
+# context properties, so this lib stays C++-only. A `Phosphor.Shaders`
+# QML module can be added (alongside `QML_ELEMENT` annotations on the
+# C++ types) when an out-of-tree consumer needs `import Phosphor.Shaders`
+# resolution.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -37,7 +41,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
 
 # PhosphorFsLoader — shared filesystem-loader scaffolding (used by
 # ShaderPackRegistry's WatchedDirectorySet + ShaderScanStrategy).
@@ -48,27 +52,10 @@ if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)
 endif()
 
-# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML module
-# resource prefix, the documented default. Setting it explicitly silences
-# the Qt6CoreMacros QTP0001 dev warning.
-if(POLICY CMP0090 OR COMMAND qt_policy)
-    qt_policy(SET QTP0001 NEW)
-endif()
-
-# Position-independent code is required for Qt's QML type-registration
-# sub-targets — must be set BEFORE qt_add_qml_module so every generated
-# sub-target inherits it.
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-endif()
-
-if(NOT DEFINED KDE_INSTALL_QMLDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_QMLDIR ${CMAKE_INSTALL_LIBDIR}/qt6/qml)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -106,10 +93,10 @@ set(phosphorshaders_SRCS
 # the pack registry. Exportable + installable so downstream find_package
 # consumers (notably PhosphorRendering) can link it.
 #
-# The Phosphor.Shaders QML module is a separate STATIC qml-module
-# target below that links this library — keeping the QML facade from
-# polluting the export set with Qt-generated `*_resources_*` sub-
-# targets that aren't part of any install rule.
+# No QML facade target here — see the file header for rationale. If a
+# `Phosphor.Shaders` module is added later, follow phosphor-animation-qml
+# 's pattern: separate STATIC qml-module target that links this library
+# (so the QML registration sub-targets don't leak into install(EXPORT)).
 
 add_library(PhosphorShaders SHARED
     ${phosphorshaders_public_HDRS}
@@ -158,36 +145,6 @@ set_target_properties(PhosphorShaders PROPERTIES
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phosphor.Shaders QML module
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# STATIC qml-module target that exposes ShaderPackRegistry to QML
-# consumers under `import Phosphor.Shaders`. STATIC because every
-# in-tree consumer (daemon, settings, editor) links the module
-# directly, picking up the registration the moment the plugin
-# library is linked — same pattern as the org.plasmazones.common
-# module in src/shared/CMakeLists.txt and the org.phosphor.animation
-# STATIC backing in phosphor-animation-qml.
-#
-# The module is consumer-side QML-only — no extra C++ sources beyond
-# what PhosphorShaders already ships. Out-of-tree `import
-# Phosphor.Shaders` resolution would need a SHARED variant
-# (see PHOSPHOR_ANIMATION_QML_INSTALL in phosphor-animation-qml for
-# the pattern); not wired up here because no out-of-tree consumer
-# imports the module yet.
-
-qt_add_qml_module(PhosphorShadersQml
-    URI Phosphor.Shaders
-    VERSION 1.0
-    STATIC
-    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Shaders
-)
-
-target_link_libraries(PhosphorShadersQml PUBLIC PhosphorShaders)
-
-add_library(PhosphorShaders::PhosphorShadersQml ALIAS PhosphorShadersQml)
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -207,12 +164,6 @@ if(NOT DEFINED KDE_INSTALL_BINDIR)
 endif()
 
 # The C++ library exports + installs as a normal find_package target.
-# The Phosphor.Shaders QML module (STATIC qt_add_qml_module) is NOT
-# included in the export set — Qt's machinery synthesises
-# `*_resources_*` sub-targets for each STATIC qml module that the
-# install(EXPORT) machinery rejects. The QML facade is in-tree-only
-# until a SHARED runtime plugin is wired up (mirroring
-# phosphor-animation-qml's PHOSPHOR_ANIMATION_QML_INSTALL flag).
 
 install(TARGETS PhosphorShaders
     EXPORT PhosphorShadersTargets

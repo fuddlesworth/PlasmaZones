@@ -30,8 +30,10 @@ class IWallpaperProvider;
 /// Discovers shaders from configured search paths, validates metadata,
 /// manages parameter presets, and watches for file changes.
 ///
-/// Unlike PlasmaZones' singleton, consumers create their own instances
-/// and register search paths explicitly.
+/// Composition roots own a per-process instance and register search
+/// paths explicitly — there is no library-level singleton. Tests
+/// construct a per-fixture registry; downstream consumers (PlasmaZones
+/// shell, future plugin compositors) instantiate their own.
 ///
 /// ## Thread safety
 ///
@@ -180,10 +182,14 @@ public:
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
 
-    /// Always true — `Qt6::ShaderTools` is a hard build dependency of
-    /// `phosphor-shell`, so a built registry necessarily has shader
-    /// support. Kept as `Q_INVOKABLE` because QML callers historically
-    /// used it as a feature gate; new code can omit the check.
+    /// Always true — once a `ShaderPackRegistry` is constructed, shader
+    /// discovery and metadata are functional (the registry is purely a
+    /// metadata-pack walker; actual shader compilation lives in the
+    /// `phosphor-rendering` library which carries the `Qt6::ShaderTools`
+    /// dependency). Kept as `Q_INVOKABLE` because QML callers
+    /// historically used it as a feature gate from the era when the
+    /// build had an opt-out for shader support; new code can omit the
+    /// check.
     Q_INVOKABLE bool shadersEnabled() const
     {
         return true;

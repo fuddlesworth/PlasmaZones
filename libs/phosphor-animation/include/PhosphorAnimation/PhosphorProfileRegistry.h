@@ -27,20 +27,27 @@ namespace PhosphorAnimation {
  * to publish the update. Every `PhosphorMotionAnimation` bound to `"<path>"`
  * auto-re-resolves on the emitted `profileChanged(path)` signal.
  *
- * ## Ownership and DI
+ * ## Ownership: composition-root DI for C++, service-locator for QML
  *
- * The registry is created and owned by the composition root (daemon, editor,
- * settings — each a separate process today). It is NOT a singleton: each
- * process owns exactly one and publishes the pointer via
- * `setDefaultRegistry(...)` so QML callsites in that process resolve to the
- * same instance the C++ side populates. Tests construct their own local
- * registry per fixture.
+ * C++ consumers receive the registry by reference via constructor injection
+ * (e.g. `SurfaceAnimator(PhosphorProfileRegistry&, ...)`) — that side is
+ * straightforward dependency injection with no global state.
  *
- * The `setDefaultRegistry` / `defaultRegistry` pair mirrors `PhosphorCurve`'s
- * static handle on `CurveRegistry`. The composition root publishes its
- * locally-owned registry once at startup and clears the handle on teardown
- * so a successive composition (in tests, or a daemon reconfigure cycle)
- * does not dangle into freed memory.
+ * The QML side cannot be wired the same way: `PhosphorMotionAnimation`
+ * instances are created by the QML engine, not by a C++ owner with a
+ * pointer to thread through. The `setDefaultRegistry` / `defaultRegistry`
+ * static-handle pair is the bridge — a process-wide service locator that
+ * the composition root publishes its locally-owned registry into so QML
+ * callsites can find it. It is NOT a singleton in the lifetime sense
+ * (each process owns exactly one registry, constructed and destructed by
+ * the composition root, not lazily by the registry itself), but it IS a
+ * service locator: any caller can read it, any caller can overwrite it,
+ * and there is no compiler-enforced binding between writer and reader.
+ * The composition root publishes once at startup and clears the handle
+ * on teardown so a successive composition (tests, or a daemon
+ * reconfigure cycle) does not dangle into freed memory. Tests that want
+ * full isolation construct a per-fixture registry and bypass the static
+ * altogether.
  *
  * ## Consumer model
  *

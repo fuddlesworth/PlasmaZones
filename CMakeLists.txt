@@ -329,7 +329,7 @@ add_subdirectory(libs/phosphor-identity)    # stable cross-process window identi
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
-add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderPackRegistry) + Phosphor.Shaders QML module
+add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderPackRegistry)
 add_subdirectory(libs/phosphor-shell)       # Wayland layer-shell QPA plugin + LayerSurface — needed by phosphor-screens
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
 add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size)

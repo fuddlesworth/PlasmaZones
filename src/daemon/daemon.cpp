@@ -50,6 +50,7 @@
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
+#include "../core/animationbootstrap.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include "../config/configdefaults.h"
@@ -269,91 +270,29 @@ void Daemon::setupAnimationProfiles()
         registry.unregisterProfile(*path);
     }
 
-    // User-authored curve + profile packs. Consumer namespace is
-    // `plasmazones/` per the LayoutManager precedent — library-level
-    // CurveLoader / ProfileLoader are agnostic (decision U); the daemon
-    // picks PlasmaZones's namespace here.
+    // Discover XDG `plasmazones/{curves,profiles}` dirs, materialise the
+    // user-writable dirs, construct the loaders, and wire the
+    // curveLoader→profileLoader rescan. Shared with the secondary
+    // composition roots (settings / editor) via `AnimationBootstrap` —
+    // both paths funnel through `constructAnimationLoaders` so the
+    // dir-discovery and loader-construction logic only exists in one
+    // place. The owner tag here is daemon-specific so the registry's
+    // partitioned-ownership map keeps daemon-loaded user JSON entries
+    // distinct from any secondary process's loader entries (today
+    // they're separate processes, but the partitioning preserves the
+    // contract).
     //
-    // `QStandardPaths::locateAll` returns directories in priority order —
-    // the writable user location FIRST, system dirs AFTER. The loader
-    // iterates in caller-supplied order and lets later entries override
-    // earlier on key collision, so we reverse to achieve the standard
-    // "system first, user wins last" layering (decision X). Matches
-    // LayoutManager::loadLayouts (src/core/layoutmanager/persistence.cpp).
-    QStringList curveDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/curves"), QStandardPaths::LocateDirectory);
-    std::reverse(curveDirs.begin(), curveDirs.end());
-    QStringList profileDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/profiles"), QStandardPaths::LocateDirectory);
-    std::reverse(profileDirs.begin(), profileDirs.end());
-
-    // locateAll returns an empty list when none of the candidate dirs
-    // exist yet (fresh install). Unconditionally include the writable
-    // location so the loader can watch it via the parent-directory
-    // fallback — once the user drops a file there, the watcher fires
-    // and the loader picks it up without a daemon restart.
-    const QString userCurveDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/curves");
-    if (!curveDirs.contains(userCurveDir)) {
-        curveDirs.append(userCurveDir);
-    }
-    const QString userProfileDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/profiles");
-    if (!profileDirs.contains(userProfileDir)) {
-        profileDirs.append(userProfileDir);
-    }
-
-    // Materialise the user dirs eagerly so live-reload works on fresh
-    // installs. `WatchedDirectorySet`'s parent-watch climb refuses to
-    // attach a `QFileSystemWatcher` to forbidden ancestors (`$HOME`,
-    // `$XDG_DATA_HOME`, etc.) — without these dirs existing, the climb
-    // terminates at `~/.local/share` and NO watch is installed. The
-    // user could then drop `~/.local/share/plasmazones/profiles/foo.json`
-    // and live-reload would silently never fire until daemon restart.
-    // Mirrors `ScriptedAlgorithmLoader::ensureUserDirectoryExists` and
-    // the ShaderRegistry ctor's `mkpath`. Failures are non-fatal — the
-    // initial on-demand scan still works without a watch.
-    QDir().mkpath(userCurveDir);
-    QDir().mkpath(userProfileDir);
-
-    // Construct loaders with NO initial load — the loadFromDirectories
-    // calls below trigger the first scan AFTER every consumer signal is
-    // wired. A loader's initial-scan profilesChanged emit otherwise fires
-    // before the publishActiveAnimationProfile listener exists and is
-    // silently dropped — we'd still get a correct snapshot via the
-    // explicit publish call at the bottom, but the signal-driven path
-    // would be quietly broken until something else triggered a republish.
-    //
-    // Registry reference is captured at loader construction — this
-    // prevents any later async rescan from landing on a different
-    // registry than the one the daemon initialized against.
-    //
-    // ProfileLoader is bound to PhosphorProfileRegistry with a
-    // PlasmaZones-specific owner tag. Entries it registers are tagged
-    // `kPlasmaZonesUserProfilesOwnerTag` in the registry's partitioned-ownership
-    // map, so a rescan replaces ONLY the user's JSON-backed profiles;
-    // the daemon's settings-fanned profiles registered below via
-    // `publishActiveAnimationProfile` are owned by the empty/direct
-    // tag and survive untouched.
-    m_curveLoader = std::make_unique<CurveLoader>(m_curveRegistry, nullptr);
-    m_profileLoader =
-        std::make_unique<ProfileLoader>(m_profileRegistry, m_curveRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
-
-    // Wire CurveLoader::curvesChanged → ProfileLoader rescan. A Profile
-    // whose `curve` spec references a user-authored curve name that
-    // wasn't yet in CurveRegistry at parse time is stored with
-    // `curve = nullptr` (falls back to library default at animation
-    // time). When the user drops or edits a curve JSON AFTER the
-    // profile files were scanned, we need to re-parse every profile
-    // so the newly-available curve gets resolved. Without this wire,
-    // drop-order-matters: curves-before-profiles works, profiles-
-    // before-curves silently loses the curve reference until the
-    // profile file itself is touched.
-    //
-    // ProfileLoader::requestRescan goes through DirectoryLoader's
-    // debounced rescan path, so a curve-pack edit that changes many
-    // files coalesces into one profile rescan.
-    connect(m_curveLoader.get(), &CurveLoader::curvesChanged, m_profileLoader.get(), &ProfileLoader::requestRescan);
+    // The initial `loadFromDirectories` scan is deferred until AFTER
+    // the daemon's pre-scan signal wiring below — a loader's
+    // initial-scan emit otherwise fires before the
+    // publishActiveAnimationProfile listener is installed and is
+    // silently dropped. Triggered explicitly via
+    // `runInitialAnimationLoad` further down.
+    auto loaderHandles =
+        constructAnimationLoaders(m_curveRegistry, m_profileRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
+    m_curveLoader = std::move(loaderHandles.curveLoader);
+    m_profileLoader = std::move(loaderHandles.profileLoader);
+    const AnimationLoaderDirs loaderDirs = std::move(loaderHandles.dirs);
 
     // Connect BEFORE the initial scans below so any signal Settings
     // fires during load (or any signal the ProfileLoader fires during
@@ -428,18 +367,10 @@ void Daemon::setupAnimationProfiles()
     // Cleared in `stop()` before the manager destructs.
     QtQuickClockManager::setDefaultManager(m_clockManager.get());
 
-    // Initial scans — order is curves-before-profiles so profile files
-    // referencing user-authored curve names resolve on first parse
-    // rather than waiting for the curveLoader→profileLoader rescan wire
-    // to fire on the second pass.
-    //
-    // Library-level pack first (today a no-op — the library ships no
-    // bundled curves/profiles — but kept for future curve-pack additions).
-    m_curveLoader->loadLibraryBuiltins();
-    m_curveLoader->loadFromDirectories(curveDirs, LiveReload::On);
-
-    m_profileLoader->loadLibraryBuiltins();
-    m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
+    // Initial scans — curves-before-profiles ordering and library-builtins-
+    // before-disk-dirs are encoded in the helper so secondary composition
+    // roots get the same shape.
+    runInitialAnimationLoad(*m_curveLoader, *m_profileLoader, loaderDirs);
 
     // Final explicit publish covers the case where neither the Settings
     // nor the ProfileLoader emitted during the loads above (e.g. fresh
