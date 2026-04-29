@@ -58,7 +58,7 @@ public:
         // Settings UI / QML pickers consume this to render the "user"
         // badge — without the explicit mark, every shader would surface
         // as system.
-        setUserShaderPath(userDir);
+        setUserPath(userDir);
         addSearchPaths(paths);
     }
 

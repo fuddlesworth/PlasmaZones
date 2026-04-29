@@ -474,6 +474,84 @@ private Q_SLOTS:
         QCOMPARE(commits, 0);
     }
 
+    /// Editing a `metadata.json` field that the parser consumes but
+    /// the SignatureContrib does NOT fingerprint must still trip
+    /// `OnCommit`. The strategy's own contribution mixes in the
+    /// `metadata.json`'s size+mtime per entry, so any byte-changing
+    /// edit is caught regardless of whether the contributor enumerates
+    /// the affected field. Without this contract the consumer's
+    /// content-changed signal silently lies about edits to
+    /// metadata-only display fields (e.g. `description`, `category`,
+    /// `parameters[].name`, etc.).
+    void testMetadataMtimeFingerprintCatchesUntrackedFieldEdit()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        const QString pkgDir = dir + QStringLiteral("/pkg-a");
+        QVERIFY(QDir().mkpath(pkgDir));
+
+        // Initial metadata: id=pkg-a, score=0, plus a "displayName"
+        // field which the parser stores in `sourceDir` (we abuse a
+        // FakePayload field to record the parsed value) but the
+        // contributor below does NOT fingerprint.
+        QJsonObject obj;
+        obj.insert(QStringLiteral("id"), QStringLiteral("pkg-a"));
+        obj.insert(QStringLiteral("score"), 0);
+        obj.insert(QStringLiteral("displayName"), QStringLiteral("First"));
+        writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact));
+
+        int commits = 0;
+        MetadataPackScanStrategy<FakePayload> strategy(
+            [](const QString& subdirPath, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
+                FakePayload p;
+                p.id = root.value(QStringLiteral("id")).toString();
+                p.score = root.value(QStringLiteral("score")).toInt(0);
+                p.isUser = isUser;
+                // Stash displayName in sourceDir so the test can verify
+                // the parsed value updated even when the signature
+                // contributor doesn't fingerprint it.
+                p.sourceDir = root.value(QStringLiteral("displayName")).toString();
+                return p;
+            },
+            [&]() {
+                ++commits;
+            });
+        // Contributor INTENTIONALLY does NOT fingerprint displayName
+        // (or score). Without the strategy's metadata-mtime mix-in the
+        // edit below would not change the signature.
+        strategy.setSignatureContrib([](QCryptographicHash& h, const FakePayload& p) {
+            h.addData(p.isUser ? "u" : "s");
+        });
+
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(dir, LiveReload::Off);
+        QCOMPARE(commits, 1);
+        QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).sourceDir, QStringLiteral("First"));
+
+        // QFileSystemWatcher mtime-resolution edge: ensure the rewrite
+        // produces a mtime distinguishable from the original. Sleeping
+        // 10ms is enough on every filesystem we care about; the
+        // strategy mixes the file SIZE in too, so even on filesystems
+        // that round mtime to the second we'd still get a different
+        // signature from the byte-count change. Make the byte count
+        // differ explicitly to be belt-and-braces.
+        QTest::qWait(10);
+
+        // Edit only `displayName` — score unchanged (so the
+        // contributor's view is identical), but bytes change so
+        // metadata.json size+mtime shift.
+        obj[QStringLiteral("displayName")] = QStringLiteral("Second-edition");
+        writeFile(pkgDir + QStringLiteral("/metadata.json"), QJsonDocument(obj).toJson(QJsonDocument::Compact));
+
+        set.rescanNow();
+
+        // Commit MUST fire because the strategy mixes metadata
+        // size+mtime into the signature. Without that mix-in the
+        // contributor (which we deliberately wrote to NOT see
+        // displayName) would have produced an identical signature.
+        QCOMPARE(commits, 2);
+        QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).sourceDir, QStringLiteral("Second-edition"));
+    }
+
     /// Entries with malformed (unparseable) `metadata.json` are
     /// skipped, not registered. Pinned alongside the parser-nullopt
     /// case — different rejection path (JSON layer vs schema layer)

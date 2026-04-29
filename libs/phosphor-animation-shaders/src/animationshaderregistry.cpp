@@ -5,12 +5,15 @@
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
+#include <QByteArray>
 #include <QCryptographicHash>
-#include <QDir>
+#include <QDateTime>
 #include <QFileInfo>
+#include <QJsonObject>
 #include <QLoggingCategory>
 
 #include <algorithm>
+#include <optional>
 
 namespace PhosphorAnimationShaders {
 
@@ -69,14 +72,18 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
     return paths;
 }
 
-/// Hash the schema-specific bits change-detection cares about. The
-/// strategy already mixes in `id`; this contributor adds path tuples,
-/// the user/system flag, and source-dir so a rename or shadow shift
-/// surfaces as a content change. Frag mtime+size aren't strictly needed
-/// because per-file watches re-fire on edits — the next rescan will
-/// already see the same bytes if nothing changed, and a content edit
-/// changes the file's `lastModified` which the watcher already covers
-/// at the wake layer. Keep the contributor light.
+/// Hash the schema-specific bits change-detection cares about beyond
+/// `metadata.json` itself. The strategy already mixes in `id`, `isUser`,
+/// and the metadata.json's size+mtime per entry — that automatically
+/// covers every parser-consumed metadata field (`name`, `description`,
+/// `parameters[]`, etc.) without enumerating them here. What this
+/// contributor adds is the OUT-OF-METADATA state that still affects
+/// rendering: the resolved frag/vert path strings (a search-path
+/// reorder that swaps the winning copy of an effect needs to be a
+/// signature change even if the metadata bytes match), the source-dir
+/// (same reasoning), and a frag-file mtime+size so a content edit on
+/// the fragment shader fires `effectsChanged` even when no
+/// `metadata.json` byte moved.
 void contributeSignature(QCryptographicHash& h, const AnimationShaderEffect& e)
 {
     h.addData(e.fragmentShaderPath.toUtf8());
@@ -85,73 +92,33 @@ void contributeSignature(QCryptographicHash& h, const AnimationShaderEffect& e)
     h.addData(QByteArrayView("|"));
     h.addData(e.sourceDir.toUtf8());
     h.addData(QByteArrayView("|"));
-    h.addData(e.isUserEffect ? "u" : "s");
+    if (!e.fragmentShaderPath.isEmpty()) {
+        const QFileInfo fragInfo(e.fragmentShaderPath);
+        h.addData(QByteArray::number(fragInfo.size()));
+        h.addData(QByteArrayView("|"));
+        h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
+    }
 }
 
 } // namespace
 
 AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
-    : QObject(parent)
-    , m_strategy(std::make_unique<ScanStrategy>(parseEffect,
-                                                [this]() {
-                                                    Q_EMIT effectsChanged();
-                                                }))
-    , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
+    : MetadataPackRegistryBase(lcRegistry(), parent)
+    , m_strategy(std::make_unique<ScanStrategy>(parseEffect, [this]() {
+        Q_EMIT effectsChanged();
+    }))
 {
     m_strategy->setPerEntryWatchPaths(effectWatchPaths);
     m_strategy->setSignatureContrib(contributeSignature);
     m_strategy->setLoggingCategory(&lcRegistry());
+    initWatcher(*m_strategy);
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Search paths
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void AnimationShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
+void AnimationShaderRegistry::onUserPathChanged(const QString& path)
 {
-    // Single-path: priority direction is irrelevant — forward with the
-    // canonical default.
-    addSearchPaths(QStringList{path}, liveReload, PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
-}
-
-void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
-                                             PhosphorFsLoader::RegistrationOrder order)
-{
-    // Pre-canonicalise + drop already-registered paths — keeps the log
-    // line below from spamming "Added search path: /foo/bar/" when
-    // /foo/bar is already registered (the base's `registerDirectories`
-    // is silent on dedup, so the filter has to run upstream).
-    const QStringList toRegister =
-        PhosphorFsLoader::WatchedDirectorySet::filterNewSearchPaths(paths, m_watcher->directories());
-    if (toRegister.isEmpty()) {
-        return;
-    }
-    m_watcher->registerDirectories(toRegister, liveReload, order);
-    for (const QString& path : std::as_const(toRegister)) {
-        qCInfo(lcRegistry) << "Added search path:" << path;
-    }
-}
-
-void AnimationShaderRegistry::setUserShaderPath(const QString& path)
-{
-    if (m_userShaderPath == path) {
-        return; // idempotent
-    }
-    m_userShaderPath = path;
     m_strategy->setUserPath(path);
-    // If search paths have already been registered, the prior scan baked
-    // in the OLD user-path classification — synchronous rescan refreshes
-    // every effect's `isUserEffect` flag against the new value.
-    if (!m_watcher->directories().isEmpty()) {
-        m_watcher->rescanNow();
-    }
-}
-
-QStringList AnimationShaderRegistry::searchPaths() const
-{
-    return m_watcher->directories();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -180,16 +147,6 @@ QStringList AnimationShaderRegistry::effectIds() const
     QStringList ids = m_strategy->packsById().keys();
     std::sort(ids.begin(), ids.end());
     return ids;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Discovery
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void AnimationShaderRegistry::refresh()
-{
-    qCDebug(lcRegistry) << "Refreshing animation shader registry";
-    m_watcher->rescanNow();
 }
 
 } // namespace PhosphorAnimationShaders

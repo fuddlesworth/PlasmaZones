@@ -50,18 +50,26 @@ namespace PhosphorFsLoader {
  *   4. Per-rescan entry cap (caller-tunable, default 10,000) — when
  *      tripped, system overflow is dropped (reverse-iteration scans
  *      user dirs first, so cap-trip never violates user-wins layering).
- *   5. SHA-1 signature over the sorted-by-id entry set + caller-
- *      supplied per-payload contribution; `OnCommit` is invoked only
- *      when the signature differs from the previous scan, giving the
- *      consumer change-only emit semantics on top of `WatchedDirectorySet`'s
- *      unconditional `rescanCompleted`.
+ *   5. SHA-1 signature over the sorted-by-id entry set. The strategy
+ *      itself contributes `id` + `isUser` + `metadata.json` size +
+ *      `metadata.json` lastModified for every entry; the caller-supplied
+ *      `SignatureContrib` adds whatever else change-detection requires
+ *      beyond that (e.g. the frag-shader's mtime+size for live-reload of
+ *      external source files). The `metadata.json` mtime is load-bearing
+ *      for change-only emit completeness: it catches every metadata
+ *      field the parser consumes (`name`, `description`, `parameters[]`,
+ *      …) without forcing every contributor to enumerate them. `OnCommit`
+ *      fires only when the signature differs from the previous scan,
+ *      giving the consumer change-only emit semantics on top of
+ *      `WatchedDirectorySet`'s unconditional `rescanCompleted`.
  *   6. Sorted-by-id accessor (`packs()`) so QHash randomisation never
  *      surfaces in downstream UI / snapshot tests.
  *   7. `isUser` classification per entry, derived from a caller-supplied
  *      user-path and per-iterated-dir canonicalisation.
  *
  * Schema-specific concerns are delegated to caller-supplied policy
- * callables held by reference internally:
+ * callables (held by value as `std::function` members; see "Lifetime"
+ * below):
  *
  *   - `Parser` — turns one `(subdirPath, jsonRoot, isUser)` into an
  *     optional `Payload`. The strategy DOES NOT prescribe which JSON
@@ -85,9 +93,12 @@ namespace PhosphorFsLoader {
  *
  *   - `SignatureContrib` (optional) — fans the payload-specific
  *     fingerprint bytes into the running SHA-1. The strategy itself
- *     contributes `id` + `isUser` + the metadata.json's size+mtime;
- *     callers add whatever else change-detection needs (frag-shader
- *     mtime+size, source-dir absolute path, etc.).
+ *     already contributes `id` + `isUser` + the `metadata.json`'s
+ *     size+mtime per entry, so any change to a parser-consumed
+ *     metadata field surfaces as a signature shift without the
+ *     contributor having to enumerate every field. Callers add what's
+ *     OUTSIDE `metadata.json` and still affects rendering (frag-shader
+ *     mtime+size, vertex-shader path, source-dir absolute path, etc.).
  *
  *   - `OnCommit` — invoked synchronously inside `performScan` after the
  *     fresh map has replaced the prior one, AND ONLY WHEN the SHA-1
@@ -101,16 +112,22 @@ namespace PhosphorFsLoader {
  * Both real consumers (`ShaderInfo` in `phosphor-shaders`, `AnimationShaderEffect`
  * in `phosphor-animation-shaders`) parse into concrete struct types they
  * already own. A virtual `IMetadataPackPayload` interface would force
- * each registry to box its parse output, hide its public payload type
- * behind a base, and add a vtable hop on every signature/watch-extract
- * call. A class template lets each registry keep its concrete payload
- * type, inline the policy calls, and share the per-rescan map via
- * direct accessors. The template is also header-only, which keeps
- * `phosphor-fsloader` itself free of dependencies on either consumer's
- * payload schema.
+ * each registry to box its parse output (heap allocation per pack) and
+ * hide its public payload type behind a base — making `packs()` /
+ * `pack(id)` lookup callers downcast on every access. A class template
+ * lets each registry keep its concrete payload type and share the
+ * per-rescan map via direct strongly-typed accessors. The template is
+ * also header-only, which keeps `phosphor-fsloader` itself free of
+ * dependencies on either consumer's payload schema.
  *
- * The price is one set of compiler instantiations per consumer payload —
- * negligible given there are exactly two of them.
+ * The policy callables themselves are stored as `std::function` (one
+ * level of type-erasure indirection per call). Inlining-via-callable-
+ * type-template-params would shave that, but at this workload (one
+ * `stat` syscall + JSON parse per entry per rescan) the indirection
+ * cost is unmeasurable — keeping the policy types out of the template
+ * signature is the better readability tradeoff. The price is one set of
+ * compiler instantiations per consumer payload — negligible given there
+ * are exactly two of them.
  *
  * ## Lifetime
  *
@@ -189,9 +206,11 @@ public:
 
     /// Optional: payload-specific bytes to fan into the per-rescan
     /// SHA-1 signature. The strategy already mixes in `id`, `isUser`,
-    /// and the metadata.json's size+mtime; callers add what change-
-    /// detection further requires (e.g. frag-shader mtime+size for
-    /// edit-on-disk wake). Default: contributes nothing extra.
+    /// and the `metadata.json`'s size+mtime per entry, so any parser-
+    /// consumed metadata field is automatically covered; callers add
+    /// what change-detection requires that lives OUTSIDE `metadata.json`
+    /// (e.g. the frag-shader's mtime+size for edit-on-disk wake).
+    /// Default: contributes nothing extra.
     using SignatureContrib = std::function<void(QCryptographicHash&, const Payload&)>;
 
     /// Synchronous "the discovered set changed" hook. Invoked from
@@ -216,6 +235,15 @@ public:
         : m_parser(std::move(parser))
         , m_onCommit(std::move(onCommit))
     {
+        // An empty `Parser` would silently skip every entry on every
+        // rescan and look like a configuration bug from the outside ("my
+        // packs all disappeared"). Both real consumers always pass a
+        // real parser; assert in debug builds so a future caller doesn't
+        // have to debug an empty registry from a default-constructed
+        // `std::function`. `OnCommit` is allowed to be empty (a consumer
+        // that doesn't care about content-changed signals).
+        Q_ASSERT_X(static_cast<bool>(m_parser), "MetadataPackScanStrategy",
+                   "Parser must not be empty — every rescan would silently skip every entry");
     }
 
     ~MetadataPackScanStrategy() override = default;
@@ -366,6 +394,20 @@ template<typename Payload>
 QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& directoriesInScanOrder)
 {
     QHash<QString, Payload> fresh;
+
+    // Per-entry fingerprint (`metadata.json` size+mtime + `isUser`)
+    // captured during the parse loop and mixed into the SHA-1 signature
+    // below. Decoupled from `Payload` so the strategy can fingerprint
+    // file-system facts the parser doesn't necessarily store, and
+    // doesn't require Payload to expose them.
+    struct EntryFingerprint
+    {
+        qint64 metadataSize = 0;
+        qint64 metadataMtimeMs = 0;
+        bool isUser = false;
+    };
+    QHash<QString, EntryFingerprint> freshFingerprints;
+
     QStringList desiredWatches;
 
     const QLoggingCategory& log = m_loggingCat ? *m_loggingCat : detail::lcMetadataPackScan();
@@ -483,7 +525,19 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
                 desiredWatches.append(m_perEntryWatch(*parsed));
             }
 
-            fresh.insert(parsed->id, std::move(*parsed));
+            // Capture the metadata.json fingerprint BEFORE the move so
+            // we can mix it into the per-rescan signature below. Any
+            // parser-consumed field's edit shifts the file's mtime
+            // (POSIX guarantees this on a content-change write — the
+            // editors used in our tests and the production save paths
+            // rely on it), so a single mtime+size mix-in covers every
+            // schema field without forcing per-field enumeration in
+            // SignatureContrib.
+            const QString idCopy = parsed->id;
+            freshFingerprints.insert(
+                idCopy,
+                EntryFingerprint{metadataInfo.size(), metadataInfo.lastModified().toMSecsSinceEpoch(), isUserDir});
+            fresh.insert(idCopy, std::move(*parsed));
         }
     }
 
@@ -496,12 +550,28 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     // SHA-1 signature over (id, isUser, metadata.json size+mtime,
     // payload-specific bytes). Stable iteration order is enforced via
     // sorted ids; QHash randomisation never leaks into the signature.
+    //
+    // The strategy's own contribution (`isUser` + metadata size+mtime)
+    // is load-bearing for change-only emit completeness: it catches
+    // every parser-consumed metadata field (`name`, `description`,
+    // `parameters[]`, …) without forcing each consumer's
+    // SignatureContrib to enumerate them. Without this mix-in, an edit
+    // that changes only a metadata field that the SignatureContrib
+    // doesn't fingerprint would parse cleanly into a new payload but
+    // the signal wouldn't fire — UI consumers would see stale data.
     QCryptographicHash hasher(QCryptographicHash::Sha1);
     QList<QString> sortedIds = fresh.keys();
     std::sort(sortedIds.begin(), sortedIds.end());
     for (const QString& id : std::as_const(sortedIds)) {
         const Payload& p = fresh.value(id);
+        const EntryFingerprint& fp = freshFingerprints.value(id);
         hasher.addData(id.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(fp.isUser ? QByteArrayView("u") : QByteArrayView("s"));
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(QByteArray::number(fp.metadataSize));
+        hasher.addData(QByteArrayView("|"));
+        hasher.addData(QByteArray::number(fp.metadataMtimeMs));
         hasher.addData(QByteArrayView("|"));
         if (m_sigContrib) {
             m_sigContrib(hasher, p);

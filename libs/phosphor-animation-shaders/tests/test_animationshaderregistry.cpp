@@ -232,7 +232,7 @@ private Q_SLOTS:
         QCOMPARE(registry.searchPaths().size(), 1);
     }
 
-    /// `setUserShaderPath` classifies a registered dir as user vs system
+    /// `setUserPath` classifies a registered dir as user vs system
     /// for the `isUserEffect` flag. Order-independent: works whether
     /// called before OR after `addSearchPaths`. The "after" case
     /// triggers a synchronous reclassification rescan; the "before"
@@ -248,16 +248,16 @@ private Q_SLOTS:
         writeMetadata(user.path() + QStringLiteral("/morph"), QStringLiteral("morph"));
 
         AnimationShaderRegistry registry;
-        // setUserShaderPath BEFORE addSearchPaths — initial scan sees
+        // setUserPath BEFORE addSearchPaths — initial scan sees
         // the right classification.
-        registry.setUserShaderPath(user.path());
+        registry.setUserPath(user.path());
         registry.addSearchPaths({system.path(), user.path()}, LiveReload::Off);
 
         QVERIFY(!registry.effect(QStringLiteral("dissolve")).isUserEffect);
         QVERIFY(registry.effect(QStringLiteral("morph")).isUserEffect);
     }
 
-    /// Order-independence pinned: `setUserShaderPath` AFTER
+    /// Order-independence pinned: `setUserPath` AFTER
     /// `addSearchPaths` triggers a reclassification rescan so already-
     /// discovered effects pick up the new flag.
     void testSetUserShaderPath_reclassifiesAfterAddSearchPaths()
@@ -278,7 +278,7 @@ private Q_SLOTS:
         QVERIFY(!registry.effect(QStringLiteral("morph")).isUserEffect);
 
         // Set the user path AFTER registration — rescan reclassifies.
-        registry.setUserShaderPath(user.path());
+        registry.setUserPath(user.path());
 
         QVERIFY(!registry.effect(QStringLiteral("dissolve")).isUserEffect);
         QVERIFY(registry.effect(QStringLiteral("morph")).isUserEffect);

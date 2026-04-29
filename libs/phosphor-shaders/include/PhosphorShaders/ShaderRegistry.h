@@ -5,15 +5,14 @@
 
 #include <PhosphorShaders/phosphorshaders_export.h>
 
+#include <PhosphorFsLoader/MetadataPackRegistryBase.h>
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
-#include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QHash>
 #include <QImage>
 #include <QList>
 #include <QMap>
 #include <QMutex>
-#include <QObject>
 #include <QRect>
 #include <QSize>
 #include <QString>
@@ -36,12 +35,16 @@ class IWallpaperProvider;
 /// construct a per-fixture registry; downstream consumers (PlasmaZones
 /// shell, future plugin compositors) instantiate their own.
 ///
+/// Search-path management (`addSearchPath`, `addSearchPaths`,
+/// `searchPaths`, `setUserPath`, `refresh`) is inherited from
+/// `PhosphorFsLoader::MetadataPackRegistryBase`.
+///
 /// ## Thread safety
 ///
-/// GUI-thread only for both reads and mutations. The shader map
-/// (`m_shaders`) is rebuilt on the GUI thread inside the rescan; the
-/// public lookup methods (`availableShaders`, `shader`, `shaderInfo`,
-/// `shaderUrl`) read it without synchronisation.
+/// GUI-thread only for both reads and mutations. The shader map lives
+/// inside the strategy and is rebuilt on the GUI thread inside the
+/// rescan; the public lookup methods (`availableShaders`, `shader`,
+/// `shaderInfo`, `shaderUrl`) read it without synchronisation.
 ///
 /// `searchPaths()` is the one exception: it returns a by-value snapshot
 /// of an implicitly-shared QStringList, so a GUI-thread caller can
@@ -49,7 +52,7 @@ class IWallpaperProvider;
 /// shader-warming path's contract). Calling `searchPaths()` *from* a
 /// worker thread concurrently with a GUI-thread mutation is a data race;
 /// snapshot on the GUI thread first.
-class PHOSPHORSHADERS_EXPORT ShaderRegistry : public QObject
+class PHOSPHORSHADERS_EXPORT ShaderRegistry : public PhosphorFsLoader::MetadataPackRegistryBase
 {
     Q_OBJECT
 
@@ -106,61 +109,6 @@ public:
     explicit ShaderRegistry(QObject* parent = nullptr);
     ~ShaderRegistry() override;
 
-    // ── Search paths ──────────────────────────────────────────────────
-
-    /// Add a directory to search for shader subdirectories. Forwards to
-    /// the batched form so the underlying watcher only runs one initial
-    /// scan; prefer `addSearchPaths` directly when registering more than
-    /// one path during construction (avoids N redundant scans, one per
-    /// path).
-    ///
-    /// @p liveReload defaults to `On` so production callers get
-    /// hot-reload by default. Pass `Off` from tests / batch-import
-    /// contexts that want a one-shot scan with no background watcher.
-    /// Inherits the underlying `WatchedDirectorySet`'s one-way-enable
-    /// semantics: once any call passes `On`, the watcher stays armed
-    /// for the registry's lifetime.
-    void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
-
-    /// Add multiple search-path directories in one shot. The strategy
-    /// applies first-registration-wins on shader-id collision under the
-    /// canonical convention; @p order tells the base which end of @p paths
-    /// is highest-priority so it can normalise before the strategy runs.
-    /// Default `LowestPriorityFirst` matches `[sys-lowest, ..., sys-highest,
-    /// user]` (what the daemon's `setupAnimationShaderEffects` already
-    /// builds); pass `HighestPriorityFirst` to feed `locateAll`'s natural
-    /// output without a manual pre-reverse.
-    ///
-    /// Prefer this over a loop of `addSearchPath` calls — a single
-    /// batched call runs exactly one scan instead of N.
-    ///
-    /// Same `liveReload` semantics as the single-path overload.
-    void addSearchPaths(
-        const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
-        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
-
-    /// Mark @p path as the "user" search path for `ShaderInfo::isUserShader`
-    /// classification. Stored as-given; the rescan canonicalises both this
-    /// path and each iterated search dir before comparing, so the input
-    /// can be either canonical or symlinked. Pass the empty string (the
-    /// default) to disable user/system differentiation — every shader will
-    /// then report `isUserShader == false`.
-    ///
-    /// Order-independent: callable before OR after `addSearchPaths`. When
-    /// the value changes and at least one search path is already
-    /// registered, the call triggers a synchronous rescan so already-
-    /// discovered shaders get reclassified immediately. Idempotent:
-    /// passing the same value twice is a no-op. Bidirectional: passing
-    /// the empty string clears the user-path designation, passing a
-    /// non-empty string sets or replaces it.
-    ///
-    /// GUI-thread only — when the path changes, the synchronous rescan
-    /// asserts the calling thread.
-    void setUserShaderPath(const QString& path);
-
-    /// Current search paths.
-    QStringList searchPaths() const;
-
     // ── Shader discovery ──────────────────────────────────────────────
 
     static QString noneShaderUuid();
@@ -197,8 +145,6 @@ public:
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────
-
-    Q_INVOKABLE void refresh();
 
     void reportShaderBakeStarted(const QString& shaderId);
     void reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error);
@@ -240,19 +186,16 @@ Q_SIGNALS:
     void shaderCompilationStarted(const QString& shaderId);
     void shaderCompilationFinished(const QString& shaderId, bool success, const QString& error);
 
+protected:
+    void onUserPathChanged(const QString& path) override;
+
 private:
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
     using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<ShaderInfo>;
-
-    /// User-shader search path used to classify discovered shaders as
-    /// user vs system. Mirrored into the strategy via setUserPath() on
-    /// every change.
-    QString m_userShaderPath;
     std::unique_ptr<ScanStrategy> m_strategy;
-    std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;
