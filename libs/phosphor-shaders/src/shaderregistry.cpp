@@ -8,7 +8,6 @@
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
 #include <QColor>
-#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -312,64 +311,14 @@ bool shaderSubdirSkip(const QString& subdirName)
     return subdirName == QLatin1String("none");
 }
 
-/// Hash schema-specific bits change-detection cares about. The strategy
-/// already mixes in `id`, `isUser`, and the metadata.json's size+mtime,
-/// so this contributor only adds the OUT-OF-METADATA state that affects
-/// rendering: the resolved frag/vert path strings, plus mtime+size for
-/// every shader source file (main frag + vertex shader + buffer-pass
-/// frags, if any) so an in-place edit on any of them surfaces as a
-/// content change even when no metadata.json byte moved. Every file
-/// reachable through `shaderEntryWatchPaths` (which globs `*.vert`,
-/// `*.frag`, `*.glsl`, `*.json`) must contribute mtime+size — without
-/// it the watcher fires the rescan but the signature stays stable and
-/// `OnCommit` doesn't fire, leaving consumers with stale GPU state.
-void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::ShaderInfo& s)
-{
-    h.addData(s.sourcePath.toUtf8());
-    h.addData(QByteArrayView("|"));
-    h.addData(s.vertexShaderPath.toUtf8());
-    h.addData(QByteArrayView("|"));
-
-    // QFileInfo on a missing file returns size 0 and an invalid mtime,
-    // and `lastModified().toMSecsSinceEpoch()` on an invalid datetime
-    // is implementation-defined. Use an explicit "missing" sentinel
-    // for absent files so the hash format is stable rather than
-    // implementation-defined; on-disk files contribute size+mtime.
-    auto contributeFileFp = [&h](const QString& path) {
-        const QFileInfo fi(path);
-        if (fi.exists()) {
-            h.addData(QByteArray::number(fi.size()));
-            h.addData(QByteArrayView("|"));
-            h.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
-        } else {
-            h.addData(QByteArrayView("missing"));
-        }
-        h.addData(QByteArrayView("|"));
-    };
-    // Frag is guaranteed to exist (the parser rejects payloads whose
-    // `sourcePath` is missing); the helper still routes through
-    // `exists()` to keep the hash format uniform across all source
-    // files.
-    contributeFileFp(s.sourcePath);
-    // Vertex shader mtime+size — symmetrical with frag and buffer
-    // shaders. The default `zone.vert` is shared across packs and may
-    // resolve to a path that doesn't exist for a pack that ships its
-    // own vertex shader at a different name; the missing-sentinel
-    // branch covers that case deterministically.
-    if (!s.vertexShaderPath.isEmpty()) {
-        contributeFileFp(s.vertexShaderPath);
-    }
-    // Buffer-pass shaders (multipass). The parser validates existence
-    // for multipass packs and clears the list otherwise, but
-    // non-multipass packs still get the default `buffer.frag` path
-    // appended unconditionally and that file may not exist — route
-    // through the helper so the hash format stays uniform.
-    for (const QString& bp : s.bufferShaderPaths) {
-        h.addData(bp.toUtf8());
-        h.addData(QByteArrayView("|"));
-        contributeFileFp(bp);
-    }
-}
+// No `setSignatureContrib` is wired below — the strategy auto-fingerprints
+// every distinct file `shaderEntryWatchPaths` and `shaderTopLevelWatchPaths`
+// return (path|size|mtime|), which already covers every shader source
+// reachable through the `*.frag/*.vert/*.glsl/*.json` globs: the per-pack
+// frag/vert/buffer shaders, the per-pack auxiliary `helpers.glsl`, AND
+// the top-level shared includes (`common.glsl`, `audio.glsl`, the default
+// `zone.vert`, …). An edit to any of them shifts the signature and fires
+// `OnCommit`. A bespoke `SignatureContrib` would be redundant.
 
 } // namespace
 
@@ -400,7 +349,6 @@ std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrate
     strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
     strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
     strategy->setPerSubdirSkip(shaderSubdirSkip);
-    strategy->setSignatureContrib(contributeShaderSignature);
     strategy->setLoggingCategory(&lcShaderRegistry());
     return strategy;
 }

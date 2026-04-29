@@ -57,15 +57,19 @@ void MetadataPackRegistryBase::addSearchPaths(const QStringList& paths, LiveRelo
     if (toRegister.isEmpty()) {
         return;
     }
+    // Log BEFORE the register call so the "Added search path: X" line
+    // appears in the journal ahead of any rescan-completion / OnCommit
+    // log lines emitted by the synchronous scan that follows. Logging
+    // after the register inverts the apparent causality in debug logs.
+    for (const QString& p : std::as_const(toRegister)) {
+        qCInfo(*m_logCat) << "Added search path:" << p;
+    }
     // Single batched register — the watcher runs ONE synchronous scan
     // for the whole batch and fires the consumer's content-changed
     // signal exactly once if the strategy reports a signature change.
     // Avoids the N-rescans-on-startup amplification a loop of
     // single-path registrations would cause.
     m_watcher->registerDirectories(toRegister, liveReload, order);
-    for (const QString& p : std::as_const(toRegister)) {
-        qCInfo(*m_logCat) << "Added search path:" << p;
-    }
 }
 
 QStringList MetadataPackRegistryBase::searchPaths() const

@@ -52,16 +52,21 @@ namespace PhosphorFsLoader {
  *      tripped, system overflow is dropped (reverse-iteration scans
  *      user dirs first, so cap-trip never violates user-wins layering).
  *   5. SHA-1 signature over the sorted-by-id entry set. The strategy
- *      itself contributes `id` + `isUser` + `metadata.json` size +
- *      `metadata.json` lastModified for every entry; the caller-supplied
- *      `SignatureContrib` adds whatever else change-detection requires
- *      beyond that (e.g. the frag-shader's mtime+size for live-reload of
- *      external source files). The `metadata.json` mtime is load-bearing
- *      for change-only emit completeness: it catches every metadata
- *      field the parser consumes (`name`, `description`, `parameters[]`,
- *      …) without forcing every contributor to enumerate them. `OnCommit`
- *      fires only when the signature differs from the previous scan,
- *      giving the consumer change-only emit semantics on top of
+ *      contributes `id` + `isUser` + `metadata.json` size+mtime per entry,
+ *      AND mixes the size+mtime of every distinct watched file (the
+ *      `metadata.json` itself, plus everything `PerEntryWatchPaths` and
+ *      `PerDirectoryWatchPaths` returned) in lex-sorted order. The
+ *      "watch list = signature scope" invariant means: any file the
+ *      strategy is watching contributes to the signature, so any file
+ *      change the watcher fires on translates to an `OnCommit` (modulo
+ *      mtime/size shifting, which POSIX guarantees on content-changing
+ *      writes). Without this auto-mix, an edit to a watched file the
+ *      caller's `SignatureContrib` doesn't enumerate (a top-level
+ *      shared `*.glsl` include, a per-pack `helpers.glsl`, etc.) would
+ *      fire the rescan but leave the signature stable — `OnCommit`
+ *      would be silenced and consumers would hold stale state.
+ *      `OnCommit` fires only when the signature differs from the previous
+ *      scan, giving the consumer change-only emit semantics on top of
  *      `WatchedDirectorySet`'s unconditional `rescanCompleted`.
  *   6. Sorted-by-id accessor (`packs()`) so QHash randomisation never
  *      surfaces in downstream UI / snapshot tests.
@@ -217,11 +222,12 @@ public:
 
     /// Optional: payload-specific bytes to fan into the per-rescan
     /// SHA-1 signature. The strategy already mixes in `id`, `isUser`,
-    /// and the `metadata.json`'s size+mtime per entry, so any parser-
-    /// consumed metadata field is automatically covered; callers add
-    /// what change-detection requires that lives OUTSIDE `metadata.json`
-    /// (e.g. the frag-shader's mtime+size for edit-on-disk wake).
-    /// Default: contributes nothing extra.
+    /// the `metadata.json`'s size+mtime per entry, AND the size+mtime
+    /// of every file `PerEntryWatchPaths` / `PerDirectoryWatchPaths`
+    /// returned — so anything reachable via the watch list is already
+    /// covered without enumeration. Use `SignatureContrib` only for
+    /// non-file payload bytes that aren't represented in the watch set
+    /// (e.g. a hash of an embedded resource). Default: contributes nothing.
     using SignatureContrib = std::function<void(QCryptographicHash&, const Payload&)>;
 
     /// Synchronous "the discovered set changed" hook. Invoked from
@@ -318,6 +324,13 @@ public:
     /// nullptr, the strategy uses its own internal category. Both
     /// real consumers pass their own so log output keeps its
     /// per-registry filterability.
+    ///
+    /// Stored as a borrowed pointer; @p cat must outlive the strategy.
+    /// The standard caller pattern — `setLoggingCategory(&lcMyRegistry())`
+    /// where `lcMyRegistry` is defined via `Q_LOGGING_CATEGORY` — gives
+    /// a static-lifetime category and trivially satisfies this. Passing
+    /// a stack-allocated or transient category yields a UAF on the next
+    /// rescan.
     void setLoggingCategory(const QLoggingCategory* cat)
     {
         m_loggingCat = cat;
@@ -600,18 +613,27 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
         return a.id < b.id;
     });
 
-    // SHA-1 signature over (id, isUser, metadata.json size+mtime,
-    // payload-specific bytes). Stable iteration order is the sorted
-    // entries vec; QHash randomisation never leaks into the signature.
+    // SHA-1 signature in two passes.
     //
-    // The strategy's own contribution (`isUser` + metadata size+mtime)
-    // is load-bearing for change-only emit completeness: it catches
-    // every parser-consumed metadata field (`name`, `description`,
-    // `parameters[]`, …) without forcing each consumer's
-    // SignatureContrib to enumerate them. Without this mix-in, an edit
-    // that changes only a metadata field that the SignatureContrib
-    // doesn't fingerprint would parse cleanly into a new payload but
-    // the signal wouldn't fire — UI consumers would see stale data.
+    // Pass 1 — per-entry attribution. (id, isUser, metadata.json size+mtime,
+    // payload-specific bytes via SignatureContrib). Stable iteration order
+    // is the sorted entries vec; QHash randomisation never leaks into the
+    // signature.
+    //
+    // Pass 2 — watch-set auto-fingerprint. Every distinct file the
+    // strategy is watching (the per-entry metadata.json plus everything
+    // returned by `PerEntryWatchPaths` and `PerDirectoryWatchPaths`)
+    // contributes path|size|mtime|. This is load-bearing for change-only
+    // emit completeness: any file the watcher fires on must shift the
+    // signature, otherwise the rescan runs but `OnCommit` stays silent
+    // and consumers hold stale state. Without this pass, top-level
+    // shared `*.glsl` includes (`common.glsl`, `audio.glsl`, …) and
+    // per-pack auxiliary files (`helpers.glsl`, etc.) would fire the
+    // watcher but not the consumer's content-changed signal.
+    //
+    // The metadata.json mtime+size shows up in BOTH passes (per-entry +
+    // watch-set). Deterministic redundancy — costs nothing, keeps the
+    // per-entry attribution clean.
     QCryptographicHash hasher(QCryptographicHash::Sha1);
     for (const Entry& e : entries) {
         hasher.addData(e.id.toUtf8());
@@ -624,6 +646,30 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
         hasher.addData(QByteArrayView("|"));
         if (m_sigContrib) {
             m_sigContrib(hasher, e.payload);
+        }
+        hasher.addData(QByteArrayView("\n"));
+    }
+    // Watch-set pass. Sorted + deduped for deterministic ordering across
+    // rescans regardless of the order paths were appended during the
+    // outer / inner loops above. `removeDuplicates` is O(n log n) and
+    // entry counts are bounded by `m_maxEntries`, so cost is negligible.
+    QStringList sortedWatches = desiredWatches;
+    sortedWatches.removeDuplicates();
+    std::sort(sortedWatches.begin(), sortedWatches.end());
+    for (const QString& path : sortedWatches) {
+        hasher.addData(path.toUtf8());
+        hasher.addData(QByteArrayView("|"));
+        const QFileInfo fi(path);
+        if (fi.exists()) {
+            hasher.addData(QByteArray::number(fi.size()));
+            hasher.addData(QByteArrayView("|"));
+            hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            // Stable sentinel for absent files. `lastModified()` on an
+            // invalid datetime is implementation-defined — explicit
+            // "missing" keeps the hash format portable across Qt
+            // versions and filesystems.
+            hasher.addData(QByteArrayView("missing"));
         }
         hasher.addData(QByteArrayView("\n"));
     }

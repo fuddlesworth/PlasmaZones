@@ -88,7 +88,7 @@ Adopted from Quickshell's `<Brand>.<Capability>` discipline:
 |---|---|---|---|
 | **phosphor-fsloader** | Filesystem scan/watch + JSON envelope + **`MetadataPackScanStrategy<Payload>` (new)** | `WatchedDirectorySet`, `IScanStrategy`, `JsonEnvelopeValidator`, `MetadataPackScanStrategy` | Domain schema parsing |
 | **phosphor-shaders** *(new)* | Shader-domain primitives + unified registry + QML facade `Phosphor.Shaders` | `BaseUniforms`, `IUniformExtension`, `ShaderIncludeResolver`, `IWallpaperProvider`, **`ShaderRegistry`** | Wayland, RHI |
-| **phosphor-wayland** *(rename of `phosphor-shell`)* | Wayland integration: wlr-layer-shell-v1 QPA plugin + `LayerSurface` | `LayerSurface`, `phosphorshell-qpa` plugin (renamed), wayland-scanner protocols | Shaders, rendering |
+| **phosphor-wayland** *(rename of `phosphor-shell`)* | Wayland integration: wlr-layer-shell-v1 QPA plugin + `LayerSurface` | `LayerSurface`, `phosphorwayland-qpa` plugin, wayland-scanner protocols | Shaders, rendering |
 | **phosphor-rendering** | Qt RHI shader rendering | `ShaderCompiler`, `ShaderEffect`, `ShaderNodeRhi` | Shader-pack discovery |
 | **phosphor-animation** | Motion primitives + Profile/Curve registries — **DI-only** | `CurveRegistry`, `PhosphorProfileRegistry` (DI), `QtQuickClockManager` (DI) | QML wrappers |
 | **phosphor-animation-qml** *(new — promoted from `phosphor-animation/qml/`)* | Qt Quick wrappers for the motion runtime; QML module `Phosphor.Animation` | `PhosphorMotionAnimation`, `Animated*` QML types | C++ motion primitives |

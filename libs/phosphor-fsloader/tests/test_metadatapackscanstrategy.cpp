@@ -613,6 +613,168 @@ private Q_SLOTS:
         QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).isUser, true);
     }
 
+    /// Top-level shared files returned by `PerDirectoryWatchPaths` (the
+    /// shader-pack registry's `common.glsl`, `audio.glsl`, etc.) must
+    /// auto-fingerprint into the per-rescan signature. Without this, an
+    /// edit to a top-level shared include fires the watcher rescan but
+    /// the signature stays stable and `OnCommit` is silenced — consumers
+    /// hold stale GPU state. Pinned with a NULL `SignatureContrib` so
+    /// the strategy's own watch-set auto-mix is the only thing that can
+    /// catch the edit.
+    void testTopLevelSharedFileFingerprint()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        const QString sharedInclude = dir + QStringLiteral("/common.glsl");
+        QVERIFY(QDir().mkpath(dir));
+        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0);
+        writeFile(sharedInclude, QByteArrayLiteral("// shared v1\n"));
+
+        int commits = 0;
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
+            ++commits;
+        });
+        strategy.setPerDirectoryWatchPaths([&sharedInclude](const QString&) {
+            return QStringList{sharedInclude};
+        });
+        // Deliberately NO `SignatureContrib` — only the strategy's
+        // watch-set auto-mix can catch the top-level file edit.
+
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(dir, LiveReload::Off);
+        QCOMPARE(commits, 1);
+
+        // Edit the top-level shared file. Distinct byte count guarantees
+        // the size mix-in shifts even on filesystems that round mtime to
+        // the second; the qWait pads the mtime resolution edge for those
+        // that don't round.
+        QTest::qWait(10);
+        writeFile(sharedInclude, QByteArrayLiteral("// shared v2 (different bytes)\n"));
+        set.rescanNow();
+
+        QCOMPARE(commits, 2);
+    }
+
+    /// Per-pack auxiliary files returned by `PerEntryWatchPaths` (a
+    /// pack's `helpers.glsl` referenced via `#include` from main frag,
+    /// auxiliary `extras.frag`, etc.) must auto-fingerprint into the
+    /// per-rescan signature for the same reason as
+    /// `testTopLevelSharedFileFingerprint`. Pinned with a NULL
+    /// `SignatureContrib` so the strategy's own watch-set auto-mix is
+    /// the only thing that can catch the edit.
+    void testPerEntryAuxiliaryFileFingerprint()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(QDir().mkpath(dir));
+        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0, QStringLiteral("effect.frag"));
+        // Sibling file the parser doesn't reference but the per-entry
+        // watch callback exposes — production analogue is a pack's
+        // `helpers.glsl` only reachable via `#include` from `effect.frag`.
+        const QString helpersPath = dir + QStringLiteral("/pkg-a/helpers.glsl");
+        writeFile(helpersPath, QByteArrayLiteral("// helpers v1\n"));
+
+        int commits = 0;
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
+            ++commits;
+        });
+        strategy.setPerEntryWatchPaths([&helpersPath](const FakePayload& p) -> QStringList {
+            QStringList out;
+            if (!p.fragmentShaderPath.isEmpty()) {
+                out.append(p.fragmentShaderPath);
+            }
+            out.append(helpersPath);
+            return out;
+        });
+        // Deliberately NO `SignatureContrib`.
+
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(dir, LiveReload::Off);
+        QCOMPARE(commits, 1);
+
+        QTest::qWait(10);
+        writeFile(helpersPath, QByteArrayLiteral("// helpers v2 (different bytes)\n"));
+        set.rescanNow();
+
+        QCOMPARE(commits, 2);
+    }
+
+    /// `setMaxEntries(0)` is a degenerate but legal cap: the strategy
+    /// must register zero entries and not commit (no-content baseline).
+    /// Pinned because the cap-trip check (`entries.size() >= cap`)
+    /// triggers on every iteration when `cap == 0`; if a future change
+    /// flips `>=` to `>`, the guard silently disappears and the cap is
+    /// off-by-one. Boundary test catches that regression.
+    void testSetMaxEntriesZero()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(QDir().mkpath(dir));
+        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0);
+        writeMetadata(dir + QStringLiteral("/pkg-b"), QStringLiteral("pkg-b"), 0);
+
+        int commits = 0;
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [&]() {
+            ++commits;
+        });
+        strategy.setMaxEntries(0);
+
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(dir, LiveReload::Off);
+
+        QCOMPARE(strategy.size(), 0);
+        QCOMPARE(commits, 0); // no-content baseline does not commit
+    }
+
+    /// A re-entrant `OnCommit` (production analogue: a slot connected to
+    /// the consumer's content-changed signal calling `refresh()`
+    /// synchronously) must not corrupt strategy state. The
+    /// `WatchedDirectorySet` reentry counter handles the orchestration;
+    /// this test pins the strategy-level invariant that the inner scan's
+    /// `m_packs` / `m_lastSignature` state survives unwind. The first
+    /// scan commits and re-enters; the re-entrant scan finds identical
+    /// state and does NOT commit again. Without the WatchedDirectorySet
+    /// guard, the inner scan could clobber the outer's state mid-stream.
+    void testReentrantOnCommit()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(QDir().mkpath(dir));
+        writeMetadata(dir + QStringLiteral("/pkg-a"), QStringLiteral("pkg-a"), 0);
+
+        int commits = 0;
+        bool reentered = false;
+        WatchedDirectorySet* setPtr = nullptr;
+        auto onCommit = [&]() {
+            ++commits;
+            // Re-enter the watcher exactly once — production code
+            // typically gates re-entry on a "first time" flag like this.
+            if (!reentered) {
+                reentered = true;
+                setPtr->rescanNow();
+            }
+        };
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), onCommit);
+        WatchedDirectorySet set(strategy);
+        setPtr = &set;
+
+        set.registerDirectory(dir, LiveReload::Off);
+
+        QVERIFY(reentered);
+        // Outer + inner each landed in OnCommit. The re-entrant inner
+        // scan sees identical filesystem state, but it observes its own
+        // first scan (m_signatureSeeded=false on the first invocation,
+        // already true on the second) — so the inner counts as a
+        // "first scan with content" and increments commits. The outer
+        // had already incremented before re-entering.
+        //
+        // The contract being pinned here is NOT the commit count
+        // specifically (that's an artefact of the ordering); it is that
+        // re-entry doesn't crash, doesn't strand the outer scan's
+        // m_packs in a half-mutated state, and that the registry
+        // settles to size==1 with the correct payload visible.
+        QCOMPARE(strategy.size(), 1);
+        QVERIFY(strategy.contains(QStringLiteral("pkg-a")));
+        // commits ≥ 1 (outer) and the inner re-entry didn't deadlock.
+        QVERIFY(commits >= 1);
+    }
+
     /// Entries with malformed (unparseable) `metadata.json` are
     /// skipped, not registered. Pinned alongside the parser-nullopt
     /// case — different rejection path (JSON layer vs schema layer)

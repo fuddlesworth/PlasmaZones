@@ -5,15 +5,10 @@
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
-#include <QByteArray>
-#include <QCryptographicHash>
-#include <QDateTime>
 #include <QDir>
-#include <QFileInfo>
 #include <QJsonObject>
 #include <QLoggingCategory>
 
-#include <algorithm>
 #include <optional>
 
 namespace PhosphorAnimationShaders {
@@ -27,6 +22,16 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// the schema-specific bits — directory-relative path resolution and
 /// `isUserEffect` stamping. The strategy itself rejects empty-id
 /// payloads with a warning, so we don't double-check here.
+///
+/// Note — intentional asymmetry with `PhosphorShaders::ShaderRegistry::parseShader`:
+/// that parser rejects payloads whose `sourcePath` doesn't exist on disk,
+/// whereas this one tolerates missing frag / vert. AnimationShaderEffect
+/// payloads are consumed by the kwin effect's transition pipeline which
+/// validates path existence at use-time and gracefully falls back; the
+/// registry is the catalog, not the gate. Watch-set auto-fingerprinting
+/// in the strategy still mixes a "missing" sentinel for absent files,
+/// so a frag materialising on disk shifts the signature and fires
+/// `effectsChanged`.
 std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const QJsonObject& root, bool isUserDir)
 {
     AnimationShaderEffect e = AnimationShaderEffect::fromJson(root);
@@ -68,53 +73,11 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
     return paths;
 }
 
-/// Hash the schema-specific bits change-detection cares about beyond
-/// `metadata.json` itself. The strategy already mixes in `id`, `isUser`,
-/// and the metadata.json's size+mtime per entry — that automatically
-/// covers every parser-consumed metadata field (`name`, `description`,
-/// `parameters[]`, etc.) without enumerating them here. What this
-/// contributor adds is the OUT-OF-METADATA state that still affects
-/// rendering: the resolved frag/vert path strings (a search-path
-/// reorder that swaps the winning copy of an effect needs to be a
-/// signature change even if the metadata bytes match), the source-dir
-/// (same reasoning), and a frag-file mtime+size so a content edit on
-/// the fragment shader fires `effectsChanged` even when no
-/// `metadata.json` byte moved.
-void contributeSignature(QCryptographicHash& h, const AnimationShaderEffect& e)
-{
-    h.addData(e.fragmentShaderPath.toUtf8());
-    h.addData(QByteArrayView("|"));
-    h.addData(e.vertexShaderPath.toUtf8());
-    h.addData(QByteArrayView("|"));
-    h.addData(e.sourceDir.toUtf8());
-    h.addData(QByteArrayView("|"));
-    // QFileInfo on a missing file returns size 0 and an invalid mtime,
-    // and `lastModified().toMSecsSinceEpoch()` on an invalid datetime
-    // is implementation-defined. The signature would still be stable
-    // *while the file stays absent*, but a flickering file would muddy
-    // change-detection diagnostics. Feed an explicit "missing" sentinel
-    // when the file isn't there; on-disk files contribute size+mtime.
-    auto contributeFileFp = [&h](const QString& path) {
-        if (path.isEmpty()) {
-            return;
-        }
-        const QFileInfo fi(path);
-        if (fi.exists()) {
-            h.addData(QByteArray::number(fi.size()));
-            h.addData(QByteArrayView("|"));
-            h.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
-        } else {
-            h.addData(QByteArrayView("missing"));
-        }
-        h.addData(QByteArrayView("|"));
-    };
-    contributeFileFp(e.fragmentShaderPath);
-    // Vertex shader mtime+size — symmetrical with the frag treatment.
-    // `effectWatchPaths` watches the vertex shader so a content edit
-    // fires the rescan; without this mix-in the SHA-1 signature
-    // wouldn't shift and `effectsChanged` would be silenced.
-    contributeFileFp(e.vertexShaderPath);
-}
+// No `setSignatureContrib` is wired below — the strategy auto-fingerprints
+// every distinct file `effectWatchPaths` returns (path|size|mtime|), which
+// covers the resolved frag and vertex shader paths in both the
+// "search-path reorder swaps the winning copy" and "in-place content edit"
+// scenarios. A bespoke `SignatureContrib` would be redundant.
 
 } // namespace
 
@@ -125,7 +88,6 @@ AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
         Q_EMIT self->effectsChanged();
     });
     strategy->setPerEntryWatchPaths(effectWatchPaths);
-    strategy->setSignatureContrib(contributeSignature);
     strategy->setLoggingCategory(&lcRegistry());
     return strategy;
 }
