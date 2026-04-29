@@ -14,6 +14,7 @@ namespace PhosphorEngineApi {
 namespace GeometryUtils {
 
 using PhosphorGeometry::availableAreaToOverlayCoordinates;
+using PhosphorGeometry::clampZonesToScreen;
 using PhosphorGeometry::enforceWindowMinSizes;
 using PhosphorGeometry::rectToJson;
 using PhosphorGeometry::removeZoneOverlaps;

@@ -3,6 +3,8 @@
 
 #include "snap_assist_filter.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
+
 #include <QHash>
 
 namespace PlasmaZones {
@@ -57,8 +59,16 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
             }
         }
 
-        // Screen filter
-        if (!screenId.isEmpty() && info.screenId != screenId) {
+        // Screen filter — match by physical monitor, not exact virtual-screen ID.
+        // The empty-zones list is computed for one virtual screen, but the user's
+        // candidate windows live across all sibling VS on the same physical
+        // monitor; an exact-match here would strand snap-assist with zero
+        // candidates whenever every window on the target VS happens to be
+        // snapped (the common case after a layout cycle), even though the
+        // adjacent VS has plenty of unsnapped candidates the user can drag in.
+        // samePhysical strips the "/vs:N" suffix on both sides before comparing,
+        // and is a no-op for plain physical IDs (single-monitor case).
+        if (!screenId.isEmpty() && !::PhosphorIdentity::VirtualScreenId::samePhysical(info.screenId, screenId)) {
             continue;
         }
 

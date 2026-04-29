@@ -528,6 +528,16 @@ void WindowDragAdaptor::clearForCompositorReconnect()
 {
     hideOverlayAndClearZoneState();
     resetDragState(/*keepEscapeShortcut=*/false);
+    // Drop any pending async snapAssistReady payload. Without this, a
+    // compositor reconnect between endDrag and the QTimer::singleShot(0)
+    // that emits snapAssistReady would deliver the prior session's
+    // windowId/screenId to the freshly-registered effect. resetDragState
+    // can NOT clear these — the normal drop path sets the pending IDs
+    // immediately before calling resetDragState, so clearing there would
+    // wipe the IDs the about-to-fire timer is meant to read, and
+    // snapAssistReady would never be emitted.
+    m_snapAssistPendingWindowId.clear();
+    m_snapAssistPendingScreenId.clear();
 }
 
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
@@ -557,12 +567,14 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // hideOverlayAndClearZoneState → false (destructive teardown).
     // Clearing it here would clobber the idled=true state set by the
     // drop path and break the next drag's refreshFromIdle trigger.
-    // Drop any pending async snapAssistReady payload. Without this, a
-    // compositor reconnect between endDrag and the QTimer::singleShot(0)
-    // that emits snapAssistReady would deliver the prior session's
-    // windowId/screenId to the freshly-registered effect.
-    m_snapAssistPendingWindowId.clear();
-    m_snapAssistPendingScreenId.clear();
+    // m_snapAssistPendingWindowId / m_snapAssistPendingScreenId are
+    // intentionally NOT cleared here. The normal drop path in drop.cpp
+    // sets those IDs immediately before calling resetDragState, then
+    // schedules computeAndEmitSnapAssist via QTimer::singleShot(0). If we
+    // cleared them here, the timer would read empty IDs and snapAssistReady
+    // would never fire — snap assist would never show. The compositor-
+    // reconnect concern is handled in clearForCompositorReconnect.
+    // computeAndEmitSnapAssist consumes-and-clears the IDs after reading.
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)

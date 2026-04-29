@@ -1246,6 +1246,16 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
 
+    // Drop the snap-assist capture's "we recently posted this handle" set —
+    // the daemon's bounded LRU is empty after a fresh registration (whether
+    // first-start or restart), so any handle the kwin-effect would otherwise
+    // skip on assumption-of-residence must be re-captured. Without this
+    // reset, the first ~24 windows the user snap-assists toward after a
+    // daemon restart silently fall back to icons.
+    if (m_snapAssistHandler) {
+        m_snapAssistHandler->resetRecentlyPostedThumbnails();
+    }
+
     // Push KWin's output-order primary screen to the daemon so getPrimaryScreen()
     // reflects KDE Display Settings rather than QGuiApplication::primaryScreen().
     auto* ws = KWin::Workspace::self();

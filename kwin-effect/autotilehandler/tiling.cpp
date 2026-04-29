@@ -470,7 +470,70 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // receives the min-size report below and will retile with adjusted zones.
     const qreal dx = qMax(0.0, dw / 2.0);
     const qreal dy = qMax(0.0, dh / 2.0);
-    const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
+    QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
+
+    // Defensive bounds clamp: if the (oversized) window would extend past the
+    // physical output containing the zone, shift it left/up so it stays on
+    // the same output. Without this, a window whose min size exceeds its
+    // zone leaks into an adjacent monitor — KWin then reassigns the window's
+    // output and the autotile engine ejects it. The daemon-side bounds clamp
+    // in recalculateLayout already shifts zones to fit, so this is a backstop
+    // for cases where the zone still violates min size (script algorithms,
+    // unsatisfiable constraints, residual rounding).
+    //
+    // Scope: this clamps to the physical Output*, NOT the virtual-screen
+    // sub-region. Overflow that crosses a virtual-screen boundary on the
+    // same physical monitor is the daemon-side clamp's responsibility (it
+    // resolves the VS region from screenGeometry(screenId); the effect side
+    // has no reliable lookup for that here).
+    //
+    // Contract parity with PhosphorGeometry::clampZonesToScreen: both keep
+    // an "effective rect" inside the bounds. The two implementations
+    // intentionally use different size sources — daemon-side uses
+    // max(zone.size, declared minSize) because it runs *before* KWin
+    // enforces min size, while the effect runs *after* and reads the actual
+    // (already-enforced) frame size from `centered`. Same contract, different
+    // input source and rect type (QRectF here, QRect there). Keep the four
+    // shift formulas in sync at the contract level.
+    if (auto* output = KWin::effects->screenAt(targetZone.center())) {
+        const QRect screenGeo = output->geometry();
+        // Use exclusive edges (x + width / y + height) since QRectF::right()
+        // and QRect::right() disagree (QRect is x+width-1, QRectF is x+width).
+        const qreal screenLeft = screenGeo.x();
+        const qreal screenTop = screenGeo.y();
+        const qreal screenRight = screenGeo.x() + screenGeo.width();
+        const qreal screenBottom = screenGeo.y() + screenGeo.height();
+        const QRectF preClamp = centered;
+        if (centered.x() + centered.width() > screenRight) {
+            centered.moveLeft(qMax(screenLeft, screenRight - centered.width()));
+        }
+        if (centered.y() + centered.height() > screenBottom) {
+            centered.moveTop(qMax(screenTop, screenBottom - centered.height()));
+        }
+        // Symmetric left/top underflow: a centered position before the screen
+        // origin (target zone with negative offset, oversized window centered
+        // off-edge) gets snapped back. Matches the daemon-side clamp.
+        if (centered.x() < screenLeft) {
+            centered.moveLeft(screenLeft);
+        }
+        if (centered.y() < screenTop) {
+            centered.moveTop(screenTop);
+        }
+        // Symmetric with daemon-side clampZonesToScreen logging: when the
+        // clamp actually fired, log the before/after so a "clamp ran but
+        // didn't fix it" report is diagnosable from one side.
+        if (Q_UNLIKELY(lcEffect().isDebugEnabled()) && centered.topLeft() != preClamp.topLeft()) {
+            qCDebug(lcEffect) << "Autotile centering: clamp adjusted" << windowId << "from" << preClamp.topLeft()
+                              << "to" << centered.topLeft() << "screen=" << screenGeo;
+        }
+    } else {
+        // screenAt may return null if the zone center happens to fall in the
+        // air between outputs (unusual; daemon assigns zones to a real
+        // screen). Log so the silent skip is diagnosable rather than
+        // mysterious.
+        qCDebug(lcEffect) << "Autotile centering: screenAt(" << targetZone.center()
+                          << ") returned null — skipping bounds clamp for" << windowId;
+    }
 
     // Already at the centered position — record and consume
     if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {

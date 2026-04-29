@@ -114,7 +114,20 @@ public:
                                 const SnapAssistCandidateList& candidates) = 0;
     virtual void hideSnapAssist() = 0;
     virtual bool isSnapAssistVisible() const = 0;
-    virtual void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) = 0;
+    /// Deliver a thumbnail as raw ARGB32 pixels. @p pixels MUST be exactly
+    /// @p width * @p height * 4 bytes, tightly packed (no row padding),
+    /// non-premultiplied. Implementations must validate dimensions and the
+    /// pixel-buffer size before reconstructing a QImage.
+    ///
+    /// @return true iff the implementation stored the thumbnail in its
+    ///         cache. False on validation failure or post-shutdown teardown.
+    ///         Callers (compositor effects) use this to decide whether to
+    ///         mark the handle as recently-posted; treating a false reply
+    ///         as success would strand future snap-assists on icons because
+    ///         the dedup window would skip a re-capture for an entry the
+    ///         daemon never actually stored.
+    virtual bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+                                        const QByteArray& pixels) = 0;
 
     // Layout picker overlay (interactive layout browser)
     virtual void hideLayoutPicker() = 0;
@@ -145,7 +158,11 @@ Q_SIGNALS:
                                   const QString& screenId);
 
     /**
-     * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
+     * @brief Informational signal emitted when the Snap Assist overlay is shown.
+     *
+     * The kwin-effect drives thumbnail capture independently as part of the
+     * `showSnapAssist` call sequence (not in response to this signal); the
+     * signal is exposed for external observers (KCMs, debugging tools).
      */
     void snapAssistShown(const QString& screenId, const EmptyZoneList& emptyZones,
                          const SnapAssistCandidateList& candidates);

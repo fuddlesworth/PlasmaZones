@@ -3,8 +3,8 @@
 
 #include "snapassisthandler.h"
 #include "plasmazoneseffect.h"
-#include "autotilehandler.h"
 #include "kwin_compositor_bridge.h"
+#include "snapassistthumbnailcapture.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -19,6 +19,8 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QUuid>
+#include <QVector>
 
 Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarningMsg)
 
@@ -88,6 +90,32 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 if (!m_effect->isDaemonReady("snap assist show")) {
                     return;
                 }
+
+                // Kick off in-process thumbnail captures alongside the
+                // showSnapAssist D-Bus call. The two are independent — the
+                // overlay opens on icons, and per-window setSnapAssistThumbnail
+                // calls land asynchronously as KWin's WindowThumbnail produces
+                // each frame. Either ordering is safe on the daemon side: a
+                // late thumbnail updates the live candidate list, an early one
+                // is held in the bounded LRU and applied when the overlay
+                // shows.
+                if (!m_capture) {
+                    m_capture = new SnapAssistThumbnailCapture(this);
+                }
+                QVector<SnapAssistThumbnailCapture::Candidate> captureList;
+                captureList.reserve(candidates.size());
+                for (const auto& c : candidates) {
+                    if (c.compositorHandle.isEmpty()) {
+                        continue;
+                    }
+                    const QUuid id(c.compositorHandle);
+                    if (id.isNull()) {
+                        continue;
+                    }
+                    captureList.append({id});
+                }
+                m_capture->captureCandidates(captureList);
+
                 QDBusMessage msg = QDBusMessage::createMethodCall(
                     PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                     PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"));
@@ -103,6 +131,13 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
             });
 }
 
+void SnapAssistHandler::resetRecentlyPostedThumbnails()
+{
+    if (m_capture) {
+        m_capture->resetRecentlyPosted();
+    }
+}
+
 PhosphorProtocol::SnapAssistCandidateList
 SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
                                    const QSet<QString>& snappedWindowIds) const
@@ -111,21 +146,30 @@ SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString
         SnapAssistFilter::buildCandidates(m_effect->compositorBridge(), excludeWindowId, screenId, snappedWindowIds);
 
     // KWin-specific: fill compositorHandle (internal UUID) for overlay window identification.
-    // Also apply KWin-specific filters the shared SnapAssistFilter can't know about:
-    //  - exclude windows managed by the autotile engine
-    //  - for virtual screens on the same physical monitor, include sibling VS candidates
-    //    but still drop autotile-managed ones (already handled above).
-    auto* autotile = m_effect->autotileHandler();
-    for (auto it = candidates.begin(); it != candidates.end();) {
-        if (autotile && autotile->isTrackedWindow(it->windowId)) {
-            it = candidates.erase(it);
-            continue;
-        }
-        auto* ew = KWinCompositorBridge::toEffectWindow(m_effect->compositorBridge()->findWindowById(it->windowId));
+    //
+    // Earlier revisions also dropped autotile-tracked candidates here via
+    // @c AutotileHandler::isTrackedWindow, but that flag tracks "we have notified
+    // autotile about this window at some point" — it is NOT a live "this window
+    // currently lives on an autotile screen" check. After a window moves from an
+    // autotile monitor to a manual-mode screen, the flag stays set until autotile's
+    // own bookkeeping catches up; using it here erased perfectly valid candidates
+    // (e.g. a window the user dragged off the autotile monitor onto vs:0) and
+    // stranded snap-assist with zero candidates on the manual screen.
+    //
+    // The screen-membership question is now answered authoritatively in
+    // SnapAssistFilter via @c VirtualScreenId::samePhysical(info.screenId, screenId):
+    // candidates are restricted to the target's physical monitor, and trigger
+    // sites gate on @c !isAutotileScreen(screenId), so by transitivity no
+    // surviving candidate is on an autotile monitor in normal flow.
+    //
+    // Sibling-VS inclusion (windows on the other VS of the same physical monitor
+    // still count as candidates) is also handled inside SnapAssistFilter, so it
+    // does NOT need to be re-applied here.
+    for (auto& c : candidates) {
+        auto* ew = KWinCompositorBridge::toEffectWindow(m_effect->compositorBridge()->findWindowById(c.windowId));
         if (ew) {
-            it->compositorHandle = ew->internalId().toString();
+            c.compositorHandle = ew->internalId().toString();
         }
-        ++it;
     }
     return candidates;
 }

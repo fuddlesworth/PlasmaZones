@@ -2771,23 +2771,24 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     ::PhosphorLayout::EdgeGaps outerGaps =
         skipGaps ? ::PhosphorLayout::EdgeGaps::uniform(0) : effectiveOuterGaps(screenId);
 
-    // Build minSizes vector for the algorithm (when respectMinimumSize is enabled)
-    // Only include the first windowCount windows (capped by maxWindows above)
-    QVector<QSize> minSizes;
-    if (effectiveRespectMinimumSize(screenId)) {
-        const QStringList windows = state->tiledWindows();
-        // KWin reports min size in logical pixels (same as QScreen/zone geometry);
-        // do not divide by devicePixelRatio or we under-report and steal too little.
-        minSizes.resize(windowCount, QSize(0, 0));
-        for (int i = 0; i < windowCount && i < windows.size(); ++i) {
-            minSizes[i] = m_windowMinSizes.value(windows[i], QSize(0, 0));
-        }
-        if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled())) {
-            for (int i = 0; i < windowCount && i < windows.size(); ++i) {
-                if (minSizes[i].width() > 0 || minSizes[i].height() > 0) {
-                    qCDebug(PhosphorTileEngine::lcTileEngine)
-                        << "  minSize[" << i << "]:" << windows[i] << "=" << minSizes[i];
-                }
+    // Canonical per-window minimum sizes (logical pixels — same units as zone/
+    // screen geometry; do not divide by devicePixelRatio or we under-report).
+    // Always populated regardless of effectiveRespectMinimumSize: KWin enforces
+    // min sizes whether the user opted in or not, so the bounds clamp below
+    // must run unconditionally. The flag only gates whether the *algorithm*
+    // sees them (and therefore whether enforceWindowMinSizes runs).
+    const QStringList tiled = state->tiledWindows();
+    QVector<QSize> windowMinSizes(windowCount, QSize(0, 0));
+    for (int i = 0; i < windowCount && i < tiled.size(); ++i) {
+        windowMinSizes[i] = m_windowMinSizes.value(tiled[i], QSize(0, 0));
+    }
+    const bool respectMin = effectiveRespectMinimumSize(screenId);
+    const QVector<QSize> minSizes = respectMin ? windowMinSizes : QVector<QSize>{};
+    if (respectMin && Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled())) {
+        for (int i = 0; i < windowCount && i < tiled.size(); ++i) {
+            if (windowMinSizes[i].width() > 0 || windowMinSizes[i].height() > 0) {
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "  minSize[" << i << "]:" << tiled[i] << "=" << windowMinSizes[i];
             }
         }
     }
@@ -2873,10 +2874,15 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
 
     // Lightweight safety net: the algorithm handles min sizes directly, but
     // enforceWindowMinSizes catches any residual deficits from rounding or
-    // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable constraints).
-    // Skip for overlapping algorithms (Monocle, Cascade, Stair): zones intentionally
-    // overlap and removeZoneOverlaps would destroy the intended layout.
-    if (effectiveRespectMinimumSize(screenId) && !minSizes.isEmpty() && !algo->producesOverlappingZones()) {
+    // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable
+    // constraints). Skip for any algorithm where producesOverlappingZones()
+    // is true (Monocle, Cascade, Stair, Deck, Paper, Spread, horizontal-deck
+    // and any future opt-in): zones intentionally overlap and the implicit
+    // removeZoneOverlaps inside enforceWindowMinSizes would destroy the
+    // intended layout.
+    // minSizes is populated iff respectMin (see above); windowCount > 0 is
+    // already guaranteed by the early return at the top of this function.
+    if (respectMin && !algo->producesOverlappingZones()) {
         const int threshold =
             effectiveInnerGap(screenId) + qMax(PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx, 12);
         const QVector<QRect> preEnforceZones = zones;
@@ -2885,6 +2891,46 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
             qCDebug(PhosphorTileEngine::lcTileEngine) << "enforceWindowMinSizes: zones adjusted"
                                                       << "before=" << preEnforceZones << "after=" << zones;
         }
+    }
+
+    // Bounds clamp: shift zone position so the effective window rect (after
+    // the compositor enforces declared min sizes) stays inside the screen.
+    // Without this, a zone narrower/shorter than the window's minSize lets
+    // KWin grow the window past the screen edge — and if an adjacent monitor
+    // is butted up to that edge, the window's center crosses into it, KWin
+    // reassigns its output, and the autotile engine ejects the window.
+    //
+    // Runs unconditionally — the user's "respect minimum size" preference
+    // controls whether the algorithm reflows around min sizes, but it does
+    // NOT change KWin's compositor-side enforcement, so we always need this
+    // safety net. Position-only; never grows or shrinks zones (size changes
+    // are owned by enforceWindowMinSizes, which is unsafe for any algorithm
+    // where producesOverlappingZones() is true).
+    //
+    // Post-clamp zones may overlap. For overlap stacks (any algo with
+    // producesOverlappingZones() true — Cascade, Stair, etc.) this is
+    // intentional and a shift just changes the visible offset slightly. For
+    // non-overlapping algorithms it can also occur when a window's min-size
+    // pressure shifts a zone leftward/upward into its neighbor; we
+    // deliberately do NOT re-run removeZoneOverlaps because it splits the
+    // overlap at the midpoint, moving the shifted zone back toward the edge
+    // it was just clamped away from — exactly re-introducing the overflow we
+    // just fixed.
+    //
+    // Most downstream consumers (applyTiling, geometry batch builders) index
+    // calculatedZones by window position, so they're insensitive to overlap.
+    // The one spatial consumer is computeDragInsertIndexAtPoint, which does
+    // zones[i].contains(cursorPos) and returns the first hit. In the rare
+    // overlap region produced by clamp shift, the lower-indexed zone wins —
+    // an acceptable tie-break given (a) overlap area is bounded by the
+    // min-size deficit (typically a few hundred pixels at most), (b) the
+    // alternative is window ejection to an adjacent monitor, and (c) the
+    // cascade/stair algorithms already exercised first-match-wins for years.
+    const QVector<QRect> preClampZones = zones;
+    PhosphorGeometry::clampZonesToScreen(zones, windowMinSizes, screen);
+    if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled()) && zones != preClampZones) {
+        qCDebug(PhosphorTileEngine::lcTileEngine) << "clampZonesToScreen: zones adjusted"
+                                                  << "before=" << preClampZones << "after=" << zones;
     }
 
     // Clamp zones to minimum 1x1 — algorithms or the constraint solver can
