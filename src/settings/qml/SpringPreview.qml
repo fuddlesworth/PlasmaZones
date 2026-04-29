@@ -11,7 +11,6 @@ ColumnLayout {
 
     property real omega: 12.0
     property real zeta: 0.8
-    property bool previewEnabled: true
 
     spacing: Kirigami.Units.smallSpacing
 

@@ -12,13 +12,8 @@ SettingsCard {
     required property string eventPath
     required property string eventLabel
     property string eventDescription: ""
-    property bool isParentNode: false
 
     readonly property var animBridge: settingsController.animationPage
-    readonly property bool hasOverride: {
-        var tree = appSettings.shaderProfileTree;
-        return root.animBridge.effectForPath(root.eventPath).length > 0;
-    }
 
     headerText: root.eventLabel
     collapsible: true

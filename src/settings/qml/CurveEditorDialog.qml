@@ -90,6 +90,7 @@ Dialog {
                         id: easingPreset
 
                         Layout.fillWidth: true
+                        Accessible.name: i18n("Easing curve preset")
                         model: [i18n("OutCubic (default)"), i18n("Linear"), i18n("OutQuad"), i18n("InOutCubic"), i18n("OutBack"), i18n("OutExpo")]
 
                         readonly property var presetCurves: ["0.33,1.00,0.68,1.00", "0.00,0.00,1.00,1.00", "0.25,0.46,0.45,0.94", "0.65,0.05,0.36,1.00", "0.18,0.89,0.32,1.28", "0.19,1.00,0.22,1.00"]
@@ -131,6 +132,7 @@ Dialog {
                         id: springPreset
 
                         Layout.fillWidth: true
+                        Accessible.name: i18n("Spring preset")
                         model: [i18n("Snappy"), i18n("Smooth"), i18n("Bouncy"), i18n("Custom")]
 
                         onActivated: {
@@ -162,6 +164,7 @@ Dialog {
                         from: 0.1
                         to: 200.0
                         value: root._workingOmega
+                        Accessible.name: i18n("Spring frequency")
                         onMoved: {
                             root._workingOmega = value;
                             springPreset.currentIndex = 3;
@@ -176,6 +179,7 @@ Dialog {
                         from: 0.0
                         to: 10.0
                         value: root._workingZeta
+                        Accessible.name: i18n("Spring damping")
                         onMoved: {
                             root._workingZeta = value;
                             springPreset.currentIndex = 3;
