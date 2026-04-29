@@ -167,7 +167,7 @@ QString AnimationSettingsController::parentChainForEvent(const QString& eventPat
         cursor = PhosphorAnimation::ProfilePaths::parentPath(cursor);
     }
 
-    static const QHash<QString, QString> displayNames = {
+    const QHash<QString, QString> displayNames = {
         {QStringLiteral("global"), PzI18n::tr("Global")},
         {QStringLiteral("window"), PzI18n::tr("Window")},
         {QStringLiteral("window.open"), PzI18n::tr("Open")},

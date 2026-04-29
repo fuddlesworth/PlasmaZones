@@ -5,11 +5,11 @@
 
 function evaluate(t, omega, zeta) {
     if (t <= 0) return 0;
-    if (zeta < 1.0) {
+    if (zeta < 0.9999) {
         var wd = omega * Math.sqrt(1.0 - zeta * zeta);
         var decay = Math.exp(-zeta * omega * t);
         return 1.0 - decay * (Math.cos(wd * t) + (zeta * omega / wd) * Math.sin(wd * t));
-    } else if (zeta === 1.0) {
+    } else if (zeta < 1.0001) {
         var decay2 = Math.exp(-omega * t);
         return 1.0 - decay2 * (1.0 + omega * t);
     } else {
