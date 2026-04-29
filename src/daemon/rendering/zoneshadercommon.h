@@ -20,6 +20,4 @@ using PhosphorRendering::ZoneRect;
 using PhosphorRendering::ZoneShaderUniforms;
 using PhosphorShell::kShaderTimeWrap;
 
-namespace ZoneShaderUboRegions = ::PhosphorRendering::ZoneShaderUboRegions;
-
 } // namespace PlasmaZones

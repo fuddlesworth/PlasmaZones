@@ -164,8 +164,8 @@ private Q_SLOTS:
         // Sentinel preserved on the unrelated slots
         QCOMPARE(md.customParams[7].w(), -1.0f);
         // No image slot 4 (image array is 4-element).
-        for (const auto& path : md.userTextures) {
-            QVERIFY(path.isEmpty() || !path.endsWith(QStringLiteral("tex.png")));
+        for (const auto& texPath : md.userTextures) {
+            QVERIFY(texPath.isEmpty() || !texPath.endsWith(QStringLiteral("tex.png")));
         }
     }
 

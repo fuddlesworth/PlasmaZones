@@ -48,6 +48,7 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::QuickPrivate
     PhosphorRendering
     PhosphorShell
+    PhosphorAudio
 )
 
 target_compile_features(plasmazones-shader-render PRIVATE cxx_std_20)

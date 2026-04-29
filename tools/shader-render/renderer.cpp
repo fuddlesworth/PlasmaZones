@@ -219,9 +219,11 @@ QVector<PhosphorRendering::ZoneData> toRuntimeZones(const QVector<Zone>& srcZone
     return out;
 }
 
-void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetadata& md, const QSize& resolution)
+void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetadata& md, const QSize& /*resolution*/)
 {
-    effect.setIResolution(QSizeF(resolution));
+    // iResolution is driven from the item's width/height by ShaderEffect::
+    // syncBasePropertiesToNode every frame, so seeding it here would be
+    // overwritten before the first sync — drop the redundant call.
     effect.setShaderSource(QUrl::fromLocalFile(md.fragmentShader));
 
     if (md.multipass) {
@@ -477,7 +479,6 @@ int Renderer::render(const RenderOptions& opts)
     // clear colour.
     window->setColor(QColor(QStringLiteral("#31363b")));
     window->resize(size);
-    window->setGeometry(0, 0, size.width(), size.height());
 
     // Initialize the render control first — sets up Qt's internal RHI, scene
     // graph, and render target allocation. After this, window->rhi() returns

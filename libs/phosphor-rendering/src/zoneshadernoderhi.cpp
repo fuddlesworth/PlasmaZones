@@ -87,9 +87,12 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         if (!resized->create()) {
             return; // keep dirty; retry next frame with old texture still bound
         }
+        // Register the new binding BEFORE dropping the old texture. setExtraBinding
+        // resets the SRB (in resetAllBindingsAndPipelines), so the SRB never
+        // transiently holds a binding to the freed old QRhiTexture pointer.
+        QRhiTexture* newPtr = resized.get();
+        setExtraBinding(1, newPtr, m_labelsSampler.get());
         m_labelsTexture = std::move(resized);
-        // Re-register the extra binding with the new texture pointer.
-        setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
     }
     QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
     if (batch) {

@@ -180,6 +180,11 @@ public:
             m_proc.kill();
             return false;
         }
+        // exitCode() is undefined when the process crashed — gate on exitStatus.
+        if (m_proc.exitStatus() != QProcess::NormalExit) {
+            qCWarning(lcEncoder) << "FfmpegPipeSink: ffmpeg crashed";
+            return false;
+        }
         return m_proc.exitCode() == 0;
     }
 
