@@ -23,192 +23,225 @@ ApplicationWindow {
     // "main" = top-level list; otherwise the parent name (e.g. "snapping")
     property string _sidebarMode: "main"
     // Main sidebar items
-    readonly property var _mainItems: [{
-        "name": "overview",
-        "label": i18n("Overview"),
-        "iconName": "monitor",
-        "hasChildren": false,
-        "hasDividerAfter": true
-    }, {
-        "name": "virtualscreens",
-        "label": i18n("Virtual Screens"),
-        "iconName": "virtual-desktops",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
-        "name": "layouts",
-        "label": i18n("Layouts"),
-        "iconName": "view-grid",
-        "hasChildren": false,
-        "hasDividerAfter": true
-    }, {
-        "name": "snapping",
-        "label": i18n("Snapping"),
-        "iconName": "view-split-left-right",
-        "hasChildren": true,
-        "hasDividerAfter": false
-    }, {
-        "name": "tiling",
-        "label": i18n("Tiling"),
-        "iconName": "window-duplicate",
-        "hasChildren": true,
-        "hasDividerAfter": true
-    }, {
-        "name": "animations",
-        "label": i18n("Animations"),
-        "iconName": "media-playback-start",
-        "hasChildren": true,
-        "hasDividerAfter": false
-    }, {
-        "name": "exclusions",
-        "label": i18n("Exclusions"),
-        "iconName": "dialog-cancel",
-        "hasChildren": false,
-        "hasDividerAfter": true
-    }, {
-        "name": "editor",
-        "label": i18n("Editor"),
-        "iconName": "document-edit",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
-        "name": "general",
-        "label": i18n("General"),
-        "iconName": "configure",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
-        "name": "about",
-        "label": i18n("About"),
-        "iconName": "help-about",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }]
+    readonly property var _mainItems: [
+        {
+            "name": "overview",
+            "label": i18n("Overview"),
+            "iconName": "monitor",
+            "hasChildren": false,
+            "hasDividerAfter": true
+        },
+        {
+            "name": "virtualscreens",
+            "label": i18n("Virtual Screens"),
+            "iconName": "virtual-desktops",
+            "hasChildren": false,
+            "hasDividerAfter": false
+        },
+        {
+            "name": "layouts",
+            "label": i18n("Layouts"),
+            "iconName": "view-grid",
+            "hasChildren": false,
+            "hasDividerAfter": true
+        },
+        {
+            "name": "snapping",
+            "label": i18n("Snapping"),
+            "iconName": "view-split-left-right",
+            "hasChildren": true,
+            "hasDividerAfter": false
+        },
+        {
+            "name": "tiling",
+            "label": i18n("Tiling"),
+            "iconName": "window-duplicate",
+            "hasChildren": true,
+            "hasDividerAfter": true
+        },
+        {
+            "name": "animations",
+            "label": i18n("Animations"),
+            "iconName": "media-playback-start",
+            "hasChildren": true,
+            "hasDividerAfter": false
+        },
+        {
+            "name": "exclusions",
+            "label": i18n("Exclusions"),
+            "iconName": "dialog-cancel",
+            "hasChildren": false,
+            "hasDividerAfter": true
+        },
+        {
+            "name": "editor",
+            "label": i18n("Editor"),
+            "iconName": "document-edit",
+            "hasChildren": false,
+            "hasDividerAfter": false
+        },
+        {
+            "name": "general",
+            "label": i18n("General"),
+            "iconName": "configure",
+            "hasChildren": false,
+            "hasDividerAfter": false
+        },
+        {
+            "name": "about",
+            "label": i18n("About"),
+            "iconName": "help-about",
+            "hasChildren": false,
+            "hasDividerAfter": false
+        }
+    ]
     // Children for each parent
     readonly property var _childItems: ({
-        "snapping": [{
-            "name": "snapping-appearance",
-            "label": i18n("Appearance"),
-            "iconName": "preferences-desktop-color"
-        }, {
-            "name": "snapping-effects",
-            "label": i18n("Effects"),
-            "iconName": "preferences-desktop-effects",
-            "hasDividerAfter": true
-        }, {
-            "name": "snapping-behavior",
-            "label": i18n("Behavior"),
-            "iconName": "preferences-system"
-        }, {
-            "name": "snapping-zoneselector",
-            "label": i18n("Zone Selector"),
-            "iconName": "view-choose",
-            "hasDividerAfter": true
-        }, {
-            "name": "snapping-assignments",
-            "label": i18n("Assignments"),
-            "iconName": "view-list-details"
-        }, {
-            "name": "snapping-apprules",
-            "label": i18n("App Rules"),
-            "iconName": "application-x-executable"
-        }, {
-            "name": "snapping-ordering",
-            "label": i18n("Priority"),
-            "iconName": "view-sort"
-        }, {
-            "name": "snapping-shortcuts",
-            "label": i18n("Quick Shortcuts"),
-            "iconName": "bookmark"
-        }],
-        "animations": [{
-            "name": "animations-snap",
-            "label": i18n("Snap"),
-            "iconName": "window-snap"
-        }, {
-            "name": "animations-layout",
-            "label": i18n("Layout Switch"),
-            "iconName": "view-grid",
-            "hasDividerAfter": true
-        }, {
-            "name": "animations-zonehighlight",
-            "label": i18n("Zone Highlight"),
-            "iconName": "highlight"
-        }, {
-            "name": "animations-osd",
-            "label": i18n("OSD"),
-            "iconName": "dialog-information",
-            "hasDividerAfter": true
-        }, {
-            "name": "animations-shaders",
-            "label": i18n("Shaders"),
-            "iconName": "preferences-desktop-effects"
-        }],
-        "tiling": [{
-            "name": "tiling-appearance",
-            "label": i18n("Appearance"),
-            "iconName": "preferences-desktop-color",
-            "hasDividerAfter": true
-        }, {
-            "name": "tiling-behavior",
-            "label": i18n("Behavior"),
-            "iconName": "preferences-system"
-        }, {
-            "name": "tiling-algorithm",
-            "label": i18n("Algorithms"),
-            "iconName": "view-grid",
-            "hasDividerAfter": true
-        }, {
-            "name": "tiling-assignments",
-            "label": i18n("Assignments"),
-            "iconName": "view-list-details"
-        }, {
-            "name": "tiling-ordering",
-            "label": i18n("Priority"),
-            "iconName": "view-sort"
-        }, {
-            "name": "tiling-shortcuts",
-            "label": i18n("Quick Shortcuts"),
-            "iconName": "bookmark"
-        }]
-    })
+            "snapping": [
+                {
+                    "name": "snapping-appearance",
+                    "label": i18n("Appearance"),
+                    "iconName": "preferences-desktop-color"
+                },
+                {
+                    "name": "snapping-effects",
+                    "label": i18n("Effects"),
+                    "iconName": "preferences-desktop-effects",
+                    "hasDividerAfter": true
+                },
+                {
+                    "name": "snapping-behavior",
+                    "label": i18n("Behavior"),
+                    "iconName": "preferences-system"
+                },
+                {
+                    "name": "snapping-zoneselector",
+                    "label": i18n("Zone Selector"),
+                    "iconName": "view-choose",
+                    "hasDividerAfter": true
+                },
+                {
+                    "name": "snapping-assignments",
+                    "label": i18n("Assignments"),
+                    "iconName": "view-list-details"
+                },
+                {
+                    "name": "snapping-apprules",
+                    "label": i18n("App Rules"),
+                    "iconName": "application-x-executable"
+                },
+                {
+                    "name": "snapping-ordering",
+                    "label": i18n("Priority"),
+                    "iconName": "view-sort"
+                },
+                {
+                    "name": "snapping-shortcuts",
+                    "label": i18n("Quick Shortcuts"),
+                    "iconName": "bookmark"
+                }
+            ],
+            "animations": [
+                {
+                    "name": "animations-snap",
+                    "label": i18n("Snap"),
+                    "iconName": "window-snap"
+                },
+                {
+                    "name": "animations-layout",
+                    "label": i18n("Layout Switch"),
+                    "iconName": "view-grid",
+                    "hasDividerAfter": true
+                },
+                {
+                    "name": "animations-zonehighlight",
+                    "label": i18n("Zone Highlight"),
+                    "iconName": "highlight"
+                },
+                {
+                    "name": "animations-osd",
+                    "label": i18n("OSD"),
+                    "iconName": "dialog-information",
+                    "hasDividerAfter": true
+                },
+                {
+                    "name": "animations-shaders",
+                    "label": i18n("Shaders"),
+                    "iconName": "preferences-desktop-effects"
+                }
+            ],
+            "tiling": [
+                {
+                    "name": "tiling-appearance",
+                    "label": i18n("Appearance"),
+                    "iconName": "preferences-desktop-color",
+                    "hasDividerAfter": true
+                },
+                {
+                    "name": "tiling-behavior",
+                    "label": i18n("Behavior"),
+                    "iconName": "preferences-system"
+                },
+                {
+                    "name": "tiling-algorithm",
+                    "label": i18n("Algorithms"),
+                    "iconName": "view-grid",
+                    "hasDividerAfter": true
+                },
+                {
+                    "name": "tiling-assignments",
+                    "label": i18n("Assignments"),
+                    "iconName": "view-list-details"
+                },
+                {
+                    "name": "tiling-ordering",
+                    "label": i18n("Priority"),
+                    "iconName": "view-sort"
+                },
+                {
+                    "name": "tiling-shortcuts",
+                    "label": i18n("Quick Shortcuts"),
+                    "iconName": "bookmark"
+                }
+            ]
+        })
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
-        "overview": "MonitorStatePage.qml",
-        "virtualscreens": "VirtualScreensPage.qml",
-        "layouts": "LayoutsPage.qml",
-        "snapping-appearance": "SnappingAppearancePage.qml",
-        "snapping-behavior": "SnappingBehaviorPage.qml",
-        "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
-        "snapping-effects": "SnappingEffectsPage.qml",
-        "animations-snap": "AnimationsSnapPage.qml",
-        "animations-layout": "AnimationsLayoutPage.qml",
-        "animations-zonehighlight": "AnimationsZoneHighlightPage.qml",
-        "animations-osd": "AnimationsOsdPage.qml",
-        "animations-shaders": "AnimationsShadersPage.qml",
-        "tiling-appearance": "TilingAppearancePage.qml",
-        "tiling-behavior": "TilingBehaviorPage.qml",
-        "tiling-algorithm": "TilingAlgorithmPage.qml",
-        "snapping-assignments": "SnappingAssignmentsPage.qml",
-        "snapping-apprules": "AssignmentsAppRulesPage.qml",
-        "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
-        "snapping-ordering": "SnappingOrderingPage.qml",
-        "tiling-assignments": "TilingAssignmentsPage.qml",
-        "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
-        "tiling-ordering": "TilingOrderingPage.qml",
-        "exclusions": "ExclusionsPage.qml",
-        "editor": "EditorPage.qml",
-        "general": "GeneralPage.qml",
-        "about": "AboutPage.qml"
-    })
+            "overview": "MonitorStatePage.qml",
+            "virtualscreens": "VirtualScreensPage.qml",
+            "layouts": "LayoutsPage.qml",
+            "snapping-appearance": "SnappingAppearancePage.qml",
+            "snapping-behavior": "SnappingBehaviorPage.qml",
+            "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
+            "snapping-effects": "SnappingEffectsPage.qml",
+            "animations-snap": "AnimationsSnapPage.qml",
+            "animations-layout": "AnimationsLayoutPage.qml",
+            "animations-zonehighlight": "AnimationsZoneHighlightPage.qml",
+            "animations-osd": "AnimationsOsdPage.qml",
+            "animations-shaders": "AnimationsShadersPage.qml",
+            "tiling-appearance": "TilingAppearancePage.qml",
+            "tiling-behavior": "TilingBehaviorPage.qml",
+            "tiling-algorithm": "TilingAlgorithmPage.qml",
+            "snapping-assignments": "SnappingAssignmentsPage.qml",
+            "snapping-apprules": "AssignmentsAppRulesPage.qml",
+            "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
+            "snapping-ordering": "SnappingOrderingPage.qml",
+            "tiling-assignments": "TilingAssignmentsPage.qml",
+            "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
+            "tiling-ordering": "TilingOrderingPage.qml",
+            "exclusions": "ExclusionsPage.qml",
+            "editor": "EditorPage.qml",
+            "general": "GeneralPage.qml",
+            "about": "AboutPage.qml"
+        })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({
-        "any": i18n("All Monitors"),
-        "standard": i18n("Standard (16:9)"),
-        "ultrawide": i18n("Ultrawide (21:9)"),
-        "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
-        "portrait": i18n("Portrait (9:16)")
-    })
+            "any": i18n("All Monitors"),
+            "standard": i18n("Standard (16:9)"),
+            "ultrawide": i18n("Ultrawide (21:9)"),
+            "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
+            "portrait": i18n("Portrait (9:16)")
+        })
 
     function _rebuildSidebar() {
         sidebarModel.clear();
@@ -225,7 +258,6 @@ ApplicationWindow {
                         for (let j = 0; j < children.length; j++) {
                             if (children[j].label.toLowerCase().indexOf(searchText) >= 0)
                                 matchingChildren.push(children[j]);
-
                         }
                     }
                     if (!itemMatches && matchingChildren.length === 0)
@@ -255,15 +287,14 @@ ApplicationWindow {
                         });
                         if (childDivider)
                             sidebarModel.append({
-                            "name": "__divider__",
-                            "label": "",
-                            "iconName": "",
-                            "hasChildren": false,
-                            "isBackButton": false,
-                            "hasDividerAfter": false,
-                            "isDivider": true
-                        });
-
+                                "name": "__divider__",
+                                "label": "",
+                                "iconName": "",
+                                "hasChildren": false,
+                                "isBackButton": false,
+                                "hasDividerAfter": false,
+                                "isDivider": true
+                            });
                     }
                     continue;
                 }
@@ -278,15 +309,14 @@ ApplicationWindow {
                 });
                 if (item.hasDividerAfter)
                     sidebarModel.append({
-                    "name": "__divider__",
-                    "label": "",
-                    "iconName": "",
-                    "hasChildren": false,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": true
-                });
-
+                        "name": "__divider__",
+                        "label": "",
+                        "iconName": "",
+                        "hasChildren": false,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": true
+                    });
             }
         } else {
             // Find parent label
@@ -325,15 +355,14 @@ ApplicationWindow {
                 });
                 if (childDivider)
                     sidebarModel.append({
-                    "name": "__divider__",
-                    "label": "",
-                    "iconName": "",
-                    "hasChildren": false,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": true
-                });
-
+                        "name": "__divider__",
+                        "label": "",
+                        "iconName": "",
+                        "hasChildren": false,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": true
+                    });
             }
         }
     }
@@ -343,7 +372,6 @@ ApplicationWindow {
         for (let i = 0; i < _mainItems.length; i++) {
             if (_mainItems[i].name === _sidebarMode)
                 return _mainItems[i].label;
-
         }
         return _sidebarMode;
     }
@@ -357,7 +385,6 @@ ApplicationWindow {
         for (let i = 0; i < children.length; i++) {
             if (children[i].name === pageName)
                 return children[i].label;
-
         }
         return pageName;
     }
@@ -367,7 +394,6 @@ ApplicationWindow {
         for (let i = 0; i < _mainItems.length; i++) {
             if (_mainItems[i].name === pageName)
                 return _mainItems[i].label;
-
         }
         return pageName;
     }
@@ -406,7 +432,7 @@ ApplicationWindow {
     width: Kirigami.Units.gridUnit * 80
     height: Kirigami.Units.gridUnit * 48
     visible: true
-    onClosing: function(close) {
+    onClosing: function (close) {
         settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
         if (settingsController.needsSave && !window._closeConfirmed) {
             close.accepted = false;
@@ -435,7 +461,7 @@ ApplicationWindow {
                 if (children[c].name === page) {
                     _sidebarMode = parents[p];
                     _rebuildSidebar();
-                    return ;
+                    return;
                 }
             }
         }
@@ -446,13 +472,11 @@ ApplicationWindow {
         function onSnappingEnabledChanged() {
             if (!appSettings.snappingEnabled && _sidebarMode === "snapping")
                 _drillOut();
-
         }
 
         function onAutotileEnabledChanged() {
             if (!appSettings.autotileEnabled && _sidebarMode === "tiling")
                 _drillOut();
-
         }
 
         target: appSettings
@@ -483,7 +507,6 @@ ApplicationWindow {
                 window._rebuildSidebar();
                 if (sidebarTransition.pendingPage)
                     settingsController.activePage = sidebarTransition.pendingPage;
-
             }
         }
 
@@ -493,7 +516,6 @@ ApplicationWindow {
             to: 1
             profile: "sidebar.fadeIn"
         }
-
     }
 
     Shortcut {
@@ -504,13 +526,12 @@ ApplicationWindow {
                 let item = sidebarModel.get(i);
                 if (!item.isBackButton && !item.hasChildren && item.name !== "__divider__") {
                     settingsController.activePage = item.name;
-                    return ;
+                    return;
                 }
             }
             // At boundary — drill out if in a sub-category
             if (_sidebarMode !== "main")
                 _drillOut();
-
         }
     }
 
@@ -522,13 +543,12 @@ ApplicationWindow {
                 let item = sidebarModel.get(i);
                 if (!item.isBackButton && !item.hasChildren && item.name !== "__divider__") {
                     settingsController.activePage = item.name;
-                    return ;
+                    return;
                 }
             }
             // At boundary — drill out if in a sub-category
             if (_sidebarMode !== "main")
                 _drillOut();
-
         }
     }
 
@@ -585,7 +605,6 @@ ApplicationWindow {
                         height: Kirigami.Units.iconSizes.small
                         opacity: 0.5
                     }
-
                 }
 
                 // Navigation list
@@ -599,7 +618,6 @@ ApplicationWindow {
                         for (var i = 0; i < sidebarModel.count; i++) {
                             if (sidebarModel.get(i).name === settingsController.activePage)
                                 return i;
-
                         }
                         return -1;
                     }
@@ -633,18 +651,18 @@ ApplicationWindow {
                         onClicked: {
                             if (isBackButton) {
                                 window._drillOut();
-                                return ;
+                                return;
                             }
                             if (hasChildren) {
                                 // Block drill-down if the feature is disabled
                                 if (name === "snapping" && !appSettings.snappingEnabled)
-                                    return ;
+                                    return;
 
                                 if (name === "tiling" && !appSettings.autotileEnabled)
-                                    return ;
+                                    return;
 
                                 window._drillIn(name);
-                                return ;
+                                return;
                             }
                             // If selecting an inline search result child, clear search and drill into parent
                             if (sidebarSearch.text.length > 0 && _sidebarMode === "main") {
@@ -657,7 +675,7 @@ ApplicationWindow {
                                             _sidebarMode = parents[p];
                                             _rebuildSidebar();
                                             settingsController.activePage = name;
-                                            return ;
+                                            return;
                                         }
                                     }
                                 }
@@ -719,9 +737,7 @@ ApplicationWindow {
                                 PhosphorMotionAnimation {
                                     profile: "widget.tint-fast"
                                 }
-
                             }
-
                         }
 
                         contentItem: RowLayout {
@@ -748,9 +764,7 @@ ApplicationWindow {
                                         profile: "widget.hover"
                                         durationOverride: 120
                                     }
-
                                 }
-
                             }
 
                             Label {
@@ -781,9 +795,7 @@ ApplicationWindow {
                                         profile: "widget.hover"
                                         durationOverride: 120
                                     }
-
                                 }
-
                             }
 
                             // Unsaved changes badge — per-page tracking.
@@ -815,7 +827,6 @@ ApplicationWindow {
                                     onRunningChanged: {
                                         if (!running)
                                             dirtyBadge.opacity = 1;
-
                                     }
 
                                     PhosphorMotionAnimation {
@@ -833,9 +844,7 @@ ApplicationWindow {
                                         to: 1
                                         profile: "widget.pulse"
                                     }
-
                                 }
-
                             }
 
                             // Enable/disable toggle for snapping and tiling.
@@ -846,7 +855,7 @@ ApplicationWindow {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
                                 checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
                                 accessibleName: navDelegate.label
-                                onToggled: function(newValue) {
+                                onToggled: function (newValue) {
                                     settingsController.beginExternalEdit(navDelegate.name);
                                     if (navDelegate.name === "snapping")
                                         appSettings.snappingEnabled = newValue;
@@ -873,11 +882,8 @@ ApplicationWindow {
                                 }
                                 visible: navDelegate.hasChildren && !window.sidebarCompact
                             }
-
                         }
-
                     }
-
                 }
 
                 // Daemon status
@@ -909,7 +915,6 @@ ApplicationWindow {
                                 onRunningChanged: {
                                     if (!running)
                                         daemonDot.opacity = 1;
-
                                 }
 
                                 PhosphorMotionAnimation {
@@ -927,9 +932,7 @@ ApplicationWindow {
                                     to: 1
                                     profile: "widget.pulse-slow"
                                 }
-
                             }
-
                         }
 
                         Label {
@@ -944,11 +947,10 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignVCenter
                             checked: settingsController.daemonRunning
                             accessibleName: i18n("Toggle daemon")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 settingsController.daemonController.setEnabled(newValue);
                             }
                         }
-
                     }
 
                     background: Rectangle {
@@ -961,25 +963,20 @@ ApplicationWindow {
                             height: Math.round(Kirigami.Units.devicePixelRatio)
                             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                         }
-
                     }
-
                 }
-
             }
 
             Behavior on Layout.preferredWidth {
                 PhosphorMotionAnimation {
                     profile: "panel.slideIn"
                 }
-
             }
 
             Behavior on Layout.minimumWidth {
                 PhosphorMotionAnimation {
                     profile: "panel.slideIn"
                 }
-
             }
 
             background: Rectangle {
@@ -993,9 +990,7 @@ ApplicationWindow {
                     width: Math.round(Kirigami.Units.devicePixelRatio)
                     color: Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
                 }
-
             }
-
         }
 
         // =================================================================
@@ -1036,7 +1031,6 @@ ApplicationWindow {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: window._drillOut()
                             }
-
                         }
 
                         // Separator
@@ -1056,13 +1050,11 @@ ApplicationWindow {
                             }
                             opacity: 0.5
                         }
-
                     }
 
                     Item {
                         Layout.fillWidth: true
                     }
-
                 }
 
                 background: Rectangle {
@@ -1074,9 +1066,7 @@ ApplicationWindow {
                         height: Math.round(Kirigami.Units.devicePixelRatio)
                         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
                     }
-
                 }
-
             }
 
             // ── Update banner (visible on all pages) ─────────────────────
@@ -1121,7 +1111,6 @@ ApplicationWindow {
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
-
                 }
 
                 background: Rectangle {
@@ -1129,7 +1118,6 @@ ApplicationWindow {
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
                     border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.3)
                 }
-
             }
 
             // ── What's New banner (visible when unseen changes exist) ──
@@ -1173,7 +1161,6 @@ ApplicationWindow {
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
-
                 }
 
                 background: Rectangle {
@@ -1181,7 +1168,6 @@ ApplicationWindow {
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
                     border.color: Qt.rgba(Kirigami.Theme.linkColor.r, Kirigami.Theme.linkColor.g, Kirigami.Theme.linkColor.b, 0.3)
                 }
-
             }
 
             // Page content with crossfade transition
@@ -1220,7 +1206,6 @@ ApplicationWindow {
                         profile: "widget.fade"
                         durationOverride: 180
                     }
-
                 }
 
                 // -- Toast notification -----------------------------------
@@ -1280,11 +1265,8 @@ ApplicationWindow {
                             to: 0
                             profile: "widget.fadeOut"
                         }
-
                     }
-
                 }
-
             }
 
             // ── Layout context menu (lives outside Loader to avoid Qt6 SIGSEGV on Menu destruction) ──
@@ -1380,8 +1362,7 @@ ApplicationWindow {
                     }
                 }
 
-                MenuSeparator {
-                }
+                MenuSeparator {}
 
                 // -- State --
                 MenuItem {
@@ -1494,7 +1475,6 @@ ApplicationWindow {
                     visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
                     onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
                 }
-
             }
 
             // Component for dynamic "Edit on <screen>" menu items
@@ -1506,7 +1486,6 @@ ApplicationWindow {
 
                     onTriggered: settingsController.editLayoutOnScreen(layoutContextMenu.layoutId, _screenName)
                 }
-
             }
 
             // Component for aspect ratio submenu items (ItemDelegate, not MenuItem —
@@ -1524,14 +1503,13 @@ ApplicationWindow {
                     onClicked: {
                         let layoutId = layoutContextMenu.layoutId;
                         let idx = _arIndex;
-                        Qt.callLater(function() {
+                        Qt.callLater(function () {
                             aspectRatioSubMenu.visible = false;
                             layoutContextMenu.visible = false;
                             settingsController.setLayoutAspectRatio(layoutId, idx);
                         });
                     }
                 }
-
             }
 
             // Aspect ratio submenu (managed imperatively by showForLayout —
@@ -1544,7 +1522,7 @@ ApplicationWindow {
 
                 function buildOnce() {
                     if (_built)
-                        return ;
+                        return;
 
                     _built = true;
                     var options = layoutContextMenu._aspectRatioOptions;
@@ -1565,7 +1543,6 @@ ApplicationWindow {
                     for (var i = 0; i < _items.length; i++) {
                         if (_items[i])
                             _items[i].isSelected = (_items[i]._arKey === currentClass);
-
                     }
                 }
 
@@ -1573,12 +1550,9 @@ ApplicationWindow {
                 icon.name: "view-fullscreen"
                 onAboutToShow: updateChecks()
 
-                enter: Transition {
-                }
+                enter: Transition {}
 
-                exit: Transition {
-                }
-
+                exit: Transition {}
             }
 
             // -- Footer action bar ----------------------------------------
@@ -1591,9 +1565,7 @@ ApplicationWindow {
                     PhosphorMotionAnimation {
                         profile: "widget.tint"
                     }
-
                 }
-
             }
 
             // -- Unsaved changes notification bar -------------------------
@@ -1660,22 +1632,16 @@ ApplicationWindow {
                                 toast.show(i18n("Settings saved"));
                             }
                         }
-
                     }
-
                 }
 
                 Behavior on implicitHeight {
                     PhosphorMotionAnimation {
                         profile: "widget.accordion"
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // ── Unsaved changes confirmation dialog ────────────────────────
@@ -1807,22 +1773,28 @@ ApplicationWindow {
 
                 // Shortcut entries
                 Repeater {
-                    model: [{
-                        "key": "Meta+Shift+P",
-                        "action": i18n("Open PlasmaZones Settings")
-                    }, {
-                        "key": "Meta+Shift+E",
-                        "action": i18n("Open Zone Editor")
-                    }, {
-                        "key": "Ctrl+PgUp",
-                        "action": i18n("Previous page")
-                    }, {
-                        "key": "Ctrl+PgDown",
-                        "action": i18n("Next page")
-                    }, {
-                        "key": "?",
-                        "action": i18n("Toggle this overlay")
-                    }]
+                    model: [
+                        {
+                            "key": "Meta+Shift+P",
+                            "action": i18n("Open PlasmaZones Settings")
+                        },
+                        {
+                            "key": "Meta+Shift+E",
+                            "action": i18n("Open Zone Editor")
+                        },
+                        {
+                            "key": "Ctrl+PgUp",
+                            "action": i18n("Previous page")
+                        },
+                        {
+                            "key": "Ctrl+PgDown",
+                            "action": i18n("Next page")
+                        },
+                        {
+                            "key": "?",
+                            "action": i18n("Toggle this overlay")
+                        }
+                    ]
 
                     delegate: RowLayout {
                         Layout.fillWidth: true
@@ -1848,11 +1820,8 @@ ApplicationWindow {
                                 text: modelData.key
                                 font: Kirigami.Theme.smallFont
                             }
-
                         }
-
                     }
-
                 }
 
                 Kirigami.Separator {
@@ -1865,9 +1834,7 @@ ApplicationWindow {
                     Layout.alignment: Qt.AlignHCenter
                     font: Kirigami.Theme.smallFont
                 }
-
             }
-
         }
 
         Behavior on opacity {
@@ -1875,9 +1842,7 @@ ApplicationWindow {
                 profile: "widget.fade"
                 durationOverride: 200
             }
-
         }
-
     }
 
     // ── What's New dialog ──────────────────────────────────────────
@@ -1891,5 +1856,4 @@ ApplicationWindow {
         running: settingsController.hasUnseenWhatsNew
         onTriggered: whatsNewDialog.open()
     }
-
 }

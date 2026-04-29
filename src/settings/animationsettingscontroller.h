@@ -3,17 +3,13 @@
 
 #pragma once
 
-#include "../config/configdefaults.h"
-#include "../pz_i18n.h"
-
-#include <PhosphorAnimationShaders/AnimationShaderEffect.h>
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
-#include <PhosphorAnimationShaders/ShaderProfile.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
-
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
+
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
 
 namespace PlasmaZones {
 

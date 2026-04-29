@@ -43,13 +43,13 @@ Rectangle {
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             var samples = 60;
+            var settleTime = (root.timingMode !== 0) ? SP.estimateSettleTime(root.springOmega, root.springZeta, 0.01) : 1.0;
             for (var i = 0; i <= samples; i++) {
                 var t = i / samples;
                 var v;
                 if (root.timingMode === 0) {
                     v = EC.evaluate(t, root.curve);
                 } else {
-                    var settleTime = SP.estimateSettleTime(root.springOmega, root.springZeta, 0.01);
                     v = SP.evaluate(t * settleTime, root.springOmega, root.springZeta);
                 }
                 var x = t * width;

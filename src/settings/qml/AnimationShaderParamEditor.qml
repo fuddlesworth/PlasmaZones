@@ -110,18 +110,22 @@ ColumnLayout {
         id: floatSliderComponent
 
         RowLayout {
+            required property var paramData
+            required property var currentValue
+
             spacing: Kirigami.Units.smallSpacing
 
             Slider {
                 Layout.fillWidth: true
-                from: parent.parent.paramData ? (parent.parent.paramData.min !== undefined ? parent.parent.paramData.min : 0.0) : 0.0
-                to: parent.parent.paramData ? (parent.parent.paramData.max !== undefined ? parent.parent.paramData.max : 1.0) : 1.0
-                value: parent.parent.currentValue || 0
-                onMoved: root.commitParam(parent.parent.paramData.id, value)
+                from: parent.paramData ? (parent.paramData.min !== undefined ? parent.paramData.min : 0.0) : 0.0
+                to: parent.paramData ? (parent.paramData.max !== undefined ? parent.paramData.max : 1.0) : 1.0
+                value: parent.currentValue || 0
+                Accessible.name: parent.paramData ? (parent.paramData.name || parent.paramData.id || "") : ""
+                onMoved: root.commitParam(parent.paramData.id, value)
             }
 
             Label {
-                text: (parent.parent.currentValue || 0).toFixed(2)
+                text: (parent.currentValue || 0).toFixed(2)
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                 horizontalAlignment: Text.AlignRight
                 font: Kirigami.Theme.smallFont
@@ -133,19 +137,23 @@ ColumnLayout {
         id: intSliderComponent
 
         RowLayout {
+            required property var paramData
+            required property var currentValue
+
             spacing: Kirigami.Units.smallSpacing
 
             Slider {
                 Layout.fillWidth: true
-                from: parent.parent.paramData ? (parent.parent.paramData.min !== undefined ? parent.parent.paramData.min : 0) : 0
-                to: parent.parent.paramData ? (parent.parent.paramData.max !== undefined ? parent.parent.paramData.max : 10) : 10
+                from: parent.paramData ? (parent.paramData.min !== undefined ? parent.paramData.min : 0) : 0
+                to: parent.paramData ? (parent.paramData.max !== undefined ? parent.paramData.max : 10) : 10
                 stepSize: 1
-                value: parent.parent.currentValue || 0
-                onMoved: root.commitParam(parent.parent.paramData.id, Math.round(value))
+                value: parent.currentValue || 0
+                Accessible.name: parent.paramData ? (parent.paramData.name || parent.paramData.id || "") : ""
+                onMoved: root.commitParam(parent.paramData.id, Math.round(value))
             }
 
             Label {
-                text: Math.round(parent.parent.currentValue || 0)
+                text: Math.round(parent.currentValue || 0)
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                 horizontalAlignment: Text.AlignRight
                 font: Kirigami.Theme.smallFont
@@ -157,8 +165,12 @@ ColumnLayout {
         id: boolCheckComponent
 
         CheckBox {
-            checked: parent.parent.currentValue || false
-            onToggled: root.commitParam(parent.parent.paramData.id, checked)
+            required property var paramData
+            required property var currentValue
+
+            checked: currentValue || false
+            Accessible.name: paramData ? (paramData.name || paramData.id || "") : ""
+            onToggled: root.commitParam(paramData.id, checked)
         }
     }
 }

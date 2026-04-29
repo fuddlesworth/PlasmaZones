@@ -3,8 +3,10 @@
 
 #include "animationsettingscontroller.h"
 #include "../config/settings.h"
+#include "../pz_i18n.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
 namespace PlasmaZones {
 

@@ -598,8 +598,13 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
-    AnimationSettingsController* m_animationPage = nullptr;
+    /// Phase 6: declared BEFORE m_animationPage so reverse-order member
+    /// destruction tears the registry down AFTER the controller that
+    /// borrows it. m_animationPage is parented to `this` (destroyed in
+    /// ~QObject, which runs after member destructors), but the controller
+    /// may access the registry during signal disconnects in its dtor.
     std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
+    AnimationSettingsController* m_animationPage = nullptr;
 
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
