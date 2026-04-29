@@ -297,10 +297,6 @@ QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesI
                 e.vertexShaderPath = effectDir + QLatin1Char('/') + e.vertexShaderPath;
                 desiredWatches.append(e.vertexShaderPath);
             }
-            if (!e.kwinFragmentShaderPath.isEmpty()) {
-                e.kwinFragmentShaderPath = effectDir + QLatin1Char('/') + e.kwinFragmentShaderPath;
-                desiredWatches.append(e.kwinFragmentShaderPath);
-            }
             if (!e.previewPath.isEmpty()) {
                 e.previewPath = effectDir + QLatin1Char('/') + e.previewPath;
             }

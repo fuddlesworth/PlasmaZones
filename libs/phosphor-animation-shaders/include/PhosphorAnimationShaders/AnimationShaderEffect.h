@@ -27,15 +27,13 @@ namespace PhosphorAnimationShaders {
  * "glitch"). Plugin-authored effects use reverse-domain or namespaced ids
  * ("myplugin.sparkle") to avoid collisions with built-in effects.
  *
- * ## Shader variants
+ * ## Shader source
  *
- * An effect carries two optional shader paths:
- * - `fragmentShaderPath`: the QtQuick / overlay variant (GLSL 330+)
- * - `kwinFragmentShaderPath`: the KWin compositor variant (may differ
- *   due to texture-input conventions)
- *
- * A consumer picks the variant it needs. Missing variant = effect is
- * unavailable on that rendering path.
+ * Each effect carries a single `fragmentShaderPath` — the same GLSL
+ * source is used on both the QtQuick and KWin compositor paint paths.
+ * `PhosphorRendering::ShaderNodeRhi` handles texture binding and
+ * coordinate conventions at the RHI level, so separate per-backend
+ * shader variants are not needed.
  *
  * ## Parameters
  *
@@ -62,16 +60,14 @@ struct PHOSPHORANIMATIONSHADERS_EXPORT AnimationShaderEffect
     /// Category for settings-UI grouping (e.g. "Fade", "Geometric", "Glitch").
     QString category;
 
-    /// Path to the QtQuick-side fragment shader (relative to the effect dir).
+    /// Path to the fragment shader (relative to the effect dir). The same
+    /// source is used on both QtQuick and KWin paths — ShaderNodeRhi
+    /// handles backend differences at the RHI level.
     QString fragmentShaderPath;
 
     /// Path to the vertex shader (relative to the effect dir). Empty = use
     /// the library's built-in fullscreen-quad vertex shader.
     QString vertexShaderPath;
-
-    /// Path to the KWin compositor-side fragment shader (relative to the
-    /// effect dir). Empty = effect not available on the KWin path.
-    QString kwinFragmentShaderPath;
 
     /// Resolved absolute directory containing this effect's assets.
     QString sourceDir;

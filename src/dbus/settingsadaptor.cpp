@@ -5,16 +5,23 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QColor>
 #include <QDBusVariant>
+#include <QStandardPaths>
 #include <functional>
 #include <optional>
 
 namespace PlasmaZones {
+
+namespace {
+constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
+}
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -480,6 +487,44 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
     REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
     REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+
+    // Phase 6: shader profile tree (JSON blob round-trip via D-Bus)
+    if (concrete) {
+        m_getters[QStringLiteral("shaderProfileTree")] = [concrete]() {
+            return QString::fromUtf8(
+                QJsonDocument(concrete->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
+        };
+        m_setters[QStringLiteral("shaderProfileTree")] = [concrete](const QVariant& v) -> bool {
+            const QString raw = v.toString();
+            if (raw.size() > kMaxShaderProfileTreeBytes)
+                return false;
+            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
+            if (!doc.isObject())
+                return false;
+            concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
+            return true;
+        };
+        m_schemas[QStringLiteral("shaderProfileTree")] = QStringLiteral("string");
+    }
+
+    // Phase 6: shader search paths (read-only, for KWin effect registry population).
+    // Serialized as a JSON array string — QStringList in QDBusVariant can
+    // deserialize as QDBusArgument on the receiving side, making toStringList()
+    // return empty. Cached on first access since XDG dirs don't change at runtime.
+    m_getters[QStringLiteral("animationShaderSearchPaths")] = []() {
+        static const QString cached = [] {
+            QStringList paths =
+                QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
+                                          QStandardPaths::LocateDirectory);
+            const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                + QStringLiteral("/plasmazones/animations");
+            if (!paths.contains(userDir))
+                paths.append(userDir);
+            return QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact));
+        }();
+        return cached;
+    };
+    m_schemas[QStringLiteral("animationShaderSearchPaths")] = QStringLiteral("string");
 
     // Autotile core settings (concrete Settings only)
     if (concrete) {

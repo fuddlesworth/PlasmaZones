@@ -39,7 +39,6 @@ private Q_SLOTS:
         original.category = QStringLiteral("Geometric");
         original.fragmentShaderPath = QStringLiteral("effect.frag");
         original.vertexShaderPath = QStringLiteral("effect.vert");
-        original.kwinFragmentShaderPath = QStringLiteral("effect_kwin.frag");
         original.previewPath = QStringLiteral("preview.png");
 
         AnimationShaderEffect::ParameterInfo p;

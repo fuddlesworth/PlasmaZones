@@ -18,6 +18,10 @@ namespace PhosphorAnimation {
 class PhosphorProfileRegistry;
 }
 
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
+
 namespace PhosphorLayer {
 class Role;
 }
@@ -153,6 +157,14 @@ public:
         QString hideScaleProfile; ///< Optional. Empty → no scale animation on hide.
         qreal showScaleFrom = 1.0; ///< Initial scale value when showScaleProfile is set.
         qreal hideScaleTo = 1.0; ///< Final scale value when hideScaleProfile is set.
+        /// Phase 6: shader transition effect ids. Looked up from
+        /// AnimationShaderRegistry. Empty → no shader transition.
+        QString showShaderEffectId;
+        QString hideShaderEffectId;
+        /// Optional profile paths for the shader time curve. When empty,
+        /// the shader leg reuses the opacity profile's curve and duration.
+        QString showShaderProfile;
+        QString hideShaderProfile;
     };
 
     /// Construct against an explicit registry with caller-supplied
@@ -172,6 +184,15 @@ public:
     /// ambiguity in the unity TU between the value-initialised default
     /// arg and a function-declarator interpretation).
     explicit SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry);
+
+    /// Full constructor with shader registry for Phase 6 transition
+    /// effects. Same DI contract as the registry-only ctors — caller
+    /// owns the AnimationShaderRegistry and threads it through; pass
+    /// `nullptr` to disable shader transitions. (No singleton fallback;
+    /// see `SurfaceAnimator(registry, defaults)` above for the
+    /// rationale.)
+    SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                    PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry, Config defaults);
 
     ~SurfaceAnimator() override;
     SurfaceAnimator(const SurfaceAnimator&) = delete;
@@ -198,6 +219,11 @@ public:
     /// without enumerating roles.
     void setDefaultConfig(Config cfg);
     Config defaultConfig() const;
+
+    /// Install the animation shader registry for Phase 6 shader transitions.
+    /// May be called after construction (the daemon creates the registry
+    /// after the overlay service). Null disables shader transitions.
+    void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
 
     /// @name ISurfaceAnimator
     /// @{
