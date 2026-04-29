@@ -270,6 +270,7 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QString},
+        {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QString},
     };
 }
 

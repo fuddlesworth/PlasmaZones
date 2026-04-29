@@ -87,7 +87,11 @@ static void sortMergedLayoutList(QVariantList& list)
     });
 }
 
-SettingsController::~SettingsController() = default;
+SettingsController::~SettingsController()
+{
+    delete m_animationPage;
+    m_animationPage = nullptr;
+}
 
 // ensureScreenIdResolver() now lives in src/common/screenidresolver.{h,cpp}
 // so daemon/editor/settings share the same install-once helper instead of
@@ -526,6 +530,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     static const QHash<QString, QString> redirects{
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
+        {QStringLiteral("animations"), QStringLiteral("animations-snap")},
     };
     return redirects;
 }
@@ -551,6 +556,11 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("snapping-apprules"),
+        QStringLiteral("animations-snap"),
+        QStringLiteral("animations-layout"),
+        QStringLiteral("animations-zonehighlight"),
+        QStringLiteral("animations-osd"),
+        QStringLiteral("animations-shaders"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),

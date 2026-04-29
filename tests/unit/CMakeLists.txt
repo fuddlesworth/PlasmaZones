@@ -425,6 +425,17 @@ add_executable(test_snapping_behavior_controller
 target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
+# AnimationSettingsController — round-trip tests for effect selection,
+# parameter persistence, parentChainForEvent display names, and
+# inheritSummaryForEvent. Compiles the controller source directly
+# because it lives in the plasmazones-settings executable.
+add_executable(test_animation_settings_controller
+    settings/test_animation_settings_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationsettingscontroller.cpp
+)
+target_link_libraries(test_animation_settings_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_animation_settings_controller COMMAND test_animation_settings_controller)
+
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)
