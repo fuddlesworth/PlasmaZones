@@ -205,8 +205,10 @@ private:
 
     // Non-owning typed alias for the strategy the base owns. Populated
     // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`
-    // — the cast is safe because we passed in the same instance.
-    ScanStrategy* m_strategy;
+    // — the cast is safe because we passed in the same instance. Named
+    // distinctly from the base's private `m_strategy` so a future reader
+    // can't accidentally read this as the same field.
+    ScanStrategy* m_typedStrategy;
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;

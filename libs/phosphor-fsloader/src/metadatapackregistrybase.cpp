@@ -10,15 +10,30 @@
 
 namespace PhosphorFsLoader {
 
+namespace {
+/// Hard-fail (in both debug and release) if the subclass handed us a null
+/// strategy. `Q_ASSERT_X` alone is inert in release, and the next line
+/// (`m_watcher(... *m_strategy ...)`) would dereference null with UB. A
+/// `qFatal` in a static gate makes both build modes crash with a clear
+/// diagnostic the moment the contract is violated.
+std::unique_ptr<IScanStrategy> requireNonNullStrategy(std::unique_ptr<IScanStrategy> strategy)
+{
+    if (!strategy) {
+        qFatal(
+            "MetadataPackRegistryBase: scan strategy must not be null — "
+            "buildScanStrategy returned a default-constructed unique_ptr");
+    }
+    return strategy;
+}
+} // namespace
+
 MetadataPackRegistryBase::MetadataPackRegistryBase(const QLoggingCategory& logCat,
                                                    std::unique_ptr<IScanStrategy> strategy, QObject* parent)
     : QObject(parent)
-    , m_strategy(std::move(strategy))
-    , m_watcher(m_strategy ? std::make_unique<WatchedDirectorySet>(*m_strategy, this) : nullptr)
+    , m_strategy(requireNonNullStrategy(std::move(strategy)))
+    , m_watcher(std::make_unique<WatchedDirectorySet>(*m_strategy, this))
     , m_logCat(&logCat)
 {
-    Q_ASSERT_X(m_strategy, "MetadataPackRegistryBase",
-               "scan strategy must not be null — the watcher holds a borrowed reference to it");
 }
 
 MetadataPackRegistryBase::~MetadataPackRegistryBase() = default;

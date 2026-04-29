@@ -281,10 +281,13 @@ QStringList shaderEntryWatchPaths(const ShaderRegistry::ShaderInfo& info)
     return paths;
 }
 
-/// Per-search-path watch additions: top-level shared GLSL/JSON includes
-/// (e.g. `common.glsl`, `audio.glsl`, `wallpaper.glsl`). These live
-/// alongside shader subdirs and any of them changing should re-fire the
-/// rescan.
+/// Per-search-path watch additions: top-level shared shader source files
+/// (e.g. `common.glsl`, `audio.glsl`, `wallpaper.glsl`, the shared
+/// `zone.vert`, the default `effect.frag` if a pack inherits it).
+/// These live alongside shader subdirs and any of them changing should
+/// re-fire the rescan. Globs match every extension `shaderEntryWatchPaths`
+/// also tracks, so a top-level file moved into a pack subdir (or vice
+/// versa) gets the same coverage either way.
 QStringList shaderTopLevelWatchPaths(const QString& searchPath)
 {
     QStringList paths;
@@ -292,7 +295,9 @@ QStringList shaderTopLevelWatchPaths(const QString& searchPath)
     if (!dir.exists()) {
         return paths;
     }
-    const QStringList topFiles = dir.entryList({QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
+    const QStringList topFiles = dir.entryList(
+        {QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"), QStringLiteral("*.json")},
+        QDir::Files);
     paths.reserve(topFiles.size());
     for (const QString& f : topFiles) {
         paths.append(dir.filePath(f));
@@ -311,12 +316,13 @@ bool shaderSubdirSkip(const QString& subdirName)
 /// already mixes in `id`, `isUser`, and the metadata.json's size+mtime,
 /// so this contributor only adds the OUT-OF-METADATA state that affects
 /// rendering: the resolved frag/vert path strings, plus mtime+size for
-/// every shader source file (main frag + buffer-pass frags, if any) so
-/// an in-place edit on any of them surfaces as a content change even
-/// when no metadata.json byte moved. Without the buffer-pass mixin a
-/// multipass shader's effect.frag would re-fire on edit but a buffer-A
-/// edit would not — the rescan triggers via QFileSystemWatcher (the
-/// buffer files match the *.frag glob) but the signature wouldn't shift.
+/// every shader source file (main frag + vertex shader + buffer-pass
+/// frags, if any) so an in-place edit on any of them surfaces as a
+/// content change even when no metadata.json byte moved. Every file
+/// reachable through `shaderEntryWatchPaths` (which globs `*.vert`,
+/// `*.frag`, `*.glsl`, `*.json`) must contribute mtime+size — without
+/// it the watcher fires the rescan but the signature stays stable and
+/// `OnCommit` doesn't fire, leaving consumers with stale GPU state.
 void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::ShaderInfo& s)
 {
     h.addData(s.sourcePath.toUtf8());
@@ -328,6 +334,17 @@ void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::Shad
     h.addData(QByteArrayView("|"));
     h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
     h.addData(QByteArrayView("|"));
+    // Vertex shader mtime+size — symmetrical with the frag/buffer
+    // treatment below. QFileInfo on a non-existent path returns size 0
+    // and an invalid lastModified, so the signature stays deterministic
+    // when the resolved vertex shader file doesn't exist on disk.
+    if (!s.vertexShaderPath.isEmpty()) {
+        const QFileInfo vertInfo(s.vertexShaderPath);
+        h.addData(QByteArray::number(vertInfo.size()));
+        h.addData(QByteArrayView("|"));
+        h.addData(QByteArray::number(vertInfo.lastModified().toMSecsSinceEpoch()));
+        h.addData(QByteArrayView("|"));
+    }
     for (const QString& bp : s.bufferShaderPaths) {
         h.addData(bp.toUtf8());
         h.addData(QByteArrayView("|"));
@@ -352,6 +369,14 @@ void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::Shad
 /// schema-specific setters. The OnCommit lambda captures @p self only
 /// as a pointer — by the time the lambda fires, the subclass ctor has
 /// finished and Q_EMIT dispatches through the full ShaderRegistry vtable.
+///
+/// Note: a most-derived ctor (e.g. `PlasmaZones::ShaderRegistry`) may call
+/// `addSearchPaths` from its own body, which triggers a synchronous rescan
+/// and fires `OnCommit` → `Q_EMIT self->shadersChanged()` while that
+/// most-derived ctor is still on the stack. Harmless — no external code
+/// can have `connect`-ed to the signal yet, since the constructed object
+/// hasn't been returned to anyone — but worth knowing if a future
+/// in-tree subclass adds slot wiring during construction.
 std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrategy(ShaderRegistry* self)
 {
     auto strategy = std::make_unique<ScanStrategy>(parseShader, [self]() {
@@ -367,7 +392,7 @@ std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrate
 
 ShaderRegistry::ShaderRegistry(QObject* parent)
     : MetadataPackRegistryBase(lcShaderRegistry(), buildScanStrategy(this), parent)
-    , m_strategy(static_cast<ScanStrategy*>(strategy()))
+    , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
 {
 }
 
@@ -375,7 +400,7 @@ ShaderRegistry::~ShaderRegistry() = default;
 
 void ShaderRegistry::onUserPathChanged(const QString& path)
 {
-    m_strategy->setUserPath(path);
+    m_typedStrategy->setUserPath(path);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -415,7 +440,7 @@ QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
     // Strategy returns a sorted-by-id snapshot — single source of truth
     // for QHash-randomisation-stable output across process launches.
-    return m_strategy->packs();
+    return m_typedStrategy->packs();
 }
 
 QVariantList ShaderRegistry::availableShadersVariant() const
@@ -431,23 +456,23 @@ QVariantList ShaderRegistry::availableShadersVariant() const
 
 ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString& id) const
 {
-    return m_strategy->pack(id);
+    return m_typedStrategy->pack(id);
 }
 
 QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
 {
-    if (!m_strategy->contains(id)) {
+    if (!m_typedStrategy->contains(id)) {
         return QVariantMap();
     }
-    return shaderInfoToVariantMap(m_strategy->pack(id));
+    return shaderInfoToVariantMap(m_typedStrategy->pack(id));
 }
 
 QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
-    if (isNoneShader(id) || !m_strategy->contains(id)) {
+    if (isNoneShader(id) || !m_typedStrategy->contains(id)) {
         return QUrl();
     }
-    return m_strategy->pack(id).shaderUrl;
+    return m_typedStrategy->pack(id).shaderUrl;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

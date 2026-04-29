@@ -101,7 +101,9 @@ private:
 
     // Non-owning typed alias for the strategy the base owns. Populated
     // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`.
-    ScanStrategy* m_strategy;
+    // Named distinctly from the base's private `m_strategy` to make the
+    // shadowing explicit at the field declaration.
+    ScanStrategy* m_typedStrategy;
 };
 
 } // namespace PhosphorAnimationShaders

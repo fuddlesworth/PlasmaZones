@@ -97,6 +97,17 @@ void contributeSignature(QCryptographicHash& h, const AnimationShaderEffect& e)
         h.addData(QByteArray::number(fragInfo.size()));
         h.addData(QByteArrayView("|"));
         h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
+        h.addData(QByteArrayView("|"));
+    }
+    // Vertex shader mtime+size — symmetrical with the frag treatment
+    // above. `effectWatchPaths` watches the vertex shader so a content
+    // edit fires the rescan; without this mix-in the SHA-1 signature
+    // wouldn't shift and `effectsChanged` would be silenced.
+    if (!e.vertexShaderPath.isEmpty()) {
+        const QFileInfo vertInfo(e.vertexShaderPath);
+        h.addData(QByteArray::number(vertInfo.size()));
+        h.addData(QByteArrayView("|"));
+        h.addData(QByteArray::number(vertInfo.lastModified().toMSecsSinceEpoch()));
     }
 }
 
@@ -116,7 +127,7 @@ AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
 
 AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
     : MetadataPackRegistryBase(lcRegistry(), buildScanStrategy(this), parent)
-    , m_strategy(static_cast<ScanStrategy*>(strategy()))
+    , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
 {
 }
 
@@ -124,7 +135,7 @@ AnimationShaderRegistry::~AnimationShaderRegistry() = default;
 
 void AnimationShaderRegistry::onUserPathChanged(const QString& path)
 {
-    m_strategy->setUserPath(path);
+    m_typedStrategy->setUserPath(path);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -135,22 +146,22 @@ QList<AnimationShaderEffect> AnimationShaderRegistry::availableEffects() const
 {
     // Strategy returns a sorted-by-id snapshot — single source of truth
     // for QHash-randomisation-stable output.
-    return m_strategy->packs();
+    return m_typedStrategy->packs();
 }
 
 AnimationShaderEffect AnimationShaderRegistry::effect(const QString& id) const
 {
-    return m_strategy->pack(id);
+    return m_typedStrategy->pack(id);
 }
 
 bool AnimationShaderRegistry::hasEffect(const QString& id) const
 {
-    return m_strategy->contains(id);
+    return m_typedStrategy->contains(id);
 }
 
 QStringList AnimationShaderRegistry::effectIds() const
 {
-    QStringList ids = m_strategy->packsById().keys();
+    QStringList ids = m_typedStrategy->packsById().keys();
     std::sort(ids.begin(), ids.end());
     return ids;
 }

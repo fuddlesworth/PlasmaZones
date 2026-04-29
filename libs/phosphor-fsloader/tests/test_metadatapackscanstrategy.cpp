@@ -552,6 +552,34 @@ private Q_SLOTS:
         QCOMPARE(strategy.pack(QStringLiteral("pkg-a")).sourceDir, QStringLiteral("Second-edition"));
     }
 
+    /// `setPerSubdirSkip` lets the caller reserve a sentinel subdirectory
+    /// name (the shader-pack registry uses `none` for "no shader"). The
+    /// strategy must skip such subdirs entirely — neither parsing the
+    /// `metadata.json` (so a malformed one inside a skipped subdir
+    /// doesn't even warn) nor counting against the per-rescan cap.
+    void testPerSubdirSkip()
+    {
+        const QString dir = m_tmp->filePath(QStringLiteral("d"));
+        QVERIFY(QDir().mkpath(dir));
+        // One legit pack.
+        writeMetadata(dir + QStringLiteral("/keep"), QStringLiteral("keep"), 1);
+        // One pack inside the sentinel subdir — would be valid if not
+        // skipped, so this test fails loudly if skip is broken.
+        writeMetadata(dir + QStringLiteral("/none"), QStringLiteral("none-pkg"), 2);
+
+        MetadataPackScanStrategy<FakePayload> strategy(makeDefaultParser(), [] { });
+        strategy.setPerSubdirSkip([](const QString& name) {
+            return name == QLatin1String("none");
+        });
+
+        WatchedDirectorySet set(strategy);
+        set.registerDirectory(dir, LiveReload::Off);
+
+        QCOMPARE(strategy.size(), 1);
+        QVERIFY(strategy.contains(QStringLiteral("keep")));
+        QVERIFY(!strategy.contains(QStringLiteral("none-pkg")));
+    }
+
     /// Entries with malformed (unparseable) `metadata.json` are
     /// skipped, not registered. Pinned alongside the parser-nullopt
     /// case — different rejection path (JSON layer vs schema layer)
