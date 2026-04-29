@@ -62,8 +62,8 @@ class AnimationShaderRegistry;
 }
 
 namespace PlasmaZones {
-class WindowThumbnailService;
 class ShaderRegistry;
+class SnapAssistThumbnailProvider;
 }
 namespace Phosphor::Screens {
 class ScreenManager;
@@ -537,10 +537,15 @@ private:
     QQuickWindow* m_snapAssistWindow = nullptr;
     QPointer<QScreen> m_snapAssistScreen;
     QString m_snapAssistScreenId;
-    std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
-    QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
-    QHash<QString, QString> m_thumbnailCache; // compositorHandle -> dataUrl; reused across continuation
+    // Bounded LRU cache + QML image provider. Borrowed pointer — the provider
+    // is added to (and owned by) the QQmlEngine via engineConfigurator below;
+    // the engine outlives every QML reference into it. nullptr until the
+    // SurfaceManager finishes constructing the engine. Thumbnails arrive via
+    // the setSnapAssistThumbnail D-Bus method, which the kwin-effect drives
+    // from inside the compositor (org.kde.kwin's WindowThumbnail rendered
+    // through OffscreenQuickScene).
+    SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
     // PhosphorZones::Layout Picker overlay (interactive layout browser)
     PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;
@@ -652,9 +657,7 @@ private:
     void setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry);
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
-    void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl);
-    /** Process next thumbnail in queue (sequential capture to avoid KWin overload). */
-    void processNextThumbnailCapture();
+    void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland

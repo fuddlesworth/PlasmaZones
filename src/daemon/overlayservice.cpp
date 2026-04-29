@@ -3,7 +3,7 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
-#include "windowthumbnailservice.h"
+#include "snapassistthumbnailprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 
@@ -332,6 +332,16 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 auto* localizedContext = new PzLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
                 engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
+
+                // Bounded LRU cache + image provider for Snap Assist thumbnails.
+                // QQmlEngine::addImageProvider takes ownership of the provider
+                // and tears it down when the engine is destroyed; we keep a
+                // borrowed pointer for inserts on the daemon side. The engine
+                // outlives every QML element it spawns, so QML callbacks that
+                // hit requestImage are safe.
+                auto* provider = new SnapAssistThumbnailProvider();
+                engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::kProviderId), provider);
+                m_thumbnailProvider = provider;
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,

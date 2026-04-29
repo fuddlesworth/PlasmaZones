@@ -10,12 +10,14 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../windowthumbnailservice.h"
+#include "../snapassistthumbnailprovider.h"
+#include <QImage>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
 #include <QKeyEvent>
 #include <QTimer>
+#include <QUrl>
 
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/ILayerShellTransport.h>
@@ -160,42 +162,29 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         }
     }
 
-    // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
-    // Requires KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 when desktop matching fails (local install).
-    // Sequential capture (one at a time) to avoid overwhelming KWin; concurrent CaptureWindow
-    // requests can cause thumbnails to stop working after the first few.
-    if (!m_thumbnailService) {
-        m_thumbnailService = std::make_unique<WindowThumbnailService>(this);
-        connect(m_thumbnailService.get(), &WindowThumbnailService::captureFinished, this,
-                [this](const QString& compositorHandle, const QString& dataUrl) {
-                    updateSnapAssistCandidateThumbnail(compositorHandle, dataUrl);
-                    processNextThumbnailCapture();
-                });
-    }
-    // Apply cached thumbnails and queue only uncached ones (reuse across continuation)
+    // Capture is driven by the kwin-effect: it grabs each candidate via
+    // OffscreenQuickScene + org.kde.kwin's WindowThumbnail and posts each
+    // thumbnail back via setSnapAssistThumbnail. Here we just attach any
+    // already-cached URL so the overlay's first paint shows live thumbnails
+    // for windows the user has snap-assisted to recently. Misses fall back
+    // to the icon path in QML; the effect's per-candidate D-Bus calls
+    // arrive shortly after and update the candidate list in place.
     m_snapAssistCandidates.clear();
-    m_thumbnailCaptureQueue.clear();
-    if (m_thumbnailService->isAvailable()) {
-        for (int i = 0; i < candidatesList.size(); ++i) {
-            QVariantMap cand = candidatesList[i].toMap();
-            QString compositorHandle = cand.value(QStringLiteral("compositorHandle")).toString();
-            if (!compositorHandle.isEmpty()) {
-                auto it = m_thumbnailCache.constFind(compositorHandle);
-                if (it != m_thumbnailCache.constEnd() && !it.value().isEmpty()) {
-                    cand[QStringLiteral("thumbnail")] = it.value();
-                } else {
-                    m_thumbnailCaptureQueue.append(compositorHandle);
-                }
+    int cachedCount = 0;
+    for (int i = 0; i < candidatesList.size(); ++i) {
+        QVariantMap cand = candidatesList[i].toMap();
+        const QString compositorHandle = cand.value(QStringLiteral("compositorHandle")).toString();
+        if (!compositorHandle.isEmpty() && m_thumbnailProvider) {
+            const QString cachedUrl = m_thumbnailProvider->urlFor(compositorHandle);
+            if (!cachedUrl.isEmpty()) {
+                cand[QStringLiteral("thumbnail")] = cachedUrl;
+                ++cachedCount;
             }
-            m_snapAssistCandidates.append(cand);
         }
-        qCDebug(lcOverlay) << "showSnapAssist:" << m_thumbnailCache.size() << "cached,"
-                           << m_thumbnailCaptureQueue.size() << "to capture";
-        processNextThumbnailCapture();
-    } else {
-        m_snapAssistCandidates = candidatesList;
-        qCDebug(lcOverlay) << "showSnapAssist: thumbnail service not available (auth?)";
+        m_snapAssistCandidates.append(cand);
     }
+    qCDebug(lcOverlay) << "showSnapAssist:" << cachedCount << "cached thumbnails;"
+                       << "remaining will arrive from kwin-effect via setSnapAssistThumbnail";
 
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("emptyZones"), zonesList);
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
@@ -249,37 +238,56 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
 
 void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
 {
-    updateSnapAssistCandidateThumbnail(compositorHandle, dataUrl);
-}
-
-void OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl)
-{
+    // External entry point (D-Bus, called by KWin scripts that produce
+    // thumbnails inside the compositor). Accept the historic data:image/png;
+    // base64 form and a file:// URL form — the latter lets KWin scripts that
+    // grabToImage to a tmp file deliver pixels without paying the encode +
+    // base64 round-trip on the script side. Both decode to a QImage on the
+    // daemon side; the canonical URL QML loads is image://plasmazones-
+    // snapassist/<handle>/<gen>, produced by the provider on insert.
     if (dataUrl.isEmpty()) {
         return;
     }
-    m_thumbnailCache.insert(compositorHandle, dataUrl);
+    QImage image;
+    static const QString kDataPrefix = QStringLiteral("data:image/png;base64,");
+    if (dataUrl.startsWith(kDataPrefix)) {
+        const QByteArray bytes = QByteArray::fromBase64(QStringView{dataUrl}.mid(kDataPrefix.size()).toLatin1());
+        image.loadFromData(bytes, "PNG");
+    } else if (dataUrl.startsWith(QLatin1String("file://"))) {
+        const QString path = QUrl(dataUrl).toLocalFile();
+        if (!path.isEmpty()) {
+            image.load(path);
+        }
+    }
+    if (image.isNull()) {
+        qCDebug(lcOverlay) << "setSnapAssistThumbnail: could not decode thumbnail for" << compositorHandle;
+        return;
+    }
+    updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
+}
+
+void OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
+{
+    if (image.isNull() || !m_thumbnailProvider) {
+        return;
+    }
+    const QString providerUrl = m_thumbnailProvider->insert(compositorHandle, std::move(image));
+    if (providerUrl.isEmpty()) {
+        return;
+    }
     if (!m_snapAssistWindow || !m_snapAssistWindow->isVisible()) {
         return;
     }
     for (int i = 0; i < m_snapAssistCandidates.size(); ++i) {
         QVariantMap cand = m_snapAssistCandidates[i].toMap();
         if (cand.value(QStringLiteral("compositorHandle")).toString() == compositorHandle) {
-            cand[QStringLiteral("thumbnail")] = dataUrl;
+            cand[QStringLiteral("thumbnail")] = providerUrl;
             m_snapAssistCandidates[i] = cand;
             writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
             qCDebug(lcOverlay) << "SnapAssist: thumbnail updated for" << compositorHandle;
             break;
         }
     }
-}
-
-void OverlayService::processNextThumbnailCapture()
-{
-    if (!m_thumbnailService || m_thumbnailCaptureQueue.isEmpty()) {
-        return;
-    }
-    const QString compositorHandle = m_thumbnailCaptureQueue.takeFirst();
-    m_thumbnailService->captureWindowAsync(compositorHandle, 256);
 }
 
 bool OverlayService::eventFilter(QObject* obj, QEvent* event)
@@ -305,13 +313,11 @@ void OverlayService::hideSnapAssist()
 {
     bool wasVisible = isSnapAssistVisible();
     const QString screenId = m_snapAssistScreenId;
-    // Don't clear m_thumbnailCache — it's keyed on KWin compositor handles
-    // (stable per-window for the lifetime of the window) and the cache is
-    // designed to be reused across continuation. Clearing on every dismiss
-    // forced full thumbnail recapture on every snap, defeating the cache.
-    // The cache naturally bounds itself: ~one entry per window the user
-    // has snap-assisted to in the current session, and entries don't go
-    // stale until KWin recycles a handle (rare).
+    // Don't touch the SnapAssistThumbnailProvider cache here — entries are
+    // keyed on KWin compositor handles (stable per-window for the window's
+    // lifetime) and reused across continuation. Eviction is now automatic
+    // via QCache LRU pressure; clearing on every dismiss would only force
+    // an expensive recapture on the very next snap.
     destroySnapAssistWindow();
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();

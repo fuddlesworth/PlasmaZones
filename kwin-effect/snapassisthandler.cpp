@@ -5,6 +5,7 @@
 #include "plasmazoneseffect.h"
 #include "autotilehandler.h"
 #include "kwin_compositor_bridge.h"
+#include "snapassistthumbnailcapture.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -19,6 +20,8 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QUuid>
+#include <QVector>
 
 Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarningMsg)
 
@@ -88,6 +91,32 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 if (!m_effect->isDaemonReady("snap assist show")) {
                     return;
                 }
+
+                // Kick off in-process thumbnail captures alongside the
+                // showSnapAssist D-Bus call. The two are independent — the
+                // overlay opens on icons, and per-window setSnapAssistThumbnail
+                // calls land asynchronously as KWin's WindowThumbnail produces
+                // each frame. Either ordering is safe on the daemon side: a
+                // late thumbnail updates the live candidate list, an early one
+                // is held in the bounded LRU and applied when the overlay
+                // shows.
+                if (!m_capture) {
+                    m_capture = new SnapAssistThumbnailCapture(this);
+                }
+                QVector<SnapAssistThumbnailCapture::Candidate> captureList;
+                captureList.reserve(candidates.size());
+                for (const auto& c : candidates) {
+                    if (c.compositorHandle.isEmpty()) {
+                        continue;
+                    }
+                    const QUuid id(c.compositorHandle);
+                    if (id.isNull()) {
+                        continue;
+                    }
+                    captureList.append({c.compositorHandle, id});
+                }
+                m_capture->captureCandidates(captureList);
+
                 QDBusMessage msg = QDBusMessage::createMethodCall(
                     PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                     PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"));
