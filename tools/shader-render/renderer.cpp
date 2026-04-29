@@ -431,6 +431,10 @@ QImage captureFrame(QQuickRenderControl* control, QRhi* rhi, QRhiTexture* colorT
         // Release the batch we never submitted so RHI bookkeeping doesn't
         // leak it — release() returns the batch to the pool without queueing.
         batch->release();
+        // Pair with the beginFrame() the caller already issued so the control
+        // doesn't sit in "frame in progress" state. Returning before endFrame()
+        // would unbalance Qt's internal frame counter.
+        control->endFrame();
         qCWarning(lcRenderer) << "control has no command buffer on frame" << i;
         return {};
     }

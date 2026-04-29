@@ -36,6 +36,13 @@ QColor parseHexColor(const QString& hex, const QColor& fallback)
 
 bool loadLayoutZones(const QString& layoutPath, const QSize& /*resolution*/, QVector<Zone>& outZones)
 {
+    // The contract is "fill the out vector with zones from the JSON". A caller
+    // that pre-populates the vector would otherwise see false-positive success
+    // when a layout's zones array is empty (the final !isEmpty() check below
+    // would still see the pre-existing entries). Clear up-front so the return
+    // value reflects what THIS call actually parsed.
+    outZones.clear();
+
     QFile f(layoutPath);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return false;

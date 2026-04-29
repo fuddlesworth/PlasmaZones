@@ -55,6 +55,16 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         return;
     }
 
+    // After K consecutive init failures we stop trying. This keeps prepare()
+    // from running newTexture/newSampler + logging on every frame forever
+    // when the underlying RHI has wedged. Once we give up, the SRB has no
+    // binding at slot 1 — the pipeline still renders, just without labels.
+    constexpr int kMaxInitAttempts = 5;
+    if (!m_labelsInitialized && m_labelsInitGaveUp) {
+        m_labelsTextureDirty = false;
+        return;
+    }
+
     // Pick the target size up-front: a non-empty staged image dictates,
     // otherwise the 1×1 transparent fallback. Used both for the first-init
     // allocation and the resize branch — without this, the first upload of
@@ -71,16 +81,32 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
     if (!m_labelsInitialized) {
         std::unique_ptr<QRhiTexture> tex(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
         if (!tex->create()) {
-            return; // retry next frame
+            ++m_labelsInitFailureCount;
+            if (m_labelsInitFailureCount >= kMaxInitAttempts) {
+                qCWarning(lcZoneShader) << "labels texture init failed" << kMaxInitAttempts
+                                        << "times — giving up; shader will render"
+                                        << "without uZoneLabels (halo/chroma/glyph effects will be absent)";
+                m_labelsInitGaveUp = true;
+                m_labelsTextureDirty = false;
+            }
+            return; // retry next frame (or stay given-up)
         }
         std::unique_ptr<QRhiSampler> sam(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                          QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!sam->create()) {
+            ++m_labelsInitFailureCount;
+            if (m_labelsInitFailureCount >= kMaxInitAttempts) {
+                qCWarning(lcZoneShader) << "labels sampler init failed" << kMaxInitAttempts
+                                        << "times — giving up; shader will render without uZoneLabels";
+                m_labelsInitGaveUp = true;
+                m_labelsTextureDirty = false;
+            }
             return; // retry next frame; tex deleted by unique_ptr
         }
         m_labelsTexture = std::move(tex);
         m_labelsSampler = std::move(sam);
         m_labelsInitialized = true;
+        m_labelsInitFailureCount = 0;
         setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
     } else if (m_labelsTexture->pixelSize() != targetSize) {
         std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
@@ -130,6 +156,12 @@ void ZoneShaderNodeRhi::releaseResources()
     m_labelsSampler.reset();
     m_labelsInitialized = false;
     m_labelsTextureDirty = true;
+    // Reset the give-up state so a fresh scene-graph cycle (e.g. after a
+    // window hide/show that destroyed the QRhi) starts from a clean slate
+    // — the previous wedge may have been backend-state that the new QRhi
+    // doesn't share.
+    m_labelsInitFailureCount = 0;
+    m_labelsInitGaveUp = false;
     removeExtraBinding(1);
 
     ShaderNodeRhi::releaseResources();

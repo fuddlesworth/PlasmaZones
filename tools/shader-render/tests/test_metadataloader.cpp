@@ -254,6 +254,39 @@ private Q_SLOTS:
         QCOMPARE(md.customParams[7].w(), -1.0f);
     }
 
+    void wallpaperFlagIsParsed()
+    {
+        // The renderer treats metadata.wallpaper=true as "warn loud + force
+        // useWallpaper=false on the effect" — see seedShaderEffect in
+        // renderer.cpp. The loader's job is just to surface the field
+        // truthfully so the renderer can decide. This test pins the parse so
+        // a future schema rename (or accidental swap to .toString) doesn't
+        // silently drop the warning path the renderer relies on.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        const QString withTrue = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "wallpaper": true
+        })"));
+        PlasmaZones::ShaderRender::ShaderMetadata mdTrue;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(withTrue, mdTrue));
+        QVERIFY(mdTrue.wallpaper);
+
+        // Default false when omitted — guards against the inverse footgun
+        // (a default change here would silently turn every shader into a
+        // wallpaper-divergence warning).
+        QTemporaryDir dir2;
+        writeFile(dir2, QStringLiteral("effect.frag"));
+        const QString withoutKey = writeMetadataJson(dir2, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag"
+        })"));
+        PlasmaZones::ShaderRender::ShaderMetadata mdDefault;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(withoutKey, mdDefault));
+        QVERIFY(!mdDefault.wallpaper);
+    }
+
     void missingSlotFieldIsSilentlySkipped()
     {
         // A parameter without a slot field is treated as UI-only metadata

@@ -178,6 +178,19 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
 
     /**
+     * @brief Override the parent's render-node factory to produce ZoneShaderNodeRhi.
+     *
+     * Both ShaderEffect subclasses (this and shader-render's RenderEffect) now
+     * route node creation through the parent's createShaderNode() hook, so the
+     * node-type contract lives in one place. The override of updatePaintNode
+     * above still exists because the load semantics differ (vertex shader
+     * loaded before fragment, plus zone data sync) — a future refactor that
+     * folds those into hook methods would remove the override entirely without
+     * touching this factory.
+     */
+    PhosphorRendering::ShaderNodeRhi* createShaderNode() override;
+
+    /**
      * @brief Handle geometry changes — re-parse zones with new resolution
      */
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;

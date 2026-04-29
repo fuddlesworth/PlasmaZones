@@ -150,7 +150,8 @@ public:
 
         // Fast-path: if the QImage is tightly packed (no row padding), pipe
         // the whole buffer in one go. The padded path copies row-by-row to a
-        // contiguous scratch buffer.
+        // contiguous scratch buffer. Both paths converge on the single
+        // expected-bytes-written check below.
         qint64 written = 0;
         if (rgba.bytesPerLine() == rowBytes) {
             written = m_proc.write(reinterpret_cast<const char*>(rgba.constBits()), expected);
@@ -161,9 +162,6 @@ public:
                 buf.append(reinterpret_cast<const char*>(rgba.constScanLine(y)), rowBytes);
             }
             written = m_proc.write(buf);
-            if (written == buf.size()) {
-                return true;
-            }
         }
         if (written != expected) {
             qCWarning(lcEncoder) << "FfmpegPipeSink: short write (" << written << "of" << expected << ")";

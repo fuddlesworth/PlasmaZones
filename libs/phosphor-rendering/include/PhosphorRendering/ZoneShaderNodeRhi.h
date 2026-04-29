@@ -71,6 +71,13 @@ private:
     std::unique_ptr<QRhiSampler> m_labelsSampler;
     bool m_labelsTextureDirty = false;
     bool m_labelsInitialized = false;
+    // Cap how many times we retry RHI texture/sampler creation. Without a cap,
+    // a permanent failure (driver wedged, persistent OOM) turns prepare() into
+    // a hot loop that runs init + logs every frame forever. The vertex-shader
+    // load in tools/shader-render's RenderEffect uses the same one-shot-latch
+    // pattern; we mirror it here for the daemon's render path.
+    int m_labelsInitFailureCount = 0;
+    bool m_labelsInitGaveUp = false;
 };
 
 } // namespace PhosphorRendering

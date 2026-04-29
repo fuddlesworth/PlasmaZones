@@ -32,15 +32,17 @@ QColor parseHexColor(const QString& hex)
     return c;
 }
 
-// Resolve a relative path against the metadata directory.  Empty or
-// already-absolute paths come back unchanged.
+// Resolve a relative path against the metadata directory.  Empty paths come
+// back unchanged; everything else gets normalised through QDir::cleanPath so
+// `../foo.frag`-style entries don't show up as `…/dir/../foo.frag` in logs and
+// duplicate-detection.
 QString resolveRelative(const QString& metadataDir, const QString& maybeRelative)
 {
     if (maybeRelative.isEmpty())
         return QString();
     if (QFileInfo(maybeRelative).isAbsolute())
-        return maybeRelative;
-    return QDir(metadataDir).filePath(maybeRelative);
+        return QDir::cleanPath(maybeRelative);
+    return QDir::cleanPath(QDir(metadataDir).filePath(maybeRelative));
 }
 
 // PlasmaZones metadata uses a *flat* parameter slot index across all
@@ -115,11 +117,12 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     out.vertexShader =
         resolveRelative(metadataDir, obj.value(QLatin1String("vertexShader")).toString(kDefaultVertexShaderFilename));
 
-    if (out.fragmentShader.isEmpty())
-        return false;
     // Validate at the boundary: a metadata.json that points at a missing
     // fragment shader fails the loader rather than silently propagating a
     // bad path that would surface later as an opaque shader-compile error.
+    // (The "isEmpty" branch is implicit here — resolveRelative returns the
+    // metadata-dir-prefixed default filename when the JSON omits the field,
+    // so out.fragmentShader is always non-empty by the time we get here.)
     if (!QFileInfo::exists(out.fragmentShader)) {
         qCWarning(lcMetadataLoader) << "fragment shader not found:" << out.fragmentShader;
         return false;

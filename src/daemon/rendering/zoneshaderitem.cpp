@@ -56,6 +56,15 @@ ZoneShaderItem::~ZoneShaderItem()
 }
 
 // ============================================================================
+// Render Node Factory
+// ============================================================================
+
+PhosphorRendering::ShaderNodeRhi* ZoneShaderItem::createShaderNode()
+{
+    return new ZoneShaderNodeRhi(this);
+}
+
+// ============================================================================
 // Refuse external uniform-extension replacement
 // ============================================================================
 
@@ -257,9 +266,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     auto* node = static_cast<ZoneShaderNodeRhi*>(oldNode);
     if (!node) {
-        // Scene graph deleted the previous node, or first call.
+        // Scene graph deleted the previous node, or first call. Route node
+        // creation through the parent's createShaderNode() factory hook so
+        // both ShaderEffect subclasses (this and tools/shader-render's
+        // RenderEffect) follow the same factory pattern — and a future
+        // refactor to delegate updatePaintNode to the parent picks up the
+        // right node type for free.
         m_zoneRenderNode = nullptr;
-        node = new ZoneShaderNodeRhi(this);
+        node = static_cast<ZoneShaderNodeRhi*>(createShaderNode());
         m_zoneRenderNode = node;
         qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     } else {
@@ -268,6 +282,11 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
+    // syncBasePropertiesToNode now also pushes m_uniformExtension down to the
+    // node — we seeded it in our constructor (qualified base setter to bypass
+    // our own override) with our internal ZoneUniformExtension, so the zone
+    // UBO region stays populated across scene-graph node recreations without
+    // any extra plumbing here.
     syncBasePropertiesToNode(node);
 
     // ── Sync user textures from ZoneShaderItem's parsed images (bindings 7-10) ──
@@ -281,8 +300,6 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         QMutexLocker lock(&m_labelsTextureMutex);
         node->setLabelsTexture(m_labelsTexture);
     }
-
-    // ── Uniform extension: NOT synced — ZoneShaderNodeRhi owns its ZoneUniformExtension ──
 
     // ── Sync shader source ───────────────────────────────────────────
     // PlasmaZones derives vertex shader path from zone.vert in the same directory.
