@@ -3,7 +3,7 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
-#include "windowthumbnailservice.h"
+#include "snapassistthumbnailprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 
@@ -325,6 +325,16 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     externalVulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
 #endif
 
+    // Construct the thumbnail provider eagerly so the borrowed @c m_thumbnailProvider
+    // pointer is non-null from this point onwards. The SurfaceManager (and
+    // its engine) is created next; the engineConfigurator releases ownership
+    // to the engine once it exists. Until then the unique_ptr keeps the
+    // provider alive — there is no longer any window where a D-Bus
+    // setSnapAssistThumbnail call would silently drop because the engine
+    // hasn't materialised yet.
+    m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
+    m_thumbnailProvider = m_thumbnailProviderOwned.get();
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
@@ -332,6 +342,39 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 auto* localizedContext = new PzLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
                 engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
+
+                // Bounded LRU cache + image provider for Snap Assist thumbnails.
+                // QQmlEngine::addImageProvider takes ownership; transfer the
+                // already-live provider out of the unique_ptr so the engine
+                // becomes the sole owner. The borrowed @c m_thumbnailProvider
+                // raw pointer remains valid for the engine's lifetime, which
+                // outlives every QML element it spawns, so QML callbacks
+                // that hit requestImage are safe.
+                //
+                // The engine's @c destroyed signal nulls @c m_thumbnailProvider
+                // before any subsequent D-Bus dispatch can dereference it.
+                // Without this hook, late @c setSnapAssistThumbnail traffic
+                // arriving after the engine is gone (e.g. forced
+                // SurfaceManager teardown outside @c ~OverlayService) would
+                // see a dangling raw pointer.
+                //
+                // Re-entrancy: if @c engineConfigurator is ever invoked again
+                // (a future SurfaceManager that recreates its engine), the
+                // unique_ptr will be empty after the first @c release(). Mint
+                // a fresh provider so the second engine isn't quietly
+                // unregistered from snap-assist thumbnails. Today the engine
+                // is single-instance for the daemon's lifetime, but defending
+                // here costs ~3 lines and removes a foot-gun if that
+                // invariant ever changes.
+                if (!m_thumbnailProviderOwned) {
+                    m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
+                    m_thumbnailProvider = m_thumbnailProviderOwned.get();
+                }
+                engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
+                                        m_thumbnailProviderOwned.release());
+                QObject::connect(&engine, &QObject::destroyed, this, [this]() {
+                    m_thumbnailProvider = nullptr;
+                });
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,

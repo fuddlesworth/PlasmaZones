@@ -389,8 +389,8 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/snapassist.cpp
     daemon/overlayservice.h
     daemon/overlayservice/internal.h
-    daemon/windowthumbnailservice.cpp
-    daemon/windowthumbnailservice.h
+    daemon/snapassistthumbnailprovider.cpp
+    daemon/snapassistthumbnailprovider.h
     daemon/shortcutmanager.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
@@ -684,14 +684,8 @@ install(FILES
     DESTINATION ${KDE_INSTALL_DATADIR}/kglobalaccel
 )
 
-# Snap Assist thumbnails: daemon captures via KWin ScreenShot2. When desktop matching fails
-# (e.g. local install), set KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 in environment.
-configure_file(
-    daemon/99-plasmazones-screenshot.conf.in
-    ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
-    @ONLY
-)
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
-    DESTINATION ${KDE_INSTALL_LIBDIR}/environment.d
-)
+# Snap Assist thumbnails are now produced inside the kwin-effect via
+# OffscreenQuickScene + org.kde.kwin's WindowThumbnail, so the daemon no
+# longer needs ScreenShot2 access. The X-KDE-DBUS-Restricted-Interfaces
+# entry and the environment.d/99-plasmazones-screenshot.conf override
+# that gated that path are gone with the C++ removal.

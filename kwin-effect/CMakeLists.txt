@@ -16,7 +16,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui DBus Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui DBus Widgets Qml Quick)
 set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
@@ -49,6 +49,9 @@ set(plasmazones_effect_SRCS
     screenchangehandler.h
     snapassisthandler.cpp
     snapassisthandler.h
+    snapassistthumbnailcapture.cpp
+    snapassistthumbnailcapture.h
+    SnapAssistThumb.qrc
     windowanimator.cpp
     windowanimator.h
     compositorclock.cpp
@@ -75,6 +78,11 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
+    # Snap-assist thumbnail capture: OffscreenQuickScene loads a tiny QML
+    # scene that hosts org.kde.kwin's WindowThumbnail. Both Qml (engine,
+    # setProperty) and Quick (QQuickItem* root) are needed.
+    Qt6::Qml
+    Qt6::Quick
     plasmazones_compositor_common
     PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly

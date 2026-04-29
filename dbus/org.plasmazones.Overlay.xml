@@ -134,12 +134,21 @@
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail from KWin script (WindowThumbnail + grabToImage). Called by plasmazones-snapassist script."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect; authenticated against /proc/&lt;pid&gt;/exe. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
             <arg name="compositorHandle" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString())."/>
+                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
-            <arg name="dataUrl" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="data:image/png;base64,... thumbnail image."/>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image width in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image height in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="pixels" type="ay" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tightly-packed ARGB32 (non-premultiplied) bytes, exactly width*height*4 long."/>
+            </arg>
+            <arg name="accepted" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon stored the thumbnail in its LRU cache. False on auth failure, oversize-payload rejection, dimension/byte-count mismatch, or post-shutdown engine teardown. Callers use this to decide whether to mark the handle as recently-posted; a false reply must NOT be treated as success."/>
             </arg>
         </method>
 
@@ -156,7 +165,7 @@
             </arg>
         </signal>
         <signal name="snapAssistShown">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails via WindowThumbnail and call setSnapAssistThumbnail."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted after the daemon has built the Snap Assist overlay. The kwin-effect drives thumbnail capture independently as part of the showSnapAssist call sequence (not in response to this signal); the signal is exposed for external observers (KCMs, debugging tools)."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID where snap occurred."/>
             </arg>
