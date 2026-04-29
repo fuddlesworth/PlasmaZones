@@ -20,6 +20,22 @@ PHOSPHORGEOMETRY_EXPORT QRect snapToRect(const QRectF& rf);
 PHOSPHORGEOMETRY_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes,
                                                    int gapThreshold, int innerGap = 0);
 
+// Position-only bounds clamp. Shifts each zone so its effective rect (max of
+// the zone's own size and the corresponding window's declared minSize) stays
+// inside the screen. Sizes are preserved; only x/y move. Pass an empty or
+// zero-filled minSizes vector to clamp purely against the zone's own size.
+//
+// Why position-only: this runs after enforceWindowMinSizes, which is the only
+// path allowed to grow/shrink zones. For overlapping algorithms (Deck/Stair/
+// Cascade/Monocle/Paper) enforceWindowMinSizes is skipped because neighbor-
+// stealing would destroy intentional overlap; a pure position shift is the
+// only safe correction in that case. For non-overlapping algorithms a
+// remaining overflow means the constraint solver couldn't satisfy the layout
+// — shifting accepts that compromise rather than letting the window be
+// pushed onto an adjacent monitor by the compositor's min-size enforcement.
+PHOSPHORGEOMETRY_EXPORT void clampZonesToScreen(QVector<QRect>& zones, const QVector<QSize>& minSizes,
+                                                const QRect& screen);
+
 PHOSPHORGEOMETRY_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
                                                 int innerGap = 0);
 

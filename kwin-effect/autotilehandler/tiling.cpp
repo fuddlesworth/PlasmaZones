@@ -473,13 +473,19 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
     // Defensive bounds clamp: if the (oversized) window would extend past the
-    // screen containing the zone, shift it left/up so it stays on the same
-    // screen. Without this, a window whose min size exceeds its zone leaks
-    // into an adjacent monitor — KWin then reassigns the window's output and
-    // the autotile engine ejects it. The daemon-side bounds clamp in
-    // recalculateLayout already shifts zones to fit, so this is a backstop
+    // physical output containing the zone, shift it left/up so it stays on
+    // the same output. Without this, a window whose min size exceeds its
+    // zone leaks into an adjacent monitor — KWin then reassigns the window's
+    // output and the autotile engine ejects it. The daemon-side bounds clamp
+    // in recalculateLayout already shifts zones to fit, so this is a backstop
     // for cases where the zone still violates min size (script algorithms,
     // unsatisfiable constraints, residual rounding).
+    //
+    // Scope: this clamps to the physical Output*, NOT the virtual-screen
+    // sub-region. Overflow that crosses a virtual-screen boundary on the
+    // same physical monitor is the daemon-side clamp's responsibility (it
+    // resolves the VS region from screenGeometry(screenId); the effect side
+    // has no reliable lookup for that here).
     if (auto* output = KWin::effects->screenAt(targetZone.center())) {
         const QRect screenGeo = output->geometry();
         // Use exclusive edges (x + width / y + height) since QRectF::right()
