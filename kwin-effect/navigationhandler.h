@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <floating_cache.h>
+
 #include <QObject>
-#include <QSet>
 #include <QString>
 
 class QDBusPendingCallWatcher;
@@ -30,19 +31,25 @@ class NavigationHandler : public QObject
 public:
     explicit NavigationHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
-    // Floating window tracking (uses full windowId, with appId fallback)
-    bool isWindowFloating(const QString& windowId) const;
-    void setWindowFloating(const QString& windowId, bool floating);
+    // Floating window tracking — delegates to shared FloatingCache
+    bool isWindowFloating(const QString& windowId) const
+    {
+        return m_floatingCache.isFloating(windowId);
+    }
+    void setWindowFloating(const QString& windowId, bool floating)
+    {
+        m_floatingCache.setFloating(windowId, floating);
+    }
     void clearAllFloatingState()
     {
-        m_floatingWindows.clear();
+        m_floatingCache.clear();
     }
     void syncFloatingWindowsFromDaemon();
     void syncFloatingStateForWindow(const QString& windowId);
 
 private:
     PlasmaZonesEffect* m_effect;
-    QSet<QString> m_floatingWindows;
+    FloatingCache m_floatingCache;
 };
 
 } // namespace PlasmaZones

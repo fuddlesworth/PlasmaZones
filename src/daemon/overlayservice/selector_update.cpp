@@ -4,12 +4,12 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
-#include "../../core/layoutmanager.h"
-#include "../../core/zone.h"
-#include "../../core/layoututils.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
@@ -17,20 +17,21 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
 namespace {
 
-void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, const ZoneSelectorConfig& config,
+void updateZoneSelectorComputedProperties(Phosphor::Screens::ScreenManager* mgr, QQuickWindow* window, QScreen* screen,
+                                          const QString& virtualScreenId, const ZoneSelectorConfig& config,
                                           ISettings* settings, const ZoneSelectorLayout& layout)
 {
     if (!window || !screen) {
         return;
     }
 
-    const QRect screenGeom = screen->geometry();
+    // Use virtual screen geometry if available, falling back to physical
+    const QRect screenGeom = resolveScreenGeometry(mgr, virtualScreenId);
     const int screenWidth = screenGeom.width();
     const int indicatorWidth = layout.indicatorWidth;
 
@@ -93,59 +94,54 @@ void applyZoneSelectorLayout(QQuickWindow* window, const ZoneSelectorLayout& lay
     writeQmlProperty(window, QStringLiteral("barHeight"), layout.barHeight);
 }
 
-// Set the zone selector window size for the computed layout.
-// Positioning is handled by layer surface anchors + margins (set in updateZoneSelectorWindow),
-// NOT by setX()/setY() — those are no-ops on layer surfaces since the compositor controls placement.
-// We only set width/height here, which the QPA plugin forwards via zwlr_layer_surface_v1_set_size.
-void applyZoneSelectorGeometry(QQuickWindow* window, QScreen* screen, const ZoneSelectorLayout& layout,
-                               ZoneSelectorPosition pos)
+// Size the zone selector window to fill the entire (virtual) screen.
+// With AnchorAll the compositor sizes the surface to the full output;
+// the QML root uses internal anchors (selectorPosition state) to position
+// the visible bar in the chosen corner of the transparent window.
+void applyZoneSelectorGeometry(QQuickWindow* window, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
+                               ZoneSelectorPosition /*pos*/)
 {
-    if (!window || !screen) {
+    if (!window || !screenGeom.isValid()) {
         return;
     }
-
-    if (pos == ZoneSelectorPosition::Center) {
-        // Fill the entire screen; QML "center" state positions the container in the middle
-        const QRect screenGeom = screen->geometry();
-        window->setWidth(screenGeom.width());
-        window->setHeight(screenGeom.height());
-        return;
-    }
-    window->setWidth(layout.barWidth);
-    window->setHeight(layout.barHeight);
+    window->setWidth(screenGeom.width());
+    window->setHeight(screenGeom.height());
 }
 
 } // namespace
 
-void OverlayService::updateZoneSelectorWindow(QScreen* screen)
+void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 {
-    if (!screen) {
+    if (screenId.isEmpty()) {
         return;
     }
 
-    auto* window = m_zoneSelectorWindows.value(screen);
+    auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
     if (!window) {
         return;
     }
 
+    QScreen* screen = m_screenStates.value(screenId).zoneSelectorPhysScreen;
+    if (!screen) {
+        return;
+    }
+
     // Update screen properties (in case screen geometry changed)
-    const QRect screenGeom = screen->geometry();
+    const QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
     // Build resolved per-screen config
-    const ZoneSelectorConfig config = m_settings
-        ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
-        : defaultZoneSelectorConfig();
+    const ZoneSelectorConfig config =
+        m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
 
     // Update settings-based properties
     if (m_settings) {
-        writeQmlProperty(window, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(window, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(window, QStringLiteral("borderColor"), m_settings->borderColor());
-        // Zone appearance settings for scaled preview (global)
+        writeColorSettings(window, m_settings);
+        // PhosphorZones::Zone appearance settings for scaled preview (global)
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
@@ -161,13 +157,18 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     // Build and pass layout data (filtered per-screen mode)
-    QVariantList layouts = buildLayoutsList(Utils::screenIdentifier(screen));
+    QVariantList layouts = buildLayoutsList(screenId);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
+
+    // Global "Auto-assign for all layouts" master toggle (#370) — when on, every
+    // layout effectively auto-assigns regardless of its per-layout flag. Pushed
+    // here so the badge in each LayoutCard shows the effective state.
+    writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
 
     // Set active layout ID for this screen
     // Per-screen assignment takes priority so each monitor highlights its own layout
     QString activeLayoutId;
-    Layout* screenLayout = resolveScreenLayout(screen);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
     if (screenLayout) {
         activeLayoutId = screenLayout->id().toString();
     }
@@ -179,16 +180,13 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked =
-            m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen), curDesktop, curActivity)
-            || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen), curDesktop,
-                                           curActivity);
+        locked = isAnyModeLocked(m_settings, screenId, curDesktop, curActivity);
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 
     // Compute layout for geometry updates using per-screen config
     const int layoutCount = layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screen, layoutCount);
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
@@ -200,68 +198,16 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(window, screen, config, m_settings, layout);
+    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout);
 
-    // Schedule QML polish for next render frame (do NOT call processEvents here —
-    // re-entrant event processing during a Wayland drag can deadlock with the
-    // compositor, causing a hard system freeze; see GitHub discussion #152).
-    if (auto* contentRoot = window->contentItem()) {
-        contentRoot->polish();
-    }
-    if (auto* layerSurface = LayerSurface::find(window)) {
-        const int screenW = screenGeom.width();
-        const int screenH = screenGeom.height();
-        const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
-        const int vMargin = std::max(0, (screenH - layout.barHeight) / 2);
+    // Positioning is entirely QML-internal: ZoneSelectorWindow.qml's
+    // selectorPosition state anchors the inner container to the requested
+    // corner of the full-screen transparent surface. Anchors/margins are
+    // baked at attach time (AnchorAll) and never mutated afterwards.
+    applyZoneSelectorGeometry(window, screenGeom, layout, pos);
 
-        // exclusiveZone(-1) ignores panel geometry; the popup renders at absolute screen
-        // coordinates over any panels, so hover coordinates match (no offset mismatch).
-
-        // Anchors use the shared helper (single source of truth for position→anchors mapping)
-        LayerSurface::Anchors anchors = getAnchorsForPosition(pos);
-
-        // Margins are position-specific: center the bar within the anchored region
-        QMargins margins;
-        switch (pos) {
-        case ZoneSelectorPosition::TopLeft:
-            margins = QMargins(0, 0, screenW - layout.barWidth, screenH - layout.barHeight);
-            break;
-        case ZoneSelectorPosition::Top:
-            margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
-            break;
-        case ZoneSelectorPosition::TopRight:
-            margins = QMargins(screenW - layout.barWidth, 0, 0, screenH - layout.barHeight);
-            break;
-        case ZoneSelectorPosition::Left:
-            margins = QMargins(0, vMargin, 0, vMargin);
-            break;
-        case ZoneSelectorPosition::Right:
-            margins = QMargins(0, vMargin, 0, vMargin);
-            break;
-        case ZoneSelectorPosition::BottomLeft:
-            margins = QMargins(0, screenH - layout.barHeight, screenW - layout.barWidth, 0);
-            break;
-        case ZoneSelectorPosition::Bottom:
-            margins = QMargins(hMargin, std::max(0, screenH - layout.barHeight), hMargin, 0);
-            break;
-        case ZoneSelectorPosition::BottomRight:
-            margins = QMargins(screenW - layout.barWidth, screenH - layout.barHeight, 0, 0);
-            break;
-        case ZoneSelectorPosition::Center:
-            margins = QMargins(0, 0, 0, 0);
-            break;
-        default:
-            // Default to Top margins (matches getAnchorsForPosition default)
-            margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
-            break;
-        }
-        // Batch anchors + margins into a single propertiesChanged() emission
-        // to avoid a one-frame glitch with new anchors but old margins.
-        LayerSurface::BatchGuard batch(layerSurface);
-        layerSurface->setAnchors(anchors);
-        layerSurface->setMargins(margins);
-    }
-    applyZoneSelectorGeometry(window, screen, layout, pos);
+    // Keep stored geometry in sync so hit-testing uses the current value
+    m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
 
     if (auto* contentRoot = window->contentItem()) {
         // Ensure the root item matches the window size after geometry changes.

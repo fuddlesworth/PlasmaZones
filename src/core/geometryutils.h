@@ -6,17 +6,32 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
+#include <PhosphorEngineApi/GeometryUtils.h>
+#include <PhosphorZones/GeometryUtils.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>
 #include <functional>
 #include <QVector>
 #include <QSize>
+#include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+namespace PhosphorZones {
+class Layout;
+class Zone;
+}
+
+namespace Phosphor::Screens {
+class ScreenManager;
+}
 
 namespace PlasmaZones {
 
-class Zone;
-class Layout;
+using PhosphorProtocol::EmptyZoneEntry;
+using PhosphorProtocol::EmptyZoneList;
+
 class ISettings;
 
 /**
@@ -27,56 +42,66 @@ class ISettings;
  */
 namespace GeometryUtils {
 
-/**
- * @brief Convert available-area zone geometry to overlay window local coordinates
- * @param geometry Absolute geometry in available screen coordinates
- * @param screen Screen the overlay window is on
- * @return Geometry in overlay window local coordinates
- *
- * The overlay window covers the full screen, but zones calculated against
- * availableGeometry need to be offset to account for panels/taskbars.
- */
-PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);
+using ::PhosphorZones::GeometryUtils::availableAreaToOverlayCoordinates;
+
+using ::PhosphorZones::GeometryUtils::getZoneGeometryWithGaps;
+
+// getZoneGeometryWithGaps (QRect overload) imported via using above
 
 /**
- * @brief Get zone geometry with per-side outer gaps
- * @param zone Zone to get geometry for
- * @param screen Screen to calculate relative to
- * @param innerGap Gap between adjacent zones (zonePadding)
- * @param outerGaps Per-side edge gaps
- * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
- * @return Geometry with appropriate gaps applied
+ * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
+ *
+ * Unified helper that resolves virtual screen geometry via Phosphor::Screens::ScreenManager when
+ * available, falling back to the physical QScreen* geometry. Eliminates the
+ * repeated pattern of querying Phosphor::Screens::ScreenManager + branching on vsGeom.isValid()
+ * that appears in navigation, resnap, snap-all, rotation, and overlay code.
+ *
+ * @param zone PhosphorZones::Zone to get geometry for
+ * @param screen Physical QScreen* (used as fallback)
+ * @param screenId Screen identifier (physical or virtual)
+ * @param layout PhosphorZones::Layout for gap overrides
+ * @param settings Global settings for gap fallbacks
+ * @return Snapped integer geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
-                                                  bool useAvailableGeometry = true);
+PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+                                                  QScreen* screen, const QString& screenId,
+                                                  PhosphorZones::Layout* layout, ISettings* settings);
+
+/**
+ * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry (floating-point)
+ *
+ * Same as getZoneGeometryForScreen but returns unsnapped QRectF. Use when the
+ * caller needs to combine multiple zone geometries (e.g. QRectF::united()) before
+ * a final snap, or when floating-point precision is needed for overlay coordinates.
+ *
+ * @param zone PhosphorZones::Zone to get geometry for
+ * @param screen Physical QScreen* (used as fallback)
+ * @param screenId Screen identifier (physical or virtual)
+ * @param layout PhosphorZones::Layout for gap overrides
+ * @param settings Global settings for gap fallbacks
+ * @return Floating-point geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+                                                    QScreen* screen, const QString& screenId,
+                                                    PhosphorZones::Layout* layout, ISettings* settings);
 
 /**
  * @brief Get effective zone padding for a layout
- * @param layout Layout to get padding for (may have per-layout override)
+ * @param layout PhosphorZones::Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)
  * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective zone padding in pixels
  *
  * Resolution cascade: per-screen override → layout override → global settings → default (8px)
  */
-PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId = {});
+PLASMAZONES_EXPORT int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings,
+                                               const QString& screenId = {});
 
-/**
- * @brief Convert QRectF to QRect with edge-consistent rounding
- * @param rf Source floating-point rectangle
- * @return Integer rectangle with consistent edge rounding
- *
- * Unlike QRectF::toRect() which rounds x, y, width, height independently,
- * this rounds the edges (left, top, right, bottom) and derives width/height
- * from the rounded edges. This ensures adjacent zones sharing an edge always
- * produce exactly the configured gap between them, even when fractional
- * scaling (e.g. 1.2x) produces non-integer zone boundaries.
- */
-PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
+using ::PhosphorZones::GeometryUtils::snapToRect;
 
 /**
  * @brief Get effective per-side outer gaps for a layout
- * @param layout Layout to get gaps for (may have per-layout overrides)
+ * @param layout PhosphorZones::Layout to get gaps for (may have per-layout overrides)
  * @param settings Global settings (used if layout has no override)
  * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective per-side edge gaps
@@ -84,101 +109,48 @@ PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
  * Resolution cascade: per-screen per-side → per-screen uniform → layout per-side →
  * layout uniform → global per-side → global uniform → default
  */
-PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenId = {});
+PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
+                                                                    const QString& screenId = {});
+
+using ::PhosphorZones::GeometryUtils::effectiveScreenGeometry;
+
+using ::PhosphorZones::GeometryUtils::extractZoneGeometry;
+using ::PhosphorZones::GeometryUtils::setZoneGeometry;
 
 /**
- * @brief Get the effective screen geometry for a layout
- * @param layout Layout to check (may use full screen geometry)
- * @param screen Screen to get geometry for
- * @return Full screen geometry if layout->useFullScreenGeometry(), otherwise available geometry
- *
- * Centralizes the decision of whether to use full screen or available (panel-excluded)
- * geometry based on the layout's useFullScreenGeometry setting.
- */
-PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen);
-
-/**
- * @brief Extract geometry as QRectF from a zone QVariantMap
- * @param zone Zone data map containing x, y, width, height keys
- * @return QRectF with the zone's geometry
- *
- * Used by EditorController and serialization code to avoid repeating
- * the x/y/width/height extraction pattern.
- */
-PLASMAZONES_EXPORT QRectF extractZoneGeometry(const QVariantMap& zone);
-
-/**
- * @brief Set geometry fields in a zone QVariantMap from a QRectF
- * @param zone Zone data map to modify
- * @param rect Geometry to set
- *
- * Sets x, y, width, height keys in the zone map.
- */
-PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
-
-/**
- * @brief Build JSON array of empty zones for Snap Assist
- * @param layout Layout containing zones
+ * @brief Build typed list of empty zones for Snap Assist
+ * @param layout PhosphorZones::Layout containing zones
  * @param screen Screen to calculate geometry for
  * @param settings Settings for zone padding/outer gap
  * @param isZoneEmpty Predicate: returns true if zone has no windows
- * @return JSON array string (compact format)
+ * @return EmptyZoneList of empty zone entries with overlay-local geometry
  *
- * Used by WindowTrackingService::getEmptyZonesJson and WindowDragAdaptor::dragStopped
- * to avoid duplicating the empty-zones JSON building logic.
+ * Used by WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
+ * to avoid duplicating the empty-zones building logic.
  */
-PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
-                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
+                                                    PhosphorZones::Layout* layout, QScreen* screen, ISettings* settings,
+                                                    const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
 /**
- * @brief Enforce minimum size constraints on zones by borrowing space from neighbors
- * @param zones List of zone geometries to adjust (in-place)
- * @param minSizes List of minimum sizes for each zone (same index as zones)
- * @param gapThreshold Threshold for considering zones effectively adjacent
- * @param innerGap Desired gap between adjacent zones (preserved during overlap resolution)
+ * @brief Build typed list of empty zones using explicit screen ID (virtual-screen-aware)
  *
- * Checks if any zone is smaller than its minimum size. If so, attempts to
- * expand it by shrinking adjacent neighbors proportionally. When multiple
- * windows have minimum size, overlaps can occur; a final pass removes them.
+ * Uses Phosphor::Screens::ScreenManager to resolve virtual screen geometry when available, falling back
+ * to the physical QScreen* geometry.
  */
+PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
+                                                    PhosphorZones::Layout* layout, const QString& screenId,
+                                                    QScreen* physScreen, ISettings* settings,
+                                                    const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
+
 PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold,
                                               int innerGap = 0);
 
-/**
- * @brief Remove overlapping zone rectangles so no two zones intersect
- * @param zones List of zone geometries to adjust (in-place)
- * @param minSizes Per-zone minimum sizes (optional); when resolving overlaps,
- *        prefer shrinking the zone with more surplus above its minimum
- * @param innerGap Desired gap between adjacent zones; when resolving overlaps,
- *        the boundary is offset so zones maintain this gap instead of being flush
- *
- * When multiple zones have minimum size constraints, steal logic can leave
- * boundaries inconsistent. This fixes horizontal and vertical overlaps by
- * shifting the shared edge toward the zone with more surplus, respecting
- * minimum sizes so enforcement is not undone.
- */
 PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
                                            int innerGap = 0);
 
-/**
- * @brief Convert QRect to compact JSON string {x, y, width, height}
- * @param rect Rectangle to serialize
- * @return JSON string suitable for D-Bus geometry exchange
- *
- * Shared utility for all components that need to serialize zone/window
- * geometry for D-Bus signals (SnapEngine, WindowTrackingAdaptor, etc.).
- */
-PLASMAZONES_EXPORT QString rectToJson(const QRect& rect);
-
-/**
- * @brief Serialize rotation/resnap entries to compact JSON array
- * @param entries Vector of rotation entries (window moves with source/target zones)
- * @return JSON array string suitable for D-Bus signals
- *
- * Shared by SnapEngine navigation (rotate, resnap) and any future code
- * that needs to serialize RotationEntry vectors for D-Bus exchange.
- */
-PLASMAZONES_EXPORT QString serializeRotationEntries(const QVector<RotationEntry>& entries);
+using ::PhosphorEngineApi::GeometryUtils::serializeZoneAssignments;
+using ::PhosphorGeometry::rectToJson;
 
 } // namespace GeometryUtils
 

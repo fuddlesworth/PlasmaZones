@@ -98,14 +98,25 @@ Window {
         }
         return -1;
     }
+    // Idle state: drag-end leaves the QQuickWindow alive (avoids the
+    // NVIDIA vkDestroyDevice deadlock — see OverlayService::setIdleForDragPause)
+    // but we still need the overlay to visually disappear and stop
+    // absorbing pointer input until the next drag. Binding
+    // Qt.WindowTransparentForInput into `flags` gets Qt Wayland to call
+    // wl_surface.set_input_region with an empty region in-place, without
+    // destroying the surface. Toggling content.visible stops the scene
+    // graph from submitting new frames — the shader surface still exists
+    // in the compositor but shows the last committed (blank) buffer.
+    // C++ flips this via writeQmlProperty(window, "_idled", true/false).
+    property bool _idled: false
 
     // Force shader re-read from disk (called by C++ on file change)
-    function loadShader() {
-        zoneShaderRenderer.loadShader();
+    function reloadShader() {
+        zoneShaderRenderer.reloadShader();
     }
 
     // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (root._idled ? Qt.WindowTransparentForInput : 0)
     color: "transparent"
     visible: false
 
@@ -113,6 +124,7 @@ Window {
         id: content
 
         anchors.fill: parent
+        visible: !root._idled
         Accessible.name: i18n("Zone overlay")
 
         MouseArea {

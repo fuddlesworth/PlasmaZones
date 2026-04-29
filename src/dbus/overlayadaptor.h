@@ -4,24 +4,36 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
+namespace PhosphorZones {
+class IZoneLayoutRegistry;
+class IZoneDetector;
+}
+
 namespace PlasmaZones {
 
+using PhosphorProtocol::EmptyZoneEntry;
+using PhosphorProtocol::EmptyZoneList;
+using PhosphorProtocol::SnapAssistCandidateList;
+
 class IOverlayService;
-class IZoneDetector;
-class ILayoutManager;
 class ISettings;
 
 /**
  * @brief D-Bus adaptor for overlay control operations
  *
  * Provides D-Bus interface: org.plasmazones.Overlay
- *  Zone overlay visibility and highlighting only
+ *  PhosphorZones::Zone overlay visibility and highlighting only
  *
- * Note: Zone detection and window tracking are handled by separate adaptors
+ * Note: PhosphorZones::Zone detection and window tracking are handled by separate adaptors
  * (ZoneDetectionAdaptor and WindowTrackingAdaptor).
  *
  * Uses interface types for loose coupling
@@ -32,8 +44,10 @@ class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")
 
 public:
-    explicit OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector, ILayoutManager* layoutManager,
-                            ISettings* settings, QObject* parent = nullptr);
+    explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
+                            PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                            Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                            QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
 
 public Q_SLOTS:
@@ -42,7 +56,7 @@ public Q_SLOTS:
     void hideOverlay();
     bool isOverlayVisible();
 
-    // Zone highlighting (requires layout manager for backward compatibility)
+    // PhosphorZones::Zone highlighting (requires layout manager for backward compatibility)
     void highlightZone(const QString& zoneId);
     void highlightZones(const QStringList& zoneIds);
     void clearHighlight();
@@ -60,20 +74,25 @@ public Q_SLOTS:
     void hideShaderPreview();
 
     // Snap Assist overlay (window picker after snapping)
-    bool showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
+    bool showSnapAssist(const QString& screenId, const PlasmaZones::EmptyZoneList& emptyZones,
+                        const PlasmaZones::SnapAssistCandidateList& candidates);
     void hideSnapAssist();
     bool isSnapAssistVisible();
-    void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl);
+    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
     void zoneHighlightChanged(const QString& zoneId);
-    void snapAssistShown(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
+    void snapAssistShown(const QString& screenId, const PlasmaZones::EmptyZoneList& emptyZones,
+                         const PlasmaZones::SnapAssistCandidateList& candidates);
 
 private:
     IOverlayService* m_overlayService; // Interface type (DIP)
-    IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
-    ILayoutManager* m_layoutManager; // Interface type (DIP) - needed for highlightZone by ID
+    PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
+    // Narrow to IZoneLayoutRegistry — overlay adaptor only reads the active
+    // layout, never per-context assignments / quick slots / persistence.
+    PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry;
+    Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 };
 

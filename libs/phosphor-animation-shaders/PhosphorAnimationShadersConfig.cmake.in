@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Qt6 6.6 COMPONENTS Core)
+find_dependency(PhosphorAnimation)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorAnimationShadersTargets.cmake")
+
+check_required_components(PhosphorAnimationShaders)

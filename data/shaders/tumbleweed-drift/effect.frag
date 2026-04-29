@@ -412,8 +412,8 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 
     if (totalCount <= 1) {
         vec2 drift = vec2(
-            sin(time * 0.17) * 0.012 + sin(time * 0.31) * 0.006,
-            cos(time * 0.23) * 0.010 + cos(time * 0.13) * 0.005
+            timeSin(0.17) * 0.012 + timeSin(0.31) * 0.006,
+            timeCos(0.23) * 0.010 + timeCos(0.13) * 0.005
         );
         uv -= drift;
         // Rolling rotation
@@ -421,7 +421,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
         vec2 lp = uv - vec2(0.5);
         uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                    lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + sin(time * 0.8) * 0.015;
+        float breathe = 1.0 + timeSin(0.8) * 0.015;
         float springT = fract(time * 1.5);
         float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
         instScale = logoScale * breathe * spring;
@@ -438,8 +438,8 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float f1 = 0.07 + float(idx) * 0.023;
     float f2 = 0.05 + float(idx) * 0.019;
     vec2 drift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.3 + h3 * TAU) * roam * 0.3,
-        cos(time * f2 + h2 * TAU) * roam * 0.9 + cos(time * f2 * 1.7 + h4 * TAU) * roam * 0.25
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.3, h3 * TAU) * roam * 0.3,
+        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.7, h4 * TAU) * roam * 0.25
     );
     uv -= drift;
 
@@ -450,7 +450,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + sin(time * (0.6 + float(idx) * 0.13) + h1 * TAU) * 0.015;
+    float breathe = 1.0 + timeSin(0.6 + float(idx) * 0.13, h1 * TAU) * 0.015;
     float springT = fract(time * 1.5 + h2);
     float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
     instScale *= breathe * spring;
@@ -481,7 +481,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     int   logoCount    = clamp(int(pLogoCount()), 1, 8);
     float fillOpacity  = pFillOpacity();
 
-    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 0.8 * PI)) * pIdleStrength();
+    float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * pIdleStrength();
 
     // Audio envelopes — responsive to moderate levels while still
     // smoothing out jitter via smoothstep shaping.
@@ -520,14 +520,14 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         float speed = pSpeed();
 
         // Horizon gradient with bass-reactive distortion
-        float horizonDrift = sin(time * 0.15) * 0.1 + bassEnv * 0.06;
+        float horizonDrift = timeSin(0.15) * 0.1 + bassEnv * 0.06;
         float horizonWave = sin(uv.x * 3.0 + time * 0.25) * 0.03
                           + sin(uv.x * 7.0 + time * 0.4) * 0.01 * (1.0 + bassEnv * 2.0);
         vec3 horizonSand = palSecondary * 0.9 + palAccent * 0.1;
         vec3 horizonMid  = palAccent * (0.25 + horizonDrift) + palPrimary * 0.55
                          + palSecondary * (0.2 - horizonDrift);
         vec3 horizonSky  = mix(palPrimary, palAccent * 0.3 + palPrimary * 0.7,
-                               sin(time * 0.1 + uv.x * 2.0) * 0.15 + 0.15);
+                               timeSin(0.1, uv.x * 2.0) * 0.15 + 0.15);
         float yShift = uv.y + horizonWave;
         vec3 col = mix(horizonSand, horizonMid, smoothstep(0.0, 0.45, yShift));
         col = mix(col, horizonSky, smoothstep(0.35, 1.0, yShift));

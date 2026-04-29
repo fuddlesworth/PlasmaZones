@@ -7,15 +7,18 @@
 #include "../undo/UndoController.h"
 #include "../helpers/ShaderDbusQueries.h"
 #include "../../core/constants.h"
-#include "../../core/layoututils.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include "pz_i18n.h"
-#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusReply>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -26,12 +29,102 @@
 #include <QScreen>
 #include <QTimer>
 #include <QUuid>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
 // ---------------------------------------------------------------------------
 // Group 1 - Screen targeting
 // ---------------------------------------------------------------------------
+
+void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
+{
+    m_virtualScreenSize = QSize();
+    m_virtualScreenRect = QRect();
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenName)) {
+        return;
+    }
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));
+    msg << screenName;
+    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+        QRect geo = qdbus_cast<QRect>(reply.arguments().at(0));
+        if (geo.isValid()) {
+            m_virtualScreenSize = geo.size();
+            QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
+            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
+            QPoint physOrigin = physScreen ? physScreen->geometry().topLeft() : QPoint();
+            m_virtualScreenRect = QRect(geo.topLeft() - physOrigin, geo.size());
+            qCDebug(lcEditor) << "Virtual screen" << screenName << "geometry:" << geo
+                              << "relative rect:" << m_virtualScreenRect;
+        }
+    }
+}
+
+QVariantList EditorController::screenModel() const
+{
+    QVariantList model;
+
+    if (m_availableScreenIds.isEmpty()) {
+        // Fallback: use Qt's physical screens (editor opened before daemon responded)
+        for (QScreen* screen : QGuiApplication::screens()) {
+            QVariantMap entry;
+            entry[QStringLiteral("name")] = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            entry[QStringLiteral("displayName")] = screen->name();
+            model.append(entry);
+        }
+        return model;
+    }
+
+    // Cache VS display names per physical screen to avoid repeated D-Bus calls
+    QHash<QString, QJsonArray> vsConfigCache;
+
+    // Build from daemon's effective screen IDs (includes virtual screens)
+    for (const QString& screenId : m_availableScreenIds) {
+        QVariantMap entry;
+        entry[QStringLiteral("name")] = screenId;
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            // Use user-configured display name from VS config, fall back to generic label
+            QString vsDisplayName;
+            QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+            int vsIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenId);
+            if (vsIndex >= 0) {
+                if (!vsConfigCache.contains(physId)) {
+                    QDBusMessage msg = QDBusMessage::createMethodCall(
+                        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                        QString(PhosphorProtocol::Service::Interface::Screen),
+                        QStringLiteral("getVirtualScreenConfig"));
+                    msg << physId;
+                    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+                    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+                        QJsonObject root =
+                            QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8()).object();
+                        vsConfigCache[physId] = root.value(QStringLiteral("screens")).toArray();
+                    } else {
+                        vsConfigCache[physId] = QJsonArray();
+                    }
+                }
+                const QJsonArray& screens = vsConfigCache[physId];
+                if (vsIndex < screens.size()) {
+                    vsDisplayName = screens[vsIndex].toObject().value(QStringLiteral("displayName")).toString();
+                }
+            }
+            if (vsDisplayName.isEmpty()) {
+                vsDisplayName = QStringLiteral("VS%1").arg(vsIndex + 1);
+            }
+            entry[QStringLiteral("displayName")] = vsDisplayName;
+        } else {
+            // Physical screen: use connector name for brevity
+            QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+            entry[QStringLiteral("displayName")] = screen ? screen->name() : screenId;
+        }
+        model.append(entry);
+    }
+
+    return model;
+}
 
 void EditorController::setTargetScreen(const QString& screenName)
 {
@@ -44,6 +137,9 @@ void EditorController::setTargetScreen(const QString& screenName)
 
         QString previousLayout = m_layoutId;
         m_targetScreen = screenName;
+
+        cacheVirtualScreenGeometry(screenName);
+
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();
@@ -66,55 +162,116 @@ void EditorController::setTargetScreen(const QString& screenName)
     }
 }
 
+namespace {
+
+/// Plan for where/how to show the editor window. Computed from the target
+/// screen + virtual screen rect, then applied via a single code path whether
+/// the window is visible or not, virtual-screen or physical.
+struct EditorWindowPlan
+{
+    QScreen* screen = nullptr; ///< Physical QScreen to map onto.
+    QRect geometry; ///< Absolute geometry to set before showing.
+    bool fullScreen = false; ///< true → showFullScreen(); false → show() (used for VS region).
+    bool frameless = false; ///< true → Qt::FramelessWindowHint (used for VS region).
+
+    bool isValid() const
+    {
+        return screen != nullptr;
+    }
+};
+
+/// Apply the computed plan to a window and present it. Used as the "apply
+/// geometry then show" lambda inside both the deferred (visible → destroy-and-
+/// remap) and direct (hidden → apply immediately) paths.
+void applyEditorWindowPlan(QQuickWindow* win, const EditorWindowPlan& plan)
+{
+    win->setFlag(Qt::FramelessWindowHint, plan.frameless);
+    win->setScreen(plan.screen);
+    win->setGeometry(plan.geometry);
+    if (plan.fullScreen) {
+        win->showFullScreen();
+    } else {
+        win->show();
+    }
+}
+
+} // anonymous namespace
+
 void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
 {
     if (!window) {
         return;
     }
 
-    if (!m_targetScreen.isEmpty()) {
-        const auto screens = QGuiApplication::screens();
-        for (auto* screen : screens) {
-            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
-                // Already on the correct screen — nothing to do
-                if (window->screen() == screen && window->isVisible()) {
-                    return;
-                }
+    // No target screen → plain fullscreen on whatever output Qt picks.
+    if (m_targetScreen.isEmpty()) {
+        window->showFullScreen();
+        return;
+    }
 
-                qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
-                                  << "geometry:" << screen->geometry();
-
-                // On Wayland, the wl_output for an xdg-shell surface is bound at
-                // surface creation time. setScreen()/setGeometry() cannot move an
-                // already-mapped surface to a different output. To switch screens we
-                // must destroy the native window (wl_surface) and let Qt recreate it
-                // so the new surface gets mapped to the correct output.
-                // When the window is already visible (mid-session screen switch), defer
-                // the destroy+recreate to avoid tearing down the surface inside the
-                // current render frame or signal handler (QTBUG-88997).
-                if (window->isVisible()) {
-                    QPointer<QQuickWindow> safeWindow(window);
-                    QScreen* targetScreen = screen;
-                    QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
-                        if (!safeWindow || !targetScreen) {
-                            return;
-                        }
-                        safeWindow->destroy();
-                        safeWindow->setScreen(targetScreen);
-                        safeWindow->setGeometry(targetScreen->geometry());
-                        safeWindow->showFullScreen();
-                    });
-                    return;
-                }
-
-                window->setScreen(screen);
-                window->setGeometry(screen->geometry());
+    // Build a single plan covering both the virtual-screen (frameless, sized
+    // to VS region) and physical-screen (full monitor) cases.
+    EditorWindowPlan plan;
+    if (m_virtualScreenRect.isValid()) {
+        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_targetScreen);
+        if (QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId)) {
+            plan.screen = physScreen;
+            // Absolute VS coordinates = physical screen origin + VS offset.
+            plan.geometry =
+                QRect(physScreen->geometry().topLeft() + m_virtualScreenRect.topLeft(), m_virtualScreenRect.size());
+            plan.fullScreen = false;
+            plan.frameless = true;
+        }
+    }
+    if (!plan.isValid()) {
+        // Physical-screen path: match by identifier, take full geometry.
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == m_targetScreen
+                || screen->name() == m_targetScreen) {
+                plan.screen = screen;
+                plan.geometry = screen->geometry();
+                plan.fullScreen = true;
+                plan.frameless = false;
                 break;
             }
         }
     }
+    if (!plan.isValid()) {
+        // Unknown target — fall back to plain fullscreen.
+        window->setFlag(Qt::FramelessWindowHint, false);
+        window->showFullScreen();
+        return;
+    }
 
-    window->showFullScreen();
+    qCDebug(lcEditor) << "Editor window plan — screen:" << plan.screen->name() << "geometry:" << plan.geometry
+                      << "fullScreen:" << plan.fullScreen << "frameless:" << plan.frameless;
+
+    // Same screen and visible → nothing to do. No Wayland workaround reliably
+    // brings an already-mapped fullscreen xdg_toplevel to the front from a
+    // programmatic caller, so we don't even try.
+    if (window->screen() == plan.screen && window->isVisible() && window->isExposed()) {
+        return;
+    }
+
+    // Visible but needs relayout (screen switch or VS/physical toggle): Wayland
+    // binds wl_output at surface-creation time, so we must destroy the native
+    // window and let Qt recreate it with the new output. Defer to the next
+    // event-loop tick so we don't tear down the platform surface from inside
+    // a paint or D-Bus dispatch.
+    if (window->isVisible()) {
+        QPointer<QQuickWindow> safeWindow(window);
+        QTimer::singleShot(0, window, [safeWindow, plan]() {
+            if (!safeWindow || !plan.screen) {
+                return;
+            }
+            safeWindow->destroy();
+            applyEditorWindowPlan(safeWindow.data(), plan);
+        });
+        return;
+    }
+
+    // Not yet visible — apply directly, no remap needed.
+    applyEditorWindowPlan(window, plan);
 }
 
 void EditorController::setTargetScreenDirect(const QString& screenName)
@@ -123,6 +280,9 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
     // when a layout is explicitly specified via command line
     if (m_targetScreen != screenName) {
         m_targetScreen = screenName;
+
+        cacheVirtualScreenGeometry(screenName);
+
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();
@@ -131,7 +291,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
 }
 
 // ---------------------------------------------------------------------------
-// Group 2 - Layout lifecycle
+// Group 2 - PhosphorZones::Layout lifecycle
 // ---------------------------------------------------------------------------
 
 /**
@@ -201,7 +361,25 @@ void EditorController::loadLayout(const QString& layoutId)
         return;
     }
 
-    QString jsonLayout = m_layoutService->loadLayout(layoutId);
+    // Try the in-process PhosphorZones::LayoutRegistry first — opens the editor instantly
+    // even when the daemon is starting up, daemon is down, or the user
+    // launched the editor as a standalone tool. Falls back to D-Bus
+    // (DBusLayoutService::loadLayout via m_layoutService) when the layout
+    // isn't on disk yet (just-created in another process, etc.) or when
+    // the ID is an autotile algorithm preview that the local PhosphorZones::LayoutRegistry
+    // can't produce.
+    QString jsonLayout;
+    if (m_localLayoutManager) {
+        const QUuid uuid = QUuid::fromString(layoutId);
+        if (!uuid.isNull()) {
+            if (PhosphorZones::Layout* layout = m_localLayoutManager->layoutById(uuid)) {
+                jsonLayout = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
+            }
+        }
+    }
+    if (jsonLayout.isEmpty()) {
+        jsonLayout = m_layoutService->loadLayout(layoutId);
+    }
     if (jsonLayout.isEmpty()) {
         // Error signal already emitted by service
         return;
@@ -215,70 +393,86 @@ void EditorController::loadLayout(const QString& layoutId)
     }
 
     QJsonObject layoutObj = doc.object();
-    m_layoutId = layoutObj[QLatin1String(JsonKeys::Id)].toString();
-    m_layoutName = layoutObj[QLatin1String(JsonKeys::Name)].toString();
+    m_layoutId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
+    m_layoutName = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
 
     // Parse zones
     QVariantList zones;
-    QJsonArray zonesArray = layoutObj[QLatin1String(JsonKeys::Zones)].toArray();
+    QJsonArray zonesArray = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)].toArray();
     for (const QJsonValue& zoneVal : zonesArray) {
         QJsonObject zoneObj = zoneVal.toObject();
         QVariantMap zone;
 
-        zone[JsonKeys::Id] = zoneObj[QLatin1String(JsonKeys::Id)].toString();
-        zone[JsonKeys::Name] = zoneObj[QLatin1String(JsonKeys::Name)].toString();
-        zone[JsonKeys::ZoneNumber] = zoneObj[QLatin1String(JsonKeys::ZoneNumber)].toInt();
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::Name] =
+            zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] =
+            zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)].toInt();
 
-        QJsonObject relGeo = zoneObj[QLatin1String(JsonKeys::RelativeGeometry)].toObject();
-        zone[JsonKeys::X] = relGeo[QLatin1String(JsonKeys::X)].toDouble();
-        zone[JsonKeys::Y] = relGeo[QLatin1String(JsonKeys::Y)].toDouble();
-        zone[JsonKeys::Width] = relGeo[QLatin1String(JsonKeys::Width)].toDouble();
-        zone[JsonKeys::Height] = relGeo[QLatin1String(JsonKeys::Height)].toDouble();
+        QJsonObject relGeo = zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)].toObject();
+        zone[::PhosphorZones::ZoneJsonKeys::X] = relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Width] =
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Height] =
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)].toDouble();
 
         // Geometry mode (default: Relative = 0)
-        int geoMode = zoneObj.contains(QLatin1String(JsonKeys::GeometryMode))
-            ? zoneObj[QLatin1String(JsonKeys::GeometryMode)].toInt()
+        int geoMode = zoneObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode))
+            ? zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode)].toInt()
             : 0;
-        zone[JsonKeys::GeometryMode] = geoMode;
+        zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = geoMode;
 
-        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)
-            && zoneObj.contains(QLatin1String(JsonKeys::FixedGeometry))) {
-            QJsonObject fixedGeo = zoneObj[QLatin1String(JsonKeys::FixedGeometry)].toObject();
-            zone[JsonKeys::FixedX] = fixedGeo[QLatin1String(JsonKeys::X)].toDouble();
-            zone[JsonKeys::FixedY] = fixedGeo[QLatin1String(JsonKeys::Y)].toDouble();
-            zone[JsonKeys::FixedWidth] = fixedGeo[QLatin1String(JsonKeys::Width)].toDouble();
-            zone[JsonKeys::FixedHeight] = fixedGeo[QLatin1String(JsonKeys::Height)].toDouble();
+        if (geoMode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)
+            && zoneObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometry))) {
+            QJsonObject fixedGeo = zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometry)].toObject();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] =
+                fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)].toDouble();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] =
+                fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)].toDouble();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] =
+                fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)].toDouble();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] =
+                fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)].toDouble();
         }
 
         // Appearance
-        QJsonObject appearance = zoneObj[QLatin1String(JsonKeys::Appearance)].toObject();
-        zone[JsonKeys::HighlightColor] = appearance[QLatin1String(JsonKeys::HighlightColor)].toString();
-        zone[JsonKeys::InactiveColor] = appearance[QLatin1String(JsonKeys::InactiveColor)].toString();
-        zone[JsonKeys::BorderColor] = appearance[QLatin1String(JsonKeys::BorderColor)].toString();
+        QJsonObject appearance = zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Appearance)].toObject();
+        zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] =
+            appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::HighlightColor)].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::InactiveColor] =
+            appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::InactiveColor)].toString();
+        zone[::PhosphorZones::ZoneJsonKeys::BorderColor] =
+            appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderColor)].toString();
         // Load all appearance properties with defaults if missing
-        zone[JsonKeys::ActiveOpacity] = appearance.contains(QLatin1String(JsonKeys::ActiveOpacity))
-            ? appearance[QLatin1String(JsonKeys::ActiveOpacity)].toDouble()
-            : Defaults::Opacity;
-        zone[JsonKeys::InactiveOpacity] = appearance.contains(QLatin1String(JsonKeys::InactiveOpacity))
-            ? appearance[QLatin1String(JsonKeys::InactiveOpacity)].toDouble()
-            : Defaults::InactiveOpacity;
-        zone[JsonKeys::BorderWidth] = appearance.contains(QLatin1String(JsonKeys::BorderWidth))
-            ? appearance[QLatin1String(JsonKeys::BorderWidth)].toInt()
-            : Defaults::BorderWidth;
-        zone[JsonKeys::BorderRadius] = appearance.contains(QLatin1String(JsonKeys::BorderRadius))
-            ? appearance[QLatin1String(JsonKeys::BorderRadius)].toInt()
-            : Defaults::BorderRadius;
+        zone[::PhosphorZones::ZoneJsonKeys::ActiveOpacity] =
+            appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ActiveOpacity))
+            ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)].toDouble()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
+        zone[::PhosphorZones::ZoneJsonKeys::InactiveOpacity] =
+            appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::InactiveOpacity))
+            ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)].toDouble()
+            : ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+        zone[::PhosphorZones::ZoneJsonKeys::BorderWidth] =
+            appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderWidth))
+            ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderWidth)].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderWidth;
+        zone[::PhosphorZones::ZoneJsonKeys::BorderRadius] =
+            appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderRadius))
+            ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderRadius)].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderRadius;
         // Use consistent key format - normalize to QString for QVariantMap storage
         // QVariantMap uses QString keys, so convert QLatin1String to QString
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
-        bool useCustomColorsValue = appearance.contains(QLatin1String(JsonKeys::UseCustomColors))
-            ? appearance[QLatin1String(JsonKeys::UseCustomColors)].toBool()
+        QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
+        bool useCustomColorsValue = appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors))
+            ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors)].toBool()
             : false;
         zone[useCustomColorsKey] = useCustomColorsValue;
 
         // Per-zone overlay display mode override (-1 = use layout/global)
-        zone[JsonKeys::OverlayDisplayMode] = appearance.contains(QLatin1String(JsonKeys::OverlayDisplayMode))
-            ? appearance[QLatin1String(JsonKeys::OverlayDisplayMode)].toInt(-1)
+        zone[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] =
+            appearance.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode))
+            ? appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)].toInt(-1)
             : -1;
 
         zones.append(zone);
@@ -289,15 +483,17 @@ void EditorController::loadLayout(const QString& layoutId)
     }
 
     // Load shader settings
-    m_currentShaderId = layoutObj[QLatin1String(JsonKeys::ShaderId)].toString();
-    if (layoutObj.contains(QLatin1String(JsonKeys::ShaderParams))) {
-        m_currentShaderParams = layoutObj[QLatin1String(JsonKeys::ShaderParams)].toObject().toVariantMap();
+    m_currentShaderId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();
+    if (layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
+        m_currentShaderParams =
+            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)].toObject().toVariantMap();
     } else {
         m_currentShaderParams.clear();
     }
 
     // Load visibility filtering allow-lists
-    LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt, m_allowedActivities);
+    PhosphorZones::LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
+                                                      m_allowedActivities);
 
     // Query available context info from daemon via D-Bus
     // Clear first so stale data is not shown if daemon is unavailable
@@ -307,21 +503,17 @@ void EditorController::loadLayout(const QString& layoutId)
     m_activitiesAvailable = false;
     m_availableActivities.clear();
     {
-        QDBusInterface iface{QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                             QString(DBus::Interface::LayoutManager)};
+        QDBusInterface iface{QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                             QString(PhosphorProtocol::Service::Interface::LayoutRegistry)};
         if (iface.isValid()) {
-            // Screen IDs (stable EDID-based identifiers)
-            QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
+            // Screen IDs (stable EDID-based identifiers).
+            // getAllScreenAssignments only emits screens with stored
+            // entries — use the dedicated enumeration method so freshly-
+            // configured systems with no per-screen assignments still
+            // populate the editor's screen list.
+            QDBusReply<QStringList> screensReply = iface.call(QStringLiteral("getAvailableScreenIds"));
             if (screensReply.isValid()) {
-                const QJsonObject screensObj = QJsonDocument::fromJson(screensReply.value().toUtf8()).object();
-                for (auto it = screensObj.begin(); it != screensObj.end(); ++it) {
-                    // Prefer the screenId field if present, fall back to connector name key
-                    QString screenId = it.value().toObject().value(QStringLiteral("screenId")).toString();
-                    if (screenId.isEmpty()) {
-                        screenId = it.key();
-                    }
-                    m_availableScreenIds.append(screenId);
-                }
+                m_availableScreenIds = screensReply.value();
             }
 
             // Virtual desktops
@@ -357,31 +549,32 @@ void EditorController::loadLayout(const QString& layoutId)
     // Load per-layout gap overrides (-1 = use global setting)
     int oldZonePadding = m_zonePadding;
     bool oldUseFullScreen = m_useFullScreenGeometry;
-    m_zonePadding = layoutObj.contains(QLatin1String(JsonKeys::ZonePadding))
-        ? layoutObj[QLatin1String(JsonKeys::ZonePadding)].toInt(-1)
+    m_zonePadding = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)].toInt(-1)
         : -1;
-    m_outerGap = layoutObj.contains(QLatin1String(JsonKeys::OuterGap))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGap)].toInt(-1)
+    m_outerGap = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGap))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGap)].toInt(-1)
         : -1;
-    m_usePerSideOuterGap = layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)].toBool(false);
-    m_outerGapTop = layoutObj.contains(QLatin1String(JsonKeys::OuterGapTop))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapTop)].toInt(-1)
+    m_usePerSideOuterGap = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap)].toBool(false);
+    m_outerGapTop = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapTop))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapTop)].toInt(-1)
         : -1;
-    m_outerGapBottom = layoutObj.contains(QLatin1String(JsonKeys::OuterGapBottom))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapBottom)].toInt(-1)
+    m_outerGapBottom = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapBottom))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)].toInt(-1)
         : -1;
-    m_outerGapLeft = layoutObj.contains(QLatin1String(JsonKeys::OuterGapLeft))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapLeft)].toInt(-1)
+    m_outerGapLeft = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapLeft))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)].toInt(-1)
         : -1;
-    m_outerGapRight = layoutObj.contains(QLatin1String(JsonKeys::OuterGapRight))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1)
+    m_outerGapRight = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapRight))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapRight)].toInt(-1)
         : -1;
-    m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
-    if (layoutObj.contains(QLatin1String(JsonKeys::AspectRatioClassKey))) {
-        QJsonValue arVal = layoutObj[QLatin1String(JsonKeys::AspectRatioClassKey)];
+    m_useFullScreenGeometry =
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
+    if (layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey))) {
+        QJsonValue arVal = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)];
         if (arVal.isString()) {
-            // Canonical format from Layout::toJson() — string like "ultrawide"
-            m_aspectRatioClass = static_cast<int>(ScreenClassification::fromString(arVal.toString()));
+            // Canonical format from PhosphorZones::Layout::toJson() — string like "ultrawide"
+            m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromString(arVal.toString()));
         } else {
             // Int format (from editor save round-trip before daemon persists)
             m_aspectRatioClass = arVal.toInt(0);
@@ -390,8 +583,8 @@ void EditorController::loadLayout(const QString& layoutId)
         m_aspectRatioClass = 0;
     }
     int oldOverlayDisplayMode = m_overlayDisplayMode;
-    m_overlayDisplayMode = layoutObj.contains(QLatin1String(JsonKeys::OverlayDisplayMode))
-        ? layoutObj[QLatin1String(JsonKeys::OverlayDisplayMode)].toInt(-1)
+    m_overlayDisplayMode = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode))
+        ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)].toInt(-1)
         : -1;
 
     m_selectedZoneId.clear();
@@ -478,9 +671,9 @@ void EditorController::saveLayout()
 
     // Build JSON from current state
     QJsonObject layoutObj;
-    layoutObj[QLatin1String(JsonKeys::Id)] = m_layoutId;
-    layoutObj[QLatin1String(JsonKeys::Name)] = m_layoutName;
-    layoutObj[QLatin1String(JsonKeys::IsBuiltIn)] = false;
+    layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = m_layoutId;
+    layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = m_layoutName;
+    layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
 
     QJsonArray zonesArray;
     QVariantList zones = m_zoneManager->zones();
@@ -488,109 +681,129 @@ void EditorController::saveLayout()
         QVariantMap zone = zoneVar.toMap();
         QJsonObject zoneObj;
 
-        zoneObj[QLatin1String(JsonKeys::Id)] = zone[JsonKeys::Id].toString();
-        zoneObj[QLatin1String(JsonKeys::Name)] = zone[JsonKeys::Name].toString();
-        zoneObj[QLatin1String(JsonKeys::ZoneNumber)] = zone[JsonKeys::ZoneNumber].toInt();
+        zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+        zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
+            zone[::PhosphorZones::ZoneJsonKeys::Name].toString();
+        zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] =
+            zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
 
         QJsonObject relGeo;
-        relGeo[QLatin1String(JsonKeys::X)] = zone[JsonKeys::X].toDouble();
-        relGeo[QLatin1String(JsonKeys::Y)] = zone[JsonKeys::Y].toDouble();
-        relGeo[QLatin1String(JsonKeys::Width)] = zone[JsonKeys::Width].toDouble();
-        relGeo[QLatin1String(JsonKeys::Height)] = zone[JsonKeys::Height].toDouble();
-        zoneObj[QLatin1String(JsonKeys::RelativeGeometry)] = relGeo;
+        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] =
+            zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] =
+            zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+        zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
 
         // Write geometry mode and fixed geometry when Fixed
-        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
-        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
-            zoneObj[QLatin1String(JsonKeys::GeometryMode)] = geoMode;
+        int geoMode = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt();
+        if (geoMode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)) {
+            zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode)] = geoMode;
             QJsonObject fixedGeo;
-            fixedGeo[QLatin1String(JsonKeys::X)] = zone.value(JsonKeys::FixedX, 0.0).toDouble();
-            fixedGeo[QLatin1String(JsonKeys::Y)] = zone.value(JsonKeys::FixedY, 0.0).toDouble();
-            fixedGeo[QLatin1String(JsonKeys::Width)] = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-            fixedGeo[QLatin1String(JsonKeys::Height)] = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
-            zoneObj[QLatin1String(JsonKeys::FixedGeometry)] = fixedGeo;
+            fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] =
+                zone.value(::PhosphorZones::ZoneJsonKeys::FixedX, 0.0).toDouble();
+            fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] =
+                zone.value(::PhosphorZones::ZoneJsonKeys::FixedY, 0.0).toDouble();
+            fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] =
+                zone.value(::PhosphorZones::ZoneJsonKeys::FixedWidth, 0.0).toDouble();
+            fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] =
+                zone.value(::PhosphorZones::ZoneJsonKeys::FixedHeight, 0.0).toDouble();
+            zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometry)] = fixedGeo;
         }
 
         QJsonObject appearance;
-        appearance[QLatin1String(JsonKeys::HighlightColor)] = zone[JsonKeys::HighlightColor].toString();
-        appearance[QLatin1String(JsonKeys::InactiveColor)] = zone[JsonKeys::InactiveColor].toString();
-        appearance[QLatin1String(JsonKeys::BorderColor)] = zone[JsonKeys::BorderColor].toString();
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::HighlightColor)] =
+            zone[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString();
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::InactiveColor)] =
+            zone[::PhosphorZones::ZoneJsonKeys::InactiveColor].toString();
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderColor)] =
+            zone[::PhosphorZones::ZoneJsonKeys::BorderColor].toString();
         // Include all appearance properties for persistence
-        appearance[QLatin1String(JsonKeys::ActiveOpacity)] =
-            zone.contains(JsonKeys::ActiveOpacity) ? zone[JsonKeys::ActiveOpacity].toDouble() : Defaults::Opacity;
-        appearance[QLatin1String(JsonKeys::InactiveOpacity)] = zone.contains(JsonKeys::InactiveOpacity)
-            ? zone[JsonKeys::InactiveOpacity].toDouble()
-            : Defaults::InactiveOpacity;
-        appearance[QLatin1String(JsonKeys::BorderWidth)] =
-            zone.contains(JsonKeys::BorderWidth) ? zone[JsonKeys::BorderWidth].toInt() : Defaults::BorderWidth;
-        appearance[QLatin1String(JsonKeys::BorderRadius)] =
-            zone.contains(JsonKeys::BorderRadius) ? zone[JsonKeys::BorderRadius].toInt() : Defaults::BorderRadius;
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)] =
+            zone.contains(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)
+            ? zone[::PhosphorZones::ZoneJsonKeys::ActiveOpacity].toDouble()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)] =
+            zone.contains(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)
+            ? zone[::PhosphorZones::ZoneJsonKeys::InactiveOpacity].toDouble()
+            : ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderWidth)] =
+            zone.contains(::PhosphorZones::ZoneJsonKeys::BorderWidth)
+            ? zone[::PhosphorZones::ZoneJsonKeys::BorderWidth].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderWidth;
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::BorderRadius)] =
+            zone.contains(::PhosphorZones::ZoneJsonKeys::BorderRadius)
+            ? zone[::PhosphorZones::ZoneJsonKeys::BorderRadius].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderRadius;
         // Use consistent key format - normalize to QString for QVariantMap lookup
         // QVariantMap uses QString keys, so convert QLatin1String to QString
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
-        appearance[QLatin1String(JsonKeys::UseCustomColors)] =
+        QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
+        appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseCustomColors)] =
             zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
         // Per-zone overlay display mode override (only if set)
-        int zoneOverlayMode = zone.value(JsonKeys::OverlayDisplayMode, -1).toInt();
+        int zoneOverlayMode = zone.value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode, -1).toInt();
         if (zoneOverlayMode >= 0) {
-            appearance[QLatin1String(JsonKeys::OverlayDisplayMode)] = zoneOverlayMode;
+            appearance[QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)] = zoneOverlayMode;
         }
-        zoneObj[QLatin1String(JsonKeys::Appearance)] = appearance;
+        zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Appearance)] = appearance;
 
         zonesArray.append(zoneObj);
     }
-    layoutObj[QLatin1String(JsonKeys::Zones)] = zonesArray;
+    layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = zonesArray;
 
     // Include shader settings (strip stale params from other shaders)
     if (!ShaderRegistry::isNoneShader(m_currentShaderId)) {
-        layoutObj[QLatin1String(JsonKeys::ShaderId)] = m_currentShaderId;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = m_currentShaderId;
     }
     if (!m_currentShaderParams.isEmpty()) {
         // Only persist params that belong to the current shader
         QVariantMap cleanParams = stripStaleShaderParams(m_currentShaderParams);
         if (!cleanParams.isEmpty()) {
-            layoutObj[QLatin1String(JsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(cleanParams);
+            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] =
+                QJsonObject::fromVariantMap(cleanParams);
         }
     }
 
     // Include per-layout gap overrides (only if set, >= 0)
     if (m_zonePadding >= 0) {
-        layoutObj[QLatin1String(JsonKeys::ZonePadding)] = m_zonePadding;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = m_zonePadding;
     }
     if (m_outerGap >= 0) {
-        layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGap)] = m_outerGap;
     }
     // Serialize per-side toggle whenever enabled so user intent is preserved across save/load
     if (m_usePerSideOuterGap) {
-        layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)] = true;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap)] = true;
         if (m_outerGapTop >= 0)
-            layoutObj[QLatin1String(JsonKeys::OuterGapTop)] = m_outerGapTop;
+            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapTop)] = m_outerGapTop;
         if (m_outerGapBottom >= 0)
-            layoutObj[QLatin1String(JsonKeys::OuterGapBottom)] = m_outerGapBottom;
+            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)] = m_outerGapBottom;
         if (m_outerGapLeft >= 0)
-            layoutObj[QLatin1String(JsonKeys::OuterGapLeft)] = m_outerGapLeft;
+            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)] = m_outerGapLeft;
         if (m_outerGapRight >= 0)
-            layoutObj[QLatin1String(JsonKeys::OuterGapRight)] = m_outerGapRight;
+            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OuterGapRight)] = m_outerGapRight;
     }
 
     // Include per-layout overlay display mode override (only if set)
     if (m_overlayDisplayMode >= 0) {
-        layoutObj[QLatin1String(JsonKeys::OverlayDisplayMode)] = m_overlayDisplayMode;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)] = m_overlayDisplayMode;
     }
 
     // Include full screen geometry mode (only if enabled)
     if (m_useFullScreenGeometry) {
-        layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)] = true;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)] = true;
     }
 
     // Include aspect ratio class (only if not Any) — serialize as int for updateLayout D-Bus,
-    // which converts to the canonical string format via Layout::setAspectRatioClassInt()
+    // which converts to the canonical string format via PhosphorZones::Layout::setAspectRatioClassInt()
     if (m_aspectRatioClass != 0) {
-        layoutObj[QLatin1String(JsonKeys::AspectRatioClassKey)] = m_aspectRatioClass;
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)] = m_aspectRatioClass;
     }
 
     // Include visibility filtering allow-lists (only if non-empty)
-    LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt, m_allowedActivities);
+    PhosphorZones::LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
+                                                    m_allowedActivities);
 
     QJsonDocument doc(layoutObj);
     QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
@@ -620,7 +833,7 @@ void EditorController::saveLayout()
     }
 
     // Note: We intentionally do NOT assign the layout to a screen here.
-    // Layout assignment should be a separate, explicit user action.
+    // PhosphorZones::Layout assignment should be a separate, explicit user action.
     // This prevents saving a layout from inadvertently changing the active layout.
 
     Q_EMIT hasUnsavedChangesChanged();
@@ -648,15 +861,16 @@ void EditorController::discardChanges()
 void EditorController::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutLoadFailed(QCoreApplication::translate("EditorController", "File path cannot be empty"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("File path cannot be empty"));
         return;
     }
 
-    QDBusInterface layoutManager(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
+    QDBusInterface layoutManager(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
-        QString error = QCoreApplication::translate("EditorController", "Cannot connect to PlasmaZones daemon");
+        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -664,8 +878,7 @@ void EditorController::importLayout(const QString& filePath)
 
     QDBusReply<QString> reply = layoutManager.call(QStringLiteral("importLayout"), filePath);
     if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("EditorController", "Failed to import layout: %1").arg(reply.error().message());
+        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.error().message());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -673,7 +886,7 @@ void EditorController::importLayout(const QString& filePath)
 
     QString newLayoutId = reply.value();
     if (newLayoutId.isEmpty()) {
-        QString error = QCoreApplication::translate("EditorController", "Imported layout but received empty ID");
+        QString error = PzI18n::tr("Imported layout but received empty ID");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -693,20 +906,21 @@ void EditorController::importLayout(const QString& filePath)
 void EditorController::exportLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutSaveFailed(QCoreApplication::translate("EditorController", "File path cannot be empty"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("File path cannot be empty"));
         return;
     }
 
     if (m_layoutId.isEmpty()) {
-        Q_EMIT layoutSaveFailed(QCoreApplication::translate("EditorController", "No layout loaded to export"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("No layout loaded to export"));
         return;
     }
 
-    QDBusInterface layoutManager(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
+    QDBusInterface layoutManager(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
-        QString error = QCoreApplication::translate("EditorController", "Cannot connect to PlasmaZones daemon");
+        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;
@@ -714,8 +928,7 @@ void EditorController::exportLayout(const QString& filePath)
 
     QDBusReply<void> reply = layoutManager.call(QStringLiteral("exportLayout"), m_layoutId, filePath);
     if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("EditorController", "Failed to export layout: %1").arg(reply.error().message());
+        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.error().message());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;

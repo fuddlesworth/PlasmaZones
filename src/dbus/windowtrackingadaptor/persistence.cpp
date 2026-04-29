@@ -3,12 +3,13 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "../../core/interfaces.h"
-#include "../../core/layoutmanager.h"
-#include "../../core/layout.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
@@ -18,6 +19,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QTimer>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -36,7 +38,9 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
         return;
     }
 
-    m_service->storePreTileGeometry(windowId, QRect(x, y, width, height), screenId, overwrite);
+    if (m_snapEngine) {
+        m_snapEngine->storeUnmanagedGeometry(windowId, QRect(x, y, width, height), screenId, overwrite);
+    }
     qCDebug(lcDbusWindow) << "Stored pre-tile geometry for" << windowId << "screen=" << screenId
                           << "overwrite=" << overwrite;
 }
@@ -49,24 +53,38 @@ bool WindowTrackingAdaptor::getPreTileGeometry(const QString& windowId, int& x, 
         return false;
     }
 
-    auto geo = m_service->preTileGeometry(windowId);
-    if (!geo) {
-        return false;
+    if (!m_snapEngine || !m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        // appId fallback
+        const QString appId = m_service->currentAppIdFor(windowId);
+        if (appId == windowId || !m_snapEngine || !m_snapEngine->hasUnmanagedGeometry(appId)) {
+            return false;
+        }
+        QRect geo = m_snapEngine->unmanagedGeometry(appId);
+        x = geo.x();
+        y = geo.y();
+        width = geo.width();
+        height = geo.height();
+        return true;
     }
 
-    x = geo->x();
-    y = geo->y();
-    width = geo->width();
-    height = geo->height();
+    QRect geo = m_snapEngine->unmanagedGeometry(windowId);
+    x = geo.x();
+    y = geo.y();
+    width = geo.width();
+    height = geo.height();
     return true;
 }
 
 bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
 {
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || !m_snapEngine) {
         return false;
     }
-    return m_service->hasPreTileGeometry(windowId);
+    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        return true;
+    }
+    const QString appId = m_service->currentAppIdFor(windowId);
+    return (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId));
 }
 
 void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
@@ -74,16 +92,44 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
         return;
     }
-    bool hadGeometry = m_service->hasPreTileGeometry(windowId);
-    m_service->clearPreTileGeometry(windowId);
+    if (!m_snapEngine) {
+        return;
+    }
+    bool hadGeometry = m_snapEngine->hasUnmanagedGeometry(windowId);
+    m_snapEngine->forgetWindow(windowId);
+    // Also remove appId entry
+    const QString appId = m_service->currentAppIdFor(windowId);
+    if (appId != windowId) {
+        hadGeometry |= m_snapEngine->hasUnmanagedGeometry(appId);
+        m_snapEngine->forgetWindow(appId);
+    }
     if (hadGeometry) {
         qCDebug(lcDbusWindow) << "Cleared pre-tile geometry for" << windowId;
     }
 }
 
-QString WindowTrackingAdaptor::getPreTileGeometriesJson()
+PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
 {
-    return serializeGeometryMap(m_service->preTileGeometries(), m_service);
+    PreTileGeometryList result;
+    if (!m_snapEngine) {
+        return result;
+    }
+    const auto& map = m_snapEngine->unmanagedGeometries();
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        PreTileGeometryEntry entry;
+        entry.appId = m_service->currentAppIdFor(it.key());
+        entry.x = it.value().geometry.x();
+        entry.y = it.value().geometry.y();
+        entry.width = it.value().geometry.width();
+        entry.height = it.value().geometry.height();
+        if (!it.value().screenId.isEmpty()) {
+            entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
+                ? it.value().screenId
+                : Phosphor::Screens::ScreenIdentity::idForName(it.value().screenId);
+        }
+        result.append(entry);
+    }
+    return result;
 }
 
 bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width,
@@ -95,7 +141,12 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         return false;
     }
 
-    auto geo = m_service->validatedPreTileGeometry(windowId);
+    QString screenId;
+    if (m_service) {
+        screenId = m_service->screenAssignments().value(windowId);
+    }
+
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         return false;
     }
@@ -114,37 +165,64 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
     }
 
     QRect geometry(x, y, width, height);
-    for (QScreen* screen : Utils::allScreens()) {
-        QRect intersection = screen->geometry().intersected(geometry);
-        if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-            return true;
+    // Use effective screen IDs (virtual if subdivided) for correct geometry checks
+    auto* mgr = m_service->screenManager();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            QRect screenGeom = mgr->screenGeometry(sid);
+            if (!screenGeom.isValid()) {
+                continue;
+            }
+            QRect intersection = screenGeom.intersected(geometry);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
+                return true;
+            }
+        }
+    } else {
+        // Fallback: no Phosphor::Screens::ScreenManager, use physical screens
+        for (QScreen* screen : Utils::allScreens()) {
+            QRect intersection = screen->geometry().intersected(geometry);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
+                return true;
+            }
         }
     }
     return false;
 }
 
-QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
+WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
-    // Delegate to service
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
-
-    if (geometries.isEmpty()) {
-        return QStringLiteral("[]");
-    }
-
-    QJsonArray windowGeometries;
+    WindowGeometryList result;
+    result.reserve(geometries.size());
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
-        QJsonObject windowObj;
-        windowObj[QLatin1String("windowId")] = it.key();
-        windowObj[QLatin1String("x")] = it.value().x();
-        windowObj[QLatin1String("y")] = it.value().y();
-        windowObj[QLatin1String("width")] = it.value().width();
-        windowObj[QLatin1String("height")] = it.value().height();
-        windowGeometries.append(windowObj);
+        result.append(WindowGeometryEntry::fromRect(it.key(), it.value()));
+    }
+    qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
+    return result;
+}
+
+QString WindowTrackingAdaptor::getPendingRestoreGeometries()
+{
+    auto targets = m_service->pendingRestoreGeometries();
+    if (targets.isEmpty()) {
+        return QStringLiteral("{}");
     }
 
-    qCDebug(lcDbusWindow) << "Returning updated geometries for" << windowGeometries.size() << "windows";
-    return QString::fromUtf8(QJsonDocument(windowGeometries).toJson(QJsonDocument::Compact));
+    QJsonObject result;
+    for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
+        const auto& target = it.value();
+        QJsonObject geoObj;
+        geoObj[QLatin1String("x")] = target.geometry.x();
+        geoObj[QLatin1String("y")] = target.geometry.y();
+        geoObj[QLatin1String("width")] = target.geometry.width();
+        geoObj[QLatin1String("height")] = target.geometry.height();
+        geoObj[QLatin1String("screenId")] = target.screenId;
+        result[it.key()] = geoObj;
+    }
+
+    qCDebug(lcDbusWindow) << "Returning pending restore geometries for" << result.size() << "apps";
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 
 void WindowTrackingAdaptor::onLayoutChanged()
@@ -180,18 +258,20 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
         return;
     }
 
-    // Check if panel geometry is ready, or if ScreenManager doesn't exist (fallback)
-    // If ScreenManager instance is null, we proceed anyway with a warning - this is
+    // Check if panel geometry is ready, or if Phosphor::Screens::ScreenManager doesn't exist (fallback)
+    // If Phosphor::Screens::ScreenManager instance is null, we proceed anyway with a warning - this is
     // better than blocking window restoration indefinitely
-    if (ScreenManager::instance() && !ScreenManager::isPanelGeometryReady()) {
+    if (m_service->screenManager()
+        && !(m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
         qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
         return;
     }
 
-    // Both conditions met (or ScreenManager unavailable) - emit the signal
+    // Both conditions met (or Phosphor::Screens::ScreenManager unavailable) - emit the signal
     m_pendingRestoresEmitted = true;
-    if (!ScreenManager::instance()) {
-        qCWarning(lcDbusWindow) << "pendingRestoresAvailable: no ScreenManager, geometry may be incorrect";
+    if (!m_service->screenManager()) {
+        qCWarning(lcDbusWindow)
+            << "pendingRestoresAvailable: no Phosphor::Screens::ScreenManager, geometry may be incorrect";
     } else {
         qCInfo(lcDbusWindow) << "Pending restores: panel geometry ready, notifying effect";
     }
@@ -212,11 +292,14 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
 
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
-    for (QScreen* screen : Utils::allScreens()) {
-        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop,
-                                                          m_layoutManager->currentActivity());
+    // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
+    const QStringList effectiveIds =
+        (m_service->screenManager() ? m_service->screenManager()->effectiveScreenIds() : QStringList());
+    for (const QString& sid : effectiveIds) {
+        PhosphorZones::Layout* layout =
+            m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
-            return Utils::screenIdentifier(screen);
+            return sid;
         }
     }
 
@@ -226,17 +309,43 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     if (!layout) {
         return QString();
     }
-    Zone* zone = layout->zoneById(*zoneUuid);
+    PhosphorZones::Zone* zone = layout->zoneById(*zoneUuid);
     if (!zone) {
         return QString();
     }
-    for (QScreen* screen : Utils::allScreens()) {
-        QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
-        QRectF normGeom = zone->normalizedGeometry(refGeom);
-        QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
-                          refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
-        if (screen->geometry().contains(zoneCenter)) {
-            return Utils::screenIdentifier(screen);
+    // Use effective screen IDs for virtual screen support
+    auto* mgr = m_service->screenManager();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            QScreen* screen = mgr->physicalQScreenFor(sid);
+            if (!screen) {
+                continue;
+            }
+            QRect effGeom = mgr->screenGeometry(sid);
+            if (!effGeom.isValid()) {
+                continue;
+            }
+            // Use effGeom consistently for both normalization and containment
+            // so the zone center projection matches the containment bounds.
+            // Using different geometries causes mismatches when available
+            // geometry differs from full geometry.
+            QRectF effGeomF(effGeom);
+            QRectF normGeom = zone->normalizedGeometry(effGeomF);
+            QPoint zoneCenter(effGeom.x() + qRound(normGeom.center().x() * effGeom.width()),
+                              effGeom.y() + qRound(normGeom.center().y() * effGeom.height()));
+            if (effGeom.contains(zoneCenter)) {
+                return sid;
+            }
+        }
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(m_service->screenManager(), layout, screen);
+            QRectF normGeom = zone->normalizedGeometry(refGeom);
+            QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
+                              refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
+            if (screen->geometry().contains(zoneCenter)) {
+                return Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            }
         }
     }
     return QString();

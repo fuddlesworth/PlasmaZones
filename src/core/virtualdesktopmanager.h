@@ -4,15 +4,18 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorEngineApi/IVirtualDesktopManager.h>
 #include <QObject>
 #include <QStringList>
 
 class QDBusInterface;
 class QDBusMessage;
 
-namespace PlasmaZones {
+namespace PhosphorZones {
+class LayoutRegistry;
+}
 
-class LayoutManager;
+namespace PlasmaZones {
 
 /**
  * @brief Manages virtual desktop changes and layout switching
@@ -20,12 +23,12 @@ class LayoutManager;
  * Handles virtual desktop changes and automatically switches layouts
  * based on assignments.
  */
-class PLASMAZONES_EXPORT VirtualDesktopManager : public QObject
+class PLASMAZONES_EXPORT VirtualDesktopManager : public QObject, public PhosphorEngineApi::IVirtualDesktopManager
 {
     Q_OBJECT
 
 public:
-    explicit VirtualDesktopManager(LayoutManager* layoutManager, QObject* parent = nullptr);
+    explicit VirtualDesktopManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent = nullptr);
     ~VirtualDesktopManager() override;
 
     /**
@@ -48,7 +51,7 @@ public:
      * @brief Get current virtual desktop number
      * @return Desktop number (1-based), or 0 if unable to determine
      */
-    int currentDesktop() const;
+    int currentDesktop() const override;
 
     /**
      * @brief Switch to a specific virtual desktop
@@ -95,7 +98,7 @@ private:
     void initKWinDBus();
     void applyDesktopListReply(const QDBusMessage& reply, const QString& currentId);
 
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     QDBusInterface* m_kwinVDInterface = nullptr;
     bool m_running = false;
     bool m_useKWinDBus = false; // True if KWin D-Bus is available

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "activitymanager.h"
-#include "layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "virtualdesktopmanager.h"
 #include "logging.h"
 #include "utils.h"
@@ -31,7 +31,7 @@
 
 namespace PlasmaZones {
 
-ActivityManager::ActivityManager(LayoutManager* layoutManager, QObject* parent)
+ActivityManager::ActivityManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
 {
@@ -85,7 +85,7 @@ bool ActivityManager::init()
                         Q_EMIT currentActivityChanged(m_currentActivity);
                     }
 
-                    // Layout resolution is handled by the daemon's
+                    // PhosphorZones::Layout resolution is handled by the daemon's
                     // syncModeFromAssignments() via currentActivityChanged signal.
                 } else if (!m_activitiesAvailable && wasAvailable) {
                     qCWarning(lcCore) << "KActivities service stopped";
@@ -131,7 +131,7 @@ void ActivityManager::start()
 #ifdef KACTIVITIES_AVAILABLE
     m_running = true;
     connectSignals();
-    // Layout resolution is handled by the daemon via currentActivityChanged signal.
+    // PhosphorZones::Layout resolution is handled by the daemon via currentActivityChanged signal.
 #endif
 }
 

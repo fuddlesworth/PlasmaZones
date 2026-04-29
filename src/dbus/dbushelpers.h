@@ -5,14 +5,20 @@
 
 #include "plasmazones_export.h"
 #include "../core/interfaces.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/utils.h"
 #include "../core/logging.h"
+#include <QRectF>
 #include <QScreen>
 #include <QUuid>
 #include <QString>
 #include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+namespace Phosphor::Screens {
+class ScreenManager;
+}
 
 namespace PlasmaZones {
 
@@ -21,8 +27,8 @@ namespace PlasmaZones {
  *
  * Consolidates common validation patterns used across multiple D-Bus adaptors:
  * - UUID parsing and validation
- * - Layout/screen null checking
- * - Zone lookup with proper error handling
+ * - PhosphorZones::Layout/screen null checking
+ * - PhosphorZones::Zone lookup with proper error handling
  *
  * Design rationale: These helpers use template logging categories to allow
  * each adaptor to log under its own category while sharing the validation logic.
@@ -71,12 +77,12 @@ inline std::optional<QUuid> parseAndValidateUuid(const QString& id, const QStrin
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Validation
+// PhosphorZones::Layout Validation
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * @brief Get the active layout with null check and warning
- * @param mgr Layout manager to query
+ * @param mgr PhosphorZones::Layout manager to query
  * @param operation Description for error logging
  * @param category Logging category to use
  * @return Active layout pointer or nullptr (logs warning if null)
@@ -86,7 +92,8 @@ inline std::optional<QUuid> parseAndValidateUuid(const QString& id, const QStrin
  *   if (!layout) { qCWarning() << "no active layout"; return; }
  */
 template<typename LogCategory>
-Layout* getActiveLayoutOrWarn(ILayoutManager* mgr, const QString& operation, LogCategory category)
+PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& operation,
+                                             LogCategory category)
 {
     if (!mgr) {
         qCWarning(category) << "Cannot" << operation << "- no layout manager";
@@ -104,17 +111,17 @@ Layout* getActiveLayoutOrWarn(ILayoutManager* mgr, const QString& operation, Log
 
 /**
  * @brief Get a zone by UUID from the active layout
- * @param mgr Layout manager to query
- * @param zoneId Zone UUID string
+ * @param mgr PhosphorZones::Layout manager to query
+ * @param zoneId PhosphorZones::Zone UUID string
  * @param operation Description for error logging
  * @param category Logging category to use
- * @return Zone pointer or nullptr (logs appropriate warnings)
+ * @return PhosphorZones::Zone pointer or nullptr (logs appropriate warnings)
  *
  * Combines UUID validation + active layout check + zone lookup.
  */
 template<typename LogCategory>
-Zone* getZoneFromActiveLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation,
-                              LogCategory category)
+PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
+                                             const QString& operation, LogCategory category)
 {
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
@@ -138,25 +145,36 @@ Zone* getZoneFromActiveLayout(ILayoutManager* mgr, const QString& zoneId, const 
 /**
  * @brief Overload using default lcDbus category
  */
-inline Zone* getZoneFromActiveLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation)
+inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
+                                                    const QString& operation)
 {
     return getZoneFromActiveLayout(mgr, zoneId, operation, lcDbus);
 }
 
 /**
  * @brief Find a zone by UUID across all layouts (not just active)
- * @param mgr Layout manager to search
- * @param zoneId Zone UUID string
+ * @param mgr PhosphorZones::Layout manager to search
+ * @param zoneId PhosphorZones::Zone UUID string
  * @param operation Description for error logging
  * @param category Logging category to use
- * @return Zone pointer or nullptr (logs warning if not found)
+ * @return PhosphorZones::Zone pointer or nullptr (logs warning if not found)
  *
  * Searches active layout first, then all layouts.
  * Useful for per-screen layout assignments where zone may be in non-active layout.
+ *
+ * @note O(N×M) in (layouts, zones-per-layout) on the cold path. Acceptable
+ * for the per-screen-assignment fallback use case where N is small (a few
+ * layouts) and only triggers when the active layout misses; not suitable
+ * for hot-path zone lookups (use the IZoneLayoutRegistry by-id surface).
  */
 template<typename LogCategory>
-Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation, LogCategory category)
+PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, const QString& zoneId,
+                                         const QString& operation, LogCategory category)
 {
+    // Takes the full LayoutRegistry here (rather than IZoneLayoutRegistry
+    // alone) because the active-layout-first search walks the full
+    // assignment + enumeration surface that callers already hold via
+    // the registry.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
         return nullptr;
@@ -168,7 +186,7 @@ Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, const QStr
     }
 
     QUuid uuid = *uuidOpt;
-    Zone* zone = nullptr;
+    PhosphorZones::Zone* zone = nullptr;
 
     // First try active layout
     if (auto* activeLayout = mgr->activeLayout()) {
@@ -195,7 +213,8 @@ Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, const QStr
 /**
  * @brief Overload using default lcDbus category
  */
-inline Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation)
+inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, const QString& zoneId,
+                                                const QString& operation)
 {
     return findZoneInAnyLayout(mgr, zoneId, operation, lcDbus);
 }
@@ -214,7 +233,7 @@ inline Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, con
 template<typename LogCategory>
 QScreen* getScreenOrWarn(const QString& screenId, const QString& operation, LogCategory category)
 {
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         qCWarning(category) << operation << ": screen not found:" << screenId;
         return nullptr;
@@ -284,6 +303,42 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
 {
     return validateNonEmpty(value, paramName, operation, lcDbus);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen ID Resolution (implemented in dbushelpers.cpp to reduce header weight)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Resolve a screen ID to an effective (virtual-aware) screen ID
+ *
+ * When screenId is empty, resolves via cursor position then primary screen fallback.
+ * When non-empty, passes virtual screen IDs through and resolves physical names
+ * via Phosphor::Screens::ScreenIdentity::idForName.
+ */
+QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);
+
+/**
+ * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
+ *
+ * Uses Phosphor::Screens::ScreenManager::physicalQScreenFor() when available, then falls back to
+ * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen — returns
+ * nullptr so the caller can decide the appropriate fallback behavior.
+ */
+QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen Geometry Resolution (implemented in dbushelpers.cpp to reduce header weight)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Resolve effective screen geometry for a layout, handling virtual screens
+ *
+ * Prefers Phosphor::Screens::ScreenManager geometry (virtual-screen-aware) when available,
+ * falls back to resolving the physical QScreen and using the QScreen overload.
+ * Returns an invalid QRectF if no geometry can be resolved.
+ */
+QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                             const QString& screenId);
 
 } // namespace DbusHelpers
 } // namespace PlasmaZones

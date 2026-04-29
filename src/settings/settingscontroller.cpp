@@ -2,120 +2,235 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settingscontroller.h"
-#include "../core/constants.h"
-#include "version.h"
-#include "../core/logging.h"
-#include "../core/utils.h"
-#include "dbusutils.h"
 
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
-#include "../autotile/TilingState.h"
-#include "../autotile/algorithms/ScriptedAlgorithm.h"
-#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
-
+#include "editorpagecontroller.h"
+#include "generalpagecontroller.h"
+#include "kzonesimporter.h"
+#include "snappingappearancecontroller.h"
+#include "snappingbehaviorcontroller.h"
+#include "snappingeffectscontroller.h"
+#include "snappingzoneselectorcontroller.h"
+#include "tilingalgorithmcontroller.h"
+#include "tilingappearancecontroller.h"
+#include "tilingbehaviorcontroller.h"
+#include "virtualscreenutils.h"
+#include "../config/configbackends.h"
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
+#include "../common/layoutpreviewserialize.h"
+#include "../common/screenidresolver.h"
+#include "../common/layoutbundlebuilder.h"
+#include "../core/constants.h"
+#include "../core/geometryutils.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
+#include "../core/logging.h"
+#include "../core/utils.h"
 #include "../pz_i18n.h"
+#include "dbusutils.h"
+#include "version.h"
+
+#include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDate>
+#include <QDesktopServices>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
-#include <QScreen>
-#include <QWindow>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDesktopServices>
-#include <QDate>
-#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QStandardPaths>
+#include <QScreen>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
+#include <QVersionNumber>
+#include <QWindow>
 
 #include <algorithm>
 #include <memory>
 
 namespace PlasmaZones {
 
-namespace {
-
-QString userAlgorithmsDir()
+// File-scope helper used by both the ctor (file-watcher rebind path) and
+// loadLayoutsAsync (D-Bus refresh path). Manual layouts sort first;
+// within each category alphabetical by name.
+static void sortMergedLayoutList(QVariantList& list)
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms/");
+    std::sort(list.begin(), list.end(), [](const QVariant& a, const QVariant& b) {
+        const QVariantMap mapA = a.toMap();
+        const QVariantMap mapB = b.toMap();
+        const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
+        const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
+        if (aIsAutotile != bIsAutotile)
+            return !aIsAutotile;
+        return mapA.value(QStringLiteral("displayName")).toString().toLower()
+            < mapB.value(QStringLiteral("displayName")).toString().toLower();
+    });
 }
 
-QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
-{
-    QString path = dir + baseName + QStringLiteral(".js");
-    if (!QFile::exists(path))
-        return path;
-    for (int i = 1; i <= 999; ++i) {
-        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
-        if (!QFile::exists(path))
-            return path;
-    }
-    return QString();
-}
-} // anonymous namespace
+SettingsController::~SettingsController() = default;
 
-SettingsController::~SettingsController()
-{
-    // Unregister D-Bus service so a stale name doesn't linger if the
-    // QDBusConnection outlives this object.
-    auto bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(DBus::SettingsApp::ObjectPath);
-    bus.unregisterService(DBus::SettingsApp::ServiceName);
-
-    // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
-    // is a singleton that outlives this object, so dangling connections would fire
-    // into a destroyed SettingsController.
-    for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
-        const auto& connPtr = it.value();
-        if (connPtr && *connPtr)
-            disconnect(*connPtr);
-    }
-    m_algorithmWatchers.clear();
-}
+// ensureScreenIdResolver() now lives in src/common/screenidresolver.{h,cpp}
+// so daemon/editor/settings share the same install-once helper instead of
+// maintaining three parallel copies.
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
     , m_screenHelper(&m_settings, this)
+    , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
+    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+                                                                           QStringLiteral("plasmazones/layouts")))
 {
-    // Translate rendering backend display names once at construction
-    for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
-        m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
+    // Install the library-level screen-id resolver before any layout load
+    // runs. First call initialises the static; subsequent constructions
+    // in the same process reuse it. Moved out of the ctor-initializer
+    // comma-operator trick so the intent is obvious at a glance —
+    // matches the daemon's handling.
+    ensureScreenIdResolver();
 
-    // Snapshot current backend so the QML "restart required" message survives page recreation
-    m_startupRenderingBackend = m_settings.renderingBackend();
+    // Auto-discovery pattern: every linked provider library has
+    // already registered a builder via static-init. The KCM just
+    // publishes the registries it owns via the shared helper
+    // (buildStandardLayoutSourceBundle) so the context-wiring is the
+    // same across daemon/editor/settings. Adding a new engine library
+    // doesn't require editing this file unless the engine demands a
+    // service the KCM doesn't already publish.
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+
+    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so
+    // any QFileSystemWatcher event landing in the window between load +
+    // connect (e.g. the daemon writing to ~/.local/share/plasmazones/layouts/
+    // mid-ctor) is handled. ZonesLayoutSource self-wires to the registry's
+    // unified ILayoutSourceRegistry::contentsChanged; future reads through
+    // the local source reflect current geometry once recalcLocalLayouts has
+    // run. When the file watcher detects a layout change on disk, refresh
+    // m_layouts from the local composite (manual + autotile) so QML rebinds
+    // even if the daemon isn't broadcasting D-Bus signals (or is down). The
+    // async refresh through scheduleLayoutLoad() / loadLayoutsAsync() also
+    // fires from daemon-side D-Bus signals and replaces m_layouts with the
+    // D-Bus-enriched view when the daemon is up — these two paths converge
+    // at m_layouts.
+    connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
+        recalcLocalLayouts();
+        QVariantList localLayouts = localLayoutPreviews();
+        if (!localLayouts.isEmpty()) {
+            sortMergedLayoutList(localLayouts);
+            m_layouts = std::move(localLayouts);
+            // Suppress the local-path emit while a D-Bus getLayoutList
+            // call is in flight — the async reply lambda will emit once
+            // it replaces m_layouts with the daemon-enriched view. If the
+            // daemon is unreachable or the call errors, the gate is
+            // cleared in the reply lambda's head and subsequent local
+            // emits run normally (fallback behaviour).
+            if (!m_awaitingDaemonLayouts) {
+                Q_EMIT layoutsChanged();
+            }
+        }
+    });
+
+    // Load the user's layouts immediately so localLayoutPreviews() returns
+    // a populated list on first call (before any QML query has had a
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
+    // PhosphorZones::LayoutRegistry scans ~/.local/share/plasmazones/layouts/ on demand
+    // and installs a QFileSystemWatcher so any subsequent disk changes
+    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    m_localLayoutManager->loadLayouts();
+    // Force a synchronous recalc over the primary screen so manual layouts
+    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
+    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
+    // referenceAspectRatio. Without this, settings-process previews render
+    // with zero-size rects for authored-pixel layouts. Daemon runs the
+    // same recalc in Daemon::init(); settings does it here because it owns
+    // an in-process PhosphorZones::LayoutRegistry independent of the daemon.
+    recalcLocalLayouts();
 
     // Load scripted algorithms so they appear in the algorithm dropdown.
-    // The daemon also creates its own ScriptedAlgorithmLoader — the KCM runs
-    // in a separate process, so both need an independent loader to populate
-    // the shared AlgorithmRegistry singleton within their respective processes.
-    auto* scriptLoader = new ScriptedAlgorithmLoader(this);
-    scriptLoader->scanAndRegister();
+    // The daemon owns its own AlgorithmRegistry + loader; the KCM runs in
+    // a separate process and binds to its own per-process registry
+    // (m_localAlgorithmRegistry) so picker-side previews stay live even
+    // when the daemon is down.
+    //
+    // Owned by unique_ptr (not parented to `this`) so reverse member-
+    // destruction tears the loader down BEFORE m_localAlgorithmRegistry.
+    // Parenting to `this` would defer destruction to ~QObject, which runs
+    // AFTER the registry's unique_ptr has already been reset — a UAF in
+    // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
+    m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
+                                                                              m_localAlgorithmRegistry.get());
 
-    // When scripted algorithms change (hot-reload), notify UI consumers.
-    // Emit both signals: availableAlgorithmsChanged for algorithm-specific
-    // listeners, and layoutsChanged so LayoutComboBox rebuilds its model
-    // (the layouts list includes autotile entries from the registry).
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this,
+    // Algorithm-registry / scripted-loader surface. Owned via unique_ptr so
+    // reverse-order destruction runs the service's dtor (which disconnects
+    // its watchers) BEFORE m_scriptLoader and m_localAlgorithmRegistry
+    // reset — the service holds raw-pointer borrows of both.
+    //
+    // Construct the service and wire all algorithmsChanged consumers
+    // BEFORE scanAndRegister so the canonical
+    //   make_unique → connect → scanAndRegister
+    // ordering holds — the empty→populated `algorithmsChanged` emit
+    // from the initial scan must reach every subscriber, otherwise a
+    // future consumer that relies on the transition (rather than
+    // querying availableAlgorithms() directly) silently misses initial
+    // population.
+    m_algorithmService =
+        std::make_unique<AlgorithmService>(&m_settings, m_localAlgorithmRegistry.get(), m_scriptLoader.get());
+    connect(m_algorithmService.get(), &AlgorithmService::algorithmCreated, this, &SettingsController::algorithmCreated);
+    connect(m_algorithmService.get(), &AlgorithmService::algorithmOperationFailed, this,
+            &SettingsController::algorithmOperationFailed);
+    connect(m_algorithmService.get(), &AlgorithmService::availableAlgorithmsChanged, this,
             &SettingsController::availableAlgorithmsChanged);
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this, &SettingsController::layoutsChanged);
+
+    // Also refresh the layout list when scripted algorithms change (hot-reload):
+    // LayoutComboBox's model includes autotile entries from the registry.
+    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+            &SettingsController::layoutsChanged);
+
+    m_scriptLoader->scanAndRegister();
 
     // Listen for external settings changes from the daemon
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::Settings), QStringLiteral("settingsChanged"), this,
-                                          SLOT(onExternalSettingsChanged()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::Settings),
+                                          QStringLiteral("settingsChanged"), this, SLOT(onExternalSettingsChanged()));
+
+    // Async window picker reply channel. Emitted by SettingsAdaptor whenever
+    // the KWin effect answers a runningWindowsRequested call via
+    // provideRunningWindows(). The signal carries the JSON payload directly
+    // so clients don't need a follow-up blocking fetch.
+    QDBusConnection::sessionBus().connect(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("runningWindowsAvailable"), this,
+        SLOT(onRunningWindowsAvailable(QString)));
+
+    // Client-side timeout for the async window picker. If the daemon
+    // never fans out a runningWindowsAvailable signal (KWin effect
+    // unloaded, crashed, or slow), the timer fires runningWindowsTimedOut()
+    // so the UI can switch from a spinner to an error state.
+    m_runningWindowsTimeout.setSingleShot(true);
+    m_runningWindowsTimeout.setInterval(RunningWindowsTimeoutMs);
+    connect(&m_runningWindowsTimeout, &QTimer::timeout, this, [this]() {
+        qCWarning(PlasmaZones::lcCore) << "requestRunningWindows: no reply within" << RunningWindowsTimeoutMs
+                                       << "ms — KWin effect unresponsive?";
+        Q_EMIT runningWindowsTimedOut();
+    });
 
     // Forward daemon running state changes and refresh data when daemon starts
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
@@ -140,25 +255,53 @@ SettingsController::SettingsController(QObject* parent)
         }
     }
 
-    // Editor and fill-on-drop settings lack Q_PROPERTY on Settings, so the
-    // meta-object loop above misses their NOTIFY signals.  Connect explicitly.
-    connect(&m_settings, &Settings::editorDuplicateShortcutChanged, this,
+    // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
+    // meta-object loop above misses them. EditorPageController forwards each
+    // NOTIFY to QML and emits changed() which drives dirty tracking here.
+    m_editorPage = new EditorPageController(&m_settings, this);
+    connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
+
+    // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
+    // underlying settings ARE Q_PROPERTY on Settings, so the meta-object
+    // loop above already wires them to onSettingsPropertyChanged(); the
+    // sub-controllers only provide the QML-facing forwarders + storage/QML
+    // trigger-list conversion.
+    m_snappingBehaviorPage = new SnappingBehaviorController(&m_settings, this);
+    m_tilingBehaviorPage = new TilingBehaviorController(&m_settings, this);
+
+    // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
+    // facade over ConfigDefaults — no Settings wiring required.
+    m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
+
+    // Snapping→Appearance page sub-controller. Owns border bounds plus the
+    // color-import action surface; its changed() signal drives dirty
+    // tracking on successful imports.
+    m_snappingAppearancePage = new SnappingAppearanceController(&m_settings, this);
+    connect(m_snappingAppearancePage, &SnappingAppearanceController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSplitHorizontalShortcutChanged, this,
+
+    // Snapping→Effects + Tiling→Appearance pages — CONSTANT-only bounds facades.
+    m_snappingEffectsPage = new SnappingEffectsController(this);
+    m_tilingAppearancePage = new TilingAppearanceController(this);
+
+    // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
+    // custom-parameter CRUD surface. Borrows the algorithm registry this
+    // controller already owns; declared as a unique_ptr AFTER
+    // m_localAlgorithmRegistry so reverse-order member destruction tears
+    // the sub-controller down BEFORE the registry resets. Parenting to
+    // `this` would defer destruction to ~QObject, which runs AFTER the
+    // registry unique_ptr — leaving the controller's raw m_registry pointer
+    // briefly dangling.
+    m_tilingAlgorithmPage =
+        std::make_unique<TilingAlgorithmController>(&m_settings, m_localAlgorithmRegistry.get(), nullptr);
+    connect(m_tilingAlgorithmPage.get(), &TilingAlgorithmController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSplitVerticalShortcutChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorFillShortcutChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorGridSnappingEnabledChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorEdgeSnappingEnabledChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalXChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalYChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::editorSnapOverrideModifierChanged, this,
-            &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::fillOnDropEnabledChanged, this, &SettingsController::onSettingsPropertyChanged);
-    connect(&m_settings, &Settings::fillOnDropModifierChanged, this, &SettingsController::onSettingsPropertyChanged);
+
+    // General page sub-controller — owns rendering-backend picker data and
+    // animation bounds. Its startup backend snapshot is captured at ctor
+    // time, so this must run AFTER m_settings is fully initialised (which
+    // is guaranteed since m_settings is the first member declared).
+    m_generalPage = new GeneralPageController(&m_settings, this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -168,67 +311,96 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
     });
 
-    // Layout load timer (debounce)
+    // Forward the per-mode disable signals from the underlying Settings up
+    // through the controller so QML bridges react regardless of write origin:
+    //   - in-process toggle in this UI (controller invokables → Settings setters)
+    //   - cross-process external write reflected via load() (daemon shortcut,
+    //     D-Bus call to SettingsAdaptor) — see Settings::load() for the
+    //     post-reparse emission of these signals
+    //   - ScreenHelper-mediated monitor toggle (the helper writes through to
+    //     Settings, which fires the underlying signal)
+    // Single forwarding point keeps the three modes' write paths symmetrical
+    // and avoids per-callsite Q_EMIT bookkeeping.
+    connect(&m_settings, &ISettings::disabledMonitorsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
+        Q_EMIT disabledMonitorsChanged(static_cast<int>(mode));
+    });
+    connect(&m_settings, &ISettings::disabledDesktopsChanged, this, [this](PhosphorZones::AssignmentEntry::Mode mode) {
+        Q_EMIT disabledDesktopsChanged(static_cast<int>(mode));
+    });
+    connect(&m_settings, &ISettings::disabledActivitiesChanged, this,
+            [this](PhosphorZones::AssignmentEntry::Mode mode) {
+                Q_EMIT disabledActivitiesChanged(static_cast<int>(mode));
+            });
+
+    // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
 
-    // Connect layout D-Bus signals for live updates
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutCreated"),
-                                          this, SLOT(loadLayoutsAsync()));
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutDeleted"),
-                                          this, SLOT(loadLayoutsAsync()));
+    // Connect layout D-Bus signals for live updates — route through the 50 ms
+    // scheduleLayoutLoad() debounce slot so a burst of signals (e.g. editor
+    // save → layoutChanged + layoutListChanged together, or KCM property
+    // tweak → layoutPropertyChanged + layoutListChanged) coalesces into
+    // one loadLayoutsAsync() call instead of recomputing the full preview
+    // list + D-Bus round-trip for every hit.
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                          QStringLiteral("layoutCreated"), this, SLOT(scheduleLayoutLoad()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                          QStringLiteral("layoutDeleted"), this, SLOT(scheduleLayoutLoad()));
     // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
-                                          this, SLOT(loadLayoutsAsync()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                          QStringLiteral("layoutChanged"), this, SLOT(scheduleLayoutLoad()));
+    // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
+    // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
+    // triggers a full reload so the layout list view refreshes, but the daemon side
+    // saved a full JSON serialization per mutation by not emitting layoutChanged.
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(scheduleLayoutLoad()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
-                                          this, SLOT(loadLayoutsAsync()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                          QStringLiteral("layoutListChanged"), this, SLOT(scheduleLayoutLoad()));
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
     QDBusConnection::sessionBus().connect(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("screenLayoutChanged"), this, SLOT(onScreenLayoutChanged(QString, QString, int)));
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("screenLayoutChanged"), this,
+        SLOT(onScreenLayoutChanged(QString, QString, int)));
     // quickLayoutSlotsChanged fires when quick layout slots are modified externally
     QDBusConnection::sessionBus().connect(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("quickLayoutSlotsChanged"), this, SIGNAL(quickLayoutSlotsChanged()));
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("quickLayoutSlotsChanged"), this,
+        SIGNAL(quickLayoutSlotsChanged()));
 
     // Connect virtual desktop / activity D-Bus signals for reactive updates
     QDBusConnection::sessionBus().connect(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("virtualDesktopCountChanged"), this, SLOT(onVirtualDesktopsChanged()));
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("virtualDesktopCountChanged"),
+        this, SLOT(onVirtualDesktopsChanged()));
     QDBusConnection::sessionBus().connect(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("virtualDesktopNamesChanged"), this, SLOT(onVirtualDesktopsChanged()));
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("activitiesChanged"),
-                                          this, SLOT(onActivitiesChanged()));
-    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager),
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("virtualDesktopNamesChanged"),
+        this, SLOT(onVirtualDesktopsChanged()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                          QStringLiteral("activitiesChanged"), this, SLOT(onActivitiesChanged()));
+    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                          QString(PhosphorProtocol::Service::ObjectPath),
+                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                           QStringLiteral("currentActivityChanged"), this, SLOT(onActivitiesChanged()));
 
-    // Connect editor settings signals from Settings to SettingsController for QML forwarding
-    connect(&m_settings, &Settings::editorDuplicateShortcutChanged, this,
-            &SettingsController::editorDuplicateShortcutChanged);
-    connect(&m_settings, &Settings::editorSplitHorizontalShortcutChanged, this,
-            &SettingsController::editorSplitHorizontalShortcutChanged);
-    connect(&m_settings, &Settings::editorSplitVerticalShortcutChanged, this,
-            &SettingsController::editorSplitVerticalShortcutChanged);
-    connect(&m_settings, &Settings::editorFillShortcutChanged, this, &SettingsController::editorFillShortcutChanged);
-    connect(&m_settings, &Settings::editorGridSnappingEnabledChanged, this,
-            &SettingsController::editorGridSnappingEnabledChanged);
-    connect(&m_settings, &Settings::editorEdgeSnappingEnabledChanged, this,
-            &SettingsController::editorEdgeSnappingEnabledChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalXChanged, this, &SettingsController::editorSnapIntervalXChanged);
-    connect(&m_settings, &Settings::editorSnapIntervalYChanged, this, &SettingsController::editorSnapIntervalYChanged);
-    connect(&m_settings, &Settings::editorSnapOverrideModifierChanged, this,
-            &SettingsController::editorSnapOverrideModifierChanged);
-    connect(&m_settings, &Settings::fillOnDropEnabledChanged, this, &SettingsController::fillOnDropEnabledChanged);
-    connect(&m_settings, &Settings::fillOnDropModifierChanged, this, &SettingsController::fillOnDropModifierChanged);
+    // (Editor NOTIFY signals are forwarded to QML by EditorPageController
+    // itself — see its constructor — so no SettingsController-side plumbing
+    // is needed here.)
     // Forward lock state changes (from Settings::load() after external D-Bus settingsChanged)
     connect(&m_settings, &Settings::lockedScreensChanged, this, &SettingsController::lockedScreensChanged);
 
@@ -282,19 +454,48 @@ void SettingsController::dismissUpdate()
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
 }
 
+// Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
+// sorts after "1.9.0" (plain string compare gets that wrong). Entries come
+// from the bundled whatsnew.json resource in no guaranteed order.
+QString SettingsController::latestWhatsNewVersion() const
+{
+    QVersionNumber best;
+    QString bestStr;
+    for (const QVariant& v : m_whatsNewEntries) {
+        const QString ver = v.toMap().value(QStringLiteral("version")).toString();
+        const QVersionNumber parsed = QVersionNumber::fromString(ver);
+        if (parsed.isNull())
+            continue;
+        if (bestStr.isEmpty() || best < parsed) {
+            best = parsed;
+            bestStr = ver;
+        }
+    }
+    return bestStr;
+}
+
 bool SettingsController::hasUnseenWhatsNew() const
 {
-    if (m_whatsNewEntries.isEmpty())
+    const QString latest = latestWhatsNewVersion();
+    if (latest.isEmpty())
         return false;
-    return m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING;
+    // Unseen iff the latest bundled entry is strictly newer than what the
+    // user last marked seen. String compare after normalisation would still
+    // mis-order "1.10" vs "1.9", so go through QVersionNumber.
+    const QVersionNumber latestV = QVersionNumber::fromString(latest);
+    const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
+    return seenV < latestV;
 }
 
 void SettingsController::markWhatsNewSeen()
 {
-    if (m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING) {
-        m_lastSeenWhatsNewVersion = PlasmaZones::VERSION_STRING;
+    const QString latest = latestWhatsNewVersion();
+    if (latest.isEmpty())
+        return;
+    if (m_lastSeenWhatsNewVersion != latest) {
+        m_lastSeenWhatsNewVersion = latest;
         QSettings appSettings;
-        appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), PlasmaZones::VERSION_STRING);
+        appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), latest);
         Q_EMIT lastSeenWhatsNewVersionChanged();
     }
 }
@@ -335,6 +536,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),
+        QStringLiteral("virtualscreens"),
     };
     return pages;
 }
@@ -349,43 +551,13 @@ void SettingsController::setActivePage(const QString& page)
         return;
     }
     if (m_activePage != resolved) {
-        // Capture dirty state BEFORE emitting, because the QML Loader
-        // reacts synchronously to activePageChanged — new page creation
-        // may trigger NOTIFY signals that set needsSave before we return.
-        const bool wasDirty = m_needsSave;
+        // m_loading suppresses onSettingsPropertyChanged — the QML Loader
+        // reacts synchronously to activePageChanged and new page creation
+        // may trigger NOTIFY signals that would otherwise mark pages dirty.
         m_loading = true;
         m_activePage = resolved;
         Q_EMIT activePageChanged();
         m_loading = false;
-        // Restore the dirty state that existed before page navigation.
-        // Any NOTIFY signals that fired during page creation were suppressed
-        // by m_loading and should not mark the settings as dirty.
-        setNeedsSave(wasDirty);
-    }
-}
-
-bool SettingsController::registerDBusService()
-{
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.registerService(DBus::SettingsApp::ServiceName)) {
-        return false;
-    }
-    // ExportScriptableSlots exposes all Q_SCRIPTABLE methods on this object (raise + setActivePage).
-    // Adding new Q_SCRIPTABLE slots will automatically expose them on D-Bus.
-    bus.registerObject(DBus::SettingsApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
-    return true;
-}
-
-void SettingsController::raise()
-{
-    const auto windows = QGuiApplication::allWindows();
-    for (auto* w : windows) {
-        if (w->type() != Qt::Window)
-            continue;
-        w->show();
-        w->raise();
-        w->requestActivate();
-        break; // Only raise the primary application window
     }
 }
 
@@ -395,9 +567,7 @@ void SettingsController::load()
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
-    m_stagedAssignments.clear();
-    m_stagedQuickSlots.clear();
-    m_stagedTilingQuickSlots.clear();
+    m_staging.clearAll();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
     Q_EMIT stagedSnappingOrderChanged();
@@ -420,57 +590,65 @@ void SettingsController::save()
         m_stagedTilingOrder.reset();
     }
 
-    // Save main settings (includes editor settings)
+    // Persistence phase (pre-save): staged tiling-quick-slot writes + VS
+    // configs need to be in Settings before the save flushes to disk.
+    m_staging.flushTilingQuickSlotsToSettings(m_settings);
+    m_staging.flushVirtualScreensToSettings(m_settings);
+
+    // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
 
-    // Flush staged tiling quick layout slots to config BEFORE notifyReload
-    // so the daemon sees them when it reparses
-    if (!m_stagedTilingQuickSlots.isEmpty()) {
-        for (auto it = m_stagedTilingQuickSlots.constBegin(); it != m_stagedTilingQuickSlots.constEnd(); ++it) {
-            m_settings.writeTilingQuickLayoutSlot(it.key(), it.value());
-        }
-        m_settings.syncConfig();
-        m_stagedTilingQuickSlots.clear();
-    }
+    // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
+    // IDs exist when assignments referencing them are processed.
+    m_staging.flushVirtualScreensToDaemon();
 
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
 
-    // Flush staged quick layout slots to daemon (D-Bus mutations, after reload)
-    for (auto it = m_stagedQuickSlots.constBegin(); it != m_stagedQuickSlots.constEnd(); ++it) {
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setQuickLayoutSlot"),
-                               {it.key(), it.value()});
-    }
-    m_stagedQuickSlots.clear();
+    // Flush staged snapping quick-layout slots via D-Bus (after reload).
+    m_staging.flushSnappingQuickSlotsToDaemon();
 
     // Flush staged assignment changes to daemon (same batch protocol as KCM).
     // This must happen AFTER notifyReload so the reload doesn't overwrite
     // the assignment changes.
-    if (!m_stagedAssignments.isEmpty()) {
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {true});
-        flushStagedAssignments();
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("applyAssignmentChanges"));
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {false});
+    if (m_staging.hasPendingAssignments()) {
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("setSaveBatchMode"), {true});
+        m_staging.flushAssignmentsToDaemon();
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("applyAssignmentChanges"));
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("setSaveBatchMode"), {false});
     }
 
-    // Safe to clear immediately: notifyReload() is synchronous, so the daemon
-    // has already processed the reload and emitted settingsChanged before we
-    // reach this line. No deferred reset needed.
-    m_saving = false;
-
+    // Defer `m_saving = false` to the next event-loop tick. Although
+    // notifyReload() is synchronous at the D-Bus level, the daemon's
+    // reply-time emission of its own settingsChanged broadcast is a
+    // separate D-Bus message that lands in this process's connection
+    // queue and is dispatched only when control returns to the event
+    // loop. Clearing m_saving immediately exposes a narrow race where
+    // onExternalSettingsChanged() fires with m_saving=false and triggers
+    // a spurious load() that reverts just-saved assignments. Posting the
+    // reset through singleShot(0) drains those queued signals first, so
+    // onExternalSettingsChanged() sees m_saving=true and returns early.
     setNeedsSave(false);
+    QTimer::singleShot(0, this, [this]() {
+        m_saving = false;
+    });
 }
 
 void SettingsController::defaults()
 {
     // reset() deletes all config groups, syncs to disk, then calls load()
-    // internally -- no separate load() needed.
-    // reset() deletes the [Editor] group and reloads defaults internally
+    // internally — load()'s reflective NOTIFY emission would otherwise
+    // route through onSettingsPropertyChanged and incrementally mark the
+    // active page dirty before we overwrite m_dirtyPages below. Suppress
+    // it so we get one clean dirtyPagesChanged emit instead of two.
+    m_loading = true;
     m_settings.reset();
+    m_loading = false;
 
-    m_stagedAssignments.clear();
-    m_stagedQuickSlots.clear();
-    m_stagedTilingQuickSlots.clear();
+    m_staging.clearAll();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
     Q_EMIT stagedSnappingOrderChanged();
@@ -479,7 +657,10 @@ void SettingsController::defaults()
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
-    setNeedsSave(true);
+    // Defaults is a global action — mark every valid page dirty so the
+    // unsaved indicator appears next to each of them.
+    m_dirtyPages = validPageNames();
+    Q_EMIT dirtyPagesChanged();
 }
 
 void SettingsController::launchEditor()
@@ -503,14 +684,78 @@ void SettingsController::onExternalSettingsChanged()
 
 void SettingsController::setNeedsSave(bool needs)
 {
-    if (m_needsSave != needs) {
-        m_needsSave = needs;
-        Q_EMIT needsSaveChanged();
+    // Mark the target page as dirty, or clear all dirty pages if needs ==
+    // false. The target is m_externalEditPage when set (sidebar / global
+    // widgets that mutate settings owned by a different page than the one
+    // the user is viewing), otherwise m_activePage. Parent categories
+    // ("snapping", "tiling") are never the active page — setActivePage
+    // redirects them to their first child — so the target always resolves
+    // to a concrete leaf page.
+    if (needs) {
+        const QString target = m_externalEditPage.isEmpty() ? m_activePage : m_externalEditPage;
+        Q_ASSERT(!parentPageRedirects().contains(target));
+        if (!m_dirtyPages.contains(target)) {
+            m_dirtyPages.insert(target);
+            Q_EMIT dirtyPagesChanged();
+        }
+    } else if (!m_dirtyPages.isEmpty()) {
+        m_dirtyPages.clear();
+        Q_EMIT dirtyPagesChanged();
     }
 }
 
+QStringList SettingsController::dirtyPages() const
+{
+    // Order is unspecified — QML uses this only as a binding dependency
+    // and calls isPageDirty() for the actual lookup.
+    return QStringList(m_dirtyPages.begin(), m_dirtyPages.end());
+}
+
+bool SettingsController::isPageDirty(const QString& page) const
+{
+    if (m_dirtyPages.contains(page))
+        return true;
+    // Parent category: dirty if any child page is dirty. The redirect map
+    // lists parents → first child, so every key here is a parent category.
+    if (parentPageRedirects().contains(page)) {
+        const QString prefix = page + QStringLiteral("-");
+        for (const QString& dirty : m_dirtyPages) {
+            if (dirty.startsWith(prefix))
+                return true;
+        }
+    }
+    return false;
+}
+
+void SettingsController::beginExternalEdit(const QString& page)
+{
+    // Resolve parent categories to their canonical leaf — same rules as
+    // setActivePage — so the sidebar can pass "snapping" or "tiling".
+    const QString resolved = parentPageRedirects().value(page, page);
+    if (!validPageNames().contains(resolved)) {
+        qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
+        return;
+    }
+    // Nested begin without a prior end means the previous caller leaked
+    // state — dirty tracking for subsequent changes would target the wrong
+    // page. Warn loudly (debug-assert in dev builds) and fall through so
+    // the new target wins.
+    if (!m_externalEditPage.isEmpty()) {
+        qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: nested call without endExternalEdit — previous target:"
+                                       << m_externalEditPage << "new target:" << resolved;
+        Q_ASSERT_X(false, "SettingsController::beginExternalEdit",
+                   "Nested call without endExternalEdit. Wrap sidebar/global edits with matched begin/end pairs.");
+    }
+    m_externalEditPage = resolved;
+}
+
+void SettingsController::endExternalEdit()
+{
+    m_externalEditPage.clear();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout management (D-Bus to daemon, no KCM LayoutManager class needed)
+// PhosphorZones::Layout management (D-Bus to daemon, no KCM PhosphorZones::LayoutRegistry class needed)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SettingsController::scheduleLayoutLoad()
@@ -520,42 +765,67 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
+    // Force-reload the in-process PhosphorZones::LayoutRegistry from disk before reading.
+    // The LayoutManager's QFileSystemWatcher catches most disk changes,
+    // but Qt's QFSW has known misses on cross-process atomic-rename
+    // writes (the daemon writes layouts via QSaveFile, which creates a
+    // new inode the watcher may not bind to in time). Belt-and-suspenders:
+    // every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
+    // / layoutDeleted / layoutChanged / layoutPropertyChanged /
+    // layoutListChanged — see the connect block in the ctor) ALSO forces
+    // an explicit reload here, so the local-source preview path stays
+    // strictly in sync with the daemon's view regardless of which file-
+    // event path fires first.
+    if (m_localLayoutManager) {
+        m_localLayoutManager->loadLayouts();
+    }
 
+    // Step 1: instant paint from the in-process composite source is handled
+    // by the ctor-wired PhosphorZones::LayoutRegistry::layoutsChanged lambda (see ~line 180
+    // — it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
+    // and emits layoutsChanged). loadLayouts() above triggers that signal
+    // synchronously when the disk contents actually changed, so the instant-paint
+    // path runs without a duplicate recalc/emit here.
+
+    // Step 2: async D-Bus call to pick up daemon-side enrichment
+    // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)
+    // that the local composite can't know about. On reply the enriched
+    // list replaces m_layouts; if the call errors we keep the local
+    // previews from Step 1 visible rather than blanking the page.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getLayoutList"));
+
+    // Gate the local-path layoutsChanged emit (see the ctor-wired lambda
+    // on PhosphorZones::LayoutRegistry::layoutsChanged). The reply lambda clears this
+    // unconditionally so any subsequent local-only refresh (daemon down)
+    // emits as usual.
+    m_awaitingDaemonLayouts = true;
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        // Clear the gate first so any local-path emit that arrives after
+        // an error reply (or after a successful one) runs normally.
+        m_awaitingDaemonLayouts = false;
 
-        QVariantList newLayouts;
         QDBusPendingReply<QStringList> reply = *w;
-
-        if (!reply.isError()) {
-            const QStringList layoutJsonList = reply.value();
-            for (const QString& layoutJson : layoutJsonList) {
-                QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
-                if (!doc.isNull() && doc.isObject()) {
-                    newLayouts.append(doc.object().toVariantMap());
-                }
-            }
-        } else {
-            qCWarning(lcCore) << "Failed to load layouts:" << reply.error().message();
+        if (reply.isError()) {
+            qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
+                              << "— keeping local manual-layout previews from Step 1.";
+            return;
         }
 
-        // Sort: manual layouts first, then autotile, each alphabetical
-        std::sort(newLayouts.begin(), newLayouts.end(), [](const QVariant& a, const QVariant& b) {
-            const QVariantMap mapA = a.toMap();
-            const QVariantMap mapB = b.toMap();
-            const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
-            const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
-            if (aIsAutotile != bIsAutotile)
-                return !aIsAutotile;
-            return mapA.value(QStringLiteral("name")).toString().toLower()
-                < mapB.value(QStringLiteral("name")).toString().toLower();
-        });
+        QVariantList newLayouts;
+        const QStringList layoutJsonList = reply.value();
+        for (const QString& layoutJson : layoutJsonList) {
+            QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
+            if (!doc.isNull() && doc.isObject()) {
+                newLayouts.append(doc.object().toVariantMap());
+            }
+        }
 
+        sortMergedLayoutList(newLayouts);
         m_layouts = newLayouts;
         Q_EMIT layoutsChanged();
 
@@ -568,9 +838,61 @@ void SettingsController::loadLayoutsAsync()
     });
 }
 
+// ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
+// See header doc for why these exist. Both helpers route through the shared
+// toVariantMap so settings + editor + future consumers emit the
+// same QML-compatible shape (drop-in replacement for the legacy m_layouts
+// produced by LayoutAdaptor::getLayoutList).
+
+QVariantList SettingsController::localLayoutPreviews() const
+{
+    QVariantList list;
+    if (!m_localSources.composite()) {
+        return list;
+    }
+    const auto previews = m_localSources.composite()->availableLayouts();
+    list.reserve(previews.size());
+    for (const auto& preview : previews) {
+        list.append(toVariantMap(preview));
+    }
+    return list;
+}
+
+void SettingsController::recalcLocalLayouts()
+{
+    if (!m_localLayoutManager) {
+        return;
+    }
+    QScreen* primary = Utils::primaryScreen();
+    if (!primary) {
+        return;
+    }
+    for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
+        if (!layout) {
+            continue;
+        }
+        // Settings app is a separate process without a daemon ScreenManager — pass
+        // nullptr and accept the Qt-availableGeometry fallback (this preview code
+        // path doesn't need VS-aware sub-regions).
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
+    }
+}
+
+QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount)
+{
+    if (id.isEmpty() || !m_localSources.composite()) {
+        return {};
+    }
+    const auto preview = m_localSources.composite()->previewAt(id, windowCount);
+    if (preview.id.isEmpty()) {
+        return {};
+    }
+    return toVariantMap(preview);
+}
+
 void SettingsController::createNewLayout()
 {
-    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
+    createNewLayout(PzI18n::tr("New Layout"), QStringLiteral("custom"), -1, true);
 }
 
 bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
@@ -578,20 +900,20 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 {
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
-        sanitizedName = QStringLiteral("New Layout");
+        sanitizedName = PzI18n::tr("New Layout");
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                                {sanitizedName, layoutType});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("createLayout"), {sanitizedName, layoutType});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
             if (aspectRatioClass >= 0) {
-                QDBusMessage arReply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                                              QStringLiteral("setLayoutAspectRatioClass"),
-                                                              {newLayoutId, aspectRatioClass});
+                QDBusMessage arReply = DaemonDBus::callDaemon(
+                    QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                    QStringLiteral("setLayoutAspectRatioClass"), {newLayoutId, aspectRatioClass});
                 if (arReply.type() == QDBusMessage::ErrorMessage) {
                     qCWarning(lcCore) << "setLayoutAspectRatioClass failed:" << arReply.errorMessage();
                 }
@@ -621,8 +943,8 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 
 void SettingsController::deleteLayout(const QString& layoutId)
 {
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "deleteLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PzI18n::tr("Could not delete layout: %1").arg(reply.errorMessage()));
@@ -632,8 +954,8 @@ void SettingsController::deleteLayout(const QString& layoutId)
 
 void SettingsController::duplicateLayout(const QString& layoutId)
 {
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("duplicateLayout"), {layoutId});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("duplicateLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newId = reply.arguments().first().toString();
         if (!newId.isEmpty()) {
@@ -646,11 +968,22 @@ void SettingsController::duplicateLayout(const QString& layoutId)
     scheduleLayoutLoad();
 }
 
+QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
+{
+    QVariantMap result;
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    if (screen) {
+        result[QStringLiteral("width")] = screen->geometry().width();
+        result[QStringLiteral("height")] = screen->geometry().height();
+    }
+    return result;
+}
+
 void SettingsController::editLayout(const QString& layoutId)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                                      QString(DBus::Interface::LayoutManager),
-                                                      QStringLiteral("openEditorForLayoutOnScreen"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("openEditorForLayoutOnScreen"));
     msg << layoutId << QString();
     QDBusConnection::sessionBus().asyncCall(msg);
 }
@@ -659,9 +992,9 @@ void SettingsController::editLayoutOnScreen(const QString& layoutId, const QStri
 {
     if (layoutId.isEmpty() || screenId.isEmpty())
         return;
-    QDBusMessage msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                                      QString(DBus::Interface::LayoutManager),
-                                                      QStringLiteral("openEditorForLayoutOnScreen"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("openEditorForLayoutOnScreen"));
     msg << layoutId << screenId;
     QDBusConnection::sessionBus().asyncCall(msg);
 }
@@ -681,8 +1014,8 @@ void SettingsController::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty())
         return;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("importLayout"), {filePath});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("importLayout"), {filePath});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
@@ -696,9 +1029,9 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
 {
     if (layoutId.isEmpty() || filePath.isEmpty())
         return;
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::LayoutManager), QStringLiteral("exportLayout"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("exportLayout"));
     msg << layoutId << filePath;
     QDBusConnection::sessionBus().asyncCall(msg);
 }
@@ -707,8 +1040,8 @@ void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)
 {
     if (layoutId.isEmpty())
         return;
-    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutHidden"),
-                           {layoutId, hidden});
+    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                           QStringLiteral("setLayoutHidden"), {layoutId, hidden});
     scheduleLayoutLoad();
 }
 
@@ -716,8 +1049,8 @@ void SettingsController::setLayoutAutoAssign(const QString& layoutId, bool enabl
 {
     if (layoutId.isEmpty())
         return;
-    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutAutoAssign"),
-                           {layoutId, enabled});
+    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                           QStringLiteral("setLayoutAutoAssign"), {layoutId, enabled});
     scheduleLayoutLoad();
 }
 
@@ -725,13 +1058,13 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 {
     if (layoutId.isEmpty())
         return;
-    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutAspectRatioClass"),
-                           {layoutId, aspectRatioClass});
+    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                           QStringLiteral("setLayoutAspectRatioClass"), {layoutId, aspectRatioClass});
     scheduleLayoutLoad();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment helpers (D-Bus to daemon LayoutManager)
+// Assignment helpers (D-Bus to daemon PhosphorZones::LayoutRegistry)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QStringList SettingsController::fontStylesForFamily(const QString& family) const
@@ -750,288 +1083,91 @@ bool SettingsController::fontStyleItalic(const QString& family, const QString& s
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment staging helpers
+// Assignment staging / mutations — QML-callable methods forward to StagingService
+// and flip the dirty flag; all state + flush logic lives in the service.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-QString SettingsController::assignmentCacheKey(const QString& screen, int desktop, const QString& activity)
-{
-    // Resolve connector names to EDID-based screen IDs so cache keys
-    // match regardless of whether the caller passes "DP-3" or the full ID
-    QString resolved = Utils::screenIdForName(screen);
-    return resolved + QChar(0x1F) + QString::number(desktop) + QChar(0x1F) + activity;
-}
-
-SettingsController::StagedAssignment& SettingsController::stagedEntry(const QString& screen, int desktop,
-                                                                      const QString& activity)
-{
-    const QString key = assignmentCacheKey(screen, desktop, activity);
-    auto it = m_stagedAssignments.find(key);
-    if (it == m_stagedAssignments.end()) {
-        StagedAssignment entry;
-        entry.screenId = Utils::screenIdForName(screen);
-        entry.virtualDesktop = desktop;
-        entry.activityId = activity;
-        it = m_stagedAssignments.insert(key, entry);
-    }
-    return *it;
-}
-
-const SettingsController::StagedAssignment* SettingsController::stagedEntryConst(const QString& screen, int desktop,
-                                                                                 const QString& activity) const
-{
-    const QString key = assignmentCacheKey(screen, desktop, activity);
-    auto it = m_stagedAssignments.constFind(key);
-    return it != m_stagedAssignments.constEnd() ? &(*it) : nullptr;
-}
-
-void SettingsController::flushStagedAssignments()
-{
-    qCInfo(PlasmaZones::lcCore) << "flushStagedAssignments: count=" << m_stagedAssignments.size();
-    for (auto it = m_stagedAssignments.constBegin(); it != m_stagedAssignments.constEnd(); ++it) {
-        const auto& s = it.value();
-        const bool isActivity = !s.activityId.isEmpty();
-        const bool isDesktop = s.virtualDesktop > 0;
-        qCInfo(PlasmaZones::lcCore)
-            << "  flush: screen=" << s.screenId << "fullCleared=" << s.fullCleared
-            << "mode=" << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
-            << "snapping=" << (s.snappingLayoutId.has_value() ? *s.snappingLayoutId : QStringLiteral("(none)"))
-            << "tiling=" << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"));
-
-        // Full clear — clear the entire entry for this context
-        if (s.fullCleared) {
-            if (isActivity)
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                       QStringLiteral("clearAssignmentForScreenActivity"), {s.screenId, s.activityId});
-            else if (isDesktop)
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                       QStringLiteral("clearAssignmentForScreenDesktop"),
-                                       {s.screenId, s.virtualDesktop});
-            else
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
-                                       {s.screenId});
-            continue;
-        }
-
-        // Explicit mode staging (overview page) — uses setAssignmentEntry for the
-        // exact (screen, desktop, activity) context. This is the only D-Bus method
-        // that targets a full context triple, matching the KCM batch save path.
-        if (s.stagedMode.has_value()) {
-            const int mode = *s.stagedMode;
-            const QString snapping = s.snappingLayoutId.value_or(QString());
-            const QString tiling = s.tilingAlgorithmId.has_value()
-                ? (LayoutId::isAutotile(*s.tilingAlgorithmId) ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
-                                                              : *s.tilingAlgorithmId)
-                : QString();
-            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
-            continue;
-        }
-
-        // Snapping layout assignment (per-field path — assignment pages)
-        if (s.snappingLayoutId.has_value() && !s.snappingLayoutId->isEmpty()) {
-            QDBusMessage reply;
-            if (isActivity)
-                reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                               QStringLiteral("assignLayoutToScreenActivity"),
-                                               {s.screenId, s.activityId, *s.snappingLayoutId});
-            else if (isDesktop)
-                reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                               QStringLiteral("assignLayoutToScreenDesktop"),
-                                               {s.screenId, s.virtualDesktop, *s.snappingLayoutId});
-            else
-                reply =
-                    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                           QStringLiteral("assignLayoutToScreen"), {s.screenId, *s.snappingLayoutId});
-            if (reply.type() == QDBusMessage::ErrorMessage)
-                qCWarning(PlasmaZones::lcCore) << "  assignLayout FAILED:" << reply.errorMessage();
-        }
-
-        // Tiling algorithm assignment
-        if (s.tilingAlgorithmId.has_value() && !s.tilingAlgorithmId->isEmpty()) {
-            const QString algoId = LayoutId::isAutotile(*s.tilingAlgorithmId)
-                ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
-                : *s.tilingAlgorithmId;
-            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, 1, QString(), algoId});
-        }
-
-        // Tiling-only clear — clearing the algorithm reverts to snapping mode (mode=0).
-        // The daemon clamps mode via qBound(0, mode, 1).
-        if (s.tilingAlgorithmId.has_value() && s.tilingAlgorithmId->isEmpty() && !s.fullCleared) {
-            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, 0, QString(), QString()});
-        }
-    }
-    m_stagedAssignments.clear();
-}
-
-bool SettingsController::stagedSnappingLayout(const QString& screen, int desktop, const QString& activity,
-                                              QString& out) const
-{
-    auto* s = stagedEntryConst(screen, desktop, activity);
-    if (!s)
-        return false;
-    if (s->fullCleared && !s->snappingLayoutId.has_value()) {
-        out = QString();
-        return true;
-    }
-    if (s->snappingLayoutId.has_value()) {
-        out = *s->snappingLayoutId;
-        return true;
-    }
-    return false;
-}
-
-bool SettingsController::stagedTilingLayout(const QString& screen, int desktop, const QString& activity,
-                                            QString& out) const
-{
-    auto* s = stagedEntryConst(screen, desktop, activity);
-    if (!s)
-        return false;
-    if (s->fullCleared && !s->tilingAlgorithmId.has_value()) {
-        out = QString();
-        return true;
-    }
-    if (s->tilingAlgorithmId.has_value()) {
-        const QString& val = *s->tilingAlgorithmId;
-        if (val.isEmpty()) {
-            out = QString();
-        } else {
-            out = LayoutId::isAutotile(val) ? val : LayoutId::makeAutotileId(val);
-        }
-        return true;
-    }
-    return false;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Assignment mutations (staged — flushed to daemon on save)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ── Staged mutation helpers ──────────────────────────────────────────────────
-
-void SettingsController::stageSnapping(const QString& screen, int desktop, const QString& activity,
-                                       const QString& layoutId)
-{
-    auto& e = stagedEntry(screen, desktop, activity);
-    e.fullCleared = false;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = layoutId;
-    e.tilingAlgorithmId = std::nullopt; // Clear opposite to prevent mode conflict on flush
-    setNeedsSave(true);
-}
-
-void SettingsController::stageTiling(const QString& screen, int desktop, const QString& activity,
-                                     const QString& layoutId)
-{
-    auto& e = stagedEntry(screen, desktop, activity);
-    e.fullCleared = false;
-    e.stagedMode = std::nullopt;
-    e.tilingAlgorithmId = layoutId;
-    e.snappingLayoutId = std::nullopt; // Clear opposite to prevent mode conflict on flush
-    setNeedsSave(true);
-}
-
-void SettingsController::stageFullClear(const QString& screen, int desktop, const QString& activity)
-{
-    auto& e = stagedEntry(screen, desktop, activity);
-    e.fullCleared = true;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = std::nullopt;
-    e.tilingAlgorithmId = std::nullopt;
-    setNeedsSave(true);
-}
-
-void SettingsController::stageTilingClear(const QString& screen, int desktop, const QString& activity)
-{
-    auto& e = stagedEntry(screen, desktop, activity);
-    e.tilingAlgorithmId = QString(); // empty = cleared
-    setNeedsSave(true);
-}
-
-// ── Snapping assignment delegates ───────────────────────────────────────────
 
 void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    stageSnapping(screenName, 0, QString(), layoutId);
+    m_staging.stageSnapping(screenName, 0, QString(), layoutId);
+    setNeedsSave(true);
 }
 
 void SettingsController::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
                                                      const QString& layoutId)
 {
-    stageSnapping(screenName, virtualDesktop, QString(), layoutId);
+    m_staging.stageSnapping(screenName, virtualDesktop, QString(), layoutId);
+    setNeedsSave(true);
 }
 
 void SettingsController::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                       const QString& layoutId)
 {
-    stageSnapping(screenName, 0, activityId, layoutId);
+    m_staging.stageSnapping(screenName, 0, activityId, layoutId);
+    setNeedsSave(true);
 }
-
-// ── Tiling assignment delegates ─────────────────────────────────────────────
 
 void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    stageTiling(screenName, 0, QString(), layoutId);
+    m_staging.stageTiling(screenName, 0, QString(), layoutId);
+    setNeedsSave(true);
 }
 
 void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
                                                            const QString& layoutId)
 {
-    stageTiling(screenName, virtualDesktop, QString(), layoutId);
+    m_staging.stageTiling(screenName, virtualDesktop, QString(), layoutId);
+    setNeedsSave(true);
 }
 
 void SettingsController::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                             const QString& layoutId)
 {
-    stageTiling(screenName, 0, activityId, layoutId);
+    m_staging.stageTiling(screenName, 0, activityId, layoutId);
+    setNeedsSave(true);
 }
-
-// ── Full-clear assignment delegates ─────────────────────────────────────────
 
 void SettingsController::clearScreenAssignment(const QString& screenName)
 {
-    stageFullClear(screenName, 0, QString());
+    m_staging.stageFullClear(screenName, 0, QString());
+    setNeedsSave(true);
 }
 
 void SettingsController::clearTilingScreenAssignment(const QString& screenName)
 {
-    stageTilingClear(screenName, 0, QString());
+    m_staging.stageTilingClear(screenName, 0, QString());
+    setNeedsSave(true);
 }
 
 void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    stageFullClear(screenName, virtualDesktop, QString());
+    m_staging.stageFullClear(screenName, virtualDesktop, QString());
+    setNeedsSave(true);
 }
 
 void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    stageFullClear(screenName, 0, activityId);
+    m_staging.stageFullClear(screenName, 0, activityId);
+    setNeedsSave(true);
 }
-
-// ── Tiling-only clear delegates ─────────────────────────────────────────────
 
 void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    stageTilingClear(screenName, virtualDesktop, QString());
+    m_staging.stageTilingClear(screenName, virtualDesktop, QString());
+    setNeedsSave(true);
 }
 
 void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    stageTilingClear(screenName, 0, activityId);
+    m_staging.stageTilingClear(screenName, 0, activityId);
+    setNeedsSave(true);
 }
-
-// ── Atomic mode+layout staging (overview page) ─────────────────────────────
 
 void SettingsController::stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                               int mode, const QString& snappingLayoutId,
                                               const QString& tilingAlgorithmId)
 {
-    auto& e = stagedEntry(screenName, virtualDesktop, activityId);
-    e.fullCleared = false;
-    e.stagedMode = mode;
-    e.snappingLayoutId = snappingLayoutId.isEmpty() ? std::nullopt : std::optional<QString>(snappingLayoutId);
-    e.tilingAlgorithmId = tilingAlgorithmId.isEmpty() ? std::nullopt : std::optional<QString>(tilingAlgorithmId);
+    m_staging.stageAssignmentEntry(screenName, virtualDesktop, activityId, mode, snappingLayoutId, tilingAlgorithmId);
     setNeedsSave(true);
 }
 
@@ -1042,9 +1178,9 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
 QString SettingsController::getLayoutForScreen(const QString& screenName) const
 {
     QString staged;
-    if (stagedSnappingLayout(screenName, 0, QString(), staged))
+    if (m_staging.stagedSnappingLayout(screenName, 0, QString(), staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getLayoutForScreen"), {screenName});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
@@ -1054,9 +1190,9 @@ QString SettingsController::getLayoutForScreen(const QString& screenName) const
 QString SettingsController::getTilingLayoutForScreen(const QString& screenName) const
 {
     QString staged;
-    if (stagedTilingLayout(screenName, 0, QString(), staged))
+    if (m_staging.stagedTilingLayout(screenName, 0, QString(), staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
@@ -1066,11 +1202,11 @@ QString SettingsController::getTilingLayoutForScreen(const QString& screenName) 
 QString SettingsController::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString staged;
-    if (stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
+    if (m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
         return staged;
     QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutForScreenDesktop"),
-                               {screenName, virtualDesktop});
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -1079,10 +1215,10 @@ QString SettingsController::getLayoutForScreenDesktop(const QString& screenName,
 QString SettingsController::getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString staged;
-    if (stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
+    if (m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
         return staged;
     QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
@@ -1092,8 +1228,8 @@ QString SettingsController::getSnappingLayoutForScreenDesktop(const QString& scr
 bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString snap, tile;
-    bool hasSnap = stagedSnappingLayout(screenName, virtualDesktop, QString(), snap);
-    bool hasTile = stagedTilingLayout(screenName, virtualDesktop, QString(), tile);
+    bool hasSnap = m_staging.stagedSnappingLayout(screenName, virtualDesktop, QString(), snap);
+    bool hasTile = m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), tile);
     if (hasSnap || hasTile) {
         // If either staged field is non-empty, we definitely have an assignment
         if (!snap.isEmpty() || !tile.isEmpty())
@@ -1104,7 +1240,7 @@ bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& sc
             return false;
     }
     QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toBool();
@@ -1114,15 +1250,15 @@ bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& sc
 QString SettingsController::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString staged;
-    if (stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
+    if (m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
         return staged;
     QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString algo = reply.arguments().first().toString();
         if (!algo.isEmpty())
-            return LayoutId::makeAutotileId(algo);
+            return PhosphorLayout::LayoutId::makeAutotileId(algo);
     }
     return {};
 }
@@ -1131,10 +1267,10 @@ bool SettingsController::hasExplicitTilingAssignmentForScreenDesktop(const QStri
                                                                      int virtualDesktop) const
 {
     QString staged;
-    if (stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
+    if (m_staging.stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
         return !staged.isEmpty();
     QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return !reply.arguments().first().toString().isEmpty();
@@ -1144,9 +1280,9 @@ bool SettingsController::hasExplicitTilingAssignmentForScreenDesktop(const QStri
 QString SettingsController::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     QString staged;
-    if (stagedSnappingLayout(screenName, 0, activityId, staged))
+    if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
@@ -1157,13 +1293,13 @@ QString SettingsController::getSnappingLayoutForScreenActivity(const QString& sc
                                                                const QString& activityId) const
 {
     QString staged;
-    if (stagedSnappingLayout(screenName, 0, activityId, staged))
+    if (m_staging.stagedSnappingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId))
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId))
             return layoutId;
     }
     return {};
@@ -1173,8 +1309,8 @@ bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& s
                                                                 const QString& activityId) const
 {
     QString snap, tile;
-    bool hasSnap = stagedSnappingLayout(screenName, 0, activityId, snap);
-    bool hasTile = stagedTilingLayout(screenName, 0, activityId, tile);
+    bool hasSnap = m_staging.stagedSnappingLayout(screenName, 0, activityId, snap);
+    bool hasTile = m_staging.stagedTilingLayout(screenName, 0, activityId, tile);
     if (hasSnap || hasTile) {
         if (!snap.isEmpty() || !tile.isEmpty())
             return true;
@@ -1182,7 +1318,7 @@ bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& s
             return false;
     }
     QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toBool();
@@ -1192,13 +1328,13 @@ bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& s
 QString SettingsController::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     QString staged;
-    if (stagedTilingLayout(screenName, 0, activityId, staged))
+    if (m_staging.stagedTilingLayout(screenName, 0, activityId, staged))
         return staged;
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        if (LayoutId::isAutotile(layoutId))
+        if (PhosphorLayout::LayoutId::isAutotile(layoutId))
             return layoutId;
     }
     return {};
@@ -1219,11 +1355,10 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > 9)
         return {};
-    // Return staged value if the user changed it before Apply
-    auto it = m_stagedQuickSlots.constFind(slotNumber);
-    if (it != m_stagedQuickSlots.constEnd())
-        return it.value();
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+    QString staged;
+    if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
+        return staged;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getQuickLayoutSlot"), {slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
@@ -1234,7 +1369,7 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
 {
     if (slotNumber < 1 || slotNumber > 9)
         return;
-    m_stagedQuickSlots[slotNumber] = layoutId;
+    m_staging.stageSnappingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
 }
 
@@ -1251,10 +1386,9 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > 9)
         return {};
-    // Return staged value if the user changed it before Apply
-    auto it = m_stagedTilingQuickSlots.constFind(slotNumber);
-    if (it != m_stagedTilingQuickSlots.constEnd())
-        return it.value();
+    QString staged;
+    if (m_staging.stagedTilingQuickSlot(slotNumber, staged))
+        return staged;
     return m_settings.readTilingQuickLayoutSlot(slotNumber);
 }
 
@@ -1262,7 +1396,7 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
 {
     if (slotNumber < 1 || slotNumber > 9)
         return;
-    m_stagedTilingQuickSlots[slotNumber] = layoutId;
+    m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
 }
 
@@ -1272,8 +1406,8 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
 
 QVariantList SettingsController::getAppRulesForLayout(const QString& layoutId) const
 {
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("getLayout"), {layoutId});
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
         return {};
 
@@ -1342,7 +1476,7 @@ static QString lockKey(const QString& screenName, int mode)
 {
     // Resolve connector names (e.g., "DP-3") to EDID-based screen IDs
     // to match the daemon's lock key format
-    QString resolved = Utils::screenIdForName(screenName);
+    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
     return QString::number(mode) + QStringLiteral(":") + resolved;
 }
 
@@ -1379,55 +1513,91 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
 // Screen helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool SettingsController::isMonitorDisabled(const QString& screenName) const
+// Convert the QML-side `viewMode` int to PhosphorZones::AssignmentEntry::Mode.
+// The numeric values match by design (0 = Snapping, 1 = Autotile) but routing
+// every call through the helper keeps the cast explicit and gives us a single
+// place to add range-clamping if a future mode is introduced.
+//
+// SharedBridge.qml sets `assignmentViewMode: -1` as a sentinel that the
+// SnappingBridge / TilingBridge subclass MUST override. If a future bridge
+// subclass forgets the override, every disable read/write would silently
+// land on the snapping list — exactly the mode confusion this whole
+// machinery is meant to eliminate. Warn loudly so the bug shows up in logs.
+//
+// The previous implementation triggered Q_ASSERT(false) on the unexpected
+// path, but QML binding evaluation order during component construction can
+// run a `function on*Changed: isMonitorDisabled(name)` handler before the
+// SnappingBridge/TilingBridge subclass override of `assignmentViewMode`
+// takes effect, hard-crashing dev builds on what is otherwise transient
+// state. The warning is enough — the fallback to Snapping is the safest
+// choice (defaults to the more permissive of the two lists for reads,
+// avoids accidental writes to a list the user didn't intend).
+static PhosphorZones::AssignmentEntry::Mode modeFromViewMode(int viewMode)
 {
-    return m_screenHelper.isMonitorDisabled(screenName);
+    if (viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
+        && viewMode != static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)) {
+        qCWarning(PlasmaZones::lcCore)
+            << "modeFromViewMode: unexpected viewMode" << viewMode
+            << "— defaulting to Snapping. A bridge subclass likely forgot to set assignmentViewMode.";
+    }
+    return viewMode == static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
+        ? PhosphorZones::AssignmentEntry::Autotile
+        : PhosphorZones::AssignmentEntry::Snapping;
 }
 
-void SettingsController::setMonitorDisabled(const QString& screenName, bool disabled)
+bool SettingsController::isMonitorDisabled(int viewMode, const QString& screenName) const
 {
-    m_screenHelper.setMonitorDisabled(screenName, disabled);
+    return m_screenHelper.isMonitorDisabled(modeFromViewMode(viewMode), screenName);
 }
 
-bool SettingsController::isDesktopDisabled(const QString& screenName, int desktop) const
+void SettingsController::setMonitorDisabled(int viewMode, const QString& screenName, bool disabled)
 {
-    return m_settings.isDesktopDisabled(screenName, desktop);
+    m_screenHelper.setMonitorDisabled(modeFromViewMode(viewMode), screenName, disabled);
 }
 
-void SettingsController::setDesktopDisabled(const QString& screenName, int desktop, bool disabled)
+bool SettingsController::isDesktopDisabled(int viewMode, const QString& screenName, int desktop) const
 {
+    return m_settings.isDesktopDisabled(modeFromViewMode(viewMode), screenName, desktop);
+}
+
+void SettingsController::setDesktopDisabled(int viewMode, const QString& screenName, int desktop, bool disabled)
+{
+    // The disabledDesktopsChanged(viewMode) signal is fired by the
+    // m_settings → controller forward in the constructor — no manual emit
+    // needed here.
+    const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + QString::number(desktop);
-    QStringList entries = m_settings.disabledDesktops();
+    QStringList entries = m_settings.disabledDesktops(mode);
     if (disabled && !entries.contains(key)) {
         entries.append(key);
-        m_settings.setDisabledDesktops(entries);
+        m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
     } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledDesktops(entries);
+        m_settings.setDisabledDesktops(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
     }
 }
 
-bool SettingsController::isActivityDisabled(const QString& screenName, const QString& activityId) const
+bool SettingsController::isActivityDisabled(int viewMode, const QString& screenName, const QString& activityId) const
 {
-    return m_settings.isActivityDisabled(screenName, activityId);
+    return m_settings.isActivityDisabled(modeFromViewMode(viewMode), screenName, activityId);
 }
 
-void SettingsController::setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled)
+void SettingsController::setActivityDisabled(int viewMode, const QString& screenName, const QString& activityId,
+                                             bool disabled)
 {
+    // See setDesktopDisabled — the per-mode signal is forwarded from
+    // m_settings via the connect set up in the constructor.
+    const auto mode = modeFromViewMode(viewMode);
     QString key = screenName + QLatin1Char('/') + activityId;
-    QStringList entries = m_settings.disabledActivities();
+    QStringList entries = m_settings.disabledActivities(mode);
     if (disabled && !entries.contains(key)) {
         entries.append(key);
-        m_settings.setDisabledActivities(entries);
+        m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged();
     } else if (!disabled && entries.removeAll(key) > 0) {
-        m_settings.setDisabledActivities(entries);
+        m_settings.setDisabledActivities(mode, entries);
         setNeedsSave(true);
-        Q_EMIT disabledActivitiesChanged();
     }
 }
 
@@ -1437,14 +1607,14 @@ void SettingsController::setActivityDisabled(const QString& screenName, const QS
 
 void SettingsController::refreshVirtualDesktops()
 {
-    QDBusMessage countReply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopCount"));
+    QDBusMessage countReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getVirtualDesktopCount"));
     if (countReply.type() == QDBusMessage::ReplyMessage && !countReply.arguments().isEmpty()) {
         m_virtualDesktopCount = countReply.arguments().first().toInt();
     }
 
-    QDBusMessage namesReply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopNames"));
+    QDBusMessage namesReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getVirtualDesktopNames"));
     if (namesReply.type() == QDBusMessage::ReplyMessage && !namesReply.arguments().isEmpty()) {
         m_virtualDesktopNames = namesReply.arguments().first().toStringList();
     }
@@ -1452,15 +1622,15 @@ void SettingsController::refreshVirtualDesktops()
 
 void SettingsController::refreshActivities()
 {
-    QDBusMessage availReply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("isActivitiesAvailable"));
+    QDBusMessage availReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("isActivitiesAvailable"));
     if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
         m_activitiesAvailable = availReply.arguments().first().toBool();
     }
 
     if (m_activitiesAvailable) {
-        QDBusMessage infoReply =
-            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getAllActivitiesInfo"));
+        QDBusMessage infoReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                        QStringLiteral("getAllActivitiesInfo"));
         if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
             QString json = infoReply.arguments().first().toString();
             QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
@@ -1472,112 +1642,12 @@ void SettingsController::refreshActivities()
             }
         }
 
-        QDBusMessage currentReply =
-            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getCurrentActivity"));
+        QDBusMessage currentReply = DaemonDBus::callDaemon(
+            QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getCurrentActivity"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             m_currentActivity = currentReply.arguments().first().toString();
         }
     }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Editor settings (delegated to Settings class for [Editor] group)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Editor getters — delegate to m_settings
-
-QString SettingsController::editorDuplicateShortcut() const
-{
-    return m_settings.editorDuplicateShortcut();
-}
-QString SettingsController::editorSplitHorizontalShortcut() const
-{
-    return m_settings.editorSplitHorizontalShortcut();
-}
-QString SettingsController::editorSplitVerticalShortcut() const
-{
-    return m_settings.editorSplitVerticalShortcut();
-}
-QString SettingsController::editorFillShortcut() const
-{
-    return m_settings.editorFillShortcut();
-}
-bool SettingsController::editorGridSnappingEnabled() const
-{
-    return m_settings.editorGridSnappingEnabled();
-}
-bool SettingsController::editorEdgeSnappingEnabled() const
-{
-    return m_settings.editorEdgeSnappingEnabled();
-}
-qreal SettingsController::editorSnapIntervalX() const
-{
-    return m_settings.editorSnapIntervalX();
-}
-qreal SettingsController::editorSnapIntervalY() const
-{
-    return m_settings.editorSnapIntervalY();
-}
-int SettingsController::editorSnapOverrideModifier() const
-{
-    return m_settings.editorSnapOverrideModifier();
-}
-bool SettingsController::fillOnDropEnabled() const
-{
-    return m_settings.fillOnDropEnabled();
-}
-int SettingsController::fillOnDropModifier() const
-{
-    return m_settings.fillOnDropModifier();
-}
-
-// Editor setters — write to m_settings + mark dirty
-
-// Editor setters — delegate to Settings. The meta-object NOTIFY connection
-// in the constructor handles setNeedsSave(true) when the value actually changes.
-void SettingsController::setEditorDuplicateShortcut(const QString& s)
-{
-    m_settings.setEditorDuplicateShortcut(s);
-}
-void SettingsController::setEditorSplitHorizontalShortcut(const QString& s)
-{
-    m_settings.setEditorSplitHorizontalShortcut(s);
-}
-void SettingsController::setEditorSplitVerticalShortcut(const QString& s)
-{
-    m_settings.setEditorSplitVerticalShortcut(s);
-}
-void SettingsController::setEditorFillShortcut(const QString& s)
-{
-    m_settings.setEditorFillShortcut(s);
-}
-void SettingsController::setEditorGridSnappingEnabled(bool v)
-{
-    m_settings.setEditorGridSnappingEnabled(v);
-}
-void SettingsController::setEditorEdgeSnappingEnabled(bool v)
-{
-    m_settings.setEditorEdgeSnappingEnabled(v);
-}
-void SettingsController::setEditorSnapIntervalX(qreal v)
-{
-    m_settings.setEditorSnapIntervalX(v);
-}
-void SettingsController::setEditorSnapIntervalY(qreal v)
-{
-    m_settings.setEditorSnapIntervalY(v);
-}
-void SettingsController::setEditorSnapOverrideModifier(int v)
-{
-    m_settings.setEditorSnapOverrideModifier(v);
-}
-void SettingsController::setFillOnDropEnabled(bool v)
-{
-    m_settings.setFillOnDropEnabled(v);
-}
-void SettingsController::setFillOnDropModifier(int v)
-{
-    m_settings.setFillOnDropModifier(v);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1588,13 +1658,15 @@ void SettingsController::onVirtualDesktopsChanged()
 {
     refreshVirtualDesktops();
 
-    // Prune disabled-desktop entries that reference desktops beyond the new count.
-    // See start.cpp comment re: mid-range renumbering limitation.
-    QStringList disabled = m_settings.disabledDesktops();
-    if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
-        m_settings.setDisabledDesktops(disabled);
-        setNeedsSave(true);
-        Q_EMIT disabledDesktopsChanged();
+    // Prune both per-mode disabled-desktop lists — see start.cpp comment re:
+    // mid-range renumbering limitation. The per-mode disabledDesktopsChanged
+    // signal is forwarded from m_settings (see ctor); no manual emit here.
+    for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+        QStringList disabled = m_settings.disabledDesktops(mode);
+        if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
+            m_settings.setDisabledDesktops(mode, disabled);
+            setNeedsSave(true);
+        }
     }
 
     Q_EMIT virtualDesktopsChanged();
@@ -1614,11 +1686,13 @@ void SettingsController::onActivitiesChanged()
                 validIds.insert(id);
             }
         }
-        QStringList disabledActs = m_settings.disabledActivities();
-        if (pruneDisabledActivityEntries(disabledActs, validIds)) {
-            m_settings.setDisabledActivities(disabledActs);
-            setNeedsSave(true);
-            Q_EMIT disabledActivitiesChanged();
+        // Per-mode signal forwarded from m_settings (see ctor) — no manual emit.
+        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+            QStringList disabledActs = m_settings.disabledActivities(mode);
+            if (pruneDisabledActivityEntries(disabledActs, validIds)) {
+                m_settings.setDisabledActivities(mode, disabledActs);
+                setNeedsSave(true);
+            }
         }
     }
 
@@ -1634,220 +1708,60 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
     Q_EMIT screenLayoutChanged();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Trigger conversion helpers (same logic as KCMSnapping)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-QVariantList SettingsController::convertTriggersForQml(const QVariantList& triggers)
+// Parses the daemon's running-windows JSON payload into a QVariantList of
+// {windowClass, appName, caption} maps ready for QML consumption. The
+// synchronous getRunningWindows() predecessor was removed in Phase 6 of
+// refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
+static QVariantList parseRunningWindowsJson(const QString& json)
 {
-    QVariantList result;
-    for (const auto& t : triggers) {
-        auto map = t.toMap();
-        QVariantMap converted;
-        converted[ConfigDefaults::triggerModifierField()] =
-            ModifierUtils::dragModifierToBitmask(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
-        converted[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
-        result.append(converted);
-    }
-    return result;
-}
-
-QVariantList SettingsController::convertTriggersForStorage(const QVariantList& triggers)
-{
-    QVariantList result;
-    for (const auto& t : triggers) {
-        auto map = t.toMap();
-        QVariantMap stored;
-        stored[ConfigDefaults::triggerModifierField()] =
-            ModifierUtils::bitmaskToDragModifier(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
-        stored[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
-        result.append(stored);
-    }
-    return result;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Trigger getters
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool SettingsController::alwaysActivateOnDrag() const
-{
-    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
-    const auto triggers = m_settings.dragActivationTriggers();
-    for (const auto& t : triggers) {
-        if (t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt() == alwaysActive) {
-            return true;
-        }
-    }
-    return false;
-}
-
-QVariantList SettingsController::dragActivationTriggers() const
-{
-    return convertTriggersForQml(m_settings.dragActivationTriggers());
-}
-
-QVariantList SettingsController::defaultDragActivationTriggers() const
-{
-    return convertTriggersForQml(ConfigDefaults::dragActivationTriggers());
-}
-
-QVariantList SettingsController::zoneSpanTriggers() const
-{
-    return convertTriggersForQml(m_settings.zoneSpanTriggers());
-}
-
-QVariantList SettingsController::defaultZoneSpanTriggers() const
-{
-    return convertTriggersForQml(ConfigDefaults::zoneSpanTriggers());
-}
-
-QVariantList SettingsController::snapAssistTriggers() const
-{
-    return convertTriggersForQml(m_settings.snapAssistTriggers());
-}
-
-QVariantList SettingsController::defaultSnapAssistTriggers() const
-{
-    return convertTriggersForQml(ConfigDefaults::snapAssistTriggers());
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Trigger setters
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::setDragActivationTriggers(const QVariantList& triggers)
-{
-    const bool wasAlwaysActive = alwaysActivateOnDrag();
-    const QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings.dragActivationTriggers() != converted) {
-        m_settings.setDragActivationTriggers(converted);
-        Q_EMIT dragActivationTriggersChanged();
-        if (alwaysActivateOnDrag() != wasAlwaysActive) {
-            Q_EMIT alwaysActivateOnDragChanged();
-        }
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setAlwaysActivateOnDrag(bool enabled)
-{
-    if (alwaysActivateOnDrag() == enabled) {
-        return;
-    }
-    if (enabled) {
-        // Single AlwaysActive trigger -- written directly in storage format (DragModifier enum)
-        QVariantMap trigger;
-        trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
-        trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
-        m_settings.setDragActivationTriggers({trigger});
-    } else {
-        // Revert to default triggers
-        m_settings.setDragActivationTriggers(ConfigDefaults::dragActivationTriggers());
-    }
-    Q_EMIT alwaysActivateOnDragChanged();
-    Q_EMIT dragActivationTriggersChanged();
-    setNeedsSave(true);
-}
-
-void SettingsController::setZoneSpanTriggers(const QVariantList& triggers)
-{
-    const QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings.zoneSpanTriggers() != converted) {
-        m_settings.setZoneSpanTriggers(converted);
-        Q_EMIT zoneSpanTriggersChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setSnapAssistTriggers(const QVariantList& triggers)
-{
-    QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings.snapAssistTriggers() != converted) {
-        m_settings.setSnapAssistTriggers(converted);
-        Q_EMIT snapAssistTriggersChanged();
-        setNeedsSave(true);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Cava detection
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool SettingsController::cavaAvailable() const
-{
-    return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Color import
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::loadColorsFromPywal()
-{
-    QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
-    if (!QFile::exists(pywalPath)) {
-        Q_EMIT colorImportError(
-            tr("Pywal colors not found. Run 'wal' to generate colors first.\n\nExpected file: %1").arg(pywalPath));
-        return;
-    }
-
-    QString error = m_settings.loadColorsFromFile(pywalPath);
-    if (!error.isEmpty()) {
-        Q_EMIT colorImportError(error);
-        return;
-    }
-
-    Q_EMIT colorImportSuccess();
-    setNeedsSave(true);
-}
-
-void SettingsController::loadColorsFromFile(const QString& filePath)
-{
-    QString error = m_settings.loadColorsFromFile(filePath);
-    if (!error.isEmpty()) {
-        Q_EMIT colorImportError(error);
-        return;
-    }
-
-    Q_EMIT colorImportSuccess();
-    setNeedsSave(true);
-}
-
-QVariantList SettingsController::getRunningWindows() const
-{
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
-    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
-        return {};
-    }
-
-    QString json = reply.arguments().at(0).toString();
     if (json.isEmpty()) {
         return {};
     }
-
     QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
         return {};
     }
 
     QVariantList result;
     const QJsonArray array = doc.array();
+    result.reserve(array.size());
     for (const QJsonValue& value : array) {
         if (!value.isObject()) {
             continue;
         }
-        QJsonObject obj = value.toObject();
+        const QJsonObject obj = value.toObject();
         QVariantMap item;
         item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
         item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
         item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
         result.append(item);
     }
-
     return result;
+}
+
+void SettingsController::requestRunningWindows()
+{
+    // Fire-and-forget: the daemon emits runningWindowsRequested to the
+    // KWin effect, which answers via provideRunningWindows, which the
+    // daemon fans out on runningWindowsAvailable — caught by our
+    // onRunningWindowsAvailable slot. The UI thread never blocks.
+    //
+    // Start (or restart) the client-side timeout guard. Repeated calls
+    // coalesce — the most recent deadline wins, matching the fire-and-
+    // forget semantics on the daemon side.
+    m_runningWindowsTimeout.start();
+    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Settings),
+                           QStringLiteral("requestRunningWindows"));
+}
+
+void SettingsController::onRunningWindowsAvailable(const QString& json)
+{
+    // Reply arrived — stop the timeout timer so a stale runningWindowsTimedOut()
+    // doesn't fire after we've already served fresh data.
+    m_runningWindowsTimeout.stop();
+    m_cachedRunningWindows = parseRunningWindowsJson(json);
+    Q_EMIT runningWindowsAvailable(m_cachedRunningWindows);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1958,9 +1872,13 @@ bool SettingsController::importAllSettings(const QString& filePath)
     } else {
         // Clean up backup on success
         QFile::remove(backupPath);
+        // Wrap the in-memory reload so property NOTIFY signals don't mark
+        // pages dirty — the imported config is already on disk.
+        m_loading = true;
         m_settings.load();
+        m_loading = false;
         DaemonDBus::notifyReload();
-        Q_EMIT needsSaveChanged();
+        setNeedsSave(false);
     }
     return ok;
 }
@@ -1971,8 +1889,8 @@ bool SettingsController::importAllSettings(const QString& filePath)
 
 QVariantList SettingsController::getScreenStates() const
 {
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getScreenStates"));
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("getScreenStates"));
     if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty())
         return {};
 
@@ -1996,13 +1914,13 @@ QVariantList SettingsController::getScreenStates() const
 bool SettingsController::hasStagedAssignment(const QString& screenName, int virtualDesktop,
                                              const QString& activityId) const
 {
-    return stagedEntryConst(screenName, virtualDesktop, activityId) != nullptr;
+    return m_staging.stagedAssignmentFor(screenName, virtualDesktop, activityId) != nullptr;
 }
 
 QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
                                                     const QString& activityId) const
 {
-    auto* s = stagedEntryConst(screenName, virtualDesktop, activityId);
+    auto* s = m_staging.stagedAssignmentFor(screenName, virtualDesktop, activityId);
     if (!s)
         return {};
     QVariantMap map;
@@ -2010,11 +1928,8 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {
         const QString& val = *s->tilingAlgorithmId;
-        // Strip "autotile:" prefix if present
-        if (val.startsWith(QLatin1String("autotile:")))
-            map[QStringLiteral("algorithmId")] = val.mid(9);
-        else
-            map[QStringLiteral("algorithmId")] = val;
+        map[QStringLiteral("algorithmId")] =
+            PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
     }
     // Explicit mode takes priority (stageAssignmentEntry path)
     if (s->stagedMode.has_value()) {
@@ -2033,682 +1948,72 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 // Algorithm helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// All bodies moved to AlgorithmService; SettingsController::* methods below
+// are 1-line Q_INVOKABLE forwarders so QML's entry points stay stable.
+
 QVariantList SettingsController::availableAlgorithms() const
 {
-    QVariantList algorithms;
-    auto* registry = AlgorithmRegistry::instance();
-    for (const QString& id : registry->availableAlgorithms()) {
-        TilingAlgorithm* algo = registry->algorithm(id);
-        if (algo) {
-            QVariantMap algoMap;
-            algoMap[QStringLiteral("id")] = id;
-            algoMap[QStringLiteral("name")] = algo->name();
-            algoMap[QStringLiteral("description")] = algo->description();
-            algoMap[QLatin1String("defaultMaxWindows")] = algo->defaultMaxWindows();
-            algoMap[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
-            algoMap[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
-            algoMap[QLatin1String("defaultSplitRatio")] = algo->defaultSplitRatio();
-            algoMap[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
-            algoMap[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
-            algoMap[QLatin1String("centerLayout")] = algo->centerLayout();
-
-            // Expose whether this algorithm declares custom parameters.
-            // The full definitions are retrieved via customParamsForAlgorithm().
-            algoMap[QLatin1String("supportsCustomParams")] = algo->supportsCustomParams();
-
-            algorithms.append(algoMap);
-        }
-    }
-    return algorithms;
-}
-
-QVariantList SettingsController::customParamsForAlgorithm(const QString& algorithmId) const
-{
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo || !algo->supportsCustomParams()) {
-        return {};
-    }
-
-    const QVariantMap savedCustom = savedCustomParams(algorithmId);
-    const QVariantList defs = algo->customParamDefList();
-
-    QVariantList result;
-    for (const auto& defVar : defs) {
-        QVariantMap paramMap = defVar.toMap();
-        const QString name = paramMap.value(QLatin1String("name")).toString();
-        // Current value: saved value if exists, else default
-        if (savedCustom.contains(name)) {
-            paramMap[QLatin1String("value")] = savedCustom.value(name);
-        } else {
-            paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
-        }
-        result.append(paramMap);
-    }
-    return result;
-}
-
-void SettingsController::setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value)
-{
-    if (algorithmId.isEmpty() || paramName.isEmpty()) {
-        return;
-    }
-
-    // Validate paramName exists in the algorithm's declared custom params
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo || !algo->supportsCustomParams()) {
-        return;
-    }
-    const QVariantList defs = algo->customParamDefList();
-    auto defIt = std::find_if(defs.cbegin(), defs.cend(), [&paramName](const QVariant& v) {
-        return v.toMap().value(QLatin1String("name")).toString() == paramName;
-    });
-    if (defIt == defs.cend()) {
-        qCWarning(lcCore) << "setCustomParam: unknown param" << paramName << "for algorithm" << algorithmId;
-        return;
-    }
-    const QVariantMap defMap = defIt->toMap();
-    const QString defType = defMap.value(QLatin1String("type")).toString();
-
-    // Coerce value to the declared type so QML callers can't persist wrong types
-    QVariant coerced = value;
-    if (defType == QLatin1String("number")) {
-        bool ok = false;
-        const qreal num = value.toDouble(&ok);
-        if (!ok) {
-            qCWarning(lcCore) << "setCustomParam: value" << value << "is not a valid number for" << paramName;
-            return;
-        }
-        const qreal minVal = defMap.value(QLatin1String("minValue")).toDouble();
-        const qreal maxVal = defMap.value(QLatin1String("maxValue")).toDouble();
-        coerced = std::clamp(num, minVal, maxVal);
-    } else if (defType == QLatin1String("bool")) {
-        coerced = value.toBool();
-    } else if (defType == QLatin1String("enum")) {
-        const QString str = value.toString();
-        const QStringList options = defMap.value(QLatin1String("enumOptions")).toStringList();
-        if (!options.contains(str)) {
-            qCWarning(lcCore) << "setCustomParam: value" << str << "not in enum options for" << paramName
-                              << "(valid:" << options << ")";
-            return;
-        }
-        coerced = str;
-    } else {
-        qCWarning(lcCore) << "setCustomParam: unknown param type" << defType << "for" << paramName;
-        return;
-    }
-
-    QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
-    QVariantMap algoEntry = perAlgo.value(algorithmId).toMap();
-    QVariantMap customParams = algoEntry.value(PerAlgoKeys::CustomParams).toMap();
-    customParams[paramName] = coerced;
-    algoEntry[PerAlgoKeys::CustomParams] = customParams;
-
-    // Preserve existing splitRatio/masterCount if not already in the entry
-    if (!algoEntry.contains(PerAlgoKeys::SplitRatio)) {
-        algoEntry[PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
-    }
-    if (!algoEntry.contains(PerAlgoKeys::MasterCount)) {
-        algoEntry[PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
-    }
-
-    perAlgo[algorithmId] = algoEntry;
-    m_settings.setAutotilePerAlgorithmSettings(perAlgo);
-    Q_EMIT customParamChanged(algorithmId, paramName);
-}
-
-QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) const
-{
-    const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
-    const QVariant algoEntry = perAlgo.value(algorithmId);
-    if (algoEntry.isValid()) {
-        const QVariant customVar = algoEntry.toMap().value(PerAlgoKeys::CustomParams);
-        if (customVar.isValid()) {
-            return customVar.toMap();
-        }
-    }
-    return {};
+    return m_algorithmService->availableAlgorithms();
 }
 
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
                                                           double splitRatio, int masterCount) const
 {
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo) {
-        return {};
-    }
+    return m_algorithmService->generateAlgorithmPreview(algorithmId, windowCount, splitRatio, masterCount);
+}
 
-    const int previewSize = 1000;
-    const QRect previewRect(0, 0, previewSize, previewSize);
-
-    TilingState state(QStringLiteral("preview"));
-    state.setMasterCount(masterCount);
-    state.setSplitRatio(splitRatio);
-
-    const int count = qMax(1, windowCount);
-    TilingParams params = TilingParams::forPreview(count, previewRect, &state);
-
-    // Include saved custom params so preview reflects user configuration
-    params.customParams = savedCustomParams(algorithmId);
-
-    QVector<QRect> zones = algo->calculateZones(params);
-
-    return AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+QVariantList SettingsController::generateAlgorithmDefaultPreview(const QString& algorithmId) const
+{
+    return m_algorithmService->generateAlgorithmDefaultPreview(algorithmId);
 }
 
 void SettingsController::openAlgorithmsFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms");
-    QDir dir(path);
-    if (!dir.exists()) {
-        dir.mkpath(QStringLiteral("."));
-    }
-    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    m_algorithmService->openAlgorithmsFolder();
 }
 
 bool SettingsController::importAlgorithm(const QString& filePath)
 {
-    if (filePath.isEmpty())
-        return false;
-
-    const QFileInfo source(filePath);
-    if (!source.exists() || !source.isFile())
-        return false;
-
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms");
-    QDir dir(destDir);
-    if (!dir.exists()) {
-        dir.mkpath(QStringLiteral("."));
-    }
-
-    const QString destPath = destDir + QLatin1Char('/') + source.fileName();
-
-    // Remove existing file so QFile::copy succeeds (it won't overwrite)
-    if (QFile::exists(destPath)) {
-        QFile::remove(destPath);
-    }
-
-    const bool ok = QFile::copy(filePath, destPath);
-    // ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
-    return ok;
+    return m_algorithmService->importAlgorithm(filePath);
 }
 
 QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
 {
-    const QLatin1String prefix("autotile:");
-    if (layoutId.startsWith(prefix))
-        return layoutId.mid(prefix.size());
-    return layoutId;
-}
-
-QString SettingsController::scriptedFilePath(const QString& algorithmId) const
-{
-    if (algorithmId.isEmpty())
-        return QString();
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo)
-        return QString();
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-    if (!scripted)
-        return QString();
-    const QString path = scripted->filePath();
-    if (path.isEmpty() || !QFile::exists(path))
-        return QString();
-    return path;
-}
-
-void SettingsController::cancelAlgorithmWatcher(const QString& expectedId)
-{
-    auto it = m_algorithmWatchers.find(expectedId);
-    if (it != m_algorithmWatchers.end()) {
-        const auto& connPtr = it.value();
-        if (connPtr && *connPtr)
-            disconnect(*connPtr);
-        m_algorithmWatchers.erase(it);
-    }
-}
-
-void SettingsController::watchForAlgorithmRegistration(const QString& expectedId)
-{
-    // Cancel any existing watcher for this ID to prevent stacking
-    cancelAlgorithmWatcher(expectedId);
-
-    auto* registry = AlgorithmRegistry::instance();
-    auto conn = std::make_shared<QMetaObject::Connection>();
-    m_algorithmWatchers[expectedId] = conn;
-    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
-                    [this, expectedId](const QString& registeredId) {
-                        if (registeredId == expectedId) {
-                            auto it = m_algorithmWatchers.find(expectedId);
-                            if (it != m_algorithmWatchers.end()) {
-                                disconnect(*it.value());
-                                m_algorithmWatchers.erase(it);
-                            }
-                            Q_EMIT algorithmCreated(expectedId);
-                        }
-                    });
-    // The context object (this) ensures the lambda is not invoked if SettingsController
-    // is destroyed before the timer fires — QTimer::singleShot with a context guarantees this.
-    QTimer::singleShot(10000, this, [this, expectedId]() {
-        auto it = m_algorithmWatchers.find(expectedId);
-        if (it != m_algorithmWatchers.end()) {
-            const auto& connPtr = it.value();
-            if (connPtr && *connPtr)
-                disconnect(*connPtr);
-            m_algorithmWatchers.erase(it);
-            qCWarning(lcCore) << "Algorithm registration timed out for:" << expectedId;
-            Q_EMIT algorithmOperationFailed(
-                PzI18n::tr("Algorithm was created but not picked up by the registry. "
-                           "Try refreshing or restarting the application."));
-        }
-    });
+    return PhosphorLayout::LayoutId::isAutotile(layoutId) ? PhosphorLayout::LayoutId::extractAlgorithmId(layoutId)
+                                                          : layoutId;
 }
 
 void SettingsController::openAlgorithm(const QString& algorithmId)
 {
-    // Try registry first (works for already-registered algorithms)
-    const QString registryPath = scriptedFilePath(algorithmId);
-    if (!registryPath.isEmpty()) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(registryPath));
-        return;
-    }
-
-    // Fallback: try user algorithms dir directly (works right after creation
-    // before the registry has picked up the file via QFileSystemWatcher).
-    // Uses algorithmId as filename — valid for createNewAlgorithm (returns filename)
-    // and duplicateAlgorithm (watches for the filename-based ID).
-    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".js");
-    if (QFile::exists(userPath)) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
-        return;
-    }
-
-    qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId
-                      << "(checked registry and user dir:" << userAlgorithmsDir() << ")";
+    m_algorithmService->openAlgorithm(algorithmId);
 }
 
 void SettingsController::openLayoutFile(const QString& layoutId)
 {
-    if (layoutId.isEmpty())
-        return;
-    // Layout files use UUID without braces as the filename
-    const QUuid uuid(layoutId);
-    if (uuid.isNull()) {
-        qCDebug(lcCore) << "openLayoutFile: not a valid UUID layout ID:" << layoutId;
-        return;
-    }
-    const QString bareId = uuid.toString(QUuid::WithoutBraces);
-    const QString filename = bareId + QStringLiteral(".json");
-    // Search user dir first, then all system dirs
-    const QString located =
-        QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
-    if (located.isEmpty()) {
-        qCWarning(lcCore) << "Layout file not found:" << filename;
-        return;
-    }
-    QDesktopServices::openUrl(QUrl::fromLocalFile(located));
+    m_algorithmService->openLayoutFile(layoutId);
 }
 
 bool SettingsController::deleteAlgorithm(const QString& algorithmId)
 {
-    if (algorithmId.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot delete algorithm — no algorithm selected."));
-        return false;
-    }
-
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo || !algo->isUserScript()) {
-        qCWarning(lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Only user-created algorithms can be deleted."));
-        return false;
-    }
-
-    const QString filePath = scriptedFilePath(algorithmId);
-    if (filePath.isEmpty()) {
-        qCWarning(lcCore) << "Algorithm file not found for:" << algorithmId;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Algorithm file not found."));
-        return false;
-    }
-
-    // Only allow deleting from the user algorithms directory (canonicalize to defeat symlinks).
-    // If the user dir doesn't exist yet, canonicalFilePath() returns empty — guard against
-    // that becoming "/" which would match any absolute path.
-    const QString rawUserDir = QFileInfo(userAlgorithmsDir()).canonicalFilePath();
-    const QString userDir = rawUserDir + QLatin1Char('/');
-    const QString canonicalPath = QFileInfo(filePath).canonicalFilePath();
-    if (rawUserDir.isEmpty() || canonicalPath.isEmpty() || !canonicalPath.startsWith(userDir)) {
-        qCWarning(lcCore) << "Refusing to delete non-user algorithm file:" << filePath << "userDir=" << rawUserDir
-                          << "canonical=" << canonicalPath;
-        Q_EMIT algorithmOperationFailed(
-            rawUserDir.isEmpty() ? PzI18n::tr("Cannot delete — user algorithms directory does not exist.")
-                                 : PzI18n::tr("Cannot delete — file is outside the user algorithms directory."));
-        return false;
-    }
-
-    // Cancel any pending registration watcher for this algorithm — otherwise
-    // the 10s timeout fires algorithmOperationFailed for a deliberately deleted file.
-    cancelAlgorithmWatcher(algorithmId);
-
-    // Use the canonical path for removal to ensure we delete the actual file,
-    // not a symlink pointing into the user dir.
-    const bool ok = QFile::remove(canonicalPath);
-    if (!ok) {
-        qCWarning(lcCore) << "Failed to delete algorithm file:" << canonicalPath;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not delete algorithm file. Check file permissions."));
-    }
-    // QFileSystemWatcher will pick up the deletion and trigger a refresh
-    return ok;
+    return m_algorithmService->deleteAlgorithm(algorithmId);
 }
 
 bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
 {
-    const QString sourcePath = scriptedFilePath(algorithmId);
-    if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm file not found."));
-        return false;
-    }
-
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm is no longer registered."));
-        return false;
-    }
-
-    const QString destDir = userAlgorithmsDir();
-    QDir dir(destDir);
-    if (!dir.exists())
-        dir.mkpath(QStringLiteral("."));
-
-    // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
-    const QString baseName = algorithmId + QStringLiteral("-copy");
-    const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
-    if (destPath.isEmpty()) {
-        qCWarning(lcCore) << "Could not find unique filename for duplicate:" << baseName;
-        Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not duplicate algorithm — too many copies exist. "
-                       "Please rename or delete existing copies."));
-        return false;
-    }
-
-    // Canonicalize source path to follow symlinks and ensure we read the actual file
-    const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
-    if (canonicalSource.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
-        return false;
-    }
-
-    // Read source, update metadata, write copy
-    QFile sourceFile(canonicalSource);
-    if (!sourceFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not read source algorithm file."));
-        return false;
-    }
-    QString content = QString::fromUtf8(sourceFile.readAll());
-    sourceFile.close();
-
-    // Update @name and @builtinId in the copy — strip all existing " (Copy)" suffixes to avoid accumulation
-    const QString newFilename = QFileInfo(destPath).completeBaseName();
-    QString baseCopyName = algo->name();
-    while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
-        baseCopyName.chop(7);
-    QString newName = baseCopyName + QStringLiteral(" (Copy)");
-    // Sanitize newlines to prevent annotation injection (parity with createNewAlgorithm)
-    newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    // Replace only the FIRST @name and @builtinId annotations — using replace(QRegularExpression)
-    // would replace ALL matches, corrupting any matching patterns in the algorithm body.
-    static const QRegularExpression nameRe(QStringLiteral("^// @name .+"), QRegularExpression::MultilineOption);
-    static const QRegularExpression idRe(QStringLiteral("^// @builtinId .+"), QRegularExpression::MultilineOption);
-    QRegularExpressionMatch nameMatch = nameRe.match(content);
-    if (nameMatch.hasMatch())
-        content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(), QStringLiteral("// @name ") + newName);
-    QRegularExpressionMatch idMatch = idRe.match(content);
-    if (idMatch.hasMatch())
-        content.replace(idMatch.capturedStart(), idMatch.capturedLength(),
-                        QStringLiteral("// @builtinId ") + newFilename);
-
-    QFile destFile(destPath);
-    if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qCWarning(lcCore) << "Failed to write duplicate algorithm file:" << destPath;
-        Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
-        return false;
-    }
-    const QByteArray encoded = content.toUtf8();
-    const qint64 written = destFile.write(encoded);
-    destFile.close();
-    if (written < 0 || written != encoded.size()) {
-        qCWarning(lcCore) << "Failed to write duplicate algorithm content:" << destPath << "written=" << written
-                          << "expected=" << encoded.size();
-        QFile::remove(destPath);
-        Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
-        return false;
-    }
-
-    // Watch for registry pickup and emit algorithmCreated (issue #2: duplicate didn't fire signal)
-    watchForAlgorithmRegistration(newFilename);
-    return true;
+    return m_algorithmService->duplicateAlgorithm(algorithmId);
 }
 
 bool SettingsController::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
-    if (destPath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("No export destination specified."));
-        return false;
-    }
-
-    const QString sourcePath = scriptedFilePath(algorithmId);
-    if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot export — algorithm file not found."));
-        return false;
-    }
-
-    // Write to a temp file first, then rename — if copy fails the existing file is preserved
-    const QString tmpPath = destPath + QStringLiteral(".tmp");
-    if (QFile::exists(tmpPath))
-        QFile::remove(tmpPath);
-    if (!QFile::copy(sourcePath, tmpPath)) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not copy algorithm file for export."));
-        return false;
-    }
-    if (QFile::exists(destPath)) {
-        if (!QFile::remove(destPath)) {
-            QFile::remove(tmpPath);
-            Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not replace existing file at export destination."));
-            return false;
-        }
-    }
-    if (!QFile::rename(tmpPath, destPath)) {
-        // rename() fails across filesystems — fall back to copy+remove
-        if (!QFile::copy(tmpPath, destPath)) {
-            QFile::remove(tmpPath);
-            Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not write to export destination."));
-            return false;
-        }
-        if (!QFile::remove(tmpPath))
-            qCWarning(lcCore) << "Failed to clean up temporary export file:" << tmpPath;
-    }
-    return true;
+    return m_algorithmService->exportAlgorithm(algorithmId, destPath);
 }
 
 QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,
                                                bool supportsMasterCount, bool supportsSplitRatio,
                                                bool producesOverlappingZones, bool supportsMemory)
 {
-    // Sanitize name to a filename: lowercase, replace non-alphanumeric (except hyphens) with
-    // hyphens, collapse multiple hyphens, strip leading/trailing hyphens
-    QString filename = name.trimmed().toLower();
-    static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9-]"));
-    filename.replace(nonAlnum, QStringLiteral("-"));
-    static const QRegularExpression multiHyphen(QStringLiteral("-{2,}"));
-    filename.replace(multiHyphen, QStringLiteral("-"));
-    static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
-    filename.replace(leadTrailHyphen, QString());
-    if (filename.isEmpty())
-        filename = QStringLiteral("untitled-algorithm");
-
-    // Build destination path
-    const QString destDir = userAlgorithmsDir();
-    QDir dir(destDir);
-    if (!dir.exists()) {
-        dir.mkpath(QStringLiteral("."));
-    }
-
-    const QString destPath = findUniqueAlgorithmPath(destDir, filename);
-    if (destPath.isEmpty()) {
-        qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename << "— all 999 slots exhausted";
-        Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not create algorithm — too many files with the same name. "
-                       "Please rename or delete existing algorithms."));
-        return QString();
-    }
-    // Update filename to match the final path (may have -N suffix)
-    filename = QFileInfo(destPath).completeBaseName();
-
-    // Build JS content
-    QString content;
-
-    // SPDX header — use current year and a placeholder author
-    const int currentYear = QDate::currentDate().year();
-    content +=
-        QStringLiteral("// SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>\n");
-    content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
-
-    // Metadata annotations — strip newlines to prevent annotation injection
-    QString sanitizedDisplayName = name.trimmed();
-    sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    content += QStringLiteral("// @name ") + sanitizedDisplayName + QStringLiteral("\n");
-    content += QStringLiteral("// @builtinId ") + filename + QStringLiteral("\n");
-    content += QStringLiteral("// @description Custom tiling algorithm\n");
-    content += QStringLiteral("// @producesOverlappingZones ")
-        + (producesOverlappingZones ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("// @supportsMasterCount ")
-        + (supportsMasterCount ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("// @supportsSplitRatio ")
-        + (supportsSplitRatio ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("// @defaultSplitRatio 0.5\n");
-    content += QStringLiteral("// @defaultMaxWindows 6\n");
-    content += QStringLiteral("// @minimumWindows 1\n");
-    content += QStringLiteral("// @zoneNumberDisplay all\n");
-    content += QStringLiteral("// @supportsMemory ")
-        + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n\n");
-
-    // Try to read base template body from system algorithm dirs
-    bool foundTemplate = false;
-    if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
-        const QString templateFile =
-            QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   QStringLiteral("plasmazones/algorithms/") + baseTemplate + QStringLiteral(".js"));
-
-        if (!templateFile.isEmpty()) {
-            QFile file(templateFile);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                const QString templateContent = QString::fromUtf8(file.readAll());
-                file.close();
-
-                // Skip the metadata header: SPDX lines, `// @annotation` lines,
-                // `/* ... */` block comments before the first code line, and
-                // surrounding blank lines. Stop as soon as we hit a non-metadata line
-                // (including doc-comments like `/** ... */` or `// Helper:`) so the
-                // template body's own documentation is preserved.
-                const QStringList lines = templateContent.split(QLatin1Char('\n'));
-                int bodyStart = 0;
-                bool inBlockComment = false;
-                for (int i = 0; i < lines.size(); ++i) {
-                    const QString trimmed = lines[i].trimmed();
-                    // Track /* ... */ block comments in the header region
-                    if (inBlockComment) {
-                        bodyStart = i + 1;
-                        if (trimmed.contains(QLatin1String("*/")))
-                            inBlockComment = false;
-                        continue;
-                    }
-                    // SPDX headers
-                    if (trimmed.startsWith(QLatin1String("// SPDX-"))) {
-                        bodyStart = i + 1;
-                        continue;
-                    }
-                    // Metadata annotations (// @name, // @builtinId, etc.)
-                    if (trimmed.startsWith(QLatin1String("// @"))) {
-                        bodyStart = i + 1;
-                        continue;
-                    }
-                    // Block comment opening in the header — only skip if we haven't
-                    // yet passed into the body (avoids stripping doc-comments after metadata).
-                    // NOTE: this also matches /** JSDoc */ style comments. We assume bundled
-                    // templates do not place JSDoc between metadata annotations.
-                    if (trimmed.startsWith(QLatin1String("/*"))) {
-                        bodyStart = i + 1;
-                        if (!trimmed.contains(QLatin1String("*/")))
-                            inBlockComment = true;
-                        continue;
-                    }
-                    // Blank lines between metadata lines are part of the header
-                    if (trimmed.isEmpty() && i == bodyStart) {
-                        bodyStart = i + 1;
-                        continue;
-                    }
-                    break;
-                }
-
-                // Append everything from bodyStart onwards
-                if (bodyStart < lines.size()) {
-                    for (int i = bodyStart; i < lines.size(); ++i) {
-                        content += lines[i];
-                        if (i < lines.size() - 1)
-                            content += QLatin1Char('\n');
-                    }
-                    foundTemplate = true;
-                }
-            }
-        }
-    }
-
-    if (!foundTemplate) {
-        content += QStringLiteral(
-            "/**\n"
-            " * Custom tiling algorithm.\n"
-            " *\n"
-            " * @param {Object} params - Tiling parameters\n"
-            " * @returns {Array<{x: number, y: number, width: number, height: number}>}\n"
-            " */\n"
-            "function calculateZones(params) {\n"
-            "    if (params.windowCount <= 0) return [];\n"
-            "    return fillArea(params.area, params.windowCount);\n"
-            "}\n");
-    }
-
-    // Write the file
-    QFile outFile(destPath);
-    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qCWarning(lcCore) << "Failed to write algorithm file:" << destPath;
-        Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
-        return QString();
-    }
-    const QByteArray encoded = content.toUtf8();
-    const qint64 written = outFile.write(encoded);
-    outFile.close();
-    if (written < 0 || written != encoded.size()) {
-        qCWarning(lcCore) << "Failed to write algorithm content:" << destPath << "written=" << written
-                          << "expected=" << encoded.size();
-        QFile::remove(destPath);
-        Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
-        return QString();
-    }
-
-    watchForAlgorithmRegistration(filename);
-    return filename;
+    return m_algorithmService->createNewAlgorithm(name, baseTemplate, supportsMasterCount, supportsSplitRatio,
+                                                  producesOverlappingZones, supportsMemory);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2795,8 +2100,8 @@ bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenN
 void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules)
 {
     // Get the current layout JSON, update the appRules field, and send back via updateLayout
-    QDBusMessage getReply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+    QDBusMessage getReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                   QStringLiteral("getLayout"), {layoutId});
     if (getReply.type() != QDBusMessage::ReplyMessage || getReply.arguments().isEmpty())
         return;
 
@@ -2818,24 +2123,9 @@ void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVa
     obj[QLatin1String("appRules")] = rulesArray;
 
     QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("updateLayout"), {updatedJson});
+    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                           QStringLiteral("updateLayout"), {updatedJson});
     scheduleLayoutLoad();
-}
-
-void SettingsController::resetEditorDefaults()
-{
-    m_settings.setEditorDuplicateShortcut(QStringLiteral("Ctrl+D"));
-    m_settings.setEditorSplitHorizontalShortcut(QStringLiteral("Ctrl+Shift+H"));
-    m_settings.setEditorSplitVerticalShortcut(QStringLiteral("Ctrl+Alt+V"));
-    m_settings.setEditorFillShortcut(QStringLiteral("Ctrl+Shift+F"));
-    m_settings.setEditorGridSnappingEnabled(true);
-    m_settings.setEditorEdgeSnappingEnabled(true);
-    m_settings.setEditorSnapIntervalX(0.05);
-    m_settings.setEditorSnapIntervalY(0.05);
-    m_settings.setEditorSnapOverrideModifier(static_cast<int>(Qt::ShiftModifier));
-    m_settings.setFillOnDropEnabled(true);
-    m_settings.setFillOnDropModifier(static_cast<int>(Qt::ControlModifier));
-    setNeedsSave(true);
 }
 
 QVariantMap SettingsController::loadWindowGeometry() const
@@ -2881,197 +2171,132 @@ void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// KZones Import
+// KZones Import — thin wrappers around kzonesimporter.{h,cpp}
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool SettingsController::hasKZonesConfig()
 {
-    const QString kwinrcPath =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
-    QSettings kwinrc(kwinrcPath, QSettings::IniFormat);
-    kwinrc.beginGroup(QStringLiteral("Script-kzones"));
-    bool has = kwinrc.contains(QStringLiteral("layoutsJson"))
-        && !kwinrc.value(QStringLiteral("layoutsJson")).toString().trimmed().isEmpty();
-    kwinrc.endGroup();
-    return has;
+    return KZonesImporter::hasKZonesConfig();
 }
 
 int SettingsController::importFromKZones()
 {
-    const QString kwinrcPath =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
-    QSettings kwinrc(kwinrcPath, QSettings::IniFormat);
-    kwinrc.beginGroup(QStringLiteral("Script-kzones"));
-    QString jsonStr = kwinrc.value(QStringLiteral("layoutsJson")).toString();
-    kwinrc.endGroup();
-
-    if (jsonStr.isEmpty()) {
-        Q_EMIT kzonesImportFinished(0, tr("No KZones configuration found in kwinrc"));
-        return 0;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        Q_EMIT kzonesImportFinished(0, tr("Failed to parse KZones layoutsJson: %1").arg(parseError.errorString()));
-        return 0;
-    }
-
-    int count = importKZonesLayouts(doc.array());
-    if (count > 0) {
+    const auto result = KZonesImporter::importFromKwinrc();
+    if (result.imported > 0) {
+        m_pendingSelectLayoutId = result.pendingSelectLayoutId;
         scheduleLayoutLoad();
-        Q_EMIT kzonesImportFinished(count, tr("Imported %n layout(s) from KZones", "", count));
-    } else {
-        Q_EMIT kzonesImportFinished(0, tr("No layouts found in KZones configuration"));
     }
-    return count;
+    Q_EMIT kzonesImportFinished(result.imported, result.message);
+    return result.imported;
 }
 
 int SettingsController::importFromKZonesFile(const QString& filePath)
 {
-    if (filePath.isEmpty()) {
-        Q_EMIT kzonesImportFinished(0, tr("No file path specified"));
-        return 0;
-    }
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        Q_EMIT kzonesImportFinished(0, tr("Could not open file: %1").arg(filePath));
-        return 0;
-    }
-
-    QByteArray data = file.readAll();
-    file.close();
-    // Strip UTF-8 BOM if present (common in Windows-edited files)
-    if (data.startsWith("\xEF\xBB\xBF"))
-        data.remove(0, 3);
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-
-    if (parseError.error != QJsonParseError::NoError) {
-        Q_EMIT kzonesImportFinished(0, tr("Failed to parse KZones JSON: %1").arg(parseError.errorString()));
-        return 0;
-    }
-
-    QJsonArray array;
-    if (doc.isArray()) {
-        array = doc.array();
-    } else if (doc.isObject()) {
-        // Single layout object — wrap in array
-        array.append(doc.object());
-    } else {
-        Q_EMIT kzonesImportFinished(0, tr("KZones file does not contain a JSON array or object"));
-        return 0;
-    }
-
-    int count = importKZonesLayouts(array);
-    if (count > 0) {
+    const auto result = KZonesImporter::importFromFile(filePath);
+    if (result.imported > 0) {
+        m_pendingSelectLayoutId = result.pendingSelectLayoutId;
         scheduleLayoutLoad();
-        Q_EMIT kzonesImportFinished(count, tr("Imported %n layout(s) from KZones file", "", count));
-    } else {
-        Q_EMIT kzonesImportFinished(0, tr("No valid layouts found in file"));
     }
-    return count;
+    Q_EMIT kzonesImportFinished(result.imported, result.message);
+    return result.imported;
 }
 
-int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
+// ── Virtual screen configuration ──────────────────────────────────────────
+
+QStringList SettingsController::getPhysicalScreens() const
 {
-    int imported = 0;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
+                                                QStringLiteral("getPhysicalScreens"));
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toStringList();
+    }
+    return {};
+}
 
-    for (const QJsonValue& layoutVal : kzonesArray) {
-        if (!layoutVal.isObject())
-            continue;
-
-        QJsonObject kzLayout = layoutVal.toObject();
-
-        // Build PlasmaZones layout JSON
-        QJsonObject pzLayout;
-        pzLayout[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-        pzLayout[QLatin1String(JsonKeys::Name)] =
-            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
-        pzLayout[QLatin1String(JsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pzLayout[QLatin1String(JsonKeys::IsBuiltIn)] = false;
-        pzLayout[QLatin1String(JsonKeys::ShowZoneNumbers)] = true;
-
-        int padding = kzLayout[QStringLiteral("padding")].toInt(0);
-        if (padding > 0) {
-            pzLayout[QLatin1String(JsonKeys::ZonePadding)] = padding;
-        }
-
-        // Convert zones — skip layouts with no zones
-        const QJsonArray kzZones = kzLayout[QStringLiteral("zones")].toArray();
-        if (kzZones.isEmpty())
-            continue;
-
-        QJsonArray pzZones;
-        QJsonArray appRules;
-
-        for (int i = 0; i < kzZones.size(); ++i) {
-            const QJsonObject kzZone = kzZones[i].toObject();
-
-            // Convert 0-100 percentage to 0.0-1.0, clamped to valid range
-            double x = qBound(0.0, kzZone[QStringLiteral("x")].toDouble(0) / 100.0, 1.0);
-            double y = qBound(0.0, kzZone[QStringLiteral("y")].toDouble(0) / 100.0, 1.0);
-            double w = qBound(0.0, kzZone[QStringLiteral("width")].toDouble(50) / 100.0, 1.0);
-            double h = qBound(0.0, kzZone[QStringLiteral("height")].toDouble(100) / 100.0, 1.0);
-
-            // Skip zero-area zones
-            if (w <= 0.0 || h <= 0.0)
-                continue;
-
-            // Use contiguous numbering (skipped zones don't leave gaps)
-            int zoneNum = pzZones.size() + 1;
-
-            QJsonObject pzZone;
-            pzZone[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-            pzZone[QLatin1String(JsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(JsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
-
-            QJsonObject relGeo;
-            relGeo[QLatin1String(JsonKeys::X)] = x;
-            relGeo[QLatin1String(JsonKeys::Y)] = y;
-            relGeo[QLatin1String(JsonKeys::Width)] = w;
-            relGeo[QLatin1String(JsonKeys::Height)] = h;
-            pzZone[QLatin1String(JsonKeys::RelativeGeometry)] = relGeo;
-
-            pzZones.append(pzZone);
-
-            // Collect per-zone applications into layout-level appRules
-            const QJsonArray apps = kzZone[QStringLiteral("applications")].toArray();
-            for (const QJsonValue& appVal : apps) {
-                QString appClass = appVal.toString().trimmed();
-                if (appClass.isEmpty())
-                    continue;
-                QJsonObject rule;
-                rule[QLatin1String(JsonKeys::Pattern)] = appClass;
-                rule[QLatin1String(JsonKeys::ZoneNumber)] = zoneNum;
-                appRules.append(rule);
+QVariantList SettingsController::getVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
+                                                QStringLiteral("getVirtualScreenConfig"), {physicalScreenId});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        QString json = reply.arguments().first().toString();
+        QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject root = doc.object();
+            QJsonArray screensArr = root.value(QLatin1String("screens")).toArray();
+            QVariantList result;
+            for (const auto& entry : screensArr) {
+                QJsonObject screenObj = entry.toObject();
+                QJsonObject regionObj = screenObj.value(QLatin1String("region")).toObject();
+                QVariantMap screen;
+                screen[QStringLiteral("displayName")] = screenObj.value(QLatin1String("displayName")).toString();
+                screen[QStringLiteral("x")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::X).toDouble();
+                screen[QStringLiteral("y")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble();
+                screen[QStringLiteral("width")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble();
+                screen[QStringLiteral("height")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble();
+                screen[QStringLiteral("index")] = screenObj.value(QLatin1String("index")).toInt();
+                result.append(screen);
             }
-        }
-
-        pzLayout[QLatin1String(JsonKeys::Zones)] = pzZones;
-        if (!appRules.isEmpty()) {
-            pzLayout[QLatin1String(JsonKeys::AppRules)] = appRules;
-        }
-
-        // Send to daemon via createLayoutFromJson D-Bus method
-        QString layoutJson = QString::fromUtf8(QJsonDocument(pzLayout).toJson(QJsonDocument::Compact));
-        QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                                    QStringLiteral("createLayoutFromJson"), {layoutJson});
-
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            QString newId = reply.arguments().first().toString();
-            if (!newId.isEmpty()) {
-                ++imported;
-                if (imported == 1) {
-                    m_pendingSelectLayoutId = newId;
-                }
-            }
+            return result;
         }
     }
+    return {};
+}
 
-    return imported;
+void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)
+{
+    QJsonObject root;
+    root[QLatin1String("physicalScreenId")] = physicalScreenId;
+
+    QJsonArray screensArr;
+    for (int i = 0; i < screens.size(); ++i) {
+        Phosphor::Screens::VirtualScreenDef def =
+            VirtualScreenUtils::variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+        if (!def.isValid()) {
+            qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
+                                << "region:" << def.region;
+            continue;
+        }
+        QJsonObject screenObj;
+        screenObj[QLatin1String("index")] = def.index;
+        screenObj[QLatin1String("displayName")] = def.displayName;
+        screenObj[QLatin1String("region")] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::X, def.region.x()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Y, def.region.y()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Width, def.region.width()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Height, def.region.height()}};
+        screensArr.append(screenObj);
+    }
+    root[QLatin1String("screens")] = screensArr;
+
+    QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
+                           QStringLiteral("setVirtualScreenConfig"), {physicalScreenId, json});
+}
+
+void SettingsController::removeVirtualScreenConfig(const QString& physicalScreenId)
+{
+    applyVirtualScreenConfig(physicalScreenId, {});
+}
+
+void SettingsController::stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)
+{
+    m_staging.stageVirtualScreenConfig(physicalScreenId, screens);
+    setNeedsSave(true);
+}
+
+void SettingsController::stageVirtualScreenRemoval(const QString& physicalScreenId)
+{
+    m_staging.stageVirtualScreenRemoval(physicalScreenId);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_staging.hasUnsavedVirtualScreenConfig(physicalScreenId);
+}
+
+QVariantList SettingsController::getStagedVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_staging.stagedVirtualScreenConfig(physicalScreenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

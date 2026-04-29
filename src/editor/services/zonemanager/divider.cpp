@@ -20,10 +20,10 @@ QVariantList ZoneManager::getZonesSharingEdge(const QString& zoneId, qreal edgeX
     }
 
     QVariantMap zone1 = m_zones[index].toMap();
-    qreal z1x = zone1[JsonKeys::X].toDouble();
-    qreal z1y = zone1[JsonKeys::Y].toDouble();
-    qreal z1w = zone1[JsonKeys::Width].toDouble();
-    qreal z1h = zone1[JsonKeys::Height].toDouble();
+    qreal z1x = zone1[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal z1y = zone1[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal z1w = zone1[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal z1h = zone1[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     bool checkRightEdge = qAbs(edgeX - (z1x + z1w)) < threshold;
     bool checkBottomEdge = qAbs(edgeY - (z1y + z1h)) < threshold;
@@ -33,10 +33,10 @@ QVariantList ZoneManager::getZonesSharingEdge(const QString& zoneId, qreal edgeX
             continue;
 
         QVariantMap zone2 = m_zones[i].toMap();
-        qreal z2x = zone2[JsonKeys::X].toDouble();
-        qreal z2y = zone2[JsonKeys::Y].toDouble();
-        qreal z2w = zone2[JsonKeys::Width].toDouble();
-        qreal z2h = zone2[JsonKeys::Height].toDouble();
+        qreal z2x = zone2[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        qreal z2y = zone2[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        qreal z2w = zone2[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        qreal z2h = zone2[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         bool sharesEdge = false;
 
@@ -58,11 +58,11 @@ QVariantList ZoneManager::getZonesSharingEdge(const QString& zoneId, qreal edgeX
 
         if (sharesEdge) {
             QVariantMap zoneInfo;
-            zoneInfo[JsonKeys::Id] = zone2[JsonKeys::Id].toString();
-            zoneInfo[JsonKeys::X] = z2x;
-            zoneInfo[JsonKeys::Y] = z2y;
-            zoneInfo[JsonKeys::Width] = z2w;
-            zoneInfo[JsonKeys::Height] = z2h;
+            zoneInfo[::PhosphorZones::ZoneJsonKeys::Id] = zone2[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            zoneInfo[::PhosphorZones::ZoneJsonKeys::X] = z2x;
+            zoneInfo[::PhosphorZones::ZoneJsonKeys::Y] = z2y;
+            zoneInfo[::PhosphorZones::ZoneJsonKeys::Width] = z2w;
+            zoneInfo[::PhosphorZones::ZoneJsonKeys::Height] = z2h;
             result.append(zoneInfo);
         }
     }
@@ -84,12 +84,12 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
     QVariantMap zone1 = m_zones[index1].toMap();
     QVariantMap zone2 = m_zones[index2].toMap();
 
-    qreal z1x = zone1[JsonKeys::X].toDouble();
-    qreal z1y = zone1[JsonKeys::Y].toDouble();
-    qreal z1w = zone1[JsonKeys::Width].toDouble();
-    qreal z2x = zone2[JsonKeys::X].toDouble();
-    qreal z2y = zone2[JsonKeys::Y].toDouble();
-    qreal z2h = zone2[JsonKeys::Height].toDouble();
+    qreal z1x = zone1[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal z1y = zone1[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal z1w = zone1[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal z2x = zone2[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal z2y = zone2[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal z2h = zone2[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     qreal oldDividerPos = 0;
     const qreal threshold = EditorConstants::EdgeThreshold;
@@ -98,7 +98,7 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
         if (z1x < z2x) {
             oldDividerPos = z1x + z1w;
         } else {
-            oldDividerPos = z2x + zone2[JsonKeys::Width].toDouble();
+            oldDividerPos = z2x + zone2[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
         }
 
         QList<int> leftZones;
@@ -109,8 +109,8 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
 
         for (int i = 0; i < m_zones.size(); ++i) {
             const QVariantMap zone = m_zones[i].toMap();
-            const qreal zx = zone[JsonKeys::X].toDouble();
-            const qreal zw = zone[JsonKeys::Width].toDouble();
+            const qreal zx = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            const qreal zw = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
             const qreal rightEdge = zx + zw;
 
             if (qAbs(rightEdge - oldDividerPos) < threshold) {
@@ -122,25 +122,25 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
 
         for (int idx : leftZones) {
             const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[JsonKeys::Id].toString();
-            const qreal x = zone[JsonKeys::X].toDouble();
-            const qreal y = zone[JsonKeys::Y].toDouble();
-            const qreal w = zone[JsonKeys::Width].toDouble();
-            const qreal h = zone[JsonKeys::Height].toDouble();
+            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
         for (int idx : rightZones) {
             const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[JsonKeys::Id].toString();
-            const qreal x = zone[JsonKeys::X].toDouble();
-            const qreal y = zone[JsonKeys::Y].toDouble();
-            const qreal w = zone[JsonKeys::Width].toDouble();
-            const qreal h = zone[JsonKeys::Height].toDouble();
+            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
     } else {
         if (z1y < z2y) {
-            oldDividerPos = z1y + zone1[JsonKeys::Height].toDouble();
+            oldDividerPos = z1y + zone1[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
         } else {
             oldDividerPos = z2y + z2h;
         }
@@ -153,8 +153,8 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
 
         for (int i = 0; i < m_zones.size(); ++i) {
             const QVariantMap zone = m_zones[i].toMap();
-            const qreal zy = zone[JsonKeys::Y].toDouble();
-            const qreal zh = zone[JsonKeys::Height].toDouble();
+            const qreal zy = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            const qreal zh = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             const qreal bottomEdge = zy + zh;
 
             if (qAbs(bottomEdge - oldDividerPos) < threshold) {
@@ -166,20 +166,20 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
 
         for (int idx : topZones) {
             const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[JsonKeys::Id].toString();
-            const qreal x = zone[JsonKeys::X].toDouble();
-            const qreal y = zone[JsonKeys::Y].toDouble();
-            const qreal w = zone[JsonKeys::Width].toDouble();
-            const qreal h = zone[JsonKeys::Height].toDouble();
+            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
         for (int idx : bottomZones) {
             const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[JsonKeys::Id].toString();
-            const qreal x = zone[JsonKeys::X].toDouble();
-            const qreal y = zone[JsonKeys::Y].toDouble();
-            const qreal w = zone[JsonKeys::Width].toDouble();
-            const qreal h = zone[JsonKeys::Height].toDouble();
+            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
     }
@@ -201,12 +201,12 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
     QVariantMap zone1 = m_zones[index1].toMap();
     QVariantMap zone2 = m_zones[index2].toMap();
 
-    qreal z1x = zone1[JsonKeys::X].toDouble();
-    qreal z1y = zone1[JsonKeys::Y].toDouble();
-    qreal z1w = zone1[JsonKeys::Width].toDouble();
-    qreal z2x = zone2[JsonKeys::X].toDouble();
-    qreal z2y = zone2[JsonKeys::Y].toDouble();
-    qreal z2h = zone2[JsonKeys::Height].toDouble();
+    qreal z1x = zone1[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal z1y = zone1[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal z1w = zone1[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal z2x = zone2[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal z2y = zone2[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal z2h = zone2[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     qreal oldDividerPos = 0;
     qreal threshold = EditorConstants::EdgeThreshold;
@@ -215,7 +215,7 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
         if (z1x < z2x) {
             oldDividerPos = z1x + z1w;
         } else {
-            oldDividerPos = z2x + zone2[JsonKeys::Width].toDouble();
+            oldDividerPos = z2x + zone2[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
         }
 
         QList<int> leftZones;
@@ -226,8 +226,8 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int i = 0; i < m_zones.size(); ++i) {
             const QVariantMap zone = m_zones[i].toMap();
-            const qreal zx = zone[JsonKeys::X].toDouble();
-            const qreal zw = zone[JsonKeys::Width].toDouble();
+            const qreal zx = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            const qreal zw = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
             const qreal rightEdge = zx + zw;
 
             if (qAbs(rightEdge - oldDividerPos) < threshold) {
@@ -243,12 +243,12 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int idx : leftZones) {
             QVariantMap zone = m_zones[idx].toMap();
-            qreal newWidth = zone[JsonKeys::Width].toDouble() + deltaX;
+            qreal newWidth = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble() + deltaX;
             if (newWidth < minSize) {
                 valid = false;
                 break;
             }
-            qreal zx = zone[JsonKeys::X].toDouble();
+            qreal zx = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
             if (zx + newWidth > 1.0) {
                 valid = false;
                 break;
@@ -258,8 +258,8 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
         if (valid) {
             for (int idx : rightZones) {
                 QVariantMap zone = m_zones[idx].toMap();
-                qreal zx = zone[JsonKeys::X].toDouble();
-                qreal zw = zone[JsonKeys::Width].toDouble();
+                qreal zx = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+                qreal zw = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
                 qreal newX = zx + deltaX;
                 qreal newWidth = zw - deltaX;
 
@@ -281,15 +281,15 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int idx : leftZones) {
             QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal zx = zone[JsonKeys::X].toDouble();
+            QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            qreal zx = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
             qreal newWidth = newDividerX - zx;
 
             if (newWidth < minSize) {
                 newWidth = minSize;
             }
 
-            zone[JsonKeys::Width] = newWidth;
+            zone[::PhosphorZones::ZoneJsonKeys::Width] = newWidth;
             if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
@@ -305,9 +305,9 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int idx : rightZones) {
             QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal oldX = zone[JsonKeys::X].toDouble();
-            qreal oldW = zone[JsonKeys::Width].toDouble();
+            QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            qreal oldX = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            qreal oldW = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
             qreal newX = newDividerX;
             qreal newWidth = (oldX + oldW) - newX;
 
@@ -316,8 +316,8 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
                 newX = (oldX + oldW) - minSize;
             }
 
-            zone[JsonKeys::X] = newX;
-            zone[JsonKeys::Width] = newWidth;
+            zone[::PhosphorZones::ZoneJsonKeys::X] = newX;
+            zone[::PhosphorZones::ZoneJsonKeys::Width] = newWidth;
             if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
@@ -333,7 +333,7 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
     } else {
         // Horizontal divider - similar logic for Y/Height
         if (z1y < z2y) {
-            oldDividerPos = z1y + zone1[JsonKeys::Height].toDouble();
+            oldDividerPos = z1y + zone1[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
         } else {
             oldDividerPos = z2y + z2h;
         }
@@ -346,8 +346,8 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int i = 0; i < m_zones.size(); ++i) {
             const QVariantMap zone = m_zones[i].toMap();
-            const qreal zy = zone[JsonKeys::Y].toDouble();
-            const qreal zh = zone[JsonKeys::Height].toDouble();
+            const qreal zy = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            const qreal zh = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             const qreal bottomEdge = zy + zh;
 
             if (qAbs(bottomEdge - oldDividerPos) < threshold) {
@@ -363,12 +363,12 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int idx : topZones) {
             QVariantMap zone = m_zones[idx].toMap();
-            qreal newHeight = zone[JsonKeys::Height].toDouble() + deltaY;
+            qreal newHeight = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble() + deltaY;
             if (newHeight < minSize) {
                 valid = false;
                 break;
             }
-            qreal zy = zone[JsonKeys::Y].toDouble();
+            qreal zy = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
             if (zy + newHeight > 1.0) {
                 valid = false;
                 break;
@@ -378,8 +378,8 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
         if (valid) {
             for (int idx : bottomZones) {
                 QVariantMap zone = m_zones[idx].toMap();
-                qreal zy = zone[JsonKeys::Y].toDouble();
-                qreal zh = zone[JsonKeys::Height].toDouble();
+                qreal zy = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+                qreal zh = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
                 qreal newY = zy + deltaY;
                 qreal newHeight = zh - deltaY;
 
@@ -401,15 +401,15 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int idx : topZones) {
             QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal zy = zone[JsonKeys::Y].toDouble();
+            QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            qreal zy = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
             qreal newHeight = newDividerY - zy;
 
             if (newHeight < minSize) {
                 newHeight = minSize;
             }
 
-            zone[JsonKeys::Height] = newHeight;
+            zone[::PhosphorZones::ZoneJsonKeys::Height] = newHeight;
             if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
@@ -425,9 +425,9 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         for (int idx : bottomZones) {
             QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal oldY = zone[JsonKeys::Y].toDouble();
-            qreal oldH = zone[JsonKeys::Height].toDouble();
+            QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+            qreal oldY = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            qreal oldH = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
             qreal newY = newDividerY;
             qreal newHeight = (oldY + oldH) - newY;
 
@@ -436,8 +436,8 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
                 newY = (oldY + oldH) - minSize;
             }
 
-            zone[JsonKeys::Y] = newY;
-            zone[JsonKeys::Height] = newHeight;
+            zone[::PhosphorZones::ZoneJsonKeys::Y] = newY;
+            zone[::PhosphorZones::ZoneJsonKeys::Height] = newHeight;
             if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }

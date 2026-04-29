@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Window
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Editable zone component with drag and resize handles
@@ -493,8 +494,9 @@ Item {
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 100
+                PhosphorMotionAnimation {
+                    profile: "widget.fade"
+                    durationOverride: 100
                 }
 
             }
@@ -504,9 +506,9 @@ Item {
         Behavior on color {
             enabled: root._animationsReady
 
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -514,9 +516,9 @@ Item {
         Behavior on border.color {
             enabled: root._animationsReady
 
-            ColorAnimation {
-                duration: Theme.animDuration
-                easing.type: Theme.animEasing
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
+                durationOverride: Theme.animDuration
             }
 
         }
@@ -638,9 +640,9 @@ Item {
     Behavior on visualX {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }
@@ -648,9 +650,9 @@ Item {
     Behavior on visualY {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }
@@ -658,9 +660,9 @@ Item {
     Behavior on visualWidth {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }
@@ -668,9 +670,9 @@ Item {
     Behavior on visualHeight {
         enabled: root.animateFillPreview
 
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
+        PhosphorMotionAnimation {
+            profile: "zone.snapResize"
+            durationOverride: 150
         }
 
     }

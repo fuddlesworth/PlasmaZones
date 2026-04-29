@@ -125,7 +125,7 @@ ComboBox {
                     continue;
 
                 layoutItems.push({
-                    "text": layout.name,
+                    "text": layout.displayName,
                     "value": layout.id,
                     "layout": layout,
                     "category": cat,
@@ -413,6 +413,7 @@ ComboBox {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
                         autoAssign: modelData.layout && modelData.layout.autoAssign === true
+                        globalAutoAssign: root.appSettings && root.appSettings.autoAssignAllLayouts === true
                     }
 
                     // Aspect ratio badge
@@ -431,7 +432,7 @@ ComboBox {
                         } else if (!hasLayout) {
                             return i18n("No default configured");
                         } else if (isDefaultOption) {
-                            let layoutName = (modelData.layout && modelData.layout.name) || "";
+                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
                             return i18n("→ %1 (%2 zones)", layoutName, (modelData.layout && modelData.layout.zoneCount) || 0);
                         } else {
                             return i18n("%1 zones", (modelData.layout && modelData.layout.zoneCount) || 0);

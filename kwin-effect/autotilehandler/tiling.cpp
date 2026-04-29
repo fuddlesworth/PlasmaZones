@@ -5,32 +5,59 @@
 // Part of AutotileHandler — split from autotilehandler.cpp for SRP.
 
 #include "../autotilehandler.h"
+#include "../dragtracker.h"
 #include "../plasmazoneseffect.h"
 #include "../windowanimator.h"
-#include "../dbus_constants.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 #include <workspace.h>
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
+void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests)
 {
-    if (tileRequestsJson.isEmpty()) {
+    if (tileRequests.isEmpty()) {
+        return;
+    }
+
+    // Validate every request up-front. A single malformed entry is logged and
+    // dropped from the batch; the remaining requests still apply. This avoids
+    // one corrupt payload (e.g. zero-size tiled request from a protocol glitch)
+    // from either resizing a window to 0×0 or poisoning the whole retile pass.
+    PhosphorProtocol::TileRequestList validatedRequests;
+    validatedRequests.reserve(tileRequests.size());
+    for (const auto& req : tileRequests) {
+        if (const QString err = req.validationError(); !err.isEmpty()) {
+            qCWarning(lcEffect) << "slotWindowsTileRequested: dropping invalid entry:" << err;
+            continue;
+        }
+        validatedRequests.append(req);
+    }
+    if (validatedRequests.isEmpty()) {
+        qCWarning(lcEffect) << "slotWindowsTileRequested: all" << tileRequests.size() << "entries invalid — aborting";
         return;
     }
 
     ++m_autotileStaggerGeneration;
-    m_autotileTargetZones.clear();
+    // NOTE: m_autotileTargetZones and m_centeredWaylandZones are intentionally
+    // NOT cleared globally here. Each retile fires for a single screen at a
+    // time (per-VS retile after a swap/rotate), so a global clear would wipe
+    // sibling-VS entries mid-animation and strand their windows without a
+    // centering target. The per-window erase-on-consumption below (and inside
+    // the centering handler) keeps the map self-cleaning — entries for
+    // windows in the new request get overwritten, entries for windows not in
+    // any request are consumed the next time their frame geometry changes.
+    // Closed windows are pruned via cleanupClosedWindowState.
 
     // Snapshot the full global stacking order before tiling. After all
     // moveResize calls (which implicitly raise on KWin 6 / Wayland),
@@ -40,13 +67,6 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     QVector<QPointer<KWin::EffectWindow>> savedGlobalStack;
     for (KWin::EffectWindow* w : allWindows) {
         savedGlobalStack.append(QPointer<KWin::EffectWindow>(w));
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(tileRequestsJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcEffect) << "Autotile windowsTileRequested: invalid JSON:" << parseError.errorString();
-        return;
     }
 
     struct Entry
@@ -59,17 +79,15 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     };
     QVector<Entry> entries;
 
-    const QJsonArray arr = doc.array();
-    for (const QJsonValue& val : arr) {
-        QJsonObject obj = val.toObject();
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
+    for (const auto& req : validatedRequests) {
+        const QString& windowId = req.windowId;
 
         // Float entries: overflow windows that should be restored to pre-autotile geometry.
         // Process inline — same cleanup as slotWindowFloatingChanged(windowId, true, ...).
         // Geometry is restored from the effect's local pre-autotile cache, avoiding
         // the per-window D-Bus roundtrip through the daemon's applyGeometryForFloat.
-        if (obj.value(QLatin1String("floating")).toBool(false)) {
-            const QString screenId = obj.value(QLatin1String("screenId")).toString();
+        if (req.floating) {
+            const QString& screenId = req.screenId;
             qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
             applyFloatCleanup(windowId);
 
@@ -78,7 +96,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             if (floatWin && !screenId.isEmpty()) {
                 auto screenIt = m_preAutotileGeometries.constFind(screenId);
                 if (screenIt != m_preAutotileGeometries.constEnd()) {
-                    const QString geoKey = findSavedGeometryKey(screenIt.value(), windowId);
+                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
                     if (!geoKey.isEmpty()) {
                         const QRectF& savedGeo = screenIt.value().value(geoKey);
                         m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
@@ -90,8 +108,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             continue;
         }
 
-        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+        QRect geo = req.toRect();
         QRect normalizedGeometry = geo.normalized();
 
         if (normalizedGeometry.width() <= 0 || normalizedGeometry.height() <= 0) {
@@ -112,7 +129,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         entry.windowId = windowId;
         entry.geometry = normalizedGeometry;
         entry.window = w;
-        entry.isMonocle = obj.value(QLatin1String("monocle")).toBool(false);
+        entry.isMonocle = req.monocle;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -123,7 +140,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
-            appIdToEntryIndices[m_effect->appIdForInstance(entries[i].windowId)].append(i);
+            appIdToEntryIndices[::PhosphorIdentity::WindowId::extractAppId(entries[i].windowId)].append(i);
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
@@ -173,37 +190,51 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         bool isMonocle = false;
     };
     QVector<TileSnap> toApply;
-    QSet<QString> tiledWindowIds;
-    QSet<QString> tileScreenIds;
     for (Entry& e : entries) {
         if (!e.window) {
             continue;
         }
-        tiledWindowIds.insert(e.windowId);
         QString screenId = m_effect->getWindowScreenId(e.window);
-        tileScreenIds.insert(screenId);
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenId, e.isMonocle});
     }
 
     const uint64_t gen = m_autotileStaggerGeneration;
 
-    auto onComplete = [this, toApply, tiledWindowIds, tileScreenIds, savedGlobalStack, gen]() {
+    // Build per-screen "new request" sets so the onComplete cleanup can
+    // compare each screen's previous bucket against its new bucket in
+    // isolation — no cross-screen contamination.
+    QHash<QString, QSet<QString>> newTiledByScreen;
+    for (const TileSnap& s : toApply) {
+        newTiledByScreen[s.screenId].insert(s.windowId);
+    }
+
+    auto onComplete = [this, toApply, newTiledByScreen, savedGlobalStack, gen]() {
         if (m_autotileStaggerGeneration != gen) {
             return;
         }
-        // Clean up windows that are no longer tiled: restore title bars and
-        // remove from tiledWindows tracking. This subsumes the old borderless-
-        // only cleanup since tiledWindows is a superset of borderlessWindows.
-        const QSet<QString> untiled = m_border.tiledWindows - tiledWindowIds;
-        for (const QString& wid : untiled) {
-            KWin::EffectWindow* win = m_effect->findWindowById(wid);
-            if (win && tileScreenIds.contains(m_effect->getWindowScreenId(win)) && !win->isMinimized()) {
-                if (m_border.borderlessWindows.contains(wid)) {
-                    setWindowBorderless(win, wid, false);
+        // Per-screen untile cleanup. For each screen that participated in
+        // this retile, the set of windows previously tracked as tiled on
+        // that screen minus the set in the new request is exactly the
+        // windows that left that screen's tiling state. Titlebars are
+        // restored only when the window isn't tracked as borderless on
+        // any sibling screen — setWindowBorderless already enforces this.
+        for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+            const QString& screenId = screenIt.key();
+            const QSet<QString>& newSet = screenIt.value();
+            const QSet<QString> previous = AutotileStateHelpers::tiledOnScreen(m_border, screenId);
+            const QSet<QString> untiled = previous - newSet;
+            for (const QString& wid : untiled) {
+                KWin::EffectWindow* win = m_effect->findWindowById(wid);
+                if (!win || win->isMinimized()) {
+                    AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
+                    continue;
                 }
+                if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(wid)) {
+                    setWindowBorderless(win, wid, false, screenId);
+                }
+                AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
             }
         }
-        m_border.tiledWindows -= untiled;
         auto* ws = KWin::Workspace::self();
         if (ws) {
             // Restore the full global stacking order (all screens, all windows).
@@ -222,7 +253,8 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             // These raises go ON TOP of the global restore, preserving user's
             // z-order choices (e.g. floated window raised to front) across
             // mode toggles.
-            for (const QString& screenId : tileScreenIds) {
+            for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+                const QString& screenId = it.key();
                 const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
                 if (savedOrder.isEmpty()) {
                     continue;
@@ -276,11 +308,36 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             if (!snap.window || snap.window->isDeleted()) {
                 return;
             }
+            // Suppress the windowFrameGeometryChanged crossing-detection paths for the
+            // duration of this per-window apply. applySnapGeometry's moveResize emits
+            // frameGeometryChanged synchronously, and after a VS swap/rotate the cached
+            // m_virtualScreenDefs may still hold pre-rotation regions — without this
+            // guard the slot would resolve the new position against stale boundaries
+            // and falsely conclude the window crossed VSes, then unsnap it.
+            m_effect->m_inDaemonGeometryApply = true;
+            const auto guard = qScopeGuard([this] {
+                m_effect->m_inDaemonGeometryApply = false;
+            });
             saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window->frameGeometry());
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
-            m_border.tiledWindows.insert(snap.windowId);
+            // A window can only be tile-managed by one screen at a time.
+            // If this is a cross-screen transfer, strip the stale tracking
+            // from any other screen before recording the new owner. This
+            // keeps the tracking map coherent when e.g. a window drags
+            // from an autotile VS onto a sibling autotile VS.
+            for (auto scrIt = m_border.tiledWindowsByScreen.begin(); scrIt != m_border.tiledWindowsByScreen.end();) {
+                if (scrIt.key() != snap.screenId) {
+                    scrIt.value().remove(snap.windowId);
+                }
+                if (scrIt.value().isEmpty() && scrIt.key() != snap.screenId) {
+                    scrIt = m_border.tiledWindowsByScreen.erase(scrIt);
+                } else {
+                    ++scrIt;
+                }
+            }
+            AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
             if (m_border.hideTitleBars) {
-                setWindowBorderless(snap.window, snap.windowId, true);
+                setWindowBorderless(snap.window, snap.windowId, true, snap.screenId);
             }
 
             if (snap.isMonocle) {
@@ -336,11 +393,54 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
 void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
 {
     Q_UNUSED(oldGeometry)
-    if (!w || m_autotileTargetZones.isEmpty()) {
+    if (!w) {
+        return;
+    }
+
+    // Fast bail: skip getWindowId entirely when neither VS detection nor centering needs it
+    if (m_effect->m_virtualScreenDefs.isEmpty() && m_autotileTargetZones.isEmpty()) {
         return;
     }
 
     const QString windowId = m_effect->getWindowId(w);
+
+    // Virtual screen change detection: KWin's outputChanged only fires on
+    // physical monitor changes. When a window moves between virtual screens
+    // on the same physical monitor (e.g., A/vs:0 → A/vs:1), no outputChanged
+    // fires. Detect the change here so the autotile engine can transfer the
+    // window. Only check windows we're already tracking (m_notifiedWindowScreens)
+    // and only when the physical screen has virtual subdivisions.
+    // Skip during a daemon-driven apply (slotWindowsTileRequested /
+    // slotApplyGeometriesBatch): the daemon is the authoritative source of the
+    // window's intended VS during VS swap/rotate, and the cached
+    // m_virtualScreenDefs may still reflect pre-rotation regions.
+    if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
+        && m_effect->m_virtualScreensReady && !m_effect->m_inDaemonGeometryApply) {
+        // Don't detect VS crossings for the dragged window — the drop handler
+        // (callDragStopped / autotile drag end) owns state transitions.
+        // Detecting mid-drag would transfer the window before the user drops it.
+        // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
+        const bool isDraggedWindow =
+            m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId();
+        if (!isDraggedWindow) {
+            const QString newScreenId = m_effect->getWindowScreenId(w);
+            const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
+            if (PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+                // Virtual screen changed on the same physical monitor — delegate to
+                // the same handler used by outputChanged. The re-entrancy guard
+                // inside handleWindowOutputChanged prevents infinite loops from
+                // geometry changes caused by tiling.
+                handleWindowOutputChanged(w);
+                return;
+            }
+        }
+        // Fall through to centering logic below for all windows (including dragged)
+    }
+
+    if (m_autotileTargetZones.isEmpty()) {
+        return;
+    }
+
     auto it = m_autotileTargetZones.find(windowId);
     if (it == m_autotileTargetZones.end()) {
         return;
@@ -448,16 +548,6 @@ void AutotileHandler::slotFocusWindowRequested(const QString& windowId)
     KWin::effects->activateWindow(w);
 }
 
-QRect AutotileHandler::applyBorderInset(const QRect& geo) const
-{
-    return geo.adjusted(m_border.width, m_border.width, -m_border.width, -m_border.width);
-}
-
-bool AutotileHandler::shouldInsetForBorder(const QString& windowId, const QRect& geo) const
-{
-    return shouldApplyBorderInset(windowId) && geo.width() > 2 * m_border.width && geo.height() > 2 * m_border.width;
-}
-
 void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)
 {
     if (minWidth <= 0 && minHeight <= 0) {
@@ -467,8 +557,9 @@ void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWi
     qCInfo(lcEffect) << "Discovered min size for" << windowId << ":" << minWidth << "x" << minHeight
                      << "- reporting to daemon for future retiles";
 
-    m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
-                                    {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        m_effect, PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
+        {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
 }
 
 } // namespace PlasmaZones

@@ -21,7 +21,7 @@ class ShaderRegistry;
  * Exposes shader metadata, compilation lifecycle, and user shader directory
  * monitoring. All methods delegate to ShaderRegistry.
  *
- * Shader assignment remains at the Layout level (via LayoutManager interface).
+ * Shader assignment remains at the PhosphorZones::Layout level (via PhosphorZones::LayoutRegistry interface).
  * This interface provides shader discovery, parameter introspection, and
  * compilation feedback for the Shader Editor and other consumers.
  */
@@ -33,6 +33,13 @@ class PLASMAZONES_EXPORT ShaderAdaptor : public QDBusAbstractAdaptor
 public:
     explicit ShaderAdaptor(ShaderRegistry* registry, QObject* parent = nullptr);
     ~ShaderAdaptor() override = default;
+
+    /// Null the borrowed ShaderRegistry pointer and sever every signal
+    /// wiring to it. Called from Daemon::stop() before the owning
+    /// unique_ptr member destroys the registry, so a late-arriving D-Bus
+    /// call lands on the null-safe fallback paths below instead of
+    /// dereferencing a dangling pointer.
+    void detach();
 
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════

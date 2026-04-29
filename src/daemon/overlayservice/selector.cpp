@@ -4,24 +4,31 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
-#include "../../core/layoutmanager.h"
-#include "../../core/zone.h"
-#include "../../core/layoututils.h"
+#include <PhosphorSurfaces/SurfaceManager.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
+#include <QCursor>
 #include <QScreen>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include "../../core/layersurface.h"
+#include <QVector>
+
+#include <PhosphorLayer/Surface.h>
+#include "pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
-void OverlayService::showZoneSelector(QScreen* targetScreen)
+void OverlayService::showZoneSelector(const QString& targetScreenId)
 {
     if (m_zoneSelectorVisible) {
         return;
@@ -32,31 +39,107 @@ void OverlayService::showZoneSelector(QScreen* targetScreen)
         return;
     }
 
+    // A deferred recreation is pending (virtualScreensChanged handler).
+    // Skip this call to avoid racing with the deferred timer, which will
+    // call showZoneSelector() once layout migrations have settled.
+    if (m_zoneSelectorRecreationPending) {
+        return;
+    }
+
     m_zoneSelectorVisible = true;
 
-    for (auto* screen : Utils::allScreens()) {
-        // Only show on the target screen (nullptr = all screens)
-        if (targetScreen && screen != targetScreen) {
-            continue;
+    // Resolve target screen from screenId (supports virtual screen IDs)
+    auto* mgr = m_screenManager;
+    QScreen* targetScreen = nullptr;
+    if (!targetScreenId.isEmpty()) {
+        targetScreen = mgr ? mgr->physicalQScreenFor(targetScreenId)
+                           : Phosphor::Screens::ScreenIdentity::findByIdOrName(targetScreenId);
+    }
+
+    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
+
+    if (mgr && !effectiveIds.isEmpty()) {
+        for (const QString& screenId : effectiveIds) {
+            QScreen* physScreen = mgr->physicalQScreenFor(screenId);
+            if (!physScreen) {
+                continue;
+            }
+            // Only show on the target screen (nullptr/empty = all screens)
+            if (!targetScreenId.isEmpty() && screenId != targetScreenId) {
+                continue;
+            }
+            // Skip monitors/desktops/activities where PlasmaZones is disabled
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
+                continue;
+            }
+            // Skip autotile-managed screens (zone selector is for manual zone selection)
+            if (m_excludedScreens.contains(screenId)) {
+                continue;
+            }
+            const QRect geom = mgr->screenGeometry(screenId);
+            const QRect targetGeom = geom.isValid() ? geom : physScreen->geometry();
+            // Reuse the warmed surface when one already exists for this
+            // screen — wlr-layer-shell v3 anchors are immutable post-attach,
+            // so the only thing that forces a rebuild is the screen entry
+            // disappearing entirely (handled by destroyZoneSelectorWindow on
+            // screen removal). Rebuilding on every drag-near-edge would pay
+            // ~50-100 ms for surface attach + Vulkan swapchain init before
+            // the show animation starts.
+            const auto& state = m_screenStates.value(screenId);
+            if (!state.zoneSelectorWindow) {
+                createZoneSelectorWindow(screenId, physScreen, targetGeom);
+            }
+            const auto& s = m_screenStates.value(screenId);
+            auto* window = s.zoneSelectorWindow;
+            auto* surface = s.zoneSelectorSurface;
+            if (!window || !surface) {
+                continue;
+            }
+            assertWindowOnScreen(window, physScreen, targetGeom);
+            updateZoneSelectorWindow(screenId);
+            window->setWidth(targetGeom.width());
+            window->setHeight(targetGeom.height());
+            qCDebug(lcOverlay) << "showZoneSelector: screen=" << screenId << "targetGeom=" << targetGeom
+                               << "physScreenGeom=" << physScreen->geometry()
+                               << "windowSizeAfterSet=" << window->width() << "x" << window->height();
+            // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup)
+            // and clears Qt.WindowTransparentForInput so input routes again.
+            surface->show();
         }
-        // Skip monitors/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                              m_currentActivity)) {
-            continue;
-        }
-        // Skip autotile-managed screens (zone selector is for manual zone selection)
-        if (m_excludedScreens.contains(Utils::screenIdentifier(screen))) {
-            continue;
-        }
-        if (!m_zoneSelectorWindows.contains(screen)) {
-            createZoneSelectorWindow(screen);
-        }
-        if (auto* window = m_zoneSelectorWindows.value(screen)) {
+    } else {
+        // Fallback: no Phosphor::Screens::ScreenManager
+        for (auto* screen : Utils::allScreens()) {
+            if (targetScreen && screen != targetScreen) {
+                continue;
+            }
+            QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
+                continue;
+            }
+            if (m_excludedScreens.contains(screenId)) {
+                continue;
+            }
+            auto* smgr = m_screenManager;
+            QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
+                                                                            : screen->geometry();
+            const auto& state = m_screenStates.value(screenId);
+            if (!state.zoneSelectorWindow) {
+                createZoneSelectorWindow(screenId, screen, geom);
+            }
+            const auto& s = m_screenStates.value(screenId);
+            auto* window = s.zoneSelectorWindow;
+            auto* surface = s.zoneSelectorSurface;
+            if (!window || !surface) {
+                continue;
+            }
             assertWindowOnScreen(window, screen);
-            updateZoneSelectorWindow(screen);
-            window->show();
-        } else {
-            qCWarning(lcOverlay) << "No window found for screen" << screen->name();
+            updateZoneSelectorWindow(screenId);
+            window->setWidth(geom.width());
+            window->setHeight(geom.height());
+            // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup).
+            surface->show();
         }
     }
 
@@ -71,16 +154,33 @@ void OverlayService::hideZoneSelector()
 
     m_zoneSelectorVisible = false;
 
-    // Note: Don't clear selected zone here - we need it for snapping when drag ends
-    // The selected zone will be cleared after the snap is processed
+    // Note: Don't clear selected zone here — we need it for snapping when
+    // drag ends. The selected zone is cleared after the snap is processed.
 
-    // Destroy windows instead of hiding. When Vulkan is the scene graph backend,
-    // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
-    // re-show — this affects ALL QQuickWindows, not just those with custom render
-    // nodes. showZoneSelector() will create fresh windows via createZoneSelectorWindow().
-    const QList<QScreen*> screens = m_zoneSelectorWindows.keys();
-    for (auto* screen : screens) {
-        destroyZoneSelectorWindow(screen);
+    // Phase 5: Surface::hide() routes through SurfaceAnimator's beginHide
+    // (widget.fadeOut profile, opacity 1→0) and flips
+    // Qt.WindowTransparentForInput on the QWindow. Surfaces stay alive so
+    // the next drag-near-edge reuses the warmed Vulkan swapchain instead
+    // of paying ~50-100 ms for a fresh layer-shell attach. Reset the QML-
+    // side hover state explicitly — autoScrollTimer would otherwise tick
+    // on stale cursor coords between hide and the next show.
+    //
+    // Restrict the reset + hide to surfaces actually in Shown state. With
+    // many virtual screens, m_screenStates accumulates one entry per VS
+    // even if only one selector was ever shown for the active drag; the
+    // unfiltered loop wrote a small storm of redundant QML invocations on
+    // every hide. Surface::hide() on a non-Shown surface is already a
+    // no-op + warning, so filtering also keeps the journal quiet.
+    const QStringList screenIds = m_screenStates.keys();
+    for (const QString& screenId : screenIds) {
+        const auto& s = m_screenStates.value(screenId);
+        if (!s.zoneSelectorSurface || !s.zoneSelectorSurface->isLogicallyShown()) {
+            continue;
+        }
+        if (s.zoneSelectorWindow) {
+            QMetaObject::invokeMethod(s.zoneSelectorWindow, "resetCursorState");
+        }
+        s.zoneSelectorSurface->hide();
     }
 
     Q_EMIT zoneSelectorVisibilityChanged(false);
@@ -100,15 +200,62 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     }
 
     // Update the zone selector window with cursor position for hover effects
-    if (auto* window = m_zoneSelectorWindows.value(screen)) {
-        // With exclusiveZone=-1, the window is positioned deterministically
-        // and mapFromGlobal gives us accurate local coordinates without compensation
-        const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
-        int localX = localPos.x();
-        int localY = localPos.y();
+    // Resolve to effective (virtual) screen ID if applicable
+    QString cursorScreenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), screen);
 
-        window->setProperty("cursorX", localX);
-        window->setProperty("cursorY", localY);
+    // Skip excluded screens (autotile-managed) — matches showZoneSelector exclusion
+    if (m_excludedScreens.contains(cursorScreenId)) {
+        return;
+    }
+
+    auto* mgr = m_screenManager;
+    // Clear selection highlight on all OTHER zone selector windows when cursor moves
+    // to a different virtual screen, preventing stale highlights from previous screen.
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        if (it.key() != cursorScreenId && it.value().zoneSelectorWindow) {
+            writeQmlProperty(it.value().zoneSelectorWindow, QStringLiteral("selectedLayoutId"), QString());
+            writeQmlProperty(it.value().zoneSelectorWindow, QStringLiteral("selectedZoneIndex"), -1);
+        }
+    }
+
+    if (auto* window = m_screenStates.value(cursorScreenId).zoneSelectorWindow) {
+        // Convert global cursor position to window-local coordinates.
+        // On Wayland with LayerShell, mapFromGlobal may return wrong coordinates
+        // before the first frame (geometry not yet applied). Fall back to
+        // manual translation using the window's reported geometry.
+        int localX, localY;
+        // On Wayland LayerShell, QWindow::geometry() is unreliable until the compositor
+        // acknowledges the surface position. Prefer the stored zoneSelectorGeometry which
+        // reflects the geometry we requested at creation time.
+        const QRect& storedGeom = m_screenStates.value(cursorScreenId).zoneSelectorGeometry;
+        const QRect winGeom = storedGeom.isValid() ? storedGeom : window->geometry();
+        if (winGeom.isValid() && winGeom.width() > 0) {
+            localX = cursorX - winGeom.x();
+            localY = cursorY - winGeom.y();
+        } else {
+            const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
+            localX = localPos.x();
+            localY = localPos.y();
+        }
+
+        // Selector hit-detection debug. Enable with:
+        //   QT_LOGGING_RULES="org.plasmazones.overlay.debug=true"
+        // Throttled to once per ~64 px cursor movement to keep the log readable
+        // while still showing geometry on every meaningful position change.
+        static QPoint sLastLoggedCursor(-1000000, -1000000);
+        const QPoint thisCursor(cursorX, cursorY);
+        const bool farMoved = std::abs(thisCursor.x() - sLastLoggedCursor.x()) > 64
+            || std::abs(thisCursor.y() - sLastLoggedCursor.y()) > 64;
+        if (farMoved && lcOverlay().isDebugEnabled()) {
+            sLastLoggedCursor = thisCursor;
+            qCDebug(lcOverlay) << "selector hit-test:"
+                               << "screen=" << cursorScreenId << "cursor(global)=" << thisCursor
+                               << "winGeom=" << winGeom << "windowSize=" << window->width() << "x" << window->height()
+                               << "local=(" << localX << "," << localY << ")";
+        }
+
+        writeQmlProperty(window, QStringLiteral("cursorX"), localX);
+        writeQmlProperty(window, QStringLiteral("cursorY"), localY);
 
         // Get layouts from QML window
         QVariantList layouts = window->property("layouts").toList();
@@ -117,14 +264,29 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         }
 
         const int layoutCount = layouts.size();
-        const ZoneSelectorConfig selectorConfig = m_settings
-            ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
-            : defaultZoneSelectorConfig();
-        const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, screen, layoutCount);
+        const ZoneSelectorConfig selectorConfig =
+            m_settings ? m_settings->resolvedZoneSelectorConfig(cursorScreenId) : defaultZoneSelectorConfig();
+        // Use virtual screen geometry for layout computation when available
+        const QRect vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
+        const QRect effectiveGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
+        const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, effectiveGeom, layoutCount);
 
         // Get grid position from QML - it knows exactly where the content is rendered
         int contentGridX = 0;
         int contentGridY = 0;
+        QSizeF gridActualSize;
+
+        // Per-cell actual positions, populated from the GridLayout's child
+        // items in declaration order. Computing positions from
+        // (cellWidth + indicatorSpacing) is wrong: when the GridLayout's
+        // explicit width (= scrollContentWidth, sized for `gridColumns`
+        // columns) exceeds the natural content width (when fewer cards than
+        // gridColumns are populated), Qt distributes the slack across the
+        // populated columns. Cards 1..N-1 then drift further right than the
+        // C++ math predicts, with cumulative error per card. Reading
+        // mapRectToItem on each cell is the only way to track this exactly.
+        QVector<QRectF> cellRectsInWindow;
+        cellRectsInWindow.reserve(layouts.size());
 
         if (auto* contentRoot = window->contentItem()) {
             if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
@@ -132,17 +294,101 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     gridItem->mapRectToItem(contentRoot, QRectF(0, 0, gridItem->width(), gridItem->height()));
                 contentGridX = qRound(gridRect.x());
                 contentGridY = qRound(gridRect.y());
+                gridActualSize = QSizeF(gridItem->width(), gridItem->height());
+
+                // Walk grid children, skipping the Repeater (zero-size
+                // sentinel) and any non-cell auxiliary items. The remaining
+                // entries are the layout-card delegates in model order, so
+                // cellRectsInWindow[i] corresponds to layouts[i].
+                const auto kids = gridItem->childItems();
+                for (QQuickItem* cell : kids) {
+                    if (!cell) {
+                        continue;
+                    }
+                    if (cell->width() <= 0 || cell->height() <= 0) {
+                        continue;
+                    }
+                    cellRectsInWindow.append(
+                        cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height())));
+                    if (cellRectsInWindow.size() >= layouts.size()) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (farMoved && lcOverlay().isDebugEnabled()) {
+            qCDebug(lcOverlay) << "selector layout:"
+                               << "columns=" << layout.columns << "rows=" << layout.rows
+                               << "cellWxH=" << layout.cellWidth << "x" << layout.cellHeight
+                               << "indicatorWxH=" << layout.indicatorWidth << "x" << layout.indicatorHeight
+                               << "spacing=" << layout.indicatorSpacing << "cardSidePad=" << layout.cardSidePadding
+                               << "cardTopMargin=" << layout.cardTopMargin << "gridOriginInWindow=(" << contentGridX
+                               << "," << contentGridY << ")"
+                               << "gridActualSize=" << gridActualSize << "predictedGridSize=("
+                               << layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing
+                               << "x"
+                               << layout.totalRows * layout.cellHeight
+                    + (layout.totalRows - 1) * layout.indicatorSpacing
+                               << ")";
+
+            // Walk the GridLayout's child cells and report where they ACTUALLY
+            // render relative to contentRoot. Compare against the per-card
+            // prediction emitted in the loop below — any divergence is the
+            // bug. Log only the first 8 cells to keep the journal sane.
+            if (auto* contentRoot = window->contentItem()) {
+                if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
+                    const auto kids = gridItem->childItems();
+                    const int dumped = std::min<int>(kids.size(), 8);
+                    for (int k = 0; k < dumped; ++k) {
+                        QQuickItem* cell = kids.at(k);
+                        if (!cell) {
+                            continue;
+                        }
+                        const QRectF cellRect =
+                            cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height()));
+                        qCDebug(lcOverlay) << "  actual cell[" << k << "]"
+                                           << "topLeftInWindow=(" << cellRect.x() << "," << cellRect.y() << ")"
+                                           << "size=" << cellRect.width() << "x" << cellRect.height();
+                    }
+                }
             }
         }
 
         // Check each layout indicator
         for (int i = 0; i < layouts.size(); ++i) {
-            int row = (layout.columns > 0) ? (i / layout.columns) : 0;
-            int col = (layout.columns > 0) ? (i % layout.columns) : 0;
-            // Cell origin includes card chrome; preview is offset by cardSidePadding horizontally
-            // and cardTopMargin vertically (matches Kirigami.Units.gridUnit in LayoutCard.qml)
-            int indicatorX = contentGridX + col * (layout.cellWidth + layout.indicatorSpacing) + layout.cardSidePadding;
-            int indicatorY = contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
+            int indicatorX;
+            int indicatorY;
+            if (i < cellRectsInWindow.size()) {
+                // Authoritative: read where QML actually rendered this card.
+                // The previewArea inside the LayoutCard is offset by
+                // cardSidePadding horizontally (anchors.horizontalCenter
+                // resolves to that within an Item of width
+                // indicatorWidth + 2*cardSidePadding) and cardTopMargin
+                // vertically (anchors.top + topMargin = Kirigami.Units.gridUnit
+                // in card mode).
+                const QRectF& cellRect = cellRectsInWindow.at(i);
+                indicatorX = qRound(cellRect.x()) + layout.cardSidePadding;
+                indicatorY = qRound(cellRect.y()) + layout.cardTopMargin;
+            } else {
+                // Fallback when QML traversal missed: derive from layout math.
+                // Hits the same drift bug as before, but only fires when the
+                // child enumeration produced fewer cells than expected (e.g.
+                // before the first frame is laid out).
+                int row = (layout.columns > 0) ? (i / layout.columns) : 0;
+                int col = (layout.columns > 0) ? (i % layout.columns) : 0;
+                indicatorX = contentGridX + col * (layout.cellWidth + layout.indicatorSpacing) + layout.cardSidePadding;
+                indicatorY = contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
+            }
+
+            if (farMoved && lcOverlay().isDebugEnabled()) {
+                qCDebug(lcOverlay) << "  card[" << i << "]"
+                                   << "indicator=(" << indicatorX << "," << indicatorY << ")"
+                                   << "size=" << layout.indicatorWidth << "x" << layout.indicatorHeight
+                                   << "containsCursor="
+                                   << (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth
+                                       && localY >= indicatorY && localY < indicatorY + layout.indicatorHeight);
+            }
 
             // Check if cursor is over this indicator
             if (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth && localY >= indicatorY
@@ -154,13 +400,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (m_settings && m_layoutManager) {
                     int curDesktop = m_layoutManager->currentVirtualDesktop();
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen),
-                                                              curDesktop, curActivity)
-                        || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen),
-                                                       curDesktop, curActivity);
+                    bool locked = isAnyModeLocked(m_settings, cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
-                        Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+                        PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
                         if (activeLayout && layoutId != activeLayout->id().toString()) {
                             continue; // Skip this non-active layout entirely
                         }
@@ -172,15 +415,37 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 int scaledPadding = window->property("scaledPadding").toInt();
                 if (scaledPadding <= 0)
                     scaledPadding = 1;
-                constexpr int minZoneSize = 8;
+                // Read from the QML root property so the hit-test clamp
+                // matches the visual clamp used by LayoutCard / ZonePreview.
+                // Both sides reading the same property is the single source
+                // of truth; fall back to the historical 8px default if the
+                // property isn't set (older QML revisions).
+                int minZoneSize = window->property("minZoneSize").toInt();
+                if (minZoneSize <= 0)
+                    minZoneSize = 8;
 
                 for (int z = 0; z < zones.size(); ++z) {
                     QVariantMap zoneMap = zones[z].toMap();
-                    QVariantMap relGeo = zoneMap[QStringLiteral("relativeGeometry")].toMap();
-                    qreal rx = relGeo[QStringLiteral("x")].toReal();
-                    qreal ry = relGeo[QStringLiteral("y")].toReal();
-                    qreal rw = relGeo[QStringLiteral("width")].toReal();
-                    qreal rh = relGeo[QStringLiteral("height")].toReal();
+                    // LayoutPreview serializes zones with flat x/y/width/height
+                    // (layoutpreviewserialize.cpp::zoneMap). The legacy
+                    // zonesToVariantList path produced a nested relativeGeometry
+                    // sub-map. Match ZonePreview.qml's resolution order: prefer
+                    // flat keys, fall back to nested. Reading nested-only made
+                    // every rx/ry/rw/rh come out as 0 once LayoutPreview became
+                    // the canonical wire format, collapsing every zone hit-rect
+                    // to a tiny box at the indicator's top-left corner.
+                    const QVariantMap relGeo = zoneMap.value(QStringLiteral("relativeGeometry")).toMap();
+                    auto coord = [&](QLatin1String flatKey, QLatin1String nestedKey) {
+                        const QVariant flat = zoneMap.value(flatKey);
+                        if (flat.isValid() && !flat.isNull()) {
+                            return flat.toReal();
+                        }
+                        return relGeo.value(nestedKey).toReal();
+                    };
+                    qreal rx = coord(QLatin1String("x"), QLatin1String("x"));
+                    qreal ry = coord(QLatin1String("y"), QLatin1String("y"));
+                    qreal rw = coord(QLatin1String("width"), QLatin1String("width"));
+                    qreal rh = coord(QLatin1String("height"), QLatin1String("height"));
 
                     // Calculate zone rectangle exactly as QML does
                     int zoneX = indicatorX + static_cast<int>(rx * layout.indicatorWidth) + scaledPadding;
@@ -195,20 +460,21 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                             m_selectedLayoutId = layoutId;
                             m_selectedZoneIndex = z;
                             m_selectedZoneRelGeo = QRectF(rx, ry, rw, rh);
-                            window->setProperty("selectedLayoutId", layoutId);
-                            window->setProperty("selectedZoneIndex", z);
+                            writeQmlProperty(window, QStringLiteral("selectedLayoutId"), layoutId);
+                            writeQmlProperty(window, QStringLiteral("selectedZoneIndex"), z);
                         }
                         return;
                     }
                 }
                 // Cursor is over layout indicator but not on a specific zone
-                // Clear selection if we had one in a different layout
-                if (!m_selectedLayoutId.isEmpty() && m_selectedLayoutId != layoutId) {
+                // Always clear zone selection — the cursor may have moved off a zone
+                // within the same layout, so checking layout ID is not sufficient
+                if (!m_selectedLayoutId.isEmpty() || m_selectedZoneIndex >= 0) {
                     m_selectedLayoutId.clear();
                     m_selectedZoneIndex = -1;
                     m_selectedZoneRelGeo = QRectF();
-                    window->setProperty("selectedLayoutId", QString());
-                    window->setProperty("selectedZoneIndex", -1);
+                    writeQmlProperty(window, QStringLiteral("selectedLayoutId"), QString());
+                    writeQmlProperty(window, QStringLiteral("selectedZoneIndex"), -1);
                 }
                 return;
             }
@@ -219,44 +485,95 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             m_selectedLayoutId.clear();
             m_selectedZoneIndex = -1;
             m_selectedZoneRelGeo = QRectF();
-            window->setProperty("selectedLayoutId", QString());
-            window->setProperty("selectedZoneIndex", -1);
+            writeQmlProperty(window, QStringLiteral("selectedLayoutId"), QString());
+            writeQmlProperty(window, QStringLiteral("selectedZoneIndex"), -1);
         }
     }
 }
 
-void OverlayService::createZoneSelectorWindow(QScreen* screen)
+void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
-    if (m_zoneSelectorWindows.contains(screen)) {
+    // Callers reach here via showZoneSelector's per-screen loop where physScreen
+    // is validated, but handleScreenAdded / setupForScreen paths can pass null
+    // under racy screen-disconnect orderings. Guard explicitly — every `->`
+    // below would otherwise deref null. Mirrors createOverlayWindow's pattern.
+    if (!physScreen) {
+        qCWarning(lcOverlay) << "createZoneSelectorWindow: null physScreen for screen=" << screenId;
+        return;
+    }
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorSurface) {
         return;
     }
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), screen, "zone selector");
-    if (!window) {
-        return;
-    }
-
-    const QRect screenGeom = screen->geometry();
+    const QRect screenGeom = geom.isValid() ? geom : physScreen->geometry();
 
     // Build resolved per-screen config
-    const ZoneSelectorConfig config = m_settings
-        ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
-        : defaultZoneSelectorConfig();
-    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
+    const ZoneSelectorConfig config =
+        m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
 
-    // Configure layer surface for zone selector (LayerTop for pointer input)
-    if (!configureLayerSurface(
-            window, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
-            QStringLiteral("plasmazones-selector-%1-%2").arg(Utils::screenIdentifier(screen)).arg(++m_scopeGeneration),
-            getAnchorsForPosition(pos))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screen->name();
-        delete window;
+    // Confine the layer-shell surface to the (virtual) screen region. Mirrors
+    // overlay.cpp's pattern via the shared layerPlacementForVs helper:
+    // physical screen → AnchorAll; virtual screen → Top|Left + margins
+    // offsetting into the physical screen, so the compositor positions +
+    // sizes the surface to the VS sub-region. Without this, a VS selector
+    // covers the whole physical screen and the QML-internal corner anchor
+    // lands on the wrong VS.
+    const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
+    const auto placement = layerPlacementForVs(isVS ? screenGeom : QRect(), physScreen->geometry());
+    std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
+    std::optional<QMargins> marginsOverride;
+    if (!placement.margins.isNull()) {
+        marginsOverride = placement.margins;
+    }
+
+    // makePerInstanceRole derives the per-instance scope by appending
+    // `-{screenId}-{gen}` to PzRoles::ZoneSelector's base prefix, so the
+    // longest-prefix match in SurfaceAnimator's configFor lookup is
+    // guaranteed by construction. Pre-fix the daemon hand-rolled the
+    // literal as "plasmazones-selector-..." which did NOT start with the
+    // base scope, and configFor silently fell back to the empty default
+    // config — every show/hide ran on the library's 150 ms OutCubic
+    // instead of panel.popup / widget.fadeOut.
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::ZoneSelector, screenId, m_surfaceManager->nextScopeGeneration());
+
+    // keepMappedOnHide=true: Phase 5 lifecycle. Surface stays Qt-visible
+    // across hide/show cycles; SurfaceAnimator drives the visual fade and
+    // the library flips Qt::WindowTransparentForInput during the hide so
+    // the still-mapped layer surface stops eating clicks.
+    //
+    // initialSize=screenGeom.size(): on virtual screens the warm-up's
+    // computeWarmupGeometry() defaults to physScreen->geometry() (the
+    // full physical output, e.g. 3200×1800 for two side-by-side VSes on
+    // one monitor), so the warm-up swapchain is sized for the entire
+    // monitor and then shrunk to the VS region on first show. With
+    // keepMappedOnHide=true the oversized swapchain persists across
+    // hide/show cycles. Sizing the warm-up directly to the VS rect cuts
+    // the swapchain footprint in half on per-monitor split setups and
+    // skips a resize cycle on first show.
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")),
+                                        .screen = physScreen,
+                                        .role = role,
+                                        .windowType = "zone selector",
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride,
+                                        .keepMappedOnHide = true,
+                                        .initialSize = screenGeom.size()});
+    if (!surface) {
         return;
     }
+    auto* window = surface->window();
+
+    // Store the intended geometry so hit-testing in updateSelectorPosition() can use it
+    // before the compositor acknowledges the LayerShell surface position.
+    // The margins for virtual screen confinement are applied by updateZoneSelectorWindow()
+    // which is called immediately after createZoneSelectorWindow() in showZoneSelector().
+    m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
 
     // Set screen properties for layout preview scaling
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
@@ -277,24 +594,33 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     // Initial layout is applied by updateZoneSelectorWindow() which is always
     // called immediately after createZoneSelectorWindow() in showZoneSelector().
 
-    window->setVisible(false);
     auto conn = connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this,
                         SLOT(onZoneSelected(QString, int, QVariant)));
     if (!conn) {
-        qCWarning(lcOverlay) << "Failed to connect zoneSelected signal for screen" << screen->name()
+        qCWarning(lcOverlay) << "Failed to connect zoneSelected signal for screen" << screenId
                              << "- zone selector layout switching will not work";
     }
-    m_zoneSelectorWindows.insert(screen, window);
+    auto& state = m_screenStates[screenId];
+    state.zoneSelectorSurface = surface;
+    state.zoneSelectorWindow = window;
+    state.zoneSelectorPhysScreen = physScreen;
 }
 
-void OverlayService::destroyZoneSelectorWindow(QScreen* screen)
+void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
-    if (auto* window = m_zoneSelectorWindows.take(screen)) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        disconnect(screen, nullptr, window, nullptr);
-        window->close();
-        window->destroy();
-        window->deleteLater();
+    auto it = m_screenStates.find(screenId);
+    if (it != m_screenStates.end()) {
+        if (it->zoneSelectorSurface) {
+            it->zoneSelectorSurface->deleteLater();
+            it->zoneSelectorSurface = nullptr;
+            it->zoneSelectorWindow = nullptr;
+        }
+        it->zoneSelectorPhysScreen = nullptr;
+        // Hit-testing on updateSelectorPosition() gates reads on
+        // zoneSelectorWindow != nullptr, but clearing the cached geometry
+        // alongside the window keeps the state entry consistent if a
+        // future reader ever drops that guard.
+        it->zoneSelectorGeometry = QRect();
     }
 }
 
@@ -315,35 +641,58 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     if (!hasSelectedZone() || !screen) {
         return QRect();
     }
+    // Delegate to screenId overload for virtual-screen-aware geometry.
+    // WARNING: QCursor::pos() may be stale on Wayland. Callers should prefer
+    // the getSelectedZoneGeometry(const QString& screenId) overload when possible.
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), screen);
+    return getSelectedZoneGeometry(screenId);
+}
 
-    // Use the same geometry pipeline as the overlay snap path
-    // (GeometryUtils::getZoneGeometryWithGaps) so that gap handling,
-    // outer-gap vs inner-gap edge detection, and usable-geometry respect
-    // are identical regardless of whether the user snaps via the overlay
-    // or the zone selector.
+QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
+{
+    if (!hasSelectedZone()) {
+        return QRect();
+    }
+
+    auto* mgr = m_screenManager;
+    QScreen* physScreen =
+        mgr ? mgr->physicalQScreenFor(screenId) : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+
+    // Primary path: use layout/zone geometry pipeline with virtual screen bounds
     if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
-        Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
+        PhosphorZones::Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
         if (selectedLayout && m_selectedZoneIndex >= 0
             && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
-            Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
+            PhosphorZones::Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
-                QString screenId = Utils::screenIdentifier(screen);
-                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings, screenId);
-                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings, screenId);
-                bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
-                QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-                return GeometryUtils::snapToRect(geom);
+                QRect result = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, physScreen, screenId,
+                                                                       selectedLayout, m_settings);
+                if (result.isValid()) {
+                    return result;
+                }
             }
         }
     }
 
-    // Fallback: manual calculation when layout/zone lookup fails
-    // Use snapToRect for edge-consistent rounding (matches primary path)
-    QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-    QRectF geom(availableGeom.x() + m_selectedZoneRelGeo.x() * availableGeom.width(),
-                availableGeom.y() + m_selectedZoneRelGeo.y() * availableGeom.height(),
-                m_selectedZoneRelGeo.width() * availableGeom.width(),
-                m_selectedZoneRelGeo.height() * availableGeom.height());
+    // Fallback: manual calculation using relative geometry
+    QRect areaGeom;
+    if (mgr) {
+        QRect vsAvailGeom = mgr->screenAvailableGeometry(screenId);
+        if (vsAvailGeom.isValid()) {
+            areaGeom = vsAvailGeom;
+        }
+    }
+    if (!areaGeom.isValid() && physScreen) {
+        areaGeom = (m_screenManager ? m_screenManager->actualAvailableGeometry(physScreen)
+                                    : ((physScreen) ? (physScreen)->availableGeometry() : QRect()));
+    }
+    if (!areaGeom.isValid()) {
+        return QRect();
+    }
+
+    QRectF geom(areaGeom.x() + m_selectedZoneRelGeo.x() * areaGeom.width(),
+                areaGeom.y() + m_selectedZoneRelGeo.y() * areaGeom.height(),
+                m_selectedZoneRelGeo.width() * areaGeom.width(), m_selectedZoneRelGeo.height() * areaGeom.height());
     return GeometryUtils::snapToRect(geom);
 }
 
@@ -366,20 +715,20 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     QString screenId;
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
-        for (auto it = m_zoneSelectorWindows.constBegin(); it != m_zoneSelectorWindows.constEnd(); ++it) {
-            if (it.value() == senderWindow) {
-                screenId = Utils::screenIdentifier(it.key());
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.value().zoneSelectorWindow == senderWindow) {
+                screenId = it.key();
                 break;
             }
         }
         if (screenId.isEmpty() && senderWindow->screen()) {
-            screenId = Utils::screenIdentifier(senderWindow->screen());
+            screenId = Phosphor::Screens::ScreenIdentity::identifierFor(senderWindow->screen());
         }
     }
 
     // Route to the correct signal based on whether this is an autotile algorithm or manual layout
-    if (LayoutId::isAutotile(layoutId)) {
-        const QString algoId = LayoutId::extractAlgorithmId(layoutId);
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
         qCInfo(lcOverlay) << "Zone selector: autotile algorithm selected, algoId=" << algoId << "screen=" << screenId;
         Q_EMIT autotileLayoutSelected(algoId, screenId);
     } else {
@@ -393,7 +742,8 @@ void OverlayService::scrollZoneSelector(int angleDeltaY)
     if (!m_zoneSelectorVisible) {
         return;
     }
-    for (auto* window : std::as_const(m_zoneSelectorWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().zoneSelectorWindow;
         if (window) {
             QMetaObject::invokeMethod(window, "applyScrollDelta", Q_ARG(QVariant, angleDeltaY));
         }

@@ -2,30 +2,36 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include <PhosphorSnapEngine/snapnavigationtargets.h>
+#include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
-#include "../autotile/AutotileEngine.h"
-#include "../snap/SnapEngine.h"
-#include "../config/iconfigbackend.h"
-#include "../core/geometryutils.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include "../config/configbackends.h"
 #include "../core/interfaces.h"
-#include "../core/layoutmanager.h"
-#include "../core/layout.h"
-#include "../core/screenmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorScreens/Manager.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
+#include "../core/screenmoderouter.h"
 #include "../core/utils.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/types.h"
 #include "../core/windowregistry.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
-WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
-                                             ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                             QObject* parent)
+WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
+                                             PhosphorZones::IZoneDetector* zoneDetector,
+                                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                             VirtualDesktopManager* virtualDesktopManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
@@ -37,10 +43,21 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     Q_ASSERT(settings);
 
     // Create business logic service
-    m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
+    m_service =
+        new WindowTrackingService(layoutManager, zoneDetector, screenManager, settings, virtualDesktopManager, this);
+
+    // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
+    // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
+    // first navigation call; setZoneDetectionAdaptor is forwarded to
+    // SnapEngine alongside WTA's own copy, so the late-wired zone detector
+    // still reaches the resolver.
 
     // Forward service signals to D-Bus
     connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
+
+    // Snap-commit signal wiring is deferred to setEngines() where m_snapEngine
+    // is available — commitSnap/commitMultiZoneSnap/uncommitSnap live on
+    // SnapEngine, not WTS.
 
     // Connect service state changes to persistence
     connect(m_service, &WindowTrackingService::stateChanged, this, &WindowTrackingAdaptor::scheduleSaveState);
@@ -51,25 +68,81 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     m_saveTimer->setInterval(500);
     connect(m_saveTimer, &QTimer::timeout, this, &WindowTrackingAdaptor::saveState);
 
-    // Connect to layout changes for pending restores notification
-    connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingAdaptor::onLayoutChanged);
+    // Persistence I/O worker — disk writes happen off the main thread.
+    // PersistenceIO::processWrite runs on the worker thread via a queued
+    // requestWrite signal, so writes are handled strictly FIFO. The
+    // writeCompleted handler dequeues the head of m_pendingWriteMasks in
+    // the same order: on success we discard the mask (bits made it to
+    // disk); on failure we OR the mask back into the service's dirty
+    // state so the retry picks up exactly the fields the failed write
+    // was supposed to cover, without disturbing any bits set by
+    // mutations that landed after takeDirty() was called for that write.
+    m_persistenceWorker = std::make_unique<PersistenceWorker>(nullptr);
+    connect(m_persistenceWorker.get(), &PersistenceWorker::writeCompleted, this,
+            [this](const QString& filePath, bool success) {
+                // writeCompleted only fires from writes WE enqueued (the
+                // sync-fallback path calls m_sessionBackend->sync() directly
+                // without routing through the worker), so the queue head
+                // must exist. Assert instead of hedging — a disappearing
+                // head would indicate a bug in enqueue/dequeue pairing.
+                Q_ASSERT(!m_pendingWriteMasks.isEmpty());
+                if (m_pendingWriteMasks.isEmpty()) {
+                    return;
+                }
+                const WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
+                if (!success) {
+                    qCWarning(lcDbusWindow) << "session state write failed for" << filePath
+                                            << "— restoring dirty mask and retrying on next tick";
+                    if (m_service && committed != WindowTrackingService::DirtyNone) {
+                        // markDirty emits stateChanged, which is wired to
+                        // scheduleSaveState() above — the retry lands on
+                        // the next debounce tick automatically.
+                        m_service->markDirty(committed);
+                    }
+                    return;
+                }
+                // Success: intentionally NOT calling PhosphorConfig::JsonBackend::clearDirty()
+                // here. The backend's own m_dirty flag tracks in-memory mutations
+                // since the last inline sync(); a successful async write of an
+                // earlier snapshot does not mean the current in-memory state
+                // matches disk, because the main thread may have mutated m_root
+                // between snapshot and completion. Clearing m_dirty in that
+                // window would cause the shutdown inline sync() to skip a real
+                // pending write. The WTS dirty mask is the authoritative
+                // gate for async writes anyway.
+                Q_UNUSED(filePath);
+            });
 
-    // Connect to ScreenManager for panel geometry readiness
-    // This is needed to delay window restoration until panel positions are known
-    // Use QTimer::singleShot to defer connection until ScreenManager is likely initialized
+    // Active-layout changes: single handler. onLayoutChanged() covers the
+    // pending-restores notification side; we prepend a dirty-mark for the
+    // DirtyActiveLayoutId field so the next save captures the new value
+    // without needing an unrelated DirtyAll path to drag it along.
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, [this]() {
+        if (m_service) {
+            m_service->markDirty(WindowTrackingService::DirtyActiveLayoutId);
+        }
+        onLayoutChanged();
+    });
+
+    // Deferred: Phosphor::Screens::ScreenManager may not be initialized yet during adaptor construction.
+    // If Phosphor::Screens::ScreenManager is still unavailable after the first event loop iteration,
+    // virtual screen signals won't be connected until the next daemon restart or
+    // screen change. Window restoration will still work via onLayoutChanged() ->
+    // tryEmitPendingRestoresAvailable(), which emits immediately when
+    // (m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady()) returns false (no
+    // Phosphor::Screens::ScreenManager instance).
     QTimer::singleShot(0, this, [this]() {
-        if (auto* screenMgr = ScreenManager::instance()) {
-            connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
-            // If panel geometry is already ready, trigger the check now
-            if (ScreenManager::isPanelGeometryReady()) {
-                onPanelGeometryReady();
-            }
-        } else {
-            // ScreenManager not available - this is unexpected but we handle it gracefully.
-            // Window restoration will still work via onLayoutChanged() -> tryEmitPendingRestoresAvailable()
-            // which will emit immediately since isPanelGeometryReady() returns false when instance is null.
-            qCWarning(lcDbusWindow)
-                << "ScreenManager instance not available - window restoration may use incorrect geometry";
+        auto* screenMgr = m_service->screenManager();
+        if (!screenMgr) {
+            qCWarning(lcDbusWindow) << "Phosphor::Screens::ScreenManager instance not available - window restoration "
+                                       "may use incorrect geometry";
+            return;
+        }
+        connect(screenMgr, &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+                &WindowTrackingAdaptor::onPanelGeometryReady);
+        // If panel geometry is already ready, trigger the check now
+        if ((m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
+            onPanelGeometryReady();
         }
     });
 
@@ -86,6 +159,17 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     }
 }
 
+// Out-of-line destructor. The unique_ptr<SnapNavigationTargetResolver>
+// that originally required this has moved to SnapEngine (Phase 5E), but
+// the destructor is kept out-of-line to avoid churning every translation
+// unit that includes this header.
+WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
+
+PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
+{
+    return m_cachedSnapEngine;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Engine wiring — cross-references and shared navigation feedback
 //
@@ -93,15 +177,17 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
 // This method only wires cross-engine references and the shared OSD path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine)
+void WindowTrackingAdaptor::setEngines(PhosphorEngineApi::PlacementEngineBase* snapEngine,
+                                       PhosphorEngineApi::PlacementEngineBase* autotileEngine)
 {
     // Disconnect previous autotile engine nav feedback (the only signal connected here)
     if (m_autotileEngine) {
-        disconnect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
+    m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
@@ -109,9 +195,25 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
     // When clearing (nullptr, nullptr), we also clear stale cross-references
     // to prevent dangling pointer access.
     // ═══════════════════════════════════════════════════════════════════════════
-    if (m_snapEngine) {
-        m_snapEngine->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
-        m_snapEngine->setAutotileEngine(m_autotileEngine);
+    if (auto* snap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine)) {
+        snap->setZoneAdjacencyResolver(m_zoneDetectionAdaptor);
+        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
+            snap->setAutotileEngine(autotile);
+        }
+
+        // Snap-specific signal: carries WindowStateEntry which is snap-mode-only.
+        // Connected via qobject_cast since the member type is PlacementEngineBase.
+        connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
+                &WindowTrackingAdaptor::windowStateChanged);
+        connect(snap, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this,
+                [this](const QString& windowId, const QString& screenId) {
+                    Q_EMIT windowFloatingChanged(windowId, false, screenId);
+                });
+    } else if (snapEngine) {
+        // Snap-mode window state signals are critical for WTS correctness.
+        // A non-SnapEngine in the snap slot means state notifications are lost.
+        Q_ASSERT_X(false, "WindowTrackingAdaptor::setEngines",
+                   "snapEngine must be a SnapEngine — snap-specific signals not connected");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -132,9 +234,23 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
     // geometry application). See ADR docs/adr-snapengine-migration.md.
     // ═══════════════════════════════════════════════════════════════════════════
     if (m_autotileEngine) {
-        connect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this,
+        connect(m_autotileEngine, &PhosphorEngineApi::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
     }
+}
+
+void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
+{
+    m_screenModeRouter = router;
+}
+
+void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
+{
+    m_zoneDetectionAdaptor = adaptor;
+    // Target resolver ownership moved to SnapEngine (Phase 5E). SnapEngine's
+    // own setZoneDetectionAdaptor wiring pushes the adaptor into its
+    // resolver when late-wired; this setter no longer has anything to do
+    // except record the pointer for any WTA-side consumers.
 }
 
 void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
@@ -152,169 +268,36 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Window Snapping - Delegate to Service
+// Window Snapping
+//
+// Snap-commit D-Bus slots (windowSnapped, windowSnappedMultiZone,
+// windowUnsnapped, windowsSnappedBatch, recordSnapIntent) moved to
+// SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
+bool WindowTrackingAdaptor::validateWindowId(const QString& windowId, const QString& operation) const
 {
-    if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
-        return;
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Cannot" << operation << "- empty window ID";
+        return false;
     }
-
-    if (zoneId.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Window snap: cannot track, empty zone ID";
-        return;
-    }
-
-    clearFloatingStateForSnap(windowId, screenId);
-
-    // Check if this was an auto-snap (restore from session or snap to last zone)
-    // and clear the flag. Auto-snapped windows don't update last-used zone tracking.
-    bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
-
-    // If NOT auto-snapped (user explicitly snapped), clear any stale pending
-    // assignment from a previous session. This prevents the window from restoring
-    // to the wrong zone if it's closed and reopened.
-    if (!wasAutoSnapped) {
-        m_service->clearStalePendingAssignment(windowId);
-    }
-
-    // Use caller-provided screen name if available, otherwise auto-detect,
-    // then fall back to cursor/active screen as tertiary fallback
-    QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
-
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-
-    // Delegate to service
-    m_service->assignWindowToZone(windowId, zoneId, resolvedScreen, currentDesktop);
-
-    // Update last used zone (skip zone selector special IDs and auto-snapped windows)
-    if (!zoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
-        QString windowClass = m_service->currentAppIdFor(windowId);
-        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
-    }
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
-
-    // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = zoneId;
-    stateObj[QLatin1String("screenId")] = resolvedScreen;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    return true;
 }
 
-void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
-                                                   const QString& screenId)
+QString WindowTrackingAdaptor::resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const
 {
-    if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
-        return;
+    if (!callerScreen.isEmpty()) {
+        return callerScreen;
     }
-
-    if (zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(lcDbusWindow) << "Multi-zone window snap: cannot track, empty zone IDs";
-        return;
+    QString detected = detectScreenForZone(zoneId);
+    if (!detected.isEmpty()) {
+        return detected;
     }
-
-    clearFloatingStateForSnap(windowId, screenId);
-
-    bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
-
-    if (!wasAutoSnapped) {
-        m_service->clearStalePendingAssignment(windowId);
+    // Tertiary: use cursor or active window screen
+    if (!m_lastCursorScreenId.isEmpty()) {
+        return m_lastCursorScreenId;
     }
-
-    // Use caller-provided screen name if available, otherwise auto-detect,
-    // then fall back to cursor/active screen as tertiary fallback
-    QString primaryZoneId = zoneIds.first();
-    QString resolvedScreen = resolveScreenForSnap(screenId, primaryZoneId);
-
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-
-    // Delegate to service with all zone IDs
-    m_service->assignWindowToZones(windowId, zoneIds, resolvedScreen, currentDesktop);
-
-    // Update last used zone with primary (skip zone selector special IDs and auto-snapped)
-    if (!primaryZoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
-        QString windowClass = m_service->currentAppIdFor(windowId);
-        m_service->updateLastUsedZone(primaryZoneId, resolvedScreen, windowClass, currentDesktop);
-    }
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
-                         << resolvedScreen;
-
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = primaryZoneId;
-    stateObj[QLatin1String("screenId")] = resolvedScreen;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
-}
-
-void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
-{
-    if (!validateWindowId(windowId, QStringLiteral("untrack window"))) {
-        return;
-    }
-
-    QString previousZoneId = m_service->zoneForWindow(windowId);
-    if (previousZoneId.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Window not found for unsnap:" << windowId;
-        return;
-    }
-
-    // Clear pending assignment so window won't be auto-restored on next focus/reopen
-    m_service->clearStalePendingAssignment(windowId);
-
-    // Delegate to service
-    m_service->unassignWindow(windowId);
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
-
-    // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = QString();
-    stateObj[QLatin1String("screenId")] = QString();
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("unsnapped");
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
-}
-
-void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
-{
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcDbusWindow) << "windowsSnappedBatch: invalid JSON:" << parseError.errorString();
-        return;
-    }
-
-    const QJsonArray entries = doc.array();
-    qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
-
-    for (const QJsonValue& val : entries) {
-        QJsonObject obj = val.toObject();
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
-        bool isRestore = obj.value(QLatin1String("isRestore")).toBool(false);
-
-        if (windowId.isEmpty()) {
-            continue;
-        }
-
-        if (isRestore) {
-            // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
-            windowUnsnapped(windowId);
-            clearPreTileGeometry(windowId);
-        } else {
-            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
-            QString screenId = obj.value(QLatin1String("screenId")).toString();
-            windowSnapped(windowId, zoneId, screenId);
-        }
-    }
+    return m_lastActiveScreenId;
 }
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
@@ -323,9 +306,47 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         return;
     }
 
-    // Check if the window is snapped — if not, nothing to do
+    // Floating window with a tracked screen: refresh the engine's
+    // screen-tracking via the cross-engine handoff contract so subsequent
+    // shortcut routing (lastActiveScreenName) finds the new screen instead of
+    // the stale one. Without this, a snap-floated window dragged to another
+    // screen leaves screenAssignments pointing at the source forever — the
+    // float toggle then unfloats it back to the source-screen zone.
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
+        if (!m_service->isWindowFloating(windowId)) {
+            return;
+        }
+        const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();
+        const QString trackedAutotile =
+            m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
+        const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap : trackedAutotile;
+        if (trackedScreen.isEmpty() || Phosphor::Screens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
+            return;
+        }
+        PhosphorEngineApi::PlacementEngineBase* source =
+            !trackedSnap.isEmpty() ? m_snapEngine.data() : m_autotileEngine.data();
+        PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
+        if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
+            dest = m_autotileEngine.data();
+        } else if (m_snapEngine) {
+            dest = m_snapEngine.data();
+        }
+        if (!dest) {
+            return;
+        }
+        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = newScreenId;
+        ctx.fromEngineId = source ? source->engineId() : QString();
+        ctx.wasFloating = true;
+        ctx.sourceGeometry = m_frameGeometry.value(windowId);
+        if (source && source != dest) {
+            source->handoffRelease(windowId);
+        }
+        dest->handoffReceive(ctx);
+        qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
+                             << "to" << newScreenId << "- handoff complete";
         return;
     }
 
@@ -334,24 +355,55 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // to its assigned zone's screen (restore, resnap, snap assist) — keep snapped.
     // If they differ, the user moved the window away — unsnap it.
     QString storedScreen = m_service->screenAssignments().value(windowId);
-    if (Utils::screensMatch(storedScreen, newScreenId)) {
+
+    // KWin reports physical screen names in outputChanged. When the stored screen
+    // is a virtual screen (e.g. "HDMI-1/vs:0"), comparing against the physical name
+    // ("HDMI-1") via screensMatch returns false → spurious unsnap.
+    //
+    // If the stored screen is virtual and its physical parent matches the reported
+    // physical screen, keep the stored virtual screen ID — it's already correct.
+    // Only re-resolve via geometry when the physical screens actually differ,
+    // which avoids the zone-center ambiguity when a zone straddles a VS boundary.
+    QString resolvedNewScreen = newScreenId;
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(newScreenId)
+        && PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
+        QString storedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
+        if (Phosphor::Screens::ScreenIdentity::screensMatch(storedPhysical, newScreenId)) {
+            // Physical parent matches — the window is still on the same monitor,
+            // so the stored virtual screen ID is still valid.
+            resolvedNewScreen = storedScreen;
+        } else {
+            // Different physical screen — resolve via zone geometry as fallback.
+            // NOTE: Ideally we'd use the window's actual position, but window
+            // geometry is not available in this context (KWin only reports the
+            // physical screen name). Using the zone center is imprecise when the
+            // zone straddles a virtual screen boundary; however, the resolved ID
+            // will still differ from storedScreen (different physical parent), so
+            // the window correctly unsnaps regardless.
+            QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
+            if (zoneGeo.isValid()) {
+                QString vsId = Utils::effectiveScreenIdAt(m_service->screenManager(), zoneGeo.center());
+                if (!vsId.isEmpty()) {
+                    resolvedNewScreen = vsId;
+                }
+            }
+        }
+    }
+
+    if (Phosphor::Screens::ScreenIdentity::screensMatch(storedScreen, resolvedNewScreen)) {
         qCDebug(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved to assigned screen, keeping snap";
         return;
     }
 
-    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to" << newScreenId
-                         << "- unsnapping";
-    m_service->clearStalePendingAssignment(windowId);
+    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
+                         << resolvedNewScreen << "- unsnapping";
+    m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = QString();
-    stateObj[QLatin1String("screenId")] = newScreenId;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("screen_changed");
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(windowId,
+                              WindowStateEntry{windowId, QString(), newScreenId, false,
+                                               QStringLiteral("screen_changed"), QStringList{}, false});
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
@@ -380,6 +432,9 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         m_lastActiveWindowId.clear();
     }
 
+    // Drop frame-geometry shadow entry for this window.
+    m_frameGeometry.remove(windowId);
+
     m_service->windowClosed(windowId);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
@@ -388,7 +443,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     // disappear signal fires synchronously from remove() and subscribers may
     // still call canonicalizeForLookup on their way out.
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(windowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         m_windowRegistry->remove(instanceId);
         m_windowRegistry->releaseCanonical(instanceId);
     }
@@ -457,8 +512,82 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     if (screenId.isEmpty()) {
         return;
     }
-    m_lastCursorScreenId = screenId;
-    qCDebug(lcDbusWindow) << "Cursor screen changed to" << screenId;
+
+    // The KWin effect may send a physical screen ID when virtual screen configs
+    // haven't loaded yet.  Resolve to the correct virtual screen using the
+    // focused window's daemon-tracked screen assignment as the best hint.
+    QString resolvedId = screenId;
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        auto* mgr = m_service->screenManager();
+        if (mgr && mgr->hasVirtualScreens(screenId)) {
+            // Use focused window's tracked screen as hint
+            if (m_service && !m_lastActiveWindowId.isEmpty()) {
+                const QString trackedScreen = m_service->screenAssignments().value(m_lastActiveWindowId);
+                if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                    && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
+                    resolvedId = trackedScreen;
+                }
+            }
+            // If no window hint, fall back to first virtual screen
+            if (!PhosphorIdentity::VirtualScreenId::isVirtual(resolvedId)) {
+                QStringList vsIds = mgr->virtualScreenIdsFor(screenId);
+                if (!vsIds.isEmpty()) {
+                    resolvedId = vsIds.first();
+                }
+            }
+        }
+    }
+
+    m_lastCursorScreenId = resolvedId;
+    qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
+}
+
+void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
+{
+    if (windowId.isEmpty() || width <= 0 || height <= 0) {
+        return;
+    }
+    m_frameGeometry[windowId] = QRect(x, y, width, height);
+}
+
+QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
+{
+    return m_frameGeometry.value(windowId);
+}
+
+QString WindowTrackingAdaptor::lastActiveScreenName() const
+{
+    // Prefer the active window's live screen tracking from either engine
+    // over the cached m_lastActiveScreenId. KWin only fires windowActivated
+    // on focus changes, so a window dragged/snapped/tiled to a different
+    // VS without losing focus leaves the cache pointing at the source
+    // screen — and the shortcut router would then dispatch (float,
+    // navigate, etc.) to the wrong engine.
+    //
+    // Lookup order:
+    //   1. snap-side screenForTrackedWindow (covers snap-mode windows
+    //      including snap-floated ones whose screen we now preserve through
+    //      float, and floating windows received via cross-engine handoff)
+    //   2. autotile-side screenForTrackedWindow (covers windows that
+    //      crossed engines via drag-insert handoff — snap released its
+    //      tracking, autotile took ownership)
+    //   3. cached m_lastActiveScreenId (windows neither engine tracks —
+    //      brand-new windows pre-tile, dialogs, etc.)
+    if (!m_lastActiveWindowId.isEmpty()) {
+        if (m_snapEngine) {
+            const QString tracked = m_snapEngine->screenForTrackedWindow(m_lastActiveWindowId);
+            if (!tracked.isEmpty()) {
+                return tracked;
+            }
+        }
+        if (m_autotileEngine) {
+            const QString tracked = m_autotileEngine->screenForTrackedWindow(m_lastActiveWindowId);
+            if (!tracked.isEmpty()) {
+                return tracked;
+            }
+        }
+    }
+    return m_lastActiveScreenId;
 }
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
@@ -472,8 +601,19 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 
     // Track the active window's screen as fallback for shortcut screen detection.
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
+    // Prefer the daemon-tracked screen assignment (set at snap time) over what the
+    // effect reports, since the effect may send a physical ID before VS configs load.
+    QString resolvedScreen = screenId;
     if (!screenId.isEmpty()) {
-        m_lastActiveScreenId = screenId;
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId) && m_service) {
+            const QString trackedScreen = m_service->screenAssignments().value(windowId);
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
+                    == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {
+                resolvedScreen = trackedScreen;
+            }
+        }
+        m_lastActiveScreenId = resolvedScreen;
     }
 
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;
@@ -485,7 +625,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = m_service->currentAppIdFor(windowId);
         int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        m_service->updateLastUsedZone(zoneId, screenId, windowClass, currentDesktop);
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
     }
 }
 
@@ -518,9 +658,22 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
     return m_service->snappedWindows();
 }
 
-QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenId)
+void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
-    return m_service->getEmptyZonesJson(screenId);
+    const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
+    int pruned = m_service->pruneStaleAssignments(alive);
+    if (m_autotileEngine) {
+        pruned += m_autotileEngine->pruneStaleWindows(alive);
+    }
+    if (pruned > 0) {
+        qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";
+        scheduleSaveState();
+    }
+}
+
+EmptyZoneList WindowTrackingAdaptor::getEmptyZones(const QString& screenId)
+{
+    return m_service->getEmptyZones(screenId);
 }
 
 QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId)
@@ -540,7 +693,7 @@ QString WindowTrackingAdaptor::getLastUsedZoneId()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Geometry Queries - Delegate to Service
+// PhosphorZones::Zone Geometry Queries - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString WindowTrackingAdaptor::findEmptyZone()
@@ -549,26 +702,46 @@ QString WindowTrackingAdaptor::findEmptyZone()
     return m_service->findEmptyZone(m_lastCursorScreenId);
 }
 
-QString WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
+ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
 {
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+{
+    QRect geo = zoneGeometryRect(zoneId, screenId);
+    if (!geo.isValid()) {
+        return ZoneGeometryRect{};
+    }
+    return ZoneGeometryRect::fromRect(geo);
+}
+
+QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QString& screenId)
 {
     if (zoneId.isEmpty()) {
-        qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: empty zone ID";
-        return QString();
+        qCDebug(lcDbusWindow) << "zoneGeometryRect: empty zone ID";
+        return QRect();
     }
-
-    // Delegate to service
     QRect geo = m_service->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
-        qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: invalid geometry for zone:" << zoneId;
-        return QString();
+        qCDebug(lcDbusWindow) << "zoneGeometryRect: invalid geometry for zone:" << zoneId;
     }
+    return geo;
+}
 
-    return GeometryUtils::rectToJson(geo);
+QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, const QString& zoneId,
+                                                    const QJsonArray& zoneIds, const QString& screenId, bool isFloating,
+                                                    const QString& changeType) const
+{
+    QJsonObject obj;
+    obj[QLatin1String("windowId")] = windowId;
+    obj[QLatin1String("zoneId")] = zoneId;
+    obj[QLatin1String("zoneIds")] = zoneIds;
+    obj[QLatin1String("screenId")] = screenId;
+    obj[QLatin1String("isFloating")] = isFloating;
+    obj[QLatin1String("isSticky")] = m_service ? m_service->isWindowSticky(windowId) : false;
+    obj[QLatin1String("changeType")] = changeType;
+    return obj;
 }
 
 } // namespace PlasmaZones

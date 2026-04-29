@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+# PhosphorAnimation unit tests. Headless — uses offscreen QPA.
+
+find_package(Qt6 REQUIRED COMPONENTS Test)
+
+function(pa_add_test _name)
+    set(_sources ${ARGN})
+    add_executable(${_name} ${_sources})
+    # AUTOMOC explicit per-target so tests still build in standalone
+    # configurations (future `-DUSE_KDE_FRAMEWORKS=OFF` portable builds
+    # or split test-only CMake subprojects) where the parent directory's
+    # CMAKE_AUTOMOC ON isn't inherited. Each test_*.cpp declares
+    # `#include "foo.moc"` for its local Q_OBJECT class, which needs
+    # AUTOMOC to generate.
+    set_target_properties(${_name} PROPERTIES AUTOMOC ON)
+    target_include_directories(${_name}
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_link_libraries(${_name}
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            PhosphorAnimation::PhosphorAnimation
+    )
+    add_test(NAME ${_name} COMMAND ${_name})
+    # Offscreen QPA so QTimer-based tests work without a display server.
+    # Silence debug chatter but keep warnings: several tests exercise
+    # parse-failure paths that log qCWarning on the validation boundary
+    # — a regression that moved a check to qCDebug would still pass
+    # under a warning-silenced rules string, masking the regression.
+    set_tests_properties(${_name} PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphoranimation.debug=false"
+        LABELS "phosphoranimation"
+    )
+endfunction()
+
+pa_add_test(pa_test_easing test_easing.cpp)
+pa_add_test(pa_test_spring test_spring.cpp)
+pa_add_test(pa_test_curve test_curve.cpp)
+pa_add_test(pa_test_curveregistry test_curveregistry.cpp)
+pa_add_test(pa_test_profile test_profile.cpp)
+pa_add_test(pa_test_profiletree test_profiletree.cpp)
+pa_add_test(pa_test_animationcontroller test_animationcontroller.cpp)
+pa_add_test(pa_test_imotionclock test_imotionclock.cpp)
+pa_add_test(pa_test_animatedvalue_scalar test_animatedvalue_scalar.cpp)
+pa_add_test(pa_test_animatedvalue_geometry test_animatedvalue_geometry.cpp)
+pa_add_test(pa_test_animatedvalue_color test_animatedvalue_color.cpp)
+pa_add_test(pa_test_animatedvalue_transform test_animatedvalue_transform.cpp)
+pa_add_test(pa_test_staggertimer test_staggertimer.cpp)
+pa_add_test(pa_test_curveloader test_curveloader.cpp)
+pa_add_test(pa_test_profileloader test_profileloader.cpp)
+pa_add_test(pa_test_loader_integration test_loader_integration.cpp)
+
+# QtQuickClock test is gated on the same CMake flag that gates the
+# class itself — the test links Qt6::Quick which isn't available
+# when PHOSPHOR_ANIMATION_QUICK=OFF.
+if(PHOSPHOR_ANIMATION_QUICK)
+    pa_add_test(pa_test_qtquickclock test_qtquickclock.cpp)
+    target_link_libraries(pa_test_qtquickclock PRIVATE Qt6::Quick)
+endif()

@@ -3,14 +3,17 @@
 
 #include "daemon.h"
 #include "../config/configdefaults.h"
+#include "../core/constants.h"
 #include "../config/configmigration.h"
 #include "../core/logging.h"
-#include "../core/qpa/layershellpluginloader.h"
-#include "../core/layersurface.h"
+#include <PhosphorShell/LayerShellPluginLoader.h>
+#include <PhosphorShell/LayerSurface.h>
 #include "../core/translationloader.h"
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
 #include "vulkan_support.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
@@ -46,8 +49,19 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
+    // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
+    // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
+    // environment (e.g. set globally for games), and its NVIDIA stat-polling
+    // thread costs ~30% CPU continuously inside this daemon — we are a
+    // background service, not a game client. Both env vars are cleared:
+    // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
+    // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
+    // Must run before QVulkanInstance::create() in vulkan_support.cpp.
+    qunsetenv("MANGOHUD");
+    qputenv("DISABLE_MANGOHUD", "1");
+
     // Register our layer-shell QPA plugin before QGuiApplication
-    PlasmaZones::registerLayerShellPlugin();
+    PhosphorShell::registerLayerShellPlugin();
 
     // Read rendering backend preference and probe Vulkan BEFORE QGuiApplication —
     // QQuickWindow::setGraphicsApi() must be called before the app object exists.
@@ -91,19 +105,22 @@ int main(int argc, char* argv[])
 #endif
     PlasmaZones::loadTranslations(&app);
 
+    // Register D-Bus struct types for typed signal/method exchange
+    PhosphorProtocol::registerWireTypes();
+
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
-    qRegisterMetaType<PlasmaZones::LayerSurface*>();
+    qRegisterMetaType<PhosphorShell::LayerSurface*>();
 
     // Verify the layer-shell QPA plugin loaded successfully. If not, overlays will
     // be created as xdg_toplevel (wrong stacking/anchoring) — warn loudly.
-    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PlasmaZones::LayerSurface::isSupported()) {
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorShell::LayerSurface::isSupported()) {
         qCCritical(lcDaemon) << "Layer-shell QPA plugin did not initialize —"
                              << "overlays will use xdg_toplevel (wrong stacking/anchoring)."
                              << "Zone overlays will appear as regular windows (visible in taskbar,"
                              << "wrong z-order, no keyboard grab). This compositor may not support"
                              << "zwlr_layer_shell_v1 (e.g. GNOME/Mutter)."
-                             << "Check that pz-layer-shell.so is installed to Qt's"
+                             << "Check that phosphorshell-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 
@@ -175,7 +192,7 @@ int main(int argc, char* argv[])
     }
 
     // Ensure single instance via D-Bus service name registration
-    const QString serviceName = QStringLiteral("org.plasmazones.daemon");
+    const QString serviceName = QString(PhosphorProtocol::Service::Name);
     QDBusConnection bus = QDBusConnection::sessionBus();
 
     if (!bus.registerService(serviceName)) {

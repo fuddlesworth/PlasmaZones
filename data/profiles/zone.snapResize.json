@@ -1,0 +1,5 @@
+{
+  "name": "zone.snapResize",
+  "duration": 200,
+  "curve": "widget-out"
+}

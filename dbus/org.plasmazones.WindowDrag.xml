@@ -4,97 +4,68 @@
     <!-- Window Drag Interface (KWin script -> Daemon) -->
     <interface name="org.plasmazones.WindowDrag">
         <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin script calls dragStarted/dragMoved/dragStopped; daemon returns snap geometry. Uses double for window rect (KWin QML) and int for cursor/modifiers."/>
-        <method name="dragStarted">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when a window drag begins. Coordinates are double (KWin QML)."/>
+        <method name="beginDrag">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative begin. Returns a DragPolicy that the compositor plugin uses to decide streaming, keyboard grab, and immediate-float behavior. Replaces dragStarted as the canonical drag-begin entry point. Single source of truth — no effect-side cache to go stale after settings reloads."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
-            <arg name="x" type="d" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window X position (double, KWin QML)."/>
-            </arg>
-            <arg name="y" type="d" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window Y position (double)."/>
-            </arg>
-            <arg name="width" type="d" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window width (double)."/>
-            </arg>
-            <arg name="height" type="d" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window height (double)."/>
+            <arg name="frameX" type="i" direction="in"/>
+            <arg name="frameY" type="i" direction="in"/>
+            <arg name="frameWidth" type="i" direction="in"/>
+            <arg name="frameHeight" type="i" direction="in"/>
+            <arg name="startScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual-screen-aware screen identifier at drag start."/>
             </arg>
             <arg name="mouseButtons" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags for the button(s) that started the drag (0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, etc.). Used for activation-by-mouse-button."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags."/>
+            </arg>
+            <arg name="policy" type="(bbbbbss)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::DragPolicy"/>
+                <annotation name="org.gtk.GDBus.DocString" value="DragPolicy struct: {streamDragMoved, showOverlay, grabKeyboard, captureGeometry, immediateFloatOnStart, screenId, bypassReason}."/>
             </arg>
         </method>
 
-        <method name="dragMoved">
-            <annotation name="org.gtk.GDBus.DocString" value="Called while the window is being dragged. Cursor position (int), keyboard modifiers and current mouse buttons (Qt flags)."/>
+        <method name="updateDragCursor">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: hot-path cursor update. Replaces dragMoved. Fire-and-forget; throttled ~30Hz by the plugin. For snap-path drags the daemon runs overlay/zone detection; for bypass drags it watches for cursor crossing a virtual-screen boundary and emits dragPolicyChanged when the policy flips (autotile↔snap)."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="cursorX" type="i" direction="in"/>
+            <arg name="cursorY" type="i" direction="in"/>
+            <arg name="modifiers" type="i" direction="in"/>
+            <arg name="mouseButtons" type="i" direction="in"/>
+        </method>
+
+        <method name="endDrag">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative end. Returns a DragOutcome the plugin applies verbatim — no further decisions on the plugin side. Handles autotile float, snap, drag-out unsnap, snap assist, and cancelled-drag paths through a single dispatch. Replaces dragStopped as the canonical drag-end entry point."/>
             <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier (must match the windowId from beginDrag)."/>
             </arg>
-            <arg name="cursorX" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Cursor X position."/>
-            </arg>
-            <arg name="cursorY" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Cursor Y position."/>
-            </arg>
+            <arg name="cursorX" type="i" direction="in"/>
+            <arg name="cursorY" type="i" direction="in"/>
             <arg name="modifiers" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers flags."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers at release."/>
             </arg>
             <arg name="mouseButtons" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags currently held (0=None, 2=Right, 4=Middle, etc.). Used to toggle overlay when activation is set to a mouse button (same as modifier: hold button during drag to show zones)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons at release."/>
+            </arg>
+            <arg name="cancelled" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the drag was cancelled (Escape, external cancel). False for normal button release."/>
+            </arg>
+            <arg name="outcome" type="(issiiiisbba(siiiiiibsssdd))" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::DragOutcome"/>
+                <annotation name="org.gtk.GDBus.DocString" value="DragOutcome struct: {action, windowId, targetScreenId, x, y, width, height, zoneId, skipAnimation, requestSnapAssist, emptyZones}."/>
             </arg>
         </method>
+
+        <!-- Legacy dragStarted/dragMoved/dragStopped removed in phase 3f.
+             The canonical drag protocol is beginDrag / updateDragCursor /
+             endDrag. Internal C++ helpers with those names still exist in
+             the adaptor (called from drag_protocol.cpp) but they're no
+             longer exposed to D-Bus. -->
 
         <method name="selectorScrollWheel">
             <annotation name="org.gtk.GDBus.DocString" value="Forward scroll delta to the zone selector during drag. Reserved for future use when KWin exposes pointer axis events to effects."/>
             <arg name="angleDeltaY" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Vertical scroll delta in 1/8 degree units (positive=up, negative=down). Standard wheel tick is ±120."/>
-            </arg>
-        </method>
-
-        <method name="dragStopped">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap). cursorX/Y are the cursor position at release (for release screen detection). modifiers: Qt::KeyboardModifiers at release — used for Snap Assist triggers (when always-on is off)."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-            <arg name="cursorX" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Cursor X at release (global coordinates)."/>
-            </arg>
-            <arg name="cursorY" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Cursor Y at release (global coordinates)."/>
-            </arg>
-            <arg name="modifiers" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers at release."/>
-            </arg>
-            <arg name="mouseButtons" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons at release. With modifiers, used for Snap Assist triggers: when any trigger held, enables Snap Assist for this drop (when always-enabled is off)."/>
-            </arg>
-            <arg name="snapX" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap X position (if shouldSnap)."/>
-            </arg>
-            <arg name="snapY" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap Y position (if shouldSnap)."/>
-            </arg>
-            <arg name="snapWidth" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
-            </arg>
-            <arg name="snapHeight" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
-            </arg>
-            <arg name="shouldSnap" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if KWin should apply the snap geometry."/>
-            </arg>
-            <arg name="releaseScreenName" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name where the drag was released (cursor position). Use for auto-fill on drop."/>
-            </arg>
-            <arg name="restoreSizeOnly" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="If true with shouldSnap: apply only width/height; keep window at current position (drag-to-unsnap). Float-toggle shortcut restores full x/y/w/h."/>
-            </arg>
-            <arg name="snapAssistRequested" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="If true: effect should call showSnapAssist with candidate windows to fill empty zones."/>
-            </arg>
-            <arg name="emptyZonesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height} for empty zones. Only set when snapAssistRequested is true."/>
             </arg>
         </method>
 
@@ -137,6 +108,21 @@
             </arg>
             <arg name="height" type="i">
                 <annotation name="org.gtk.GDBus.DocString" value="Pre-snap height (pixels)."/>
+            </arg>
+        </signal>
+        <signal name="dragPolicyChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon detected a policy flip mid-drag (typically because the cursor crossed a virtual-screen boundary that changes autotile↔snap routing). Plugin reacts by applying the transition: entering/exiting autotile bypass, canceling snap overlay, calling handleDragToFloat, etc. Replaces the effect-side cross-VS flip loop that used a stale local cache."/>
+            <arg name="windowId" type="s"/>
+            <arg name="newPolicy" type="(bbbbbss)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PlasmaZones::DragPolicy"/>
+            </arg>
+        </signal>
+        <signal name="snapAssistReady">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted asynchronously after endDrag returns, when the drop requested snap assist (outcome.requestSnapAssist=true). Carries the list of empty zones on the release screen. The effect subscribes and shows the window picker from its slot, discarding the signal if a new drag has already started. Deferring the empty-zone-list computation here keeps the endDrag D-Bus reply fast — the compositor is unblocked before buildEmptyZoneList walks the zone list."/>
+            <arg name="windowId" type="s"/>
+            <arg name="releaseScreenId" type="s"/>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PlasmaZones::EmptyZoneList"/>
             </arg>
         </signal>
     </interface>

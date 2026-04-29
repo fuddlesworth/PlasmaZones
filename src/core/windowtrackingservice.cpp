@@ -4,9 +4,12 @@
 #include "windowtrackingservice.h"
 #include "constants.h"
 #include "interfaces.h"
-#include "layout.h"
-#include "zone.h"
-#include "layoutmanager.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "virtualdesktopmanager.h"
 #include "utils.h"
 #include "logging.h"
@@ -14,16 +17,21 @@
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
+#include <algorithm>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
-WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
-                                             ISettings* settings, VirtualDesktopManager* vdm, QObject* parent)
+WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
+                                             PhosphorZones::IZoneDetector* zoneDetector,
+                                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                             VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_zoneDetector(zoneDetector)
     , m_settings(settings)
     , m_virtualDesktopManager(vdm)
+    , m_screenManager(screenManager)
 {
     Q_ASSERT(layoutManager);
     Q_ASSERT(zoneDetector);
@@ -32,7 +40,7 @@ WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZone
     // Note: No save timer needed - persistence handled by WindowTrackingAdaptor via KConfig
     // Service just emits stateChanged() signal when state changes
     //
-    // Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
+    // PhosphorZones::Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
     // onLayoutChanged(). Do NOT connect here - duplicate invocation would clear m_resnapBuffer
     // on the second run (after assignments were already removed), causing no_windows_to_resnap.
 
@@ -53,13 +61,13 @@ QString WindowTrackingService::currentAppIdFor(const QString& anyWindowId) const
         return QString();
     }
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(anyWindowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
         const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
         if (!fromRegistry.isEmpty()) {
             return fromRegistry;
         }
     }
-    return Utils::extractAppId(anyWindowId);
+    return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
 }
 
 QString WindowTrackingService::canonicalizeForLookup(const QString& rawWindowId) const
@@ -74,7 +82,7 @@ QString WindowTrackingService::canonicalizeForLookup(const QString& rawWindowId)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Assignment Management
+// PhosphorZones::Zone Assignment Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
@@ -86,248 +94,178 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
 void WindowTrackingService::assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
                                                 const QString& screenId, int virtualDesktop)
 {
-    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
+    Q_ASSERT(m_snapState);
+    if (windowId.isEmpty() || zoneIds.isEmpty()) {
+        return;
+    }
+
+    // Filter out empty/null zone IDs — callers may pass partially-valid lists
+    QStringList validZoneIds;
+    validZoneIds.reserve(zoneIds.size());
+    for (const auto& id : zoneIds) {
+        if (!id.isEmpty()) {
+            validZoneIds.append(id);
+        }
+    }
+    if (validZoneIds.isEmpty()) {
         return;
     }
 
     // Only emit signal if value actually changed
-    QStringList previousZones = m_windowZoneAssignments.value(windowId);
-    bool zoneChanged = (previousZones != zoneIds);
+    QStringList previousZones = m_snapState->zonesForWindow(windowId);
+    bool zoneChanged = (previousZones != validZoneIds);
 
-    m_windowZoneAssignments[windowId] = zoneIds;
-    m_windowScreenAssignments[windowId] = screenId;
-    m_windowDesktopAssignments[windowId] = virtualDesktop;
-
-    // NOTE: Do NOT store to m_pendingRestoreQueues here!
-    // Pending assignments are for session persistence and should only be populated
-    // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
-    // windows to auto-restore on open, even when they shouldn't.
+    m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
 
     if (zoneChanged) {
-        Q_EMIT windowZoneChanged(windowId, zoneIds.first());
+        Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
-    scheduleSaveState();
+    // Only the zone/screen/desktop maps changed. Narrower than DirtyAll so
+    // the next save rewrites exactly one JSON field instead of all ten.
+    markDirty(DirtyZoneAssignments);
 }
 
 void WindowTrackingService::unassignWindow(const QString& windowId)
 {
-    // Get the zones before removing (needed for last-used zone check)
-    QStringList previousZoneIds = m_windowZoneAssignments.take(windowId);
-    if (previousZoneIds.isEmpty()) {
-        return; // Window wasn't assigned, nothing to do
+    Q_ASSERT(m_snapState);
+    auto result = m_snapState->unassignWindow(windowId);
+    if (!result.wasAssigned) {
+        return;
     }
-
-    m_windowScreenAssignments.remove(windowId);
-    m_windowDesktopAssignments.remove(windowId);
-
-    // Clear last-used zone if we're unsnapping from it
-    // This preserves last-used zone when unsnapping a different window
-    if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
-        m_lastUsedZoneId.clear();
-        m_lastUsedScreenId.clear();
-        m_lastUsedZoneClass.clear();
-        m_lastUsedDesktop = 0;
-    }
-
-    // Don't remove from pending - keep for session restore
-    // (pending is keyed by app ID anyway)
 
     Q_EMIT windowZoneChanged(windowId, QString());
-    scheduleSaveState();
+    markDirty(DirtyZoneAssignments | (result.lastUsedZoneCleared ? DirtyLastUsedZone : DirtyNone));
 }
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const
 {
-    const QStringList zones = m_windowZoneAssignments.value(windowId);
-    return zones.isEmpty() ? QString() : zones.first();
+    return m_snapState->zoneForWindow(windowId);
 }
 
 QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
 {
-    return m_windowZoneAssignments.value(windowId);
+    return m_snapState->zonesForWindow(windowId);
 }
 
 QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 {
-    QStringList result;
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        if (it.value().contains(zoneId)) {
-            result.append(it.key());
-        }
-    }
-    return result;
+    return m_snapState->windowsInZone(zoneId);
 }
 
 QStringList WindowTrackingService::snappedWindows() const
 {
-    return m_windowZoneAssignments.keys();
+    return m_snapState->snappedWindows();
+}
+
+int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = m_snapState->pruneStaleAssignments(aliveWindowIds);
+
+    int wtsCleaned = 0;
+    auto removeHash = [&](auto& hash) {
+        for (auto it = hash.begin(); it != hash.end();) {
+            if (!aliveWindowIds.contains(it.key())) {
+                it = hash.erase(it);
+                ++wtsCleaned;
+            } else {
+                ++it;
+            }
+        }
+    };
+    auto removeSet = [&](auto& set) {
+        for (auto it = set.begin(); it != set.end();) {
+            if (!aliveWindowIds.contains(*it)) {
+                it = set.erase(it);
+                ++wtsCleaned;
+            } else {
+                ++it;
+            }
+        }
+    };
+
+    removeHash(m_windowStickyStates);
+    removeSet(m_floatingWindows);
+
+    if (m_snapEngine) {
+        wtsCleaned += m_snapEngine->pruneStaleWindows(aliveWindowIds);
+    }
+
+    if (pruned > 0 || wtsCleaned > 0) {
+        markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);
+    }
+
+    return pruned + wtsCleaned;
 }
 
 bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 {
-    auto it = m_windowZoneAssignments.constFind(windowId);
-    return it != m_windowZoneAssignments.constEnd() && !it->isEmpty();
+    return m_snapState->isWindowSnapped(windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Pre-Tile Geometry Storage (unified snap + autotile)
+// Geometry Validation Utility
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::storePreTileGeometry(const QString& windowId, const QRect& geometry,
-                                                 const QString& connectorName, bool overwrite)
+std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRect& geo, const QString& savedScreen,
+                                                                      const QString& currentScreenName) const
 {
-    if (windowId.isEmpty()) {
-        qCWarning(lcCore) << "Cannot store pre-tile geometry: empty windowId";
-        return;
-    }
-    if (!geometry.isValid()) {
-        return;
-    }
-
-    QString appId = currentAppIdFor(windowId);
-
-    if (!overwrite) {
-        // First-only mode (snap): don't overwrite when moving A→B
-        if (m_preTileGeometries.contains(windowId)) {
-            qCDebug(lcCore) << "storePreTileGeometry: skipping (windowId exists)" << windowId
-                            << "existing:" << m_preTileGeometries.value(windowId).geometry << "proposed:" << geometry;
-            return;
-        }
-        if (appId != windowId && m_preTileGeometries.contains(appId)) {
-            qCDebug(lcCore) << "storePreTileGeometry: skipping (appId exists)" << appId
-                            << "existing:" << m_preTileGeometries.value(appId).geometry << "proposed:" << geometry;
-            return;
-        }
-    }
-
-    PreTileGeometry entry{geometry, connectorName};
-    qCDebug(lcCore) << "storePreTileGeometry:" << windowId << "=" << geometry << "screen:" << connectorName
-                    << "overwrite:" << overwrite;
-    m_preTileGeometries[windowId] = entry;
-    if (appId != windowId) {
-        m_preTileGeometries[appId] = entry;
-    }
-
-    // Memory cleanup: limit cache to prevent unbounded growth.
-    // Each window stores up to 2 keys (windowId + appId), so evict until we're
-    // back at the cap. Skip just-inserted keys.
-    static constexpr int MaxPreTileGeometries = 100;
-    while (m_preTileGeometries.size() > MaxPreTileGeometries) {
-        bool evicted = false;
-        for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
-            if (it.key() != windowId && it.key() != appId) {
-                m_preTileGeometries.erase(it);
-                evicted = true;
-                break;
-            }
-        }
-        if (!evicted) {
-            break; // Only our own keys remain
-        }
-    }
-
-    scheduleSaveState();
-}
-
-std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windowId) const
-{
-    if (windowId.isEmpty()) {
-        return std::nullopt;
-    }
-    if (m_preTileGeometries.contains(windowId)) {
-        const auto& entry = m_preTileGeometries.value(windowId);
-        qCDebug(lcCore) << "preTileGeometry: found by windowId" << windowId << "=" << entry.geometry
-                        << "screen:" << entry.connectorName;
-        return entry.geometry;
-    }
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId && m_preTileGeometries.contains(appId)) {
-        const auto& entry = m_preTileGeometries.value(appId);
-        qCDebug(lcCore) << "preTileGeometry: found by appId" << appId << "=" << entry.geometry
-                        << "screen:" << entry.connectorName;
-        return entry.geometry;
-    }
-    qCDebug(lcCore) << "preTileGeometry: not found for" << windowId;
-    return std::nullopt;
-}
-
-bool WindowTrackingService::hasPreTileGeometry(const QString& windowId) const
-{
-    if (windowId.isEmpty()) {
-        return false;
-    }
-    if (m_preTileGeometries.contains(windowId)) {
-        return true;
-    }
-    QString appId = currentAppIdFor(windowId);
-    return (appId != windowId && m_preTileGeometries.contains(appId));
-}
-
-void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
-{
-    if (windowId.isEmpty()) {
-        return;
-    }
-    bool removed = m_preTileGeometries.remove(windowId) > 0;
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId) {
-        removed |= (m_preTileGeometries.remove(appId) > 0);
-    }
-    if (removed) {
-        qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
-        scheduleSaveState();
-    }
-}
-
-std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QString& windowId,
-                                                                     const QString& currentScreenName) const
-{
-    if (windowId.isEmpty()) {
+    if (!geo.isValid() || geo.width() <= 0 || geo.height() <= 0) {
         return std::nullopt;
     }
 
-    // Look up the full entry (with screen context)
-    QString storedScreen;
-    QRect rect;
-    auto lookupEntry = [&](const QString& key) -> bool {
-        auto it = m_preTileGeometries.constFind(key);
-        if (it == m_preTileGeometries.constEnd()) {
-            return false;
-        }
-        rect = it->geometry;
-        storedScreen = it->connectorName;
-        return true;
-    };
-    if (!lookupEntry(windowId)) {
-        QString appId = currentAppIdFor(windowId);
-        if (appId == windowId || !lookupEntry(appId)) {
-            return std::nullopt;
-        }
-    }
-
-    if (!rect.isValid() || rect.width() <= 0 || rect.height() <= 0) {
-        return std::nullopt;
-    }
-
-    // Cross-screen check: if the geometry was captured on a different screen than
-    // where the window currently is, the absolute coordinates are wrong. Preserve
-    // the size but center on the current screen.
-    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty() && storedScreen != currentScreenName) {
-        QScreen* target = Utils::findScreenByIdOrName(currentScreenName);
+    // Cross-screen check: if the geometry was captured on a different screen than where
+    // the window currently is, the absolute coordinates are wrong. Preserve the size
+    // but center on the current screen. This triggers for:
+    // 1. Different physical monitors (e.g. DP-1 vs HDMI-1)
+    // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
+    //    — the virtual screens have different geometry bounds, so coordinates are wrong.
+    if (!savedScreen.isEmpty() && !currentScreenName.isEmpty()
+        && !Phosphor::Screens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
+        auto* mgr = m_screenManager;
+        QScreen* target = mgr ? mgr->physicalQScreenFor(currentScreenName)
+                              : Phosphor::Screens::ScreenIdentity::findByIdOrName(currentScreenName);
         if (target) {
-            QRect available = target->availableGeometry();
-            QRect adjusted(available.x() + (available.width() - rect.width()) / 2,
-                           available.y() + (available.height() - rect.height()) / 2, rect.width(), rect.height());
-            qCDebug(lcCore) << "validatedPreTileGeometry: cross-screen adjustment for" << windowId << "from"
-                            << storedScreen << "to" << currentScreenName << ":" << rect << "->" << adjusted;
+            // For virtual screens, prefer virtual screen bounds over full physical screen
+            QRect available = (mgr && mgr->screenGeometry(currentScreenName).isValid())
+                ? mgr->screenAvailableGeometry(currentScreenName)
+                : target->availableGeometry();
+            // Clamp size to fit within the target screen (the window may have been
+            // larger than the target VS when captured on a wider screen/physical monitor).
+            int w = qMin(geo.width(), available.width());
+            int h = qMin(geo.height(), available.height());
+            int x = available.x() + (available.width() - w) / 2;
+            int y = available.y() + (available.height() - h) / 2;
+            QRect adjusted(x, y, w, h);
+            qCDebug(lcCore) << "validateGeometryForScreen: cross-screen adjustment from" << savedScreen << "to"
+                            << currentScreenName << ":" << geo << "->" << adjusted;
             return adjusted;
         }
     }
 
-    if (isGeometryOnScreen(rect)) {
-        return rect;
+    if (isGeometryOnScreen(geo)) {
+        return geo;
     }
-    return adjustGeometryToScreen(rect);
+    return adjustGeometryToScreen(geo);
+}
+
+std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
+                                                                       bool exactOnly) const
+{
+    if (windowId.isEmpty() || !m_snapEngine) {
+        return std::nullopt;
+    }
+    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
+        return validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
+                                         m_snapEngine->unmanagedScreen(windowId), screenId);
+    }
+    if (!exactOnly) {
+        const QString appId = currentAppIdFor(windowId);
+        if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
+            return validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
+                                             m_snapEngine->unmanagedScreen(appId), screenId);
+        }
+    }
+    return std::nullopt;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -358,46 +296,13 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         if (appId != windowId) {
             m_floatingWindows.remove(appId);
         }
-        // Clear autotile-floated origin tracking for this specific instance only.
-        // No appId removal — autotile-floated is per-instance, never shared.
-        m_autotileFloatedWindows.remove(windowId);
     }
+
+    if (m_snapState) {
+        m_snapState->setFloating(windowId, floating);
+    }
+
     scheduleSaveState();
-}
-
-void WindowTrackingService::markAutotileFloated(const QString& windowId)
-{
-    m_autotileFloatedWindows.insert(windowId);
-}
-
-void WindowTrackingService::clearAutotileFloated(const QString& windowId)
-{
-    m_autotileFloatedWindows.remove(windowId);
-}
-
-bool WindowTrackingService::isAutotileFloated(const QString& windowId) const
-{
-    // Exact match only — NO appId fallback.
-    // m_autotileFloatedWindows is ephemeral runtime state (not persisted).
-    // A appId fallback would cross-contaminate multiple instances of the
-    // same app (e.g., 3 Dolphin windows share appId "dolphin:dolphin",
-    // so floating one would incorrectly mark all three).
-    return m_autotileFloatedWindows.contains(windowId);
-}
-
-void WindowTrackingService::saveSnapFloating(const QString& windowId)
-{
-    m_savedSnapFloatingWindows.insert(windowId);
-}
-
-bool WindowTrackingService::restoreSnapFloating(const QString& windowId)
-{
-    return m_savedSnapFloatingWindows.remove(windowId);
-}
-
-void WindowTrackingService::clearSavedSnapFloating()
-{
-    m_savedSnapFloatingWindows.clear();
 }
 
 QStringList WindowTrackingService::floatingWindows() const
@@ -407,73 +312,95 @@ QStringList WindowTrackingService::floatingWindows() const
 
 void WindowTrackingService::unsnapForFloat(const QString& windowId)
 {
-    // Save zone(s) and screen for restore on unfloat.
-    // Key by full windowId (not appId) so multiple instances of the same
-    // application each remember their own zone independently.
-    if (m_windowZoneAssignments.contains(windowId)) {
-        QStringList zoneIds = m_windowZoneAssignments.value(windowId);
-        m_preFloatZoneAssignments[windowId] = zoneIds;
-        // Save the screen where the window was snapped so unfloat restores to the correct monitor
-        QString screenId = m_windowScreenAssignments.value(windowId);
-        if (!screenId.isEmpty()) {
-            m_preFloatScreenAssignments[windowId] = screenId;
-        }
-        qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
-        unassignWindow(windowId);
-
-        // Consume one pending restore entry so this window doesn't get re-snapped
-        // to the old zone when closed and reopened. Uses consumePendingAssignment
-        // (not clearStalePendingAssignment) to preserve entries for other instances
-        // of the same app — e.g. unsnapping one Konsole shouldn't affect the other two.
-        consumePendingAssignment(windowId);
+    if (!m_snapState || !m_snapState->isWindowSnapped(windowId)) {
+        return;
     }
-    // Note: If window not in assignments, it's already unsnapped - no action needed
+
+    // Read zone/screen for logging BEFORE unsnapForFloat clears them.
+    QStringList zoneIds = m_snapState->zonesForWindow(windowId);
+    QString screenId = m_snapState->screenForWindow(windowId);
+
+    // SnapState::unsnapForFloat saves pre-float state (windowId-keyed) and unassigns.
+    auto unassignResult = m_snapState->unsnapForFloat(windowId);
+
+    // Also write an appId-keyed entry into SnapState for session-restore fallback.
+    // SnapState::unsnapForFloat only writes the windowId key; the appId alias
+    // lets preFloatZone()/preFloatScreen() find the entry after a window
+    // close+reopen cycle where the windowId changes but the appId persists.
+    QString appId = currentAppIdFor(windowId);
+    if (appId != windowId && !appId.isEmpty()) {
+        m_snapState->addPreFloatZone(appId, zoneIds);
+        if (!screenId.isEmpty()) {
+            m_snapState->addPreFloatScreen(appId, screenId);
+        }
+    }
+    qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
+
+    markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
+
+    Q_EMIT windowZoneChanged(windowId, QString());
+    markDirty(DirtyZoneAssignments | (unassignResult.lastUsedZoneCleared ? DirtyLastUsedZone : DirtyNone));
+
+    consumePendingAssignment(windowId);
+}
+
+template<typename Func>
+auto WindowTrackingService::preFloatLookup(const QString& windowId, Func&& getter) const -> decltype(getter(windowId))
+{
+    if (!m_snapState) {
+        return {};
+    }
+    auto result = getter(windowId);
+    if (!result.isEmpty()) {
+        return result;
+    }
+    QString appId = currentAppIdFor(windowId);
+    if (appId != windowId) {
+        result = getter(appId);
+    }
+    return result;
 }
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
 {
-    // Try full window ID first (runtime - distinguishes multiple instances)
-    QStringList zones = m_preFloatZoneAssignments.value(windowId);
-    if (zones.isEmpty()) {
-        // Fall back to app ID (session restore - pointer addresses change across restarts)
-        QString appId = currentAppIdFor(windowId);
-        zones = m_preFloatZoneAssignments.value(appId);
-    }
-    return zones.isEmpty() ? QString() : zones.first();
+    return preFloatLookup(windowId, [this](const QString& id) {
+        return m_snapState->preFloatZone(id);
+    });
 }
 
 QStringList WindowTrackingService::preFloatZones(const QString& windowId) const
 {
-    // Try full window ID first, fall back to app ID for session restore
-    QStringList zones = m_preFloatZoneAssignments.value(windowId);
-    if (zones.isEmpty()) {
-        QString appId = currentAppIdFor(windowId);
-        zones = m_preFloatZoneAssignments.value(appId);
-    }
-    return zones;
+    return preFloatLookup(windowId, [this](const QString& id) {
+        return m_snapState->preFloatZones(id);
+    });
 }
 
 QString WindowTrackingService::preFloatScreen(const QString& windowId) const
 {
-    // Try full window ID first, fall back to app ID for session restore
-    QString screen = m_preFloatScreenAssignments.value(windowId);
-    if (screen.isEmpty()) {
-        QString appId = currentAppIdFor(windowId);
-        screen = m_preFloatScreenAssignments.value(appId);
+    return preFloatLookup(windowId, [this](const QString& id) {
+        return m_snapState->preFloatScreen(id);
+    });
+}
+
+void WindowTrackingService::clearPreFloatZoneForWindow(const QString& windowId)
+{
+    if (windowId.isEmpty() || !m_snapState) {
+        return;
     }
-    return screen;
+    m_snapState->clearPreFloatZone(windowId);
 }
 
 void WindowTrackingService::clearPreFloatZone(const QString& windowId)
 {
+    if (!m_snapState) {
+        return;
+    }
     // Remove by full window ID (runtime entries)
-    m_preFloatZoneAssignments.remove(windowId);
-    m_preFloatScreenAssignments.remove(windowId);
+    m_snapState->clearPreFloatZone(windowId);
     // Also remove by app ID (session-restored entries)
     QString appId = currentAppIdFor(windowId);
     if (appId != windowId) {
-        m_preFloatZoneAssignments.remove(appId);
-        m_preFloatScreenAssignments.remove(appId);
+        m_snapState->clearPreFloatZone(appId);
     }
 }
 
@@ -485,44 +412,6 @@ bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
     setWindowFloating(windowId, false);
     clearPreFloatZone(windowId);
     return true;
-}
-
-UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windowId,
-                                                            const QString& fallbackScreen) const
-{
-    UnfloatResult result;
-
-    QStringList zoneIds = preFloatZones(windowId);
-    if (zoneIds.isEmpty()) {
-        return result;
-    }
-
-    // Validate saved screen — fall back to caller's screen if monitor is gone
-    QString restoreScreen = preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
-        restoreScreen.clear();
-    }
-    if (restoreScreen.isEmpty()) {
-        restoreScreen = fallbackScreen;
-    }
-
-    // Compute geometry (combined for multi-zone)
-    QRect geo;
-    if (zoneIds.size() > 1) {
-        geo = multiZoneGeometry(zoneIds, restoreScreen);
-    } else {
-        geo = zoneGeometry(zoneIds.first(), restoreScreen);
-    }
-
-    if (!geo.isValid()) {
-        return result;
-    }
-
-    result.found = true;
-    result.zoneIds = zoneIds;
-    result.geometry = geo;
-    result.screenId = restoreScreen;
-    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -537,6 +426,125 @@ void WindowTrackingService::setWindowSticky(const QString& windowId, bool sticky
 bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 {
     return m_windowStickyStates.value(windowId, false);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shared Helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// sortZonesByNumber / buildZonePositionMap removed — callers should use
+// PhosphorZones::LayoutUtils directly.
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Out-of-line accessors delegating to SnapState
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const QHash<QString, QStringList>& WindowTrackingService::zoneAssignments() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->zoneAssignments();
+}
+
+const QHash<QString, QString>& WindowTrackingService::screenAssignments() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->screenAssignments();
+}
+
+const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->desktopAssignments();
+}
+
+QString WindowTrackingService::lastUsedZoneId() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->lastUsedZoneId();
+}
+
+QString WindowTrackingService::lastUsedZoneClass() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->lastUsedZoneClass();
+}
+
+void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
+{
+    Q_ASSERT(m_snapState);
+    m_snapState->retagLastUsedZoneClass(newClass);
+}
+
+const QSet<QString>& WindowTrackingService::userSnappedClasses() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->userSnappedClasses();
+}
+
+void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)
+{
+    if (!m_snapState) {
+        qCWarning(lcCore) << "setUserSnappedClasses: no SnapState — dropping" << classes.size() << "classes";
+        return;
+    }
+    m_snapState->setUserSnappedClasses(classes);
+}
+
+const QHash<QString, QStringList>& WindowTrackingService::preFloatZoneAssignments() const
+{
+    static const QHash<QString, QStringList> empty;
+    if (!m_snapState) {
+        return empty;
+    }
+    return m_snapState->preFloatZoneAssignments();
+}
+
+const QHash<QString, QString>& WindowTrackingService::preFloatScreenAssignments() const
+{
+    static const QHash<QString, QString> empty;
+    if (!m_snapState) {
+        return empty;
+    }
+    return m_snapState->preFloatScreenAssignments();
+}
+
+void WindowTrackingService::setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments)
+{
+    if (!m_snapState) {
+        qCWarning(lcCore) << "setPreFloatZoneAssignments: no SnapState — dropping" << assignments.size() << "entries";
+        return;
+    }
+    m_snapState->setPreFloatZoneAssignments(assignments);
+}
+
+void WindowTrackingService::setPreFloatScreenAssignments(const QHash<QString, QString>& assignments)
+{
+    if (!m_snapState) {
+        qCWarning(lcCore) << "setPreFloatScreenAssignments: no SnapState — dropping" << assignments.size() << "entries";
+        return;
+    }
+    m_snapState->setPreFloatScreenAssignments(assignments);
+}
+
+void WindowTrackingService::setActiveAssignments(const QHash<QString, QStringList>& zones,
+                                                 const QHash<QString, QString>& screens,
+                                                 const QHash<QString, int>& desktops)
+{
+    if (!m_snapState) {
+        qCWarning(lcCore) << "setActiveAssignments: no SnapState — dropping" << zones.size() << "assignments";
+        return;
+    }
+    m_snapState->setZoneAssignments(zones);
+    m_snapState->setScreenAssignments(screens);
+    m_snapState->setDesktopAssignments(desktops);
+}
+
+QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
+{
+    if (zoneIds.isEmpty()) {
+        return QRect();
+    }
+    return (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenId) : zoneGeometry(zoneIds.first(), screenId);
 }
 
 } // namespace PlasmaZones

@@ -51,8 +51,15 @@ set(plasmazones_effect_SRCS
     snapassisthandler.h
     windowanimator.cpp
     windowanimator.h
+    compositorclock.cpp
+    compositorclock.h
     dragtracker.cpp
     dragtracker.h
+    # virtualscreenid moved to libs/phosphor-identity (PhosphorIdentity::VirtualScreenId).
+    # Consumers include <PhosphorIdentity/VirtualScreenId.h> directly; reachable
+    # transitively via plasmazones_compositor_common's PhosphorIdentity link.
+    kwin_compositor_bridge.cpp
+    kwin_compositor_bridge.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro
@@ -68,12 +75,24 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
+    plasmazones_compositor_common
+    PhosphorProtocol::PhosphorProtocol
+    # Explicit link: `compositorclock.h` and `windowanimator.h` directly
+    # include `<PhosphorAnimation/...>`. The dependency is reachable
+    # transitively via `plasmazones_compositor_common`, but depending
+    # on a transitive target for a directly-included header is brittle
+    # — a future reshuffle of compositor-common's link graph could drop
+    # the re-export and this target would break mysteriously. Named
+    # here so the link graph matches the include graph.
+    PhosphorAnimation::PhosphorAnimation
+    PhosphorAnimationShaders::PhosphorAnimationShaders
 )
 
 # Include directories
 target_include_directories(kwin_effect_plasmazones PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}  # For shared/ headers (virtualscreenid.h)
 )
 
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in

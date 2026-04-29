@@ -8,7 +8,7 @@
  *        already mapped, so successive D-Bus calls arrive with different
  *        "appId|uuid" composites for the same underlying window.
  *
- * Before the fix, AutotileEngine stored m_windowToStateKey / TilingState under
+ * Before the fix, AutotileEngine stored m_windowToStateKey / PhosphorTiles::TilingState under
  * the first-seen composite; the second composite hit the "window not found in
  * any autotile state" path and the user's toggleWindowFloat / navigation
  * shortcuts silently failed until a mode toggle rebuilt state from scratch.
@@ -22,11 +22,13 @@
 #include <QSignalSpy>
 #include <QTest>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include "../helpers/AutotileTestHelpers.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/windowregistry.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 namespace {
 
@@ -52,7 +54,7 @@ private Q_SLOTS:
 
     void embyScenario_toggleFloatSurvivesClassMutation()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
@@ -73,7 +75,7 @@ private Q_SLOTS:
         engine.windowOpened(firstSeen, screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(firstSeen));
 
@@ -85,7 +87,7 @@ private Q_SLOTS:
         // 3. The failing call from the discussion — toggleWindowFloat arrives
         //    with the rebranded composite. It must hit the already-tracked
         //    window, not the "window not found in any autotile state" path.
-        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedback);
         QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
 
         engine.toggleWindowFloat(afterRename, screen);
@@ -96,7 +98,7 @@ private Q_SLOTS:
         // The float state transition was actually emitted.
         QCOMPARE(floatSpy.count(), 1);
 
-        // And TilingState now marks the canonical (first-seen) entry as floating —
+        // And PhosphorTiles::TilingState now marks the canonical (first-seen) entry as floating —
         // not a duplicate under the new composite.
         QVERIFY(state->isFloating(firstSeen));
         QVERIFY(!state->containsWindow(afterRename));
@@ -109,7 +111,7 @@ private Q_SLOTS:
 
     void multipleClassMutations_stayConvergent()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
@@ -125,7 +127,7 @@ private Q_SLOTS:
         // First class opens the window and locks the canonical key.
         engine.windowOpened(makeComposite(classes[0], instanceId), screen);
         QCoreApplication::processEvents();
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
 
         // Every subsequent rebroadcast must resolve to the same canonical entry.
@@ -151,7 +153,7 @@ private Q_SLOTS:
 
     void windowClosed_releasesCanonicalEntry()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("DP-1");
         const QString instanceId = QStringLiteral("deadbeef");
 
@@ -169,7 +171,7 @@ private Q_SLOTS:
         engine.windowOpened(reuse, screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(reuse));
         QVERIFY(!state->containsWindow(firstOpen));
@@ -179,13 +181,13 @@ private Q_SLOTS:
     // ────────────────────────────────────────────────────────────────────
     // The production wire format: the kwin-effect bridge sends bare
     // instance ids, not composites. Metadata comes from the registry. The
-    // engine must still find the right TilingState entry when
+    // engine must still find the right PhosphorTiles::TilingState entry when
     // toggleWindowFloat arrives.
     // ────────────────────────────────────────────────────────────────────
 
     void bareInstanceId_wireFormat_worksEndToEnd()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
@@ -204,7 +206,7 @@ private Q_SLOTS:
         engine.windowOpened(instanceId, screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(instanceId));
 
@@ -212,7 +214,7 @@ private Q_SLOTS:
         // instance id and doesn't care.
         registry.upsert(instanceId, {QStringLiteral("media.emby.client.beta"), QString(), QString()});
 
-        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedback(&engine, &AutotileEngine::navigationFeedback);
         QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
 
         // toggleWindowFloat arrives with the same bare instance id — exact match.

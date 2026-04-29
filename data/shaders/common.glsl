@@ -12,9 +12,10 @@
 #define PLASMAZONES_COMMON_GLSL
 
 layout(std140, binding = 0) uniform ZoneUniforms {
+    // ── Base uniforms (PhosphorShell::BaseUniforms, 672 bytes) ───────
     mat4 qt_Matrix;
     float qt_Opacity;
-    float iTime;
+    float iTime;            // wrapped lo part, always in [0, kShaderTimeWrap). Safe to use directly.
     float iTimeDelta;
     int iFrame;
     vec2 iResolution;
@@ -24,21 +25,63 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
     vec4 customParams[8];
     vec4 customColors[16];
+    vec2 iChannelResolution[4];
+    int iAudioSpectrumSize;  // number of bars; 0 = disabled
+    int iFlipBufferY;        // always 1; both OpenGL and Vulkan need Y-flip when sampling buffer textures
+    // std140: 8 bytes implicit padding here (int+int=8 → next vec2 array aligned to 16)
+    vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
+    float iTimeHi;       // integer wrap offset (changes once per kShaderTimeWrap seconds)
+    // ── Zone extension (after BaseUniforms) ──────────────────────────
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
     vec4 zoneParams[64];
-    vec2 iChannelResolution[4];
-    int iAudioSpectrumSize;  // number of bars; 0 = disabled
-    int iFlipBufferY;        // Vestigial: always 1. Both OpenGL and Vulkan need Y-flip. Kept for UBO layout stability.
-    vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
 };
+
+// Shader time-wrap period — must match kShaderTimeWrap in zoneshadercommon.h
+// iTime is wrapped into [0, K_TIME_WRAP); iTimeHi is the floor-offset. Without
+// wrapping, float32 ULP would grow past one frame at ~36h uptime and kill any
+// animation driven purely by iTime.
+const float K_TIME_WRAP = 1024.0;
 
 layout(binding = 1) uniform sampler2D uZoneLabels;
 
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
+
+// ─── Time helpers (continuous phase across iTimeHi wrap) ────────────────────
+// iTime wraps at K_TIME_WRAP seconds to preserve float32 precision. For usage
+// patterns like `fbm(pos + time * speed)` or `fract(time * speed)` the wrap is
+// visible once per period but harmless — just use iTime directly. For sin/cos
+// phase animations that must not discontinuity, use the timeSin/timeCos
+// helpers below: they compose phase from (iTimeHi, iTime) via angle-addition,
+// with the large-phase term reduced mod TAU so float32 quantization of
+// `speed * iTimeHi` never leaks into the result.
+float timeSin(float speed) {
+    float phaseHi = speed * iTimeHi;
+    float phaseLo = speed * iTime;
+    float phaseHiMod = phaseHi - floor(phaseHi / TAU) * TAU;
+    return sin(phaseHiMod) * cos(phaseLo) + cos(phaseHiMod) * sin(phaseLo);
+}
+float timeSin(float speed, float offset) {
+    float phaseHi = speed * iTimeHi + offset;
+    float phaseLo = speed * iTime;
+    float phaseHiMod = phaseHi - floor(phaseHi / TAU) * TAU;
+    return sin(phaseHiMod) * cos(phaseLo) + cos(phaseHiMod) * sin(phaseLo);
+}
+float timeCos(float speed) {
+    float phaseHi = speed * iTimeHi;
+    float phaseLo = speed * iTime;
+    float phaseHiMod = phaseHi - floor(phaseHi / TAU) * TAU;
+    return cos(phaseHiMod) * cos(phaseLo) - sin(phaseHiMod) * sin(phaseLo);
+}
+float timeCos(float speed, float offset) {
+    float phaseHi = speed * iTimeHi + offset;
+    float phaseLo = speed * iTime;
+    float phaseHiMod = phaseHi - floor(phaseHi / TAU) * TAU;
+    return cos(phaseHiMod) * cos(phaseLo) - sin(phaseHiMod) * sin(phaseLo);
+}
 
 // Resolution-independent pixel scale factor. Normalizes pixel-space values
 // (border width, glow radius, chromatic aberration, etc.) so they occupy the

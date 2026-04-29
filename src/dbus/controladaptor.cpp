@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "controladaptor.h"
+#include "snapadaptor.h"
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
-#include "../core/layoutmanager.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 
 #include <QDBusConnection>
 #include <QFutureWatcher>
@@ -22,10 +23,13 @@
 
 namespace PlasmaZones {
 
-ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                               AutotileEngine* autotileEngine, ScreenManager* screenManager, QObject* parent)
+ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
+                               PhosphorZones::LayoutRegistry* layoutManager,
+                               PhosphorEngineApi::IPlacementEngine* autotileEngine,
+                               Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
+    , m_snapAdaptor(snapAdaptor)
     , m_layoutAdaptor(layoutAdaptor)
     , m_layoutManager(layoutManager)
     , m_autotileEngine(autotileEngine)
@@ -40,23 +44,26 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
                                 << "zoneNumber=" << zoneNumber;
         return;
     }
+    if (!m_layoutManager) {
+        return;
+    }
 
     // Resolve zone from screen's current layout
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: no layout for screen" << screenId;
         return;
     }
 
-    Zone* zone = layout->zoneByNumber(zoneNumber);
+    PhosphorZones::Zone* zone = layout->zoneByNumber(zoneNumber);
     if (!zone) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: zone" << zoneNumber << "not found in layout" << layout->name();
         return;
     }
 
-    // Delegate to WTA's moveWindowToZone convenience method
-    if (m_wta) {
-        m_wta->moveWindowToZone(windowId, zone->id().toString());
+    // Delegate to SnapAdaptor's moveWindowToZone convenience method
+    if (m_snapAdaptor) {
+        m_snapAdaptor->moveWindowToZone(windowId, zone->id().toString());
     }
 }
 
@@ -68,7 +75,7 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
     }
 
     // Determine current mode and toggle
-    bool isAutotile = m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId);
+    bool isAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
     int newMode = isAutotile ? 0 : 1; // 0=Snapping, 1=Autotile
 
     // Use the LayoutAdaptor's assignment system to toggle mode
@@ -92,7 +99,7 @@ QString ControlAdaptor::getFullState()
     // Layouts
     if (m_layoutManager) {
         QJsonArray layoutArray;
-        for (Layout* layout : m_layoutManager->layouts()) {
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
             QJsonObject lo;
             lo[QLatin1String("id")] = layout->id().toString();
             lo[QLatin1String("name")] = layout->name();
@@ -101,7 +108,7 @@ QString ControlAdaptor::getFullState()
         }
         state[QLatin1String("layouts")] = layoutArray;
 
-        Layout* active = m_layoutManager->activeLayout();
+        PhosphorZones::Layout* active = m_layoutManager->activeLayout();
         if (active) {
             state[QLatin1String("activeLayoutId")] = active->id().toString();
             state[QLatin1String("activeLayoutName")] = active->name();
@@ -110,7 +117,16 @@ QString ControlAdaptor::getFullState()
 
     // Window states (via WTA)
     if (m_wta) {
-        state[QLatin1String("windows")] = QJsonDocument::fromJson(m_wta->getAllWindowStates().toUtf8()).array();
+        QJsonArray windowsArray;
+        for (const auto& ws : m_wta->getAllWindowStates()) {
+            QJsonObject wsObj;
+            wsObj[QLatin1String("windowId")] = ws.windowId;
+            wsObj[QLatin1String("zoneId")] = ws.zoneId;
+            wsObj[QLatin1String("screenId")] = ws.screenId;
+            wsObj[QLatin1String("isFloating")] = ws.isFloating;
+            windowsArray.append(wsObj);
+        }
+        state[QLatin1String("windows")] = windowsArray;
     }
 
     // Autotile state
@@ -118,7 +134,7 @@ QString ControlAdaptor::getFullState()
         QJsonObject autotile;
         autotile[QLatin1String("enabled")] = m_autotileEngine->isEnabled();
         QJsonArray screens;
-        for (const QString& s : m_autotileEngine->autotileScreens()) {
+        for (const QString& s : m_autotileEngine->activeScreens()) {
             screens.append(s);
         }
         autotile[QLatin1String("screens")] = screens;
@@ -126,6 +142,16 @@ QString ControlAdaptor::getFullState()
     }
 
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
+}
+
+void ControlAdaptor::detach()
+{
+    m_wta = nullptr;
+    m_snapAdaptor = nullptr;
+    m_layoutAdaptor = nullptr;
+    m_layoutManager = nullptr;
+    m_autotileEngine = nullptr;
+    m_screenManager = nullptr;
 }
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
@@ -138,6 +164,16 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
         message.setDelayedReply(true);
         auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Busy"),
                                               QStringLiteral("A support report is already being generated"));
+        QDBusConnection::sessionBus().send(error);
+        return {};
+    }
+
+    // Detach was called (shutdown in progress) — fail the report cleanly
+    // instead of feeding null pointers into collectSnapshot.
+    if (!m_screenManager || !m_layoutManager || !m_autotileEngine) {
+        message.setDelayedReply(true);
+        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
+                                              QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
         return {};
     }

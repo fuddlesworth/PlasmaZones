@@ -3,22 +3,31 @@
 
 #include "autotileadaptor.h"
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/AutotileEngine.h"
-#include "autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 
 #include "core/logging.h"
+#include <PhosphorScreens/Manager.h>
 
+#include <PhosphorProtocol/WireTypes.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
 namespace PlasmaZones {
 
-AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
+AutotileAdaptor::AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
+                                 Phosphor::Screens::ScreenManager* screenManager,
+                                 PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
+    , m_screenManager(screenManager)
+    , m_algorithmRegistry(algorithmRegistry)
 {
+    Q_ASSERT_X(m_algorithmRegistry, "AutotileAdaptor",
+               "null ITileAlgorithmRegistry — setAlgorithm / availableAlgorithms / algorithmInfo will crash");
     // Note: We use manual signal connections (below) instead of setAutoRelaySignals(true)
     // to avoid duplicate D-Bus signal emissions when engine signals are forwarded.
 
@@ -28,14 +37,26 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
     }
 
     // Connect engine signals to D-Bus signals
-    connect(m_engine, &AutotileEngine::enabledChanged, this, &AutotileAdaptor::enabledChanged);
-    connect(m_engine, &AutotileEngine::autotileScreensChanged, this, &AutotileAdaptor::autotileScreensChanged);
-    connect(m_engine, &AutotileEngine::algorithmChanged, this, &AutotileAdaptor::algorithmChanged);
-    connect(m_engine, &AutotileEngine::tilingChanged, this, &AutotileAdaptor::tilingChanged);
-    connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
-    connect(m_engine, &AutotileEngine::focusWindowRequested, this, &AutotileAdaptor::focusWindowRequested);
-    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this, &AutotileAdaptor::windowsReleasedFromTiling);
-    connect(m_engine, &AutotileEngine::windowFloatingChanged, this, &AutotileAdaptor::windowFloatingChanged);
+    connect(m_engine, &PhosphorTileEngine::AutotileEngine::enabledChanged, this, &AutotileAdaptor::enabledChanged);
+    connect(m_engine, &PhosphorTileEngine::AutotileEngine::autotileScreensChanged, this,
+            &AutotileAdaptor::autotileScreensChanged);
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::algorithmChanged, this,
+            &AutotileAdaptor::algorithmChanged);
+    // Internal signal is placementChanged (engine-generic); D-Bus name stays tilingChanged
+    // for backward compatibility with existing KWin effect / third-party consumers.
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged, this, &AutotileAdaptor::tilingChanged);
+    connect(m_engine, &PhosphorTileEngine::AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::activateWindowRequested, this,
+            &AutotileAdaptor::focusWindowRequested);
+    // The in-process engine signal has a 2nd QSet<QString> argument for
+    // daemon-side bookkeeping; strip it before forwarding over D-Bus since
+    // QSet is not a D-Bus-marshallable type.
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::windowsReleased, this,
+            [this](const QStringList& windowIds, const QSet<QString>& /*releasedScreenIds*/) {
+                Q_EMIT windowsReleasedFromTiling(windowIds);
+            });
+    connect(m_engine, &PhosphorEngineApi::PlacementEngineBase::windowFloatingChanged, this,
+            &AutotileAdaptor::windowFloatingChanged);
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }
 
@@ -73,7 +94,7 @@ void AutotileAdaptor::setAlgorithm(const QString& algorithmId)
     if (!ensureEngine("setAlgorithm")) {
         return;
     }
-    if (!AlgorithmRegistry::instance()->algorithm(algorithmId)) {
+    if (!m_algorithmRegistry->algorithm(algorithmId)) {
         qCWarning(lcDbusAutotile) << "setAlgorithm: unknown algorithm ID:" << algorithmId;
         return;
     }
@@ -177,6 +198,62 @@ void AutotileAdaptor::focusPrevious()
     m_engine->focusPrevious();
 }
 
+int AutotileAdaptor::pendingWindowOpensCount() const
+{
+    return m_pendingOpens.size();
+}
+
+void AutotileAdaptor::dispatchWindowOpened(const WindowOpenedEntry& entry)
+{
+    if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
+        return;
+    }
+    m_engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+}
+
+bool AutotileAdaptor::deferUntilPanelReady()
+{
+    // Fast path: panel geometry already known, or no Phosphor::Screens::ScreenManager at all (tests
+    // without a singleton fall through and proceed with whatever geometry exists).
+    if (!m_screenManager || (m_screenManager && m_screenManager->isPanelGeometryReady())) {
+        return false;
+    }
+
+    // Lazily wire the flush slot on first deferral. AutoConnection resolves to a
+    // direct call when the signal fires from our thread (production: the D-Bus
+    // watcher's finished callback runs on the main thread, same as us), so there
+    // is no posted-event reentrancy. Leaving the connection installed for the
+    // session is fine — panelGeometryReady is a one-shot signal (see
+    // Phosphor::Screens::ScreenManager::queryKdePlasmaPanels).
+    if (!m_pendingOpensListenerInstalled) {
+        connect(m_screenManager, &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+                &AutotileAdaptor::flushPendingWindowOpens);
+        m_pendingOpensListenerInstalled = true;
+    }
+    return true;
+}
+
+void AutotileAdaptor::flushPendingWindowOpens()
+{
+    if (m_pendingOpens.isEmpty()) {
+        return;
+    }
+    if (!ensureEngine("flushPendingWindowOpens")) {
+        m_pendingOpens.clear();
+        return;
+    }
+    // Move-then-clear so any re-entrant dispatchWindowOpened → slot callback → new
+    // deferral (unlikely post-ready, but defensive) queues into a fresh list rather
+    // than mutating the one we're iterating.
+    const WindowOpenedList toFlush = std::move(m_pendingOpens);
+    m_pendingOpens.clear();
+    qCInfo(lcDbusAutotile) << "flushPendingWindowOpens: processing" << toFlush.size()
+                           << "deferred windows after panel geometry became ready";
+    for (const auto& entry : toFlush) {
+        dispatchWindowOpened(entry);
+    }
+}
+
 void AutotileAdaptor::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
     if (!ensureEngine("windowOpened")) {
@@ -190,39 +267,44 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
         qCDebug(lcDbusAutotile) << "windowOpened: empty screen ID for window" << windowId;
         return;
     }
+    // Non-blocking startup gate: if the first panel D-Bus query has not completed
+    // yet, queue this entry and return. Processing immediately would compute zones
+    // against the unreserved full-screen rect (Phosphor::Screens::ScreenManager's availability cache
+    // is empty until the sensor windows and Plasma D-Bus panel query finish), and
+    // the daemon would emit a visible correction a frame later. Flushing happens in
+    // flushPendingWindowOpens() when panelGeometryReady fires.
+    WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
+    if (deferUntilPanelReady()) {
+        qCInfo(lcDbusAutotile) << "windowOpened: deferring" << windowId
+                               << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
+        m_pendingOpens.append(entry);
+        return;
+    }
     qCDebug(lcDbusAutotile) << "windowOpened: windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
                             << "x" << minHeight;
-    m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+    dispatchWindowOpened(entry);
 }
 
-void AutotileAdaptor::windowsOpenedBatch(const QString& batchJson)
+void AutotileAdaptor::windowsOpenedBatch(const WindowOpenedList& entries)
 {
     if (!ensureEngine("windowsOpenedBatch")) {
         return;
     }
 
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcDbusAutotile) << "windowsOpenedBatch: invalid JSON:" << parseError.errorString();
+    // See windowOpened() above for the startup-race rationale. The batch path queues
+    // all entries atomically so windows in the same batch retain their original order
+    // when flushed.
+    if (deferUntilPanelReady()) {
+        qCInfo(lcDbusAutotile) << "windowsOpenedBatch: deferring" << entries.size()
+                               << "windows until panel geometry ready";
+        m_pendingOpens.append(entries);
         return;
     }
 
-    const QJsonArray entries = doc.array();
     qCInfo(lcDbusAutotile) << "windowsOpenedBatch: processing" << entries.size() << "windows";
 
-    for (const QJsonValue& val : entries) {
-        QJsonObject obj = val.toObject();
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
-        QString screenId = obj.value(QLatin1String("screenId")).toString();
-        int minWidth = obj.value(QLatin1String("minWidth")).toInt(0);
-        int minHeight = obj.value(QLatin1String("minHeight")).toInt(0);
-
-        if (windowId.isEmpty() || screenId.isEmpty()) {
-            continue;
-        }
-
-        m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+    for (const auto& entry : entries) {
+        dispatchWindowOpened(entry);
     }
 }
 
@@ -283,33 +365,33 @@ void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString
 
 QStringList AutotileAdaptor::availableAlgorithms()
 {
-    return AlgorithmRegistry::instance()->availableAlgorithms();
+    return m_algorithmRegistry->availableAlgorithms();
 }
 
-QString AutotileAdaptor::algorithmInfo(const QString& algorithmId)
+AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
-    TilingAlgorithm* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDbusAutotile) << "Unknown algorithm:" << algorithmId;
-        return QStringLiteral("{}");
+        return {};
     }
 
-    QJsonObject info;
-    info[QLatin1String("id")] = algorithmId; // Validated by successful lookup above
-    info[QLatin1String("name")] = algo->name();
-    info[QLatin1String("description")] = algo->description();
-    info[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
-    info[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
-    info[QLatin1String("centerLayout")] = algo->centerLayout();
-    info[QLatin1String("defaultSplitRatio")] = algo->defaultSplitRatio();
-    info[QLatin1String("defaultMaxWindows")] = algo->defaultMaxWindows();
-    info[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
-    info[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
-    info[QLatin1String("isScripted")] = algo->isScripted();
-    info[QLatin1String("isUserScript")] = algo->isUserScript();
-    info[QLatin1String("supportsMemory")] = algo->supportsMemory();
+    AlgorithmInfoEntry entry;
+    entry.id = algorithmId; // Validated by successful lookup above
+    entry.name = algo->name();
+    entry.description = algo->description();
+    entry.supportsMasterCount = algo->supportsMasterCount();
+    entry.supportsSplitRatio = algo->supportsSplitRatio();
+    entry.centerLayout = algo->centerLayout();
+    entry.producesOverlappingZones = algo->producesOverlappingZones();
+    entry.defaultSplitRatio = algo->defaultSplitRatio();
+    entry.defaultMaxWindows = algo->defaultMaxWindows();
+    entry.isScripted = algo->isScripted();
+    entry.zoneNumberDisplay = algo->zoneNumberDisplay();
+    entry.isUserScript = algo->isUserScript();
+    entry.supportsMemory = algo->supportsMemory();
 
-    return QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact));
+    return entry;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -329,27 +411,31 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
         return;
     }
 
-    QJsonArray outArr;
+    TileRequestList requests;
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
-        // Float entries (overflow windows) have no geometry — pass through as-is
-        if (obj.value(QLatin1String("floating")).toBool(false)) {
-            outArr.append(obj);
-            continue;
+        TileRequestEntry entry;
+        entry.windowId = obj.value(QLatin1String("windowId")).toString();
+        entry.floating = obj.value(QLatin1String("floating")).toBool(false);
+        if (!entry.floating) {
+            entry.x = obj.value(QLatin1String("x")).toInt();
+            entry.y = obj.value(QLatin1String("y")).toInt();
+            entry.width = obj.value(QLatin1String("width")).toInt();
+            entry.height = obj.value(QLatin1String("height")).toInt();
+            if (entry.width <= 0 || entry.height <= 0) {
+                qCDebug(lcDbusAutotile) << "onWindowsTiled: invalid geometry for" << entry.windowId;
+                continue;
+            }
         }
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
-        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
-        if (geo.width() <= 0 || geo.height() <= 0) {
-            qCDebug(lcDbusAutotile) << "onWindowsTiled: invalid geometry for" << windowId << geo;
-            continue;
-        }
-        outArr.append(obj);
+        entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
+        entry.screenId = obj.value(QLatin1String("screenId")).toString();
+        entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        requests.append(entry);
     }
 
-    if (!outArr.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "Emitting windowsTileRequested:" << outArr.size() << "windows";
-        Q_EMIT windowsTileRequested(QString::fromUtf8(QJsonDocument(outArr).toJson(QJsonDocument::Compact)));
+    if (!requests.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "Emitting windowsTileRequested:" << requests.size() << "windows";
+        Q_EMIT windowsTileRequested(requests);
     }
 }
 

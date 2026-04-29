@@ -22,7 +22,7 @@ function isBuiltIn(item) {
 
 function matchesCommonFilters(item, search, showHidden) {
     if (search.length > 0
-        && !(item.name || "").toLowerCase().includes(search)
+        && !(item.displayName || "").toLowerCase().includes(search)
         && !(item.description || "").toLowerCase().includes(search))
         return false;
     if (!showHidden && item.hiddenFromSelector === true)
@@ -77,7 +77,7 @@ function applyTilingFilters(items, search, f) {
             return false;
         if (!f.showOverlapping && item.producesOverlappingZones === true)
             return false;
-        if (!f.showPersistent && item.memory === true)
+        if (!f.showPersistent && item.supportsMemory === true)
             return false;
         if (!f.showCustomParams && item.supportsCustomParams === true)
             return false;
@@ -190,13 +190,13 @@ function sortItems(groups, sortIdx, ascending, customOrder) {
                 if (aIdx !== bIdx)
                     cmp = aIdx - bIdx;
                 else
-                    cmp = (a.name || "").localeCompare(b.name || "");
+                    cmp = (a.displayName || "").localeCompare(b.displayName || "");
             } else if (sortIdx === 1) {
                 cmp = Math.max(0, a.zoneCount || 0) - Math.max(0, b.zoneCount || 0);
                 if (cmp === 0)
-                    cmp = (a.name || "").localeCompare(b.name || "");
+                    cmp = (a.displayName || "").localeCompare(b.displayName || "");
             } else {
-                cmp = (a.name || "").localeCompare(b.name || "");
+                cmp = (a.displayName || "").localeCompare(b.displayName || "");
             }
             return ascending ? cmp : -cmp;
         });

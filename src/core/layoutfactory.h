@@ -8,10 +8,15 @@
 #include <QHash>
 #include <functional>
 
-namespace PlasmaZones {
-
+namespace PhosphorZones {
 class Layout;
-class LayoutManager;
+}
+
+namespace PhosphorZones {
+class LayoutRegistry;
+}
+
+namespace PlasmaZones {
 
 /**
  * @brief Factory for creating layouts by type name
@@ -21,17 +26,17 @@ class LayoutManager;
  * layout types and keeps the creation logic centralized.
  *
  * Usage:
- *   Layout* layout = LayoutFactory::create("grid", manager);
+ *   PhosphorZones::Layout* layout = LayoutFactory::create("grid", manager);
  *   if (!layout) { // handle unknown type }
  */
 class PLASMAZONES_EXPORT LayoutFactory
 {
 public:
-    using CreatorFunc = std::function<Layout*(LayoutManager*)>;
+    using CreatorFunc = std::function<PhosphorZones::Layout*(PhosphorZones::LayoutRegistry*)>;
 
     /**
      * @brief Create a layout of the specified type
-     * @param type Layout type name (e.g., "columns", "rows", "grid", "priority", "focus", "custom")
+     * @param type PhosphorZones::Layout type name (e.g., "columns", "rows", "grid", "priority", "focus", "custom")
      * @param manager Parent layout manager
      * @return Newly created layout, or nullptr if type is unknown
      *
@@ -43,7 +48,7 @@ public:
      * - "focus": Focus layout (centered main + surrounding zones)
      * - "custom" or unknown: Empty custom layout
      */
-    static Layout* create(const QString& type, LayoutManager* manager);
+    static PhosphorZones::Layout* create(const QString& type, PhosphorZones::LayoutRegistry* manager);
 
     /**
      * @brief Register a custom layout creator

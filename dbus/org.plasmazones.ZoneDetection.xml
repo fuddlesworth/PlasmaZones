@@ -32,25 +32,27 @@
         </method>
 
         <method name="getZoneGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON ({x, y, width, height}) for the primary screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as a struct (x, y, width, height) for the primary screen."/>
             <arg name="zoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
-            <arg name="geometry" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {x, y, width, height}."/>
+            <arg name="geometry" type="(iiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone geometry struct: (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
             </arg>
         </method>
 
         <method name="getZoneGeometryForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON for a specific screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as a struct for a specific screen."/>
             <arg name="zoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID (empty = primary screen)."/>
             </arg>
-            <arg name="geometry" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {x, y, width, height}."/>
+            <arg name="geometry" type="(iiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone geometry struct: (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
             </arg>
         </method>
 
@@ -71,6 +73,9 @@
             </arg>
             <arg name="direction" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Direction: left, right, up, down."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (optional, empty = current screen)."/>
             </arg>
             <arg name="zoneId" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Adjacent zone UUID, or empty string."/>
@@ -104,12 +109,13 @@
         </method>
 
         <method name="getAllZoneGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Return all zone geometries as a list of JSON strings, optionally for a specific screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return all zone geometries as a list of named geometry structs, optionally for a specific screen."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID (optional, empty = all screens)."/>
             </arg>
-            <arg name="geometries" type="as" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="List of zone geometry JSON strings."/>
+            <arg name="geometries" type="a(siiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of named zone geometry structs: (zoneId, x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::NamedZoneGeometryList"/>
             </arg>
         </method>
 
@@ -138,8 +144,9 @@
             <arg name="zoneId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
-            <arg name="geometry" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone geometry as JSON."/>
+            <arg name="geometry" type="(iiii)">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone geometry struct: (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
             </arg>
         </signal>
     </interface>

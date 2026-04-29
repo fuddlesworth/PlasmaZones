@@ -56,7 +56,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Autotile.xml"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.LayoutManager.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.LayoutRegistry.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Overlay.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Screen.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Settings.xml"

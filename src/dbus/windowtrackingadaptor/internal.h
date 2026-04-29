@@ -9,8 +9,12 @@
 #include <QRect>
 #include <QHash>
 #include <QString>
+#include "../../core/constants.h"
 #include "../../core/utils.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/windowtrackingservice.h"
+#include <PhosphorEngineApi/PlacementEngineBase.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 namespace WindowTrackingInternal {
@@ -27,32 +31,55 @@ inline QJsonArray toJsonArray(const QStringList& list)
 inline QJsonObject rectToJsonObject(const QRect& rect)
 {
     QJsonObject obj;
-    obj[QLatin1String("x")] = rect.x();
-    obj[QLatin1String("y")] = rect.y();
-    obj[QLatin1String("width")] = rect.width();
-    obj[QLatin1String("height")] = rect.height();
+    obj[::PhosphorZones::ZoneJsonKeys::X] = rect.x();
+    obj[::PhosphorZones::ZoneJsonKeys::Y] = rect.y();
+    obj[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
+    obj[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
     return obj;
 }
 
-inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::PreTileGeometry>& map,
+inline QString serializeGeometryMap(const QHash<QString, PhosphorEngineApi::PlacementEngineBase::UnmanagedEntry>& map,
                                     const WindowTrackingService* service)
 {
-    // Runtime map keys are bare instance ids, not composites. Parsing them
-    // as strings would write per-instance uuids into the disk format where
-    // they'd never match on next launch. Look up the current class via the
-    // WTS (which consults the registry) to get a stable class-based disk
-    // key that survives KWin restarts.
+    // Runtime map keys are either bare appIds (stable cross-session keys) or
+    // full "appId|uuid" instance keys (per-runtime data). The output format is
+    // appId-keyed for cross-session restore, so multiple runtime entries can
+    // collide onto the same output slot.
+    //
+    // Two-pass to guarantee a fresh per-instance capture wins over any stale
+    // appId-only entry left over from a prior session.
+    auto serialize = [](const PhosphorEngineApi::PlacementEngineBase::UnmanagedEntry& entry) -> QJsonObject {
+        QJsonObject obj = rectToJsonObject(entry.geometry);
+        if (!entry.screenId.isEmpty()) {
+            obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
+                ? entry.screenId
+                : Phosphor::Screens::ScreenIdentity::idForName(entry.screenId);
+        }
+        return obj;
+    };
+
     QJsonObject result;
+    // Pass 1: appId-only keys
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        if (it.key().contains(QLatin1Char('|'))) {
+            continue;
+        }
         const QString appId = service ? service->currentAppIdFor(it.key()) : it.key();
         if (appId.isEmpty()) {
             continue;
         }
-        QJsonObject obj = rectToJsonObject(it.value().geometry);
-        if (!it.value().connectorName.isEmpty()) {
-            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
+        result[appId] = serialize(it.value());
+    }
+    // Pass 2: per-instance keys (these win over pass 1's cross-session baseline)
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        if (!it.key().contains(QLatin1Char('|'))) {
+            continue;
         }
-        result[appId] = obj;
+        const QString appId = service ? service->currentAppIdFor(it.key()) : it.key();
+        if (appId.isEmpty()) {
+            continue;
+        }
+        result[appId] = serialize(it.value());
     }
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
@@ -63,7 +90,8 @@ inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::
  * Used for daemon-only restarts where KWin UUIDs are stable, so
  * multi-instance apps keep per-window pre-tile geometry.
  */
-inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingService::PreTileGeometry>& map)
+inline QString
+serializeGeometryMapFull(const QHash<QString, PhosphorEngineApi::PlacementEngineBase::UnmanagedEntry>& map)
 {
     QJsonArray result;
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
@@ -73,12 +101,14 @@ inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingServi
         }
         QJsonObject obj;
         obj[QLatin1String("windowId")] = it.key();
-        obj[QLatin1String("x")] = it.value().geometry.x();
-        obj[QLatin1String("y")] = it.value().geometry.y();
-        obj[QLatin1String("width")] = it.value().geometry.width();
-        obj[QLatin1String("height")] = it.value().geometry.height();
-        if (!it.value().connectorName.isEmpty()) {
-            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
+        obj[::PhosphorZones::ZoneJsonKeys::X] = it.value().geometry.x();
+        obj[::PhosphorZones::ZoneJsonKeys::Y] = it.value().geometry.y();
+        obj[::PhosphorZones::ZoneJsonKeys::Width] = it.value().geometry.width();
+        obj[::PhosphorZones::ZoneJsonKeys::Height] = it.value().geometry.height();
+        if (!it.value().screenId.isEmpty()) {
+            obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
+                ? it.value().screenId
+                : Phosphor::Screens::ScreenIdentity::idForName(it.value().screenId);
         }
         result.append(obj);
     }

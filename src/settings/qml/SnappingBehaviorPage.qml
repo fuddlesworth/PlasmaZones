@@ -9,8 +9,12 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
+    // references stay direct since those are Settings Q_PROPERTYs the
+    // sub-controller doesn't wrap.
+    readonly property var settingsBridge: settingsController.snappingBehaviorPage
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int thresholdMax: settingsController.adjacentThresholdMax
+    readonly property int thresholdMax: root.settingsBridge.adjacentThresholdMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -45,10 +49,10 @@ Flickable {
                         SettingsSwitch {
                             id: alwaysActivateSwitch
 
-                            checked: settingsController.alwaysActivateOnDrag
+                            checked: root.settingsBridge.alwaysActivateOnDrag
                             accessibleName: i18n("Activate on every window drag")
                             onToggled: function(newValue) {
-                                settingsController.alwaysActivateOnDrag = newValue;
+                                root.settingsBridge.alwaysActivateOnDrag = newValue;
                             }
                         }
 
@@ -57,11 +61,18 @@ Flickable {
                     SettingsSeparator {
                     }
 
+                    // The activation trigger list and the Hold/Toggle controls
+                    // serve dual purpose (#249): when "Activate on every drag"
+                    // is on, the same triggers DEACTIVATE the overlay (hold to
+                    // hide; toggle to flip off the implicitly-on overlay).
+                    // resolveActivationActive in the runtime mirrors this with
+                    // an inversion gated on alwaysActiveOnDrag.
                     SettingsRow {
-                        title: i18n("Hold to activate")
-                        description: i18n("Hold a modifier or mouse button to show zones while dragging")
-                        enabled: !alwaysActivateSwitch.checked
-                        opacity: enabled ? 1 : 0.4
+                        readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
+                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
+
+                        title: activeTitle
+                        description: activeDescription
 
                         ModifierAndMouseCheckBoxes {
                             id: dragActivationInput
@@ -69,11 +80,11 @@ Flickable {
                             width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: settingsController.dragActivationTriggers
-                            defaultTriggers: settingsController.defaultDragActivationTriggers
+                            triggers: root.settingsBridge.dragActivationTriggers
+                            defaultTriggers: root.settingsBridge.defaultDragActivationTriggers
                             tooltipEnabled: false
                             onTriggersModified: (triggers) => {
-                                settingsController.dragActivationTriggers = triggers;
+                                root.settingsBridge.dragActivationTriggers = triggers;
                             }
                         }
 
@@ -83,10 +94,10 @@ Flickable {
                     }
 
                     SettingsRow {
+                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
+
                         title: i18n("Toggle mode")
-                        description: i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
-                        enabled: !alwaysActivateSwitch.checked
-                        opacity: enabled ? 1 : 0.4
+                        description: activeDescription
 
                         SettingsSwitch {
                             checked: appSettings.toggleActivation
@@ -134,11 +145,11 @@ Flickable {
                             width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: settingsController.zoneSpanTriggers
-                            defaultTriggers: settingsController.defaultZoneSpanTriggers
+                            triggers: root.settingsBridge.zoneSpanTriggers
+                            defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
                             tooltipEnabled: false
                             onTriggersModified: (triggers) => {
-                                settingsController.zoneSpanTriggers = triggers;
+                                root.settingsBridge.zoneSpanTriggers = triggers;
                             }
                         }
 
@@ -152,7 +163,7 @@ Flickable {
                         description: i18n("Distance from zone edge for multi-zone selection")
 
                         SettingsSpinBox {
-                            from: settingsController.adjacentThresholdMin
+                            from: root.settingsBridge.adjacentThresholdMin
                             to: root.thresholdMax
                             value: appSettings.adjacentThreshold
                             onValueModified: (value) => {
@@ -219,11 +230,11 @@ Flickable {
                             width: Math.min(root.sliderPreferredWidth, Kirigami.Units.gridUnit * 16)
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: settingsController.snapAssistTriggers
-                            defaultTriggers: settingsController.defaultSnapAssistTriggers
+                            triggers: root.settingsBridge.snapAssistTriggers
+                            defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers
                             tooltipEnabled: false
                             onTriggersModified: (triggers) => {
-                                settingsController.snapAssistTriggers = triggers;
+                                root.settingsBridge.snapAssistTriggers = triggers;
                             }
                         }
 
@@ -332,6 +343,23 @@ Flickable {
                             accessibleName: i18n("Move new windows to last zone")
                             onToggled: function(newValue) {
                                 appSettings.moveNewWindowsToLastZone = newValue;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Auto-assign new windows for all layouts")
+                        description: i18n("Fill the first empty zone when a new window opens. When on, this overrides each layout's individual auto-assign toggle and applies to every layout.")
+
+                        SettingsSwitch {
+                            checked: appSettings.autoAssignAllLayouts
+                            accessibleName: i18n("Auto-assign new windows for all layouts")
+                            onToggled: function(newValue) {
+                                appSettings.autoAssignAllLayouts = newValue;
                             }
                         }
 

@@ -9,6 +9,8 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    readonly property var settingsBridge: settingsController.snappingEffectsPage
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -116,8 +118,8 @@ Flickable {
                         description: i18n("Target refresh rate for shader animations")
 
                         SettingsSlider {
-                            from: settingsController.shaderFrameRateMin
-                            to: settingsController.shaderFrameRateMax
+                            from: root.settingsBridge.shaderFrameRateMin
+                            to: root.settingsBridge.shaderFrameRateMax
                             value: appSettings.shaderFrameRate
                             valueSuffix: " fps"
                             labelWidth: 55
@@ -133,12 +135,12 @@ Flickable {
 
                     SettingsRow {
                         title: i18n("Audio spectrum")
-                        description: settingsController.cavaAvailable ? i18n("Feed audio spectrum data to shaders that support it") : i18n("CAVA is not installed — install cava to enable audio visualization")
+                        description: root.settingsBridge.cavaAvailable ? i18n("Feed audio spectrum data to shaders that support it") : i18n("CAVA is not installed — install cava to enable audio visualization")
 
                         SettingsSwitch {
                             id: audioVizSwitch
 
-                            enabled: settingsController.cavaAvailable
+                            enabled: root.settingsBridge.cavaAvailable
                             checked: appSettings.enableAudioVisualizer
                             accessibleName: i18n("Enable CAVA audio spectrum")
                             onToggled: function(newValue) {
@@ -152,7 +154,7 @@ Flickable {
                         Layout.fillWidth: true
                         type: Kirigami.MessageType.Warning
                         text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
-                        visible: !settingsController.cavaAvailable && shaderCard.toggleChecked
+                        visible: !root.settingsBridge.cavaAvailable && shaderCard.toggleChecked
                     }
 
                     SettingsSeparator {
@@ -161,11 +163,11 @@ Flickable {
                     SettingsRow {
                         title: i18n("Spectrum bars")
                         description: i18n("Number of frequency bands in the audio visualization")
-                        enabled: audioVizSwitch.checked && settingsController.cavaAvailable
+                        enabled: audioVizSwitch.checked && root.settingsBridge.cavaAvailable
 
                         SettingsSlider {
-                            from: settingsController.audioSpectrumBarCountMin
-                            to: settingsController.audioSpectrumBarCountMax
+                            from: root.settingsBridge.audioSpectrumBarCountMin
+                            to: root.settingsBridge.audioSpectrumBarCountMax
                             stepSize: 2
                             value: appSettings.audioSpectrumBarCount
                             valueSuffix: ""

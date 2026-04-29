@@ -4,17 +4,18 @@
 #include "screenchangehandler.h"
 #include "autotilehandler.h"
 #include "plasmazoneseffect.h"
-#include "dbus_constants.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WireTypes.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 
+#include <QDBusArgument>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include <QPointer>
 
 Q_LOGGING_CATEGORY(lcScreenChange, "kwin.effect.plasmazones.screenchange", QtWarningMsg)
@@ -79,13 +80,28 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     // Position-only changes (e.g. exiting KDE panel edit mode) should not move windows.
     const QSize previousSize = m_lastVirtualScreenGeometry.size();
     const QSize currentSize = currentGeometry.size();
-    if (previousSize == currentSize) {
-        qCDebug(lcScreenChange) << "Virtual screen size unchanged, skipping window repositioning";
-        m_lastVirtualScreenGeometry = currentGeometry;
-        return;
-    }
+    const bool sizeChanged = (previousSize != currentSize);
 
     m_lastVirtualScreenGeometry = currentGeometry;
+
+    // Always refresh virtual screen definitions — physical screen geometry
+    // (including position) changed, so virtual screen absolute coordinates
+    // need recalculation from the daemon.
+    if (m_effect->m_daemonServiceRegistered) {
+        m_effect->fetchAllVirtualScreenConfigs();
+    }
+
+    if (!sizeChanged) {
+        // Even when physical size is unchanged, virtual screen split ratio changes
+        // require window repositioning. Only proceed if VS configs exist; otherwise
+        // there's nothing to reposition.
+        if (!m_effect->m_daemonServiceRegistered || m_effect->m_virtualScreenDefs.isEmpty()) {
+            qCDebug(lcScreenChange) << "Screen size unchanged, no VS configs — skipping window repositioning";
+            return;
+        }
+        qCDebug(lcScreenChange) << "Screen size unchanged but VS configs present — repositioning windows";
+    }
+
     if (m_reapplyInProgress) {
         m_reapplyPending = true;
         return;
@@ -109,8 +125,8 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         return;
     }
     m_reapplyInProgress = true;
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
-                                                             QStringLiteral("getUpdatedWindowGeometries"));
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {
@@ -119,11 +135,11 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
             return;
         }
         self->m_reapplyInProgress = false;
-        QDBusPendingReply<QString> reply = *w;
+        QDBusPendingReply<PhosphorProtocol::WindowGeometryList> reply = *w;
         if (!reply.isValid()) {
             qCDebug(lcScreenChange) << "No window geometries to update";
         } else {
-            self->applyWindowGeometriesFromJson(reply.value());
+            self->applyWindowGeometries(reply.value());
         }
         if (self->m_reapplyPending) {
             self->m_reapplyPending = false;
@@ -136,23 +152,12 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
     });
 }
 
-void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometriesJson)
+void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries)
 {
-    if (geometriesJson.isEmpty() || geometriesJson == QLatin1String("[]")) {
+    if (geometries.isEmpty()) {
         qCDebug(lcScreenChange) << "Empty geometries list from daemon";
         return;
     }
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcScreenChange) << "Failed to parse window geometries:" << parseError.errorString();
-        return;
-    }
-    if (!doc.isArray()) {
-        qCWarning(lcScreenChange) << "Window geometries root is not an array";
-        return;
-    }
-    QJsonArray geometries = doc.array();
     qCInfo(lcScreenChange) << "Applying geometries to" << geometries.size() << "windows";
 
     // Single pass: map by full window ID and by appId for fallback
@@ -164,7 +169,7 @@ void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometrie
             continue;
         }
         QString fullId = m_effect->getWindowId(w);
-        QString appId = m_effect->appIdForInstance(fullId);
+        QString appId = ::PhosphorIdentity::WindowId::extractAppId(fullId);
         windowByFullId.insert(fullId, w);
         if (!windowByAppId.contains(appId)) {
             windowByAppId.insert(appId, w);
@@ -178,37 +183,28 @@ void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometrie
     };
     QVector<ApplyEntry> toApply;
 
-    for (const QJsonValue& value : geometries) {
-        if (!value.isObject()) {
-            qCDebug(lcScreenChange) << "Skipping non-object geometry entry";
-            continue;
-        }
-        QJsonObject obj = value.toObject();
-        QString windowId = obj[QLatin1String("windowId")].toString();
-        if (windowId.isEmpty()) {
+    for (const auto& entry : geometries) {
+        if (entry.windowId.isEmpty()) {
             qCDebug(lcScreenChange) << "Skipping geometry entry with empty windowId";
             continue;
         }
-        int width = obj[QLatin1String("width")].toInt();
-        int height = obj[QLatin1String("height")].toInt();
-        if (width <= 0 || height <= 0) {
-            qCDebug(lcScreenChange) << "Skipping geometry entry with invalid size for" << windowId;
+        if (entry.width <= 0 || entry.height <= 0) {
+            qCDebug(lcScreenChange) << "Skipping geometry entry with invalid size for" << entry.windowId;
             continue;
         }
-        int x = obj[QLatin1String("x")].toInt();
-        int y = obj[QLatin1String("y")].toInt();
 
-        KWin::EffectWindow* window = windowByFullId.value(windowId);
+        KWin::EffectWindow* window = windowByFullId.value(entry.windowId);
         if (!window) {
-            window = windowByAppId.value(m_effect->appIdForInstance(windowId));
+            window = windowByAppId.value(::PhosphorIdentity::WindowId::extractAppId(entry.windowId));
         }
         if (window && m_effect->shouldHandleWindow(window)) {
             const QString winScreenId = m_effect->getWindowScreenId(window);
             if (m_effect->m_autotileHandler->isAutotileScreen(winScreenId)) {
-                qCDebug(lcScreenChange) << "Skipping autotile-managed window" << windowId << "on screen" << winScreenId;
+                qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"
+                                        << winScreenId;
                 continue;
             }
-            QRect newGeometry(x, y, width, height);
+            QRect newGeometry = entry.toRect();
             QRectF currentWindowGeometry = window->frameGeometry();
             if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
                 toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry});

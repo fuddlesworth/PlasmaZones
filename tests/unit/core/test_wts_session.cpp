@@ -6,7 +6,7 @@
  * @brief Unit tests for WindowTrackingService session restore, clear-stale, and resnap
  *
  * Tests cover:
- * 1. Zone-number fallback on session restore
+ * 1. PhosphorZones::Zone-number fallback on session restore
  * 2. Floating window skips restore
  * 3. Clear stale pending assignments
  * 4. Resnap from previous layout
@@ -32,15 +32,19 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
-#include "core/layoutmanager.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================
@@ -52,49 +56,49 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using StubSettingsSession = StubSettings;
 
 // =========================================================================
-// Stub Zone Detector
+// Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorSession : public IZoneDetector
+class StubZoneDetectorSession : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorSession(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
+    PhosphorZones::Layout* layout() const override
     {
         return m_layout;
     }
-    void setLayout(Layout* layout) override
+    void setLayout(PhosphorZones::Layout* layout) override
     {
         m_layout = layout;
     }
-    ZoneDetectionResult detectZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
     {
         return {};
     }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
     {
         return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -102,18 +106,18 @@ public:
     }
 
 private:
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
 // =========================================================================
 // Helper
 // =========================================================================
 
-static Layout* createTestLayout(int zoneCount, QObject* parent)
+static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
 {
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
+    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
     for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
         qreal x = static_cast<qreal>(i) / zoneCount;
         qreal w = 1.0 / zoneCount;
         zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
@@ -135,23 +139,31 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSession(nullptr);
         m_zoneDetector = new StubZoneDetectorSession(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
+        m_engine->setEngineSettings(m_settings);
+        m_service->setSnapState(m_engine->snapState());
+        m_service->setSnapEngine(m_engine);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
     }
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_engine;
+        m_engine = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -184,7 +196,7 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        SnapResult result = m_service->calculateRestoreFromSession(QStringLiteral("firefox|99999"), QString(), false);
+        SnapResult result = m_engine->calculateRestoreFromSession(QStringLiteral("firefox|99999"), QString(), false);
         Q_UNUSED(result);
 
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
@@ -207,7 +219,7 @@ private Q_SLOTS:
         floating.insert(appId);
         m_service->setFloatingWindows(floating);
 
-        SnapResult result = m_service->calculateRestoreFromSession(windowId, QString(), false);
+        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QString(), false);
         QVERIFY(!result.shouldSnap);
     }
 
@@ -218,7 +230,7 @@ private Q_SLOTS:
     void testClearStalePendingAssignment()
     {
         QString windowId = QStringLiteral("app|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
@@ -231,8 +243,8 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        bool cleared = m_service->clearStalePendingAssignment(windowId);
-        QVERIFY(cleared);
+        bool popped = m_service->consumePendingAssignment(windowId);
+        QVERIFY(popped);
         QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
     }
 
@@ -250,13 +262,13 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
         m_service->assignWindowToZone(window3, m_zoneIds[2], QString(), 0);
 
-        Layout* newLayout = createTestLayout(2, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<RotationEntry> resnap = m_service->calculateResnapFromPreviousLayout();
-        QVector<RotationEntry> secondCall = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> secondCall = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
     }
 
@@ -272,8 +284,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
         m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
 
-        QVector<RotationEntry> cw = m_service->calculateRotation(true);
-        QVector<RotationEntry> ccw = m_service->calculateRotation(false);
+        QVector<ZoneAssignmentEntry> cw = m_engine->calculateRotation(true);
+        QVector<ZoneAssignmentEntry> ccw = m_engine->calculateRotation(false);
 
         Q_UNUSED(cw);
         Q_UNUSED(ccw);
@@ -332,7 +344,7 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        SnapResult result = m_service->calculateRestoreFromSession(windowId, QStringLiteral("DP-1"), false);
+        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QStringLiteral("DP-1"), false);
         if (result.shouldSnap) {
             QVERIFY(result.geometry.isValid());
         }
@@ -360,7 +372,7 @@ private Q_SLOTS:
     void testConsumePendingAssignment()
     {
         QString windowId = QStringLiteral("app|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
@@ -376,7 +388,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Layout Import UUID Collision
+    // P0: PhosphorZones::Layout Import UUID Collision
     // =====================================================================
 
     void testLayoutImport_uuidCollision_regeneratesIds()
@@ -399,11 +411,12 @@ private Q_SLOTS:
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsSession* m_settings = nullptr;
     StubZoneDetectorSession* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    SnapEngine* m_engine = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };
 

@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Qt6 6.6 COMPONENTS Core Qml)
+find_dependency(PhosphorEngineApi)
+find_dependency(PhosphorLayoutApi)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorTilesTargets.cmake")
+
+check_required_components(PhosphorTiles)

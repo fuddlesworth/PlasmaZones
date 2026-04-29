@@ -11,51 +11,145 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../dbus/windowtrackingadaptor.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
 /**
- * @brief Resolve current screen for keyboard shortcuts
+ * @brief Resolve a physical screen ID to a virtual screen ID if subdivisions exist.
  *
- * Primary source: the cursor's screen, reported by the KWin effect via
- * cursorScreenChanged (fires on every monitor crossing in slotMouseChanged).
- * This accurately reflects where the user is looking, even if no window
- * on that screen has focus.
+ * When the KWin effect sends a physical screen ID (e.g., during daemon reconnect
+ * before virtual screen configs are loaded), the daemon must resolve it to the
+ * correct virtual screen.  Uses the focused window's geometry center as the
+ * position hint (QCursor::pos() is unreliable on Wayland for background daemons).
+ * Falls back to vs:0 (leftmost) if no better hint is available.
  *
- * Fallback: the focused window's screen, reported via windowActivated.
- * Used when the effect hasn't loaded yet or no mouse movement has occurred.
- *
- * QCursor::pos() is NOT used — it returns stale data for background daemons
- * on Wayland.
+ * @p mgr is the injected ScreenManager (required — pass null only in tests
+ * that don't exercise VS resolution; null is treated as "no subdivision").
  */
-inline QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
+inline QString resolveVirtualScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& physicalId,
+                                      const WindowTrackingAdaptor* trackingAdaptor,
+                                      const QPoint& cursorPos = QPoint(-1, -1))
+{
+    if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
+        return physicalId;
+    }
+
+    // Best source: the focused window's daemon-tracked screen assignment.
+    // When a window is snapped to a zone, windowSnapped() stores the virtual
+    // screen ID in m_windowScreenAssignments.  This is authoritative — it was
+    // set at snap time by the daemon itself, not by the effect.
+    if (trackingAdaptor && trackingAdaptor->service()) {
+        const QString activeWindowId = trackingAdaptor->lastActiveWindowId();
+        if (!activeWindowId.isEmpty()) {
+            const QString trackedScreen = trackingAdaptor->service()->screenAssignments().value(activeWindowId);
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == physicalId) {
+                return trackedScreen;
+            }
+        }
+    }
+
+    // Fallback: effect-reported active screen (may be virtual if effect has VS configs)
+    if (trackingAdaptor) {
+        const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(activeScreen)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(activeScreen) == physicalId) {
+            return activeScreen;
+        }
+    }
+
+    // Cursor position hint: when a keyboard shortcut fires with no focused window,
+    // the cursor position (from the effect) can resolve the correct virtual screen.
+    if (cursorPos.x() >= 0) {
+        const QString vsAtCursor = mgr->effectiveScreenAt(cursorPos);
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(vsAtCursor)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(vsAtCursor) == physicalId) {
+            return vsAtCursor;
+        }
+    }
+
+    // Last resort: first virtual screen (vs:0)
+    QStringList vsIds = mgr->virtualScreenIdsFor(physicalId);
+    if (!vsIds.isEmpty()) {
+        return vsIds.first();
+    }
+    return physicalId;
+}
+
+/**
+ * @brief Resolve the screen ID for a keyboard shortcut action (virtual-screen-aware).
+ *
+ * Every navigation shortcut (float, move, focus, restore, swap, ...) targets
+ * the focused window, so the focused window's screen is authoritative — the
+ * cursor is only consulted when there is no active window (e.g. empty-desktop
+ * shortcuts). Using cursor-first silently misroutes actions when the user
+ * lets the mouse rest on a different virtual screen than the focused window.
+ */
+inline QString resolveShortcutScreenId(Phosphor::Screens::ScreenManager* mgr,
+                                       const WindowTrackingAdaptor* trackingAdaptor)
 {
     if (!trackingAdaptor) {
-        return nullptr;
+        QScreen* primary = Utils::primaryScreen();
+        return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
     }
 
-    // Prefer cursor screen — tracks the physical cursor position
-    const QString& cursorScreen = trackingAdaptor->lastCursorScreenName();
-    if (!cursorScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByIdOrName(cursorScreen);
-        if (screen) {
-            return screen;
-        }
-    }
-
-    // Cursor screen not yet reported (effect not loaded or no mouse movement).
-    // Fall back to focused window's screen.
-    const QString& activeScreen = trackingAdaptor->lastActiveScreenName();
+    // Primary: focused window's screen (may already be a virtual ID from the effect)
+    const QString activeScreen = trackingAdaptor->lastActiveScreenName();
     if (!activeScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByIdOrName(activeScreen);
-        if (screen) {
-            return screen;
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(activeScreen)) {
+            return resolveVirtualScreenId(mgr, activeScreen, trackingAdaptor);
         }
+        return activeScreen;
     }
 
-    // Last resort: primary screen (daemon just started, no KWin effect data yet)
-    qCDebug(lcDaemon) << "resolveShortcutScreen: using primary screen";
-    return Utils::primaryScreen();
+    // Fallback: cursor screen, for shortcuts fired with no focused window
+    const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
+    if (!cursorScreen.isEmpty()) {
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(cursorScreen)) {
+            return resolveVirtualScreenId(mgr, cursorScreen, trackingAdaptor);
+        }
+        return cursorScreen;
+    }
+
+    // Last resort: primary screen physical ID
+    QScreen* primary = Utils::primaryScreen();
+    return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
+}
+
+/**
+ * @brief Resolve the screen ID for a screen-targeted shortcut (cursor-first).
+ *
+ * Sibling of @ref resolveShortcutScreenId for actions that target a screen
+ * (per-VS layout-source toggle) rather than a window (focus, move, swap).
+ * The user's intent for a screen-targeted shortcut is "the screen I am
+ * looking at right now" — i.e. the cursor's screen. Routing those off the
+ * focused window's screen silently misroutes the action when the focused
+ * window lives on a different VS than the cursor.
+ *
+ * Falls back to focused-window screen, then primary screen.
+ *
+ * @p mgr is unused today (lastCursorScreenName is already virtual-screen
+ * resolved at the WindowTrackingAdaptor source). Kept in the signature so
+ * the call site mirrors @ref resolveShortcutScreenId and so a future
+ * resolution policy that needs ScreenManager has a place to land.
+ */
+inline QString resolveCursorScreenId(Phosphor::Screens::ScreenManager* /*mgr*/,
+                                     const WindowTrackingAdaptor* trackingAdaptor)
+{
+    if (trackingAdaptor) {
+        const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
+        if (!cursorScreen.isEmpty()) {
+            return cursorScreen;
+        }
+        const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+        if (!activeScreen.isEmpty()) {
+            return activeScreen;
+        }
+    }
+    QScreen* primary = Utils::primaryScreen();
+    return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
 }
 
 /**
@@ -73,6 +167,7 @@ inline QString navigationDirectionToString(NavigationDirection direction)
     case NavigationDirection::Down:
         return QStringLiteral("down");
     }
+    Q_UNREACHABLE();
     return QString();
 }
 

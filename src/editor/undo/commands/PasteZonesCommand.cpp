@@ -17,7 +17,7 @@ PasteZonesCommand::PasteZonesCommand(QPointer<ZoneManager> zoneManager, const QV
     // Extract zone IDs from the data
     for (const QVariant& zoneVar : zonesData) {
         QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone.value(QString::fromLatin1(JsonKeys::Id)).toString();
+        QString zoneId = zone.value(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::Id)).toString();
         if (!zoneId.isEmpty()) {
             m_zoneIds.append(zoneId);
         }

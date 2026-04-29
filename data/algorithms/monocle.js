@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Monocle
-// @builtinId monocle
-// @description One window fullscreen at a time, cycle through others
-// @producesOverlappingZones true
-// @supportsMasterCount false
-// @supportsSplitRatio false
-// @defaultMaxWindows 4
-// @minimumWindows 1
-// @zoneNumberDisplay last
-// @supportsMemory false
+var metadata = {
+    name: "Monocle",
+    id: "monocle",
+    description: "One window fullscreen at a time, cycle through others",
+    producesOverlappingZones: true,
+    supportsMasterCount: false,
+    supportsSplitRatio: false,
+    defaultMaxWindows: 4,
+    minimumWindows: 1,
+    zoneNumberDisplay: "last",
+    supportsMemory: false
+};
 
 /**
  * Monocle layout: all windows get the same full-area rectangle.

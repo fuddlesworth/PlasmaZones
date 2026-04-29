@@ -4,23 +4,28 @@
 #include "zonedetectionadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include "../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
 #include "../core/logging.h"
+#include "../core/spatialadjacency.h"
 #include "../core/utils.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
-ZoneDetectionAdaptor::ZoneDetectionAdaptor(IZoneDetector* detector, ILayoutManager* layoutManager, ISettings* settings,
+ZoneDetectionAdaptor::ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector,
+                                           PhosphorZones::LayoutRegistry* layoutManager,
+                                           Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                            QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_zoneDetector(detector)
     , m_layoutManager(layoutManager)
+    , m_screenManager(screenManager)
     , m_settings(settings)
 {
     Q_ASSERT(detector);
@@ -39,14 +44,18 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
         return QString();
     }
 
+    // Resolve to effective (virtual) screen ID at the cursor position
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(x, y), screen);
+
     // Use per-screen layout resolution instead of global activeLayout
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return QString();
     }
 
     // Use the layout's geometry preference (full screen or available area)
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+    // Prefer virtual screen geometry when the effective screen ID is a virtual screen
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(m_screenManager, layout, screenId);
 
     // Guard against zero-size geometry (disconnected or degenerate screen)
     if (refGeom.width() <= 0 || refGeom.height() <= 0) {
@@ -54,19 +63,20 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     }
 
     // Recalculate zone geometries so detectZone operates on absolute coords
-    layout->recalculateZoneGeometries(refGeom);
+    LayoutComputeService::recalculateSync(layout, refGeom);
     m_zoneDetector->setLayout(layout);
 
-    // Use ZoneDetector::detectZone which resolves overlapping zones via
+    // Use PhosphorZones::ZoneDetector::detectZone which resolves overlapping zones via
     // center-distance heuristic — consistent with the drag path.
     QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
-    ZoneDetectionResult detection = m_zoneDetector->detectZone(cursorPos);
-    Zone* foundZone = detection.primaryZone;
+    PhosphorZones::ZoneDetectionResult detection = m_zoneDetector->detectZone(cursorPos);
+    PhosphorZones::Zone* foundZone = detection.primaryZone;
 
     if (foundZone) {
         m_zoneDetector->highlightZone(foundZone);
         // Trigger overlay update via signal (decoupled)
-        Q_EMIT zoneDetected(foundZone->id().toString(), getZoneGeometry(foundZone->id().toString()));
+        ZoneGeometryRect geom = getZoneGeometry(foundZone->id().toString());
+        Q_EMIT zoneDetected(foundZone->id().toString(), geom);
         return foundZone->id().toString();
     }
 
@@ -74,39 +84,42 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     return QString();
 }
 
-QString ZoneDetectionAdaptor::getZoneGeometry(const QString& zoneId)
+ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometry(const QString& zoneId)
 {
     // Use empty screen name to fall back to primary screen
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
 {
     // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
-    Zone* zone = DbusHelpers::findZoneInAnyLayout(m_layoutManager, zoneId, QStringLiteral("get zone geometry"));
+    PhosphorZones::Zone* zone =
+        DbusHelpers::findZoneInAnyLayout(m_layoutManager, zoneId, QStringLiteral("get zone geometry"));
     if (!zone) {
-        return QString();
+        return ZoneGeometryRect{};
     }
 
     // Find target screen - use specified screen ID or fall back to primary
-    QScreen* screen = DbusHelpers::getScreenOrWarn(screenId, QStringLiteral("getZoneGeometryForScreen"));
+    QScreen* screen = screenId.isEmpty()
+        ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getZoneGeometryForScreen"))
+        : DbusHelpers::resolvePhysicalQScreen(m_screenManager, screenId);
+    if (!screen && !screenId.isEmpty()) {
+        qCWarning(lcDbus) << "getZoneGeometryForScreen: screen not found:" << screenId;
+    }
     if (!screen) {
-        return QString();
+        return ZoneGeometryRect{};
     }
 
-    // Use geometry with gaps (matches snap behavior)
-    // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
-    Layout* zoneLayout = qobject_cast<Layout*>(zone->parent());
-    QString resolvedScreenId = Utils::screenIdentifier(screen);
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings, resolvedScreenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings, resolvedScreenId);
-    bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
-    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-    QRect snapped = GeometryUtils::snapToRect(geom);
+    // Use geometry with gaps (matches snap behavior), auto-resolving virtual screen geometry
+    PhosphorZones::Layout* zoneLayout = qobject_cast<PhosphorZones::Layout*>(zone->parent());
+    // Prefer the caller-supplied screenId (may be a virtual screen ID) over
+    // deriving from QScreen which always yields the physical screen ID
+    QString resolvedScreenId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    QRect snapped = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, resolvedScreenId, zoneLayout,
+                                                            m_settings);
 
-    // Return as "x,y,width,height"
-    return QStringLiteral("%1,%2,%3,%4").arg(snapped.x()).arg(snapped.y()).arg(snapped.width()).arg(snapped.height());
+    return ZoneGeometryRect::fromRect(snapped);
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
@@ -114,18 +127,13 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
     QStringList zoneIds;
 
     // Use per-screen layout (falls back to activeLayout if no assignment)
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+    QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout) {
         return zoneIds;
     }
 
-    // Find screen
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
-    if (!screen) {
-        return zoneIds;
-    }
-
-    // Get all zones for this screen
+    // Get all zones for this screen's layout
     for (auto* zone : layout->zones()) {
         zoneIds.append(zone->id().toString());
     }
@@ -146,31 +154,35 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+    // Resolve to effective (virtual) screen ID at the cursor position
+    QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(x, y), screen);
+
+    auto* layout = m_layoutManager->resolveLayoutForScreen(effectiveId);
     if (!layout) {
         qCWarning(lcDbus) << "detectMultiZone: no layout for screen" << screen->name();
         return zoneIds;
     }
 
     // Use the layout's geometry preference (full screen or available area)
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+    // Prefer virtual screen geometry when the effective screen ID is a virtual screen
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(m_screenManager, layout, effectiveId);
     if (refGeom.width() <= 0 || refGeom.height() <= 0) {
         return zoneIds;
     }
 
-    layout->recalculateZoneGeometries(refGeom);
+    LayoutComputeService::recalculateSync(layout, refGeom);
     m_zoneDetector->setLayout(layout);
 
     // Convert cursor position to QPointF for detection
     QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
 
     // Call detectMultiZone
-    ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
+    PhosphorZones::ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
 
     if (result.isMultiZone && result.primaryZone) {
         // Multi-zone detected - collect all zone IDs
         zoneIds.append(result.primaryZone->id().toString());
-        for (Zone* zone : result.adjacentZones) {
+        for (PhosphorZones::Zone* zone : result.adjacentZones) {
             if (zone && zone != result.primaryZone) {
                 zoneIds.append(zone->id().toString());
             }
@@ -184,7 +196,8 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
     return zoneIds;
 }
 
-QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, const QString& direction)
+QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                              const QString& screenId) const
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get adjacent zone"))) {
         return QString();
@@ -192,104 +205,64 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
 
     // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
-    Zone* currentZone =
+    PhosphorZones::Zone* currentZone =
         DbusHelpers::findZoneInAnyLayout(m_layoutManager, currentZoneId, QStringLiteral("get adjacent zone"));
     if (!currentZone) {
         return QString();
     }
 
     // Get the layout containing this zone
-    Layout* layout = qobject_cast<Layout*>(currentZone->parent());
+    PhosphorZones::Layout* layout = qobject_cast<PhosphorZones::Layout*>(currentZone->parent());
     if (!layout) {
         qCWarning(lcDbus) << "Zone has no parent layout:" << currentZoneId;
         return QString();
     }
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
-    QScreen* refScreen = Utils::primaryScreen();
-    if (!refScreen) {
+    // Use virtual-screen-aware resolution: prefer caller-supplied screenId,
+    // then cursor position, then primary screen fallback.
+    QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(m_screenManager, layout, resolvedId);
+    if (!refGeom.isValid()) {
         return QString();
     }
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
 
-    QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
-    QPointF currentCenter(currentGeom.center());
+    const QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
 
-    Zone* bestZone = nullptr;
-    qreal bestDistance = std::numeric_limits<qreal>::max();
-
-    for (auto* zone : layout->zones()) {
-        if (zone == currentZone) {
-            continue;
-        }
-
-        QRectF zoneGeom = zone->normalizedGeometry(refGeom);
-        QPointF zoneCenter(zoneGeom.center());
-
-        // Check if zone is in the correct direction
-        bool isValidDirection = false;
-        qreal distance = 0;
-
-        if (direction == Utils::Direction::Left) {
-            // Zone must be to the left (its right edge <= current left edge, or center is left)
-            if (zoneCenter.x() < currentCenter.x()) {
-                isValidDirection = true;
-                distance = currentCenter.x() - zoneCenter.x();
-                // Prefer zones with similar vertical position
-                distance += std::abs(zoneCenter.y() - currentCenter.y()) * 2;
-            }
-        } else if (direction == Utils::Direction::Right) {
-            if (zoneCenter.x() > currentCenter.x()) {
-                isValidDirection = true;
-                distance = zoneCenter.x() - currentCenter.x();
-                distance += std::abs(zoneCenter.y() - currentCenter.y()) * 2;
-            }
-        } else if (direction == Utils::Direction::Up) {
-            if (zoneCenter.y() < currentCenter.y()) {
-                isValidDirection = true;
-                distance = currentCenter.y() - zoneCenter.y();
-                distance += std::abs(zoneCenter.x() - currentCenter.x()) * 2;
-            }
-        } else if (direction == Utils::Direction::Down) {
-            if (zoneCenter.y() > currentCenter.y()) {
-                isValidDirection = true;
-                distance = zoneCenter.y() - currentCenter.y();
-                distance += std::abs(zoneCenter.x() - currentCenter.x()) * 2;
-            }
-        }
-
-        if (isValidDirection && distance < bestDistance) {
-            bestDistance = distance;
-            bestZone = zone;
-        }
+    const auto zones = layout->zones();
+    QList<QRectF> candidateGeoms;
+    candidateGeoms.reserve(zones.size());
+    for (auto* zone : zones) {
+        candidateGeoms.append(zone->normalizedGeometry(refGeom));
     }
 
-    return bestZone ? bestZone->id().toString() : QString();
+    const int bestIndex = SpatialAdjacency::findAdjacentRect(currentGeom, candidateGeoms, direction);
+    if (bestIndex < 0) {
+        return QString();
+    }
+    return zones.at(bestIndex)->id().toString();
 }
 
-QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenId)
+QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenId) const
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
         return QString();
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+    QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
-    QScreen* refScreen = DbusHelpers::getScreenOrWarn(screenId, QStringLiteral("getFirstZoneInDirection"));
-    if (!refScreen) {
-        refScreen = Utils::primaryScreen();
-    }
-    if (!refScreen) {
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(m_screenManager, layout, resolvedId);
+    if (!refGeom.isValid()) {
         return QString();
     }
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
 
-    Zone* bestZone = nullptr;
+    PhosphorZones::Zone* bestZone = nullptr;
     qreal bestValue = 0;
     bool initialized = false;
 
@@ -297,7 +270,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
         QRectF geom = zone->normalizedGeometry(refGeom);
         qreal value = 0;
 
-        if (direction == Utils::Direction::Left) {
+        if (direction == Phosphor::Screens::Direction::Left) {
             // Find leftmost zone (smallest x)
             value = geom.x();
             if (!initialized || value < bestValue) {
@@ -305,7 +278,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
                 bestZone = zone;
                 initialized = true;
             }
-        } else if (direction == Utils::Direction::Right) {
+        } else if (direction == Phosphor::Screens::Direction::Right) {
             // Find rightmost zone (largest x + width, i.e., right edge)
             value = geom.x() + geom.width();
             if (!initialized || value > bestValue) {
@@ -313,7 +286,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
                 bestZone = zone;
                 initialized = true;
             }
-        } else if (direction == Utils::Direction::Up) {
+        } else if (direction == Phosphor::Screens::Direction::Up) {
             // Find topmost zone (smallest y)
             value = geom.y();
             if (!initialized || value < bestValue) {
@@ -321,7 +294,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
                 bestZone = zone;
                 initialized = true;
             }
-        } else if (direction == Utils::Direction::Down) {
+        } else if (direction == Phosphor::Screens::Direction::Down) {
             // Find bottommost zone (largest y + height, i.e., bottom edge)
             value = geom.y() + geom.height();
             if (!initialized || value > bestValue) {
@@ -345,7 +318,8 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
 QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& screenId)
 {
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+    QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout) {
         return QString();
     }
@@ -358,38 +332,42 @@ QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& scr
     return zone->id().toString();
 }
 
-QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
+NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
 {
-    QStringList result;
+    NamedZoneGeometryList result;
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+    QString resolvedScreenId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedScreenId);
     if (!layout) {
         return result;
     }
 
-    QScreen* screen = screenId.isEmpty()
-        ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"))
-        : DbusHelpers::getScreenOrWarn(screenId, QStringLiteral("getAllZoneGeometries"));
+    // Virtual screen IDs have no QScreen object — resolve to backing physical QScreen.
+    QScreen* screen = screenId.isEmpty() ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"))
+                                         : DbusHelpers::resolvePhysicalQScreen(m_screenManager, screenId);
+    if (!screen && !screenId.isEmpty()) {
+        qCWarning(lcDbus) << "getAllZoneGeometries: screen not found:" << screenId;
+    }
     if (!screen) {
         return result;
     }
 
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
-    QString resolvedScreenId = Utils::screenIdentifier(screen);
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, resolvedScreenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, resolvedScreenId);
-    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    // Prefer the caller-supplied screenId (may be a virtual screen ID) over
+    // deriving from QScreen which always yields the physical screen ID
+    if (resolvedScreenId.isEmpty()) {
+        resolvedScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    }
     for (auto* zone : layout->zones()) {
-        // Use geometry with gaps (matches snap behavior)
-        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-        QRect snapped = GeometryUtils::snapToRect(geom);
-        // Format: "zoneId:x,y,width,height"
-        QString entry = QStringLiteral("%1:%2,%3,%4,%5")
-                            .arg(zone->id().toString())
-                            .arg(snapped.x())
-                            .arg(snapped.y())
-                            .arg(snapped.width())
-                            .arg(snapped.height());
+        // Use geometry with gaps (matches snap behavior), auto-resolving virtual screen geometry
+        QRect snapped = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, resolvedScreenId, layout,
+                                                                m_settings);
+        NamedZoneGeometry entry;
+        entry.zoneId = zone->id().toString();
+        entry.x = snapped.x();
+        entry.y = snapped.y();
+        entry.width = snapped.width();
+        entry.height = snapped.height();
         result.append(entry);
     }
 

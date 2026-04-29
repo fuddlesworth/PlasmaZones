@@ -111,7 +111,7 @@ QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
     if (rawWindowId.isEmpty()) {
         return rawWindowId;
     }
-    const QString instanceId = Utils::extractInstanceId(rawWindowId);
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
     if (it != m_canonicalByInstance.constEnd()) {
         return it.value();
@@ -125,7 +125,7 @@ QString WindowRegistry::canonicalizeForLookup(const QString& rawWindowId) const
     if (rawWindowId.isEmpty()) {
         return rawWindowId;
     }
-    const QString instanceId = Utils::extractInstanceId(rawWindowId);
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
     return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
 }
@@ -135,7 +135,7 @@ void WindowRegistry::releaseCanonical(const QString& anyWindowId)
     if (anyWindowId.isEmpty()) {
         return;
     }
-    const QString instanceId = Utils::extractInstanceId(anyWindowId);
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
     m_canonicalByInstance.remove(instanceId);
 }
 

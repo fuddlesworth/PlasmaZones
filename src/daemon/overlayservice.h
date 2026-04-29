@@ -5,31 +5,74 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QMargins>
 #include <QMutex>
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <atomic>
 #include <memory>
+#include <optional>
+
+#include <PhosphorLayer/Role.h>
 
 #include "../core/interfaces.h"
-#include "../core/layout.h"
-#include "vulkan_support.h"
+#include <PhosphorZones/Layout.h>
 
-class QQmlEngine;
+namespace PhosphorLayer {
+class ILayerShellTransport;
+class IScreenProvider;
+class Surface;
+class SurfaceFactory;
+// Role is a value type — full definition pulled in via Role.h above.
+} // namespace PhosphorLayer
+
+namespace PhosphorAnimationLayer {
+class SurfaceAnimator;
+} // namespace PhosphorAnimationLayer
+
+namespace PhosphorAnimation {
+class PhosphorProfileRegistry;
+} // namespace PhosphorAnimation
+
+namespace PhosphorZones {
+class Zone;
+}
+
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
+namespace PhosphorAudio {
+class IAudioSpectrumProvider;
+}
+
+namespace PhosphorSurfaces {
+class SurfaceManager;
+}
+
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
 
 namespace PlasmaZones {
-class CavaService;
 class WindowThumbnailService;
+class ShaderRegistry;
+}
+namespace Phosphor::Screens {
+class ScreenManager;
 }
 class QQuickWindow;
 class QScreen;
 class QTimer;
 
 namespace PlasmaZones {
-
-class Zone;
 
 /**
  * @brief Manages zone overlay windows
@@ -45,7 +88,63 @@ class OverlayService : public IOverlayService
     Q_PROPERTY(bool zoneSelectorVisible READ isZoneSelectorVisible NOTIFY zoneSelectorVisibilityChanged)
 
 public:
-    explicit OverlayService(QObject* parent = nullptr);
+    /**
+     * @brief Per-screen overlay state, grouping window pointers, physical screen
+     * references, and geometry that were previously stored in parallel QHash maps.
+     */
+    struct PerScreenOverlayState
+    {
+        // PhosphorLayer-backed lifecycle handles. Own the QQuickWindow via their
+        // internal transport. The parallel QQuickWindow* fields below are convenience
+        // accessors cached from surface->window() at create time and preserved so the
+        // hundreds of `window->setProperty(...)` call sites in overlayservice/*.cpp
+        // don't each need to reach through a surface pointer.
+        PhosphorLayer::Surface* overlaySurface = nullptr;
+        PhosphorLayer::Surface* zoneSelectorSurface = nullptr;
+        // Single per-screen surface that hosts both LayoutOsd and NavigationOsd
+        // content via NotificationOverlay.qml's mode-driven Loader. The two
+        // OSD types share PzRoles::OsdBase (FullscreenOverlay layer, AnchorAll,
+        // no keyboard, click-through) and are never simultaneously visible,
+        // so they collapse to one wl_surface / QSGRenderThread / VkSwapchainKHR
+        // per effective screen. LayoutPickerOverlay uses a different protocol
+        // shape (CenteredModal with exclusive keyboard) and keeps its own
+        // surface — see pz_roles.h for the role definitions.
+        PhosphorLayer::Surface* notificationSurface = nullptr;
+
+        QQuickWindow* overlayWindow = nullptr;
+        QScreen* overlayPhysScreen = nullptr;
+        QRect overlayGeometry;
+        QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
+        // Cache key for the last successful labelsTexture rebuild on this window.
+        // Hashes (size, showNumbers, font settings, per-zone {number,x,y,w,h}). When
+        // updateLabelsTextureForWindow is called with the same hash, both the 23 MB
+        // QImage rebuild AND Qt's QVariant(QImage) property-write equality compare
+        // are skipped. 0 = never computed / cache invalid.
+        quint64 labelsTextureHash = 0;
+        QQuickWindow* zoneSelectorWindow = nullptr;
+        QScreen* zoneSelectorPhysScreen = nullptr;
+        /// Intended geometry of the zone selector window. On Wayland LayerShell, QWindow::geometry()
+        /// is unreliable until the compositor acknowledges the surface position. This field stores
+        /// the geometry we requested so hit-testing in updateSelectorPosition() can use it immediately.
+        QRect zoneSelectorGeometry;
+        QQuickWindow* notificationWindow = nullptr;
+        QScreen* notificationPhysScreen = nullptr;
+    };
+
+    /// @param screenManager Borrowed; must outlive this service.
+    /// @param shaderRegistry Borrowed; must outlive this service. Used by
+    ///                 every overlay path that resolves a shader by id.
+    ///                 Nullable — passing nullptr disables shader-based
+    ///                 overlays entirely (tests that don't exercise shaders).
+    /// @param profileRegistry Borrowed; must outlive this service.
+    ///                 Threaded into the SurfaceAnimator that drives every
+    ///                 overlay show/hide. Composition roots (the daemon)
+    ///                 own a single PhosphorProfileRegistry instance and
+    ///                 hand it through here — the singleton accessor is
+    ///                 gone (Phase A3 of the architecture refactor).
+    /// @param parent Qt parent.
+    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+                            PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent = nullptr);
     ~OverlayService() override;
 
     // IOverlayService interface
@@ -55,24 +154,52 @@ public:
     void hide() override;
     void toggle() override;
 
-    void updateLayout(Layout* layout) override;
+    void updateLayout(PhosphorZones::Layout* layout) override;
     void updateSettings(ISettings* settings) override;
+    void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
     void updateGeometries() override;
 
-    // Zone highlighting for overlay display (IOverlayService interface)
+    // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
     void highlightZone(const QString& zoneId) override;
     void highlightZones(const QStringList& zoneIds) override;
     void clearHighlight() override;
 
+    // Mid-drag idle / resume — see IOverlayService for rationale.
+    void setIdleForDragPause() override;
+    void refreshFromIdle() override;
+
     // Additional methods
-    void setLayout(Layout* layout);
-    Layout* layout() const
+    void setLayout(PhosphorZones::Layout* layout);
+    PhosphorZones::Layout* layout() const
     {
         return m_layout;
     }
 
     void setSettings(ISettings* settings);
-    void setLayoutManager(ILayoutManager* layoutManager);
+    void setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager);
+
+    /// Inject the daemon-owned tile-algorithm registry. Required when
+    /// autotile entries should appear in @ref visibleLayoutCount /
+    /// @ref layoutListForScreen output. Borrowed — caller owns it and
+    /// must keep it alive for the service's lifetime.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
+    /// Inject the daemon's bundle-owned autotile layout source. Optional —
+    /// when set, @ref buildUnifiedLayoutList reuses its internal preview
+    /// cache across calls instead of constructing a transient source per
+    /// call (which throws away the cache). Borrowed — caller owns it and
+    /// must keep it alive for the service's lifetime.
+    ///
+    /// @note Expected to be called at most once. The service does not
+    /// subscribe to the source's own signals — replacing the pointer
+    /// later would not require a disconnect today, but matching the
+    /// "set-once after construction" discipline used by every other
+    /// setAutotileLayoutSource call site keeps the contract uniform.
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+    Phosphor::Screens::ScreenManager* screenManager() const
+    {
+        return m_screenManager;
+    }
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
@@ -101,9 +228,9 @@ public:
     void handleScreenAdded(QScreen* screen);
     void handleScreenRemoved(QScreen* screen);
 
-    // Zone selector management (IOverlayService interface)
+    // PhosphorZones::Zone selector management (IOverlayService interface)
     bool isZoneSelectorVisible() const override;
-    void showZoneSelector(QScreen* screen = nullptr) override;
+    void showZoneSelector(const QString& targetScreenId = QString()) override;
     void hideZoneSelector() override;
     void updateSelectorPosition(int cursorX, int cursorY) override;
     void scrollZoneSelector(int angleDeltaY) override;
@@ -125,37 +252,45 @@ public:
         return m_selectedZoneIndex;
     }
     QRect getSelectedZoneGeometry(QScreen* screen) const override;
+    QRect getSelectedZoneGeometry(const QString& screenId) const override;
     void clearSelectedZone() override;
 
-    // Layout OSD (visual preview when switching layouts)
+    // PhosphorZones::Layout OSD (visual preview when switching layouts)
     // screenId: target screen (empty = screen under cursor, fallback to primary)
-    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
                        bool autoAssign = false, const QString& screenId = QString(), bool showMasterDot = false,
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
-    void showLockedLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
     void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
-     * @brief Pre-create Layout OSD QML windows for all connected screens.
+     * @brief Pre-create the unified NotificationOverlay window for all connected
+     * screens. Drives both the layout-OSD and navigation-OSD show paths since
+     * they share a single per-screen surface (Phase-2 unification).
      *
-     * First-time QML compilation of LayoutOsd.qml takes ~100-300ms (component
-     * loading, scene graph creation, Wayland layer-shell registration).  Call
-     * this early (deferred from daemon start) so the first layout switch OSD
-     * appears instantly instead of blocking the event loop.
+     * First-time QML compilation of NotificationOverlay.qml takes ~100-300ms
+     * (component loading, scene graph creation, Wayland layer-shell
+     * registration). Call this early (deferred from daemon start) so the
+     * first layout switch OSD or keyboard navigation action appears
+     * instantly instead of blocking the event loop.
+     *
+     * Idempotent — subsequent calls are no-ops thanks to the
+     * m_notificationsWarmed latch and per-screen window guard.
      */
-    void warmUpLayoutOsd();
+    void warmUpNotifications();
 
+private:
     /**
-     * @brief Pre-create Navigation OSD QML windows for all connected screens.
-     *
-     * Same rationale as warmUpLayoutOsd(): avoids ~100-300ms QML compilation
-     * delay on the first keyboard navigation action after daemon start or
-     * after the dismiss timer destroys the previous window.
+     * @brief Install the QGuiApplication::screenAdded hook for the
+     * notification overlay so hot-plugged monitors get a per-screen window
+     * after the initial warm-up. Idempotent via m_screenAddedConnected
+     * (lambdas can't use UniqueConnection).
      */
-    void warmUpNavigationOsd();
+    void ensureOsdScreenAddedConnected();
 
+public:
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
@@ -169,22 +304,43 @@ public:
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
-    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson) override;
+    void showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
+                        const SnapAssistCandidateList& candidates) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
-    void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
+    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) override;
 
-    // Layout Picker overlay (interactive layout browser + resnap)
+    // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
-    bool isLayoutPickerVisible() const;
+    bool isLayoutPickerVisible() const override;
+
+    /**
+     * @brief Pre-create the Layout Picker QML window on the primary screen.
+     *
+     * The picker's first show otherwise pays ~50-100 ms for Wayland layer-
+     * shell surface creation + Vulkan swapchain init + QML compilation.
+     * Pre-warming on daemon start moves that cost off the user's hot path
+     * so the very first picker invocation is instant. Subsequent shows on
+     * the same screen reuse the warmed surface; cross-screen shows fall
+     * back to destroy+recreate (wlr-layer-shell v3 anchors are immutable
+     * post-attach).
+     */
+    void warmUpLayoutPicker();
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 public Q_SLOTS:
-    void hideLayoutOsd();
-    void hideNavigationOsd();
-    void hideLayoutPicker();
+    // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
+    // dismiss path: QML auto-dismiss timer → loaded content's
+    // dismissRequested() → host NotificationOverlay re-emits → wired by
+    // createWarmedOsdSurface to Surface::hide() → SurfaceAnimator::beginHide
+    // → PhosphorLayer::Surface flips Qt::WindowTransparentForInput on the
+    // still-mapped QWindow. No C++ slot runs on dismiss — destroying the
+    // QQuickWindow would re-introduce the blocking ~QQuickWindow Vulkan
+    // teardown that the warm-surface design is meant to avoid. Pre-warmed
+    // OSD windows are reused for the daemon's entire lifetime.
+    void hideLayoutPicker() override;
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML
@@ -202,6 +358,17 @@ private:
     // Skips hidden windows — showZoneSelector()/show() refresh before showing.
     void refreshVisibleWindows();
 
+    // Connect to a PhosphorZones::Layout's layoutModified signal so live edits from the editor
+    // (shader id/params, zone geometry, appearance) propagate to the live overlay
+    // without waiting for a layout switch or daemon restart.
+    void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
+
+    // Stop observing a layout (e.g. because PhosphorZones::LayoutRegistry just removed it).
+    // Disconnects the per-layout layoutModified signal and erases the entry
+    // from m_observedLayouts. Idempotent — calling for an unobserved layout
+    // is a no-op.
+    void stopObservingLayout(PhosphorZones::Layout* layout);
+
     // Hide overlay/selector windows on screens where the current context is disabled,
     // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
     void hideDisabledAndRefresh();
@@ -211,89 +378,281 @@ private:
     void dismissOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
     void recreateOverlayWindowsOnTypeMismatch();
+
+    /**
+     * @brief Create/destroy/update overlay windows keyed by screen ID
+     *
+     * Virtual-screen-aware overloads. The screenId can be a physical screen ID
+     * or a virtual screen ID (format "physicalId/vs:N"). The physScreen is the
+     * backing QScreen* for Wayland layer-shell parenting.
+     */
+    void createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry);
+    void destroyOverlayWindow(const QString& screenId);
+    void dismissOverlayWindow(const QString& screenId);
+    void updateOverlayWindow(const QString& screenId, QScreen* physScreen);
+
+    // Move a live overlay entry from oldKey to newKey. Used when the effective
+    // screen id for the same physical monitor flips between a virtual variant
+    // ("...:115107/vs:0") and the bare physical id ("...:115107"), so the
+    // existing QQuickWindow + VkSwapchainKHR is reused instead of torn down.
+    // Returns true if a rekey happened.
+    bool rekeyOverlayState(const QString& oldKey, const QString& newKey);
+
+    // Install a QScreen::geometryChanged watcher that keeps the per-screen
+    // overlay window's size / stored geometry / margins in sync with the
+    // physical monitor's new bounds. Shared by createOverlayWindow and
+    // rekeyOverlayState so both call sites route through the same lambda.
+    // sid is captured by value so the watcher keeps working after a rekey.
+    QMetaObject::Connection installOverlayGeometryWatcher(QScreen* physScreen, const QString& screenId, bool isVS);
+
+    // Debug-build invariant check: every m_screenStates entry either has a key
+    // present in targetIds or is a distinct physical monitor from every target.
+    // Catches orphan accumulation from effective-id jitter. No-op in release.
+    void validateScreenStateInvariant(const QStringList& targetIds) const;
+
+    // Write _idled=true/false on every live overlay window based on which
+    // VS the cursor is currently on. One-overlay-per-VS architecture: all
+    // overlay windows stay alive for their lifetime, and per-window idle
+    // state controls content.visible + Qt.WindowTransparentForInput via
+    // the QML _idled property. Only the cursor's VS is un-idled in
+    // single-monitor mode; every overlay is un-idled when showOnAllMonitors.
+    // An empty activeEffectiveId idles every overlay (used by
+    // setIdleForDragPause when no VS should be active).
+    void applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors);
+
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
-                                      Layout* screenLayout);
+                                      PhosphorZones::Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
-    QVariantList buildLayoutsList(const QString& screenId = QString()) const;
-    QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
+    QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
+    /// Build the popup / picker layouts list for @p screenId.
+    ///
+    /// @p autotilePreviewCanvas — when non-empty, autotile algorithm
+    ///   previews are computed against this rect rather than the default
+    ///   square canvas. Pass the target screen's available geometry size
+    ///   when the consumer is per-screen (layout picker, OSD) so
+    ///   aspect-sensitive algorithms (BSP, fibonacci, …) preview along
+    ///   the same split axis the live tiler will render. Empty (default)
+    ///   keeps the legacy square-canvas behaviour for screen-agnostic
+    ///   consumers.
+    QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
+    /// Per-screen layout-family filter used for the zone selector.
+    /// `manual` enables PhosphorZones layout entries; `autotile` enables
+    /// algorithm previews. Both default-true is "show everything"; the
+    /// resolver narrows to a single family when the screen has an
+    /// explicit assignment.
+    struct LayoutIncludeFlags
+    {
+        bool manual = true;
+        bool autotile = true;
+    };
+    /// Resolve the per-screen include filter. buildLayoutsList (the popup
+    /// model) and visibleLayoutCount (used by isNearTriggerEdge to size
+    /// the keep-visible bar) both go through here so the trigger geometry
+    /// matches the rendered popup row count.
+    LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId) const;
+    QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, QScreen* screen,
+                                 PhosphorZones::Layout* layout = nullptr) const;
+    QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
+                                 const QRect& overlayGeometry, PhosphorZones::Layout* layout = nullptr) const;
 
     /**
      * @brief Resolve the layout for a given screen with fallback chain
      *
      * Tries: per-screen assignment → activeLayout → m_layout
      */
-    Layout* resolveScreenLayout(QScreen* screen) const;
+    PhosphorZones::Layout* resolveScreenLayout(QScreen* screen) const;
+    PhosphorZones::Layout* resolveScreenLayout(const QString& screenId) const;
 
-    std::unique_ptr<QQmlEngine> m_engine;
-    QHash<QScreen*, QQuickWindow*> m_overlayWindows;
-    QHash<QScreen*, QQuickWindow*> m_zoneSelectorWindows;
-    QPointer<Layout> m_layout;
+    // PhosphorLayer infrastructure — owns the wlr-layer-shell binding, screen
+    // enumeration, and Surface factory for all overlay-style windows. Members
+    // ordered so factory is destroyed before provider/transport (factory keeps
+    // raw pointers to the other two).
+    std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
+    std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
+    /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for
+    /// every Surface this service creates. Forward-declared to keep the
+    /// phosphor-animation-layer header out of the daemon's public surface;
+    /// the unique_ptr destructor only needs the type at .cpp definition
+    /// time. MUST outlive m_surfaceFactory (the factory's Deps captures
+    /// the animator pointer; surfaces it produces dispatch through it on
+    /// every show/hide).
+    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
+    /// this OverlayService because m_animationShaderRegistry is declared
+    /// before m_overlayService in daemon.h — reverse destruction order
+    /// guarantees the registry outlives this service.
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
+    std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
+    std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
+
+    // Managed surface lifecycle: shared QQmlEngine, Vulkan keep-alive, scope generation.
+    std::unique_ptr<PhosphorSurfaces::SurfaceManager> m_surfaceManager;
+
+    QHash<QString, PerScreenOverlayState> m_screenStates;
+    QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    ILayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
+    ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
+
+    // Precise disconnect handles for signal sources whose slots are lambdas
+    // (disconnect(src, sig, this, nullptr) would sever ALL slots matching —
+    // safe today but trap-prone if a second connection is ever added).
+    QMetaObject::Connection m_shadersChangedConnection;
+    // Debounce layoutModified → refreshVisibleWindows. layoutModified fires on
+    // every Q_PROPERTY change (e.g. per-frame during a zone drag), so
+    // coalescing prevents redundant rebuilds of zone variant lists + label
+    // texture re-uploads. Guarded by the single-shot timer pattern: first
+    // fire starts a timer; subsequent fires before the timer elapses do
+    // nothing; the timer callback runs refreshVisibleWindows once.
+    bool m_refreshCoalescePending = false;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
-    QScreen* m_currentOverlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only, for #136)
+    bool m_zoneSelectorRecreationPending =
+        false; // Guard against re-entrant showZoneSelector during deferred recreation
+    QString m_currentOverlayScreenId; // Effective screen ID overlay is shown on (single-monitor mode, for #136)
 
-    // Zone selector selection tracking
+    // PhosphorZones::Zone selector selection tracking
     QString m_selectedLayoutId;
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
-    // Layout OSD windows
-    QHash<QScreen*, QQuickWindow*> m_layoutOsdWindows;
-
-    // Navigation OSD windows
-    QHash<QScreen*, QQuickWindow*> m_navigationOsdWindows;
+    // Layout-OSD and Navigation-OSD content share a single per-screen
+    // PerScreenOverlayState::notificationWindow (NotificationOverlay.qml)
+    // post-Phase-2 unification — no separate per-mode window pointers.
 
     // Shader preview overlay (editor dialog)
+    PhosphorLayer::Surface* m_shaderPreviewSurface = nullptr;
     QQuickWindow* m_shaderPreviewWindow = nullptr;
-    QScreen* m_shaderPreviewScreen = nullptr;
+    QPointer<QScreen> m_shaderPreviewScreen;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
+    QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
 
     // Snap Assist overlay (window picker after snapping)
+    PhosphorLayer::Surface* m_snapAssistSurface = nullptr;
     QQuickWindow* m_snapAssistWindow = nullptr;
-    QScreen* m_snapAssistScreen = nullptr;
+    QPointer<QScreen> m_snapAssistScreen;
+    QString m_snapAssistScreenId;
     std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
-    QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
-    // Layout Picker overlay (interactive layout browser)
+    QHash<QString, QString> m_thumbnailCache; // compositorHandle -> dataUrl; reused across continuation
+    // PhosphorZones::Layout Picker overlay (interactive layout browser)
+    PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;
+    QPointer<QScreen> m_layoutPickerScreen;
+    QString m_layoutPickerScreenId;
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
+    // "Notifications have been pre-warmed" flag. With LayoutOsd and
+    // NavigationOsd unified onto a single per-screen NotificationOverlay
+    // surface, this single flag gates whether the screenAdded hot-plug
+    // lambda auto-creates the per-new-screen notification window.
+    // Set by warmUpNotifications().
+    bool m_notificationsWarmed = false;
 
-    // Persistent 1x1 keep-alive window that prevents Qt from tearing down
-    // global Wayland/Vulkan protocol objects when all other windows are destroyed.
-    QQuickWindow* m_keepAliveWindow = nullptr;
+    // Keep-alive is managed by m_surfaceManager (PhosphorSurfaces::SurfaceManager).
 
-    // Track screens with failed window creation to prevent log spam
-    QHash<QScreen*, bool> m_navigationOsdCreationFailed;
+    // Remembered so ~OverlayService can disconnect the D-Bus PrepareForSleep
+    // subscription explicitly rather than relying on QDBusConnection's
+    // internal receiver-destroyed detection (which works, but leaves a dead
+    // entry in the connection's slot table for the rest of the session).
+    bool m_prepareForSleepConnected = false;
+
+    // Track screens where notification-window creation has failed, so the
+    // spam-guard in createNotificationWindow only logs once per screen
+    // regardless of which OSD path (layout-osd or navigation-osd) tried to
+    // bring the surface up. Cleared in destroyAllWindowsForPhysicalScreen
+    // when a hot-plug cycle reattaches the same physical monitor.
+    QSet<QString> m_notificationCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationActionKey; // "action:reason" composite key
+    QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
-    void createZoneSelectorWindow(QScreen* screen);
-    void destroyZoneSelectorWindow(QScreen* screen);
-    void updateZoneSelectorWindow(QScreen* screen);
-    void showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked);
-    void createLayoutOsdWindow(QScreen* screen);
-    void destroyLayoutOsdWindow(QScreen* screen);
-    void createNavigationOsdWindow(QScreen* screen);
-    void destroyNavigationOsdWindow(QScreen* screen);
+    void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
+    void destroyZoneSelectorWindow(const QString& screenId);
+    void updateZoneSelectorWindow(const QString& screenId);
+    void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
+    /// Create / destroy the per-screen NotificationOverlay window that hosts
+    /// both LayoutOsd and NavigationOsd content via NotificationOverlay.qml's
+    /// mode-driven Loader. Single per-screen surface — Phase-2 unification
+    /// collapsed the two prior OSD-class surfaces (which shared
+    /// PzRoles::OsdBase and were never simultaneously visible) onto
+    /// PzRoles::Notification. Phase-5 keepMappedOnHide=true and
+    /// dismissRequested → Surface::hide() wiring are done inside
+    /// createWarmedOsdSurface.
+    void createNotificationWindow(const QString& screenId, QScreen* physScreen);
+    void destroyNotificationWindow(const QString& screenId);
 
-    void createShaderPreviewWindow(QScreen* screen);
+    /// Lazily create the per-screen NotificationOverlay window if missing,
+    /// then return a pointer to its PerScreenOverlayState (or nullptr if
+    /// creation failed — surface refused, layer-shell unavailable, etc.).
+    /// Single source of truth for the "ensure-notification-window" pattern
+    /// shared between prepareLayoutOsdWindow, showNavigationOsd, and the
+    /// screenAdded hot-plug lambda.
+    PerScreenOverlayState* ensureNotificationWindowFor(const QString& effectiveId, QScreen* physScreen);
+
+    /// Shared property-push for layout-OSD content. Used by both
+    /// showLayoutOsdImpl (PhosphorZones::Layout* path) and the
+    /// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
+    /// path). The struct lets the two callers diverge only on the values
+    /// they compute, not on the property-write sequence.
+    struct LayoutOsdContentParams
+    {
+        QString id; ///< layoutId — UUID for manual layouts, "autotile:..." for algorithms
+        QString name; ///< layoutName as shown in the OSD label
+        QVariantList zones; ///< pre-built zone variant list (empty for locked-with-no-zones)
+        int category = 0; ///< PhosphorZones::LayoutCategory enum value
+        bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
+        bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
+        bool locked = false; ///< draws lock badge + " (Locked)" suffix
+        qreal screenAspectRatio = 16.0 / 9.0;
+        QString aspectRatioClass = QStringLiteral("any");
+        bool showMasterDot = false;
+        bool producesOverlappingZones = false;
+        QString zoneNumberDisplay = QStringLiteral("all");
+        int masterCount = 1;
+    };
+    void pushLayoutOsdContent(QQuickWindow* window, const LayoutOsdContentParams& params);
+
+    void destroyIfTypeMismatch(const QString& screenId);
+    void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
     void destroyShaderPreviewWindow();
 
-    void createSnapAssistWindow();
+    /// Destroy all overlay, OSD, zone selector, snap assist, and layout picker windows
+    /// backed by the given physical screen. Used by both virtualScreensChanged and handleScreenRemoved.
+    void destroyAllWindowsForPhysicalScreen(QScreen* screen);
+
+    void createSnapAssistWindow(QScreen* physScreen);
+    void createSnapAssistWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
     void destroySnapAssistWindow();
 
-    void createLayoutPickerWindow(QScreen* screen);
+    void createLayoutPickerWindow(QScreen* physScreen);
+    void createLayoutPickerWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
     void destroyLayoutPickerWindow();
 
+    /**
+     * @brief Construct the SurfaceAnimator and register per-Role configs.
+     *
+     * Phase 5 of the phosphor-animation roadmap: a single library-driven
+     * animator drives show/hide across every overlay (LayoutOsd,
+     * NavigationOsd, LayoutPicker, ZoneSelector, SnapAssist) using
+     * Profile-resolved curves shared with in-window animations. Called
+     * exactly once from the ctor; the animator's lifetime is tied to
+     * `*this`.
+     *
+     * @param profileRegistry Borrowed; threaded into the SurfaceAnimator's
+     *                        constructor. Must outlive the animator.
+     */
+    void setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry);
+
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
-    void updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl);
+    void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl);
     /** Process next thumbnail in queue (sequential capture to avoid KWin overload). */
     void processNextThumbnailCapture();
 
@@ -303,37 +662,99 @@ private:
      * The QPA plugin binds the Wayland output once during LayerSurface/platform
      * window construction. Set QWindow::screen() BEFORE the window is shown.
      */
-    static void assertWindowOnScreen(QWindow* window, QScreen* screen);
+    static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry = QRect());
 
     /**
      * @brief Prepare layout OSD window for display
      * @param window Output: the prepared window (nullptr on failure)
+     * @param outSurface Output: the backing PhosphorLayer::Surface (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
      * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
-    bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
-                                const QString& screenId = QString());
+    bool prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface, QScreen*& outPhysScreen,
+                                QRect& screenGeom, qreal& aspectRatio, const QString& screenId = QString());
 
     /**
-     * @brief Create a QML window from a resource URL
-     * @param qmlUrl QML resource URL (e.g., "qrc:/ui/ZoneOverlay.qml")
-     * @param screen Screen to assign the window to
-     * @param windowType Description for logging (e.g., "overlay", "zone selector")
-     * @return Created window with C++ ownership, or nullptr on failure
-     *
-     * Handles common QML window creation: component loading, error checking,
-     * QQuickWindow casting, ownership, and screen assignment.
+     * @brief Parameters for @ref createLayerSurface, kept as a named-member
+     *        aggregate so call sites read top-to-bottom rather than relying
+     *        on positional arg ordering. Required fields up top, optional
+     *        below; Qt6 designated-init form is `LayerSurfaceParams{.qmlUrl=...}`.
      */
-    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
-                                  const QVariantMap& initialProperties = QVariantMap());
+    struct LayerSurfaceParams
+    {
+        // Required.
+        QUrl qmlUrl = {}; ///< QML file (Window-rooted — PZ's overlay QML convention)
+        QScreen* screen = nullptr; ///< target screen (physical; virtual-screen positioning is the caller's job)
+        PhosphorLayer::Role role = {}; ///< protocol-level preset (see pz_roles.h)
+        const char* windowType = ""; ///< debug/telemetry label
+
+        // Optional — explicit `= {}` suppresses GCC's
+        // -Wmissing-field-initializers warning on designated-init call sites
+        // that omit these. (For `QUrl` / `Role` above the same is true; we
+        // just want one consistent style across the struct.)
+        QVariantMap windowProperties = {}; ///< Applied as dynamic properties before QML loads.
+        std::optional<PhosphorLayer::Anchors> anchorsOverride =
+            std::nullopt; ///< Overrides the role's anchors (virtual-screen positioning).
+        std::optional<QMargins> marginsOverride =
+            std::nullopt; ///< Overrides the role's margins (virtual-screen positioning).
+        bool keepMappedOnHide = false; ///< See SurfaceConfig::keepMappedOnHide.
+        /// Initial swapchain size committed during warm-up. Empty (default)
+        /// → screen geometry, which guarantees a non-zero buffer for every
+        /// anchor configuration but allocates a full-screen Vulkan swapchain
+        /// (~25 MB at 4K × triple buffer on NVIDIA). Non-empty → a swapchain
+        /// proportional to the passed size. The eventual visible size is
+        /// still driven by per-show setWidth/setHeight; this only governs
+        /// the warm-up commit. Forwarded verbatim to
+        /// SurfaceConfig::initialSize, including the empty-as-unset sentinel.
+        QSize initialSize = {};
+    };
+
+    /**
+     * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
+     *
+     * Every overlay, OSD, zone selector, snap assist, layout picker, and shader
+     * preview in OverlayService goes through this single helper. Returns a surface
+     * that has been warmed up (window created, QML loaded, transport attached) but
+     * is hidden — callers decide when to call @c surface->show() or keep it warm
+     * for pre-warmed OSDs.
+     *
+     * @return the surface on success; nullptr on failure (warnings logged internally).
+     */
+    PhosphorLayer::Surface* createLayerSurface(LayerSurfaceParams params);
+
+    /**
+     * @brief Create a warmed OSD-style surface and wire its dismiss signal.
+     *
+     * Common pattern for createNotificationWindow (and the LayoutPicker
+     * surface in snapassist.cpp): (1) caller builds a per-instance
+     * scope-prefixed Role via @ref PzRoles::makePerInstanceRole,
+     * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
+     * (3) string-connects the QML-side `dismissRequested()` signal to
+     * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
+     * the picker) can drive the library animator without a C++ slot in
+     * the loop.
+     *
+     * Returns the warmed Surface on success; nullptr on failure (warning
+     * logged inside createLayerSurface). Caller installs the surface +
+     * window pointers into PerScreenOverlayState.
+     *
+     * @param role           Fully-formed per-instance role (use
+     *                       PzRoles::makePerInstanceRole to build).
+     * @param qmlUrl         QML file to load.
+     * @param physScreen     Target physical screen.
+     * @param windowType     Debug/telemetry label.
+     */
+    PhosphorLayer::Surface* createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
+                                                   QScreen* physScreen, const char* windowType);
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
     // Shader support methods
     bool useShaderForScreen(QScreen* screen) const;
+    bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;
     bool canUseShaders() const;
     void startShaderAnimation();
@@ -348,7 +769,7 @@ private:
      * This is the common implementation for show() and showAtPosition().
      * Extracts ~100 lines of duplicate code from both methods.
      */
-    void initializeOverlay(QScreen* cursorScreen);
+    void initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos = QPoint(-1, -1));
 
 private Q_SLOTS:
     // System sleep/resume handler (connected to logind PrepareForSleep signal)
@@ -366,29 +787,20 @@ private:
     bool m_zoneDataDirty = true;
     QString m_pendingShaderError;
 
-    // Monotonic counter for unique layer-shell scope strings.
-    // Appended to each configureLayerSurface() scope so KWin sees every
-    // new surface as unique, avoiding configure rate-limiting after rapid
-    // destroy/recreate cycles on Vulkan.
-    int m_scopeGeneration = 0;
+    // Scope generation delegated to m_surfaceManager->nextScopeGeneration().
 
-    // CAVA audio visualization
-    std::unique_ptr<CavaService> m_cavaService;
+    // Audio spectrum provider (CAVA backend via phosphor-audio)
+    std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
 
-    // Zone data version for shader synchronization
+    // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
 
-    // Layout filter: which types to include in zone picker (set by Daemon)
+    // PhosphorZones::Layout filter: which types to include in zone picker (set by Daemon)
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
-
-    // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
-#if QT_CONFIG(vulkan)
-    std::unique_ptr<QVulkanInstance> m_fallbackVulkanInstance;
-#endif
 };
 
 } // namespace PlasmaZones

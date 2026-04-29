@@ -22,13 +22,17 @@
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/windowtrackingadaptor.h"
-#include "core/layoutmanager.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================
@@ -40,48 +44,48 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using StubSettingsBridge = StubSettings;
 
 // =========================================================================
-// Stub Zone Detector
+// Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorBridge : public IZoneDetector
+class StubZoneDetectorBridge : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorBridge(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
-    {
-        return nullptr;
-    }
-    void setLayout(Layout*) override
-    {
-    }
-    ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Layout* layout() const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    void setLayout(PhosphorZones::Layout*) override
     {
-        return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    {
+        return {};
+    }
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
+    {
+        return nullptr;
+    }
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
+    {
+        return nullptr;
+    }
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
+    {
+        return {};
+    }
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -104,17 +108,24 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_bridgeAdaptor = new CompositorBridgeAdaptor(m_parent);
 
-        // For ControlAdaptor tests we need a WTA + LayoutManager
-        m_layoutManager = new LayoutManager(nullptr);
+        // For ControlAdaptor tests we need a WTA + PhosphorZones::LayoutRegistry
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsBridge(nullptr);
         m_zoneDetector = new StubZoneDetectorBridge(nullptr);
 
         m_wtaParent = new QObject(nullptr);
-        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, m_wtaParent);
+        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_wtaParent);
+
+        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, nullptr, nullptr);
+        m_snapEngine->setEngineSettings(m_settings);
+        m_wta->service()->setSnapState(m_snapEngine->snapState());
+        m_wta->service()->setSnapEngine(m_snapEngine);
+        m_wta->setEngines(m_snapEngine, nullptr);
 
         // Create a test layout so getFullState has data
-        auto* layout = new Layout(QStringLiteral("TestLayout"), m_layoutManager);
-        auto* zone = new Zone(layout);
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), m_layoutManager);
+        auto* zone = new PhosphorZones::Zone(layout);
         zone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         zone->setZoneNumber(1);
         layout->addZone(zone);
@@ -122,7 +133,8 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(layout);
 
         m_controlParent = new QObject(nullptr);
-        m_controlAdaptor = new ControlAdaptor(m_wta, nullptr, m_layoutManager, nullptr, nullptr, m_controlParent);
+        m_controlAdaptor =
+            new ControlAdaptor(m_wta, nullptr, nullptr, m_layoutManager, nullptr, nullptr, m_controlParent);
     }
 
     void cleanup()
@@ -130,6 +142,9 @@ private Q_SLOTS:
         delete m_controlParent;
         m_controlParent = nullptr;
         m_controlAdaptor = nullptr;
+        m_wta->service()->setSnapState(nullptr);
+        delete m_snapEngine;
+        m_snapEngine = nullptr;
         delete m_wtaParent;
         m_wtaParent = nullptr;
         m_wta = nullptr;
@@ -151,18 +166,15 @@ private Q_SLOTS:
 
     void testRegisterBridge_returnsApiVersion()
     {
-        QString result = m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"),
-                                                         {QStringLiteral("borderless"), QStringLiteral("animation")});
+        BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QJsonDocument doc = QJsonDocument::fromJson(result.toUtf8());
-        QVERIFY(!doc.isNull());
-        QJsonObject obj = doc.object();
-        QCOMPARE(obj[QLatin1String("apiVersion")].toInt(), 1);
+        QCOMPARE(result.apiVersion, QStringLiteral("2"));
     }
 
     void testRegisterBridge_storesBridgeName()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {});
 
         QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
@@ -170,7 +182,7 @@ private Q_SLOTS:
     void testRegisterBridge_storesCapabilities()
     {
         QStringList caps = {QStringLiteral("borderless"), QStringLiteral("maximize"), QStringLiteral("animation")};
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), caps);
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), caps);
 
         QCOMPARE(m_bridgeAdaptor->bridgeCapabilities(), caps);
     }
@@ -179,12 +191,40 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("0.40"),
-                                        {QStringLiteral("modifiers")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("2"), {QStringLiteral("modifiers")});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("hyprland"));
-        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("0.40"));
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("2"));
+    }
+
+    // Version gate regression test: a peer speaking an older protocol
+    // version (< MinPeerApiVersion) must be rejected with the REJECTED
+    // sentinel in sessionId, must NOT update the stored bridge name, and
+    // must NOT emit bridgeRegistered. If this regresses, stale effects
+    // would silently connect and crash on marshalling mismatches.
+    void testRegisterBridge_rejectsOldVersion()
+    {
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
+
+        BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("1"),
+                                                                          {QStringLiteral("borderless")});
+
+        QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
+        QCOMPARE(result.apiVersion, QStringLiteral("2"));
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
+    }
+
+    // Non-numeric versions parse as 0 via QString::toInt(), which is
+    // below MinPeerApiVersion and must also be rejected.
+    void testRegisterBridge_rejectsNonNumericVersion()
+    {
+        BridgeRegistrationResult result =
+            m_bridgeAdaptor->registerBridge(QStringLiteral("weird-compositor"), QStringLiteral("garbage"), {});
+
+        QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
+        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
     }
 
     // =====================================================================
@@ -193,14 +233,14 @@ private Q_SLOTS:
 
     void testHasCapability_registered_returnsTrue()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
     }
 
     void testHasCapability_notRegistered_returnsFalse()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("unknown_capability")));
     }
@@ -249,11 +289,12 @@ private:
     QObject* m_parent = nullptr;
     CompositorBridgeAdaptor* m_bridgeAdaptor = nullptr;
 
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsBridge* m_settings = nullptr;
     StubZoneDetectorBridge* m_zoneDetector = nullptr;
     QObject* m_wtaParent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
+    SnapEngine* m_snapEngine = nullptr;
     QObject* m_controlParent = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
 };

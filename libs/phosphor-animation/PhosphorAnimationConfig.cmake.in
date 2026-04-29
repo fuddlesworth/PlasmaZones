@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Core library — always needed. Pin Qt to match the library's build
+# minimum; without the version guard a consumer on Qt 6.5 resolves
+# find_package(PhosphorAnimation) cleanly and then fails later with a
+# cryptic missing-symbol at link time.
+find_dependency(Qt6 6.6 COMPONENTS Core Gui)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorAnimationTargets.cmake")
+
+# QML wrappers (PhosphorEasing / Spring / Curve / Profile / animated-value
+# Q_GADGETs / PhosphorMotionAnimation / org.phosphor.animation module) live
+# in the sibling phosphor-animation-qml library since Phase A1; consumers
+# that need them call `find_package(PhosphorAnimationQml)` separately.
+
+check_required_components(PhosphorAnimation)

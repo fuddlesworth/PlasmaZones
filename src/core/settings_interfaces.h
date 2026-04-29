@@ -5,6 +5,8 @@
 
 #include "plasmazones_export.h"
 #include "enums.h"
+#include <PhosphorEngineApi/IGeometrySettings.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <QString>
 #include <QStringList>
 #include <QSet>
@@ -52,6 +54,57 @@ inline constexpr const char GridColumns[] = "GridColumns";
 inline constexpr const char TriggerDistance[] = "TriggerDistance";
 } // namespace ZoneSelectorConfigKey
 
+/**
+ * Per-screen autotile override key constants.
+ * These intentionally differ from the global ConfigKeys accessors (e.g.
+ * "AutotileAlgorithm" here vs ConfigKeys::defaultAutotileAlgorithmKey() =
+ * "DefaultAutotileAlgorithm") because per-screen overrides replace the default.
+ */
+namespace PerScreenAutotileKey {
+inline constexpr const char Algorithm[] = "AutotileAlgorithm";
+inline constexpr const char SplitRatio[] = "AutotileSplitRatio";
+inline constexpr const char MasterCount[] = "AutotileMasterCount";
+inline constexpr const char InnerGap[] = "AutotileInnerGap";
+inline constexpr const char OuterGap[] = "AutotileOuterGap";
+inline constexpr const char UsePerSideOuterGap[] = "AutotileUsePerSideOuterGap";
+inline constexpr const char OuterGapTop[] = "AutotileOuterGapTop";
+inline constexpr const char OuterGapBottom[] = "AutotileOuterGapBottom";
+inline constexpr const char OuterGapLeft[] = "AutotileOuterGapLeft";
+inline constexpr const char OuterGapRight[] = "AutotileOuterGapRight";
+inline constexpr const char FocusNewWindows[] = "AutotileFocusNewWindows";
+inline constexpr const char SmartGaps[] = "AutotileSmartGaps";
+inline constexpr const char MaxWindows[] = "AutotileMaxWindows";
+inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
+inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
+inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
+inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
+inline constexpr const char SplitRatioStep[] = "AutotileSplitRatioStep";
+inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
+inline constexpr const char AnimationDuration[] = "AnimationDuration";
+inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
+} // namespace PerScreenAutotileKey
+
+namespace PerScreenSnappingKey {
+
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGap;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapBottom;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapLeft;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapRight;
+using PhosphorEngineApi::PerScreenSnappingKey::OuterGapTop;
+using PhosphorEngineApi::PerScreenSnappingKey::UsePerSideOuterGap;
+using PhosphorEngineApi::PerScreenSnappingKey::ZonePadding;
+
+inline constexpr QLatin1String SnapAssistEnabled{"SnapAssistEnabled"};
+inline constexpr QLatin1String ZoneSelectorEnabled{"ZoneSelectorEnabled"};
+inline constexpr QLatin1String ZoneSelectorTriggerDistance{"ZoneSelectorTriggerDistance"};
+inline constexpr QLatin1String ZoneSelectorPosition{"ZoneSelectorPosition"};
+inline constexpr QLatin1String ZoneSelectorLayoutMode{"ZoneSelectorLayoutMode"};
+inline constexpr QLatin1String ZoneSelectorSizeMode{"ZoneSelectorSizeMode"};
+inline constexpr QLatin1String ZoneSelectorMaxRows{"ZoneSelectorMaxRows"};
+inline constexpr QLatin1String ZoneSelectorPreviewWidth{"ZoneSelectorPreviewWidth"};
+inline constexpr QLatin1String ZoneSelectorPreviewHeight{"ZoneSelectorPreviewHeight"};
+} // namespace PerScreenSnappingKey
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -93,15 +146,21 @@ public:
     // Display settings
     virtual bool showZonesOnAllMonitors() const = 0;
     virtual void setShowZonesOnAllMonitors(bool show) = 0;
-    virtual QStringList disabledMonitors() const = 0;
-    virtual void setDisabledMonitors(const QStringList& screenIdOrNames) = 0;
-    virtual bool isMonitorDisabled(const QString& screenIdOrName) const = 0;
-    virtual QStringList disabledDesktops() const = 0;
-    virtual void setDisabledDesktops(const QStringList& entries) = 0;
-    virtual bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const = 0;
-    virtual QStringList disabledActivities() const = 0;
-    virtual void setDisabledActivities(const QStringList& entries) = 0;
-    virtual bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const = 0;
+    // Per-mode disable lists. The `mode` argument selects which list to read
+    // or write — disabling a monitor for snap leaves the autotile gate untouched
+    // and vice versa. Storage is `Display.{Snapping,Autotile}Disabled*`
+    // in the v3 schema.
+    virtual QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
+    virtual void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) = 0;
+    virtual bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const = 0;
+    virtual QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
+    virtual void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) = 0;
+    virtual bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                   int desktop) const = 0;
+    virtual QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
+    virtual void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) = 0;
+    virtual bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                                    const QString& activityId) const = 0;
     virtual QStringList lockedScreens() const = 0;
     virtual void setLockedScreens(const QStringList& screens) = 0;
     virtual void setScreenLocked(const QString& screenIdOrName, bool locked) = 0;
@@ -115,6 +174,8 @@ public:
     virtual void setFlashZonesOnSwitch(bool flash) = 0;
     virtual bool showOsdOnLayoutSwitch() const = 0;
     virtual void setShowOsdOnLayoutSwitch(bool show) = 0;
+    virtual bool showOsdOnDesktopSwitch() const = 0;
+    virtual void setShowOsdOnDesktopSwitch(bool show) = 0;
     virtual bool showNavigationOsd() const = 0;
     virtual void setShowNavigationOsd(bool show) = 0;
     virtual OsdStyle osdStyle() const = 0;
@@ -172,30 +233,23 @@ public:
 /**
  * @brief Settings related to zone geometry (padding, gaps, thresholds)
  *
- * Used by: KWin Effect, KCM, Zone Detector
+ * Used by: KWin Effect, KCM, PhosphorZones::Zone Detector
  *
  * Per-side gap semantics differ by implementer:
  * - Settings: values are clamped to [0, INT_MAX]; -1 is not valid (global config always has a value)
- * - Layout: -1 sentinel means "use global setting"; >= 0 is a per-layout override
+ * - PhosphorZones::Layout: -1 sentinel means "use global setting"; >= 0 is a per-layout override
  */
-class PLASMAZONES_EXPORT IZoneGeometrySettings
+class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngineApi::IGeometrySettings
 {
 public:
-    virtual ~IZoneGeometrySettings() = default;
+    ~IZoneGeometrySettings() override = default;
 
-    virtual int zonePadding() const = 0;
     virtual void setZonePadding(int padding) = 0;
-    virtual int outerGap() const = 0;
     virtual void setOuterGap(int gap) = 0;
-    virtual bool usePerSideOuterGap() const = 0;
     virtual void setUsePerSideOuterGap(bool enabled) = 0;
-    virtual int outerGapTop() const = 0;
     virtual void setOuterGapTop(int gap) = 0;
-    virtual int outerGapBottom() const = 0;
     virtual void setOuterGapBottom(int gap) = 0;
-    virtual int outerGapLeft() const = 0;
     virtual void setOuterGapLeft(int gap) = 0;
-    virtual int outerGapRight() const = 0;
     virtual void setOuterGapRight(int gap) = 0;
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
@@ -205,12 +259,6 @@ public:
     virtual void setMinimumZoneSizePx(int size) = 0;
     virtual int minimumZoneDisplaySizePx() const = 0;
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
-
-    // Per-screen snapping config resolution (override > global fallback)
-    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
-    {
-        return {};
-    }
 };
 
 /**
@@ -301,6 +349,8 @@ public:
     virtual void setStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
+    virtual bool autoAssignAllLayouts() const = 0;
+    virtual void setAutoAssignAllLayouts(bool enabled) = 0;
     virtual bool snapAssistFeatureEnabled() const = 0;
     virtual void setSnapAssistFeatureEnabled(bool enabled) = 0;
     virtual bool snapAssistEnabled() const = 0;
@@ -331,7 +381,7 @@ public:
 /**
  * @brief Settings related to default layout selection
  *
- * Used by: Daemon, KCM, Layout Manager
+ * Used by: Daemon, KCM, PhosphorZones::Layout Manager
  */
 class PLASMAZONES_EXPORT IDefaultLayoutSettings
 {
@@ -355,36 +405,45 @@ enum class DisabledReason {
 };
 
 /**
- * @brief Determine *why* PlasmaZones is disabled for a given screen/desktop/activity.
+ * @brief Determine *why* PlasmaZones is disabled for a given screen/desktop/activity
+ *        in the given mode.
  *
  * Returns the highest-priority reason, or NotDisabled if the context is active.
  * Use this when you need the reason (e.g. for OSD messages); use isContextDisabled()
  * for simple gate checks.
+ *
+ * `mode` selects the per-mode disable list — pass Snapping when gating snap-side
+ * code paths (overlay, drag-drop, snap navigation), Autotile when gating autotile
+ * paths, or look up the screen's current mode via ScreenModeRouter::modeFor() for
+ * mode-agnostic call sites.
  */
-inline DisabledReason contextDisabledReason(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
-                                            const QString& activity)
+inline DisabledReason contextDisabledReason(const IZoneVisualizationSettings* s,
+                                            PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId,
+                                            int desktop, const QString& activity)
 {
     if (!s)
         return DisabledReason::NotDisabled;
-    if (s->isMonitorDisabled(screenId))
+    if (s->isMonitorDisabled(mode, screenId))
         return DisabledReason::MonitorDisabled;
-    if (desktop > 0 && s->isDesktopDisabled(screenId, desktop))
+    if (desktop > 0 && s->isDesktopDisabled(mode, screenId, desktop))
         return DisabledReason::DesktopDisabled;
-    if (!activity.isEmpty() && s->isActivityDisabled(screenId, activity))
+    if (!activity.isEmpty() && s->isActivityDisabled(mode, screenId, activity))
         return DisabledReason::ActivityDisabled;
     return DisabledReason::NotDisabled;
 }
 
 /**
- * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context.
+ * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context
+ *        in the given mode.
  *
  * Returns true if the screen is disabled, OR the desktop is disabled, OR the activity
- * is disabled. Use at every point where overlay/snapping/autotile is gated.
+ * is disabled — for the specified mode. Use at every point where overlay/snapping/autotile
+ * is gated.
  */
-inline bool isContextDisabled(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
-                              const QString& activity)
+inline bool isContextDisabled(const IZoneVisualizationSettings* s, PhosphorZones::AssignmentEntry::Mode mode,
+                              const QString& screenId, int desktop, const QString& activity)
 {
-    return contextDisabledReason(s, screenId, desktop, activity) != DisabledReason::NotDisabled;
+    return contextDisabledReason(s, mode, screenId, desktop, activity) != DisabledReason::NotDisabled;
 }
 
 /**
@@ -397,6 +456,9 @@ inline bool pruneDisabledDesktopEntries(QStringList& entries, int maxDesktop)
 {
     const int before = entries.size();
     entries.removeIf([maxDesktop](const QString& entry) {
+        // Composite key format: "screenId/desktopNumber". Virtual screen IDs
+        // (e.g. "physId/vs:N") contain '/', but the desktop suffix is always the
+        // last segment, so lastIndexOf('/') correctly splits at the boundary.
         int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
         if (slashIdx < 0)
             return true; // malformed entry
@@ -417,6 +479,9 @@ inline bool pruneDisabledActivityEntries(QStringList& entries, const QSet<QStrin
 {
     const int before = entries.size();
     entries.removeIf([&validActivityIds](const QString& entry) {
+        // Composite key format: "screenId/activityUuid". Virtual screen IDs
+        // (e.g. "physId/vs:N") contain '/', but the activity suffix is always the
+        // last segment, so lastIndexOf('/') correctly splits at the boundary.
         int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
         if (slashIdx < 0)
             return true; // malformed entry

@@ -8,6 +8,7 @@
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
 #include "../core/constants.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones::DaemonDBus {
 
@@ -17,8 +18,8 @@ constexpr int TimeoutMs = 3000;
 /// Call a daemon method synchronously and return the reply
 inline QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {})
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath), interface, method);
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath), interface, method);
     if (!args.isEmpty()) {
         msg.setArguments(args);
     }
@@ -33,16 +34,16 @@ inline QDBusMessage callDaemon(const QString& interface, const QString& method, 
 /// load() that reverts just-saved assignments.
 inline void notifyReload()
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::Settings), QStringLiteral("reloadSettings"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("reloadSettings"));
     QDBusConnection::sessionBus().call(msg, QDBus::Block, TimeoutMs);
 }
 
 /// Batch-set settings on the daemon. Synchronous call.
 inline QDBusMessage setDaemonSettings(const QVariantMap& settings)
 {
-    return callDaemon(QString(DBus::Interface::Settings), QStringLiteral("setSettings"),
+    return callDaemon(QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("setSettings"),
                       {QVariant::fromValue(settings)});
 }
 
@@ -51,9 +52,9 @@ inline QDBusMessage setDaemonSettings(const QVariantMap& settings)
 inline void setPerScreenDaemonSetting(const QString& screenName, const QString& category, const QString& key,
                                       const QVariant& value)
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::Settings), QStringLiteral("setPerScreenSetting"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("setPerScreenSetting"));
     msg.setArguments({screenName, category, key, QVariant::fromValue(QDBusVariant(value))});
     QDBusConnection::sessionBus().asyncCall(msg);
 }
@@ -61,9 +62,9 @@ inline void setPerScreenDaemonSetting(const QString& screenName, const QString& 
 /// Clear all per-screen settings for a category on the daemon (async).
 inline void clearPerScreenDaemonSettings(const QString& screenName, const QString& category)
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::Settings), QStringLiteral("clearPerScreenSettings"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("clearPerScreenSettings"));
     msg.setArguments({screenName, category});
     QDBusConnection::sessionBus().asyncCall(msg);
 }

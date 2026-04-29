@@ -9,10 +9,14 @@
 #include "../undo/commands/ToggleGeometryModeCommand.h"
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
+#include "../../config/configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "../../core/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
+#include <QDBusMessage>
 #include <QDBusInterface>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
@@ -23,6 +27,7 @@
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -398,7 +403,8 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 {
     if (!targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Utils::screenIdentifier(screen) == targetScreen || screen->name() == targetScreen) {
+            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == targetScreen
+                || screen->name() == targetScreen) {
                 return screen;
             }
         }
@@ -408,6 +414,10 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 
 QSize EditorController::targetScreenSize() const
 {
+    // Virtual screens: use cached geometry from daemon (set in setTargetScreen)
+    if (m_virtualScreenSize.isValid()) {
+        return m_virtualScreenSize;
+    }
     QScreen* screen = findTargetScreen(m_targetScreen);
     return screen ? screen->geometry().size() : QSize(1920, 1080);
 }
@@ -445,41 +455,81 @@ void EditorController::setInsets(int left, int top, int right, int bottom)
 
 void EditorController::refreshUsableAreaInsets()
 {
-    QScreen* screen = findTargetScreen(m_targetScreen);
-    if (!screen) {
-        setInsets(0, 0, 0, 0);
-        return;
+    // For virtual screens, use the daemon's geometry (QScreen doesn't know about VS).
+    // The daemon's getScreenGeometry and getAvailableGeometry handle VS IDs.
+    QString screenId = m_targetScreen;
+    bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
+
+    // For physical screens, pre-populate fullGeom from Qt as a fallback in case the
+    // daemon D-Bus call fails. For virtual screens, fullGeom stays empty — the daemon
+    // is the only source of VS geometry and the getScreenGeometry callback will set it.
+    QRect fullGeom;
+    if (!isVirtual) {
+        QScreen* screen = findTargetScreen(m_targetScreen);
+        if (!screen) {
+            setInsets(0, 0, 0, 0);
+            return;
+        }
+        fullGeom = screen->geometry();
+        screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     }
 
-    QRect fullGeom = screen->geometry();
+    // Query the daemon for both full and available geometry via D-Bus.
+    // The daemon's Phosphor::Screens::ScreenManager handles VS IDs natively.
+    QDBusMessage geoMsg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));
+    geoMsg << screenId;
+    QDBusMessage availMsg = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getAvailableGeometry"));
+    availMsg << screenId;
 
-    // Query the daemon for available geometry via D-Bus (async to avoid blocking the GUI thread).
-    // The daemon's ScreenManager has layer-shell sensor windows that detect
-    // actual panel positions — this data is not available in the editor process.
-    QString screenId = Utils::screenIdentifier(screen);
-    QDBusInterface screenIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                               QString::fromLatin1(DBus::Interface::Screen), QDBusConnection::sessionBus());
+    auto* geoWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(geoMsg), this);
+    auto* availWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(availMsg), this);
 
-    if (screenIface.isValid()) {
-        QDBusPendingCall pending = screenIface.asyncCall(QStringLiteral("getAvailableGeometry"), screenId);
-        auto* watcher = new QDBusPendingCallWatcher(pending, this);
-        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                         [this, fullGeom](QDBusPendingCallWatcher* w) {
-                             w->deleteLater();
-                             QDBusPendingReply<QRect> reply = *w;
-                             QRect availGeom = fullGeom;
-                             if (reply.isValid() && !reply.value().isEmpty()) {
-                                 availGeom = reply.value();
-                             }
-                             applyUsableAreaInsets(fullGeom, availGeom);
-                         });
-        return;
-    }
+    // Use shared state to wait for both replies.
+    // QPointer guards against EditorController being destroyed before callbacks fire
+    // (e.g., rapid screen switches that destroy and recreate the editor window).
+    auto fullGeomResult = std::make_shared<QRect>(fullGeom);
+    auto availGeomResult = std::make_shared<QRect>();
+    auto pending = std::make_shared<int>(2);
+    QPointer<EditorController> self(this);
 
-    // No daemon — Qt's availableGeometry is used as fallback in applyUsableAreaInsets,
-    // but on Wayland it often returns the full geometry (panels aren't reported).
-    qCWarning(lcEditor) << "D-Bus daemon unreachable; usable area insets may be inaccurate";
-    applyUsableAreaInsets(fullGeom, fullGeom);
+    auto applyWhenReady = [self, fullGeomResult, availGeomResult, pending]() {
+        if (--(*pending) > 0) {
+            return;
+        }
+        if (!self) {
+            return;
+        }
+        QRect fg = *fullGeomResult;
+        QRect ag = availGeomResult->isValid() ? *availGeomResult : fg;
+        if (fg.isValid()) {
+            self->applyUsableAreaInsets(fg, ag);
+        } else {
+            self->setInsets(0, 0, 0, 0);
+        }
+    };
+
+    connect(geoWatcher, &QDBusPendingCallWatcher::finished, this,
+            [fullGeomResult, applyWhenReady](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QRect> reply = *w;
+                if (reply.isValid() && !reply.value().isEmpty()) {
+                    *fullGeomResult = reply.value();
+                }
+                applyWhenReady();
+            });
+    connect(availWatcher, &QDBusPendingCallWatcher::finished, this,
+            [availGeomResult, applyWhenReady](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QRect> reply = *w;
+                if (reply.isValid() && !reply.value().isEmpty()) {
+                    *availGeomResult = reply.value();
+                }
+                applyWhenReady();
+            });
 }
 
 void EditorController::applyUsableAreaInsets(const QRect& fullGeom, const QRect& daemonAvailGeom)
@@ -518,7 +568,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
         return;
     }
 
-    int oldMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    int oldMode = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt();
     int newMode = (oldMode == 0) ? 1 : 0; // Toggle between Relative(0) and Fixed(1)
 
     QSize screenSize = targetScreenSize();
@@ -529,7 +579,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
 
     // Current fixed geometry (may not exist)
     QRectF oldFixedGeo;
-    if (zone.contains(JsonKeys::FixedX)) {
+    if (zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
         oldFixedGeo = m_zoneManager->extractFixedGeometry(zone);
     }
 
@@ -611,35 +661,35 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     }
 
     // Update geometry mode
-    zone[JsonKeys::GeometryMode] = mode;
+    zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = mode;
 
     // Update relative geometry
-    zone[JsonKeys::X] = relativeGeo.x();
-    zone[JsonKeys::Y] = relativeGeo.y();
-    zone[JsonKeys::Width] = relativeGeo.width();
-    zone[JsonKeys::Height] = relativeGeo.height();
+    zone[::PhosphorZones::ZoneJsonKeys::X] = relativeGeo.x();
+    zone[::PhosphorZones::ZoneJsonKeys::Y] = relativeGeo.y();
+    zone[::PhosphorZones::ZoneJsonKeys::Width] = relativeGeo.width();
+    zone[::PhosphorZones::ZoneJsonKeys::Height] = relativeGeo.height();
 
-    if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+    if (mode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)) {
         // Switching to Fixed: compute and set fixed pixel coords
         if (fixedGeo.isValid()) {
-            zone[JsonKeys::FixedX] = fixedGeo.x();
-            zone[JsonKeys::FixedY] = fixedGeo.y();
-            zone[JsonKeys::FixedWidth] = fixedGeo.width();
-            zone[JsonKeys::FixedHeight] = fixedGeo.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixedGeo.y();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixedGeo.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = fixedGeo.height();
         } else {
             // Compute from relative + screen size
             QSizeF ss = m_zoneManager->effectiveScreenSizeF();
-            zone[JsonKeys::FixedX] = relativeGeo.x() * ss.width();
-            zone[JsonKeys::FixedY] = relativeGeo.y() * ss.height();
-            zone[JsonKeys::FixedWidth] = relativeGeo.width() * ss.width();
-            zone[JsonKeys::FixedHeight] = relativeGeo.height() * ss.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] = relativeGeo.x() * ss.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] = relativeGeo.y() * ss.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = relativeGeo.width() * ss.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = relativeGeo.height() * ss.height();
         }
     } else {
         // Switching to Relative: remove stale fixed keys
-        zone.remove(QString::fromLatin1(JsonKeys::FixedX));
-        zone.remove(QString::fromLatin1(JsonKeys::FixedY));
-        zone.remove(QString::fromLatin1(JsonKeys::FixedWidth));
-        zone.remove(QString::fromLatin1(JsonKeys::FixedHeight));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedX));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedY));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedWidth));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedHeight));
     }
 
     // setZoneData emits ZoneManager::zonesChanged, which is connected to
@@ -647,48 +697,89 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     m_zoneManager->setZoneData(zoneId, zone);
 }
 
-void EditorController::refreshGlobalZonePadding()
+void EditorController::refreshGlobalGapOverlaySettings()
 {
-    int newValue = SettingsDbusQueries::queryGlobalZonePadding();
+    // Fetches every gap and overlay key the editor cares about in a single
+    // daemon round-trip. Prior to this the editor ctor path made 8 sequential
+    // blocking getSetting() calls (1 zonePadding + 6 outerGap-related +
+    // 1 overlayDisplayMode) — each constructing a fresh QDBusInterface.
+    // SettingsAdaptor::getSettings reads straight from the in-memory
+    // registry so the daemon-side cost is unchanged, and we avoid N-1
+    // extra IPC round-trips on the editor startup hot path.
+    static const QStringList kGapOverlayKeys = {
+        QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+        QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
+        QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
+    };
+    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kGapOverlayKeys);
 
-    if (m_cachedGlobalZonePadding != newValue) {
-        m_cachedGlobalZonePadding = newValue;
-        Q_EMIT globalZonePaddingChanged();
+    // Helper: read an int from the batch result. Uses toInt(&ok) so a
+    // malformed daemon reply (wrong type, not convertible) falls back to
+    // the default rather than silently coercing to 0. Negative values are
+    // also treated as invalid — these keys are all non-negative pixel
+    // counts / enum indices, matching the old single-key helpers'
+    // semantics. Keys missing from the batch (unknown to the daemon, or
+    // the whole call failed) also fall through to the fallback.
+    auto readInt = [&](const QString& key, int fallback) {
+        auto it = values.constFind(key);
+        if (it == values.constEnd()) {
+            return fallback;
+        }
+        bool ok = false;
+        const int v = it.value().toInt(&ok);
+        if (!ok || v < 0) {
+            return fallback;
+        }
+        return v;
+    };
+    auto readBool = [&](const QString& key, bool fallback) {
+        auto it = values.constFind(key);
+        return it == values.constEnd() ? fallback : it.value().toBool();
+    };
+
+    // zonePadding
+    {
+        const int newValue = readInt(QStringLiteral("zonePadding"), Defaults::ZonePadding);
+        if (m_cachedGlobalZonePadding != newValue) {
+            m_cachedGlobalZonePadding = newValue;
+            Q_EMIT globalZonePaddingChanged();
+        }
     }
-}
 
-void EditorController::refreshGlobalOuterGap()
-{
-    int newValue = SettingsDbusQueries::queryGlobalOuterGap();
-    bool newUsePerSide = SettingsDbusQueries::queryGlobalUsePerSideOuterGap();
-    int newTop = SettingsDbusQueries::queryGlobalOuterGapTop();
-    int newBottom = SettingsDbusQueries::queryGlobalOuterGapBottom();
-    int newLeft = SettingsDbusQueries::queryGlobalOuterGapLeft();
-    int newRight = SettingsDbusQueries::queryGlobalOuterGapRight();
+    // outerGap cluster — matches the old refreshGlobalOuterGap()
+    // change-detection semantics (one aggregate signal covers any field
+    // changing).
+    {
+        const int newValue = readInt(QStringLiteral("outerGap"), Defaults::OuterGap);
+        const bool newUsePerSide = readBool(QStringLiteral("usePerSideOuterGap"), false);
+        const int newTop = readInt(QStringLiteral("outerGapTop"), Defaults::OuterGap);
+        const int newBottom = readInt(QStringLiteral("outerGapBottom"), Defaults::OuterGap);
+        const int newLeft = readInt(QStringLiteral("outerGapLeft"), Defaults::OuterGap);
+        const int newRight = readInt(QStringLiteral("outerGapRight"), Defaults::OuterGap);
 
-    bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
-        || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
-        || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
+        const bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
+            || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
+            || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
 
-    m_cachedGlobalOuterGap = newValue;
-    m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
-    m_cachedGlobalOuterGapTop = newTop;
-    m_cachedGlobalOuterGapBottom = newBottom;
-    m_cachedGlobalOuterGapLeft = newLeft;
-    m_cachedGlobalOuterGapRight = newRight;
+        m_cachedGlobalOuterGap = newValue;
+        m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
+        m_cachedGlobalOuterGapTop = newTop;
+        m_cachedGlobalOuterGapBottom = newBottom;
+        m_cachedGlobalOuterGapLeft = newLeft;
+        m_cachedGlobalOuterGapRight = newRight;
 
-    if (changed) {
-        Q_EMIT globalOuterGapChanged();
+        if (changed) {
+            Q_EMIT globalOuterGapChanged();
+        }
     }
-}
 
-void EditorController::refreshGlobalOverlayDisplayMode()
-{
-    int newValue = SettingsDbusQueries::queryGlobalOverlayDisplayMode();
-
-    if (m_cachedGlobalOverlayDisplayMode != newValue) {
-        m_cachedGlobalOverlayDisplayMode = newValue;
-        Q_EMIT globalOverlayDisplayModeChanged();
+    // overlayDisplayMode
+    {
+        const int newValue = readInt(QStringLiteral("overlayDisplayMode"), ConfigDefaults::overlayDisplayMode());
+        if (m_cachedGlobalOverlayDisplayMode != newValue) {
+            m_cachedGlobalOverlayDisplayMode = newValue;
+            Q_EMIT globalOverlayDisplayModeChanged();
+        }
     }
 }
 

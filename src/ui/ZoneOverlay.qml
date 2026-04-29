@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -37,6 +38,16 @@ Window {
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
     property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
+    // Idle state: drag-end leaves the QQuickWindow alive (avoids the
+    // NVIDIA vkDestroyDevice deadlock — see OverlayService::setIdleForDragPause)
+    // but we still need the overlay to visually disappear and stop
+    // absorbing pointer input until the next drag. Binding
+    // Qt.WindowTransparentForInput into `flags` gets Qt Wayland to call
+    // wl_surface.set_input_region with an empty region in-place, without
+    // destroying the surface. Toggling content.visible stops the scene
+    // graph from submitting new frames. C++ flips this via
+    // writeQmlProperty(window, "_idled", true/false).
+    property bool _idled: false
 
     function flash() {
         flashAnimation.start();
@@ -81,7 +92,7 @@ Window {
     }
 
     // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (root._idled ? Qt.WindowTransparentForInput : 0)
     color: "transparent"
     // Start hidden; OverlayService controls visibility via show()/hide().
     visible: false
@@ -91,6 +102,7 @@ Window {
         id: content
 
         anchors.fill: parent
+        visible: !root._idled
 
         // Debug background to verify overlay is showing
         Rectangle {
@@ -259,13 +271,12 @@ Window {
             SequentialAnimation {
                 id: flashAnimation
 
-                NumberAnimation {
+                PhosphorMotionAnimation {
                     target: flashOverlay
-                    property: "opacity"
+                    properties: "opacity"
                     from: 0.3
                     to: 0
-                    duration: 300
-                    easing.type: Easing.OutQuad
+                    profile: "zone.flash"
                 }
 
             }

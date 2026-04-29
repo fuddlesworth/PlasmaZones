@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorZones/AssignmentEntry.h>
 #include <QObject>
 #include <QVariantList>
 
@@ -26,8 +27,8 @@ public:
 
     QVariantList screens() const;
 
-    bool isMonitorDisabled(const QString& screenName) const;
-    void setMonitorDisabled(const QString& screenName, bool disabled);
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName) const;
+    void setMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName, bool disabled);
 
     /// Call in KCM constructor to connect D-Bus screen change signals
     void connectToDaemonSignals();
@@ -37,7 +38,10 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void screensChanged();
-    void disabledMonitorsChanged();
+    // Note: there is no disabledMonitorsChanged here. The canonical source is
+    // ISettings::disabledMonitorsChanged(Mode), which Settings emits on every
+    // write (in-process or via load() reparse). SettingsController forwards
+    // that signal to QML; ScreenHelper only needs to mark dirty via needsSave().
     void needsSave();
 
 private:

@@ -7,14 +7,14 @@
 #include <QJsonArray>
 #include <QScopedPointer>
 
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 #include "config/configdefaults.h"
 
 using namespace PlasmaZones;
 
 /**
- * @brief Unit tests for TilingState focus tracking, serialization, clear, and utility methods.
+ * @brief Unit tests for PhosphorTiles::TilingState focus tracking, serialization, clear, and utility methods.
  *
  * Tests cover:
  * - Focus tracking (default, set/get, untracked, clear, signals, focusedTiledIndex)
@@ -35,13 +35,13 @@ private Q_SLOTS:
 
     void testFocusedWindow_default()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(state.focusedWindow().isEmpty());
     }
 
     void testFocusedWindow_setAndGet()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
 
@@ -54,7 +54,7 @@ private Q_SLOTS:
 
     void testFocusedWindow_untrackedIgnored()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.setFocusedWindow(QStringLiteral("A"));
 
@@ -65,7 +65,7 @@ private Q_SLOTS:
 
     void testFocusedWindow_clearFocus()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.setFocusedWindow(QStringLiteral("A"));
 
@@ -76,28 +76,28 @@ private Q_SLOTS:
 
     void testFocusedWindow_signal()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
-        QSignalSpy focusSpy(&state, &TilingState::focusedWindowChanged);
+        QSignalSpy focusSpy(&state, &PhosphorTiles::TilingState::focusedWindowChanged);
         state.setFocusedWindow(QStringLiteral("A"));
         QCOMPARE(focusSpy.count(), 1);
     }
 
     void testFocusedWindow_noSignalOnSameValue()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.setFocusedWindow(QStringLiteral("A"));
 
-        QSignalSpy focusSpy(&state, &TilingState::focusedWindowChanged);
+        QSignalSpy focusSpy(&state, &PhosphorTiles::TilingState::focusedWindowChanged);
         state.setFocusedWindow(QStringLiteral("A"));
         QCOMPARE(focusSpy.count(), 0);
     }
 
     void testFocusedTiledIndex_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -111,7 +111,7 @@ private Q_SLOTS:
 
     void testFocusedTiledIndex_noFocus()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QCOMPARE(state.focusedTiledIndex(), -1);
@@ -119,7 +119,7 @@ private Q_SLOTS:
 
     void testFocusedTiledIndex_floatingFocused()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.setFocusedWindow(QStringLiteral("A"));
@@ -131,7 +131,7 @@ private Q_SLOTS:
 
     void testFocusedTiledIndex_skipsFloating()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B")); // will be floating
         state.addWindow(QStringLiteral("C"));
@@ -148,7 +148,7 @@ private Q_SLOTS:
 
     void testSerialization_roundtrip()
     {
-        TilingState state(QStringLiteral("monitor1"));
+        PhosphorTiles::TilingState state(QStringLiteral("monitor1"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -159,7 +159,7 @@ private Q_SLOTS:
 
         QJsonObject json = state.toJson();
 
-        QScopedPointer<TilingState> restored(TilingState::fromJson(json));
+        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
         QVERIFY(!restored.isNull());
 
         QCOMPARE(restored->screenId(), QStringLiteral("monitor1"));
@@ -174,10 +174,10 @@ private Q_SLOTS:
 
     void testSerialization_emptyState()
     {
-        TilingState state(QStringLiteral("empty"));
+        PhosphorTiles::TilingState state(QStringLiteral("empty"));
         QJsonObject json = state.toJson();
 
-        QScopedPointer<TilingState> restored(TilingState::fromJson(json));
+        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
         QVERIFY(!restored.isNull());
         QCOMPARE(restored->screenId(), QStringLiteral("empty"));
         QCOMPARE(restored->windowCount(), 0);
@@ -189,7 +189,7 @@ private Q_SLOTS:
     {
         // Missing screenName should return nullptr
         QJsonObject invalidJson;
-        QScopedPointer<TilingState> result(TilingState::fromJson(invalidJson));
+        QScopedPointer<PhosphorTiles::TilingState> result(PhosphorTiles::TilingState::fromJson(invalidJson));
         QVERIFY(result.isNull());
     }
 
@@ -203,13 +203,13 @@ private Q_SLOTS:
         json[QStringLiteral("masterCount")] = 99; // Way too high
         json[QStringLiteral("splitRatio")] = 5.0; // Way too high
 
-        QScopedPointer<TilingState> restored(TilingState::fromJson(json));
+        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
         QVERIFY(!restored.isNull());
 
         // masterCount should be clamped to MaxMasterCount (absolute limit, not window count)
-        QCOMPARE(restored->masterCount(), AutotileDefaults::MaxMasterCount);
+        QCOMPARE(restored->masterCount(), PhosphorTiles::AutotileDefaults::MaxMasterCount);
         // splitRatio should be clamped to MaxSplitRatio (0.9)
-        QVERIFY(qFuzzyCompare(restored->splitRatio(), AutotileDefaults::MaxSplitRatio));
+        QVERIFY(qFuzzyCompare(restored->splitRatio(), PhosphorTiles::AutotileDefaults::MaxSplitRatio));
     }
 
     void testSerialization_invalidFloatingIgnored()
@@ -223,7 +223,7 @@ private Q_SLOTS:
         json[QStringLiteral("masterCount")] = 1;
         json[QStringLiteral("splitRatio")] = 0.5;
 
-        QScopedPointer<TilingState> restored(TilingState::fromJson(json));
+        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
         QVERIFY(!restored.isNull());
 
         // Invalid floating window should be ignored
@@ -238,7 +238,7 @@ private Q_SLOTS:
 
     void testClear_resetsAll()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.setFloating(QStringLiteral("A"), true);
@@ -259,17 +259,17 @@ private Q_SLOTS:
 
     void testClear_emitsSignals()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.setFocusedWindow(QStringLiteral("A"));
         state.setMasterCount(3);
         state.setSplitRatio(0.8);
 
-        QSignalSpy countSpy(&state, &TilingState::windowCountChanged);
-        QSignalSpy focusSpy(&state, &TilingState::focusedWindowChanged);
-        QSignalSpy masterSpy(&state, &TilingState::masterCountChanged);
-        QSignalSpy ratioSpy(&state, &TilingState::splitRatioChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy countSpy(&state, &PhosphorTiles::TilingState::windowCountChanged);
+        QSignalSpy focusSpy(&state, &PhosphorTiles::TilingState::focusedWindowChanged);
+        QSignalSpy masterSpy(&state, &PhosphorTiles::TilingState::masterCountChanged);
+        QSignalSpy ratioSpy(&state, &PhosphorTiles::TilingState::splitRatioChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.clear();
 
@@ -284,17 +284,17 @@ private Q_SLOTS:
 
     void testClear_noSignalIfAlreadyDefault()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         // State is already at defaults — clear() returns early, no signals
 
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
         state.clear();
         QCOMPARE(stateSpy.count(), 0);
     }
 
     void testClear_preservesScreenName()
     {
-        TilingState state(QStringLiteral("myScreen"));
+        PhosphorTiles::TilingState state(QStringLiteral("myScreen"));
         state.addWindow(QStringLiteral("A"));
         state.clear();
 
@@ -308,7 +308,7 @@ private Q_SLOTS:
 
     void testCalculatedZones_setAndGet()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVector<QRect> zones = {QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)};
 
         state.setCalculatedZones(zones);
@@ -317,7 +317,7 @@ private Q_SLOTS:
 
     void testCalculatedZones_defaultEmpty()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(state.calculatedZones().isEmpty());
     }
 
@@ -327,7 +327,7 @@ private Q_SLOTS:
 
     void testWindowIndex_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
 
@@ -338,7 +338,7 @@ private Q_SLOTS:
 
     void testWindowPosition_aliasForIndex()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("X"));
 
         QCOMPARE(state.windowPosition(QStringLiteral("X")), state.windowIndex(QStringLiteral("X")));
@@ -347,7 +347,7 @@ private Q_SLOTS:
 
     void testContainsWindow_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QVERIFY(state.containsWindow(QStringLiteral("A")));

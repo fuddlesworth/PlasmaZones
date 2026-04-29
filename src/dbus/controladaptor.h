@@ -12,14 +12,26 @@
 #include <QString>
 #include <QStringList>
 
+namespace PhosphorZones {
+class Zone;
+class LayoutRegistry;
+}
+
 namespace PlasmaZones {
 
 class WindowTrackingAdaptor;
+class SnapAdaptor;
 class LayoutAdaptor;
-class AutotileEngine;
-class LayoutManager;
+
+// Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+} // namespace PlasmaZones
+namespace PhosphorEngineApi {
+class IPlacementEngine;
+}
+namespace Phosphor::Screens {
 class ScreenManager;
-class Zone;
+}
+namespace PlasmaZones {
 
 /**
  * @brief D-Bus adaptor for high-level convenience API
@@ -36,9 +48,20 @@ class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Control")
 
 public:
-    explicit ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                            AutotileEngine* autotileEngine, ScreenManager* screenManager, QObject* parent = nullptr);
+    explicit ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
+                            PhosphorZones::LayoutRegistry* layoutManager,
+                            PhosphorEngineApi::IPlacementEngine* autotileEngine,
+                            Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
+
+    /// Null every borrowed pointer. Called from Daemon::stop() before the
+    /// unique_ptr members that own these objects run their destructors
+    /// (the adaptor is Qt-parented to the daemon, so ~QObject — which
+    /// destroys us — would otherwise run AFTER those unique_ptrs, leaving
+    /// every m_* member dangling). Each public slot guards on null so the
+    /// adaptor degrades to a no-op instead of UAF when a queued D-Bus
+    /// call lands post-detach.
+    void detach();
 
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -50,7 +73,7 @@ public Q_SLOTS:
     /**
      * @brief Snap a window to a specific zone in a layout
      * @param windowId Window to snap
-     * @param zoneNumber Zone number (1-indexed)
+     * @param zoneNumber PhosphorZones::Zone number (1-indexed)
      * @param screenId Screen for geometry resolution (empty = primary)
      * @note Resolves the zone from the screen's current layout
      */
@@ -79,10 +102,11 @@ public Q_SLOTS:
 
 private:
     WindowTrackingAdaptor* m_wta;
+    SnapAdaptor* m_snapAdaptor;
     LayoutAdaptor* m_layoutAdaptor;
-    LayoutManager* m_layoutManager;
-    AutotileEngine* m_autotileEngine;
-    ScreenManager* m_screenManager;
+    PhosphorZones::LayoutRegistry* m_layoutManager;
+    PhosphorEngineApi::IPlacementEngine* m_autotileEngine;
+    Phosphor::Screens::ScreenManager* m_screenManager;
     QPointer<QFutureWatcher<QString>> m_reportWatcher;
 };
 

@@ -1,0 +1,5 @@
+{
+  "name": "osd.show",
+  "duration": 150,
+  "curve": "cubic-out"
+}

@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Shared zone preview component for rendering layout zones
@@ -57,7 +58,11 @@ Item {
     /// raw geometry is rendered as-is. Set from algorithm metadata
     /// (@producesOverlappingZones) rather than auto-detected at runtime.
     property bool producesOverlappingZones: false
-    /// Animation duration in milliseconds
+    /// DEPRECATED — vestigial post-PR-344. Was Animation duration in ms
+    /// per Behavior; durations now come from the profile registry (see
+    /// `PhosphorAnimation::ProfilePaths::Widget*` and `zone.highlight`).
+    /// Kept as a no-op accept so `LayoutCard.qml` and `AlgorithmPreview.qml`
+    /// binding sites don't break.
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
     property bool interactive: false
@@ -105,13 +110,16 @@ Item {
             required property var modelData
             required property int index
             // Parse relative geometry — clamp to [0, 1] to handle fixed-geometry
-            // layouts whose reference screen differs from current (zones can exceed 1.0)
-            property var relGeo: modelData.relativeGeometry || {
-            }
-            property real relX: Math.max(0, Math.min(relGeo.x || 0, 1))
-            property real relY: Math.max(0, Math.min(relGeo.y || 0, 1))
-            property real relWidth: Math.max(0, Math.min(relGeo.width || 0.25, 1 - relX))
-            property real relHeight: Math.max(0, Math.min(relGeo.height || 1, 1 - relY))
+            // layouts whose reference screen differs from current (zones can exceed 1.0).
+            // Zones may come from LayoutPreview (flat x/y/w/h) or the legacy
+            // zonesToVariantList shape (nested relativeGeometry); prefer flat,
+            // fall back to nested.
+            property var relGeo: modelData.relativeGeometry || ({
+            })
+            property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
+            property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
+            property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
+            property real relHeight: Math.max(0, Math.min((modelData.height !== undefined ? modelData.height : (relGeo.height || 1)), 1 - relY))
             // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
             property bool isZoneSelected: {
                 // Highlight all zones when any is selected (highlightAllZones mode)
@@ -211,8 +219,9 @@ Item {
                 }
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: root.animationDuration
+                    PhosphorMotionAnimation {
+                        profile: "widget.fade"
+                        durationOverride: root.animationDuration
                     }
 
                 }
@@ -230,40 +239,50 @@ Item {
                 onEntered: root.zoneHovered(index)
             }
 
-            // Animations
+            // Animations — durationOverride binds to root.animationDuration
+            // so consumer Items that override the default 150 ms (LayoutCard,
+            // AlgorithmPreview) still drive the timing here.
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
             Behavior on scale {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.2
+                // OutBack overshoot=1.20 feel — restored faithfully via the
+                // osd-pop curve referenced through zone.highlight-pop.
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight-pop"
+                    durationOverride: root.animationDuration
                 }
 
             }
 
+            // Border feedback uses the half-duration zone.highlight-border
+            // profile so the border snaps in twice as fast as the fill —
+            // matches the pre-PR-344 `duration: animationDuration / 2` shape.
             Behavior on border.color {
-                ColorAnimation {
-                    duration: root.animationDuration / 2
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight-border"
+                    durationOverride: root.animationDuration / 2
                 }
 
             }
 
             Behavior on border.width {
-                NumberAnimation {
-                    duration: root.animationDuration / 2
+                PhosphorMotionAnimation {
+                    profile: "zone.highlight-border"
+                    durationOverride: root.animationDuration / 2
                 }
 
             }
@@ -281,8 +300,8 @@ Item {
             required property int index
             readonly property var relGeo: modelData.relativeGeometry || ({
             })
-            readonly property real relX: relGeo.x || 0
-            readonly property real relY: relGeo.y || 0
+            readonly property real relX: modelData.x !== undefined ? modelData.x : (relGeo.x || 0)
+            readonly property real relY: modelData.y !== undefined ? modelData.y : (relGeo.y || 0)
             readonly property real leftOffset: relX < 0.01 ? root.edgeGap : root.zonePadding / 2
             readonly property real topOffset: relY < 0.01 ? root.edgeGap : root.zonePadding / 2
 

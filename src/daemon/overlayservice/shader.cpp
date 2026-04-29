@@ -3,17 +3,21 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "../cavaservice.h"
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
-#include "../../core/layout.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../../core/utils.h"
 #include "../../core/shaderregistry.h"
 #include "../rendering/zonelabeltexturebuilder.h"
+#include "pz_roles.h"
+
+#include <PhosphorLayer/ILayerShellTransport.h>
+#include <PhosphorLayer/Surface.h>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
-#include <QQmlContext>
 #include <QMutexLocker>
 #include <QTimer>
 #include <QImage>
@@ -22,7 +26,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include "../../core/layersurface.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -59,20 +63,10 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& size,
                                        const IZoneVisualizationSettings* settings)
 {
-    const QColor labelFontColor = settings ? settings->labelFontColor() : QColor(Qt::white);
-    QColor backgroundColor = Qt::black;
-    if (settings) {
-        backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
-    }
-    const QString fontFamily = settings ? settings->labelFontFamily() : QString();
-    const qreal fontSizeScale = settings ? settings->labelFontSizeScale() : 1.0;
-    const int fontWeight = settings ? settings->labelFontWeight() : QFont::Bold;
-    const bool fontItalic = settings ? settings->labelFontItalic() : false;
-    const bool fontUnderline = settings ? settings->labelFontUnderline() : false;
-    const bool fontStrikeout = settings ? settings->labelFontStrikeout() : false;
-    QImage labelsImage =
-        ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor, fontFamily, fontSizeScale,
-                                       fontWeight, fontItalic, fontUnderline, fontStrikeout);
+    const LabelFontSettings lfs = extractLabelFontSettings(settings);
+    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor,
+                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
+                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
@@ -89,8 +83,7 @@ QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& s
 bool OverlayService::canUseShaders() const
 {
 #ifdef PLASMAZONES_SHADERS_ENABLED
-    auto* registry = ShaderRegistry::instance();
-    return registry && registry->shadersEnabled();
+    return m_shaderRegistry && m_shaderRegistry->shadersEnabled();
 #else
     return false;
 #endif
@@ -98,14 +91,56 @@ bool OverlayService::canUseShaders() const
 
 bool OverlayService::useShaderForScreen(QScreen* screen) const
 {
+    if (!screen) {
+        return false;
+    }
+    // Resolve to virtual screen ID when the physical screen has subdivisions,
+    // so shader-type checks use the correct per-virtual-screen layout.
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    auto* mgr = m_screenManager;
+    if (mgr && mgr->hasVirtualScreens(physId)) {
+        // Check all virtual screens — if any uses a shader, return true.
+        // This is used by initializeOverlay which creates per-virtual-screen windows.
+        const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+        for (const QString& vsId : vsIds) {
+            if (useShaderForScreen(vsId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return useShaderForScreen(physId);
+}
+
+bool OverlayService::anyScreenUsesShader() const
+{
     if (!canUseShaders()) {
         return false;
     }
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    Layout* screenLayout = resolveScreenLayout(screen);
-    if (!screenLayout || ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
+    for (const QString& screenId : m_screenStates.keys()) {
+        if (useShaderForScreen(screenId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool OverlayService::useShaderForScreen(const QString& screenId) const
+{
+    if (!canUseShaders()) {
+        return false;
+    }
+    if (m_settings && !m_settings->enableShaderEffects()) {
+        return false;
+    }
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
+    if (!screenLayout) {
+        return false;
+    }
+    if (ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
         return false;
     }
 
@@ -121,24 +156,7 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
         }
     }
 
-    auto* registry = ShaderRegistry::instance();
-    return registry && registry->shader(screenLayout->shaderId()).isValid();
-}
-
-bool OverlayService::anyScreenUsesShader() const
-{
-    if (!canUseShaders()) {
-        return false;
-    }
-    if (m_settings && !m_settings->enableShaderEffects()) {
-        return false;
-    }
-    for (auto* screen : m_overlayWindows.keys()) {
-        if (useShaderForScreen(screen)) {
-            return true;
-        }
-    }
-    return false;
+    return m_shaderRegistry && m_shaderRegistry->shader(screenLayout->shaderId()).isValid();
 }
 
 void OverlayService::startShaderAnimation()
@@ -157,8 +175,8 @@ void OverlayService::startShaderAnimation()
 
     // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
     // Just sync config in case frame rate changed since CAVA was started.
-    if (m_cavaService && m_cavaService->isRunning() && m_settings) {
-        m_cavaService->setFramerate(frameRate);
+    if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
+        m_audioProvider->setFramerate(frameRate);
     }
 
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
@@ -168,7 +186,8 @@ void OverlayService::stopShaderAnimation()
 {
     // Don't stop CAVA here — it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
-    for (auto* window : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().overlayWindow;
         if (window) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
         }
@@ -187,8 +206,8 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
-        auto* window = it.value();
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (window && useShaderForScreen(it.key())) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
         }
@@ -211,12 +230,16 @@ void OverlayService::updateShaderUniforms()
         currentTime = m_shaderTimer.elapsed();
     }
 
-    const float iTime = currentTime / 1000.0f;
+    // Keep iTime as double through the whole pipeline. ZoneShaderNodeRhi splits
+    // it into iTime (wrapped) + iTimeHi at the final GPU upload — see
+    // kShaderTimeWrap. Casting to float32 here would requantize the counter
+    // before the wrap, reintroducing the freezing bug at long uptimes.
+    const double iTime = static_cast<double>(currentTime) / 1000.0;
 
     // Calculate delta time with clamp (max 100ms prevents jumps after sleep/resume)
     constexpr float maxDelta = 0.1f;
     const qint64 lastTime = m_lastFrameTime.exchange(currentTime);
-    float iTimeDelta = qMin((currentTime - lastTime) / 1000.0f, maxDelta);
+    float iTimeDelta = qMin(static_cast<float>(currentTime - lastTime) / 1000.0f, maxDelta);
 
     // Prevent frame counter overflow (reset at 1 billion, ~193 days at 60fps)
     int frame = m_frameCount.fetch_add(1);
@@ -233,8 +256,8 @@ void OverlayService::updateShaderUniforms()
     // Skip hidden non-shader windows kept alive across hide/show cycles —
     // they don't have iTime/iFrame properties and writing to hidden windows
     // is wasted work (60Hz property writes silently dropped by QML).
-    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
-        auto* window = it.value();
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (window && window->isVisible()) {
             writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
             writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
@@ -264,7 +287,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenId.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenId);
+        screen = resolveTargetScreen(m_screenManager, screenId);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);
@@ -277,7 +300,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         return;
     }
 
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (!registry || !registry->shadersEnabled()) {
         qCDebug(lcOverlay) << "showShaderPreview: shaders not available";
         return;
@@ -297,7 +320,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     if (!m_shaderPreviewWindow || m_shaderPreviewScreen != screen) {
         destroyShaderPreviewWindow();
-        createShaderPreviewWindow(screen);
+        createShaderPreviewWindow(screen, screenId);
     }
 
     if (!m_shaderPreviewWindow) {
@@ -306,32 +329,35 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     m_shaderPreviewScreen = screen;
     m_shaderPreviewShaderId = shaderId;
+    m_shaderPreviewScreenId = screenId;
 
-    auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-    if (!layerSurface) {
-        qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
+    auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr;
+    if (!handle) {
+        qCWarning(lcOverlay) << "showShaderPreview: no transport handle for preview surface"
                              << "— layer-shell may have been lost (compositor restart?)."
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
-        createShaderPreviewWindow(screen);
-        if (!m_shaderPreviewWindow) {
+        createShaderPreviewWindow(screen, screenId);
+        if (!m_shaderPreviewSurface || !m_shaderPreviewWindow) {
+            // Belt-and-braces: createShaderPreviewWindow sets both fields
+            // atomically, but a future refactor that split them could leave
+            // a non-null surface with a null window — `setWidth` on a null
+            // window would crash. Guard both.
             return;
         }
-        layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-        if (!layerSurface) {
-            qCWarning(lcOverlay) << "showShaderPreview: recreated window still has no LayerSurface — aborting";
+        handle = m_shaderPreviewSurface->transport();
+        if (!handle) {
+            qCWarning(lcOverlay) << "showShaderPreview: recreated surface still has no transport — aborting";
             return;
         }
     }
 
     {
-        const QRect screenGeom = screen->geometry();
-        const int localX = x - screenGeom.x();
-        const int localY = y - screenGeom.y();
-        // Batch anchors + margins into a single propertiesChanged() emission
-        LayerSurface::BatchGuard batch(layerSurface);
-        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+        // For virtual screens, margins are relative to the physical screen origin,
+        // not the virtual screen origin (LayerShell positions within the physical output).
+        const auto placement = layerPlacementAt(QPoint(x, y), screen->geometry());
+        handle->setAnchors(placement.anchors);
+        handle->setMargins(placement.margins);
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -354,8 +380,14 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
 
-    // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade)
-    applyShaderInfoToWindow(m_shaderPreviewWindow, info, shaderParams);
+    // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade).
+    // Pass the preview's sub-rect + the containing physical screen so a
+    // wallpaper-consuming shader samples the portion of the wallpaper that
+    // actually sits behind the preview rect — mirrors the VS-cropping path
+    // in overlay.cpp so preview and live overlay agree pixel-for-pixel.
+    const QRect previewSubGeom(x, y, width, height);
+    const QRect previewPhysGeom = screen->geometry();
+    applyShaderInfoToWindow(m_shaderPreviewWindow, info, shaderParams, previewSubGeom, previewPhysGeom);
 
     // Start iTime animation for preview (shared timer with main overlay)
     // Must start m_shaderTimer - updateShaderUniforms() uses it and returns early if invalid
@@ -380,11 +412,10 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             // Size only — position is controlled by layer-surface anchors + margins.
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
-            if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
-                const QRect screenGeom = screen->geometry();
-                const int localX = x - screenGeom.x();
-                const int localY = y - screenGeom.y();
-                layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+            if (auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr) {
+                // Margins are relative to the physical screen origin (LayerShell).
+                // Anchors were baked in at attach; only margins mutate here.
+                handle->setMargins(layerPlacementAt(QPoint(x, y), screen->geometry()).margins);
             }
         }
     }
@@ -412,56 +443,58 @@ void OverlayService::hideShaderPreview()
     destroyShaderPreviewWindow();
 }
 
-void OverlayService::createShaderPreviewWindow(QScreen* screen)
+void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& screenId)
 {
-    if (m_shaderPreviewWindow) {
+    if (m_shaderPreviewSurface) {
         return;
     }
-
-    m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
     QVariantMap initProps;
     initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
+    initProps.insert(QStringLiteral("isShaderOverlay"), true);
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen,
-                                   "shader preview overlay", initProps);
-    if (!window) {
-        qCWarning(lcOverlay) << "Failed to create shader preview overlay window";
+    // Unique-per-instance scope to avoid compositor-side rate limiting when the
+    // editor rapidly opens/closes the Shader Settings dialog. Routes through
+    // makePerInstanceRole so the per-instance prefix is guaranteed by
+    // construction to start with PzRoles::ShaderPreview's base — even though
+    // the SurfaceAnimator deliberately doesn't register a config for this
+    // role (editor-controlled imperative show/hide), keeping construction
+    // uniform across every per-instance role keeps a future migration cheap.
+    const QString scopeId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    const auto role =
+        PzRoles::makePerInstanceRole(PzRoles::ShaderPreview, scopeId, m_surfaceManager->nextScopeGeneration());
+
+    auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")),
+                                        .screen = screen,
+                                        .role = role,
+                                        .windowType = "shader preview overlay",
+                                        .windowProperties = initProps});
+    if (!surface) {
         return;
     }
 
-    window->setProperty("isShaderOverlay", true);
-
-    if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-shader-preview-%1-%2")
-                                   .arg(Utils::screenIdentifier(screen))
-                                   .arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << screen->name();
-        delete window;
-        return;
-    }
-
-    m_shaderPreviewWindow = window;
+    m_shaderPreviewSurface = surface;
+    m_shaderPreviewWindow = surface->window();
     m_shaderPreviewScreen = screen;
-    window->setVisible(false);
+    // Surface starts in State::Hidden (warmed) — caller flips visible later.
 }
 
 void OverlayService::destroyShaderPreviewWindow()
 {
-    if (m_shaderPreviewWindow) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        if (m_shaderPreviewScreen) {
+    if (m_shaderPreviewSurface) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're tearing down.
+        if (m_shaderPreviewScreen && m_shaderPreviewWindow) {
             disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
         }
-        m_shaderPreviewWindow->close();
-        m_shaderPreviewWindow->destroy();
-        m_shaderPreviewWindow->deleteLater();
+        m_shaderPreviewSurface->deleteLater();
+        m_shaderPreviewSurface = nullptr;
         m_shaderPreviewWindow = nullptr;
     }
     m_shaderPreviewScreen = nullptr;
     m_shaderPreviewShaderId.clear();
+    m_shaderPreviewScreenId.clear();
     // Stop shader timer only if main overlay is also not visible
     if (!m_visible && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
         stopShaderAnimation();

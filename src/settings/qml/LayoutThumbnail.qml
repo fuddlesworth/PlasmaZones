@@ -30,12 +30,12 @@ Rectangle {
     readonly property real borderOpacity: 0.9 // Increased for better border visibility
     readonly property int normalBorderWidth: Math.round(Kirigami.Units.devicePixelRatio)
     readonly property int selectedBorderWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5) // Thicker when selected
-    // When set (> 0), overrides layout-based aspect ratio with the target monitor's
-    // actual aspect ratio — so the preview matches the physical screen shape (e.g. portrait).
+    // Override: set to a positive value to force the aspect ratio for the target screen
+    // (e.g., a virtual screen that is portrait even though the primary display is landscape).
     property real screenAspectRatio: 0
     // Aspect ratio: use the layout's intended ratio so previews show correct proportions.
     // Falls back to primary screen ratio for user-created layouts (aspectRatioClass "any" or absent).
-    readonly property real fallbackAspectRatio: (Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9)
+    readonly property real fallbackAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : ((Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9))
     readonly property real layoutAspectRatio: {
         // If a specific screen aspect ratio was provided, use it — the preview
         // should match the physical monitor shape regardless of layout class.
@@ -112,7 +112,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: Kirigami.Units.smallSpacing
-        text: root.layout ? (root.layout.name || i18n("Unnamed")) : ""
+        text: root.layout ? (root.layout.displayName || i18n("Unnamed")) : ""
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
         font.weight: isSelected ? Font.DemiBold : Font.Normal
         elide: Text.ElideRight

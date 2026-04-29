@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorTiles/AutotileConstants.h>
+
 namespace PlasmaZones {
 
 /**
@@ -46,7 +49,7 @@ enum class ZoneSelectorPosition {
 };
 
 /**
- * @brief Layout mode options for the zone selector
+ * @brief PhosphorZones::Layout mode options for the zone selector
  */
 enum class ZoneSelectorLayoutMode {
     Grid = 0, ///< Grid layout with configurable columns
@@ -62,14 +65,7 @@ enum class ZoneSelectorSizeMode {
     Manual = 1 ///< Use explicit previewWidth/previewHeight settings
 };
 
-/**
- * @brief Sticky window handling options
- */
-enum class StickyWindowHandling {
-    TreatAsNormal = 0, ///< Sticky windows follow per-desktop behavior
-    RestoreOnly = 1, ///< Allow restore, disable auto-snap
-    IgnoreAll = 2 ///< Disable restore and auto-snap
-};
+using StickyWindowHandling = PhosphorEngineApi::StickyWindowHandling;
 
 /**
  * @brief OSD style options for layout switch notifications
@@ -91,5 +87,8 @@ enum class OverlayDisplayMode {
     ZoneRectangles = 0, ///< Current behavior: full-size translucent rectangles
     LayoutPreview = 1 ///< kZones-style: small layout thumbnail per zone
 };
+
+using AutotileDragBehavior = PhosphorTiles::AutotileDragBehavior;
+using AutotileOverflowBehavior = PhosphorTiles::AutotileOverflowBehavior;
 
 } // namespace PlasmaZones

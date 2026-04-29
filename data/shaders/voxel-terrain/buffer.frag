@@ -298,7 +298,7 @@ void main() {
 
     // Camera: winding path through the world
     float dt = iTime * scrollSpeed + 50.0;
-    float roll = 0.15 * cos(0.08 * iTime);
+    float roll = 0.15 * timeCos(0.08);
     vec3 ro = cameraPath(dt) + vec3(0.0, cameraHeight, 0.0);
     vec3 ta = cameraPath(dt + 10.0) + vec3(0.0, cameraHeight - cameraTilt * 4.0, 0.0);
 

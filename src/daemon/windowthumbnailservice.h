@@ -11,7 +11,7 @@ namespace PlasmaZones {
 /**
  * @brief Captures window thumbnails via KWin ScreenShot2 D-Bus API.
  *
- * Uses kwinHandle from EffectWindow::internalId().toString() for the window handle.
+ * Uses compositorHandle from EffectWindow::internalId().toString() for the window handle.
  * Requires X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2 in daemon .desktop,
  * or KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 when desktop matching fails (e.g. local install).
  */
@@ -27,10 +27,10 @@ public:
     /**
      * @brief Capture thumbnail asynchronously; emits captureFinished when done
      */
-    void captureWindowAsync(const QString& kwinHandle, int maxSize = 256);
+    void captureWindowAsync(const QString& compositorHandle, int maxSize = 256);
 
 Q_SIGNALS:
-    void captureFinished(const QString& kwinHandle, const QString& dataUrl);
+    void captureFinished(const QString& compositorHandle, const QString& dataUrl);
 };
 
 } // namespace PlasmaZones

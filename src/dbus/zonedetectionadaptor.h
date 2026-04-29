@@ -4,45 +4,61 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
+#include <PhosphorProtocol/WireTypes.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
+namespace PhosphorZones {
+class IZoneDetector;
+class LayoutRegistry;
+}
+
 namespace PlasmaZones {
 
-class IZoneDetector;
-class ILayoutManager;
+using PhosphorProtocol::NamedZoneGeometry;
+using PhosphorProtocol::NamedZoneGeometryList;
+using PhosphorProtocol::ZoneGeometryRect;
+
 class ISettings;
 
 /**
  * @brief D-Bus adaptor for zone detection operations
  *
  * Provides D-Bus interface: org.plasmazones.ZoneDetection
- *  Zone detection queries
+ *  PhosphorZones::Zone detection queries
  *
  * Uses interface types for loose coupling
  */
-class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor
+class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor,
+                                                public PhosphorSnapEngine::IZoneAdjacencyResolver
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.ZoneDetection")
 
 public:
-    explicit ZoneDetectionAdaptor(IZoneDetector* detector, ILayoutManager* layoutManager, ISettings* settings,
+    explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::LayoutRegistry* layoutManager,
+                                  Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                   QObject* parent = nullptr);
     ~ZoneDetectionAdaptor() override = default;
 
 public Q_SLOTS:
-    // Zone detection for cursor position
+    // PhosphorZones::Zone detection for cursor position
     QString detectZoneAtPosition(int x, int y);
     QStringList detectMultiZoneAtPosition(int x, int y);
-    QString getZoneGeometry(const QString& zoneId);
-    QString getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    PlasmaZones::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
+    PlasmaZones::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
     QStringList getZonesForScreen(const QString& screenId);
 
-    // Zone navigation - get adjacent zone in a direction
+    // PhosphorZones::Zone navigation - get adjacent zone in a direction
     // direction: "left", "right", "up", "down"
-    QString getAdjacentZone(const QString& currentZoneId, const QString& direction);
+    Q_INVOKABLE QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                        const QString& screenId = QString()) const override;
 
     /**
      * @brief Get the first (edge) zone in a given direction
@@ -55,15 +71,16 @@ public Q_SLOTS:
      *   - down: bottommost zone (largest y + height)
      *
      * @param direction Direction string ("left", "right", "up", "down")
-     * @return Zone ID of the edge zone, or empty string if no zones available
+     * @return PhosphorZones::Zone ID of the edge zone, or empty string if no zones available
      */
-    QString getFirstZoneInDirection(const QString& direction, const QString& screenId = QString());
+    Q_INVOKABLE QString getFirstZoneInDirection(const QString& direction,
+                                                const QString& screenId = QString()) const override;
 
     // Get zone info by zone number (1-indexed), optionally for a specific screen
     QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());
 
     // Get all zone geometries, optionally for a specific screen
-    QStringList getAllZoneGeometries(const QString& screenId = QString());
+    PlasmaZones::NamedZoneGeometryList getAllZoneGeometries(const QString& screenId = QString());
 
     /**
      * @brief Get current keyboard modifier state
@@ -95,11 +112,12 @@ public Q_SLOTS:
     QString detectZoneWithModifiers(int x, int y);
 
 Q_SIGNALS:
-    void zoneDetected(const QString& zoneId, const QString& geometry);
+    void zoneDetected(const QString& zoneId, const PlasmaZones::ZoneGeometryRect& geometry);
 
 private:
-    IZoneDetector* m_zoneDetector; // Interface type (DIP)
-    ILayoutManager* m_layoutManager; // Interface type (DIP)
+    PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
+    PhosphorZones::LayoutRegistry* m_layoutManager; // Interface type (DIP)
+    Phosphor::Screens::ScreenManager* m_screenManager; // For VS-aware geometry / id resolution
     ISettings* m_settings; // For zonePadding setting
 };
 

@@ -1,51 +1,51 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../core/animationbootstrap.h"
 #include "../core/logging.h"
+#include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configmigration.h"
 #include "settingscontroller.h"
+#include "settingslaunchcontroller.h"
 #include "version.h"
 #include "pz_i18n.h"
 #include "pz_qml_i18n.h"
 
 #include "../core/constants.h"
 
+#include <PhosphorAnimationQml/PhosphorCurve.h>
+#include <PhosphorAnimationQml/QtQuickClockManager.h>
+
 #include <QGuiApplication>
 #include <QCommandLineParser>
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusMessage>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QScopeGuard>
 
 namespace {
 
+constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PlasmaZones::DBus::SettingsApp::ServiceName,
+                                                      PlasmaZones::DBus::SettingsApp::ObjectPath,
+                                                      PlasmaZones::DBus::SettingsApp::Interface};
+
 /// Try to forward a --page request to an already-running instance.
-/// Returns true if the running instance handled it (caller should exit).
+/// Returns true if a running instance exists (caller should exit).
+///
+/// Forwards only the page switch — does not try to raise the running window.
+/// No Wayland workaround reliably convinces KWin to bring an already-mapped
+/// xdg_toplevel to the front from a programmatic caller, so the user has to
+/// focus the existing window themselves.
 bool activateRunningInstance(const QString& page)
 {
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.isConnected())
+    if (!PlasmaZones::SingleInstanceService::isRunning(kSettingsIds))
         return false;
 
-    QDBusInterface iface(PlasmaZones::DBus::SettingsApp::ServiceName, PlasmaZones::DBus::SettingsApp::ObjectPath,
-                         PlasmaZones::DBus::SettingsApp::Interface, bus);
-    if (!iface.isValid())
-        return false;
-
-    iface.setTimeout(3000); // 3s timeout — avoid long hang if existing instance is frozen
     if (!page.isEmpty()) {
-        QDBusMessage pageReply = iface.call(QStringLiteral("setActivePage"), page);
-        if (pageReply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to forward page to running instance:" << pageReply.errorMessage();
-        }
+        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
     }
-    QDBusMessage reply = iface.call(QStringLiteral("raise"));
-    if (reply.type() == QDBusMessage::ErrorMessage)
-        return false;
     return true;
 }
 
@@ -53,6 +53,18 @@ bool activateRunningInstance(const QString& page)
 
 int main(int argc, char* argv[])
 {
+    // Opt out of MangoHud's implicit Vulkan layer injection. MangoHud's
+    // implicit_layer manifest attaches whenever MANGOHUD=1 is in the
+    // environment (e.g. set globally for games), and its NVIDIA stat-polling
+    // thread costs ~30% CPU continuously inside this process — we are a
+    // settings UI, not a game client. Both env vars are cleared:
+    // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
+    // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
+    // Must run before QGuiApplication construction (which initializes the
+    // QtQuick render path and may load the Vulkan ICD chain).
+    qunsetenv("MANGOHUD");
+    qputenv("DISABLE_MANGOHUD", "1");
+
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
@@ -93,12 +105,41 @@ int main(int argc, char* argv[])
     // settings app may start before the daemon on first upgrade).
     PlasmaZones::ConfigMigration::ensureJsonConfig();
 
+    // Bootstrap the per-process PhosphorProfileRegistry so QML
+    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve against the
+    // shipped data/profiles JSONs. Without this the registry stays empty in
+    // the settings process and every animation falls back to the library
+    // default 150 ms — see AnimationBootstrap docs for the full rationale.
+    // Must outlive the QML engine (Behavior bindings keep registry handles).
+    PlasmaZones::AnimationBootstrap animationBootstrap;
+
+    // Publish the bootstrap-owned registries + a fresh clock manager as
+    // the QML-side defaults. Phase A3 of the architecture refactor
+    // retired the prior `PhosphorProfileRegistry::instance()` /
+    // `QtQuickClockManager::instance()` Meyers singletons — composition
+    // roots own and publish their own.
+    PhosphorAnimation::QtQuickClockManager clockManager;
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(animationBootstrap.curveRegistry());
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(animationBootstrap.profileRegistry());
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(&clockManager);
+    auto unpublishAnimationDefaults = qScopeGuard([] {
+        PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
+        PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
+        PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+    });
+
     PlasmaZones::SettingsController controller;
+
+    // The launch controller owns the D-Bus single-instance lifecycle. Holds a
+    // non-owning pointer to `controller`, which must outlive it (guaranteed by
+    // reverse destruction order: `controller` is declared first and destroyed
+    // last).
+    PlasmaZones::SettingsLaunchController launcher(&controller);
 
     // Register D-Bus service so future launches can forward to us.
     // If registration fails, another instance registered between our
     // activateRunningInstance() check and now — retry forwarding and exit.
-    if (!controller.registerDBusService()) {
+    if (!launcher.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
         if (activateRunningInstance(requestedPage)) {
             return 0;

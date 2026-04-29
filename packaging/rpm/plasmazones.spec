@@ -16,7 +16,7 @@ Version:        0.0.0
 Release:        1%{?dist}
 Summary:        Window tiling and autotiling for KDE Plasma
 
-License:        GPL-3.0-or-later
+License:        GPL-3.0-or-later AND LGPL-2.1-or-later
 URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
@@ -154,6 +154,7 @@ echo ""
 
 %files
 %license LICENSE
+%license COPYING.LESSER
 %doc README.md
 
 # Executables
@@ -163,14 +164,56 @@ echo ""
 %{_bindir}/plasmazones-report
 
 # Libraries
+%{_libdir}/libPhosphorLayoutApi.so*
+%{_libdir}/libPhosphorZones.so*
+%{_libdir}/libPhosphorIdentity.so*
+%{_libdir}/libPhosphorTiles.so*
+%{_libdir}/libPhosphorConfig.so*
+%{_libdir}/libPhosphorShell.so*
+%{_libdir}/libPhosphorRendering.so*
+%{_libdir}/libPhosphorLayer.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
-# Layer-shell QPA plugin
-%{_libdir}/qt6/plugins/wayland-shell-integration/pz-layer-shell.so
+# Layer-shell QPA plugin (PhosphorShell)
+%{_libdir}/qt6/plugins/wayland-shell-integration/phosphorshell-qpa.so
+
+# PhosphorLayoutApi development headers and CMake config
+%{_includedir}/PhosphorLayoutApi/
+%{_libdir}/cmake/PhosphorLayoutApi/
+
+# PhosphorZones development headers and CMake config
+%{_includedir}/PhosphorZones/
+%{_libdir}/cmake/PhosphorZones/
+
+# PhosphorIdentity development headers and CMake config
+%{_includedir}/PhosphorIdentity/
+%{_libdir}/cmake/PhosphorIdentity/
+
+# PhosphorTiles development headers and CMake config
+%{_includedir}/PhosphorTiles/
+%{_libdir}/cmake/PhosphorTiles/
+
+# PhosphorConfig development headers and CMake config
+%{_includedir}/PhosphorConfig/
+%{_libdir}/cmake/PhosphorConfig/
+
+# PhosphorShell development headers, CMake config, and runtime data
+# (bundled shaders + wayland protocol XMLs installed to _datadir/phosphorshell/).
+%{_includedir}/PhosphorShell/
+%{_libdir}/cmake/PhosphorShell/
+%{_datadir}/phosphorshell/
+
+# PhosphorRendering development headers and CMake config
+%{_includedir}/PhosphorRendering/
+%{_libdir}/cmake/PhosphorRendering/
+
+# PhosphorLayer development headers and CMake config
+%{_includedir}/PhosphorLayer/
+%{_libdir}/cmake/PhosphorLayer/
 
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so

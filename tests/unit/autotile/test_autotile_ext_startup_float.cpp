@@ -5,13 +5,15 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/AutotileConfig.h"
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include "../helpers/AutotileTestHelpers.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief Extended tests for startup/init and float/unfloat behaviors
@@ -24,7 +26,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     // =========================================================================
@@ -33,7 +35,7 @@ private Q_SLOTS:
 
     void testStartup_pendingOrderTimeoutCleansUp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -43,7 +45,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(QStringLiteral("win1")));
 
@@ -55,11 +57,11 @@ private Q_SLOTS:
 
     void testStartup_coalescedRetileFromBurstWindowOpens()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         engine.windowOpened(QStringLiteral("win1"), screen);
         engine.windowOpened(QStringLiteral("win2"), screen);
@@ -69,21 +71,21 @@ private Q_SLOTS:
 
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
         QCOMPARE(state->windowCount(), 3);
     }
 
     void testStartup_pendingOrderSkipsRetileUntilWindowsArrive()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
 
         QStringList order = {QStringLiteral("win1"), QStringLiteral("win2")};
-        engine.stateForScreen(screen);
+        engine.tilingStateForScreen(screen);
         engine.setInitialWindowOrder(screen, order);
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
 
         engine.setAutotileScreens({screen});
         QCoreApplication::processEvents();
@@ -101,7 +103,7 @@ private Q_SLOTS:
 
     void testToggleWindowFloat_crossScreenFallback()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
@@ -118,7 +120,7 @@ private Q_SLOTS:
 
     void testWindowFocused_crossScreenMigration()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
@@ -126,24 +128,24 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), screen1);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(screen1);
         QVERIFY(state1->containsWindow(QStringLiteral("win1")));
 
         engine.windowFocused(QStringLiteral("win1"), screen2);
         QCoreApplication::processEvents();
 
         QVERIFY(!state1->containsWindow(QStringLiteral("win1")));
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
         QVERIFY(state2->containsWindow(QStringLiteral("win1")));
     }
 
     void testToggleWindowFloat_untrackedWindowFeedback()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedbackRequested);
+        QSignalSpy feedbackSpy(&engine, &AutotileEngine::navigationFeedback);
 
         engine.toggleWindowFloat(QStringLiteral("nonexistent"), screen);
 
@@ -160,7 +162,7 @@ private Q_SLOTS:
 
     void testSetWindowFloat_alreadyFloatedNoOp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -169,7 +171,7 @@ private Q_SLOTS:
 
         engine.floatWindow(QStringLiteral("win1"));
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state->isFloating(QStringLiteral("win1")));
 
         QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
@@ -181,7 +183,7 @@ private Q_SLOTS:
 
     void testSetWindowFloat_unfloatNonAutotileScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -190,7 +192,7 @@ private Q_SLOTS:
 
         engine.floatWindow(QStringLiteral("win1"));
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state->isFloating(QStringLiteral("win1")));
 
         engine.setAutotileScreens({});

@@ -2,22 +2,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowdragadaptor.h"
+#include "dragactivation.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
 #include "../../config/configdefaults.h"
+#include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
-#include "../../core/layoutmanager.h"
-#include "../../core/layout.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "../../core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/zoneselectorlayout.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/constants.h"
-#include "../../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -25,8 +30,25 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                                     int mouseButtons)
 {
     Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
+
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "dragStarted: empty windowId";
+        return;
+    }
+
+    if (!m_settings) {
+        return;
+    }
+
+    // Pre-parse triggers to avoid QVariantMap unboxing on every dragMoved tick
+    m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
+    m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
+    m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
+    // Ensure no stale preview carries over from a prior drag.
+    cancelDragInsertIfActive();
+
     // Check if snapping is enabled
-    if (m_settings && !m_settings->snappingEnabled()) {
+    if (!m_settings->snappingEnabled()) {
         qCInfo(lcDbusWindow) << "Snapping disabled in settings, ignoring drag";
         m_snapCancelled = true;
         m_draggedWindowId.clear();
@@ -51,13 +73,27 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_modifierConflictWarned = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
+    m_lastLoggedActivationActive = false;
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
-    m_prevTriggerHeld = false;
+    // Seeded true so the first dragMoved tick can't register a spurious
+    // rising edge when the drag was initiated with the activation trigger
+    // already held (e.g. Alt+Click, where Alt is KWin's move-window modifier
+    // and is also commonly the configured snap activation trigger). The user
+    // must perform a real release→press cycle to toggle.
+    m_prevTriggerHeld = true;
     m_overlayShown = false;
-    m_overlayScreen = nullptr;
+    // m_overlayIdled is NOT reset here. The previous drag's end sets it:
+    // a normal drop (hideOverlayAndSelector) leaves it true because the
+    // shader overlay was idled rather than destroyed — dragMoved's first
+    // activationActive tick will see idled=true and call refreshFromIdle()
+    // to repopulate zones. A destructive cleanup (hideOverlayAndClearZoneState
+    // on compositor reconnect / window-closed / context-disabled) leaves
+    // it false because the overlay window is gone and showAtPosition on
+    // the next tick will recreate it fresh.
     m_zoneSelectorShown = false;
+    m_zoneSelectorShownOn.clear();
     m_lastCursorX = 0;
     m_lastCursorY = 0;
 
@@ -81,18 +117,17 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         QScreen* screen = screenAtPoint(m_originalGeometry.center().x(), m_originalGeometry.center().y());
 
         if (screen) {
-            auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+            QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
+            if (screenId.isEmpty())
+                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
-                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
-                QString screenId = Utils::screenIdentifier(screen);
-                int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-                bool useAvail = !(layout && layout->useFullScreenGeometry());
+                LayoutComputeService::recalculateSync(
+                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId));
 
                 for (auto* zone : layout->zones()) {
-                    QRectF zoneGeom =
-                        GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-                    QRect zoneRect = GeometryUtils::snapToRect(zoneGeom);
+                    QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
+                                                                             layout, m_settings);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -112,55 +147,100 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     }
 }
 
-Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen)
+PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId)
 {
-    outScreen = screenAtPoint(x, y);
-    if (!outScreen
-        || isContextDisabled(m_settings, Utils::screenIdentifier(outScreen), m_layoutManager->currentVirtualDesktop(),
-                             m_layoutManager->currentActivity())) {
+    // Resolve effective (virtual-aware) screen ID
+    auto resolved = resolveScreenAt(QPointF(x, y));
+    outScreen = resolved.qscreen;
+    if (!outScreen) {
+        return nullptr;
+    }
+    outScreenId = resolved.screenId;
+    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
+                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        // Crosses real hide(): the overlay window is destroyed, so the "blanked
+        // but alive" invariant that m_overlayIdled documents is broken. Clear
+        // it so a later activation-return doesn't call refreshFromIdle() on a
+        // dead surface.
+        m_overlayIdled = false;
         return nullptr;
     }
 
     // Skip overlay and zone detection on autotile-managed screens
-    QString screenId = Utils::screenIdentifier(outScreen);
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(outScreenId)) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        m_overlayIdled = false;
         return nullptr;
     }
 
+    // Call showAtPosition unconditionally on every tick. OverlayService
+    // short-circuits on same-physical-monitor re-shows (compares extracted
+    // physical ids of m_currentOverlayScreenId vs the cursor's effective id),
+    // so rapid drag ticks that stay on one monitor cost only two findScreen
+    // calls and a string extract — no Vulkan churn. The adaptor-side
+    // m_overlayScreenId comparator that used to gate this was fed by the
+    // same jittery effective-id source, and its string mismatches triggered
+    // a second path into initializeOverlay even when the cursor hadn't
+    // left the physical monitor. Dropping the comparator makes
+    // OverlayService the single source of truth for "is a re-init needed".
     if (!m_overlayShown) {
-        m_overlayService->showAtPosition(x, y);
-        m_overlayShown = true;
-        m_overlayScreen = outScreen;
-    } else if (m_settings && !m_settings->showZonesOnAllMonitors() && m_overlayScreen != outScreen) {
-        // Cursor moved to different monitor - switch overlay to follow (fixes #136)
-        m_overlayService->showAtPosition(x, y);
-        m_overlayScreen = outScreen;
+        qCInfo(lcDbusWindow) << "prepareHandlerContext: show overlay at" << x << y << "screen=" << outScreenId;
     }
+    m_overlayService->showAtPosition(x, y);
+    m_overlayShown = true;
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(outScreenId);
     if (!layout) {
         return nullptr;
     }
 
-    layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, outScreen));
+    // Use virtual screen geometry for zone calculation when available
+    auto* mgr = m_screenManager;
+    QRectF effectiveGeom;
+    if (mgr) {
+        QRect vsGeom = mgr->screenGeometry(outScreenId);
+        if (vsGeom.isValid()) {
+            if (layout->useFullScreenGeometry()) {
+                effectiveGeom = QRectF(vsGeom);
+            } else {
+                QRect vsAvailGeom = mgr->screenAvailableGeometry(outScreenId);
+                effectiveGeom = vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
+            }
+        }
+    }
+    if (!effectiveGeom.isValid()) {
+        effectiveGeom = GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, outScreen);
+    }
+    LayoutComputeService::recalculateSync(layout, effectiveGeom);
     return layout;
 }
 
 void WindowDragAdaptor::hideOverlayAndClearZoneState()
 {
     // Fast path: if overlay isn't shown and zone state is already clear, skip all work.
-    // dragMoved calls this on every poll tick when no activation trigger is held, so
-    // avoiding redundant clearHighlights()/clearHighlight() calls (which may touch QML
-    // objects) prevents daemon event-loop congestion and D-Bus back-pressure on the
-    // compositor thread (see discussion #167).
+    //
+    // NOTE the asymmetry with clearOverlayForTriggerRelease()'s fast path:
+    // this method is the full-destroy variant (called from drag end /
+    // compositor reconnect / window closed), so it keys on m_overlayShown,
+    // not m_overlayIdled. When idled, m_overlayShown is true by design
+    // (the window is still alive), so we correctly proceed to the real
+    // hide() call and destroy — which is what the idle state's consumers
+    // want at real drag end anyway.
     if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
         return;
     }
 
     if (m_overlayShown && m_overlayService) {
+        qCInfo(lcDbusWindow) << "hideOverlayAndClearZoneState: hide overlay triggerHeld=false";
         m_overlayService->hide();
         m_overlayShown = false;
-        m_overlayScreen = nullptr;
     }
     if (m_zoneDetector) {
         m_zoneDetector->clearHighlights();
@@ -174,12 +254,62 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     m_currentZoneGeometry = QRect();
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
+    m_overlayIdled = false;
+}
+
+void WindowDragAdaptor::clearOverlayForTriggerRelease()
+{
+    // Mid-drag trigger release. The user let go of the activation modifier,
+    // but the drag is still live — the overlay must visually go away, but the
+    // backing QQuickWindow must STAY ALIVE. Destroying the window on every
+    // trigger toggle pays a Vulkan swap-chain teardown (~QQuickWindow blocks
+    // on the scene graph render thread) plus a labels-texture rebuild on the
+    // next show. With modifier-key thrashing mid-drag, these stacked on the
+    // main thread and stalled D-Bus dispatch long enough for kwin-effect's
+    // endDrag to time out ("daemon unresponsive") and queued shortcut events
+    // to deliver in a microsecond burst when the thread finally drained.
+    //
+    // Compare to hideOverlayAndClearZoneState() which IS destructive — that
+    // path runs on actual drag end / compositor reconnect / dragged-window
+    // closed.
+    //
+    // Intentional side effect: we clear m_currentZoneId / the zone geometry
+    // state alongside the visual blank. If the user then drops the window
+    // while the trigger is still released, dragStopped captures an empty
+    // zone and the window lands at its release position with no snap. This
+    // matches the activation-trigger contract — "hold the trigger to snap,
+    // release to float-drop" — and is the same behavior the legacy
+    // destructive hide path produced. Intentional, not a regression.
+
+    // Fast path: already idled and zone state already clear. dragMoved still
+    // calls us on every tick while the trigger is released, so this hot loop
+    // must be cheap.
+    if (m_overlayIdled && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
+        return;
+    }
+
+    if (m_overlayService) {
+        m_overlayService->setIdleForDragPause();
+    }
+    if (m_zoneDetector) {
+        m_zoneDetector->clearHighlights();
+    }
+
+    m_currentZoneId.clear();
+    m_currentAdjacentZoneIds.clear();
+    m_isMultiZoneMode = false;
+    m_currentZoneGeometry = QRect();
+    m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+    m_overlayIdled = true;
+    // NOTE: m_overlayShown intentionally left true — the window is still alive.
 }
 
 void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 {
     QScreen* screen = nullptr;
-    auto* layout = prepareHandlerContext(x, y, screen);
+    QString screenId;
+    auto* layout = prepareHandlerContext(x, y, screen, screenId);
     if (!layout) {
         return;
     }
@@ -193,7 +323,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 
     // Find zone at cursor position using layout's smallest-area heuristic
     // (zone geometry already recalculated to absolute coords by prepareHandlerContext)
-    Zone* foundZone = layout->zoneAtPoint(QPointF(x, y));
+    PhosphorZones::Zone* foundZone = layout->zoneAtPoint(QPointF(x, y));
 
     // Accumulate painted zones (never remove during a paint drag)
     if (foundZone) {
@@ -202,7 +332,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 
     // Build zone list from painted zones, then expand using same raycast algorithm as editor
     if (!m_paintedZoneIds.isEmpty()) {
-        QVector<Zone*> paintedZones;
+        QVector<PhosphorZones::Zone*> paintedZones;
         for (auto* zone : layout->zones()) {
             if (m_paintedZoneIds.contains(zone->id())) {
                 paintedZones.append(zone);
@@ -213,13 +343,13 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
             // Use same raycasting/intersection algorithm as detectMultiZone and editor:
             // expand to include all zones that intersect the bounding rect of painted zones
             m_zoneDetector->setLayout(layout);
-            QVector<Zone*> zonesToSnap = m_zoneDetector->expandPaintedZonesToRect(paintedZones);
+            QVector<PhosphorZones::Zone*> zonesToSnap = m_zoneDetector->expandPaintedZonesToRect(paintedZones);
 
             if (zonesToSnap.isEmpty()) {
                 return;
             }
 
-            QRectF combinedGeom = computeCombinedZoneGeometry(zonesToSnap, screen, layout);
+            QRectF combinedGeom = computeCombinedZoneGeometry(zonesToSnap, screen, layout, screenId);
 
             // Update multi-zone state from expanded zones (what we actually snap to)
             QVector<QUuid> zoneIds;
@@ -246,7 +376,8 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 {
     QScreen* screen = nullptr;
-    auto* layout = prepareHandlerContext(x, y, screen);
+    QString screenId;
+    auto* layout = prepareHandlerContext(x, y, screen, screenId);
     if (!layout) {
         return;
     }
@@ -257,7 +388,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
     QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
 
     // Call detectMultiZone instead of detectZone
-    ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
+    PhosphorZones::ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
 
     if (result.isMultiZone && result.primaryZone) {
         // Multi-zone detected
@@ -266,7 +397,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 
         // Collect zone IDs from adjacent zones
         newAdjacentZoneIds.append(result.primaryZone->id());
-        for (Zone* zone : result.adjacentZones) {
+        for (PhosphorZones::Zone* zone : result.adjacentZones) {
             if (zone && zone->id() != result.primaryZone->id()) {
                 newAdjacentZoneIds.append(zone->id());
             }
@@ -279,16 +410,16 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_isMultiZoneMode = true;
 
             // Build de-duplicated zone list for geometry and highlighting
-            QVector<Zone*> zonesToHighlight;
+            QVector<PhosphorZones::Zone*> zonesToHighlight;
             zonesToHighlight.append(result.primaryZone);
-            for (Zone* zone : result.adjacentZones) {
+            for (PhosphorZones::Zone* zone : result.adjacentZones) {
                 if (zone && zone != result.primaryZone) {
                     zonesToHighlight.append(zone);
                 }
             }
 
             m_currentMultiZoneGeometry =
-                GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout));
+                GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout, screenId));
             m_zoneDetector->highlightZones(zonesToHighlight);
             m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
         }
@@ -302,13 +433,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            QString screenId = Utils::screenIdentifier(screen);
-            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-            EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-            bool useAvail = !(layout && layout->useFullScreenGeometry());
-            QRectF geom =
-                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps, useAvail);
-            m_currentZoneGeometry = GeometryUtils::snapToRect(geom);
+            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(m_screenManager, result.primaryZone, screen,
+                                                                            screenId, layout, m_settings);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {
@@ -341,10 +467,95 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         mods = QGuiApplication::queryKeyboardModifiers();
     }
 
-    // Read activation triggers once — used by both the retrigger check and normal processing.
-    // Previously read twice (once in the snapCancelled block, once after), which was wasteful.
-    const QVariantList triggers = m_settings->dragActivationTriggers();
-    const bool triggerHeld = anyTriggerHeld(triggers, mods, mouseButtons);
+    // Always-active bit: derived per-tick from the activation cache so the
+    // bypass path (autotile-only, never goes through dragStarted) can't carry
+    // a stale value into the inversion below. Cap is MaxTriggersPerAction (4)
+    // so the scan is essentially free.
+    const bool alwaysActiveOnDrag = std::any_of(m_cachedActivationTriggers.cbegin(), m_cachedActivationTriggers.cend(),
+                                                [](const ParsedTrigger& pt) {
+                                                    return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
+                                                });
+
+    // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap
+    // unboxing per tick. EXCLUDES the AlwaysActive sentinel — that bit is
+    // owned by alwaysActiveOnDrag above. Otherwise the inversion in
+    // always-active mode would read as "trigger always held" and the overlay
+    // would never show. The non-sentinel entries serve double duty: they
+    // activate the overlay when always-active is off, and deactivate it
+    // (hold or toggle) when always-active is on (#249).
+    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+
+    // ── Autotile drag-insert preview (runs even when m_snapCancelled) ───────
+    // This block is intentionally ABOVE the snap-cancelled early return because
+    // the KWin effect calls callCancelSnap() when the cursor crosses from a snap
+    // screen to an autotile screen mid-drag. That sets m_snapCancelled=true, and
+    // would otherwise starve this block for the entire remainder of the drag.
+    // Autotile drag-insert lives on an independent trigger list, so it should
+    // activate regardless of snap-overlay cancel state.
+    if (m_autotileEngine && m_settings) {
+        const bool rawAutotileInsertHeld = anyTriggerHeld(m_cachedAutotileDragInsertTriggers, mods, mouseButtons);
+
+        // Toggle mode: detect rising edge (release→press) to flip insert-active state
+        bool autotileInsertHeld;
+        if (m_settings->autotileDragInsertToggle()) {
+            if (rawAutotileInsertHeld && !m_prevAutotileDragInsertHeld) {
+                m_autotileDragInsertToggled = !m_autotileDragInsertToggled;
+            }
+            m_prevAutotileDragInsertHeld = rawAutotileInsertHeld;
+            autotileInsertHeld = m_autotileDragInsertToggled;
+        } else {
+            autotileInsertHeld = rawAutotileInsertHeld;
+        }
+
+        const QString autotileScreenId = effectiveScreenIdAt(cursorX, cursorY);
+        const bool onAutotileScreen =
+            !autotileScreenId.isEmpty() && m_autotileEngine->isActiveOnScreen(autotileScreenId);
+
+        // Reorder-mode override: the Krohnkite-style drag-to-swap setting makes
+        // drag-insert the default behavior on autotile screens (no modifier
+        // required). Gated on the beginDrag-time snapshot m_dragReorderActive
+        // so we don't re-query settings + engine tiled-state per cursor tick.
+        // Also scoped to onAutotileScreen — if the cursor leaves the autotile
+        // screen mid-drag, the normal cross-screen cancel logic below should
+        // run, not the force-held override. Explicit held trigger still wins
+        // downstream, but is redundant.
+        if (m_dragReorderActive && onAutotileScreen) {
+            autotileInsertHeld = true;
+        }
+
+        const bool previewActive = m_autotileEngine->hasDragInsertPreview();
+        const QString previewScreenId = m_autotileEngine->dragInsertPreviewScreenId();
+
+        if (autotileInsertHeld && onAutotileScreen) {
+            // Cursor crossed between two autotile screens while the trigger is
+            // held: cancel the old preview before starting a fresh one on the
+            // new screen. Without this the old preview stays stuck on the
+            // departed screen until the trigger is released.
+            if (previewActive && previewScreenId != autotileScreenId) {
+                m_autotileEngine->cancelDragInsertPreview();
+            }
+            if (!m_autotileEngine->hasDragInsertPreview()) {
+                const bool began = m_autotileEngine->beginDragInsertPreview(windowId, autotileScreenId);
+                qCDebug(lcDbusWindow) << "autotile drag-insert preview begin:" << windowId << "on" << autotileScreenId
+                                      << "=>" << began;
+            }
+            if (m_autotileEngine->hasDragInsertPreview()
+                && m_autotileEngine->dragInsertPreviewScreenId() == autotileScreenId) {
+                const int targetIdx =
+                    m_autotileEngine->computeDragInsertIndexAtPoint(autotileScreenId, QPoint(cursorX, cursorY));
+                if (targetIdx >= 0) {
+                    m_autotileEngine->updateDragInsertPreview(targetIdx);
+                }
+                m_lastCursorX = cursorX;
+                m_lastCursorY = cursorY;
+                return;
+            }
+        } else if (previewActive) {
+            // Trigger released or cursor left the autotile screen mid-drag —
+            // cancel the preview so neighbours snap back to their original order.
+            m_autotileEngine->cancelDragInsertPreview();
+        }
+    }
 
     if (m_snapCancelled) {
         // Allow retriggering the overlay after Escape: the user must release the
@@ -374,40 +585,63 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_overlayService->updateMousePosition(cursorX, cursorY);
     }
 
-    // Activation state: use the trigger check from above (already computed)
-    const bool zoneActivationHeld = triggerHeld;
+    // Resolve overlay state via the pure helper — keeps the truth table
+    // (toggle rising edge + always-active inversion) in one testable place.
+    // Adaptor stays as the I/O shell that feeds in current input state and
+    // persists the returned latches. In always-active mode the resolver
+    // inverts the active output so non-sentinel triggers become
+    // deactivate-while-held (hold mode) or toggle-off (toggle mode).
+    const ActivationDecision decision = resolveActivationActive(
+        triggerHeld, m_settings->toggleActivation(), alwaysActiveOnDrag, m_prevTriggerHeld, m_activationToggled);
+    m_prevTriggerHeld = decision.nextPrevTriggerHeld;
+    m_activationToggled = decision.nextActivationToggled;
+    bool activationActive = decision.active;
 
-    // Toggle mode: detect rising edge (release→press) to flip overlay state
-    bool activationActive;
-    if (m_settings->toggleActivation()) {
-        if (zoneActivationHeld && !m_prevTriggerHeld) {
-            m_activationToggled = !m_activationToggled;
-        }
-        m_prevTriggerHeld = zoneActivationHeld;
-        activationActive = m_activationToggled;
-    } else {
-        activationActive = zoneActivationHeld;
+    // Log activation-state transitions so overlay show/hide churn can be traced.
+    if (activationActive != m_lastLoggedActivationActive) {
+        qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
+                             << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
+                             << "triggerHeld=" << triggerHeld << "alwaysActive=" << alwaysActiveOnDrag
+                             << "toggleActivation=" << m_settings->toggleActivation();
+        m_lastLoggedActivationActive = activationActive;
+    }
+
+    // Resume the overlay out of its mid-drag idle state whenever the
+    // activation trigger is currently held AND we're currently idled,
+    // regardless of whether this was the tick that logged the transition.
+    // Keeping this independent of the logging predicate above means a
+    // missed transition log (or a coalesced dragMoved) can still refresh
+    // the overlay. refreshFromIdle() is cheap when inputs are unchanged —
+    // L2's labels-texture hash cache skips the 23 MB QImage rebuild, and
+    // the QVariantList zones push is small.
+    if (activationActive && m_overlayIdled && m_overlayService) {
+        m_overlayService->refreshFromIdle();
+        m_overlayIdled = false;
     }
 
     // Check all configured zone span triggers (multi-bind support)
-    const QVariantList zoneSpanTriggers = m_settings->zoneSpanTriggers();
-    const bool zoneSpanModifierHeld = anyTriggerHeld(zoneSpanTriggers, mods, mouseButtons);
+    const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
 
-    // Conflict detection: warn once per drag when activation and zone span share a trigger
+    // Conflict detection: warn once per drag when activation and zone span
+    // can both fire on the same physical input. Runtime semantics are AND
+    // within an entry, with 0 acting as a wildcard for that field (see
+    // anyTriggerHeld). So (Ctrl, LMB) vs (Ctrl, RMB) is not a conflict —
+    // those triggers are mutually exclusive — but (Ctrl, 0) vs (Ctrl, RMB)
+    // IS, because the 0-button entry matches whenever Ctrl is held,
+    // including when Ctrl+RMB satisfies the zone-span entry too. Treat 0 as
+    // wildcard in both fields to catch these real overlaps.
     if (!m_modifierConflictWarned) {
         m_modifierConflictWarned = true;
-        for (const auto& at : triggers) {
-            const auto aMap = at.toMap();
-            const int aMod = aMap.value(ConfigDefaults::triggerModifierField(), 0).toInt();
-            const int aBtn = aMap.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
-            if (aMod == 0 && aBtn == 0)
+        for (const auto& at : m_cachedActivationTriggers) {
+            if (at.modifier == 0 && at.mouseButton == 0)
                 continue;
-            for (const auto& st : zoneSpanTriggers) {
-                const auto sMap = st.toMap();
-                if ((aMod != 0 && sMap.value(ConfigDefaults::triggerModifierField(), 0).toInt() == aMod)
-                    || (aBtn != 0 && sMap.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt() == aBtn)) {
-                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
-                                            << "(mod:" << aMod << "btn:" << aBtn << ");"
+            for (const auto& st : m_cachedZoneSpanTriggers) {
+                const bool modOverlap = at.modifier == st.modifier || at.modifier == 0 || st.modifier == 0;
+                const bool btnOverlap = at.mouseButton == st.mouseButton || at.mouseButton == 0 || st.mouseButton == 0;
+                if (modOverlap && btnOverlap) {
+                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span can both match"
+                                            << "(activation mod:" << at.modifier << "btn:" << at.mouseButton
+                                            << "vs zone-span mod:" << st.modifier << "btn:" << st.mouseButton << ");"
                                             << "zone span takes priority when both match";
                 }
             }
@@ -421,6 +655,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // Modifier held: overlay takes priority — dismiss zone selector if open
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
             m_overlayService->hideZoneSelector();
             m_overlayService->clearSelectedZone();
         }
@@ -435,11 +670,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             handleMultiZoneModifier(cursorX, cursorY);
         }
     } else {
-        // No modifier: hide overlay, clear painted zones, allow zone selector
+        // No modifier: blank overlay shader output + clear painted zones.
+        // CRITICAL: do NOT destroy the overlay window here — we're mid-drag.
+        // Destroying on every trigger toggle caused multi-second D-Bus stalls.
+        // See clearOverlayForTriggerRelease() for the full rationale.
         if (!m_paintedZoneIds.isEmpty()) {
             m_paintedZoneIds.clear();
         }
-        hideOverlayAndClearZoneState();
+        clearOverlayForTriggerRelease();
         checkZoneSelectorTrigger(cursorX, cursorY);
     }
 
@@ -468,7 +706,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
 void WindowDragAdaptor::selectorScrollWheel(int angleDeltaY)
 {
-    m_overlayService->scrollZoneSelector(angleDeltaY);
+    if (m_overlayService) {
+        m_overlayService->scrollZoneSelector(angleDeltaY);
+    }
 }
 
 } // namespace PlasmaZones

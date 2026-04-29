@@ -1,18 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Quadrant Priority
-// @builtinId quadrant-priority
-// @description First window gets a large corner; rest fill the L-shaped remainder
-// @producesOverlappingZones false
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.6
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay all
-// @masterZoneIndex 0
-// @supportsMemory false
+var metadata = {
+    name: "Quadrant Priority",
+    id: "quadrant-priority",
+    description: "First window gets a large corner; rest fill the L-shaped remainder",
+    producesOverlappingZones: false,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.6,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "all",
+    masterZoneIndex: 0,
+    supportsMemory: false
+};
 
 /**
  * Quadrant Priority layout: first window occupies a large top-left quadrant.

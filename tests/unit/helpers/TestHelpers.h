@@ -18,12 +18,12 @@ namespace TestHelpers {
  * Uses JsonKeys constants from core/constants.h for all key names.
  * Shared across test_zone_shader_item.cpp and test_overlay_helpers.cpp.
  *
- * @param id Zone identifier (optional, omitted from map if empty)
+ * @param id PhosphorZones::Zone identifier (optional, omitted from map if empty)
  * @param x X coordinate in pixels
  * @param y Y coordinate in pixels
  * @param w Width in pixels
  * @param h Height in pixels
- * @param zoneNumber Zone number label (default 0)
+ * @param zoneNumber PhosphorZones::Zone number label (default 0)
  * @param highlighted Whether the zone is highlighted (default false)
  * @return QVariantMap representing the zone
  */
@@ -32,14 +32,14 @@ inline QVariantMap makeZone(const QString& id, float x, float y, float w, float 
 {
     QVariantMap z;
     if (!id.isEmpty()) {
-        z.insert(JsonKeys::Id, id);
+        z.insert(::PhosphorZones::ZoneJsonKeys::Id, id);
     }
-    z.insert(JsonKeys::X, x);
-    z.insert(JsonKeys::Y, y);
-    z.insert(JsonKeys::Width, w);
-    z.insert(JsonKeys::Height, h);
-    z.insert(JsonKeys::ZoneNumber, zoneNumber);
-    z.insert(JsonKeys::IsHighlighted, highlighted);
+    z.insert(::PhosphorZones::ZoneJsonKeys::X, x);
+    z.insert(::PhosphorZones::ZoneJsonKeys::Y, y);
+    z.insert(::PhosphorZones::ZoneJsonKeys::Width, w);
+    z.insert(::PhosphorZones::ZoneJsonKeys::Height, h);
+    z.insert(::PhosphorZones::ZoneJsonKeys::ZoneNumber, zoneNumber);
+    z.insert(::PhosphorZones::ZoneJsonKeys::IsHighlighted, highlighted);
     return z;
 }
 

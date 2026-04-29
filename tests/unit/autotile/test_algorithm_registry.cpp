@@ -8,9 +8,9 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
@@ -20,8 +20,13 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Unit tests for AlgorithmRegistry: singleton, built-in algorithms,
+ * @brief Unit tests for PhosphorTiles::AlgorithmRegistry: built-in algorithms,
  *        retrieval, and default algorithm behavior.
+ *
+ * The registry is no longer a process-global singleton; composition roots
+ * (daemon, editor, settings, this test fixture) each own their own instance.
+ * Tests share a fixture registry via ScriptedAlgoTestSetup::registry() so
+ * built-ins only register once per test-process run.
  */
 class TestAlgorithmRegistry : public QObject
 {
@@ -37,13 +42,17 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Singleton tests
+    // Fixture sanity
     // =========================================================================
 
-    void testSingleton_sameInstance()
+    void testFixture_registryNonNull()
     {
-        auto* instance1 = AlgorithmRegistry::instance();
-        auto* instance2 = AlgorithmRegistry::instance();
+        // Sanity-check the fixture: the test setup hands back a non-null
+        // registry and the same instance for both calls (it's a
+        // fixture-owned instance, not a process singleton — but within
+        // one test run the fixture's accessor is stable).
+        auto* instance1 = m_scriptSetup.registry();
+        auto* instance2 = m_scriptSetup.registry();
 
         QVERIFY(instance1 != nullptr);
         QCOMPARE(instance1, instance2);
@@ -55,7 +64,7 @@ private Q_SLOTS:
 
     void testBuiltIn_masterStackRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("master-stack"));
 
         QVERIFY(algo != nullptr);
@@ -66,7 +75,7 @@ private Q_SLOTS:
 
     void testBuiltIn_columnsRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("columns"));
 
         QVERIFY(algo != nullptr);
@@ -77,7 +86,7 @@ private Q_SLOTS:
 
     void testBuiltIn_bspRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("bsp"));
 
         QVERIFY(algo != nullptr);
@@ -88,7 +97,7 @@ private Q_SLOTS:
 
     void testBuiltIn_rowsRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("rows"));
 
         QVERIFY(algo != nullptr);
@@ -99,7 +108,7 @@ private Q_SLOTS:
 
     void testBuiltIn_dwindleRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("dwindle"));
 
         QVERIFY(algo != nullptr);
@@ -110,7 +119,7 @@ private Q_SLOTS:
 
     void testBuiltIn_spiralRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("spiral"));
 
         QVERIFY(algo != nullptr);
@@ -121,7 +130,7 @@ private Q_SLOTS:
 
     void testBuiltIn_monocleRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("monocle"));
 
         QVERIFY(algo != nullptr);
@@ -132,7 +141,7 @@ private Q_SLOTS:
 
     void testBuiltIn_threeColumnRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("three-column"));
 
         QVERIFY(algo != nullptr);
@@ -143,7 +152,7 @@ private Q_SLOTS:
 
     void testBuiltIn_gridRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("grid"));
 
         QVERIFY(algo != nullptr);
@@ -154,7 +163,7 @@ private Q_SLOTS:
 
     void testBuiltIn_wideRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("wide"));
 
         QVERIFY(algo != nullptr);
@@ -165,7 +174,7 @@ private Q_SLOTS:
 
     void testBuiltIn_centeredMasterRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("centered-master"));
 
         QVERIFY(algo != nullptr);
@@ -176,7 +185,7 @@ private Q_SLOTS:
 
     void testBuiltIn_allRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
 
         QVERIFY(available.contains(QLatin1String("master-stack")));
@@ -202,10 +211,10 @@ private Q_SLOTS:
     // Backwards compatibility & sandbox tests
     // =========================================================================
 
-    void testBuiltIn_builtinIdBackwardsCompatibility()
+    void testBuiltIn_idBackwardsCompatibility()
     {
-        auto* registry = AlgorithmRegistry::instance();
-        const QStringList builtinIds = {
+        auto* registry = m_scriptSetup.registry();
+        const QStringList expectedIds = {
             // 15 original C++-to-JS converted algorithms
             QLatin1String("bsp"),
             QLatin1String("cascade"),
@@ -233,15 +242,15 @@ private Q_SLOTS:
             QLatin1String("paper"),
             QLatin1String("tatami"),
         };
-        for (const auto& id : builtinIds) {
+        for (const auto& id : expectedIds) {
             QVERIFY2(registry->hasAlgorithm(id), qPrintable(QStringLiteral("Missing algorithm: ") + id));
         }
     }
 
     void testBuiltIn_allAlgorithmsCalculateZones()
     {
-        auto* registry = AlgorithmRegistry::instance();
-        TilingState state(QStringLiteral("test"));
+        auto* registry = m_scriptSetup.registry();
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         const QRect screen(0, 0, 1920, 1080);
         const auto allIds = registry->availableAlgorithms();
         QVERIFY2(allIds.size() >= 15,
@@ -249,7 +258,7 @@ private Q_SLOTS:
         for (const auto& id : allIds) {
             auto* algo = registry->algorithm(id);
             QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Null algorithm: ") + id));
-            auto zones = algo->calculateZones(makeParams(3, screen, &state, 0, EdgeGaps::uniform(0)));
+            auto zones = algo->calculateZones(makeParams(3, screen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
             QVERIFY2(!zones.isEmpty(), qPrintable(QStringLiteral("No zones from: ") + id));
             if (algo->producesOverlappingZones()) {
                 QVERIFY2(zones.size() >= 1 && zones.size() <= 3,
@@ -267,12 +276,17 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
-        QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(), QLatin1String("bsp"));
+        QCOMPARE(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId(), QLatin1String("bsp"));
+        // Round-trip through the virtual interface — concrete registry's
+        // override resolves to the same id, so a future test fake that
+        // overrides the policy can substitute its own.
+        auto* registry = m_scriptSetup.registry();
+        QCOMPARE(registry->defaultAlgorithmId(), QLatin1String("bsp"));
     }
 
     void testDefault_algorithmInstance()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* defaultAlgo = registry->defaultAlgorithm();
         auto* bsp = registry->algorithm(QLatin1String("bsp"));
 
@@ -286,7 +300,7 @@ private Q_SLOTS:
 
     void testRetrieval_unknownReturnsNull()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QStringLiteral("nonexistent-algorithm"));
 
         QVERIFY(algo == nullptr);
@@ -294,7 +308,7 @@ private Q_SLOTS:
 
     void testRetrieval_emptyIdReturnsNull()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QString());
 
         QVERIFY(algo == nullptr);
@@ -302,7 +316,7 @@ private Q_SLOTS:
 
     void testRetrieval_hasAlgorithm()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
 
         QVERIFY(registry->hasAlgorithm(QLatin1String("master-stack")));
         QVERIFY(registry->hasAlgorithm(QLatin1String("columns")));
@@ -320,7 +334,7 @@ private Q_SLOTS:
 
     void testRetrieval_allAlgorithms()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto all = registry->allAlgorithms();
 
         // At least 15 built-in algorithms are registered before any scripted loader runs
@@ -339,8 +353,8 @@ private Q_SLOTS:
     void testFrozenGlobals_jsReassignmentBlocked()
     {
         // TODO: The current test infrastructure does not expose a way to evaluate
-        // arbitrary JS code in the sandboxed QJSEngine of a ScriptedAlgorithm.
-        // The engine is private to each ScriptedAlgorithm instance, and there is
+        // arbitrary JS code in the sandboxed QJSEngine of a PhosphorTiles::ScriptedAlgorithm.
+        // The engine is private to each PhosphorTiles::ScriptedAlgorithm instance, and there is
         // no public evaluateJs() method.
         //
         // What should be tested:
@@ -361,8 +375,8 @@ private Q_SLOTS:
 
         // Verify determinism as an indirect frozen-globals check: two identical
         // calls must produce identical output.
-        auto* registry = AlgorithmRegistry::instance();
-        TilingState state(QStringLiteral("test"));
+        auto* registry = m_scriptSetup.registry();
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         const QRect screen(0, 0, 1920, 1080);
 
@@ -376,78 +390,14 @@ private Q_SLOTS:
         for (const auto& id : algoIds) {
             auto* algo = registry->algorithm(id);
             QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Missing algorithm: ") + id));
-            auto zones1 = algo->calculateZones(makeParams(5, screen, &state, 10, EdgeGaps::uniform(0)));
-            auto zones2 = algo->calculateZones(makeParams(5, screen, &state, 10, EdgeGaps::uniform(0)));
+            auto zones1 =
+                algo->calculateZones(makeParams(5, screen, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
+            auto zones2 =
+                algo->calculateZones(makeParams(5, screen, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
             QVERIFY2(
                 zones1 == zones2,
                 qPrintable(QStringLiteral("Algorithm '%1' non-deterministic — frozen globals may be mutable").arg(id)));
         }
-    }
-
-    // =========================================================================
-    // zonesToRelativeGeometry tests
-    // =========================================================================
-
-    void testRelativeGeometry_identicalZonesPreserved()
-    {
-        // Identical zones (e.g. monocle) should be converted faithfully —
-        // no artificial offsets. The algorithm's raw geometry is authoritative.
-        const QRect previewRect(0, 0, 1000, 1000);
-        QVector<QRect> identicalZones;
-        for (int i = 0; i < 4; ++i) {
-            identicalZones.append(previewRect);
-        }
-
-        auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
-        QCOMPARE(result.size(), 4);
-
-        for (int i = 0; i < result.size(); ++i) {
-            auto geo = result[i].toMap()[QLatin1String("relativeGeometry")].toMap();
-            QCOMPARE(geo[QLatin1String("x")].toReal(), 0.0);
-            QCOMPARE(geo[QLatin1String("y")].toReal(), 0.0);
-            QCOMPARE(geo[QLatin1String("width")].toReal(), 1.0);
-            QCOMPARE(geo[QLatin1String("height")].toReal(), 1.0);
-        }
-    }
-
-    void testIdenticalZones_noOffsetApplied()
-    {
-        // Identical zones (e.g. monocle) should be converted to identical
-        // relative geometry — no artificial offsets applied.
-        const QRect previewRect(0, 0, 1000, 1000);
-        QVector<QRect> identicalZones;
-        for (int i = 0; i < 16; ++i) {
-            identicalZones.append(previewRect);
-        }
-
-        auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
-        QCOMPARE(result.size(), 16);
-
-        for (int i = 0; i < result.size(); ++i) {
-            auto map = result[i].toMap();
-            auto geo = map[QLatin1String("relativeGeometry")].toMap();
-            QCOMPARE(geo[QLatin1String("x")].toReal(), 0.0);
-            QCOMPARE(geo[QLatin1String("y")].toReal(), 0.0);
-            QCOMPARE(geo[QLatin1String("width")].toReal(), 1.0);
-            QCOMPARE(geo[QLatin1String("height")].toReal(), 1.0);
-        }
-    }
-
-    void testMonoclePreview_singleZoneNoOffset()
-    {
-        // A single zone should not get offset treatment
-        const QRect previewRect(0, 0, 1000, 1000);
-        QVector<QRect> singleZone;
-        singleZone.append(previewRect);
-
-        auto result = AlgorithmRegistry::zonesToRelativeGeometry(singleZone, previewRect);
-        QCOMPARE(result.size(), 1);
-
-        auto geo = result[0].toMap()[QLatin1String("relativeGeometry")].toMap();
-        QCOMPARE(geo[QLatin1String("x")].toReal(), 0.0);
-        QCOMPARE(geo[QLatin1String("y")].toReal(), 0.0);
-        QCOMPARE(geo[QLatin1String("width")].toReal(), 1.0);
-        QCOMPARE(geo[QLatin1String("height")].toReal(), 1.0);
     }
 };
 

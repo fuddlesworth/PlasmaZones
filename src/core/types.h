@@ -4,155 +4,78 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorEngineApi/EngineTypes.h>
+#include <PhosphorEngineApi/NavigationContext.h>
+#include <QHashFunctions>
+#include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QRect>
 
 namespace PlasmaZones {
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Shared Types - Parameter Objects for Complex Method Signatures
-// ═══════════════════════════════════════════════════════════════════════════════
-// These types reduce the number of output parameters in D-Bus methods and
-// provide clear semantic grouping of related data.
-// ═══════════════════════════════════════════════════════════════════════════════
+using NavigationContext = PhosphorEngineApi::NavigationContext;
 
-/**
- * @brief Result of a snap calculation
- *
- * Used by WindowTrackingService and D-Bus adaptor to communicate
- * snap decisions and geometry in a clean, single-object format.
- */
-struct PLASMAZONES_EXPORT SnapResult
-{
-    bool shouldSnap = false; ///< Whether the window should be snapped
-    QRect geometry; ///< Target geometry for snapping (x, y, width, height)
-    QString zoneId; ///< UUID of primary target zone (backward compat)
-    QStringList zoneIds; ///< All zone UUIDs (for multi-zone snap)
-    QString screenId; ///< Screen where the zone is located
+using TilingStateKey = PhosphorEngineApi::TilingStateKey;
+using PhosphorEngineApi::qHash;
 
-    /**
-     * @brief Check if this result represents a valid snap operation
-     * @return true if shouldSnap is true and geometry is valid
-     */
-    bool isValid() const
-    {
-        return shouldSnap && geometry.isValid() && !zoneId.isEmpty();
-    }
+using SnapIntent = PhosphorEngineApi::SnapIntent;
+using ResnapEntry = PhosphorEngineApi::ResnapEntry;
+using PendingRestore = PhosphorEngineApi::PendingRestore;
+using SnapResult = PhosphorEngineApi::SnapResult;
+using UnfloatResult = PhosphorEngineApi::UnfloatResult;
+using ZoneAssignmentEntry = PhosphorEngineApi::ZoneAssignmentEntry;
 
-    /**
-     * @brief Create an empty/no-snap result
-     */
-    static SnapResult noSnap()
-    {
-        return SnapResult{false, QRect(), QString(), QStringList(), QString()};
-    }
-};
-
-/**
- * @brief Result of an unfloat geometry resolution
- *
- * Used by SnapEngine and WindowTrackingAdaptor to resolve the geometry
- * a floating window should return to when unfloated. Encapsulates the
- * shared screen-validation + zone-geometry resolution sequence.
- */
-struct PLASMAZONES_EXPORT UnfloatResult
-{
-    bool found = false; ///< Whether a valid restore target was found
-    QStringList zoneIds; ///< Zone UUIDs to restore to
-    QRect geometry; ///< Target geometry for the window
-    QString screenId; ///< Screen where the zones are located
-};
-
-/**
- * @brief Information about a window being dragged
- *
- * Groups window identification and context data that's commonly
- * passed together during drag operations.
- */
 struct PLASMAZONES_EXPORT DragInfo
 {
-    QString windowId; ///< Full window ID (class:resource:pointer)
-    QRect geometry; ///< Current window geometry
-    QString appName; ///< Application name (for exclusion checks)
-    QString windowClass; ///< Window class (for pattern matching)
-    QString screenId; ///< Screen where window is located
-    bool isSticky = false; ///< Whether window is on all desktops
-    int virtualDesktop = 0; ///< Current virtual desktop (0 = all)
+    QString windowId;
+    QRect geometry;
+    QString appName;
+    QString windowClass;
+    QString screenId;
+    bool isSticky = false;
+    int virtualDesktop = 0;
 
-    /**
-     * @brief Check if drag info has required fields
-     */
     bool isValid() const
     {
         return !windowId.isEmpty();
     }
-
-    // Note: Use WindowTrackingService::currentAppIdFor(dragInfo.windowId) or
-    // PlasmaZonesEffect::appIdForInstance() to get the live app class.
-    // windowId is the opaque compositor instance id — never parse it.
 };
 
-/**
- * @brief Navigation command for keyboard zone movement
- *
- * Encapsulates the parameters for zone navigation operations.
- */
 struct PLASMAZONES_EXPORT NavigationCommand
 {
     enum class Type {
-        MoveToZone, ///< Move window to a specific zone
-        FocusZone, ///< Focus window in a zone
-        SwapWindows, ///< Swap two windows between zones
-        PushToEmpty, ///< Push window to first empty zone
-        Restore, ///< Restore window to original size
-        ToggleFloat, ///< Toggle window floating state
-        SnapToNumber, ///< Snap to zone by number
-        Rotate ///< Rotate windows in layout
+        MoveToZone,
+        FocusZone,
+        SwapWindows,
+        PushToEmpty,
+        Restore,
+        ToggleFloat,
+        SnapToNumber,
+        Rotate
     };
 
     Type type = Type::MoveToZone;
     QString targetZoneId;
     QString targetWindowId;
-    QString zoneGeometry; ///< JSON geometry for D-Bus
-    bool clockwise = true; ///< For rotation commands
+    QString zoneGeometry;
+    bool clockwise = true;
 
-    /**
-     * @brief Create a move-to-zone command
-     */
     static NavigationCommand moveToZone(const QString& zoneId, const QString& geometry)
     {
         return NavigationCommand{Type::MoveToZone, zoneId, QString(), geometry, true};
     }
 
-    /**
-     * @brief Create a focus-zone command
-     */
     static NavigationCommand focusZone(const QString& zoneId, const QString& windowId)
     {
         return NavigationCommand{Type::FocusZone, zoneId, windowId, QString(), true};
     }
 
-    /**
-     * @brief Create a swap-windows command
-     */
     static NavigationCommand swapWindows(const QString& zoneId, const QString& windowId, const QString& geometry)
     {
         return NavigationCommand{Type::SwapWindows, zoneId, windowId, geometry, true};
     }
-};
-
-/**
- * @brief Window rotation entry for rotate-windows-in-layout feature
- *
- * Describes a single window movement in a rotation operation.
- */
-struct PLASMAZONES_EXPORT RotationEntry
-{
-    QString windowId; ///< Window to move
-    QString sourceZoneId; ///< Zone window is moving from (for OSD highlighting)
-    QString targetZoneId; ///< Zone to move to
-    QRect targetGeometry; ///< Target geometry in pixels
 };
 
 } // namespace PlasmaZones

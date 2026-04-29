@@ -3,15 +3,20 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
-#include "cavaservice.h"
 #include "windowthumbnailservice.h"
 
-#include "../core/layout.h"
-#include "../core/layoutmanager.h"
-#include "../core/zone.h"
-#include "../core/layoututils.h"
+#include <PhosphorAudio/CavaSpectrumProvider.h>
+
+#include <PhosphorSurfaces/SurfaceManager.h>
+#include <PhosphorSurfaces/SurfaceManagerConfig.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutUtils.h>
+#include "../common/layoutpreviewserialize.h"
+#include "../core/unifiedlayoutlist.h"
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 #include "../core/constants.h"
 
@@ -22,6 +27,7 @@
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QMutexLocker>
 
@@ -29,36 +35,308 @@
 #include "pz_qml_i18n.h"
 #include "vulkan_support.h"
 
-#include "../core/layersurface.h"
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimationLayer/SurfaceAnimator.h>
+#include <PhosphorLayer/Role.h>
+#include <PhosphorLayer/Surface.h>
+#include <PhosphorLayer/SurfaceConfig.h>
+#include <PhosphorLayer/SurfaceFactory.h>
+#include <PhosphorLayer/defaults/DefaultScreenProvider.h>
+#include <PhosphorLayer/defaults/PhosphorShellTransport.h>
+#include <QQuickItem>
+#include "overlayservice/pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
 namespace {
 
-// Clean up all windows in a QHash map
-template<typename K>
-void cleanupWindowMap(QHash<K, QQuickWindow*>& windowMap)
+// Tear down every PhosphorLayer::Surface referenced by a state entry.
+// The Surface owns its QQuickWindow; deleteLater cascades into ~Surface
+// which unmaps the layer surface and schedules the window for deletion.
+// We never touch the QQuickWindow* directly — double-destroying a Surface-
+// owned window was the source of UB in a prior revision of this file.
+void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
-    for (auto* window : std::as_const(windowMap)) {
-        if (window) {
-            QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-            window->close();
-            window->destroy();
-            window->deleteLater();
+    QObject::disconnect(state.overlayGeomConnection);
+    state.overlayGeomConnection = {};
+    if (state.overlaySurface) {
+        state.overlaySurface->deleteLater();
+    }
+    if (state.zoneSelectorSurface) {
+        state.zoneSelectorSurface->deleteLater();
+    }
+    if (state.notificationSurface) {
+        state.notificationSurface->deleteLater();
+    }
+    state.overlaySurface = nullptr;
+    state.zoneSelectorSurface = nullptr;
+    state.notificationSurface = nullptr;
+    state.overlayWindow = nullptr;
+    state.zoneSelectorWindow = nullptr;
+    state.notificationWindow = nullptr;
+    state.overlayPhysScreen = nullptr;
+    state.zoneSelectorPhysScreen = nullptr;
+    state.notificationPhysScreen = nullptr;
+}
+
+// Release every surface across the state map, then clear it.
+void cleanupAllScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states)
+{
+    for (auto& state : states) {
+        releaseSurfacesInState(state);
+    }
+    states.clear();
+}
+
+// Release surfaces for state entries whose key starts with @p prefix,
+// then erase those entries from the map.
+//
+// Semantics: prefix is typically `physId + PhosphorIdentity::VirtualScreenId::Separator`, so
+// this function matches ONLY virtual-screen entries (`physId/vs:N`) and
+// deliberately skips the bare-physId entry (`physId`). Callers that need
+// to clean up the bare entry must do so separately — see the
+// onVirtualScreensChangedHandler call site where both are explicitly
+// cleaned in sequence.
+void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states, const QString& prefix)
+{
+    for (auto it = states.begin(); it != states.end();) {
+        if (it.key().startsWith(prefix)) {
+            releaseSurfacesInState(it.value());
+            it = states.erase(it);
+        } else {
+            ++it;
         }
     }
-    windowMap.clear();
 }
 
 } // namespace
 
-OverlayService::OverlayService(QObject* parent)
-    : IOverlayService(parent)
-    , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
+namespace {
+
+// ── Profile path constants ─────────────────────────────────────────────
+// Lifted as named statics so a typo within this file is impossible (the
+// compiler binds the symbol; the registry resolves the value once at
+// first call). Profile JSONs discovered through PhosphorProfileRegistry's
+// watcher path can still change the curve/duration these names resolve
+// to at runtime.
+const QString& osdShow()
 {
-    // Set up i18n for QML (makes i18n() available in QML)
-    auto* localizedContext = new PzLocalizedContext(m_engine.get());
-    m_engine->rootContext()->setContextObject(localizedContext);
+    static const QString s = QStringLiteral("osd.show");
+    return s;
+}
+const QString& osdPop()
+{
+    static const QString s = QStringLiteral("osd.pop");
+    return s;
+}
+const QString& osdHide()
+{
+    static const QString s = QStringLiteral("osd.hide");
+    return s;
+}
+const QString& panelPopup()
+{
+    static const QString s = QStringLiteral("panel.popup");
+    return s;
+}
+const QString& widgetFadeOut()
+{
+    // Registered hide profile for ZoneSelector (panel.popup show +
+    // widget.fadeOut hide). The matching widget.fade is intentionally
+    // absent — no overlay uses it after the dead-default cleanup; if a
+    // future overlay needs a plain widget fade, register the path
+    // inline at the call site.
+    static const QString s = QStringLiteral("widget.fadeOut");
+    return s;
+}
+
+// ── Per-role Config builders ───────────────────────────────────────────
+// One factory per overlay role so adding/tweaking a 6th overlay touches
+// exactly one named function rather than appending to a 100-line
+// setupSurfaceAnimator. Each builder documents the visual shape it
+// encodes; setupSurfaceAnimator just wires the builder output to the
+// matching PzRole.
+//
+// **Profile-coupling caveat (osd.hide on the scale leg):** the OSD and
+// LayoutPicker configs reuse `osdHide` as the `hideScaleProfile`. That
+// means a user-tunable JSON edit to `osd.hide` (e.g. swapping its
+// easing for Spring physics to bounce the opacity) ALSO affects the
+// scale leg, because both legs resolve the same Profile path. Live-
+// reload's "drop a JSON, see it apply" UX is intentional, but profile
+// authors should know the two legs are coupled. If a future overlay
+// needs independent opacity/scale tuning, introduce a separate
+// `osd.hide-scale` profile and register it on `hideScaleProfile`
+// instead of reusing `osdHide`.
+
+namespace PAL = PhosphorAnimationLayer;
+
+/// Default config — empty. Surfaces that route through the animator
+/// without a registered config fall back to AnimatedValue's library
+/// default (150 ms OutCubic), same as a missing-profile lookup. Every
+/// Surface that goes through Surface::show()/hide() in this service has
+/// an explicit registration below; the empty default is documentation.
+PAL::SurfaceAnimator::Config buildDefaultConfig()
+{
+    return PAL::SurfaceAnimator::Config{};
+}
+
+/// LayoutOsd / NavigationOsd: identical fade-and-pop shape. The visual
+/// treatment is meant to read the same across the two OSDs, so a single
+/// shared config keeps tuning edits consistent. OutBack-overshoot scale
+/// pop preserved from the original QML hand-roll. Explicit empty shader
+/// fields suppress GCC's -Wmissing-field-initializers under designated init.
+PAL::SurfaceAnimator::Config buildOsdConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
+                                        .hideProfile = osdHide(),
+                                        .showScaleProfile = osdPop(),
+                                        .hideScaleProfile = osdHide(),
+                                        .showScaleFrom = 0.8,
+                                        .hideScaleTo = 0.9,
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
+}
+
+/// LayoutPicker: same osd shape as buildOsdConfig but with a softer
+/// scale envelope (0.9→1 instead of 0.8→1). The picker is a larger
+/// surface so the overshoot reads as a pop rather than a slam.
+PAL::SurfaceAnimator::Config buildLayoutPickerConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
+                                        .hideProfile = osdHide(),
+                                        .showScaleProfile = osdPop(),
+                                        .hideScaleProfile = osdHide(),
+                                        .showScaleFrom = 0.9,
+                                        .hideScaleTo = 0.95,
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
+}
+
+/// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
+/// the hide animation actually paints). Opacity-only — explicit empty
+/// scale and shader fields suppress GCC's -Wmissing-field-initializers
+/// under designated init.
+PAL::SurfaceAnimator::Config buildZoneSelectorConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
+                                        .hideProfile = widgetFadeOut(),
+                                        .showScaleProfile = {},
+                                        .hideScaleProfile = {},
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
+}
+
+/// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
+/// (keepMappedOnHide=false), so ~Surface synchronously cancels any
+/// in-flight beginHide before the hide animation can paint a frame.
+/// Registering a hideProfile here would be dead code; leave it empty.
+PAL::SurfaceAnimator::Config buildSnapAssistConfig()
+{
+    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
+                                        .hideProfile = {},
+                                        .showScaleProfile = {},
+                                        .hideScaleProfile = {},
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
+}
+
+} // namespace
+
+void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry)
+{
+    namespace PAL = PhosphorAnimationLayer;
+
+    // Two existing surface types deliberately BYPASS this animator and
+    // therefore never read any config (default or per-role):
+    //   - Overlay (zone overlay rendering): hidden via direct
+    //     window->hide() in dismissOverlayWindow because the rapid
+    //     drag-mode path uses _idled property toggling rather than the
+    //     show/hide state machine.
+    //   - ShaderPreview (editor preview window): shown via direct
+    //     window->show() in showShaderPreview because the editor controls
+    //     visibility imperatively and re-creates on every open.
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
+    if (m_animShaderRegistry) {
+        m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
+    }
+
+    // Profile names are the same paths PhosphorMotionAnimation in QML
+    // uses today, so the live-reload path (drop a JSON, see it apply on
+    // next show) automatically applies to the C++ side too.
+    //
+    // Phase-2 surface unification: a single per-screen
+    // PzRoles::Notification surface (NotificationOverlay.qml) hosts both
+    // layout-OSD and navigation-OSD content via a Loader. Production
+    // surfaces are scoped `plasmazones-notification-{screenId}-{gen}`
+    // and resolve to this config via the animator's longest-prefix
+    // lookup.
+    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig());
+    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig());
+}
+
+OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+                               PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
+    : IOverlayService(parent)
+    , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
+    , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
+{
+    m_screenManager = screenManager;
+    m_shaderRegistry = shaderRegistry;
+
+    // The profile registry is non-optional: SurfaceAnimator binds to it by
+    // reference. Composition roots own a single PhosphorProfileRegistry
+    // and thread it through every consumer — fail loud if the wiring is
+    // wrong rather than silently falling back to library defaults.
+    Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
+               "profileRegistry must not be null — composition root must own and inject the registry");
+
+    // Phase-5 SurfaceAnimator. One instance drives every overlay's
+    // show/hide via Profile-resolved curves; per-Role configs install
+    // below in setupSurfaceAnimator(). Constructed BEFORE the
+    // SurfaceFactory because the factory's Deps captures the animator
+    // pointer; Surfaces produced after this point dispatch through it
+    // on every show/hide.
+    setupSurfaceAnimator(*profileRegistry);
+
+    m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(
+        PhosphorLayer::SurfaceFactory::Deps{.transport = m_transport.get(),
+                                            .screens = m_screenProvider.get(),
+                                            .engineProvider = nullptr,
+                                            .animator = m_surfaceAnimator.get(),
+                                            .loggingCategory = QStringLiteral("plasmazones.overlay")});
+
+    const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    const QString pipelineCachePath =
+        cacheDir.isEmpty() ? QString() : (cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
+
+    QVulkanInstance* externalVulkanInstance = nullptr;
+#if QT_CONFIG(vulkan)
+    externalVulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+#endif
+
+    m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
+        .surfaceFactory = m_surfaceFactory.get(),
+        .engineConfigurator =
+            [this](QQmlEngine& engine) {
+                auto* localizedContext = new PzLocalizedContext(&engine);
+                engine.rootContext()->setContextObject(localizedContext);
+                engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
+            },
+        .pipelineCachePath = pipelineCachePath,
+        .vulkanInstance = externalVulkanInstance,
+        .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
+    });
 
     // Connect to screen changes (with safety check for early initialization)
     if (qGuiApp) {
@@ -68,48 +346,121 @@ OverlayService::OverlayService(QObject* parent)
         qCWarning(lcOverlay) << "Overlay: created before QGuiApplication, screen signals not connected";
     }
 
-    // Connect to system sleep/resume via logind to restart shader timer after wake
-    // This prevents large iTimeDelta jumps when system resumes from sleep
-    QDBusConnection::systemBus().connect(QStringLiteral("org.freedesktop.login1"),
-                                         QStringLiteral("/org/freedesktop/login1"),
-                                         QStringLiteral("org.freedesktop.login1.Manager"),
-                                         QStringLiteral("PrepareForSleep"), this, SLOT(onPrepareForSleep(bool)));
+    // Connect to virtual screen configuration changes
+    if (auto* mgr = m_screenManager) {
+        auto onVirtualScreensChangedHandler = [this](const QString& physicalScreenId) {
+            // Destroy old overlays for this physical screen, recreate with new config
+            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId);
+            if (!physScreen) {
+                // Physical screen removed -- destroy windows and clean up stale virtual screen entries
+                const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
+                cleanupVirtualScreenStates(m_screenStates, prefix);
+                // Also clean up the bare physical-ID entry (no /vs:N suffix) —
+                // cleanupVirtualScreenStates only matches entries starting with "physId/",
+                // not the bare "physId" key itself.
+                destroyOverlayWindow(physicalScreenId);
+                destroyZoneSelectorWindow(physicalScreenId);
+                destroyNotificationWindow(physicalScreenId);
+                m_screenStates.remove(physicalScreenId);
+                return;
+            }
+
+            // If the new config HAS virtual screens for this physical ID,
+            // destroy any overlay window keyed by the bare physical screen ID
+            // itself. Virtual screens use prefixed keys; the bare key would be
+            // a leftover from the previous (non-virtual) configuration.
+            auto* mgr2 = m_screenManager;
+            if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
+                destroyOverlayWindow(physicalScreenId);
+                destroyZoneSelectorWindow(physicalScreenId);
+                destroyNotificationWindow(physicalScreenId);
+            }
+
+            // Clear selected zone before destroying windows — the selection references
+            // zone geometry from the old virtual screen config and would be stale.
+            clearSelectedZone();
+
+            // Track whether zone selectors were visible before destruction so we can
+            // recreate them for the new virtual screen configuration.
+            const bool hadZoneSelector = m_zoneSelectorVisible;
+
+            // Destroy all window types (overlays, selectors, OSDs, snap assist, layout picker)
+            destroyAllWindowsForPhysicalScreen(physScreen);
+
+            // Reset zone selector flag — the windows were destroyed, so the flag
+            // must be cleared to allow re-showing. Without this, the guard at the
+            // top of showZoneSelector() prevents recreation.
+            if (hadZoneSelector) {
+                m_zoneSelectorVisible = false;
+            }
+
+            // Recreate with new virtual screen config if visible. Reuses
+            // mgr2 from above — the Phosphor::Screens::ScreenManager singleton doesn't change
+            // mid-lambda, so re-querying would just be noise.
+            if (isVisible()) {
+                if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
+                    for (const QString& vsId : mgr2->virtualScreenIdsFor(physicalScreenId)) {
+                        QRect vsGeom = mgr2->screenGeometry(vsId);
+                        if (vsGeom.isValid()) {
+                            createOverlayWindow(vsId, physScreen, vsGeom);
+                        }
+                    }
+                } else {
+                    createOverlayWindow(physScreen);
+                }
+            }
+
+            // Recreate zone selectors for the new virtual screen configuration.
+            // Defer to the next event loop pass to allow PhosphorZones::LayoutRegistry to process
+            // assignment migrations for the new virtual screen IDs first, ensuring
+            // the zone selector shows the correct layout list.
+            if (hadZoneSelector) {
+                m_zoneSelectorRecreationPending = true;
+                QTimer::singleShot(0, this, [this]() {
+                    m_zoneSelectorRecreationPending = false;
+                    // m_zoneSelectorVisible was set to false above (to allow recreation).
+                    // If an external showZoneSelector() ran during the event loop pass between
+                    // posting this timer and its execution, it will have set m_zoneSelectorVisible
+                    // back to true — in that case we must NOT call showZoneSelector() again
+                    // (double-show). The !m_zoneSelectorVisible guard handles exactly this:
+                    // false means "no interim show happened, we still need to recreate";
+                    // true means "already re-shown, skip".
+                    if (!m_zoneSelectorVisible) {
+                        showZoneSelector();
+                    }
+                });
+            }
+        };
+        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this, onVirtualScreensChangedHandler);
+        // Regions-only changes (swap/rotate/boundary-resize) also need the
+        // overlay windows destroyed and recreated with the new VS geometry.
+        // The handler is heavy but only runs when overlays are visible
+        // (active drag), so the cost is bounded.
+        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+                onVirtualScreensChangedHandler);
+    }
+
+    // Connect to system sleep/resume via logind to restart shader timer after wake.
+    // This prevents large iTimeDelta jumps when system resumes from sleep.
+    // Track the connect result so the dtor can disconnect cleanly rather than
+    // leaving a dead entry in QDBusConnection's slot table until the session ends.
+    m_prepareForSleepConnected = QDBusConnection::systemBus().connect(
+        QStringLiteral("org.freedesktop.login1"), QStringLiteral("/org/freedesktop/login1"),
+        QStringLiteral("org.freedesktop.login1.Manager"), QStringLiteral("PrepareForSleep"), this,
+        SLOT(onPrepareForSleep(bool)));
+    if (!m_prepareForSleepConnected) {
+        qCDebug(lcOverlay) << "PrepareForSleep D-Bus signal subscription failed (logind not available?) —"
+                           << "shader-timer restart on resume will not run";
+    }
 
     // Reset shader error state on construction (fresh start after reboot)
     m_pendingShaderError.clear();
 
-    m_cavaService = std::make_unique<CavaService>(this);
-    connect(m_cavaService.get(), &CavaService::spectrumUpdated, this, &OverlayService::onAudioSpectrumUpdated);
+    m_audioProvider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
+    connect(m_audioProvider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
+            &OverlayService::onAudioSpectrumUpdated);
 
-    // Create a persistent 1x1 keep-alive window to prevent Qt from tearing down
-    // global Wayland/Vulkan protocol objects (zwp_linux_dmabuf_v1, wp_presentation,
-    // etc.) when the last visible QQuickWindow is destroyed. Without this, after
-    // overlay destroy-on-hide, Qt cleans up the Vulkan rendering infrastructure
-    // and no new windows can render buffers.
-    QTimer::singleShot(0, this, [this]() {
-        QScreen* screen = Utils::primaryScreen();
-        if (!screen) {
-            return;
-        }
-        m_keepAliveWindow = new QQuickWindow();
-        QQmlEngine::setObjectOwnership(m_keepAliveWindow, QQmlEngine::CppOwnership);
-#if QT_CONFIG(vulkan)
-        auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-        if (vulkanInstance) {
-            m_keepAliveWindow->setVulkanInstance(vulkanInstance);
-        }
-#endif
-        m_keepAliveWindow->setScreen(screen);
-        m_keepAliveWindow->setWidth(1);
-        m_keepAliveWindow->setHeight(1);
-        // Configure as background layer — invisible, no input, minimal compositor cost.
-        // Best-effort: if layer-shell is unavailable the window still keeps Qt's
-        // Vulkan globals alive (just renders as a tiny xdg_toplevel).
-        (void)configureLayerSurface(m_keepAliveWindow, screen, LayerSurface::LayerBackground,
-                                    LayerSurface::KeyboardInteractivityNone, QStringLiteral("plasmazones-keepalive"),
-                                    LayerSurface::AnchorNone, 0);
-        m_keepAliveWindow->show();
-    });
+    // Keep-alive is managed by m_surfaceManager (created in its constructor).
 }
 
 bool OverlayService::isVisible() const
@@ -124,117 +475,113 @@ bool OverlayService::isZoneSelectorVisible() const
 
 OverlayService::~OverlayService()
 {
-    // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
-    // Only needed for the fallback instance we own — when main.cpp provided the instance,
-    // it outlives OverlayService (declared before QGuiApplication), so no cleanup needed.
-#if QT_CONFIG(vulkan)
-    if (m_fallbackVulkanInstance && qGuiApp) {
-        qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());
-    }
-#endif
-
     // Disconnect from QGuiApplication first so we don't get screen-related callbacks
     // while we're destroying windows.
     if (qGuiApp) {
         disconnect(qGuiApp, nullptr, this, nullptr);
     }
 
-    // Clean up all window types before engine is destroyed
-    // (takes C++ ownership to prevent QML GC interference)
-    cleanupWindowMap(m_zoneSelectorWindows);
-    cleanupWindowMap(m_overlayWindows);
-    cleanupWindowMap(m_layoutOsdWindows);
-    cleanupWindowMap(m_navigationOsdWindows);
-
-    // Destroy keep-alive window last (after all other windows)
-    if (m_keepAliveWindow) {
-        m_keepAliveWindow->close();
-        m_keepAliveWindow->destroy();
-        delete m_keepAliveWindow;
-        m_keepAliveWindow = nullptr;
+    if (m_prepareForSleepConnected) {
+        QDBusConnection::systemBus().disconnect(QStringLiteral("org.freedesktop.login1"),
+                                                QStringLiteral("/org/freedesktop/login1"),
+                                                QStringLiteral("org.freedesktop.login1.Manager"),
+                                                QStringLiteral("PrepareForSleep"), this, SLOT(onPrepareForSleep(bool)));
+        m_prepareForSleepConnected = false;
     }
 
-    // Process pending deletions before destroying the QML engine.
-    // All deleteLater() calls must complete while the engine is still valid.
-    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    // Clean up all window types before engine is destroyed. The Surface owns
+    // the QQuickWindow, so deleteLater on the Surface cascades into
+    // ~Surface → ~Impl → window teardown in the right order. Never destroy
+    // the window directly — that races against ~Surface and dereferences a
+    // deleted pointer in ~Impl.
+    cleanupAllScreenStates(m_screenStates);
 
-    // Now m_engine (unique_ptr) will be destroyed safely
-    // since all QML objects have been properly cleaned up
+    // Singleton surfaces (snap assist, layout picker, shader preview) are
+    // QObject children of `this`, so the QObject parent-child system would
+    // destroy them AFTER our own destructor body runs — i.e. after the
+    // member destructors. Schedule their deletion now so SurfaceManager's
+    // drain loop picks them up before the engine is destroyed.
+    if (m_snapAssistSurface) {
+        m_snapAssistSurface->deleteLater();
+        m_snapAssistSurface = nullptr;
+    }
+    if (m_layoutPickerSurface) {
+        m_layoutPickerSurface->deleteLater();
+        m_layoutPickerSurface = nullptr;
+    }
+    if (m_shaderPreviewSurface) {
+        m_shaderPreviewSurface->deleteLater();
+        m_shaderPreviewSurface = nullptr;
+    }
+
+    // Drain deferred-delete events NOW, while all OverlayService members are
+    // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,
+    // etc. — if we let ~m_surfaceManager's drain run instead, those members could
+    // already be destroyed (C++ member destruction order is reverse declaration).
+    m_surfaceManager->drainDeferredDeletes();
 }
 
-QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
-                                              const QVariantMap& initialProperties)
+PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams params)
 {
-    if (!screen) {
-        qCWarning(lcOverlay) << "Screen is null for" << windowType;
+    if (!params.screen) {
+        qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << params.windowType;
         return nullptr;
     }
 
-    QQmlComponent component(m_engine.get(), qmlUrl);
+    PhosphorLayer::SurfaceConfig cfg;
+    cfg.role = std::move(params.role);
+    cfg.contentUrl = std::move(params.qmlUrl);
+    cfg.screen = params.screen;
+    cfg.windowProperties = std::move(params.windowProperties);
+    cfg.anchorsOverride = std::move(params.anchorsOverride);
+    cfg.marginsOverride = std::move(params.marginsOverride);
+    cfg.keepMappedOnHide = params.keepMappedOnHide;
+    // SurfaceConfig::initialSize uses isEmpty() as the "unset" sentinel —
+    // forwarding the param verbatim preserves that contract (empty here →
+    // empty there → fall back to screen geometry inside surface.cpp).
+    cfg.initialSize = params.initialSize;
+    cfg.debugName = QString::fromUtf8(params.windowType);
 
-    if (component.isError()) {
-        qCWarning(lcOverlay) << "Failed to load" << windowType << "QML:" << component.errors();
+    return m_surfaceManager->createSurface(std::move(cfg), this);
+}
+
+PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
+                                                               QScreen* physScreen, const char* windowType)
+{
+    // Warm-up size matches NotificationOverlay.qml's QML literal (240x70).
+    // This only governs the size of the warm-up commit — every per-show
+    // path in osd.cpp goes through assertWindowOnScreen + sizeAndCenterOsd,
+    // both of which still call setGeometry / setWidth / setHeight against
+    // the live window, so per-show swapchain resizes still happen on every
+    // show as before. What changes here is that the daemon stops paying for
+    // a full-screen swapchain for an OSD whose visible content is a tiny
+    // toast: holding ~17 fullscreen swapchains (one per warmed overlay
+    // across virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary
+    // stack, and a content-sized warm-up brings that down to the toast's
+    // own footprint.
+    auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
+                                        .screen = physScreen,
+                                        .role = role,
+                                        .windowType = windowType,
+                                        .keepMappedOnHide = true,
+                                        .initialSize = QSize(240, 70)});
+    if (!surface) {
         return nullptr;
     }
 
-    if (component.status() != QQmlComponent::Ready) {
-        qCWarning(lcOverlay) << windowType << "QML component not ready, status=" << component.status();
-        return nullptr;
+    // Wire the QML-side auto-dismiss signal to Surface::hide(). The OSD
+    // content components (LayoutOsdContent, NavigationOsdContent) both
+    // expose `signal dismissRequested()` driven by their shared
+    // OsdDismissable timer; the unified NotificationOverlay host
+    // re-emits each loaded content's signal as its own dismissRequested.
+    // LayoutPickerOverlay uses the same name (post-#9 rename) for
+    // backdrop-click dismissal. String-based connect is the only path
+    // because QML-defined signals aren't addressable via Qt5
+    // `&Class::signal` pointers.
+    if (auto* window = surface->window()) {
+        QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));
     }
-
-    QObject* obj =
-        initialProperties.isEmpty() ? component.create() : component.createWithInitialProperties(initialProperties);
-    if (!obj) {
-        qCWarning(lcOverlay) << "Failed to create" << windowType << "window:" << component.errors();
-        return nullptr;
-    }
-
-    auto* window = qobject_cast<QQuickWindow*>(obj);
-    if (!window) {
-        qCWarning(lcOverlay) << "Created object is not a QQuickWindow for" << windowType;
-        obj->deleteLater();
-        return nullptr;
-    }
-
-    // Take C++ ownership so QML's GC doesn't delete the window
-    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-
-    // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
-    // set before it can create a Vulkan surface. The instance is stored as a dynamic
-    // property on QGuiApplication by main.cpp.
-    // IMPORTANT: setVulkanInstance() must be called before the window is shown or
-    // the scene graph is initialized. This is safe here because the window starts
-    // with visible: false and show() is called separately after createQmlWindow().
-#if QT_CONFIG(vulkan)
-    auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-    if (vulkanInstance) {
-        window->setVulkanInstance(vulkanInstance);
-    } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
-        // This can happen when backend is 'auto' and Qt chose Vulkan at runtime.
-        // Create a QVulkanInstance on-the-fly so overlays still work.
-        if (!m_fallbackVulkanInstance) {
-            m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
-            m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
-            if (m_fallbackVulkanInstance->create()) {
-                qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
-                qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
-                                  QVariant::fromValue(m_fallbackVulkanInstance.get()));
-            } else {
-                qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance."
-                                      << "Overlay windows will not render correctly.";
-                m_fallbackVulkanInstance.reset();
-                window->deleteLater();
-                return nullptr;
-            }
-        }
-        window->setVulkanInstance(m_fallbackVulkanInstance.get());
-    }
-#endif
-
-    // Set the screen before the QPA plugin creates the LayerSurface
-    window->setScreen(screen);
-
-    return window;
+    return surface;
 }
 
 void OverlayService::show()
@@ -255,10 +602,13 @@ void OverlayService::show()
             cursorScreen = Utils::primaryScreen();
         }
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen
-            && isContextDisabled(m_settings, Utils::screenIdentifier(cursorScreen), m_currentVirtualDesktop,
-                                 m_currentActivity)) {
-            return;
+        // Check both physical and effective (virtual) screen IDs
+        if (cursorScreen && m_settings) {
+            QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), cursorScreen);
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
+                return;
+            }
         }
     }
 
@@ -279,23 +629,59 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             // Fallback to primary screen if no screen contains the cursor position
             cursorScreen = Utils::primaryScreen();
         }
+
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen
-            && isContextDisabled(m_settings, Utils::screenIdentifier(cursorScreen), m_currentVirtualDesktop,
-                                 m_currentActivity)) {
-            return;
+        // Check both physical and effective (virtual) screen IDs
+        if (cursorScreen && m_settings) {
+            QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
+                return;
+            }
         }
     }
+
+    const QPoint cursorPos(cursorX, cursorY);
 
     if (m_visible) {
-        // Already visible: when single-monitor mode, switch overlay if cursor moved to different screen (#136)
-        if (!showOnAllMonitors && cursorScreen && m_currentOverlayScreen != cursorScreen) {
-            initializeOverlay(cursorScreen);
+        // One-overlay-per-VS architecture: every VS already has a live
+        // overlay window from initializeOverlay. Cross-VS switching is
+        // just a matter of flipping per-window _idled state — no
+        // re-init, no rekey, no layer-shell re-anchor. This sidesteps
+        // the earlier "wrong spot" bug where rekey moved the map entry
+        // but left the layer surface anchored to the previous VS's
+        // bounds, and the full NVIDIA vkDestroyDevice deadlock on any
+        // destroy path.
+        if (!cursorScreen) {
+            cursorScreen = Utils::findScreenAtPosition(cursorPos);
         }
-        return;
+        if (!cursorScreen) {
+            return;
+        }
+        const QString cursorEffectiveId =
+            Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
+        if (cursorEffectiveId.isEmpty()) {
+            return;
+        }
+        // Per-VS toggle (autotile→snap mid-session) leaves us with a VS that
+        // is no longer excluded but never had its overlay window created at
+        // first-show time. Detect that here — the cursor is now on a non-
+        // excluded VS with no live window — and fall through to full init
+        // so Phase 3 creates the window. Without this, applyIdleStateForCursor
+        // finds nothing to flip and the overlay never becomes visible until
+        // the next hide()/show() cycle.
+        const bool cursorVsHasWindow = m_screenStates.contains(cursorEffectiveId)
+            && m_screenStates.value(cursorEffectiveId).overlayWindow != nullptr;
+        if (cursorVsHasWindow || m_excludedScreens.contains(cursorEffectiveId)) {
+            m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
+            applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
+            return;
+        }
+        // Fall through — initializeOverlay will (re)build the per-VS window
+        // set against the current excluded set and resume normal operation.
     }
 
-    initializeOverlay(cursorScreen);
+    initializeOverlay(cursorScreen, cursorPos);
 }
 
 void OverlayService::hide()
@@ -305,7 +691,7 @@ void OverlayService::hide()
     }
 
     m_visible = false;
-    m_currentOverlayScreen = nullptr;
+    m_currentOverlayScreenId.clear();
 
     // Stop shader animation
     stopShaderAnimation();
@@ -313,12 +699,16 @@ void OverlayService::hide()
     // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
     // so animations feel less predictable and don't restart
 
-    // Dismiss all overlay windows. Non-shader windows are hidden (reused on
-    // next show); shader windows are destroyed (QSGRenderNode pipelines
-    // don't survive the QRhi context change across hide/show).
-    const QList<QScreen*> screens = m_overlayWindows.keys();
-    for (auto* screen : screens) {
-        dismissOverlayWindow(screen);
+    // Destroy overlay windows instead of hiding them. On Vulkan with Wayland
+    // layer-shell, window->hide() destroys the wl_surface but the Qt Vulkan
+    // backend doesn't properly reinitialize the VkSwapchainKHR when the window
+    // is re-shown, causing the scene graph render loop to stall. Destroying the
+    // window entirely and creating a fresh one on the next show() avoids this.
+    // initializeOverlay() will call createOverlayWindow() since overlay windows
+    // are now destroyed.
+    const QStringList screenIds = m_screenStates.keys();
+    for (const QString& screenId : screenIds) {
+        destroyOverlayWindow(screenId);
     }
 
     m_pendingShaderError.clear();
@@ -335,6 +725,119 @@ void OverlayService::toggle()
     }
 }
 
+void OverlayService::setIdleForDragPause()
+{
+    // Blank the overlay's shader output without destroying QQuickWindows.
+    // The heavy hide() path pays a ~QQuickWindow Vulkan teardown per screen
+    // which blocks the main thread on the scene graph render thread — and
+    // with modifier-key thrashing during a drag we ended up paying that cost
+    // many times per second, stalling D-Bus dispatch long enough for
+    // kwin-effect's endDrag to time out and the user to see multi-second lag.
+    //
+    // Here we only clear the per-window QML properties that drive the shader
+    // (zones, zoneCount, highlights). Windows, Vulkan swap chains, and layer
+    // surfaces stay alive. On the next activation tick, refreshFromIdle()
+    // re-pushes the current zone data — cheap because the labels-texture
+    // build is hash-cached on unchanged inputs.
+    if (!m_visible) {
+        return;
+    }
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        QQuickWindow* window = it.value().overlayWindow;
+        if (!window) {
+            continue;
+        }
+        // _idled gates content.visible and toggles Qt.WindowTransparentForInput
+        // in the overlay QML (RenderNodeOverlay.qml / ZoneOverlay.qml). That
+        // makes the wl_surface effectively invisible and non-input-absorbing
+        // in place, without destroying the QQuickWindow. Blanking only the
+        // zones properties below is not sufficient — on some shaders the
+        // base pass still renders visible output when zoneCount==0, and the
+        // input region stays active until the flag change lands.
+        writeQmlProperty(window, QStringLiteral("_idled"), true);
+        writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
+        writeQmlProperty(window, QStringLiteral("zoneCount"), 0);
+        writeQmlProperty(window, QStringLiteral("highlightedCount"), 0);
+        writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
+        writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
+        // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
+        // side's labelsTexture property still holds the previously-built image
+        // (setProperty was never called with a new one); it just isn't sampled
+        // while zoneCount is 0. Keeping the hash means refreshFromIdle() with
+        // unchanged zones hits the cache and costs one hash compute instead
+        // of rebuilding 23 MB of pixels.
+    }
+    // CRITICAL: mark zone data CLEAN, not dirty. The shader animation tick
+    // (shader.cpp:245) re-runs updateZonesForAllWindows() whenever dirty is
+    // set, which would rebuild the real zones and undo the blank. The idle
+    // state is "what we just wrote, do not re-derive from layout data until
+    // refreshFromIdle() is called."
+    m_zoneDataDirty = false;
+    // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
+    // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
+    // set to 0 the per-frame work collapses to a handful of uniform uploads
+    // to a surface that's rendering no visible geometry — bounded cost, O(1)
+    // per screen. Pausing and restarting the timer across the idle cycle
+    // would require additional state tracking in refreshFromIdle() and add
+    // a startup transient on every modifier re-press. Left unchanged for
+    // simplicity; revisit if profiling ever shows it as a hot spot.
+}
+
+void OverlayService::refreshFromIdle()
+{
+    // Restore zone data after a setIdleForDragPause() blank and flip
+    // the active VS's overlay back to visible.
+    //
+    // setIdleForDragPause() unconditionally idles every overlay (zones
+    // blanked + _idled=true), so refreshFromIdle() re-pushes zone data
+    // to all of them and then applies the cursor-based idle state to
+    // un-idle the one the cursor is currently on. The L2 labels-texture
+    // hash cache keeps the shader-path re-push cheap on unchanged inputs.
+    if (!m_visible) {
+        return;
+    }
+    updateZonesForAllWindows();
+    // Resolve the cursor's current VS — the drag adaptor keeps
+    // m_currentOverlayScreenId updated via showAtPosition, so this
+    // reflects the last VS the cursor was observed on.
+    const bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
+    applyIdleStateForCursor(m_currentOverlayScreenId, showOnAllMonitors);
+}
+
+void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors)
+{
+    // One-overlay-per-VS idle state: iterate every live overlay window
+    // and flip its _idled QML property based on whether its VS should
+    // currently be accepting input / rendering content.
+    //
+    // - showOnAllMonitors=true  → all overlays un-idled (all VSes active)
+    // - showOnAllMonitors=false → only activeEffectiveId un-idled
+    // - activeEffectiveId empty → all overlays idled (no active VS —
+    //   used by setIdleForDragPause when drag-end hasn't chosen a next
+    //   cursor position yet, or when the cursor sits on a disabled VS)
+    //
+    // The write is idempotent: QML property binding only re-evaluates
+    // when the value actually changes, so flipping _idled on a window
+    // that's already in the target state is free.
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        QQuickWindow* window = it.value().overlayWindow;
+        if (!window) {
+            continue;
+        }
+        const bool shouldBeActive =
+            showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
+        writeQmlProperty(window, QStringLiteral("_idled"), !shouldBeActive);
+    }
+}
+
+void OverlayService::setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry)
+{
+    m_animShaderRegistry = registry;
+    if (m_surfaceAnimator) {
+        m_surfaceAnimator->setAnimationShaderRegistry(registry);
+    }
+}
+
 void OverlayService::updateSettings(ISettings* settings)
 {
     setSettings(settings);
@@ -348,52 +851,9 @@ void OverlayService::updateSettings(ISettings* settings)
     // the current configuration.
     syncCavaState();
 
-    // Destroy overlay windows on screens/desktops/activities that are now disabled.
-    // Destroy (not hide) because disabled contexts won't be re-shown soon, and
-    // destroying frees GPU resources for screens that may be permanently inactive.
-    {
-        const QList<QScreen*> overlayScreens = m_overlayWindows.keys();
-        for (auto* screen : overlayScreens) {
-            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                  m_currentActivity)) {
-                destroyOverlayWindow(screen);
-            }
-        }
-    }
-    // Zone selector windows on disabled contexts are destroyed to free GPU resources.
-    {
-        const QList<QScreen*> selectorScreens = m_zoneSelectorWindows.keys();
-        for (auto* screen : selectorScreens) {
-            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                  m_currentActivity)) {
-                destroyZoneSelectorWindow(screen);
-            }
-        }
-    }
-
-    if (m_visible) {
-        for (auto* screen : m_overlayWindows.keys()) {
-            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                  m_currentActivity)) {
-                continue;
-            }
-            updateOverlayWindow(screen);
-        }
-    }
-
-    // Keep zone selector windows in sync with settings changes (position, layout, sizing).
-    // Without this, changing settings while the selector is visible can leave stale geometry
-    // and anchors, causing corrupted rendering or incorrect window sizing.
-    // Skip disabled screens/desktops/activities.
-    if (!m_zoneSelectorWindows.isEmpty()) {
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                  m_currentActivity)) {
-                continue;
-            }
-            updateZoneSelectorWindow(screen);
-        }
-    }
+    // Hide overlay and zone selector on disabled screens/desktops/activities,
+    // then refresh remaining (non-disabled) windows with the new settings.
+    hideDisabledAndRefresh();
 
     // If the selector was visible but got disabled via settings, hide it immediately.
     if (m_zoneSelectorVisible && m_settings && !m_settings->zoneSelectorEnabled()) {
@@ -401,7 +861,7 @@ void OverlayService::updateSettings(ISettings* settings)
     }
 }
 
-void OverlayService::setLayout(Layout* layout)
+void OverlayService::setLayout(PhosphorZones::Layout* layout)
 {
     if (m_layout != layout) {
         m_layout = layout;
@@ -410,12 +870,21 @@ void OverlayService::setLayout(Layout* layout)
     }
 }
 
-Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
+PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 {
-    Layout* screenLayout = nullptr;
-    if (m_layoutManager && screen) {
-        screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                                        m_currentActivity);
+    // Physical QScreen* overload: derives screenId and delegates.
+    // Callers with a known virtual screenId should use the QString overload directly.
+    if (!screen) {
+        return m_layout;
+    }
+    return resolveScreenLayout(Phosphor::Screens::ScreenIdentity::identifierFor(screen));
+}
+
+PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
+{
+    PhosphorZones::Layout* screenLayout = nullptr;
+    if (m_layoutManager && !screenId.isEmpty()) {
+        screenLayout = m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
         if (!screenLayout) {
             screenLayout = m_layoutManager->defaultLayout();
         }
@@ -431,42 +900,30 @@ void OverlayService::hideDisabledAndRefresh()
     // Destroy windows on screens where the current context is disabled.
     // Destroy (not hide) to free GPU resources for permanently inactive contexts.
     if (m_settings) {
-        {
-            const QList<QScreen*> selectorScreens = m_zoneSelectorWindows.keys();
-            for (auto* screen : selectorScreens) {
-                if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                      m_currentActivity)) {
-                    destroyZoneSelectorWindow(screen);
-                }
-            }
-        }
-        if (m_visible) {
-            const QList<QScreen*> overlayScreens = m_overlayWindows.keys();
-            for (auto* screen : overlayScreens) {
-                if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                      m_currentActivity)) {
-                    destroyOverlayWindow(screen);
+        const QStringList screenIds = m_screenStates.keys();
+        for (const QString& screenId : screenIds) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                  m_currentVirtualDesktop, m_currentActivity)) {
+                destroyZoneSelectorWindow(screenId);
+                if (m_visible) {
+                    destroyOverlayWindow(screenId);
                 }
             }
         }
     }
 
-    // Update remaining (non-disabled) zone selector windows
-    if (!m_zoneSelectorWindows.isEmpty()) {
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                   m_currentActivity)) {
-                updateZoneSelectorWindow(screen);
-            }
+    // Update remaining (non-disabled) zone selector and overlay windows
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        const QString& screenId = it.key();
+        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
+                              m_currentActivity)) {
+            continue;
         }
-    }
-    // Update remaining overlay windows when visible
-    if (m_visible && !m_overlayWindows.isEmpty()) {
-        for (auto* screen : m_overlayWindows.keys()) {
-            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                   m_currentActivity)) {
-                updateOverlayWindow(screen);
-            }
+        if (it.value().zoneSelectorWindow) {
+            updateZoneSelectorWindow(screenId);
+        }
+        if (m_visible && it.value().overlayWindow && it.value().overlayPhysScreen) {
+            updateOverlayWindow(screenId, it.value().overlayPhysScreen);
         }
     }
 }
@@ -491,8 +948,25 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
 void OverlayService::setupForScreen(QScreen* screen)
 {
-    if (!m_overlayWindows.contains(screen)) {
-        createOverlayWindow(screen);
+    // Set up overlay windows for all effective screens on this physical screen
+    auto* mgr = m_screenManager;
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    if (mgr && mgr->hasVirtualScreens(physId)) {
+        for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
+            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayWindow) {
+                QRect vsGeom = mgr->screenGeometry(vsId);
+                if (!vsGeom.isValid()) {
+                    qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
+                                         << "— skipping overlay creation";
+                    continue;
+                }
+                createOverlayWindow(vsId, screen, vsGeom);
+            }
+        }
+    } else {
+        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayWindow) {
+            createOverlayWindow(screen);
+        }
     }
 }
 
@@ -501,7 +975,7 @@ void OverlayService::removeScreen(QScreen* screen)
     destroyOverlayWindow(screen);
 }
 
-void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
+void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry)
 {
     if (!window || !screen) {
         return;
@@ -509,59 +983,162 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
     if (window->screen() != screen) {
         window->setScreen(screen);
     }
-    window->setGeometry(screen->geometry());
+    // For virtual screens (geometry differs from physical), positioning is handled by
+    // LayerShellQt margins. Calling setGeometry with absolute coordinates would override
+    // those margins, causing double-positioning. Only set geometry for physical screens.
+    const QRect targetGeom = geometry.isValid() ? geometry : screen->geometry();
+    if (targetGeom == screen->geometry()) {
+        window->setGeometry(targetGeom);
+    }
+    // Virtual screens: size is set by the caller; position is set by LayerShellQt margins.
 }
 
 void OverlayService::handleScreenAdded(QScreen* screen)
 {
-    if (m_visible && screen
-        && !isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                              m_currentActivity)) {
+    if (!m_visible || !screen) {
+        return;
+    }
+    const QString physScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+
+    auto* mgr = m_screenManager;
+    if (mgr && mgr->hasVirtualScreens(physScreenId)) {
+        // Create overlays for each virtual screen on this physical screen
+        for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, vsId, m_currentVirtualDesktop,
+                                  m_currentActivity)) {
+                continue;
+            }
+            QRect vsGeom = mgr->screenGeometry(vsId);
+            if (vsGeom.isValid()) {
+                createOverlayWindow(vsId, screen, vsGeom);
+                updateOverlayWindow(vsId, screen);
+                if (auto* window = m_screenStates.value(vsId).overlayWindow) {
+                    assertWindowOnScreen(window, screen, vsGeom);
+                    window->show();
+                }
+            }
+        }
+    } else {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
-        if (auto* window = m_overlayWindows.value(screen)) {
+        if (auto* window = m_screenStates.value(physScreenId).overlayWindow) {
             assertWindowOnScreen(window, screen);
             window->show();
         }
     }
 }
 
-void OverlayService::handleScreenRemoved(QScreen* screen)
+void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
 {
-    destroyOverlayWindow(screen);
-    destroyZoneSelectorWindow(screen);
-    destroyLayoutOsdWindow(screen);
-    destroyNavigationOsdWindow(screen);
-    // Clean up failed creation tracking
-    m_navigationOsdCreationFailed.remove(screen);
-}
-
-QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
-{
-    // Determine filter per-screen: check this screen's assignment to decide
-    // whether to show manual layouts, autotile algorithms, or both.
-    bool includeManual = m_includeManualLayouts;
-    bool includeAutotile = m_includeAutotileLayouts;
-    auto* layoutManager = dynamic_cast<LayoutManager*>(m_layoutManager);
-    if (layoutManager) {
-        const QString resolvedId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
-        if (!resolvedId.isEmpty()) {
-            const QString assignmentId =
-                layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
-            if (LayoutId::isAutotile(assignmentId)) {
-                includeManual = false;
-                includeAutotile = true;
-            } else {
-                includeManual = true;
-                includeAutotile = false;
+    // Remove all windows associated with this physical screen
+    // (includes any virtual screens on this physical screen)
+    const QStringList screenIds = m_screenStates.keys();
+    for (const QString& id : screenIds) {
+        const auto& state = m_screenStates[id];
+        if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
+            || state.notificationPhysScreen == screen) {
+            destroyOverlayWindow(id);
+            destroyZoneSelectorWindow(id);
+            destroyNotificationWindow(id);
+            // If every window for this screen-id was already released (or
+            // this state entry never actually held any — e.g. an OSD
+            // creation failed earlier), drop the empty shell so screen
+            // hot-plug cycles don't slowly accumulate dead keys. Matches
+            // cleanupVirtualScreenStates semantics: the state entry is
+            // meaningless without at least one live window.
+            auto& s = m_screenStates[id];
+            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.notificationSurface) {
+                m_screenStates.remove(id);
             }
         }
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
-        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
-        LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
-    return LayoutUtils::toVariantList(entries);
+
+    // Clean up snap assist and layout picker if on this physical screen
+    if (m_snapAssistScreen == screen) {
+        destroySnapAssistWindow();
+    }
+    if (m_layoutPickerScreen == screen) {
+        destroyLayoutPickerWindow();
+    }
+
+    // Drop notification-window "creation failed" sentinels for screen ids
+    // rooted on this physical screen. Without this, if the same physical
+    // monitor is reconnected (hot-plug cycle) it inherits the stale flag
+    // and we silently refuse to recreate the OSD. Matching is prefix-based
+    // because virtual-screen ids embed the physical id as the prefix.
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    if (!physId.isEmpty()) {
+        const QString vsPrefix = physId + PhosphorIdentity::VirtualScreenId::Separator;
+        for (auto it = m_notificationCreationFailed.begin(); it != m_notificationCreationFailed.end();) {
+            if (*it == physId || it->startsWith(vsPrefix)) {
+                it = m_notificationCreationFailed.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // Drop the dedup sentinel for this physical screen so a hot-plug cycle
+    // doesn't suppress the first navigation OSD on the reconnected monitor
+    // when it lands inside the implicit 200 ms timeout window. The dedup is
+    // keyed on the screenId at time-of-fire, and a removed-then-readded
+    // monitor reuses the same id — without this clear, a navigation action
+    // on the readded screen within 200 ms of the last action on the
+    // pre-removal incarnation gets silently swallowed.
+    if (!physId.isEmpty()
+        && (m_lastNavigationScreenId == physId
+            || m_lastNavigationScreenId.startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator))) {
+        m_lastNavigationActionKey.clear();
+        m_lastNavigationScreenId.clear();
+        m_lastNavigationTime.invalidate();
+    }
+}
+
+void OverlayService::handleScreenRemoved(QScreen* screen)
+{
+    destroyAllWindowsForPhysicalScreen(screen);
+}
+
+OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId) const
+{
+    // Both buildLayoutsList (populates the popup) and visibleLayoutCount
+    // (used by isNearTriggerEdge to size the keep-visible bar) go through
+    // here so the trigger geometry matches the rendered popup row count.
+    // If the resolver ever skips setting one of the fields, the struct's
+    // in-class defaults (both true) supply a safe "show everything"
+    // fallback rather than UB.
+    LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
+    if (!m_layoutManager) {
+        return flags;
+    }
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+        : screenId;
+    if (resolvedId.isEmpty()) {
+        return flags;
+    }
+    const QString assignmentId =
+        m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        flags.manual = false;
+        flags.autotile = true;
+    } else {
+        flags.manual = true;
+        flags.autotile = false;
+    }
+    return flags;
+}
+
+QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize autotilePreviewCanvas) const
+{
+    const auto inc = resolvePerScreenLayoutInclude(screenId);
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
+        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
+        autotilePreviewCanvas);
+    return PlasmaZones::toVariantList(entries);
 }
 
 void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
@@ -582,11 +1159,20 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 
 int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
-    // Ordering doesn't affect count — skip custom order for performance
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-        m_includeAutotileLayouts, Utils::screenAspectRatio(screenId),
-        m_settings && m_settings->filterLayoutsByAspectRatio());
+    // Mirror buildLayoutsList's per-screen include resolution. Pre-fix the
+    // raw m_includeManualLayouts/m_includeAutotileLayouts flags were used
+    // here — both default true — so on screens where the popup actually
+    // showed only manual (or only autotile) layouts, this returned the
+    // sum of both, inflating the row count and blowing barHeight up to
+    // ~screen height. isNearTriggerEdge then kept the popup visible
+    // wherever the cursor was during the drag.
+    const auto inc = resolvePerScreenLayoutInclude(screenId);
+    // Ordering doesn't affect count — skip custom order for performance.
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
+        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();
 }
 

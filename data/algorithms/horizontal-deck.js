@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Horizontal Deck
-// @builtinId horizontal-deck
-// @description Focused window on top; remaining windows peek from the bottom edge
-// @producesOverlappingZones true
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.75
-// @defaultMaxWindows 5
-// @minimumWindows 1
-// @zoneNumberDisplay firstAndLast
-// @supportsMemory false
+var metadata = {
+    name: "Horizontal Deck",
+    id: "horizontal-deck",
+    description: "Focused window on top; remaining windows peek from the bottom edge",
+    producesOverlappingZones: true,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.75,
+    defaultMaxWindows: 5,
+    minimumWindows: 1,
+    zoneNumberDisplay: "firstAndLast",
+    supportsMemory: false
+};
 
 /**
  * Horizontal Deck layout: vertical version of Deck. The focused window takes

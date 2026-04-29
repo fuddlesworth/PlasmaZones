@@ -3,7 +3,7 @@
 
 /**
  * @file test_layout_zones.cpp
- * @brief Unit tests for Layout zone operations, serialization, visibility, geometry cache
+ * @brief Unit tests for PhosphorZones::Layout zone operations, serialization, visibility, geometry cache
  */
 
 #include <QTest>
@@ -12,8 +12,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include "core/layoutworker/layoutcomputeservice.h"
+#include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
 
@@ -22,20 +23,20 @@ class TestLayoutZones : public QObject
     Q_OBJECT
 
 private:
-    Layout* createLayoutWithZones(int zoneCount, QObject* parent = nullptr)
+    PhosphorZones::Layout* createLayoutWithZones(int zoneCount, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(QStringLiteral("test"), parent);
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("test"), parent);
         for (int i = 0; i < zoneCount; ++i) {
-            auto* zone = new Zone();
+            auto* zone = new PhosphorZones::Zone();
             zone->setRelativeGeometry(QRectF(qreal(i) / zoneCount, 0.0, 1.0 / zoneCount, 1.0));
             layout->addZone(zone);
         }
         return layout;
     }
 
-    Zone* createZoneWithGeometry(const QRectF& geometry, QObject* parent = nullptr)
+    PhosphorZones::Zone* createZoneWithGeometry(const QRectF& geometry, QObject* parent = nullptr)
     {
-        auto* zone = new Zone(parent);
+        auto* zone = new PhosphorZones::Zone(parent);
         zone->setGeometry(geometry);
         zone->setRelativeGeometry(geometry);
         return zone;
@@ -49,7 +50,7 @@ private Q_SLOTS:
 
     void testLayout_zoneAtPoint_overlappingZones_selectsSmallest()
     {
-        Layout layout(QStringLiteral("Overlap"));
+        PhosphorZones::Layout layout(QStringLiteral("Overlap"));
 
         auto* bigZone = createZoneWithGeometry(QRectF(0, 0, 1000, 1000));
         layout.addZone(bigZone);
@@ -57,14 +58,14 @@ private Q_SLOTS:
         auto* smallZone = createZoneWithGeometry(QRectF(100, 100, 200, 200));
         layout.addZone(smallZone);
 
-        Zone* result = layout.zoneAtPoint(QPointF(150, 150));
+        PhosphorZones::Zone* result = layout.zoneAtPoint(QPointF(150, 150));
         QVERIFY(result != nullptr);
         QCOMPARE(result, smallZone);
     }
 
     void testLayout_zoneAtPoint_identicalSizeOverlap()
     {
-        Layout layout(QStringLiteral("IdenticalOverlap"));
+        PhosphorZones::Layout layout(QStringLiteral("IdenticalOverlap"));
 
         auto* zone1 = createZoneWithGeometry(QRectF(0, 0, 100, 100));
         layout.addZone(zone1);
@@ -72,36 +73,36 @@ private Q_SLOTS:
         auto* zone2 = createZoneWithGeometry(QRectF(50, 50, 100, 100));
         layout.addZone(zone2);
 
-        Zone* result = layout.zoneAtPoint(QPointF(75, 75));
+        PhosphorZones::Zone* result = layout.zoneAtPoint(QPointF(75, 75));
         QVERIFY(result != nullptr);
         QCOMPARE(result, zone1);
     }
 
     void testLayout_zoneAtPoint_noContainingZone_returnsNull()
     {
-        Layout layout(QStringLiteral("NoMatch"));
+        PhosphorZones::Layout layout(QStringLiteral("NoMatch"));
 
         auto* zone = createZoneWithGeometry(QRectF(0, 0, 100, 100));
         layout.addZone(zone);
 
-        Zone* result = layout.zoneAtPoint(QPointF(500, 500));
+        PhosphorZones::Zone* result = layout.zoneAtPoint(QPointF(500, 500));
         QVERIFY(result == nullptr);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P1: Zone add/remove renumbering
+    // P1: PhosphorZones::Zone add/remove renumbering
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testLayout_addZone_renumbersZones()
     {
-        Layout layout(QStringLiteral("Renumber"));
+        PhosphorZones::Layout layout(QStringLiteral("Renumber"));
 
-        auto* z1 = new Zone();
+        auto* z1 = new PhosphorZones::Zone();
         z1->setRelativeGeometry(QRectF(0, 0, 0.5, 1));
         layout.addZone(z1);
         QCOMPARE(z1->zoneNumber(), 1);
 
-        auto* z2 = new Zone();
+        auto* z2 = new PhosphorZones::Zone();
         z2->setRelativeGeometry(QRectF(0.5, 0, 0.5, 1));
         layout.addZone(z2);
         QCOMPARE(z2->zoneNumber(), 2);
@@ -112,17 +113,17 @@ private Q_SLOTS:
 
     void testLayout_removeZone_renumbersRemaining()
     {
-        Layout layout(QStringLiteral("RemoveRenumber"));
+        PhosphorZones::Layout layout(QStringLiteral("RemoveRenumber"));
 
-        auto* z1 = new Zone();
+        auto* z1 = new PhosphorZones::Zone();
         z1->setRelativeGeometry(QRectF(0, 0, 0.33, 1));
         layout.addZone(z1);
 
-        auto* z2 = new Zone();
+        auto* z2 = new PhosphorZones::Zone();
         z2->setRelativeGeometry(QRectF(0.33, 0, 0.33, 1));
         layout.addZone(z2);
 
-        auto* z3 = new Zone();
+        auto* z3 = new PhosphorZones::Zone();
         z3->setRelativeGeometry(QRectF(0.66, 0, 0.34, 1));
         layout.addZone(z3);
 
@@ -141,7 +142,7 @@ private Q_SLOTS:
 
     void testLayout_serialization_roundtrip_allProperties()
     {
-        Layout original(QStringLiteral("Roundtrip Test"));
+        PhosphorZones::Layout original(QStringLiteral("Roundtrip Test"));
         original.setDescription(QStringLiteral("A test layout"));
         original.setZonePadding(12);
         original.setOuterGap(8);
@@ -158,19 +159,19 @@ private Q_SLOTS:
         original.setAutoAssign(true);
         original.setUseFullScreenGeometry(true);
 
-        auto* zone1 = new Zone();
+        auto* zone1 = new PhosphorZones::Zone();
         zone1->setRelativeGeometry(QRectF(0, 0, 0.5, 1));
         zone1->setName(QStringLiteral("Left"));
         original.addZone(zone1);
 
-        auto* zone2 = new Zone();
+        auto* zone2 = new PhosphorZones::Zone();
         zone2->setRelativeGeometry(QRectF(0.5, 0, 0.5, 1));
         zone2->setName(QStringLiteral("Right"));
         original.addZone(zone2);
 
         QJsonObject json = original.toJson();
 
-        Layout* restored = Layout::fromJson(json);
+        PhosphorZones::Layout* restored = PhosphorZones::Layout::fromJson(json);
         QVERIFY(restored != nullptr);
 
         QCOMPARE(restored->id(), original.id());
@@ -199,17 +200,17 @@ private Q_SLOTS:
 
     void testLayout_serialization_perSideGaps_minus1_preserved()
     {
-        Layout original(QStringLiteral("Gaps"));
+        PhosphorZones::Layout original(QStringLiteral("Gaps"));
         original.setUsePerSideOuterGap(true);
         original.setOuterGapTop(10);
 
-        auto* zone = new Zone();
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         original.addZone(zone);
 
         QJsonObject json = original.toJson();
 
-        Layout* restored = Layout::fromJson(json);
+        PhosphorZones::Layout* restored = PhosphorZones::Layout::fromJson(json);
         QVERIFY(restored != nullptr);
 
         QCOMPARE(restored->outerGapTop(), 10);
@@ -226,13 +227,13 @@ private Q_SLOTS:
 
     void testLayout_visibility_hiddenFromSelector()
     {
-        Layout layout(QStringLiteral("Hidden"));
+        PhosphorZones::Layout layout(QStringLiteral("Hidden"));
         QVERIFY(!layout.hiddenFromSelector());
 
         layout.setHiddenFromSelector(true);
         QVERIFY(layout.hiddenFromSelector());
 
-        QSignalSpy spy(&layout, &Layout::hiddenFromSelectorChanged);
+        QSignalSpy spy(&layout, &PhosphorZones::Layout::hiddenFromSelectorChanged);
         layout.setHiddenFromSelector(false);
         QCOMPARE(spy.count(), 1);
         QVERIFY(!layout.hiddenFromSelector());
@@ -240,7 +241,7 @@ private Q_SLOTS:
 
     void testLayout_visibility_allowedScreens_emptyMeansAll()
     {
-        Layout layout(QStringLiteral("AllScreens"));
+        PhosphorZones::Layout layout(QStringLiteral("AllScreens"));
         QVERIFY(layout.allowedScreens().isEmpty());
 
         layout.setAllowedScreens({QStringLiteral("DP-1")});
@@ -252,7 +253,7 @@ private Q_SLOTS:
 
     void testLayout_visibility_allowedDesktops_emptyMeansAll()
     {
-        Layout layout(QStringLiteral("AllDesktops"));
+        PhosphorZones::Layout layout(QStringLiteral("AllDesktops"));
         QVERIFY(layout.allowedDesktops().isEmpty());
 
         layout.setAllowedDesktops({1, 2, 3});
@@ -264,7 +265,7 @@ private Q_SLOTS:
 
     void testLayout_visibility_allowedActivities_emptyMeansAll()
     {
-        Layout layout(QStringLiteral("AllActivities"));
+        PhosphorZones::Layout layout(QStringLiteral("AllActivities"));
         QVERIFY(layout.allowedActivities().isEmpty());
 
         layout.setAllowedActivities({QStringLiteral("act1"), QStringLiteral("act2")});
@@ -280,25 +281,25 @@ private Q_SLOTS:
 
     void testLayout_recalculateGeometries_cachedGeometry_noRedundantWork()
     {
-        Layout layout(QStringLiteral("Cache"));
-        auto* zone = new Zone();
+        PhosphorZones::Layout layout(QStringLiteral("Cache"));
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout.addZone(zone);
 
         QRectF screenGeom(0, 0, 1920, 1080);
 
-        layout.recalculateZoneGeometries(screenGeom);
+        LayoutComputeService::recalculateSync(&layout, screenGeom);
         QRectF firstGeom = zone->geometry();
         QVERIFY(!firstGeom.isEmpty());
 
         QCOMPARE(layout.lastRecalcGeometry(), screenGeom);
 
         zone->setGeometry(QRectF(0, 0, 100, 100));
-        layout.recalculateZoneGeometries(screenGeom);
+        LayoutComputeService::recalculateSync(&layout, screenGeom);
         QCOMPARE(zone->geometry(), QRectF(0, 0, 100, 100));
 
         QRectF newScreenGeom(0, 0, 2560, 1440);
-        layout.recalculateZoneGeometries(newScreenGeom);
+        LayoutComputeService::recalculateSync(&layout, newScreenGeom);
         QCOMPARE(layout.lastRecalcGeometry(), newScreenGeom);
         QCOMPARE(zone->geometry(), QRectF(0, 0, 2560, 1440));
     }

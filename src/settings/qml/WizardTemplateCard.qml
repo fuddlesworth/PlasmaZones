@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Reusable template card for wizard dialogs.
@@ -72,17 +73,17 @@ Item {
                 yScale: root.isHovered ? 1.02 : 1
 
                 Behavior on xScale {
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.hover"
+                        durationOverride: 200
                     }
 
                 }
 
                 Behavior on yScale {
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.hover"
+                        durationOverride: 200
                     }
 
                 }
@@ -92,9 +93,9 @@ Item {
                 y: root.isHovered ? -1 : 0
 
                 Behavior on y {
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.hover"
+                        durationOverride: 200
                     }
 
                 }
@@ -156,24 +157,25 @@ Item {
         }
 
         Behavior on color {
-            ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: 200
             }
 
         }
 
         Behavior on border.width {
-            NumberAnimation {
-                duration: 150
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: 200
             }
 
         }

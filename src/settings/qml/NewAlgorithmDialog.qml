@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Multi-step wizard for creating a new tiling algorithm.
@@ -172,8 +173,9 @@ Kirigami.Dialog {
                                 color: templateDelegate.selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
 
                                 Behavior on color {
-                                    ColorAnimation {
-                                        duration: 200
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.fade"
+                                        durationOverride: 200
                                     }
 
                                 }

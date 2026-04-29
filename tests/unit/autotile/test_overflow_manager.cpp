@@ -5,9 +5,9 @@
 #include <QTest>
 
 // Project headers
-#include "autotile/OverflowManager.h"
+#include <PhosphorTileEngine/OverflowManager.h>
 
-using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 static const QString kScreen1 = QStringLiteral("Screen1");
 static const QString kScreen2 = QStringLiteral("Screen2");
@@ -182,7 +182,7 @@ private Q_SLOTS:
     void testRecoverIfRoom_purgesExternallyUnfloated()
     {
         OverflowManager mgr;
-        // Window is in TilingState but NOT floating (externally unfloated)
+        // Window is in PhosphorTiles::TilingState but NOT floating (externally unfloated)
         mgr.markOverflow(kWin2, kScreen1);
 
         QStringList recovered = mgr.recoverIfRoom(

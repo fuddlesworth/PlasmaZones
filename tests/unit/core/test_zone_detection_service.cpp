@@ -16,63 +16,67 @@
 #include <QVector>
 #include <QScopedPointer>
 
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/windowtrackingservice.h"
-#include "core/layoutmanager.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
 #include "core/utils.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Minimal Stub ZoneDetector
+// Minimal Stub PhosphorZones::ZoneDetector
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class StubZoneDetectorSvc : public IZoneDetector
+class StubZoneDetectorSvc : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorSvc(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
 
-    Layout* layout() const override
+    PhosphorZones::Layout* layout() const override
     {
         return m_layout;
     }
-    void setLayout(Layout* layout) override
+    void setLayout(PhosphorZones::Layout* layout) override
     {
         m_layout = layout;
     }
-    ZoneDetectionResult detectZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
     {
         return {};
     }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
     {
         return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -80,7 +84,7 @@ public:
     }
 
 private:
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -100,14 +104,15 @@ private Q_SLOTS:
     void testMultiZoneGeometry_someZonesInvalid()
     {
         IsolatedConfigGuard guard;
-        QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
+        QScopedPointer<PhosphorZones::LayoutRegistry> layoutManager(new PhosphorZones::LayoutRegistry(
+            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
-        QScopedPointer<WindowTrackingService> service(
-            new WindowTrackingService(layoutManager.data(), detector.data(), settings.data(), nullptr, nullptr));
+        QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
+            layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
 
-        auto* layout = new Layout(QStringLiteral("Test"), layoutManager.data());
-        auto* z1 = new Zone(layout);
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
+        auto* z1 = new PhosphorZones::Zone(layout);
         z1->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 1.0));
         z1->setZoneNumber(1);
         layout->addZone(z1);
@@ -132,19 +137,25 @@ private Q_SLOTS:
     void testCalculateRotation_uuidFormatMismatch()
     {
         IsolatedConfigGuard guard;
-        QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
+        QScopedPointer<PhosphorZones::LayoutRegistry> layoutManager(new PhosphorZones::LayoutRegistry(
+            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
-        QScopedPointer<WindowTrackingService> service(
-            new WindowTrackingService(layoutManager.data(), detector.data(), settings.data(), nullptr, nullptr));
+        QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
+            layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
+        QScopedPointer<SnapEngine> engine(
+            new SnapEngine(layoutManager.data(), service.data(), detector.data(), nullptr, nullptr));
+        engine->setEngineSettings(settings.data());
+        service->setSnapState(engine->snapState());
+        service->setSnapEngine(engine.data());
 
-        auto* layout = new Layout(QStringLiteral("Test"), layoutManager.data());
-        auto* z1 = new Zone(layout);
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
+        auto* z1 = new PhosphorZones::Zone(layout);
         z1->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 1.0));
         z1->setZoneNumber(1);
         layout->addZone(z1);
 
-        auto* z2 = new Zone(layout);
+        auto* z2 = new PhosphorZones::Zone(layout);
         z2->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 1.0));
         z2->setZoneNumber(2);
         layout->addZone(z2);
@@ -159,14 +170,14 @@ private Q_SLOTS:
         service->assignWindowToZone(QStringLiteral("app:win:123"), zoneIdWithBraces, QString(), 0);
 
         // calculateRotation should handle both formats without error
-        QVector<RotationEntry> result = service->calculateRotation(true);
+        QVector<ZoneAssignmentEntry> result = engine->calculateRotation(true);
         Q_UNUSED(result);
 
         // Now try with without-braces format
         service->unassignWindow(QStringLiteral("app:win:123"));
         service->assignWindowToZone(QStringLiteral("app:win:456"), zoneIdWithoutBraces, QString(), 0);
 
-        QVector<RotationEntry> result2 = service->calculateRotation(false);
+        QVector<ZoneAssignmentEntry> result2 = engine->calculateRotation(false);
         Q_UNUSED(result2);
     }
 };

@@ -5,10 +5,18 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
-#include "iconfigbackend.h"
+#include "configbackends.h"
+
+#include <PhosphorConfig/Store.h>
+
 #include <memory>
-#include <optional>
 #include <QFont>
 #include <QHash>
 #include <QVariantMap>
@@ -18,32 +26,52 @@ namespace PlasmaZones {
 /**
  * @brief Global settings for PlasmaZones
  *
- * Implements the ISettings interface with IConfigBackend persistence.
+ * Implements the ISettings interface with PhosphorConfig::IBackend persistence.
  * Supports ricer-friendly customization with color themes, opacity,
  * and integration with system color schemes.
  *
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
-class PLASMAZONES_EXPORT Settings : public ISettings
+class PLASMAZONES_EXPORT Settings : public ISettings,
+                                    public PhosphorEngineApi::IAutotileSettings,
+                                    public PhosphorEngineApi::ISnapSettings
 {
     Q_OBJECT
+    Q_INTERFACES(PhosphorEngineApi::IAutotileSettings PhosphorEngineApi::ISnapSettings)
 
 public:
-    /** Maximum number of activation triggers per action (drag, multi-zone, zone span) */
-    static constexpr int MaxTriggersPerAction = 4;
+    /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
+     *  Source of truth lives in ConfigDefaults::maxTriggersPerAction() so both this
+     *  public accessor and the schema-side validator (canonicalTriggerList) read
+     *  from the same constant without either side depending on the other. */
+    static constexpr int MaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
 
     /**
      * @brief Construct with an external (non-owned) config backend
      *
-     * Used by the daemon to share a single IConfigBackend across
-     * Settings, LayoutManager, and other components. Eliminates Qt's
+     * Used by the daemon to share a single PhosphorConfig::IBackend across
+     * Settings, PhosphorZones::LayoutRegistry, and other components. Eliminates Qt's
      * QConfFile cache conflicts from multiple QSettings instances per file.
      *
+     * CONTRACT: @p backend MUST be pointing at a config file that has
+     * already been migrated to the current schema. Callers are responsible
+     * for invoking ConfigMigration::ensureJsonConfig() before constructing
+     * the backend. Production entry points (daemon/main, settings/main,
+     * editor controller) already do this at startup.
+     *
      * @param backend Non-owned backend pointer (must outlive this Settings)
+     * @param curveRegistry Non-owned curve registry pointer used for Profile
+     *                      JSON parsing. If nullptr, falls back to a local
+     *                      static registry (standalone tests). Must outlive
+     *                      this Settings. Supplying at construction time
+     *                      guarantees the initial `load()` resolves curves
+     *                      through the caller's registry, preserving
+     *                      `shared_ptr<const Curve>` identity across the
+     *                      Settings ↔ daemon boundary.
      * @param parent Parent QObject
      */
-    Settings(IConfigBackend* backend, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -59,17 +87,17 @@ public:
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
                    showZonesOnAllMonitorsChanged)
-    Q_PROPERTY(
-        QStringList disabledMonitors READ disabledMonitors WRITE setDisabledMonitors NOTIFY disabledMonitorsChanged)
-    Q_PROPERTY(
-        QStringList disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
-    Q_PROPERTY(QStringList disabledActivities READ disabledActivities WRITE setDisabledActivities NOTIFY
-                   disabledActivitiesChanged)
+    // Per-mode disable lists are not exposed as Q_PROPERTYs because their
+    // accessors take a Mode argument. QML / D-Bus consumers go through the
+    // mode-aware Q_INVOKABLEs on SettingsController and the per-mode
+    // registrations in SettingsAdaptor instead.
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
+    Q_PROPERTY(bool showOsdOnDesktopSwitch READ showOsdOnDesktopSwitch WRITE setShowOsdOnDesktopSwitch NOTIFY
+                   showOsdOnDesktopSwitchChanged)
     Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
@@ -96,7 +124,7 @@ public:
     Q_PROPERTY(
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
-    // Zone settings
+    // PhosphorZones::Zone settings
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(
@@ -124,6 +152,8 @@ public:
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
+                   autoAssignAllLayoutsChanged)
     Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
                    snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
@@ -133,7 +163,7 @@ public:
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
 
-    // Layout filtering
+    // PhosphorZones::Layout filtering
     Q_PROPERTY(bool filterLayoutsByAspectRatio READ filterLayoutsByAspectRatio WRITE setFilterLayoutsByAspectRatio
                    NOTIFY filterLayoutsByAspectRatioChanged)
 
@@ -155,7 +185,7 @@ public:
     Q_PROPERTY(
         int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
-    // Zone Selector
+    // PhosphorZones::Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
                    zoneSelectorEnabledChanged)
     Q_PROPERTY(int zoneSelectorTriggerDistance READ zoneSelectorTriggerDistance WRITE setZoneSelectorTriggerDistance
@@ -208,6 +238,10 @@ public:
         int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
     Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY
                    autotileInsertPositionChanged)
+    Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
+                   setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
+    Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
+                   autotileDragInsertToggleChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -242,6 +276,10 @@ public:
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
+    Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
+                   autotileDragBehaviorChanged)
+    Q_PROPERTY(int autotileOverflowBehavior READ autotileOverflowBehaviorInt WRITE setAutotileOverflowBehaviorInt NOTIFY
+                   autotileOverflowBehaviorChanged)
     // Autotile Shortcuts
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY
                    autotileToggleShortcutChanged)
@@ -334,7 +372,7 @@ public:
     Q_PROPERTY(QString swapWindowDownShortcut READ swapWindowDownShortcut WRITE setSwapWindowDownShortcut NOTIFY
                    swapWindowDownShortcutChanged)
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    // Snap to PhosphorZones::Zone by Number Shortcuts (Meta+Ctrl+1-9)
     Q_PROPERTY(QString snapToZone1Shortcut READ snapToZone1Shortcut WRITE setSnapToZone1Shortcut NOTIFY
                    snapToZone1ShortcutChanged)
     Q_PROPERTY(QString snapToZone2Shortcut READ snapToZone2Shortcut WRITE setSnapToZone2Shortcut NOTIFY
@@ -361,14 +399,14 @@ public:
     Q_PROPERTY(QString rotateWindowsCounterclockwiseShortcut READ rotateWindowsCounterclockwiseShortcut WRITE
                    setRotateWindowsCounterclockwiseShortcut NOTIFY rotateWindowsCounterclockwiseShortcutChanged)
 
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    // Cycle Windows in PhosphorZones::Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
     // Cycles focus between windows stacked in the same zone
     Q_PROPERTY(QString cycleWindowForwardShortcut READ cycleWindowForwardShortcut WRITE setCycleWindowForwardShortcut
                    NOTIFY cycleWindowForwardShortcutChanged)
     Q_PROPERTY(QString cycleWindowBackwardShortcut READ cycleWindowBackwardShortcut WRITE setCycleWindowBackwardShortcut
                    NOTIFY cycleWindowBackwardShortcutChanged)
 
-    // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
+    // Resnap to New PhosphorZones::Layout (Meta+Ctrl+Z, easy pinky key)
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
                    NOTIFY resnapToNewLayoutShortcutChanged)
 
@@ -376,13 +414,28 @@ public:
     Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut NOTIFY
                    snapAllWindowsShortcutChanged)
 
-    // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
+    // PhosphorZones::Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
     Q_PROPERTY(QString layoutPickerShortcut READ layoutPickerShortcut WRITE setLayoutPickerShortcut NOTIFY
                    layoutPickerShortcutChanged)
 
-    // Toggle Layout Lock (Meta+Ctrl+L)
+    // Toggle PhosphorZones::Layout Lock (Meta+Ctrl+L)
     Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
                    toggleLayoutLockShortcutChanged)
+
+    // Virtual Screen Swap / Rotate (Meta+Ctrl+Shift+Arrow, Meta+Ctrl+Shift+[/])
+    Q_PROPERTY(QString swapVirtualScreenLeftShortcut READ swapVirtualScreenLeftShortcut WRITE
+                   setSwapVirtualScreenLeftShortcut NOTIFY swapVirtualScreenLeftShortcutChanged)
+    Q_PROPERTY(QString swapVirtualScreenRightShortcut READ swapVirtualScreenRightShortcut WRITE
+                   setSwapVirtualScreenRightShortcut NOTIFY swapVirtualScreenRightShortcutChanged)
+    Q_PROPERTY(QString swapVirtualScreenUpShortcut READ swapVirtualScreenUpShortcut WRITE setSwapVirtualScreenUpShortcut
+                   NOTIFY swapVirtualScreenUpShortcutChanged)
+    Q_PROPERTY(QString swapVirtualScreenDownShortcut READ swapVirtualScreenDownShortcut WRITE
+                   setSwapVirtualScreenDownShortcut NOTIFY swapVirtualScreenDownShortcutChanged)
+    Q_PROPERTY(QString rotateVirtualScreensClockwiseShortcut READ rotateVirtualScreensClockwiseShortcut WRITE
+                   setRotateVirtualScreensClockwiseShortcut NOTIFY rotateVirtualScreensClockwiseShortcutChanged)
+    Q_PROPERTY(
+        QString rotateVirtualScreensCounterclockwiseShortcut READ rotateVirtualScreensCounterclockwiseShortcut WRITE
+            setRotateVirtualScreensCounterclockwiseShortcut NOTIFY rotateVirtualScreensCounterclockwiseShortcutChanged)
 
 public:
     explicit Settings(QObject* parent = nullptr);
@@ -390,746 +443,347 @@ public:
 
     // No singleton - use dependency injection instead
 
-    // ISettings interface implementation
-    QVariantList dragActivationTriggers() const override
-    {
-        return m_dragActivationTriggers;
-    }
+    // Activation — PhosphorConfig::Store-backed.
+    QVariantList dragActivationTriggers() const override;
     void setDragActivationTriggers(const QVariantList& triggers) override;
-
-    bool zoneSpanEnabled() const override
-    {
-        return m_zoneSpanEnabled;
-    }
+    bool zoneSpanEnabled() const override;
     void setZoneSpanEnabled(bool enabled) override;
-    DragModifier zoneSpanModifier() const override
-    {
-        return m_zoneSpanModifier;
-    }
+    DragModifier zoneSpanModifier() const override;
     void setZoneSpanModifier(DragModifier modifier) override;
-    QVariantList zoneSpanTriggers() const override
-    {
-        return m_zoneSpanTriggers;
-    }
-    void setZoneSpanTriggers(const QVariantList& triggers) override;
-    bool toggleActivation() const override
-    {
-        return m_toggleActivation;
-    }
-    void setToggleActivation(bool enable) override;
-    bool snappingEnabled() const override
-    {
-        return m_snappingEnabled;
-    }
-    void setSnappingEnabled(bool enabled) override;
-    int zoneSpanModifierInt() const
-    {
-        return static_cast<int>(m_zoneSpanModifier);
-    }
+    int zoneSpanModifierInt() const;
     void setZoneSpanModifierInt(int modifier);
+    QVariantList zoneSpanTriggers() const override;
+    void setZoneSpanTriggers(const QVariantList& triggers) override;
+    bool toggleActivation() const override;
+    void setToggleActivation(bool enable) override;
+    bool snappingEnabled() const override;
+    void setSnappingEnabled(bool enabled) override;
 
-    bool showZonesOnAllMonitors() const override
-    {
-        return m_showZonesOnAllMonitors;
-    }
+    // Display — PhosphorConfig::Store-backed.
+    bool showZonesOnAllMonitors() const override;
     void setShowZonesOnAllMonitors(bool show) override;
-
-    QStringList disabledMonitors() const override
-    {
-        return m_disabledMonitors;
-    }
-    void setDisabledMonitors(const QStringList& screenIdOrNames) override;
-    bool isMonitorDisabled(const QString& screenIdOrName) const override;
-
-    QStringList disabledDesktops() const override
-    {
-        return m_disabledDesktops;
-    }
-    void setDisabledDesktops(const QStringList& entries) override;
-    bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const override;
-
-    QStringList disabledActivities() const override
-    {
-        return m_disabledActivities;
-    }
-    void setDisabledActivities(const QStringList& entries) override;
-    bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const override;
-
-    bool showZoneNumbers() const override
-    {
-        return m_showZoneNumbers;
-    }
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) override;
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const override;
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override;
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                           int desktop) const override;
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const override;
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override;
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                            const QString& activityId) const override;
+    bool showZoneNumbers() const override;
     void setShowZoneNumbers(bool show) override;
-
-    bool flashZonesOnSwitch() const override
-    {
-        return m_flashZonesOnSwitch;
-    }
+    bool flashZonesOnSwitch() const override;
     void setFlashZonesOnSwitch(bool flash) override;
-
-    bool showOsdOnLayoutSwitch() const override
-    {
-        return m_showOsdOnLayoutSwitch;
-    }
+    bool showOsdOnLayoutSwitch() const override;
     void setShowOsdOnLayoutSwitch(bool show) override;
-
-    bool showNavigationOsd() const override
-    {
-        return m_showNavigationOsd;
-    }
+    bool showOsdOnDesktopSwitch() const override;
+    void setShowOsdOnDesktopSwitch(bool show) override;
+    bool showNavigationOsd() const override;
     void setShowNavigationOsd(bool show) override;
-
-    OsdStyle osdStyle() const override
-    {
-        return m_osdStyle;
-    }
+    OsdStyle osdStyle() const override;
     void setOsdStyle(OsdStyle style) override;
-    int osdStyleInt() const
-    {
-        return static_cast<int>(m_osdStyle);
-    }
+    int osdStyleInt() const;
     void setOsdStyleInt(int style);
-
-    OverlayDisplayMode overlayDisplayMode() const override
-    {
-        return m_overlayDisplayMode;
-    }
+    OverlayDisplayMode overlayDisplayMode() const override;
     void setOverlayDisplayMode(OverlayDisplayMode mode) override;
-    int overlayDisplayModeInt() const
-    {
-        return static_cast<int>(m_overlayDisplayMode);
-    }
+    int overlayDisplayModeInt() const;
     void setOverlayDisplayModeInt(int mode);
 
-    bool useSystemColors() const override
-    {
-        return m_useSystemColors;
-    }
+    // Appearance — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Getters read through the store on demand with validator-driven
+    // clamping; setters go through the store so persistence is immediate.
+    bool useSystemColors() const override;
     void setUseSystemColors(bool use) override;
-
-    QColor highlightColor() const override
-    {
-        return m_highlightColor;
-    }
+    QColor highlightColor() const override;
     void setHighlightColor(const QColor& color) override;
-
-    QColor inactiveColor() const override
-    {
-        return m_inactiveColor;
-    }
+    QColor inactiveColor() const override;
     void setInactiveColor(const QColor& color) override;
-
-    QColor borderColor() const override
-    {
-        return m_borderColor;
-    }
+    QColor borderColor() const override;
     void setBorderColor(const QColor& color) override;
-
-    QColor labelFontColor() const override
-    {
-        return m_labelFontColor;
-    }
+    QColor labelFontColor() const override;
     void setLabelFontColor(const QColor& color) override;
-
-    qreal activeOpacity() const override
-    {
-        return m_activeOpacity;
-    }
+    qreal activeOpacity() const override;
     void setActiveOpacity(qreal opacity) override;
-
-    qreal inactiveOpacity() const override
-    {
-        return m_inactiveOpacity;
-    }
+    qreal inactiveOpacity() const override;
     void setInactiveOpacity(qreal opacity) override;
-
-    int borderWidth() const override
-    {
-        return m_borderWidth;
-    }
+    int borderWidth() const override;
     void setBorderWidth(int width) override;
-
-    int borderRadius() const override
-    {
-        return m_borderRadius;
-    }
+    int borderRadius() const override;
     void setBorderRadius(int radius) override;
-
-    bool enableBlur() const override
-    {
-        return m_enableBlur;
-    }
+    bool enableBlur() const override;
     void setEnableBlur(bool enable) override;
-
-    QString labelFontFamily() const override
-    {
-        return m_labelFontFamily;
-    }
+    QString labelFontFamily() const override;
     void setLabelFontFamily(const QString& family) override;
-    qreal labelFontSizeScale() const override
-    {
-        return m_labelFontSizeScale;
-    }
+    qreal labelFontSizeScale() const override;
     void setLabelFontSizeScale(qreal scale) override;
-    int labelFontWeight() const override
-    {
-        return m_labelFontWeight;
-    }
+    int labelFontWeight() const override;
     void setLabelFontWeight(int weight) override;
-    bool labelFontItalic() const override
-    {
-        return m_labelFontItalic;
-    }
+    bool labelFontItalic() const override;
     void setLabelFontItalic(bool italic) override;
-    bool labelFontUnderline() const override
-    {
-        return m_labelFontUnderline;
-    }
+    bool labelFontUnderline() const override;
     void setLabelFontUnderline(bool underline) override;
-    bool labelFontStrikeout() const override
-    {
-        return m_labelFontStrikeout;
-    }
+    bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    int zonePadding() const override
-    {
-        return m_zonePadding;
-    }
+    // PhosphorZones::Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
+    int zonePadding() const override;
     void setZonePadding(int padding) override;
-
-    int outerGap() const override
-    {
-        return m_outerGap;
-    }
+    int outerGap() const override;
     void setOuterGap(int gap) override;
-
-    bool usePerSideOuterGap() const override
-    {
-        return m_usePerSideOuterGap;
-    }
+    bool usePerSideOuterGap() const override;
     void setUsePerSideOuterGap(bool enabled) override;
-
-    int outerGapTop() const override
-    {
-        return m_outerGapTop;
-    }
+    int outerGapTop() const override;
     void setOuterGapTop(int gap) override;
-
-    int outerGapBottom() const override
-    {
-        return m_outerGapBottom;
-    }
+    int outerGapBottom() const override;
     void setOuterGapBottom(int gap) override;
-
-    int outerGapLeft() const override
-    {
-        return m_outerGapLeft;
-    }
+    int outerGapLeft() const override;
     void setOuterGapLeft(int gap) override;
-
-    int outerGapRight() const override
-    {
-        return m_outerGapRight;
-    }
+    int outerGapRight() const override;
     void setOuterGapRight(int gap) override;
-
-    int adjacentThreshold() const override
-    {
-        return m_adjacentThreshold;
-    }
+    int adjacentThreshold() const override;
     void setAdjacentThreshold(int threshold) override;
 
-    int pollIntervalMs() const override
-    {
-        return m_pollIntervalMs;
-    }
+    // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
+    int pollIntervalMs() const override;
     void setPollIntervalMs(int interval) override;
-
-    int minimumZoneSizePx() const override
-    {
-        return m_minimumZoneSizePx;
-    }
+    int minimumZoneSizePx() const override;
     void setMinimumZoneSizePx(int size) override;
-
-    int minimumZoneDisplaySizePx() const override
-    {
-        return m_minimumZoneDisplaySizePx;
-    }
+    int minimumZoneDisplaySizePx() const override;
     void setMinimumZoneDisplaySizePx(int size) override;
 
-    bool keepWindowsInZonesOnResolutionChange() const override
-    {
-        return m_keepWindowsInZonesOnResolutionChange;
-    }
+    // Behavior — PhosphorConfig::Store-backed.
+    bool keepWindowsInZonesOnResolutionChange() const override;
     void setKeepWindowsInZonesOnResolutionChange(bool keep) override;
-
-    bool moveNewWindowsToLastZone() const override
-    {
-        return m_moveNewWindowsToLastZone;
-    }
+    bool moveNewWindowsToLastZone() const override;
     void setMoveNewWindowsToLastZone(bool move) override;
-
-    bool restoreOriginalSizeOnUnsnap() const override
-    {
-        return m_restoreOriginalSizeOnUnsnap;
-    }
+    bool restoreOriginalSizeOnUnsnap() const override;
     void setRestoreOriginalSizeOnUnsnap(bool restore) override;
-    StickyWindowHandling stickyWindowHandling() const override
-    {
-        return m_stickyWindowHandling;
-    }
+    StickyWindowHandling stickyWindowHandling() const override;
     void setStickyWindowHandling(StickyWindowHandling handling) override;
-    int stickyWindowHandlingInt() const
-    {
-        return static_cast<int>(m_stickyWindowHandling);
-    }
+    int stickyWindowHandlingInt() const;
     void setStickyWindowHandlingInt(int handling);
-
-    bool restoreWindowsToZonesOnLogin() const override
-    {
-        return m_restoreWindowsToZonesOnLogin;
-    }
+    bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
-
-    bool snapAssistFeatureEnabled() const override
-    {
-        return m_snapAssistFeatureEnabled;
-    }
+    bool autoAssignAllLayouts() const override;
+    void setAutoAssignAllLayouts(bool enabled) override;
+    bool snapAssistFeatureEnabled() const override;
     void setSnapAssistFeatureEnabled(bool enabled) override;
-
-    bool snapAssistEnabled() const override
-    {
-        return m_snapAssistEnabled;
-    }
+    bool snapAssistEnabled() const override;
     void setSnapAssistEnabled(bool enabled) override;
-
-    QVariantList snapAssistTriggers() const override
-    {
-        return m_snapAssistTriggers;
-    }
+    QVariantList snapAssistTriggers() const override;
     void setSnapAssistTriggers(const QVariantList& triggers) override;
-
-    QString defaultLayoutId() const override
-    {
-        return m_defaultLayoutId;
-    }
+    QString defaultLayoutId() const override;
     void setDefaultLayoutId(const QString& layoutId) override;
 
-    bool filterLayoutsByAspectRatio() const override
-    {
-        return m_filterLayoutsByAspectRatio;
-    }
+    bool filterLayoutsByAspectRatio() const override;
     void setFilterLayoutsByAspectRatio(bool filter) override;
 
-    // Ordering
-    QStringList snappingLayoutOrder() const override
-    {
-        return m_snappingLayoutOrder;
-    }
+    // Ordering — PhosphorConfig::Store-backed (see settingsschema.cpp).
+    // Wire format is a comma-joined QString; the canonicalCommaList
+    // validator trims/dedups on every read and write.
+    QStringList snappingLayoutOrder() const override;
     void setSnappingLayoutOrder(const QStringList& order) override;
-    QStringList tilingAlgorithmOrder() const override
-    {
-        return m_tilingAlgorithmOrder;
-    }
+    QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
 
-    QStringList excludedApplications() const override
-    {
-        return m_excludedApplications;
-    }
+    // Exclusions — PhosphorConfig::Store-backed.
+    QStringList excludedApplications() const override;
     void setExcludedApplications(const QStringList& apps) override;
     Q_INVOKABLE void addExcludedApplication(const QString& app);
     Q_INVOKABLE void removeExcludedApplicationAt(int index);
-
-    QStringList excludedWindowClasses() const override
-    {
-        return m_excludedWindowClasses;
-    }
+    QStringList excludedWindowClasses() const override;
     void setExcludedWindowClasses(const QStringList& classes) override;
     Q_INVOKABLE void addExcludedWindowClass(const QString& cls);
     Q_INVOKABLE void removeExcludedWindowClassAt(int index);
-
-    bool excludeTransientWindows() const override
-    {
-        return m_excludeTransientWindows;
-    }
+    bool excludeTransientWindows() const override;
     void setExcludeTransientWindows(bool exclude) override;
-
-    int minimumWindowWidth() const override
-    {
-        return m_minimumWindowWidth;
-    }
+    int minimumWindowWidth() const override;
     void setMinimumWindowWidth(int width) override;
-
-    int minimumWindowHeight() const override
-    {
-        return m_minimumWindowHeight;
-    }
+    int minimumWindowHeight() const override;
     void setMinimumWindowHeight(int height) override;
 
-    // Zone Selector
-    bool zoneSelectorEnabled() const override
-    {
-        return m_zoneSelectorEnabled;
-    }
+    // PhosphorZones::Zone Selector — PhosphorConfig::Store-backed.
+    bool zoneSelectorEnabled() const override;
     void setZoneSelectorEnabled(bool enabled) override;
-    int zoneSelectorTriggerDistance() const override
-    {
-        return m_zoneSelectorTriggerDistance;
-    }
+    int zoneSelectorTriggerDistance() const override;
     void setZoneSelectorTriggerDistance(int distance) override;
-    ZoneSelectorPosition zoneSelectorPosition() const override
-    {
-        return m_zoneSelectorPosition;
-    }
+    ZoneSelectorPosition zoneSelectorPosition() const override;
     void setZoneSelectorPosition(ZoneSelectorPosition position) override;
-    int zoneSelectorPositionInt() const
-    {
-        return static_cast<int>(m_zoneSelectorPosition);
-    }
+    int zoneSelectorPositionInt() const;
     void setZoneSelectorPositionInt(int position);
-    ZoneSelectorLayoutMode zoneSelectorLayoutMode() const override
-    {
-        return m_zoneSelectorLayoutMode;
-    }
+    ZoneSelectorLayoutMode zoneSelectorLayoutMode() const override;
     void setZoneSelectorLayoutMode(ZoneSelectorLayoutMode mode) override;
-    int zoneSelectorLayoutModeInt() const
-    {
-        return static_cast<int>(m_zoneSelectorLayoutMode);
-    }
+    int zoneSelectorLayoutModeInt() const;
     void setZoneSelectorLayoutModeInt(int mode);
-    int zoneSelectorPreviewWidth() const override
-    {
-        return m_zoneSelectorPreviewWidth;
-    }
+    int zoneSelectorPreviewWidth() const override;
     void setZoneSelectorPreviewWidth(int width) override;
-    int zoneSelectorPreviewHeight() const override
-    {
-        return m_zoneSelectorPreviewHeight;
-    }
+    int zoneSelectorPreviewHeight() const override;
     void setZoneSelectorPreviewHeight(int height) override;
-    bool zoneSelectorPreviewLockAspect() const override
-    {
-        return m_zoneSelectorPreviewLockAspect;
-    }
+    bool zoneSelectorPreviewLockAspect() const override;
     void setZoneSelectorPreviewLockAspect(bool locked) override;
-    int zoneSelectorGridColumns() const override
-    {
-        return m_zoneSelectorGridColumns;
-    }
+    int zoneSelectorGridColumns() const override;
     void setZoneSelectorGridColumns(int columns) override;
-    ZoneSelectorSizeMode zoneSelectorSizeMode() const override
-    {
-        return m_zoneSelectorSizeMode;
-    }
+    ZoneSelectorSizeMode zoneSelectorSizeMode() const override;
     void setZoneSelectorSizeMode(ZoneSelectorSizeMode mode) override;
-    int zoneSelectorSizeModeInt() const
-    {
-        return static_cast<int>(m_zoneSelectorSizeMode);
-    }
+    int zoneSelectorSizeModeInt() const;
     void setZoneSelectorSizeModeInt(int mode);
-    int zoneSelectorMaxRows() const override
-    {
-        return m_zoneSelectorMaxRows;
-    }
+    int zoneSelectorMaxRows() const override;
     void setZoneSelectorMaxRows(int rows) override;
 
     // Per-screen zone selector config (override > global fallback)
     ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenIdOrName) const override;
-    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const;
+    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
-                                                     const QVariant& value);
-    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName);
-    Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const;
+                                                     const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
 
     // Per-screen autotile config (override > global fallback)
-    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const;
+    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value);
-    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName);
-    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const;
+                                                 const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const override;
 
     // Per-screen snapping config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value);
-    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName);
-    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const;
+                                                 const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bool autotileEnabled() const
-    {
-        return m_autotileEnabled;
-    }
+    // Autotiling — PhosphorConfig::Store-backed.
+    bool autotileEnabled() const;
     void setAutotileEnabled(bool enabled);
-
-    QString defaultAutotileAlgorithm() const
-    {
-        return m_defaultAutotileAlgorithm;
-    }
-    void setDefaultAutotileAlgorithm(const QString& algorithm);
-
-    qreal autotileSplitRatio() const
-    {
-        return m_autotileSplitRatio;
-    }
-    void setAutotileSplitRatio(qreal ratio);
-
-    qreal autotileSplitRatioStep() const
-    {
-        return m_autotileSplitRatioStep;
-    }
+    QString defaultAutotileAlgorithm() const override;
+    void setDefaultAutotileAlgorithm(const QString& algorithm) override;
+    qreal autotileSplitRatio() const override;
+    void setAutotileSplitRatio(qreal ratio) override;
+    qreal autotileSplitRatioStep() const override;
     void setAutotileSplitRatioStep(qreal step);
-
-    int autotileMasterCount() const
-    {
-        return m_autotileMasterCount;
-    }
-    void setAutotileMasterCount(int count);
-
-    QVariantMap autotilePerAlgorithmSettings() const
-    {
-        return m_autotilePerAlgorithmSettings;
-    }
-    void setAutotilePerAlgorithmSettings(const QVariantMap& settings);
-
-    int autotileInnerGap() const
-    {
-        return m_autotileInnerGap;
-    }
+    int autotileMasterCount() const override;
+    void setAutotileMasterCount(int count) override;
+    QVariantMap autotilePerAlgorithmSettings() const override;
+    void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override;
+    int autotileInnerGap() const override;
     void setAutotileInnerGap(int gap);
-
-    int autotileOuterGap() const
-    {
-        return m_autotileOuterGap;
-    }
+    int autotileOuterGap() const override;
     void setAutotileOuterGap(int gap);
-
-    bool autotileUsePerSideOuterGap() const
-    {
-        return m_autotileUsePerSideOuterGap;
-    }
+    bool autotileUsePerSideOuterGap() const override;
     void setAutotileUsePerSideOuterGap(bool enabled);
-
-    int autotileOuterGapTop() const
-    {
-        return m_autotileOuterGapTop;
-    }
+    int autotileOuterGapTop() const override;
     void setAutotileOuterGapTop(int gap);
-
-    int autotileOuterGapBottom() const
-    {
-        return m_autotileOuterGapBottom;
-    }
+    int autotileOuterGapBottom() const override;
     void setAutotileOuterGapBottom(int gap);
-
-    int autotileOuterGapLeft() const
-    {
-        return m_autotileOuterGapLeft;
-    }
+    int autotileOuterGapLeft() const override;
     void setAutotileOuterGapLeft(int gap);
-
-    int autotileOuterGapRight() const
-    {
-        return m_autotileOuterGapRight;
-    }
+    int autotileOuterGapRight() const override;
     void setAutotileOuterGapRight(int gap);
-
-    bool autotileFocusNewWindows() const
-    {
-        return m_autotileFocusNewWindows;
-    }
+    bool autotileFocusNewWindows() const override;
     void setAutotileFocusNewWindows(bool focus);
-
-    bool autotileSmartGaps() const
-    {
-        return m_autotileSmartGaps;
-    }
+    bool autotileSmartGaps() const override;
     void setAutotileSmartGaps(bool smart);
+    int autotileMaxWindows() const override;
+    void setAutotileMaxWindows(int count) override;
 
-    int autotileMaxWindows() const
-    {
-        return m_autotileMaxWindows;
-    }
-    void setAutotileMaxWindows(int count);
-
-    enum class AutotileInsertPosition {
-        End = 0,
-        AfterFocused = 1,
-        AsMaster = 2
-    };
-    AutotileInsertPosition autotileInsertPosition() const
-    {
-        return m_autotileInsertPosition;
-    }
-    void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const
-    {
-        return static_cast<int>(m_autotileInsertPosition);
-    }
+    using AutotileInsertPosition = PhosphorTiles::AutotileInsertPosition;
+    PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const override;
+    void setAutotileInsertPosition(PhosphorTiles::AutotileInsertPosition position);
+    int autotileInsertPositionInt() const;
     void setAutotileInsertPositionInt(int position);
 
-    // Autotile Shortcuts
-    QString autotileToggleShortcut() const
-    {
-        return m_autotileToggleShortcut;
-    }
+    QVariantList autotileDragInsertTriggers() const override;
+    void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
+    bool autotileDragInsertToggle() const override;
+    void setAutotileDragInsertToggle(bool enable) override;
+
+    // Autotile Shortcuts — PhosphorConfig::Store-backed.
+    QString autotileToggleShortcut() const;
     void setAutotileToggleShortcut(const QString& shortcut);
-
-    QString autotileFocusMasterShortcut() const
-    {
-        return m_autotileFocusMasterShortcut;
-    }
+    QString autotileFocusMasterShortcut() const;
     void setAutotileFocusMasterShortcut(const QString& shortcut);
-
-    QString autotileSwapMasterShortcut() const
-    {
-        return m_autotileSwapMasterShortcut;
-    }
+    QString autotileSwapMasterShortcut() const;
     void setAutotileSwapMasterShortcut(const QString& shortcut);
-
-    QString autotileIncMasterRatioShortcut() const
-    {
-        return m_autotileIncMasterRatioShortcut;
-    }
+    QString autotileIncMasterRatioShortcut() const;
     void setAutotileIncMasterRatioShortcut(const QString& shortcut);
-
-    QString autotileDecMasterRatioShortcut() const
-    {
-        return m_autotileDecMasterRatioShortcut;
-    }
+    QString autotileDecMasterRatioShortcut() const;
     void setAutotileDecMasterRatioShortcut(const QString& shortcut);
-
-    QString autotileIncMasterCountShortcut() const
-    {
-        return m_autotileIncMasterCountShortcut;
-    }
+    QString autotileIncMasterCountShortcut() const;
     void setAutotileIncMasterCountShortcut(const QString& shortcut);
-
-    QString autotileDecMasterCountShortcut() const
-    {
-        return m_autotileDecMasterCountShortcut;
-    }
+    QString autotileDecMasterCountShortcut() const;
     void setAutotileDecMasterCountShortcut(const QString& shortcut);
-
-    QString autotileRetileShortcut() const
-    {
-        return m_autotileRetileShortcut;
-    }
+    QString autotileRetileShortcut() const;
     void setAutotileRetileShortcut(const QString& shortcut);
 
-    // Animation Settings (applies to both snapping and autotiling geometry changes)
-    bool animationsEnabled() const override
-    {
-        return m_animationsEnabled;
-    }
+    // Animation Settings (applies to both snapping and autotiling geometry
+    // changes) — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Phase 4 sub-commit 6: storage format migrated to a single Profile
+    // JSON blob; per-field accessors below are projections. The `animationProfile`
+    // getter / setter is the new canonical surface for consumers that want
+    // the whole Profile atomically (daemon's WindowAnimator config-reload path,
+    // plugin-authored profile presets).
+    bool animationsEnabled() const override;
     void setAnimationsEnabled(bool enabled) override;
-
-    int animationDuration() const override
-    {
-        return m_animationDuration;
-    }
+    /// The single Profile blob backing every per-field accessor below.
+    /// Not a Q_PROPERTY — QML consumers that need the typed Profile
+    /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
+    /// returns a C++-only PhosphorAnimation::Profile value.
+    PhosphorAnimation::Profile animationProfile() const;
+    void setAnimationProfile(const PhosphorAnimation::Profile& profile);
+    int animationDuration() const override;
     void setAnimationDuration(int duration) override;
-
-    QString animationEasingCurve() const override
-    {
-        return m_animationEasingCurve;
-    }
+    QString animationEasingCurve() const override;
     void setAnimationEasingCurve(const QString& curve) override;
-
-    int animationMinDistance() const override
-    {
-        return m_animationMinDistance;
-    }
+    int animationMinDistance() const override;
     void setAnimationMinDistance(int distance) override;
-
-    int animationSequenceMode() const override
-    {
-        return m_animationSequenceMode;
-    }
+    int animationSequenceMode() const override;
     void setAnimationSequenceMode(int mode) override;
-
-    int animationStaggerInterval() const override
-    {
-        return m_animationStaggerInterval;
-    }
+    int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
 
-    // Additional Autotiling Settings
-    bool autotileFocusFollowsMouse() const override
-    {
-        return m_autotileFocusFollowsMouse;
-    }
+    PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
+
+    // Additional Autotiling Settings — PhosphorConfig::Store-backed.
+    bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
-
-    bool autotileRespectMinimumSize() const
-    {
-        return m_autotileRespectMinimumSize;
-    }
+    bool autotileRespectMinimumSize() const override;
     void setAutotileRespectMinimumSize(bool respect);
-
-    bool autotileHideTitleBars() const override
-    {
-        return m_autotileHideTitleBars;
-    }
+    bool autotileHideTitleBars() const override;
     void setAutotileHideTitleBars(bool hide) override;
-
-    bool autotileShowBorder() const override
-    {
-        return m_autotileShowBorder;
-    }
+    bool autotileShowBorder() const override;
     void setAutotileShowBorder(bool show) override;
-
-    int autotileBorderWidth() const override
-    {
-        return m_autotileBorderWidth;
-    }
+    int autotileBorderWidth() const override;
     void setAutotileBorderWidth(int width) override;
-
-    int autotileBorderRadius() const override
-    {
-        return m_autotileBorderRadius;
-    }
+    int autotileBorderRadius() const override;
     void setAutotileBorderRadius(int radius) override;
-
-    QColor autotileBorderColor() const override
-    {
-        return m_autotileBorderColor;
-    }
+    QColor autotileBorderColor() const override;
     void setAutotileBorderColor(const QColor& color) override;
-
-    QColor autotileInactiveBorderColor() const override
-    {
-        return m_autotileInactiveBorderColor;
-    }
+    QColor autotileInactiveBorderColor() const override;
     void setAutotileInactiveBorderColor(const QColor& color) override;
-
-    bool autotileUseSystemBorderColors() const override
-    {
-        return m_autotileUseSystemBorderColors;
-    }
+    bool autotileUseSystemBorderColors() const override;
     void setAutotileUseSystemBorderColors(bool use) override;
-
-    StickyWindowHandling autotileStickyWindowHandling() const override
-    {
-        return m_autotileStickyWindowHandling;
-    }
+    StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
-    int autotileStickyWindowHandlingInt() const
-    {
-        return static_cast<int>(m_autotileStickyWindowHandling);
-    }
+    int autotileStickyWindowHandlingInt() const;
     void setAutotileStickyWindowHandlingInt(int handling);
-
-    QStringList lockedScreens() const override
-    {
-        return m_lockedScreens;
-    }
+    AutotileDragBehavior autotileDragBehavior() const override;
+    void setAutotileDragBehavior(AutotileDragBehavior behavior) override;
+    int autotileDragBehaviorInt() const;
+    void setAutotileDragBehaviorInt(int behavior);
+    AutotileOverflowBehavior autotileOverflowBehavior() const override;
+    void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) override;
+    int autotileOverflowBehaviorInt() const;
+    void setAutotileOverflowBehaviorInt(int behavior);
+    QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
@@ -1137,342 +791,189 @@ public:
     void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity,
                           bool locked) override;
 
+    // Virtual screen configuration
+    QHash<QString, Phosphor::Screens::VirtualScreenConfig> virtualScreenConfigs() const;
+    void setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::VirtualScreenConfig>& configs);
+    /// Returns true on success, false if the config was rejected by
+    /// Phosphor::Screens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
+    /// already-current value is treated as a successful no-op.
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config);
+    Phosphor::Screens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+
+    /// Atomically re-key a persisted VS config from @p oldPhysicalScreenId to
+    /// @p newPhysicalScreenId. Used when a screen's disambiguation-aware
+    /// identifier flips (same-model hotplug) so the user's existing
+    /// subdivision doesn't orphan under the old key. No-op if no config
+    /// exists at @p oldPhysicalScreenId. Emits @ref virtualScreenConfigsChanged
+    /// exactly once (not twice, as remove+set would).
+    /// @return true on success or when nothing to migrate.
+    bool renameVirtualScreenConfig(const QString& oldPhysicalScreenId, const QString& newPhysicalScreenId);
+
     // Rendering (ISettings)
-    QString renderingBackend() const override
-    {
-        return m_renderingBackend;
-    }
+    // Rendering backend — PhosphorConfig::Store-backed; the schema's
+    // validator runs normalizeRenderingBackend on every read/write so
+    // unknown strings are coerced to a valid choice.
+    QString renderingBackend() const override;
     void setRenderingBackend(const QString& backend) override;
 
-    // Shader Effects
-    bool enableShaderEffects() const override
-    {
-        return m_enableShaderEffects;
-    }
+    // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Getters read through the store (validator clamps FrameRate and BarCount
+    // ranges uniformly); setters route the write through the store so the
+    // value is coerced + persisted in memory on the same call, with
+    // syncConfig()/save() flushing to disk.
+    bool enableShaderEffects() const override;
     void setEnableShaderEffects(bool enable) override;
-    int shaderFrameRate() const override
-    {
-        return m_shaderFrameRate;
-    }
+    int shaderFrameRate() const override;
     void setShaderFrameRate(int fps) override;
-    bool enableAudioVisualizer() const override
-    {
-        return m_enableAudioVisualizer;
-    }
+    bool enableAudioVisualizer() const override;
     void setEnableAudioVisualizer(bool enable) override;
-    int audioSpectrumBarCount() const override
-    {
-        return m_audioSpectrumBarCount;
-    }
+    int audioSpectrumBarCount() const override;
     void setAudioSpectrumBarCount(int count) override;
 
-    // Global Shortcuts (for KGlobalAccel)
-    QString openEditorShortcut() const
-    {
-        return m_openEditorShortcut;
-    }
+    // Global Shortcuts (for KGlobalAccel) — PhosphorConfig::Store-backed.
+    QString openEditorShortcut() const;
     void setOpenEditorShortcut(const QString& shortcut);
-    QString openSettingsShortcut() const
-    {
-        return m_openSettingsShortcut;
-    }
+    QString openSettingsShortcut() const;
     void setOpenSettingsShortcut(const QString& shortcut);
-    QString previousLayoutShortcut() const
-    {
-        return m_previousLayoutShortcut;
-    }
+    QString previousLayoutShortcut() const;
     void setPreviousLayoutShortcut(const QString& shortcut);
-    QString nextLayoutShortcut() const
-    {
-        return m_nextLayoutShortcut;
-    }
+    QString nextLayoutShortcut() const;
     void setNextLayoutShortcut(const QString& shortcut);
-    QString quickLayout1Shortcut() const
-    {
-        return m_quickLayoutShortcuts[0];
-    }
+    QString quickLayout1Shortcut() const;
     void setQuickLayout1Shortcut(const QString& shortcut);
-    QString quickLayout2Shortcut() const
-    {
-        return m_quickLayoutShortcuts[1];
-    }
+    QString quickLayout2Shortcut() const;
     void setQuickLayout2Shortcut(const QString& shortcut);
-    QString quickLayout3Shortcut() const
-    {
-        return m_quickLayoutShortcuts[2];
-    }
+    QString quickLayout3Shortcut() const;
     void setQuickLayout3Shortcut(const QString& shortcut);
-    QString quickLayout4Shortcut() const
-    {
-        return m_quickLayoutShortcuts[3];
-    }
+    QString quickLayout4Shortcut() const;
     void setQuickLayout4Shortcut(const QString& shortcut);
-    QString quickLayout5Shortcut() const
-    {
-        return m_quickLayoutShortcuts[4];
-    }
+    QString quickLayout5Shortcut() const;
     void setQuickLayout5Shortcut(const QString& shortcut);
-    QString quickLayout6Shortcut() const
-    {
-        return m_quickLayoutShortcuts[5];
-    }
+    QString quickLayout6Shortcut() const;
     void setQuickLayout6Shortcut(const QString& shortcut);
-    QString quickLayout7Shortcut() const
-    {
-        return m_quickLayoutShortcuts[6];
-    }
+    QString quickLayout7Shortcut() const;
     void setQuickLayout7Shortcut(const QString& shortcut);
-    QString quickLayout8Shortcut() const
-    {
-        return m_quickLayoutShortcuts[7];
-    }
+    QString quickLayout8Shortcut() const;
     void setQuickLayout8Shortcut(const QString& shortcut);
-    QString quickLayout9Shortcut() const
-    {
-        return m_quickLayoutShortcuts[8];
-    }
+    QString quickLayout9Shortcut() const;
     void setQuickLayout9Shortcut(const QString& shortcut);
-
-    // Helper to get quick layout shortcut by index (0-8)
+    // Helper accessors by 0-based index.
     QString quickLayoutShortcut(int index) const;
     void setQuickLayoutShortcut(int index, const QString& shortcut);
 
     // Keyboard Navigation Shortcuts
-    QString moveWindowLeftShortcut() const
-    {
-        return m_moveWindowLeftShortcut;
-    }
+    QString moveWindowLeftShortcut() const;
     void setMoveWindowLeftShortcut(const QString& shortcut);
-    QString moveWindowRightShortcut() const
-    {
-        return m_moveWindowRightShortcut;
-    }
+    QString moveWindowRightShortcut() const;
     void setMoveWindowRightShortcut(const QString& shortcut);
-    QString moveWindowUpShortcut() const
-    {
-        return m_moveWindowUpShortcut;
-    }
+    QString moveWindowUpShortcut() const;
     void setMoveWindowUpShortcut(const QString& shortcut);
-    QString moveWindowDownShortcut() const
-    {
-        return m_moveWindowDownShortcut;
-    }
+    QString moveWindowDownShortcut() const;
     void setMoveWindowDownShortcut(const QString& shortcut);
-    QString focusZoneLeftShortcut() const
-    {
-        return m_focusZoneLeftShortcut;
-    }
+    QString focusZoneLeftShortcut() const;
     void setFocusZoneLeftShortcut(const QString& shortcut);
-    QString focusZoneRightShortcut() const
-    {
-        return m_focusZoneRightShortcut;
-    }
+    QString focusZoneRightShortcut() const;
     void setFocusZoneRightShortcut(const QString& shortcut);
-    QString focusZoneUpShortcut() const
-    {
-        return m_focusZoneUpShortcut;
-    }
+    QString focusZoneUpShortcut() const;
     void setFocusZoneUpShortcut(const QString& shortcut);
-    QString focusZoneDownShortcut() const
-    {
-        return m_focusZoneDownShortcut;
-    }
+    QString focusZoneDownShortcut() const;
     void setFocusZoneDownShortcut(const QString& shortcut);
-    QString pushToEmptyZoneShortcut() const
-    {
-        return m_pushToEmptyZoneShortcut;
-    }
+    QString pushToEmptyZoneShortcut() const;
     void setPushToEmptyZoneShortcut(const QString& shortcut);
-    QString restoreWindowSizeShortcut() const
-    {
-        return m_restoreWindowSizeShortcut;
-    }
+    QString restoreWindowSizeShortcut() const;
     void setRestoreWindowSizeShortcut(const QString& shortcut);
-    QString toggleWindowFloatShortcut() const
-    {
-        return m_toggleWindowFloatShortcut;
-    }
+    QString toggleWindowFloatShortcut() const;
     void setToggleWindowFloatShortcut(const QString& shortcut);
 
-    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
-    QString swapWindowLeftShortcut() const
-    {
-        return m_swapWindowLeftShortcut;
-    }
+    QString swapWindowLeftShortcut() const;
     void setSwapWindowLeftShortcut(const QString& shortcut);
-    QString swapWindowRightShortcut() const
-    {
-        return m_swapWindowRightShortcut;
-    }
+    QString swapWindowRightShortcut() const;
     void setSwapWindowRightShortcut(const QString& shortcut);
-    QString swapWindowUpShortcut() const
-    {
-        return m_swapWindowUpShortcut;
-    }
+    QString swapWindowUpShortcut() const;
     void setSwapWindowUpShortcut(const QString& shortcut);
-    QString swapWindowDownShortcut() const
-    {
-        return m_swapWindowDownShortcut;
-    }
+    QString swapWindowDownShortcut() const;
     void setSwapWindowDownShortcut(const QString& shortcut);
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
-    QString snapToZone1Shortcut() const
-    {
-        return m_snapToZoneShortcuts[0];
-    }
+    QString snapToZone1Shortcut() const;
     void setSnapToZone1Shortcut(const QString& shortcut);
-    QString snapToZone2Shortcut() const
-    {
-        return m_snapToZoneShortcuts[1];
-    }
+    QString snapToZone2Shortcut() const;
     void setSnapToZone2Shortcut(const QString& shortcut);
-    QString snapToZone3Shortcut() const
-    {
-        return m_snapToZoneShortcuts[2];
-    }
+    QString snapToZone3Shortcut() const;
     void setSnapToZone3Shortcut(const QString& shortcut);
-    QString snapToZone4Shortcut() const
-    {
-        return m_snapToZoneShortcuts[3];
-    }
+    QString snapToZone4Shortcut() const;
     void setSnapToZone4Shortcut(const QString& shortcut);
-    QString snapToZone5Shortcut() const
-    {
-        return m_snapToZoneShortcuts[4];
-    }
+    QString snapToZone5Shortcut() const;
     void setSnapToZone5Shortcut(const QString& shortcut);
-    QString snapToZone6Shortcut() const
-    {
-        return m_snapToZoneShortcuts[5];
-    }
+    QString snapToZone6Shortcut() const;
     void setSnapToZone6Shortcut(const QString& shortcut);
-    QString snapToZone7Shortcut() const
-    {
-        return m_snapToZoneShortcuts[6];
-    }
+    QString snapToZone7Shortcut() const;
     void setSnapToZone7Shortcut(const QString& shortcut);
-    QString snapToZone8Shortcut() const
-    {
-        return m_snapToZoneShortcuts[7];
-    }
+    QString snapToZone8Shortcut() const;
     void setSnapToZone8Shortcut(const QString& shortcut);
-    QString snapToZone9Shortcut() const
-    {
-        return m_snapToZoneShortcuts[8];
-    }
+    QString snapToZone9Shortcut() const;
     void setSnapToZone9Shortcut(const QString& shortcut);
-
-    // Helper to get snap-to-zone shortcut by index (0-8)
     QString snapToZoneShortcut(int index) const;
     void setSnapToZoneShortcut(int index, const QString& shortcut);
 
-    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
-    QString rotateWindowsClockwiseShortcut() const
-    {
-        return m_rotateWindowsClockwiseShortcut;
-    }
+    QString rotateWindowsClockwiseShortcut() const;
     void setRotateWindowsClockwiseShortcut(const QString& shortcut);
-    QString rotateWindowsCounterclockwiseShortcut() const
-    {
-        return m_rotateWindowsCounterclockwiseShortcut;
-    }
+    QString rotateWindowsCounterclockwiseShortcut() const;
     void setRotateWindowsCounterclockwiseShortcut(const QString& shortcut);
-
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
-    QString cycleWindowForwardShortcut() const
-    {
-        return m_cycleWindowForwardShortcut;
-    }
+    QString cycleWindowForwardShortcut() const;
     void setCycleWindowForwardShortcut(const QString& shortcut);
-    QString cycleWindowBackwardShortcut() const
-    {
-        return m_cycleWindowBackwardShortcut;
-    }
+    QString cycleWindowBackwardShortcut() const;
     void setCycleWindowBackwardShortcut(const QString& shortcut);
-    QString resnapToNewLayoutShortcut() const
-    {
-        return m_resnapToNewLayoutShortcut;
-    }
+    QString resnapToNewLayoutShortcut() const;
     void setResnapToNewLayoutShortcut(const QString& shortcut);
-
-    QString snapAllWindowsShortcut() const
-    {
-        return m_snapAllWindowsShortcut;
-    }
+    QString snapAllWindowsShortcut() const;
     void setSnapAllWindowsShortcut(const QString& shortcut);
-
-    QString layoutPickerShortcut() const
-    {
-        return m_layoutPickerShortcut;
-    }
+    QString layoutPickerShortcut() const;
     void setLayoutPickerShortcut(const QString& shortcut);
-
-    QString toggleLayoutLockShortcut() const
-    {
-        return m_toggleLayoutLockShortcut;
-    }
+    QString toggleLayoutLockShortcut() const;
     void setToggleLayoutLockShortcut(const QString& shortcut);
+
+    QString swapVirtualScreenLeftShortcut() const;
+    void setSwapVirtualScreenLeftShortcut(const QString& shortcut);
+    QString swapVirtualScreenRightShortcut() const;
+    void setSwapVirtualScreenRightShortcut(const QString& shortcut);
+    QString swapVirtualScreenUpShortcut() const;
+    void setSwapVirtualScreenUpShortcut(const QString& shortcut);
+    QString swapVirtualScreenDownShortcut() const;
+    void setSwapVirtualScreenDownShortcut(const QString& shortcut);
+    QString rotateVirtualScreensClockwiseShortcut() const;
+    void setRotateVirtualScreensClockwiseShortcut(const QString& shortcut);
+    QString rotateVirtualScreensCounterclockwiseShortcut() const;
+    void setRotateVirtualScreensCounterclockwiseShortcut(const QString& shortcut);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings (shared [Editor] group in config.json)
+    // PhosphorConfig::Store-backed.
     // ═══════════════════════════════════════════════════════════════════════════
-
-    QString editorDuplicateShortcut() const
-    {
-        return m_editorDuplicateShortcut;
-    }
+    QString editorDuplicateShortcut() const;
     void setEditorDuplicateShortcut(const QString& shortcut);
-    QString editorSplitHorizontalShortcut() const
-    {
-        return m_editorSplitHorizontalShortcut;
-    }
+    QString editorSplitHorizontalShortcut() const;
     void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    QString editorSplitVerticalShortcut() const
-    {
-        return m_editorSplitVerticalShortcut;
-    }
+    QString editorSplitVerticalShortcut() const;
     void setEditorSplitVerticalShortcut(const QString& shortcut);
-    QString editorFillShortcut() const
-    {
-        return m_editorFillShortcut;
-    }
+    QString editorFillShortcut() const;
     void setEditorFillShortcut(const QString& shortcut);
-    bool editorGridSnappingEnabled() const
-    {
-        return m_editorGridSnappingEnabled;
-    }
+    bool editorGridSnappingEnabled() const;
     void setEditorGridSnappingEnabled(bool enabled);
-    bool editorEdgeSnappingEnabled() const
-    {
-        return m_editorEdgeSnappingEnabled;
-    }
+    bool editorEdgeSnappingEnabled() const;
     void setEditorEdgeSnappingEnabled(bool enabled);
-    qreal editorSnapIntervalX() const
-    {
-        return m_editorSnapIntervalX;
-    }
+    qreal editorSnapIntervalX() const;
     void setEditorSnapIntervalX(qreal interval);
-    qreal editorSnapIntervalY() const
-    {
-        return m_editorSnapIntervalY;
-    }
+    qreal editorSnapIntervalY() const;
     void setEditorSnapIntervalY(qreal interval);
-    int editorSnapOverrideModifier() const
-    {
-        return m_editorSnapOverrideModifier;
-    }
+    int editorSnapOverrideModifier() const;
     void setEditorSnapOverrideModifier(int mod);
-    bool fillOnDropEnabled() const
-    {
-        return m_fillOnDropEnabled;
-    }
+    bool fillOnDropEnabled() const;
     void setFillOnDropEnabled(bool enabled);
-    int fillOnDropModifier() const
-    {
-        return m_fillOnDropModifier;
-    }
+    int fillOnDropModifier() const;
     void setFillOnDropModifier(int mod);
+
+    // Old inline accessors replaced above — kept anchors below so the second
+    // half of the replaced region can be collapsed in one edit pass.
 
     // TilingQuickLayoutSlots — read/write via the shared config backend
     QString readTilingQuickLayoutSlot(int slotNumber) const;
@@ -1490,6 +991,15 @@ public:
     void applyAutotileBorderSystemColor();
 
 Q_SIGNALS:
+    /// Emitted when the whole animation Profile blob is replaced via
+    /// `setAnimationProfile`. Fires alongside every per-field *Changed
+    /// signal. Consumers that want to observe the Profile atomically
+    /// (e.g., daemon's WindowAnimator re-configuring its MotionSpec
+    /// defaults) prefer this signal; Q_PROPERTY consumers bound to the
+    /// per-field surface get re-triggered through the individual
+    /// signals per the existing NOTIFY wiring.
+    void animationProfileChanged();
+
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -1503,193 +1013,150 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void filterLayoutsByAspectRatioChanged();
+    void virtualScreenConfigsChanged();
 
 private:
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Helper Methods for load()
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Read and validate an integer from config with bounds checking
-     * @param group IConfigGroup to read from
-     * @param key Config key name
-     * @param defaultValue Default if not found or invalid
-     * @param min Minimum valid value
-     * @param max Maximum valid value
-     * @param settingName Human-readable name for warning messages
-     * @return Validated integer value
-     */
-    int readValidatedInt(IConfigGroup& group, const QString& key, int defaultValue, int min, int max,
-                         const char* settingName);
-
-    /**
-     * @brief Read and validate a color from config
-     * @param group IConfigGroup to read from
-     * @param key Config key name
-     * @param defaultValue Default if not found or invalid
-     * @param settingName Human-readable name for warning messages
-     * @return Validated QColor value
-     */
-    QColor readValidatedColor(IConfigGroup& group, const QString& key, const QColor& defaultValue,
-                              const char* settingName);
-
-    /**
-     * @brief Load indexed shortcuts (1-9) from config group
-     * @param group IConfigGroup to read from
-     * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
-     * @param shortcuts Array of 9 QString to populate
-     * @param defaults Array of 9 default values
-     */
-    void loadIndexedShortcuts(IConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
-                              const QString (&defaults)[9]);
-
-    /**
-     * @brief Parse a trigger list from JSON string
-     * @param json JSON array string
-     * @return Parsed list (capped at MaxTriggersPerAction), or std::nullopt if empty/invalid
-     */
-    static std::optional<QVariantList> parseTriggerListJson(const QString& json);
-
-    /**
-     * @brief Save a trigger list to config as compact JSON
-     * @param group IConfigGroup to write to
-     * @param key Config key for the JSON trigger list
-     * @param triggers The trigger list to serialize
-     */
-    static void saveTriggerList(IConfigGroup& group, const QString& key, const QVariantList& triggers);
-
-    /** @brief Shared dispatcher for indexed shortcut arrays (quick-layout, snap-to-zone) */
+    /// Member-function-pointer alias used by the indexed shortcut setters
+    /// (quickLayoutShortcut / snapToZoneShortcut) when fanning out to the
+    /// per-index NOTIFY signal.
     using ShortcutSignalFn = void (Settings::*)();
-    void setIndexedShortcut(QString (&arr)[9], int index, const QString& shortcut,
-                            const ShortcutSignalFn (&signals)[9]);
 
-    // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(IConfigBackend* backend);
-    void loadDisplayConfig(IConfigBackend* backend);
-    void loadAppearanceConfig(IConfigBackend* backend);
-    void loadZoneGeometryConfig(IConfigBackend* backend);
-    void loadBehaviorConfig(IConfigBackend* backend);
-    void loadZoneSelectorConfig(IConfigBackend* backend);
-    void loadPerScreenOverrides(IConfigBackend* backend);
-    void loadShortcutConfig(IConfigBackend* backend);
-    void loadAutotilingConfig(IConfigBackend* backend);
-    void loadEditorConfig(IConfigBackend* backend);
+    /// Member-function-pointer alias for the per-trigger-list NOTIFY signal
+    /// passed into @ref writeTriggerList.
+    using TriggerListSignalFn = void (Settings::*)();
 
-    // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(IConfigBackend* backend);
-    void saveDisplayConfig(IConfigBackend* backend);
-    void saveAppearanceConfig(IConfigBackend* backend);
-    void saveZoneGeometryConfig(IConfigBackend* backend);
-    void saveBehaviorConfig(IConfigBackend* backend);
-    void saveZoneSelectorConfig(IConfigBackend* backend);
-    void saveAllPerScreenOverrides(IConfigBackend* backend);
-    void saveShortcutConfig(IConfigBackend* backend);
-    void saveAutotilingConfig(IConfigBackend* backend);
-    void saveEditorConfig(IConfigBackend* backend);
+    /// Shared trigger-list setter used by the four "plain" setters
+    /// (activation, deactivation, snap-assist, autotile-insert). Caps at
+    /// @c MaxTriggersPerAction, round-trips through the schema's validator,
+    /// and only emits @p specificSignal + @c settingsChanged on a real change.
+    /// @c setZoneSpanTriggers does its own dance because it also synchronises
+    /// the legacy single-modifier key.
+    void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
+                          TriggerListSignalFn specificSignal);
+
+    /// Member-function-pointer alias for the three per-mode disable NOTIFY
+    /// signals passed into @ref writeDisableList. The signals carry the mode
+    /// that flipped so listeners only react to their own axis.
+    using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
+
+    /// Shared comma-list setter used by @ref setDisabledMonitors,
+    /// @ref setDisabledDesktops, and @ref setDisabledActivities. Reads under
+    /// @c displayGroup, writes the joined list, post-write compares against
+    /// the canonicalised form (the @c canonicalCommaList validator
+    /// trims/de-dupes/normalises whitespace), and only fires
+    /// @p signalFn + @c settingsChanged on a real change.
+    void writeDisableList(const QString& key, const QStringList& entries, PhosphorZones::AssignmentEntry::Mode mode,
+                          DisableModeSignalFn signalFn);
+
+    /// Shared getter for the three per-mode disable lists. Reads under
+    /// @c displayGroup and parses the comma-joined value into a list. The
+    /// monitor variant additionally resolves connector names to canonical
+    /// screen ids — that step lives in @ref disabledMonitors itself, not
+    /// here, because composite-keyed lists (desktop/activity) embed the
+    /// screen id and would need parsing the composite to canonicalise.
+    QStringList readDisableList(const QString& key) const;
+
+    // ─── load() / save() helpers ────────────────────────────────────────
+    // Only non-Store groups need dedicated helpers now. Store-backed groups
+    // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
+    // Autotiling/Editor/Appearance/Rendering/Shaders/Ordering) persist via
+    // setters and flush via m_configBackend->sync() in save().
+    void loadPerScreenOverrides(PhosphorConfig::IBackend* backend);
+    void loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
+    void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
+    void saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();
     // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
-    static void deletePerScreenGroups(IConfigBackend* backend);
+    static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
 
+    // Patch one field of the Profile JSON blob and emit the canonical
+    // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
+    //
+    // Hot path: per-field setters fired by settings-UI sliders at ~30 Hz.
+    // The helper consolidates the 5 near-identical animation field setters
+    // (duration / easing-curve / min-distance / sequence-mode / stagger-
+    // interval) so the merge contract (read existing blob → insert one
+    // field → write back, preserving every other on-disk key) is in one
+    // place rather than copy-pasted five times.
+    //
+    // T must be comparable (`operator==`) and convertible to QJsonValue
+    // (the QJsonObject::insert overload set covers int / double / bool /
+    // QString / QJsonValue / QJsonArray / QJsonObject).
+    //
+    // - @p jsonFieldName     The Profile JSON key (raw `const char*` —
+    //                        wrapped via `QLatin1String` at the insert site
+    //                        to satisfy Qt6's deleted raw-string ctor).
+    // - @p currentValue      What the corresponding getter returns BEFORE
+    //                        the write — supplied by the caller because the
+    //                        getter shape varies per field (int via
+    //                        `effectiveDuration`, QString via raw blob
+    //                        read for the curve case, etc.). The no-op
+    //                        guard short-circuits when `currentValue ==
+    //                        newValue` so a slider drag at constant value
+    //                        wakes no observers.
+    // - @p newValue          The post-clamp / post-resolve value to insert.
+    //                        Pre-processing (clamping for numeric setters,
+    //                        registry resolution for the easing setter)
+    //                        stays at the call site — the helper is a pure
+    //                        merge primitive, not a validator.
+    // - @p fieldChangedSignal The per-field NOTIFY pointer. Fires alongside
+    //                         animationProfileChanged + settingsChanged on
+    //                         every successful write.
+    template<typename T>
+    void patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
+                           void (Settings::*fieldChangedSignal)());
+
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
-    std::unique_ptr<IConfigBackend> m_ownedBackend;
-    IConfigBackend* m_configBackend = nullptr; // always valid after construction
+    std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
+    PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
+
+    // Declarative store built on top of the backend. Every setting migrated
+    // from hand-written load*/save* functions routes through here. See
+    // settingsschema.cpp for the current list of migrated groups.
+    std::unique_ptr<PhosphorConfig::Store> m_store;
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
-    QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();
-    DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
-    QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_toggleActivation = ConfigDefaults::toggleActivation();
-    bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
+    // Activation is stored in m_store.
 
     // Display
-    bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
-    QStringList m_disabledMonitors;
-    QStringList m_disabledDesktops;
-    QStringList m_disabledActivities;
-    bool m_showZoneNumbers = ConfigDefaults::showNumbers();
-    bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
-    bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
-    bool m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
-    OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
-    OverlayDisplayMode m_overlayDisplayMode = OverlayDisplayMode::ZoneRectangles;
+    // Display is stored in m_store; no cached members here.
 
     // Appearance
-    bool m_useSystemColors = ConfigDefaults::useSystemColors();
-    QColor m_highlightColor = ConfigDefaults::highlightColor();
-    QColor m_inactiveColor = ConfigDefaults::inactiveColor();
-    QColor m_borderColor = ConfigDefaults::borderColor();
-    QColor m_labelFontColor = ConfigDefaults::labelFontColor();
-    qreal m_activeOpacity = ConfigDefaults::activeOpacity();
-    qreal m_inactiveOpacity = ConfigDefaults::inactiveOpacity();
-    int m_borderWidth = ConfigDefaults::borderWidth();
-    int m_borderRadius = ConfigDefaults::borderRadius();
-    bool m_enableBlur = ConfigDefaults::enableBlur();
-    QString m_labelFontFamily;
-    qreal m_labelFontSizeScale = ConfigDefaults::labelFontSizeScale();
-    int m_labelFontWeight = ConfigDefaults::labelFontWeight();
-    bool m_labelFontItalic = ConfigDefaults::labelFontItalic();
-    bool m_labelFontUnderline = ConfigDefaults::labelFontUnderline();
-    bool m_labelFontStrikeout = ConfigDefaults::labelFontStrikeout();
+    // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
+    // m_store; no cached members here.
 
-    // Zone settings
-    int m_zonePadding = ConfigDefaults::zonePadding();
-    int m_outerGap = ConfigDefaults::outerGap();
-    bool m_usePerSideOuterGap = ConfigDefaults::usePerSideOuterGap();
-    int m_outerGapTop = ConfigDefaults::outerGapTop();
-    int m_outerGapBottom = ConfigDefaults::outerGapBottom();
-    int m_outerGapLeft = ConfigDefaults::outerGapLeft();
-    int m_outerGapRight = ConfigDefaults::outerGapRight();
-    int m_adjacentThreshold = ConfigDefaults::adjacentThreshold();
+    // PhosphorZones::Zone settings
+    // PhosphorZones::Zone geometry is stored in m_store; no cached members here.
 
     // Performance and behavior
-    int m_pollIntervalMs = ConfigDefaults::pollIntervalMs();
-    int m_minimumZoneSizePx = ConfigDefaults::minimumZoneSizePx();
-    int m_minimumZoneDisplaySizePx = ConfigDefaults::minimumZoneDisplaySizePx();
+    // Performance is stored in m_store; no cached members here.
 
     // Window behavior
-    bool m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();
-    bool m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
-    bool m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
-    StickyWindowHandling m_stickyWindowHandling = StickyWindowHandling::TreatAsNormal;
-    bool m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
-    bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
-    bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
-    QVariantList m_snapAssistTriggers; // [{modifier: int, mouseButton: int}, ...]
+    // Behavior (WindowHandling + SnapAssist) is stored in m_store.
 
     // Default layout (used when no explicit assignment exists)
-    QString m_defaultLayoutId;
+    // defaultLayoutId stored in m_store.
 
-    // Layout filtering
-    bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
+    // PhosphorZones::Layout filtering
+    // filterLayoutsByAspectRatio is stored in m_store.
 
     // Ordering
-    QStringList m_snappingLayoutOrder;
-    QStringList m_tilingAlgorithmOrder;
+    // Ordering is stored in m_store; no cached members here.
 
     // Exclusions
-    QStringList m_excludedApplications;
-    QStringList m_excludedWindowClasses;
-    bool m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
-    int m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
-    int m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
+    // Exclusions are stored in m_store; no cached members here.
 
-    // Zone Selector
-    bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
-    int m_zoneSelectorTriggerDistance = ConfigDefaults::triggerDistance();
-    ZoneSelectorPosition m_zoneSelectorPosition = ZoneSelectorPosition::Top;
-    ZoneSelectorLayoutMode m_zoneSelectorLayoutMode = ZoneSelectorLayoutMode::Grid;
-    ZoneSelectorSizeMode m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto;
-    int m_zoneSelectorMaxRows = ConfigDefaults::maxRows();
-    int m_zoneSelectorPreviewWidth = ConfigDefaults::previewWidth();
-    int m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
-    bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
-    int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
+    // PhosphorZones::Zone Selector
+    // PhosphorZones::Zone selector is stored in m_store.
+    // (remaining zone selector members stored in m_store)
+
+    // Virtual screen configurations (physicalScreenId -> config)
+    QHash<QString, Phosphor::Screens::VirtualScreenConfig> m_virtualScreenConfigs;
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
@@ -1701,141 +1168,23 @@ private:
     QHash<QString, QVariantMap> m_perScreenSnappingSettings;
 
     // Autotiling Settings
-    bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    QString m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
-    qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
-    qreal m_autotileSplitRatioStep = ConfigDefaults::autotileSplitRatioStep();
-    int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
-    QVariantMap m_autotilePerAlgorithmSettings;
-    int m_autotileInnerGap = ConfigDefaults::autotileInnerGap();
-    int m_autotileOuterGap = ConfigDefaults::autotileOuterGap();
-    bool m_autotileUsePerSideOuterGap = ConfigDefaults::autotileUsePerSideOuterGap();
-    int m_autotileOuterGapTop = ConfigDefaults::autotileOuterGapTop();
-    int m_autotileOuterGapBottom = ConfigDefaults::autotileOuterGapBottom();
-    int m_autotileOuterGapLeft = ConfigDefaults::autotileOuterGapLeft();
-    int m_autotileOuterGapRight = ConfigDefaults::autotileOuterGapRight();
-    bool m_autotileFocusNewWindows = ConfigDefaults::autotileFocusNewWindows();
-    bool m_autotileSmartGaps = ConfigDefaults::autotileSmartGaps();
-    int m_autotileMaxWindows = ConfigDefaults::autotileMaxWindows();
-    AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
+    // Autotiling stored in m_store.
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
-    bool m_animationsEnabled = ConfigDefaults::animationsEnabled();
-    int m_animationDuration = ConfigDefaults::animationDuration();
-    QString m_animationEasingCurve = ConfigDefaults::animationEasingCurve();
-    int m_animationMinDistance = ConfigDefaults::animationMinDistance();
-    int m_animationSequenceMode = ConfigDefaults::animationSequenceMode();
-    int m_animationStaggerInterval = ConfigDefaults::animationStaggerInterval();
+    // Animations are stored in m_store; no cached members here.
+
+    // Non-owned CurveRegistry for animation profile parsing. Injected
+    // at construction (daemon composition root); null for standalone
+    // Settings instances that fall back to a local static registry.
+    // Injection is constructor-only — there is no post-construction
+    // setter because `load()` runs during ctor and would leave cached
+    // Profile state parsed through the wrong registry if a setter ran
+    // after. Callers must pass the registry up front or accept the
+    // fallback contract.
+    PhosphorAnimation::CurveRegistry* m_curveRegistry = nullptr;
 
     // Additional Autotiling Settings
-    bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
-    bool m_autotileRespectMinimumSize = ConfigDefaults::autotileRespectMinimumSize();
-    bool m_autotileHideTitleBars = ConfigDefaults::autotileHideTitleBars();
-    bool m_autotileShowBorder = ConfigDefaults::autotileShowBorder();
-    int m_autotileBorderWidth = ConfigDefaults::autotileBorderWidth();
-    int m_autotileBorderRadius = ConfigDefaults::autotileBorderRadius();
-    QColor m_autotileBorderColor = ConfigDefaults::autotileBorderColor();
-    QColor m_autotileInactiveBorderColor = ConfigDefaults::autotileInactiveBorderColor();
-    bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
-    StickyWindowHandling m_autotileStickyWindowHandling = StickyWindowHandling::TreatAsNormal;
-    QStringList m_lockedScreens;
-    // Autotile Shortcuts (defaults from ConfigDefaults, canonical source)
-    QString m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();
-    QString m_autotileFocusMasterShortcut = ConfigDefaults::autotileFocusMasterShortcut();
-    QString m_autotileSwapMasterShortcut = ConfigDefaults::autotileSwapMasterShortcut();
-    QString m_autotileIncMasterRatioShortcut = ConfigDefaults::autotileIncMasterRatioShortcut();
-    QString m_autotileDecMasterRatioShortcut = ConfigDefaults::autotileDecMasterRatioShortcut();
-    QString m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
-    QString m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
-    QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
-
-    // Rendering
-    QString m_renderingBackend = ConfigDefaults::renderingBackend();
-
-    // Shader Effects
-    bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
-    int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
-    bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
-    int m_audioSpectrumBarCount = ConfigDefaults::audioSpectrumBarCount();
-
-    // Global Shortcuts (defaults from ConfigDefaults, canonical source)
-    QString m_openEditorShortcut = ConfigDefaults::openEditorShortcut();
-    QString m_openSettingsShortcut = ConfigDefaults::openSettingsShortcut();
-    QString m_previousLayoutShortcut = ConfigDefaults::previousLayoutShortcut();
-    QString m_nextLayoutShortcut = ConfigDefaults::nextLayoutShortcut();
-    QString m_quickLayoutShortcuts[9] = {ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
-                                         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
-                                         ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
-                                         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-                                         ConfigDefaults::quickLayout9Shortcut()};
-
-    // Keyboard Navigation Shortcuts
-    // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
-    // we use Meta+Alt+Shift+Arrow instead.
-    QString m_moveWindowLeftShortcut = ConfigDefaults::moveWindowLeftShortcut();
-    QString m_moveWindowRightShortcut = ConfigDefaults::moveWindowRightShortcut();
-    QString m_moveWindowUpShortcut = ConfigDefaults::moveWindowUpShortcut();
-    QString m_moveWindowDownShortcut = ConfigDefaults::moveWindowDownShortcut();
-    // Meta+Arrow conflicts with KDE's Quick Tile; we use Alt+Shift+Arrow instead.
-    QString m_focusZoneLeftShortcut = ConfigDefaults::focusZoneLeftShortcut();
-    QString m_focusZoneRightShortcut = ConfigDefaults::focusZoneRightShortcut();
-    QString m_focusZoneUpShortcut = ConfigDefaults::focusZoneUpShortcut();
-    QString m_focusZoneDownShortcut = ConfigDefaults::focusZoneDownShortcut();
-    QString m_pushToEmptyZoneShortcut = ConfigDefaults::pushToEmptyZoneShortcut();
-    QString m_restoreWindowSizeShortcut = ConfigDefaults::restoreWindowSizeShortcut();
-    QString m_toggleWindowFloatShortcut = ConfigDefaults::toggleWindowFloatShortcut();
-
-    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
-    // Swaps focused window with window in adjacent zone
-    // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
-    // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
-    QString m_swapWindowLeftShortcut = ConfigDefaults::swapWindowLeftShortcut();
-    QString m_swapWindowRightShortcut = ConfigDefaults::swapWindowRightShortcut();
-    QString m_swapWindowUpShortcut = ConfigDefaults::swapWindowUpShortcut();
-    QString m_swapWindowDownShortcut = ConfigDefaults::swapWindowDownShortcut();
-
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
-    // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.
-    QString m_snapToZoneShortcuts[9] = {ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-                                        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-                                        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-                                        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-                                        ConfigDefaults::snapToZone9Shortcut()};
-
-    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
-    // Rotates all windows in the current layout clockwise or counterclockwise
-    QString m_rotateWindowsClockwiseShortcut = ConfigDefaults::rotateWindowsClockwiseShortcut();
-    QString m_rotateWindowsCounterclockwiseShortcut = ConfigDefaults::rotateWindowsCounterclockwiseShortcut();
-
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
-    // Cycles focus between windows stacked in the same zone (monocle-style navigation)
-    QString m_cycleWindowForwardShortcut = ConfigDefaults::cycleWindowForwardShortcut();
-    QString m_cycleWindowBackwardShortcut = ConfigDefaults::cycleWindowBackwardShortcut();
-
-    // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
-    QString m_resnapToNewLayoutShortcut = ConfigDefaults::resnapToNewLayoutShortcut();
-
-    // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
-    QString m_snapAllWindowsShortcut = ConfigDefaults::snapAllWindowsShortcut();
-
-    // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
-    QString m_layoutPickerShortcut = ConfigDefaults::layoutPickerShortcut();
-
-    // Toggle Layout Lock (Meta+Ctrl+L)
-    QString m_toggleLayoutLockShortcut = ConfigDefaults::toggleLayoutLockShortcut();
-
-    // Editor Settings ([Editor] group in config.json)
-    QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
-    QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
-    QString m_editorSplitVerticalShortcut = ConfigDefaults::editorSplitVerticalShortcut();
-    QString m_editorFillShortcut = ConfigDefaults::editorFillShortcut();
-    bool m_editorGridSnappingEnabled = ConfigDefaults::editorGridSnappingEnabled();
-    bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
-    qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapInterval();
-    qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapInterval();
-    int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
-    bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
-    int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
+    // Autotiling (continued) stored in m_store.
 };
 
 } // namespace PlasmaZones

@@ -3,277 +3,92 @@
 
 #pragma once
 
-#include <QObject>
-#include <QHash>
-#include <QRect>
-#include <QRectF>
-#include <QPointF>
-#include <QSizeF>
-#include <QString>
-#include <QtMath>
-#include <chrono>
+#include <PhosphorAnimation/AnimatedValue.h>
+#include <PhosphorAnimation/AnimationController.h>
+
+#include <functional>
 
 namespace KWin {
 class EffectWindow;
+class LogicalOutput;
 class WindowPaintData;
+}
+
+namespace PhosphorAnimation {
+class IMotionClock;
 }
 
 namespace PlasmaZones {
 
 /**
- * @brief Easing curve supporting cubic bezier, elastic, and bounce types
+ * @brief KWin adapter on top of `PhosphorAnimation::AnimationController`.
  *
- * Bezier: P0=(0,0) and P3=(1,1) are implicit, defined by P1=(x1,y1) and P2=(x2,y2).
- * Stored in config as "x1,y1,x2,y2" (bezier) or "elastic-out:1.0,0.3" (named).
- * Detection: if string contains a letter -> named curve; otherwise -> bezier.
- */
-struct EasingCurve
-{
-    enum class Type {
-        CubicBezier,
-        ElasticIn,
-        ElasticOut,
-        ElasticInOut,
-        BounceIn,
-        BounceOut,
-        BounceInOut
-    };
-
-    Type type = Type::CubicBezier;
-
-    // Bezier control points (used when type == CubicBezier)
-    qreal x1 = 0.33;
-    qreal y1 = 1.0;
-    qreal x2 = 0.68;
-    qreal y2 = 1.0;
-
-    // Parameters for elastic and bounce curves
-    qreal amplitude = 1.0; // Elastic: overshoot intensity; Bounce: bounce height scale
-    qreal period = 0.3; // Elastic only: oscillation period
-    int bounces = 3; // Bounce only: number of bounces (1–8)
-
-    /// Evaluate the easing curve at time x (0.0-1.0), returns eased value
-    qreal evaluate(qreal x) const;
-
-    /// Parse from config string; returns default OutCubic bezier on failure
-    static EasingCurve fromString(const QString& str);
-
-    /// Serialize to config string
-    QString toString() const;
-
-    bool operator==(const EasingCurve& other) const
-    {
-        if (type != other.type)
-            return false;
-        if (type == Type::CubicBezier) {
-            return qFuzzyCompare(1.0 + x1, 1.0 + other.x1) && qFuzzyCompare(1.0 + y1, 1.0 + other.y1)
-                && qFuzzyCompare(1.0 + x2, 1.0 + other.x2) && qFuzzyCompare(1.0 + y2, 1.0 + other.y2);
-        }
-        // Elastic types: compare amplitude and period
-        if (type == Type::ElasticIn || type == Type::ElasticOut || type == Type::ElasticInOut) {
-            return qFuzzyCompare(1.0 + amplitude, 1.0 + other.amplitude)
-                && qFuzzyCompare(1.0 + period, 1.0 + other.period);
-        }
-        // Bounce types (BounceIn, BounceOut, BounceInOut): compare amplitude and bounce count
-        return qFuzzyCompare(1.0 + amplitude, 1.0 + other.amplitude) && bounces == other.bounces;
-    }
-    bool operator!=(const EasingCurve& other) const
-    {
-        return !(*this == other);
-    }
-
-private:
-    static qreal evaluateElasticOut(qreal t, qreal amp, qreal per);
-    static qreal evaluateBounceOut(qreal t, qreal amp, int n);
-};
-
-/**
- * @brief Animation data for window snap transitions (translate + scale)
- *
- * Stores the start position/size and target geometry for smooth animations.
- * The window's actual frame is moved to targetGeometry immediately via
- * moveResize(); this animation provides a visual translation offset and
- * scale factor that morph from the old geometry to the new.
- *
- * Timing uses presentTime from KWin's compositor (vsync-aligned) rather
- * than wall-clock time, ensuring frame-perfect animation. Progress is
- * cached once per frame to avoid inconsistencies between position and
- * size interpolation within a single paint cycle.
- */
-struct WindowAnimation
-{
-    QPointF startPosition; ///< Visual top-left position before snap
-    QSizeF startSize; ///< Visual size before snap (for scale interpolation)
-    QRect targetGeometry; ///< Target geometry (for duplicate detection)
-    std::chrono::milliseconds startTime{-1}; ///< presentTime when animation started (-1 = pending)
-    qreal duration = 150.0; ///< Animation duration in milliseconds
-    EasingCurve easing; ///< Easing curve for this animation
-    qreal cachedProgress = 0.0; ///< Eased progress, updated once per frame
-
-    /// Check if the animation has been initialized
-    bool isValid() const
-    {
-        return startTime.count() >= 0;
-    }
-
-    /// Update cached progress from presentTime. Called once per frame.
-    void updateProgress(std::chrono::milliseconds presentTime)
-    {
-        if (startTime.count() < 0) {
-            // First frame — latch the start time to this presentTime
-            startTime = presentTime;
-            cachedProgress = 0.0;
-            return;
-        }
-        if (duration <= 0.0) {
-            cachedProgress = 1.0;
-            return;
-        }
-        const qreal elapsed = qreal((presentTime - startTime).count());
-        const qreal t = qMin(1.0, elapsed / duration);
-        cachedProgress = easing.evaluate(t);
-    }
-
-    /// Returns the cached eased progress (0.0 to 1.0)
-    qreal progress() const
-    {
-        return cachedProgress;
-    }
-
-    /// Check if animation is complete based on presentTime
-    bool isComplete(std::chrono::milliseconds presentTime) const
-    {
-        if (startTime.count() < 0 || duration <= 0.0) {
-            return true;
-        }
-        return qreal((presentTime - startTime).count()) >= duration;
-    }
-
-    /// Absolute visual top-left position at the cached progress.
-    QPointF currentVisualPosition() const
-    {
-        const qreal p = cachedProgress;
-        const qreal tx = targetGeometry.x();
-        const qreal ty = targetGeometry.y();
-        return QPointF(startPosition.x() + (tx - startPosition.x()) * p,
-                       startPosition.y() + (ty - startPosition.y()) * p);
-    }
-
-    /// Interpolated visual size at the cached progress.
-    QSizeF currentVisualSize() const
-    {
-        const qreal p = cachedProgress;
-        const qreal tw = targetGeometry.width();
-        const qreal th = targetGeometry.height();
-        return QSizeF(startSize.width() + (tw - startSize.width()) * p,
-                      startSize.height() + (th - startSize.height()) * p);
-    }
-
-    /// True if the animation involves a size change (not just position).
-    bool hasScaleChange() const
-    {
-        return qAbs(startSize.width() - targetGeometry.width()) > 1.0
-            || qAbs(startSize.height() - targetGeometry.height()) > 1.0;
-    }
-};
-
-/**
- * @brief Manages window snap animations (translate + scale)
+ * The compositor-agnostic state machine (lifecycle, progression via
+ * `AnimatedValue<QRectF>`, clock integration, bounds computation,
+ * completion + repaint hooks) lives in the library base. This subclass
+ * binds the handle type to `KWin::EffectWindow*`, routes the five
+ * virtual hooks into KWin's effect pipeline, and adds
+ * `applyTransform` — the only KWin-coupled call still needed.
  *
  * When a window is snapped to a zone, the caller applies moveResize()
- * immediately to set the final geometry. This animator provides visual
+ * immediately to set the final geometry. The animator provides visual
  * translation and scale transforms in paintWindow() that morph the
  * window from its old position/size to the new one. This follows the
  * standard KDE effect pattern — effects are purely visual overlays on
  * the compositing pipeline and never call moveResize() per-frame.
  *
- * Timing is driven by presentTime (vsync-aligned) for frame-perfect
- * animation, and progress is cached once per frame to ensure consistent
- * position and size interpolation within a single paint cycle.
+ * Timing is driven by per-output `CompositorClock` instances resolved
+ * via the `OutputClockResolver` callback — mixed-refresh-rate displays
+ * phase-lock independently instead of beating against a shared process-
+ * wide clock. The resolver is injected by the effect at construction
+ * time; the animator's `clockForHandle` override calls back into it
+ * with each window's current `LogicalOutput`.
  */
-class WindowAnimator : public QObject
+class WindowAnimator : public PhosphorAnimation::AnimationController<KWin::EffectWindow*>
 {
-    Q_OBJECT
-
 public:
-    explicit WindowAnimator(QObject* parent = nullptr);
+    /// Callback resolving an output to the matching IMotionClock. The
+    /// effect owns the clock instances; the animator just routes via
+    /// this resolver at `startAnimation` time. May return nullptr for
+    /// an unknown output — in that case the controller's default
+    /// clock (set via setClock) is used.
+    using OutputClockResolver = std::function<PhosphorAnimation::IMotionClock*(KWin::LogicalOutput*)>;
 
-    // Configuration
-    void setEnabled(bool enabled)
-    {
-        m_enabled = enabled;
-    }
-    bool isEnabled() const
-    {
-        return m_enabled;
-    }
-    void setDuration(qreal ms)
-    {
-        m_duration = ms;
-    }
-    qreal duration() const
-    {
-        return m_duration;
-    }
-    void setEasingCurve(const EasingCurve& curve)
-    {
-        m_easing = curve;
-    }
-    const EasingCurve& easingCurve() const
-    {
-        return m_easing;
-    }
-    void setMinDistance(int pixels)
-    {
-        m_minDistance = qMax(0, pixels);
-    }
-    int minDistance() const
-    {
-        return m_minDistance;
-    }
+    using AnimationCompleteCallback = std::function<void(KWin::EffectWindow*)>;
 
-    // Animation management
-    bool hasActiveAnimations() const
-    {
-        return !m_animations.isEmpty();
-    }
-    bool hasAnimation(KWin::EffectWindow* window) const;
-    bool startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QSizeF& oldSize,
-                        const QRect& targetGeometry);
-    void removeAnimation(KWin::EffectWindow* window);
-    void clear();
+    /// Install the per-output clock resolver. Safe to call at any time;
+    /// takes effect for subsequent `startAnimation` calls. In-flight
+    /// animations keep the clock captured at their own start time.
+    void setOutputClockResolver(OutputClockResolver resolver);
 
-    // Animation state queries
-    bool isAnimatingToTarget(KWin::EffectWindow* window, const QRect& targetGeometry) const;
+    void setOnAnimationCompleteCallback(AnimationCompleteCallback callback);
 
-    /// Current visual top-left position (lerped between start and target).
-    /// Used to chain animations when redirecting to a new target mid-flight.
-    QPointF currentVisualPosition(KWin::EffectWindow* window) const;
-
-    /// Current visual size (lerped between start and target).
-    /// Used to chain animations when redirecting to a new target mid-flight.
-    QSizeF currentVisualSize(KWin::EffectWindow* window) const;
-
-    // Per-frame: update cached progress and clean up completed animations.
-    // Called from prePaintScreen() with the compositor's presentTime.
-    void advanceAnimations(std::chrono::milliseconds presentTime);
-
-    // Schedule targeted repaints for active animation regions. Called from postPaintScreen().
-    void scheduleRepaints() const;
-
-    // Paint helper — applies translate offset and scale transform.
-    // The window visually morphs from startPosition/startSize to its final geometry.
+    /// Apply translate offset + scale transform to @p data so the window
+    /// renders at the current interpolated visual position/size. No-op
+    /// when @p window has no active animation or the motion is still
+    /// pending (startTime not latched — one frame between
+    /// startAnimation and the first advanceAnimations tick).
     void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 
-    // Bounding rect covering the full animation path (for repaint regions)
-    QRectF animationBounds(KWin::EffectWindow* window) const;
+protected:
+    void onAnimationStarted(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationComplete(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationReplaced(KWin::EffectWindow* window,
+                             const PhosphorAnimation::AnimatedValue<QRectF>& displaced) override;
+    void onAnimationRetargeted(KWin::EffectWindow* window,
+                               const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationReaped(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationAbandoned(KWin::EffectWindow* window,
+                              const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onRepaintNeeded(KWin::EffectWindow* window, const QRectF& bounds) const override;
+    bool isHandleValid(KWin::EffectWindow* window) const override;
+    QMarginsF expandedPadding(KWin::EffectWindow* window,
+                              const PhosphorAnimation::AnimatedValue<QRectF>& anim) const override;
+    PhosphorAnimation::IMotionClock* clockForHandle(KWin::EffectWindow* window) const override;
 
 private:
-    QHash<KWin::EffectWindow*, WindowAnimation> m_animations;
-    bool m_enabled = true;
-    qreal m_duration = 150.0;
-    EasingCurve m_easing;
-    int m_minDistance = 0;
+    OutputClockResolver m_outputClockResolver;
+    AnimationCompleteCallback m_onAnimationCompleteCallback;
 };
 
 } // namespace PlasmaZones

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "virtualdesktopmanager.h"
-#include "layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "logging.h"
 #include "utils.h"
 #include <QDBusConnection>
@@ -18,7 +18,7 @@
 
 namespace PlasmaZones {
 
-VirtualDesktopManager::VirtualDesktopManager(LayoutManager* layoutManager, QObject* parent)
+VirtualDesktopManager::VirtualDesktopManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
 {
@@ -253,7 +253,7 @@ void VirtualDesktopManager::start()
     } else {
         m_currentDesktop = currentDesktop();
     }
-    // Layout resolution is handled by the daemon's syncModeFromAssignments()
+    // PhosphorZones::Layout resolution is handled by the daemon's syncModeFromAssignments()
     // via the currentDesktopChanged signal — no direct layout switching here.
 }
 
@@ -330,7 +330,7 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
     // Ensure current desktop is still valid
     if (m_currentDesktop > count) {
         m_currentDesktop = count;
-        // Layout resolution happens via currentDesktopChanged signal to daemon
+        // PhosphorZones::Layout resolution happens via currentDesktopChanged signal to daemon
         Q_EMIT currentDesktopChanged(m_currentDesktop);
     }
 

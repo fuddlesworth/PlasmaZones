@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Reusable notification banner with slide-in animation
@@ -105,20 +106,20 @@ Rectangle {
     ParallelAnimation {
         id: showAnim
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: banner
-            property: "opacity"
+            properties: "opacity"
             to: 1
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+            profile: "panel.popup"
+            durationOverride: Theme.animDuration
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: bannerTranslate
-            property: "y"
+            properties: "y"
             to: 0
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+            profile: "panel.popup"
+            durationOverride: Theme.animDuration
         }
 
     }
@@ -126,20 +127,20 @@ Rectangle {
     ParallelAnimation {
         id: hideAnim
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: banner
-            property: "opacity"
+            properties: "opacity"
             to: 0
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+            profile: "widget.fade"
+            durationOverride: Theme.animDuration
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: bannerTranslate
-            property: "y"
+            properties: "y"
             to: Kirigami.Units.smallSpacing
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+            profile: "widget.fade"
+            durationOverride: Theme.animDuration
         }
 
     }

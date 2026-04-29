@@ -90,16 +90,16 @@ static QImage readImageFromPipe(int readFd, const QVariantMap& metadata)
     return image;
 }
 
-void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int maxSize)
+void WindowThumbnailService::captureWindowAsync(const QString& compositorHandle, int maxSize)
 {
-    if (kwinHandle.isEmpty()) {
+    if (compositorHandle.isEmpty()) {
         return;
     }
 
     int pipeFds[2];
     if (pipe2(pipeFds, O_CLOEXEC) != 0) {
         qCWarning(lcOverlay) << "captureWindowAsync: pipe creation failed";
-        Q_EMIT captureFinished(kwinHandle, QString());
+        Q_EMIT captureFinished(compositorHandle, QString());
         return;
     }
 
@@ -108,7 +108,7 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
 
     QDBusMessage msg = QDBusMessage::createMethodCall(kScreenShot2Service, kScreenShot2Path, kScreenShot2Iface,
                                                       QStringLiteral("CaptureWindow"));
-    msg << kwinHandle << QVariantMap() << QVariant::fromValue(fd);
+    msg << compositorHandle << QVariantMap() << QVariant::fromValue(fd);
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
 
@@ -116,7 +116,7 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
     const int readFd = pipeFds[0];
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, readFd, kwinHandle, maxSize](QDBusPendingCallWatcher* w) {
+            [this, readFd, compositorHandle, maxSize](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
 
                 QDBusPendingReply<QVariantMap> reply(*w);
@@ -125,12 +125,12 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
                     // Invalid window requested (closed before capture) is expected; log at debug level
                     if (errMsg.contains(QLatin1String("Invalid window requested"))) {
                         qCDebug(lcOverlay)
-                            << "captureWindowAsync:" << kwinHandle << "window invalid (closed?):" << errMsg;
+                            << "captureWindowAsync:" << compositorHandle << "window invalid (closed?):" << errMsg;
                     } else {
-                        qCInfo(lcOverlay) << "captureWindowAsync:" << kwinHandle << "DBus error:" << errMsg;
+                        qCInfo(lcOverlay) << "captureWindowAsync:" << compositorHandle << "DBus error:" << errMsg;
                     }
                     close(readFd);
-                    Q_EMIT captureFinished(kwinHandle, QString());
+                    Q_EMIT captureFinished(compositorHandle, QString());
                     return;
                 }
 
@@ -144,23 +144,25 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
                 });
 
                 auto* futureWatcher = new QFutureWatcher<QImage>(this);
-                connect(futureWatcher, &QFutureWatcher<QImage>::finished, this, [this, futureWatcher, kwinHandle]() {
-                    futureWatcher->deleteLater();
-                    QImage image = futureWatcher->result();
-                    QString dataUrl;
-                    if (!image.isNull()) {
-                        QByteArray ba;
-                        QBuffer buffer(&ba);
-                        buffer.open(QIODevice::WriteOnly);
-                        if (image.save(&buffer, "PNG")) {
-                            dataUrl = QStringLiteral("data:image/png;base64,") + QString::fromUtf8(ba.toBase64());
+                connect(
+                    futureWatcher, &QFutureWatcher<QImage>::finished, this, [this, futureWatcher, compositorHandle]() {
+                        futureWatcher->deleteLater();
+                        QImage image = futureWatcher->result();
+                        QString dataUrl;
+                        if (!image.isNull()) {
+                            QByteArray ba;
+                            QBuffer buffer(&ba);
+                            buffer.open(QIODevice::WriteOnly);
+                            if (image.save(&buffer, "PNG")) {
+                                dataUrl = QStringLiteral("data:image/png;base64,") + QString::fromUtf8(ba.toBase64());
+                            }
                         }
-                    }
-                    if (dataUrl.isEmpty()) {
-                        qCDebug(lcOverlay) << "captureWindowAsync:" << kwinHandle << "no thumbnail (auth/format/pipe?)";
-                    }
-                    Q_EMIT captureFinished(kwinHandle, dataUrl);
-                });
+                        if (dataUrl.isEmpty()) {
+                            qCDebug(lcOverlay)
+                                << "captureWindowAsync:" << compositorHandle << "no thumbnail (auth/format/pipe?)";
+                        }
+                        Q_EMIT captureFinished(compositorHandle, dataUrl);
+                    });
                 futureWatcher->setFuture(future);
             });
 }

@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// @name Paper
-// @builtinId paper
-// @description Equal-width overlapping pages like a document viewer; splitRatio controls page width
-// @producesOverlappingZones true
-// @supportsMasterCount false
-// @supportsSplitRatio true
-// @defaultSplitRatio 0.8
-// @defaultMaxWindows 6
-// @minimumWindows 1
-// @zoneNumberDisplay last
-// @supportsMemory false
+var metadata = {
+    name: "Paper",
+    id: "paper",
+    description: "Equal-width overlapping pages like a document viewer; splitRatio controls page width",
+    producesOverlappingZones: true,
+    supportsMasterCount: false,
+    supportsSplitRatio: true,
+    defaultSplitRatio: 0.8,
+    defaultMaxWindows: 6,
+    minimumWindows: 1,
+    zoneNumberDisplay: "last",
+    supportsMemory: false
+};
 
 /**
  * Paper layout: each window is an equal-width "page" (default 80%

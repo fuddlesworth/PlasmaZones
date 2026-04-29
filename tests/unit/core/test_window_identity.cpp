@@ -3,21 +3,25 @@
 
 /**
  * @file test_window_identity.cpp
- * @brief Unit tests for Utils::extractAppId() — the legacy composite parser.
+ * @brief Unit tests for PhosphorIdentity::WindowId::extractAppId() — the composite-key parser.
  *
- * IMPORTANT: the runtime wire format is no longer "appId|uuid" composite —
- * the kwin-effect bridge sends opaque instance ids (bare UUIDs).
- * Utils::extractAppId() is preserved as a fallback inside
- * WindowTrackingService::currentAppIdFor() for unit tests and code paths
- * that don't have a WindowRegistry attached — on a bare instance id the
- * helper is a passthrough (no '|' separator to split on).
+ * The effect produces window ids in the form "appId|instanceId" (frozen at
+ * first observation). Every daemon map keys off that composite. Services
+ * that need the first-seen app class parse it with PhosphorIdentity::WindowId::extractAppId();
+ * services that need the LIVE app class (Electron/CEF apps that mutate
+ * their WM_CLASS mid-session) query WindowTrackingService::currentAppIdFor
+ * or AutotileEngine::currentAppIdFor, both of which hit WindowRegistry.
  *
- * This file validates the parser's behavior on both legacy composites and
- * bare instance ids so that the compat fallback stays well-defined. It does
- * NOT describe how production looks up app class for a window — for that,
- * see WindowTrackingService::currentAppIdFor() and
- * PlasmaZonesEffect::appIdForInstance(), which query the live
- * WindowRegistry.
+ * The two semantics coexist intentionally: the stable composite lets
+ * daemon maps ignore class mutations (so a rule bound to a zone doesn't
+ * get reassigned mid-session), and the live registry lookup lets new
+ * rule decisions see the current class.
+ *
+ * This file pins extractAppId()'s behavior on composites (split before the
+ * first '|') and on bare strings (passthrough) so the fallback stays
+ * well-defined for the WindowTrackingService::currentAppIdFor() and
+ * AutotileEngine::currentAppIdFor() call paths that walk this helper when
+ * no registry is attached.
  */
 
 #include <QTest>
@@ -26,7 +30,13 @@
 
 #include "../../../src/core/utils.h"
 
-using PlasmaZones::Utils::extractAppId;
+#include <PhosphorIdentity/WindowId.h>
+
+using PhosphorIdentity::WindowId::appIdMatches;
+using PhosphorIdentity::WindowId::buildCompositeId;
+using PhosphorIdentity::WindowId::deriveShortName;
+using PhosphorIdentity::WindowId::extractAppId;
+using PhosphorIdentity::WindowId::extractInstanceId;
 
 class TestWindowIdentity : public QObject
 {
@@ -91,12 +101,10 @@ private Q_SLOTS:
 
     void testExtractAppId_pipeAtStart()
     {
-        // Edge case: pipe at position 0 -- should return empty (sep == 0, not > 0)
         QString windowId = QStringLiteral("|uuid-1234");
         QString appId = extractAppId(windowId);
 
-        // extractAppId returns original string when sep is not > 0
-        QCOMPARE(appId, windowId);
+        QCOMPARE(appId, QString());
     }
 
     // =====================================================================
@@ -184,12 +192,132 @@ private Q_SLOTS:
 
     void testWindowIdWithEmptyAppId()
     {
-        // Empty app ID part (pipe at start)
         QString windowId = QStringLiteral("|uuid-12345");
         QString appId = extractAppId(windowId);
 
-        // pipe at position 0 means sep is not > 0, returns original
-        QCOMPARE(appId, windowId);
+        QCOMPARE(appId, QString());
+    }
+
+    // =====================================================================
+    // buildCompositeId — symmetry with extractAppId / extractInstanceId
+    // =====================================================================
+
+    void testBuildCompositeId_roundtrip()
+    {
+        const QString appId = QStringLiteral("org.kde.konsole");
+        const QString instanceId = QStringLiteral("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+        const QString composite = buildCompositeId(appId, instanceId);
+
+        QCOMPARE(composite, appId + QLatin1Char('|') + instanceId);
+        QCOMPARE(extractAppId(composite), appId);
+        QCOMPARE(extractInstanceId(composite), instanceId);
+    }
+
+    void testBuildCompositeId_emptyInstance_yieldsBareAppId()
+    {
+        // Symmetric with extractAppId's passthrough on bare strings — an empty
+        // instance id must not leave a dangling separator, otherwise the
+        // round-trip extractInstanceId(buildCompositeId(a, "")) would return
+        // an empty string that subsequent matchers treat as a valid instance.
+        const QString composite = buildCompositeId(QStringLiteral("firefox"), QString());
+        QCOMPARE(composite, QStringLiteral("firefox"));
+        QCOMPARE(extractAppId(composite), QStringLiteral("firefox"));
+    }
+
+    void testBuildCompositeId_emptyAppId_preservesSeparator()
+    {
+        // An empty appId with a non-empty instance id must still produce a
+        // composite that extractInstanceId can recover — otherwise a window
+        // that briefly has no app class can't be disambiguated.
+        const QString composite = buildCompositeId(QString(), QStringLiteral("uuid-1"));
+        QCOMPARE(composite, QStringLiteral("|uuid-1"));
+        QCOMPARE(extractInstanceId(composite), QStringLiteral("uuid-1"));
+    }
+
+    // =====================================================================
+    // appIdMatches — segment-aware pattern matching used by Layout::matchAppRule
+    //
+    // The semantics here are subtle enough that the inline header comment
+    // is the spec; these tests pin it so future refactors can't quietly
+    // widen or narrow the match.
+    // =====================================================================
+
+    void testAppIdMatches_exactIgnoresCase()
+    {
+        QVERIFY(appIdMatches(QStringLiteral("firefox"), QStringLiteral("firefox")));
+        QVERIFY(appIdMatches(QStringLiteral("Firefox"), QStringLiteral("firefox")));
+        QVERIFY(appIdMatches(QStringLiteral("firefox"), QStringLiteral("FIREFOX")));
+    }
+
+    void testAppIdMatches_trailingDotSegment()
+    {
+        // Reverse-DNS appId matched by bare last-segment pattern.
+        QVERIFY(appIdMatches(QStringLiteral("org.mozilla.firefox"), QStringLiteral("firefox")));
+        // And the reverse direction: bare appId matched by reverse-DNS pattern.
+        QVERIFY(appIdMatches(QStringLiteral("firefox"), QStringLiteral("org.mozilla.firefox")));
+    }
+
+    void testAppIdMatches_rejectsShortPrefixCollision()
+    {
+        // The header's key invariant: 4-char "fire" must not match any form
+        // of "firefox". Asymmetric gating (prefix candidate ≥ 5 chars) is
+        // what enforces this.
+        QVERIFY(!appIdMatches(QStringLiteral("fire"), QStringLiteral("firefox")));
+        QVERIFY(!appIdMatches(QStringLiteral("firefox"), QStringLiteral("fire")));
+        QVERIFY(!appIdMatches(QStringLiteral("org.mozilla.firefox"), QStringLiteral("fire")));
+        QVERIFY(!appIdMatches(QStringLiteral("fire"), QStringLiteral("org.mozilla.firefox")));
+    }
+
+    void testAppIdMatches_lastSegmentPrefix()
+    {
+        // "systemsettings" is a 14-char prefix candidate, so it passes the
+        // ≥5 gate and matches "org.kde.systemsettings5" via its last segment.
+        QVERIFY(appIdMatches(QStringLiteral("org.kde.systemsettings5"), QStringLiteral("systemsettings")));
+        // Reverse direction — bare appId prefixes the pattern's last segment.
+        QVERIFY(appIdMatches(QStringLiteral("systemsettings"), QStringLiteral("org.kde.systemsettings5")));
+    }
+
+    void testAppIdMatches_emptyInputsReturnFalse()
+    {
+        QVERIFY(!appIdMatches(QString(), QStringLiteral("firefox")));
+        QVERIFY(!appIdMatches(QStringLiteral("firefox"), QString()));
+        QVERIFY(!appIdMatches(QString(), QString()));
+    }
+
+    void testAppIdMatches_noCrossSegmentMatch()
+    {
+        // "mozilla" is a middle segment, not a trailing one, so it must not
+        // match — prevents rules scoped to "firefox" from catching "thunderbird"
+        // just because both are under "org.mozilla".
+        QVERIFY(!appIdMatches(QStringLiteral("org.mozilla.firefox"), QStringLiteral("mozilla")));
+    }
+
+    // =====================================================================
+    // deriveShortName — icon / display-name helper
+    // =====================================================================
+
+    void testDeriveShortName_reverseDns()
+    {
+        QCOMPARE(deriveShortName(QStringLiteral("org.kde.dolphin")), QStringLiteral("dolphin"));
+        QCOMPARE(deriveShortName(QStringLiteral("com.example.app")), QStringLiteral("app"));
+    }
+
+    void testDeriveShortName_bareName()
+    {
+        QCOMPARE(deriveShortName(QStringLiteral("firefox")), QStringLiteral("firefox"));
+    }
+
+    void testDeriveShortName_trailingDotStrippedBeforeSegmentExtraction()
+    {
+        // Documented behaviour: trailing dots are chopped first so the
+        // segment lookup doesn't degenerate into returning the full string.
+        QCOMPARE(deriveShortName(QStringLiteral("org.kde.foo.")), QStringLiteral("foo"));
+    }
+
+    void testDeriveShortName_emptyAndDotOnly()
+    {
+        QCOMPARE(deriveShortName(QString()), QString());
+        QCOMPARE(deriveShortName(QStringLiteral("....")), QString());
     }
 };
 

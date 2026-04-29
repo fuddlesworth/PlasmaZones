@@ -1,0 +1,116 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/RetargetPolicy.h>
+#include <PhosphorAnimation/phosphoranimation_export.h>
+
+#include <functional>
+
+namespace PhosphorAnimation {
+
+class IMotionClock;
+
+/**
+ * @brief Runtime call-site bundle for starting an `AnimatedValue<T>`.
+ *
+ * `Profile` is the serializable config surface — duration, curve,
+ * sequencing defaults — and round-trips through JSON / D-Bus / settings
+ * UI. `MotionSpec<T>` is the *runtime* bundle at `start()` time,
+ * combining the Profile with per-animation concerns that never belong
+ * in persisted config: the clock that drives this specific animation
+ * (per-output scope — see `IMotionClock`), the retarget policy default,
+ * and the two user-callbacks. See Phase 3 decision H in the design doc.
+ *
+ * ## Ownership
+ *
+ * `clock` is a non-owning pointer. The clock outlives every
+ * `AnimatedValue` that reads from it — in practice it is owned by the
+ * compositor effect / `QQuickWindow` that spawns the animations.
+ *
+ * The two callbacks are held by value (std::function) and copied into
+ * the AnimatedValue — they may capture local state with the usual
+ * caveats (no dangling references after the capture goes out of scope).
+ *
+ * ## Required fields
+ *
+ * `profile` must carry a non-null `curve` or the curve inherited via
+ * `Profile::effectiveXxx()` must resolve to something non-null through
+ * the caller's inheritance chain. `clock` must be non-null. Every
+ * other field is optional.
+ *
+ * ## Exception contract on callbacks
+ *
+ * `onValueChanged` and `onComplete` MUST NOT throw. The library does
+ * not catch exceptions propagating out of them — a throwing callback
+ * unwinds through `AnimatedValue::advance` / `finish`, skipping the
+ * post-callback state finalisation (the re-entrancy guard that checks
+ * `m_isComplete` after `onValueChanged` fires, the `requestFrame()`
+ * call that keeps the paint loop ticking) and leaves the owning
+ * container in whatever half-mutated state the erase-before-hook
+ * contract produced (typically: entry already erased, controller hook
+ * not yet fired, caller's stack still unwinding). The `AnimationController`
+ * virtual hooks (`onAnimationStarted`, `onAnimationComplete`, etc.) are
+ * held to the same no-throw contract for the same reason.
+ *
+ * In practice the shipped consumers (`WindowAnimator`, QtQuick drivers)
+ * all use non-throwing callbacks (QObject method calls, repaint
+ * scheduling) and this is a straightforward invariant to maintain.
+ * Consumers wrapping user code that can throw should catch at the
+ * callback boundary and downgrade to a diagnostic log.
+ */
+template<typename T>
+struct MotionSpec
+{
+    /// Curve + duration + sequencing metadata. Serializable.
+    Profile profile;
+
+    /// Drives this animation's progression. Non-owning; non-null required.
+    IMotionClock* clock = nullptr;
+
+    /// Default retarget behaviour for subsequent `retarget()` calls that
+    /// don't specify a policy explicitly. Individual `retarget(newTo,
+    /// policy)` calls override this per-invocation; the field just sets
+    /// the default for `retarget(newTo)`.
+    RetargetPolicy retargetPolicy = RetargetPolicy::PreserveVelocity;
+
+    /// Fired every `advance()` that changes `value()`. The consumer's
+    /// damage / invalidation hook — compositor adapters wire
+    /// `effects->addRepaint(bounds)`, QML adapters wire
+    /// `item->polishAndUpdate()`. Fired with the new value after the
+    /// AnimatedValue has updated its cached state, so `AnimatedValue::
+    /// value()` inside the callback returns the same value passed as
+    /// the argument.
+    ///
+    /// ## Picking a notification path when going through
+    /// `AnimationController`
+    ///
+    /// The controller drives its own damage bookkeeping via
+    /// `onRepaintNeeded` + `scheduleRepaints()` and fires its lifecycle
+    /// hooks (`onAnimationStarted` / `onAnimationReplaced` /
+    /// `onAnimationComplete` / `onAnimationReaped` /
+    /// `onAnimationAbandoned`) from the controller thread. Consumers
+    /// that go through the controller should **prefer the virtual
+    /// hooks** and leave these callbacks unset — `SnapPolicy::
+    /// createSnapSpec` reflects that convention by returning a spec
+    /// with `onValueChanged` / `onComplete` blank.
+    ///
+    /// Direct consumers of `AnimatedValue<T>` (no controller layer —
+    /// a standalone shell component, a unit test, a QML `Behavior`
+    /// analogue) wire these callbacks instead. Mixing is legal
+    /// (callbacks fire regardless of whether a controller is present)
+    /// but makes double-counting easy; pick one surface per call site.
+    std::function<void(const T&)> onValueChanged;
+
+    /// Fired exactly once when the animation completes. After this
+    /// callback returns, `isAnimating()` is false and `isComplete()` is
+    /// true. Not fired on `cancel()` — that path is explicitly non-
+    /// completion; consumers wanting cleanup on either path observe
+    /// the two separately. See `onValueChanged` for the
+    /// callback-vs-controller-hook notification-path guidance.
+    std::function<void()> onComplete;
+};
+
+} // namespace PhosphorAnimation

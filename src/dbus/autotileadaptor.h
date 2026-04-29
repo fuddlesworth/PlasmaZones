@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 
+#include <PhosphorProtocol/WireTypes.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QRect>
@@ -12,9 +13,25 @@
 #include <QString>
 #include <QStringList>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
+namespace PhosphorTileEngine {
+class AutotileEngine;
+}
+
 namespace PlasmaZones {
 
-class AutotileEngine;
+using PhosphorProtocol::AlgorithmInfoEntry;
+using PhosphorProtocol::TileRequestEntry;
+using PhosphorProtocol::TileRequestList;
+using PhosphorProtocol::WindowOpenedEntry;
+using PhosphorProtocol::WindowOpenedList;
 
 /**
  * @brief D-Bus adaptor for autotiling control
@@ -57,10 +74,29 @@ public:
      * @brief Construct an AutotileAdaptor
      *
      * @param engine The AutotileEngine to expose via D-Bus
+     * @param screenManager Screen manager (for panel-geometry deferral)
+     * @param algorithmRegistry Injected tile-algorithm registry. Borrowed —
+     *        composition root owns lifetime, must outlive the adaptor.
+     *        Used for algorithm validation/enumeration on the D-Bus surface.
+     *        The adaptor stores this directly rather than reaching back
+     *        through @c engine->algorithmRegistry() so the DI contract is
+     *        visible at the constructor signature and a future per-engine
+     *        registry divergence doesn't silently re-route D-Bus queries.
      * @param parent Parent QObject (typically the daemon)
      */
-    explicit AutotileAdaptor(AutotileEngine* engine, QObject* parent = nullptr);
+    explicit AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
+                             Phosphor::Screens::ScreenManager* screenManager,
+                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
+
+    /**
+     * @brief Number of windowOpened entries waiting for panel geometry
+     *
+     * Observable state for tests and for support-bundle output: returns the size
+     * of the deferred windowOpened queue (see windowsOpenedBatch rationale).
+     * Always zero once @c panelGeometryReady has fired.
+     */
+    int pendingWindowOpensCount() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Property Accessors
@@ -165,12 +201,11 @@ public Q_SLOTS:
      *
      * Processes multiple windowOpened in one D-Bus call. Used on daemon
      * startup/restart and autotile toggle-on to avoid per-window D-Bus
-     * round-trips. Entries may include preTileGeometry to eliminate
-     * separate storePreTileGeometry calls.
+     * round-trips.
      *
-     * @param batchJson JSON array of {windowId, screenId, minWidth, minHeight, preTileGeometry?}
+     * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
-    void windowsOpenedBatch(const QString& batchJson);
+    void windowsOpenedBatch(const PlasmaZones::WindowOpenedList& entries);
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -249,9 +284,9 @@ public Q_SLOTS:
     /**
      * @brief Get information about a specific algorithm
      * @param algorithmId Algorithm ID to query
-     * @return JSON object with id, name, description, icon
+     * @return AlgorithmInfoEntry struct with algorithm metadata
      */
-    QString algorithmInfo(const QString& algorithmId);
+    AlgorithmInfoEntry algorithmInfo(const QString& algorithmId);
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -292,7 +327,7 @@ Q_SIGNALS:
      *
      * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
-    void windowsTileRequested(const QString& tileRequestsJson);
+    void windowsTileRequested(const PlasmaZones::TileRequestList& tileRequests);
 
     /**
      * @brief Emitted when a window should be focused
@@ -309,6 +344,12 @@ Q_SIGNALS:
      * Fired when screens are removed from autotile (e.g., switching from
      * autotile to manual mode). The KWin effect should restore these windows
      * to their pre-autotile geometry or leave them at their current position.
+     *
+     * NOTE: This is the D-Bus-facing signal and carries only @p windowIds —
+     * the in-process `PlacementEngineBase::windowsReleased` signal
+     * additionally carries a `QSet<QString>` of released screen IDs for
+     * internal daemon wiring. QSet is not marshallable over D-Bus, so the
+     * adaptor strips that second argument before forwarding.
      *
      * @param windowIds Window IDs no longer under autotile control
      */
@@ -334,6 +375,14 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onWindowsTiled(const QString& tileRequestsJson);
 
+    /**
+     * @brief Flush any windowOpened events that were deferred waiting for panel geometry
+     *
+     * Connected to Phosphor::Screens::ScreenManager::panelGeometryReady. See the rationale comment on
+     * windowsOpenedBatch() for why deferral is needed.
+     */
+    void flushPendingWindowOpens();
+
 private:
     /**
      * @brief Check if engine is available, logging warning if not
@@ -349,7 +398,34 @@ private:
      */
     bool ensureEngineAndConfig(const char* methodName) const;
 
-    AutotileEngine* m_engine = nullptr;
+    /**
+     * @brief Forward a single window-opened notification to the engine
+     *
+     * Shared tail between windowOpened(), windowsOpenedBatch(), and
+     * flushPendingWindowOpens() so all three paths validate arguments and
+     * invoke the engine identically.
+     */
+    void dispatchWindowOpened(const WindowOpenedEntry& entry);
+
+    /**
+     * @brief Decide whether an incoming windowOpened must be deferred
+     *
+     * Returns true if panel geometry is not yet ready (the caller should queue the
+     * entry and return). Lazily connects flushPendingWindowOpens() on first deferral.
+     * Exposed as a helper so windowOpened() and windowsOpenedBatch() share the gate.
+     */
+    bool deferUntilPanelReady();
+
+    PhosphorTileEngine::AutotileEngine* m_engine = nullptr;
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
+
+    // Window-opened events received before the first panel D-Bus query completed.
+    // Processing them immediately would compute zones against the unreserved screen rect
+    // (the s_availableGeometryCache in Phosphor::Screens::ScreenManager is still empty), so we queue them
+    // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
+    WindowOpenedList m_pendingOpens;
+    bool m_pendingOpensListenerInstalled = false;
 
 public:
     /**

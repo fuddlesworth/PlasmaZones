@@ -5,13 +5,15 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
-#include "autotile/AutotileEngine.h"
-#include "autotile/AutotileConfig.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include "../helpers/AutotileTestHelpers.h"
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorTileEngine;
 
 /**
  * @brief AutotileEngine tests for windowMinSizeUpdated behavior
@@ -24,12 +26,12 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     void testWindowMinSizeUpdated_validWindow()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-minsize-1");
 
@@ -38,7 +40,7 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 200, 100);
         QCoreApplication::processEvents();
 
@@ -47,7 +49,7 @@ private Q_SLOTS:
 
     void testWindowMinSizeUpdated_noOpSameValue()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-minsize-2");
 
@@ -56,7 +58,7 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 100, 50);
         QCoreApplication::processEvents();
 
@@ -65,7 +67,7 @@ private Q_SLOTS:
 
     void testWindowMinSizeUpdated_unknownWindow()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -77,7 +79,7 @@ private Q_SLOTS:
 
     void testWindowMinSizeUpdated_negativeValues()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-minsize-neg");
 
@@ -92,7 +94,7 @@ private Q_SLOTS:
 
     void testWindowMinSizeUpdated_zeroRemovesEntry()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-minsize-zero");
 
@@ -101,7 +103,7 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
-        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QSignalSpy tilingSpy(&engine, &PhosphorEngineApi::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, 0, 0);
         QCoreApplication::processEvents();
 

@@ -5,9 +5,9 @@
 #include <QRect>
 #include <QVector>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"
@@ -42,21 +42,21 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* threeCol()
+    PhosphorTiles::TilingAlgorithm* threeCol()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("three-column"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("three-column"));
     }
-    TilingAlgorithm* grid()
+    PhosphorTiles::TilingAlgorithm* grid()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("grid"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("grid"));
     }
-    TilingAlgorithm* masterStack()
+    PhosphorTiles::TilingAlgorithm* masterStack()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
     }
-    TilingAlgorithm* dw()
+    PhosphorTiles::TilingAlgorithm* dw()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("dwindle"));
     }
 
 private Q_SLOTS:
@@ -81,47 +81,53 @@ private Q_SLOTS:
 
     void testThreeColumn_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        QVERIFY(threeCol()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QVERIFY(threeCol()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testGrid_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        QVERIFY(grid()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QVERIFY(grid()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testColumns_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        QVERIFY(AlgorithmRegistry::instance()
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QVERIFY(m_scriptSetup.registry()
                     ->algorithm(QLatin1String("columns"))
-                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)))
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
     }
 
     void testRows_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        QVERIFY(AlgorithmRegistry::instance()
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QVERIFY(m_scriptSetup.registry()
                     ->algorithm(QLatin1String("rows"))
-                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)))
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
     }
 
     void testThreeColumn_zeroAndOneWindow()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = threeCol()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones = threeCol()->calculateZones(
+            makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
 
     void testThreeColumn_twoWindows_usesSplitRatio()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = threeCol()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = threeCol()->calculateZones(
+            makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         int masterWidth = static_cast<int>(ScreenWidth * 0.6);
         QCOMPARE(zones[0].x(), 0);
@@ -136,9 +142,10 @@ private Q_SLOTS:
 
     void testThreeColumn_threeWindows_centerMaster()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
-        auto zones = threeCol()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = threeCol()->calculateZones(
+            makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         int centerWidth = static_cast<int>(ScreenWidth * 0.5);
         int sideWidth = static_cast<int>(ScreenWidth * 0.25);
@@ -158,9 +165,10 @@ private Q_SLOTS:
 
     void testThreeColumn_fourWindows_interleavedFilling()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
-        auto zones = threeCol()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = threeCol()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         int centerWidth = static_cast<int>(ScreenWidth * 0.5);
         int sideWidth = static_cast<int>(ScreenWidth * 0.25);
@@ -179,9 +187,10 @@ private Q_SLOTS:
 
     void testThreeColumn_fiveWindows_distribution()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
-        auto zones = threeCol()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = threeCol()->calculateZones(
+            makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         int sideWidth = static_cast<int>(ScreenWidth * 0.25);
         int centerWidth = static_cast<int>(ScreenWidth * 0.5);
@@ -193,9 +202,10 @@ private Q_SLOTS:
 
     void testThreeColumn_manyWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
-        auto zones = threeCol()->calculateZones(makeParams(11, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = threeCol()->calculateZones(
+            makeParams(11, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 11);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -208,9 +218,10 @@ private Q_SLOTS:
 
     void testThreeColumn_offsetScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QRect offsetScreen(100, 50, 1920, 1080);
-        auto zones = threeCol()->calculateZones(makeParams(5, offsetScreen, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            threeCol()->calculateZones(makeParams(5, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(allWithinBounds(zones, offsetScreen));
         QVERIFY(noOverlaps(zones));
@@ -219,9 +230,10 @@ private Q_SLOTS:
     void testThreeColumn_withGaps()
     {
         QRect screen(0, 0, 1920, 1080);
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6); // Explicit ratio for deterministic geometry
-        auto zones = threeCol()->calculateZones(makeParams(3, screen, &state, 10, EdgeGaps::uniform(20)));
+        auto zones =
+            threeCol()->calculateZones(makeParams(3, screen, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(20)));
         QCOMPARE(zones.size(), 3);
         QCOMPARE(zones[0].x(), 402);
         QCOMPARE(zones[0].width(), 1116);
@@ -235,10 +247,11 @@ private Q_SLOTS:
 
     void testGapAware_singleZoneOuterGap()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = AlgorithmRegistry::instance()
-                         ->algorithm(QLatin1String("columns"))
-                         ->calculateZones(makeParams(1, m_screenGeometry, &state, 10, EdgeGaps::uniform(20)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            m_scriptSetup.registry()
+                ->algorithm(QLatin1String("columns"))
+                ->calculateZones(makeParams(1, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(20)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0].left(), 20);
         QCOMPARE(zones[0].top(), 20);
@@ -248,10 +261,11 @@ private Q_SLOTS:
 
     void testGapAware_twoColumnsWithGaps()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = AlgorithmRegistry::instance()
-                         ->algorithm(QLatin1String("columns"))
-                         ->calculateZones(makeParams(2, m_screenGeometry, &state, 10, EdgeGaps::uniform(20)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            m_scriptSetup.registry()
+                ->algorithm(QLatin1String("columns"))
+                ->calculateZones(makeParams(2, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(20)));
         QCOMPARE(zones.size(), 2);
         QCOMPARE(zones[0].left(), 20);
         QCOMPARE(zones[0].top(), 20);
@@ -263,12 +277,13 @@ private Q_SLOTS:
 
     void testGapAware_masterStackWithGaps()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("w1"));
         state.addWindow(QStringLiteral("w2"));
         state.addWindow(QStringLiteral("w3"));
         state.setSplitRatio(0.6);
-        auto zones = masterStack()->calculateZones(makeParams(3, m_screenGeometry, &state, 8, EdgeGaps::uniform(8)));
+        auto zones = masterStack()->calculateZones(
+            makeParams(3, m_screenGeometry, &state, 8, ::PhosphorLayout::EdgeGaps::uniform(8)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         QCOMPARE(zones[0].left(), 8);
@@ -281,10 +296,11 @@ private Q_SLOTS:
 
     void testGapAware_rowsWithGaps()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = AlgorithmRegistry::instance()
-                         ->algorithm(QLatin1String("rows"))
-                         ->calculateZones(makeParams(3, m_screenGeometry, &state, 10, EdgeGaps::uniform(15)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            m_scriptSetup.registry()
+                ->algorithm(QLatin1String("rows"))
+                ->calculateZones(makeParams(3, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(15)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         for (const QRect& zone : zones) {
@@ -297,16 +313,18 @@ private Q_SLOTS:
 
     void testGrid_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = grid()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            grid()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
 
     void testGrid_fourWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = grid()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            grid()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(zonesFillScreen(zones, m_screenGeometry));
@@ -319,8 +337,9 @@ private Q_SLOTS:
 
     void testGrid_fiveWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = grid()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            grid()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QCOMPARE(zones[0].y(), 0);
@@ -333,8 +352,9 @@ private Q_SLOTS:
 
     void testGrid_nineWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = grid()->calculateZones(makeParams(9, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones =
+            grid()->calculateZones(makeParams(9, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 9);
         QVERIFY(noOverlaps(zones));
         QVERIFY(zonesFillScreen(zones, m_screenGeometry));
@@ -344,8 +364,9 @@ private Q_SLOTS:
 
     void testGrid_withGaps()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = grid()->calculateZones(makeParams(4, m_screenGeometry, &state, 10, EdgeGaps::uniform(20)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones = grid()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(20)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QRect area(20, 20, 1880, 1040);
@@ -365,10 +386,10 @@ private Q_SLOTS:
     void test_bspNegativeContentWidth()
     {
         QRect screen(0, 0, 100, 100);
-        TilingState state(QStringLiteral("test"));
-        auto zones = AlgorithmRegistry::instance()
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones = m_scriptSetup.registry()
                          ->algorithm(QLatin1String("bsp"))
-                         ->calculateZones(makeParams(3, screen, &state, 200, EdgeGaps::uniform(10)));
+                         ->calculateZones(makeParams(3, screen, &state, 200, ::PhosphorLayout::EdgeGaps::uniform(10)));
         QCOMPARE(zones.size(), 3);
         for (const auto& z : zones) {
             QVERIFY(z.width() > 0 && z.height() > 0);
@@ -378,8 +399,8 @@ private Q_SLOTS:
     void test_dwindleGapExceedsRemaining()
     {
         QRect screen(0, 0, 200, 200);
-        TilingState state(QStringLiteral("test"));
-        auto zones = dw()->calculateZones(makeParams(5, screen, &state, 80, EdgeGaps::uniform(10)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones = dw()->calculateZones(makeParams(5, screen, &state, 80, ::PhosphorLayout::EdgeGaps::uniform(10)));
         QCOMPARE(zones.size(), 5);
         for (const auto& z : zones) {
             QVERIFY(z.width() > 0 && z.height() > 0);
@@ -389,10 +410,11 @@ private Q_SLOTS:
     void test_masterStackUnsatisfiableMinWidths()
     {
         QRect screen(0, 0, 400, 400);
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         QVector<QSize> minSizes = {QSize(300, 0), QSize(300, 0)};
-        auto zones = masterStack()->calculateZones(makeParams(2, screen, &state, 10, EdgeGaps::uniform(0), minSizes));
+        auto zones = masterStack()->calculateZones(
+            makeParams(2, screen, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0), minSizes));
         QCOMPARE(zones.size(), 2);
         QVERIFY(zones[0].width() > 0);
         QVERIFY(zones[1].width() > 0);
@@ -402,10 +424,11 @@ private Q_SLOTS:
     void test_threeColumnUnsatisfiableMinWidths()
     {
         QRect screen(0, 0, 300, 300);
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         QVector<QSize> minSizes = {QSize(200, 0), QSize(200, 0), QSize(200, 0)};
-        auto zones = threeCol()->calculateZones(makeParams(3, screen, &state, 10, EdgeGaps::uniform(0), minSizes));
+        auto zones = threeCol()->calculateZones(
+            makeParams(3, screen, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0), minSizes));
         QCOMPARE(zones.size(), 3);
         for (int i = 0; i < 3; ++i) {
             QVERIFY(zones[i].width() > 0);

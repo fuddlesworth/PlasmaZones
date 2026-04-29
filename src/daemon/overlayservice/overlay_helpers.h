@@ -22,9 +22,14 @@
 #include <QJsonParseError>
 #include <atomic>
 
-#include "../../core/layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
 #include "../../core/logging.h"
 #include "../../core/enums.h"
+
+namespace PlasmaZones {
+using PhosphorShell::LayerSurface;
+namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
+} // namespace PlasmaZones
 
 namespace PlasmaZones {
 

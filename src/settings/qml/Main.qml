@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 ApplicationWindow {
     id: window
@@ -29,11 +30,17 @@ ApplicationWindow {
         "hasChildren": false,
         "hasDividerAfter": true
     }, {
+        "name": "virtualscreens",
+        "label": i18n("Virtual Screens"),
+        "iconName": "virtual-desktops",
+        "hasChildren": false,
+        "hasDividerAfter": false
+    }, {
         "name": "layouts",
         "label": i18n("Layouts"),
         "iconName": "view-grid",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "snapping",
         "label": i18n("Snapping"),
@@ -51,7 +58,7 @@ ApplicationWindow {
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "editor",
         "label": i18n("Editor"),
@@ -139,6 +146,7 @@ ApplicationWindow {
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
         "overview": "MonitorStatePage.qml",
+        "virtualscreens": "VirtualScreensPage.qml",
         "layouts": "LayoutsPage.qml",
         "snapping-appearance": "SnappingAppearancePage.qml",
         "snapping-behavior": "SnappingBehaviorPage.qml",
@@ -428,12 +436,11 @@ ApplicationWindow {
         property string pendingMode: ""
         property string pendingPage: ""
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 0
-            duration: 80
-            easing.type: Easing.InQuad
+            profile: "sidebar.fadeOut"
         }
 
         ScriptAction {
@@ -446,12 +453,11 @@ ApplicationWindow {
             }
         }
 
-        NumberAnimation {
+        PhosphorMotionAnimation {
             target: sidebar
-            property: "opacity"
+            properties: "opacity"
             to: 1
-            duration: 120
-            easing.type: Easing.OutQuad
+            profile: "sidebar.fadeIn"
         }
 
     }
@@ -676,8 +682,8 @@ ApplicationWindow {
                             }
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 120
+                                PhosphorMotionAnimation {
+                                    profile: "widget.tint-fast"
                                 }
 
                             }
@@ -704,8 +710,9 @@ ApplicationWindow {
                                 }
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
@@ -736,68 +743,82 @@ ApplicationWindow {
                                 visible: !window.sidebarCompact
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "widget.hover"
+                                        durationOverride: 120
                                     }
 
                                 }
 
                             }
 
-                            // Unsaved changes badge
+                            // Unsaved changes badge — per-page tracking.
+                            // Reference dirtyPages once so QML tracks it as a
+                            // binding dependency, then delegate the actual
+                            // lookup (including parent-category traversal) to
+                            // the controller's isPageDirty().
                             Rectangle {
+                                id: dirtyBadge
+
                                 width: Kirigami.Units.smallSpacing * 1.5
                                 height: Kirigami.Units.smallSpacing * 1.5
                                 radius: width / 2
                                 color: Kirigami.Theme.neutralTextColor
-                                visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
+                                visible: {
+                                    if (navDelegate.isDivider || navDelegate.isBackButton)
+                                        return false;
+
+                                    settingsController.dirtyPages; // binding dependency
+                                    return settingsController.isPageDirty(navDelegate.name);
+                                }
                                 Layout.alignment: Qt.AlignVCenter
 
                                 SequentialAnimation {
                                     id: dirtyBadgePulse
 
-                                    property Item target: parent
-
                                     loops: Animation.Infinite
-                                    running: navDelegate.isActive && settingsController.needsSave
+                                    running: dirtyBadge.visible
                                     onRunningChanged: {
                                         if (!running)
-                                            target.opacity = 1;
+                                            dirtyBadge.opacity = 1;
 
                                     }
 
-                                    NumberAnimation {
-                                        target: dirtyBadgePulse.target
-                                        property: "opacity"
+                                    PhosphorMotionAnimation {
+                                        target: dirtyBadge
+                                        properties: "opacity"
                                         from: 1
                                         to: 0.4
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.pulse"
                                     }
 
-                                    NumberAnimation {
-                                        target: dirtyBadgePulse.target
-                                        property: "opacity"
+                                    PhosphorMotionAnimation {
+                                        target: dirtyBadge
+                                        properties: "opacity"
                                         from: 0.4
                                         to: 1
-                                        duration: 1000
-                                        easing.type: Easing.InOutSine
+                                        profile: "widget.pulse"
                                     }
 
                                 }
 
                             }
 
-                            // Enable/disable toggle for snapping and tiling
+                            // Enable/disable toggle for snapping and tiling.
+                            // Wraps the assignment in begin/endExternalEdit so
+                            // the dirty marker lands on snapping/tiling rather
+                            // than whatever page the user is currently viewing.
                             SettingsSwitch {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
                                 checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
                                 accessibleName: navDelegate.label
                                 onToggled: function(newValue) {
+                                    settingsController.beginExternalEdit(navDelegate.name);
                                     if (navDelegate.name === "snapping")
                                         appSettings.snappingEnabled = newValue;
                                     else
                                         appSettings.autotileEnabled = newValue;
+                                    settingsController.endExternalEdit();
                                 }
                             }
 
@@ -857,22 +878,20 @@ ApplicationWindow {
 
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 1
                                     to: 0.4
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.pulse-slow"
                                 }
 
-                                NumberAnimation {
+                                PhosphorMotionAnimation {
                                     target: daemonDot
-                                    property: "opacity"
+                                    properties: "opacity"
                                     from: 0.4
                                     to: 1
-                                    duration: 1500
-                                    easing.type: Easing.InOutSine
+                                    profile: "widget.pulse-slow"
                                 }
 
                             }
@@ -916,17 +935,15 @@ ApplicationWindow {
             }
 
             Behavior on Layout.preferredWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    profile: "panel.slideIn"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    profile: "panel.slideIn"
                 }
 
             }
@@ -1159,15 +1176,15 @@ ApplicationWindow {
                         fadeIn.restart();
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: fadeIn
 
                         target: pageLoader.item
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 180
-                        easing.type: Easing.OutCubic
+                        profile: "widget.fade"
+                        durationOverride: 180
                     }
 
                 }
@@ -1204,15 +1221,15 @@ ApplicationWindow {
                         font.weight: Font.Medium
                     }
 
-                    NumberAnimation {
+                    PhosphorMotionAnimation {
                         id: toastShow
 
                         target: toast
-                        property: "opacity"
+                        properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                        profile: "panel.popup"
+                        durationOverride: 200
                     }
 
                     SequentialAnimation {
@@ -1222,13 +1239,12 @@ ApplicationWindow {
                             duration: 2000
                         }
 
-                        NumberAnimation {
+                        PhosphorMotionAnimation {
                             target: toast
-                            property: "opacity"
+                            properties: "opacity"
                             from: 1
                             to: 0
-                            duration: 400
-                            easing.type: Easing.InCubic
+                            profile: "widget.fadeOut"
                         }
 
                     }
@@ -1289,15 +1305,8 @@ ApplicationWindow {
                     if (screens.length > 1) {
                         for (let i = 0; i < screens.length; i++) {
                             let s = screens[i];
-                            let parts = [s.manufacturer || "", s.model || ""].filter((p) => {
-                                return p !== "";
-                            });
-                            let label = parts.length > 0 ? parts.join(" ") : (s.name || "");
-                            if (s.resolution)
-                                label += " (" + s.resolution + ")";
-
                             let item = screenMenuItemComponent.createObject(layoutContextMenu, {
-                                "text": i18n("Edit on %1", label),
+                                "text": i18n("Edit on %1", s.displayLabel || s.name || ""),
                                 "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
                             });
                             item._screenName = s.name;
@@ -1368,10 +1377,18 @@ ApplicationWindow {
                 }
 
                 MenuItem {
-                    text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
-                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
+                    readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
+                    readonly property bool globalAuto: appSettings.autoAssignAllLayouts === true
+
+                    // When the global "Auto-assign for all layouts" toggle is on (#370),
+                    // every layout effectively auto-assigns regardless of its per-layout flag,
+                    // so the per-layout toggle is preserved but disabled here. The label
+                    // points the user at the global setting that's overriding it.
+                    text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
+                    icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
                     visible: !layoutContextMenu.isAutotile
-                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+                    enabled: !globalAuto
+                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
                 }
 
                 // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --
@@ -1537,8 +1554,8 @@ ApplicationWindow {
                 color: settingsController.needsSave ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 300
+                    PhosphorMotionAnimation {
+                        profile: "widget.tint"
                     }
 
                 }
@@ -1594,13 +1611,6 @@ ApplicationWindow {
                         }
 
                         Button {
-                            text: i18n("Defaults")
-                            icon.name: "document-revert"
-                            flat: true
-                            onClicked: defaultsConfirmDialog.open()
-                        }
-
-                        Button {
                             text: i18n("Discard")
                             icon.name: "edit-undo"
                             flat: true
@@ -1622,9 +1632,8 @@ ApplicationWindow {
                 }
 
                 Behavior on implicitHeight {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "widget.accordion"
                     }
 
                 }
@@ -1828,8 +1837,9 @@ ApplicationWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "widget.fade"
+                durationOverride: 200
             }
 
         }

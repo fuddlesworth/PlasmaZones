@@ -3,13 +3,13 @@
 
 #include "supportreport.h"
 #include "logging.h"
-#include "screenmanager.h"
-#include "layoutmanager.h"
-#include "layout.h"
-#include "zone.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "version.h"
 #include "../config/configdefaults.h"
-#include "../autotile/AutotileEngine.h"
+#include <PhosphorEngineApi/IPlacementEngine.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -49,8 +49,9 @@ QString SupportReport::redactHomePath(const QString& input)
     return result;
 }
 
-SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenManager, LayoutManager* layoutManager,
-                                                       AutotileEngine* autotileEngine)
+SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
+                                                       PhosphorZones::LayoutRegistry* layoutManager,
+                                                       PhosphorEngineApi::IPlacementEngine* autotileEngine)
 {
     Snapshot snap;
 
@@ -62,7 +63,8 @@ SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenMana
             Snapshot::ScreenInfo info;
             info.name = screen->name();
             info.geometry = screen->geometry();
-            info.available = ScreenManager::actualAvailableGeometry(screen);
+            info.available =
+                screenManager ? screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
             info.refreshRate = screen->refreshRate();
             info.devicePixelRatio = screen->devicePixelRatio();
             snap.screens.append(info);
@@ -71,10 +73,10 @@ SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenMana
 
     if (layoutManager) {
         snap.hasLayoutManager = true;
-        const QList<Layout*> layouts = layoutManager->layouts();
-        const Layout* active = layoutManager->activeLayout();
+        const QList<PhosphorZones::Layout*> layouts = layoutManager->layouts();
+        const PhosphorZones::Layout* active = layoutManager->activeLayout();
         snap.layouts.reserve(layouts.size());
-        for (Layout* layout : layouts) {
+        for (PhosphorZones::Layout* layout : layouts) {
             Snapshot::LayoutInfo info;
             info.name = layout->name();
             info.id = layout->id().toString();
@@ -87,7 +89,7 @@ SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenMana
     if (autotileEngine) {
         snap.hasAutotileEngine = true;
         snap.autotileEnabled = autotileEngine->isEnabled();
-        const auto screens = autotileEngine->autotileScreens();
+        const auto screens = autotileEngine->activeScreens();
         snap.autotileScreens = QStringList(screens.begin(), screens.end());
     }
 
@@ -323,8 +325,9 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     return report;
 }
 
-QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
-                                AutotileEngine* autotileEngine, int sinceMinutes)
+QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager,
+                                PhosphorZones::LayoutRegistry* layoutManager,
+                                PhosphorEngineApi::IPlacementEngine* autotileEngine, int sinceMinutes)
 {
     return generateFromSnapshot(collectSnapshot(screenManager, layoutManager, autotileEngine), sinceMinutes);
 }

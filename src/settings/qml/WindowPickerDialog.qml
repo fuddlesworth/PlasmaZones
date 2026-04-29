@@ -20,6 +20,10 @@ Kirigami.Dialog {
     required property var appSettings
     property bool forApps: false
     property var windowList: []
+    // Set by the Connections block below when the controller signals a
+    // timeout (KWin effect unloaded / unresponsive). Cleared on every
+    // successful reply. Drives the placeholder-message error state.
+    property bool requestTimedOut: false
 
     signal picked(string value)
 
@@ -55,9 +59,19 @@ Kirigami.Dialog {
         searchField.forceActiveFocus();
     }
 
+    // Async refresh: show whatever we already have cached from a previous
+    // fetch so the list paints instantly, then kick off a fresh request.
+    // The `Connections` block below replaces `windowList` when the
+    // daemon signals runningWindowsAvailable — the dialog never blocks
+    // on the D-Bus call even if the KWin effect is unloaded or slow.
+    // A client-side timeout in SettingsController surfaces
+    // runningWindowsTimedOut() if no reply arrives, which flips
+    // requestTimedOut so the placeholder can switch to an error state.
     function refresh() {
         searchField.text = "";
-        windowList = appSettings.getRunningWindows();
+        requestTimedOut = false;
+        windowList = appSettings.cachedRunningWindows();
+        appSettings.requestRunningWindows();
     }
 
     title: forApps ? i18n("Pick Application from Running Windows") : i18n("Pick Window Class from Running Windows")
@@ -70,6 +84,19 @@ Kirigami.Dialog {
             onTriggered: dialog.refresh()
         }
     ]
+
+    Connections {
+        function onRunningWindowsAvailable(windows) {
+            dialog.requestTimedOut = false;
+            dialog.windowList = windows;
+        }
+
+        function onRunningWindowsTimedOut() {
+            dialog.requestTimedOut = true;
+        }
+
+        target: settingsController
+    }
 
     ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -110,8 +137,8 @@ Kirigami.Dialog {
                 anchors.centerIn: parent
                 width: parent.width - Kirigami.Units.gridUnit * 4
                 visible: windowListView.count === 0
-                text: dialog.windowList.length === 0 ? i18n("No windows found") : i18n("No matching windows")
-                explanation: dialog.windowList.length === 0 ? i18n("Make sure the PlasmaZones daemon and KWin effect are running") : i18n("Try a different search term")
+                text: dialog.requestTimedOut ? i18n("No response from KWin effect") : dialog.windowList.length === 0 ? i18n("No windows found") : i18n("No matching windows")
+                explanation: dialog.requestTimedOut ? i18n("The KWin effect did not respond. Make sure the PlasmaZones daemon is running, then click Refresh.") : dialog.windowList.length === 0 ? i18n("Make sure the PlasmaZones daemon and KWin effect are running") : i18n("Try a different search term")
             }
 
             delegate: ItemDelegate {

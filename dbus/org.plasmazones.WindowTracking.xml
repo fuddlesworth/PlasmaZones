@@ -12,7 +12,7 @@
             <arg name="zoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window was snapped (empty to auto-detect)."/>
             </arg>
         </method>
@@ -24,7 +24,7 @@
             <arg name="zoneIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="List of zone UUIDs (first is primary)."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window was snapped (empty to auto-detect)."/>
             </arg>
         </method>
@@ -41,9 +41,10 @@
             </arg>
         </method>
         <method name="windowsSnappedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. JSON array of {windowId, zoneId, screenId, isRestore}."/>
-            <arg name="batchJson" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of snap confirmations."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. Array of (windowId, zoneId, screenId, isRestore)."/>
+            <arg name="entries" type="a(sssb)" direction="in">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PlasmaZones::SnapConfirmationList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of snap confirmation structs."/>
             </arg>
         </method>
         <method name="getZoneForWindow">
@@ -79,13 +80,20 @@
                 <annotation name="org.gtk.GDBus.DocString" value="All snapped window IDs."/>
             </arg>
         </method>
-        <method name="getEmptyZonesJson">
-            <annotation name="org.gtk.GDBus.DocString" value="Return JSON array of empty zones for Snap Assist continuation. Same format as emptyZonesJson from dragStopped."/>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+        <method name="pruneStaleWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale KConfig entries."/>
+            <arg name="aliveWindowIds" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs currently known to KWin."/>
             </arg>
-            <arg name="emptyZonesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height, borderWidth, borderRadius}."/>
+        </method>
+        <method name="getEmptyZones">
+            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same format as emptyZones from dragStopped."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
+            </arg>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::EmptyZoneList"/>
             </arg>
         </method>
         <method name="getLastUsedZoneId">
@@ -111,7 +119,7 @@
             <arg name="height" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window height."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen connector name where window is located (for cross-screen restore)."/>
             </arg>
             <arg name="overwrite" type="b" direction="in">
@@ -178,12 +186,6 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Floating window IDs."/>
             </arg>
         </method>
-        <method name="notifyDragOutUnsnap">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without activation trigger. If tracked as snapped, handles unsnap: saves zone for restore, marks floating, clears zone assignment."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-        </method>
         <method name="windowUnsnappedForFloat">
             <annotation name="org.gtk.GDBus.DocString" value="Unsnap for float toggle; saves zone for later restore."/>
             <arg name="windowId" type="s" direction="in">
@@ -209,36 +211,39 @@
             </arg>
         </method>
         <method name="calculateUnfloatRestore">
-            <annotation name="org.gtk.GDBus.DocString" value="Calculate unfloat restore geometry and zone IDs in one call. Returns JSON with found, zoneIds, x, y, width, height. Supports multi-zone: combined geometry of all pre-float zones."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Calculate unfloat restore geometry and zone IDs in one call. Supports multi-zone: combined geometry of all pre-float zones."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name for geometry calculation."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier for geometry calculation (e.g. Dell:U2722D:115107)."/>
             </arg>
-            <arg name="restoreJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {found, zoneIds, x, y, width, height}."/>
+            <arg name="result" type="(bassiiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="UnfloatRestoreResult: (found, zoneIds, screenName, x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::UnfloatRestoreResult"/>
             </arg>
         </method>
         <method name="getZoneGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON for the given zone (primary screen)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry for the given zone (primary screen)."/>
             <arg name="zoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
-            <arg name="geometryJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON e.g. {x, y, width, height}."/>
+            <arg name="geometry" type="(iiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="ZoneGeometryRect: (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
             </arg>
         </method>
         <method name="getZoneGeometryForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON for the given zone on the given screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry for the given zone on the given screen."/>
             <arg name="zoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
-            <arg name="geometryJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON e.g. {x, y, width, height}."/>
+            <arg name="geometry" type="(iiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="ZoneGeometryRect: (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::ZoneGeometryRect"/>
             </arg>
         </method>
         <method name="snapToAppRule">
@@ -247,7 +252,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
             </arg>
             <arg name="windowScreenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
             </arg>
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
@@ -274,7 +279,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
             </arg>
             <arg name="windowScreenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
             </arg>
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
@@ -301,7 +306,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
             </arg>
             <arg name="windowScreenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
             </arg>
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
@@ -327,8 +332,8 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's screen (e.g. DP-1)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's screen identifier (e.g. Dell:U2722D:115107)."/>
             </arg>
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
@@ -354,8 +359,8 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
             </arg>
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
@@ -377,9 +382,16 @@
             </arg>
         </method>
         <method name="getUpdatedWindowGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change (respects keepWindowsInZonesOnResolutionChange)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change."/>
+            <arg name="geometries" type="a(siiii)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowGeometryList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
+            </arg>
+        </method>
+        <method name="getPendingRestoreGeometries">
+            <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
             <arg name="geometriesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, x, y, width, height}."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: {x, y, width, height}, ... }"/>
             </arg>
         </method>
         <method name="reportNavigationFeedback">
@@ -399,8 +411,8 @@
             <arg name="targetZoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Target zone ID for OSD highlighting (optional)."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name where navigation occurred (for OSD placement)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier where navigation occurred (for OSD placement)."/>
             </arg>
         </method>
         <signal name="windowZoneChanged">
@@ -410,12 +422,6 @@
             </arg>
             <arg name="zoneId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID (or empty if unsnapped)."/>
-            </arg>
-        </signal>
-        <signal name="toggleWindowFloatRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when keyboard shortcut requests float toggle (KWin effect reacts)."/>
-            <arg name="shouldFloat" type="b">
-                <annotation name="org.gtk.GDBus.DocString" value="True to float, false to unfloat."/>
             </arg>
         </signal>
         <signal name="navigationFeedback">
@@ -435,14 +441,8 @@
             <arg name="targetZoneId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Target zone ID for OSD highlighting."/>
             </arg>
-            <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name where navigation occurred (for OSD placement)."/>
-            </arg>
-        </signal>
-        <signal name="resnapToNewLayoutRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when resnapToNewLayout is called. JSON array of window moves for KWin to apply."/>
-            <arg name="resnapData" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array [{windowId, targetZoneId, x, y, width, height}, ...]"/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier where navigation occurred (for OSD placement)."/>
             </arg>
         </signal>
         <signal name="pendingRestoresAvailable">
@@ -453,13 +453,13 @@
         </signal>
         <signal name="windowFloatingChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's floating state changes (e.g., when a floating window is drag-snapped). The KWin effect should listen to this to keep its local floating cache in sync."/>
-            <arg name="stableId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window stable identifier (windowClass:resourceName without pointer address)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
             <arg name="isFloating" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="New floating state."/>
             </arg>
-            <arg name="screenName" type="s">
+            <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
             </arg>
         </signal>
@@ -469,7 +469,7 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
             </arg>
         </method>
@@ -478,7 +478,7 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
             </arg>
             <arg name="floating" type="b" direction="in">
@@ -486,19 +486,15 @@
             </arg>
         </method>
         <signal name="applyGeometryRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to apply geometry. zoneId empty = float restore only; zoneId set = apply and call windowSnapped."/>
-            <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to apply geometry to."/>
-            </arg>
-            <arg name="geometryJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height}."/>
-            </arg>
-            <arg name="zoneId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone to snap to (empty for float restore)."/>
-            </arg>
-            <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen for OSD placement."/>
-            </arg>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometry. zoneId empty = float restore only; zoneId set = apply and call windowSnapped."/>
+            <arg name="windowId" type="s"/>
+            <arg name="x" type="i"/>
+            <arg name="y" type="i"/>
+            <arg name="width" type="i"/>
+            <arg name="height" type="i"/>
+            <arg name="zoneId" type="s"/>
+            <arg name="screenId" type="s"/>
+            <arg name="sizeOnly" type="b"/>
         </signal>
         <signal name="activateWindowRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>
@@ -507,9 +503,10 @@
             </arg>
         </signal>
         <signal name="applyGeometriesBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to apply geometries for a batch of windows. Daemon handles zone bookkeeping internally — effect just applies geometries with stagger."/>
-            <arg name="batchJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of [{windowId, x, y, width, height, targetZoneId, sourceZoneId}]."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>
+            <arg name="geometries" type="a(siiiis)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowGeometryList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
             </arg>
             <arg name="action" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, snap_all) for feedback."/>
@@ -532,8 +529,8 @@
         </method>
         <method name="cursorScreenChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen. Called by KWin effect when cursor crosses monitor boundaries."/>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Name of the screen the cursor is now on (e.g. DP-1)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the cursor is now on (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
         </method>
         <method name="windowClosed">
@@ -547,9 +544,19 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
             </arg>
+        </method>
+        <method name="setFrameGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged (debounced). Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+            <arg name="width" type="i" direction="in"/>
+            <arg name="height" type="i" direction="in"/>
         </method>
         <method name="resnapToNewLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout. Maps by zone number (1-&gt;1, 2-&gt;2) with cycling when new layout has fewer zones. Call after switching layouts."/>
@@ -565,100 +572,105 @@
         </method>
         <method name="snapAllWindows">
             <annotation name="org.gtk.GDBus.DocString" value="Trigger snap-all-windows from daemon shortcut. Emits snapAllWindowsRequested signal for the KWin effect to collect unsnapped windows and assign them to zones."/>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where cursor is located."/>
             </arg>
         </method>
         <method name="calculateSnapAllWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Calculate zone assignments for a list of unsnapped windows. Called by KWin effect after collecting unsnapped windows on the target screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Calculate zone assignments for a list of unsnapped windows. Called by compositor plugin after collecting unsnapped windows on the target screen."/>
             <arg name="windowIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="List of unsnapped window IDs."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen for layout/geometry resolution."/>
             </arg>
-            <arg name="snapData" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array [{windowId, targetZoneId, x, y, width, height}, ...]"/>
+            <arg name="snapResults" type="a(sssiiii)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::SnapAllResultList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, targetZoneId, sourceZoneId, x, y, width, height)."/>
             </arg>
         </method>
         <method name="getMoveTargetForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven move: get target zone and geometry for moving a window in a direction."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="direction" type="s" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bssiiiiss)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::MoveTargetResult"/>
             </arg>
         </method>
         <method name="getFocusTargetForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven focus: get window ID to activate in adjacent zone."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="direction" type="s" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bsssss)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="FocusTargetResult: (success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::FocusTargetResult"/>
             </arg>
         </method>
         <method name="getRestoreForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven restore: get pre-snap geometry for restoring a snapped window."/>
             <arg name="windowId" type="s" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, found, x, y, width, height}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bbiiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="RestoreTargetResult: (success, found, x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::RestoreTargetResult"/>
             </arg>
         </method>
         <method name="getCycleTargetForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven cycle: get next/prev window in same zone to activate."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="forward" type="b" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, windowIdToActivate, zoneId, screenName}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bssss)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="CycleTargetResult: (success, reason, windowIdToActivate, zoneId, screenName)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::CycleTargetResult"/>
             </arg>
         </method>
         <method name="getSwapTargetForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven swap: get geometries and zone IDs for swapping with adjacent zone."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="direction" type="s" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2, zoneId2, screenName, sourceZoneId, targetZoneId}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bssiiiissiiiissss)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="SwapTargetResult: (success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2, zoneId2, screenName, sourceZoneId, targetZoneId)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::SwapTargetResult"/>
             </arg>
         </method>
         <method name="getPushTargetForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven push: get empty zone and geometry for pushing window."/>
             <arg name="windowId" type="s" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bssiiiiss)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::MoveTargetResult"/>
             </arg>
         </method>
         <method name="getSnapToZoneByNumberTarget">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven snap: get zone and geometry for snapping to zone by number (1-9)."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="zoneNumber" type="i" direction="in"/>
-            <arg name="screenName" type="s" direction="in"/>
-            <arg name="resultJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="result" type="(bssiiiiss)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::MoveTargetResult"/>
             </arg>
         </method>
         <signal name="snapAllWindowsRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows."/>
-            <arg name="screenName" type="s">
+            <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to operate on."/>
             </arg>
         </signal>
         <signal name="moveSpecificWindowToZoneRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a specific window (e.g. from Snap Assist) should be moved to a zone."/>
-            <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier to move."/>
-            </arg>
-            <arg name="zoneId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
-            </arg>
-            <arg name="geometryJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height} for the zone."/>
-            </arg>
+            <arg name="windowId" type="s"/>
+            <arg name="zoneId" type="s"/>
+            <arg name="x" type="i"/>
+            <arg name="y" type="i"/>
+            <arg name="width" type="i"/>
+            <arg name="height" type="i"/>
         </signal>
         <!-- Phase 1 Convenience Methods (TUI/CLI support) -->
         <method name="moveWindowToZone">
@@ -680,18 +692,20 @@
             </arg>
         </method>
         <method name="getWindowState">
-            <annotation name="org.gtk.GDBus.DocString" value="Get comprehensive state for a single window. Returns JSON with windowId, zoneId, screenId, isFloating, isSticky."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get comprehensive state for a single window."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
-            <arg name="stateJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {windowId, zoneId, screenId, isFloating, isSticky}."/>
+            <arg name="state" type="(sssbsasb)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="WindowStateEntry: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowStateEntry"/>
             </arg>
         </method>
         <method name="getAllWindowStates">
-            <annotation name="org.gtk.GDBus.DocString" value="Get state for all tracked windows (TUI dashboard). Returns JSON array of window state objects."/>
-            <arg name="statesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, zoneId, screenId, isFloating, isSticky}."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get state for all tracked windows (TUI dashboard)."/>
+            <arg name="states" type="a(sssbsasb)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of WindowStateEntry structs."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::WindowStateList"/>
             </arg>
         </method>
         <signal name="windowStateChanged">
@@ -699,8 +713,9 @@
             <arg name="windowId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Window whose state changed."/>
             </arg>
-            <arg name="stateJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {windowId, zoneId, screenId, isFloating, changeType}. changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
+            <arg name="state" type="(sssbsasb)">
+                <annotation name="org.gtk.GDBus.DocString" value="WindowStateEntry: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky). changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PlasmaZones::WindowStateEntry"/>
             </arg>
         </signal>
     </interface>

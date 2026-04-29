@@ -5,6 +5,7 @@
 // Part of GeometryUtils namespace — split from geometryutils.cpp for SRP.
 
 #include "../geometryutils.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "../constants.h"
 #include <QRect>
 #include <QSize>
@@ -47,8 +48,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                 int rightIdx = (leftIdx == i) ? j : i;
 
                 // Min-size-aware boundary placement
-                int leftMinW = AutotileDefaults::MinZoneSizePx;
-                int rightMinW = AutotileDefaults::MinZoneSizePx;
+                int leftMinW = PhosphorTiles::AutotileDefaults::MinZoneSizePx;
+                int rightMinW = PhosphorTiles::AutotileDefaults::MinZoneSizePx;
                 if (hasMinSizes) {
                     if (minSizes[leftIdx].width() > 0) {
                         leftMinW = qMax(leftMinW, minSizes[leftIdx].width());
@@ -127,8 +128,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                 int topIdx = (zones[i].top() <= zones[j].top()) ? i : j;
                 int bottomIdx = (topIdx == i) ? j : i;
 
-                int topMinH = AutotileDefaults::MinZoneSizePx;
-                int bottomMinH = AutotileDefaults::MinZoneSizePx;
+                int topMinH = PhosphorTiles::AutotileDefaults::MinZoneSizePx;
+                int bottomMinH = PhosphorTiles::AutotileDefaults::MinZoneSizePx;
                 if (hasMinSizes) {
                     if (minSizes[topIdx].height() > 0) {
                         topMinH = qMax(topMinH, minSizes[topIdx].height());

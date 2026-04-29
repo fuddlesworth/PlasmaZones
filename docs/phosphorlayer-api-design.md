@@ -1,0 +1,707 @@
+# PhosphorLayer — API Design Document
+
+## Overview
+
+PhosphorLayer is a Qt6/C++20 library for managing the lifecycle of
+wlr-layer-shell surfaces: overlays, panels, docks, backgrounds, modals, and
+on-screen displays. It generalizes the per-screen surface management machinery
+currently embedded in PlasmaZones' `OverlayService` (~7 distinct surface types,
+~300 LOC of duplicated boilerplate) into a reusable library that any Wayland
+application targeting KDE Plasma (or any wlr-layer-shell compositor) can
+consume.
+
+**License:** LGPL-2.1-or-later
+**Namespace:** `PhosphorLayer`
+**Depends on:** PhosphorShell (default `ILayerShellTransport` implementation),
+Qt6 Core/Gui/Quick
+
+---
+
+## Dependency Graph
+
+```
+PhosphorShell              PhosphorLayer                PlasmaZones
+(layer-shell QPA,          (surface lifecycle,          (OverlayService
+ LayerSurface,              topology coord, presets,     becomes a thin
+ compositor resilience)     role registry)               consumer)
+        │                          │                            │
+        └──── PUBLIC link ─────────┘                            │
+                                   └──── PUBLIC link ───────────┘
+
+Also usable without PlasmaZones: panel applets, notification daemons,
+lockscreens, live wallpaper apps.
+```
+
+A panel application uses PhosphorLayer with its own content QML and its own
+`IScreenProvider` backed by `QGuiApplication::screens()`. PlasmaZones injects
+a virtual-screen-aware `IScreenProvider` instead.
+
+---
+
+## Design Principles
+
+1. **No consumer-specific types** — no zones, no overlays, no PlasmaZones
+   concepts in the public API. "Layer surface" is the only domain object.
+2. **Dependency injection everywhere** — `IScreenProvider`,
+   `ILayerShellTransport`, and `QQmlEngine` are all injectable. No hard-wired
+   dependencies on `QGuiApplication::screens()` or PhosphorShell.
+3. **Isolation over convenience** — each `Surface` owns its own `QQmlEngine`
+   by default. Sharing is opt-in, explicit, and consumer-controlled. Hidden
+   coupling through shared engines is rejected.
+4. **Open presets, closed primitives** — `Role` is an open value type (any
+   consumer can define one); `Layer`/`Anchor`/`KeyboardInteractivity` are
+   closed enums (wlr-layer-shell protocol values).
+5. **Single responsibility** — creation, registry bookkeeping, and topology
+   response are separate classes. Each is independently testable.
+6. **No globals** — every piece of state hangs off an instance the consumer
+   owns. Clear lifetime, clear composition.
+7. **Explicit lifecycle** — formal state machine on every `Surface`.
+   "Did I already call show()?" is not a valid runtime question.
+8. **Policy is the consumer's** — focus coordination, z-ordering between
+   sibling surfaces, input routing: all consumer decisions. Library exposes
+   primitives, not policy.
+
+---
+
+## Public API
+
+### 1. Role — `PhosphorLayer::Role`
+
+A value type describing a surface's protocol-level configuration: which
+layer, which anchors, what exclusive zone, what keyboard interactivity.
+Consumers pick from library-provided presets **or define their own**.
+
+```cpp
+#include <PhosphorLayer/Role>
+
+namespace PhosphorLayer {
+
+struct Role {
+    Layer layer = Layer::Overlay;
+    Anchors anchors = AnchorNone;
+    int exclusiveZone = -1;                  // -1 = ignore other surfaces' zones
+    KeyboardInteractivity keyboard = KeyboardInteractivity::None;
+    QMargins defaultMargins;
+    QString scopePrefix;                     // namespace for this role's surfaces
+
+    // Fluent modifiers return a copy with the field changed — for defining
+    // derivative roles without mutation. Enables `Roles::TopPanel.withExclusiveZone(30)`.
+    [[nodiscard]] Role withLayer(Layer l) const;
+    [[nodiscard]] Role withAnchors(Anchors a) const;
+    [[nodiscard]] Role withExclusiveZone(int z) const;
+    [[nodiscard]] Role withKeyboard(KeyboardInteractivity k) const;
+    [[nodiscard]] Role withMargins(QMargins m) const;
+    [[nodiscard]] Role withScopePrefix(QString prefix) const;
+};
+
+// ── Library-shipped presets (namespace, not enum — extensible) ────────
+namespace Roles {
+    inline constexpr Role FullscreenOverlay { Layer::Overlay, AnchorAll,
+                                              -1, KeyboardInteractivity::None,
+                                              {}, u"pl-fullscreen"_s };
+
+    inline constexpr Role TopPanel { Layer::Top,
+                                     AnchorTop | AnchorLeft | AnchorRight,
+                                     0, KeyboardInteractivity::OnDemand,
+                                     {}, u"pl-top-panel"_s };
+    inline constexpr Role BottomPanel { /* mirror */ };
+    inline constexpr Role LeftDock    { /* ... */ };
+    inline constexpr Role RightDock   { /* ... */ };
+
+    inline constexpr Role CenteredModal   { Layer::Top, AnchorNone,
+                                            -1, KeyboardInteractivity::Exclusive,
+                                            {}, u"pl-modal"_s };
+    inline constexpr Role CornerToast     { /* ... */ };
+    inline constexpr Role Background      { Layer::Background, AnchorAll,
+                                            0, KeyboardInteractivity::None,
+                                            {}, u"pl-background"_s };
+    inline constexpr Role FloatingOverlay { /* ... */ };
+}
+
+} // namespace PhosphorLayer
+```
+
+Consumer-defined presets compose naturally:
+
+```cpp
+// In PlasmaZones
+namespace PzRoles {
+    inline constexpr Role Overlay =
+        Roles::FullscreenOverlay.withScopePrefix(u"pz-overlay"_s);
+    inline constexpr Role SnapAssist =
+        Roles::CenteredModal.withScopePrefix(u"pz-snap-assist"_s);
+    inline constexpr Role LayoutOsd =
+        Roles::CornerToast.withMargins({0, 40, 0, 0})
+                          .withScopePrefix(u"pz-layout-osd"_s);
+}
+```
+
+---
+
+### 2. SurfaceConfig — `PhosphorLayer::SurfaceConfig`
+
+Immutable value type passed to `SurfaceFactory::create()`. Aggregates the
+role with per-instance data (content, screen, overrides, context).
+
+```cpp
+struct SurfaceConfig {
+    Role role;                              // REQUIRED — copied at construction
+    QUrl contentUrl;                        // QML root (mutually exclusive with contentItem)
+    std::unique_ptr<QQuickItem> contentItem;// Pre-built item (ownership transferred)
+    QScreen* screen = nullptr;              // Nullable — resolved by affinity at creation
+    QVariantMap contextProperties;          // Injected into the surface's QML context
+    QQmlEngine* sharedEngine = nullptr;     // nullptr = per-surface engine (default, isolated)
+
+    // Per-instance overrides (nullopt = use role's default)
+    std::optional<Layer> layerOverride;
+    std::optional<Anchors> anchorsOverride;
+    std::optional<int> exclusiveZoneOverride;
+    std::optional<KeyboardInteractivity> keyboardOverride;
+    std::optional<QMargins> marginsOverride;
+
+    // Observability
+    QString debugName;                      // Logged in state transitions
+};
+```
+
+SurfaceConfig is moved into the Surface at construction and stored `const`
+internally. Reconfiguration = destroy + recreate — matches the wlr-layer-shell
+protocol which forbids most post-show property changes.
+
+---
+
+### 3. Surface — `PhosphorLayer::Surface`
+
+Represents one layer-shell surface. Owns its `QQuickWindow` and (by default)
+its own `QQmlEngine`. Not constructible directly — only via `SurfaceFactory`
+so the factory can inject dependencies.
+
+```cpp
+class PHOSPHORLAYER_EXPORT Surface : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(State state READ state NOTIFY stateChanged FINAL)
+
+public:
+    enum class State {
+        Constructed,   // SurfaceConfig accepted; no window yet
+        Warming,       // QML compiling / engine initializing (hidden)
+        Shown,         // Layer surface configured by compositor; visible
+        Hidden,        // Fully hidden; can transition back to Shown
+        Failed,        // Unrecoverable (QML error, transport rejected, etc.)
+    };
+    Q_ENUM(State)
+
+    ~Surface() override;
+
+    State state() const noexcept;
+    const SurfaceConfig& config() const noexcept; // Read-only view for consumers
+
+    // Lifecycle transitions — idempotent, safe to call in any state.
+    // Guarded: invalid transitions emit a warning and no-op.
+    void show();
+    void hide();
+    void warmUp();                          // Pre-compile QML without showing
+
+    // Escape hatches (use sparingly — prefer the declarative API above)
+    QQuickWindow* window() const noexcept;
+    ITransportHandle* transport() const noexcept;
+
+Q_SIGNALS:
+    // Carries only the new state — the previous state is not exposed.
+    // Consumers that need it should cache it in their slot.
+    void stateChanged(State newState);
+    void failed(const QString& reason);
+
+private:
+    friend class SurfaceFactory;
+    Surface(SurfaceConfig cfg, SurfaceDeps deps, QObject* parent);
+
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+```
+
+#### State transition table
+
+| From          | Event                    | To           | Notes                      |
+|---------------|--------------------------|--------------|----------------------------|
+| Constructed   | `warmUp()`               | Warming      | Creates engine + window, hidden |
+| Constructed   | `show()`                 | Warming → Shown (chained) | |
+| Warming       | (QML compiled)           | Hidden       | Via warmUp path            |
+| Warming       | (QML error)              | Failed       | Emits `failed()`           |
+| Hidden/Warming| `show()`                 | Shown        | Calls transport            |
+| Shown         | `hide()`                 | Hidden       | Synchronous — window unmapped immediately |
+| *             | (transport rejected)     | Failed       |                            |
+
+Invalid transitions (e.g., `show()` from `Failed`) log a `qCWarning` with the
+debugName and no-op. They do not throw.
+
+Topology-driven respawn (screen removed, compositor restarted) is **not**
+modelled as a Surface state — it's the consumer's responsibility via
+`TopologyCoordinator` callbacks or `ScreenSurfaceRegistry::syncToScreens`.
+The library deliberately keeps Surface oblivious to the screen lifecycle so
+consumers own the save-state-before-destroy sequencing.
+
+---
+
+### 4. SurfaceFactory — `PhosphorLayer::SurfaceFactory`
+
+Stateless constructor (holds references to injected dependencies only). One
+responsibility: turn a `SurfaceConfig` into a live `Surface`.
+
+```cpp
+class PHOSPHORLAYER_EXPORT SurfaceFactory : public QObject {
+    Q_OBJECT
+public:
+    struct Deps {
+        ILayerShellTransport* transport = nullptr;  // REQUIRED
+        IQmlEngineProvider* engineProvider = nullptr; // Optional — default: per-surface
+        IScreenProvider* screens = nullptr;         // REQUIRED
+        QString loggingCategory = u"phosphorlayer"_s;
+    };
+    explicit SurfaceFactory(Deps deps, QObject* parent = nullptr);
+
+    // Creates exactly one Surface bound to the given screen (or config.screen
+    // if non-null). For multi-screen patterns, use ScreenSurfaceRegistry.
+    // Returns nullptr and logs if deps.transport->isSupported() is false.
+    [[nodiscard]] Surface* create(SurfaceConfig cfg, QObject* parent = nullptr);
+};
+```
+
+Failure modes (all yield `nullptr` + logged reason):
+- Transport unsupported (compositor lacks wlr-layer-shell)
+- Invalid config (both `contentUrl` and `contentItem` set)
+- Screen required but `config.screen` nullptr and no primary from provider
+
+---
+
+### 5. ScreenSurfaceRegistry — `PhosphorLayer::ScreenSurfaceRegistry`
+
+Per-screen surface bookkeeping for affinities that imply multiple surfaces
+(`AllScreens`). Generic on the surface type so consumers that subclass
+`Surface` keep their type through the API.
+
+```cpp
+template <typename SurfaceT = Surface>
+class ScreenSurfaceRegistry {
+public:
+    // Per-screen builder. Receives the target screen; returns a new Surface
+    // (or subclass) bound to it. Nullptr return is permitted — the registry
+    // skips that screen without logging.
+    using Builder = std::function<SurfaceT*(QScreen*)>;
+
+    ScreenSurfaceRegistry(SurfaceFactory* factory, IScreenProvider* screens);
+
+    // Create one SurfaceT per screen reported by the provider.
+    // Returns the current set. Safe to call repeatedly — idempotent against
+    // the provider's current screen list. SurfaceConfig is move-only so we
+    // take a Builder rather than a single template config; the Builder is
+    // also the natural place to inject per-screen context properties.
+    QList<SurfaceT*> createForAllScreens(Builder builder);
+
+    // Diff-based sync: destroys surfaces for removed screens, calls @p
+    // builder for added screens. No signals emitted — consumers listen to
+    // their surfaces directly.
+    void syncToScreens(Builder builder);
+
+    // Register an externally-constructed surface. Registry becomes the
+    // owner-of-record: clear() will deleteLater() adopted entries. QPointer
+    // + DeferredDelete coalescing keeps this safe when the surface is also
+    // reachable through a parent-QObject that's about to destroy it.
+    void adoptSurface(QScreen* screen, SurfaceT* surface);
+
+    SurfaceT* surfaceForScreen(QScreen* s) const;
+    QList<SurfaceT*> surfaces() const;
+    void clear();                           // Destroys owned surfaces only
+};
+```
+
+---
+
+### 6. TopologyCoordinator — `PhosphorLayer::TopologyCoordinator`
+
+Reacts to screen hot-plug / virtual-screen reconfiguration / compositor
+restart. Drives recreations via the registry.
+
+```cpp
+class PHOSPHORLAYER_EXPORT TopologyCoordinator : public QObject {
+    Q_OBJECT
+public:
+    using SyncCallback = std::function<void()>;
+    using CallbackId = quint64;
+
+    struct TopologyConfig {
+        int debounceMs = 200;               // Qt emits screensChanged repeatedly
+        bool debugLogDiffs = false;
+    };
+    TopologyCoordinator(IScreenProvider* screens,
+                        ILayerShellTransport* transport,
+                        TopologyConfig cfg = {},
+                        QObject* parent = nullptr);
+
+    // Register a callback that fires on each debounced topology change.
+    // The coordinator deliberately does NOT hold pointers to ScreenSurface-
+    // Registry instances — consumers wire the sync call themselves through
+    // a callback so they can also update non-registry state at the same
+    // transition point. Returns an opaque id; pass to detachSyncCallback
+    // to remove. Callbacks fire in registration order.
+    [[nodiscard]] CallbackId attachSyncCallback(SyncCallback cb);
+    void detachSyncCallback(CallbackId id);
+
+Q_SIGNALS:
+    void screensChanging();                 // Debounce fired; recreation imminent
+    void screensChanged();                  // All callbacks have run
+    void compositorRestarted();             // Transport signalled global removal
+};
+```
+
+---
+
+## Injected Interfaces
+
+### IScreenProvider
+
+```cpp
+// Separate QObject so IScreenProvider itself can be multiple-inherited
+// into a non-QObject domain class without Qt's single-QObject-parent rule.
+class PHOSPHORLAYER_EXPORT ScreenProviderNotifier : public QObject {
+    Q_OBJECT
+public:
+    explicit ScreenProviderNotifier(QObject* parent = nullptr);
+Q_SIGNALS:
+    void screensChanged();  // Screen list or geometry changed
+    void focusChanged();    // focused() would now return a different screen
+};
+
+class PHOSPHORLAYER_EXPORT IScreenProvider {
+public:
+    virtual ~IScreenProvider() = default;
+    virtual QList<QScreen*> screens() const = 0;
+    virtual QScreen* primary() const = 0;
+    virtual QScreen* focused() const = 0;              // Screen containing cursor / last-focused
+    virtual ScreenProviderNotifier* notifier() const = 0;
+};
+
+// Default implementation — backed by QGuiApplication
+class PHOSPHORLAYER_EXPORT DefaultScreenProvider : public IScreenProvider { /* ... */ };
+```
+
+PlasmaZones injects a virtual-screen-aware provider; standalone consumers use
+`DefaultScreenProvider`.
+
+### ILayerShellTransport
+
+Abstracts the protocol binding so tests don't need Wayland.
+
+```cpp
+class PHOSPHORLAYER_EXPORT ILayerShellTransport {
+public:
+    virtual ~ILayerShellTransport() = default;
+    virtual bool isSupported() const = 0;
+    // Attach a QQuickWindow to the layer-shell protocol with initial config.
+    // Returns a handle the surface uses to apply mutable properties later.
+    virtual std::unique_ptr<ITransportHandle> attach(QQuickWindow* win,
+                                                     const TransportAttachArgs& args) = 0;
+    // Compositor-lost callback (global removal / compositor restart).
+    // Returns an opaque cookie; pass to removeCompositorLostCallback to
+    // unsubscribe. 0 is reserved for "registration refused" and is safe
+    // to pass to remove. Long-lived transports without unsubscribe leak
+    // dead entries for the process lifetime — always remove on consumer
+    // destruction.
+    using CompositorLostCallback = std::function<void()>;
+    using CompositorLostCookie = quint64;
+    [[nodiscard]] virtual CompositorLostCookie
+        addCompositorLostCallback(CompositorLostCallback cb) = 0;
+    virtual void removeCompositorLostCallback(CompositorLostCookie cookie) = 0;
+};
+
+// Default implementations:
+//   PhosphorShellTransport — wraps PhosphorShell::LayerSurface (wlr-layer-shell)
+//   XdgToplevelTransport   — fallback for compositors without wlr-layer-shell
+class PHOSPHORLAYER_EXPORT PhosphorShellTransport : public ILayerShellTransport { /* ... */ };
+class PHOSPHORLAYER_EXPORT XdgToplevelTransport  : public ILayerShellTransport { /* ... */ };
+```
+
+### IQmlEngineProvider (optional)
+
+```cpp
+class PHOSPHORLAYER_EXPORT IQmlEngineProvider {
+public:
+    virtual ~IQmlEngineProvider() = default;
+    // Called once per Surface construction. Default impl returns a new engine;
+    // consumers that want engine sharing return the same engine repeatedly.
+    virtual QQmlEngine* engineForSurface(const SurfaceConfig& cfg) = 0;
+    // Called when a surface using the returned engine is destroyed.
+    // Default impl deletes the engine; sharing impls no-op.
+    virtual void releaseEngine(QQmlEngine* engine) = 0;
+};
+```
+
+---
+
+## Composition Example (what a consumer writes)
+
+```cpp
+// Once at application startup — composition root
+auto screens   = std::make_unique<DefaultScreenProvider>();
+auto transport = std::make_unique<PhosphorShellTransport>();
+auto factory   = std::make_unique<SurfaceFactory>(SurfaceFactory::Deps{
+    .transport = transport.get(),
+    .screens = screens.get(),
+});
+auto topology  = std::make_unique<TopologyCoordinator>(screens.get(),
+                                                       transport.get());
+
+// One surface per screen for a notification daemon
+auto notifReg = std::make_unique<ScreenSurfaceRegistry<>>(factory.get(),
+                                                          screens.get());
+// Wire the coordinator's debounced-topology callback into the registry's
+// diff-based sync. The coordinator has no direct knowledge of registries;
+// consumers compose the two with a small lambda so non-registry state
+// can piggy-back on the same transition point.
+topology->attachSyncCallback([&] {
+    notifReg->syncToScreens([&](QScreen* s) {
+        auto cfg = SurfaceConfig{};
+        cfg.role = Roles::CornerToast.withMargins({0, 40, 40, 0});
+        cfg.contentUrl = QUrl(u"qrc:/MyApp/NotificationItem.qml"_s);
+        cfg.screen = s;
+        cfg.contextProperties = {{u"notificationController"_s,
+                                  QVariant::fromValue(m_ctrl)}};
+        return factory->create(std::move(cfg));
+    });
+});
+// Prime the initial set without waiting for the first topology change.
+notifReg->createForAllScreens([&](QScreen* s) {
+    SurfaceConfig cfg;
+    cfg.role = Roles::CornerToast.withMargins({0, 40, 40, 0});
+    cfg.contentUrl = QUrl(u"qrc:/MyApp/NotificationItem.qml"_s);
+    cfg.screen = s;
+    return factory->create(std::move(cfg));
+});
+
+// Singleton modal
+SurfaceConfig modalCfg;
+modalCfg.role = Roles::CenteredModal;
+modalCfg.contentUrl = QUrl(u"qrc:/MyApp/SettingsDialog.qml"_s);
+modalCfg.debugName = u"settings-modal"_s;
+auto* modal = factory->create(std::move(modalCfg));
+modal->show();
+```
+
+---
+
+## Threading Model
+
+All public API: **GUI thread only.** Internals handle Wayland-event-loop
+interactions via `QObject::connect` with Qt::QueuedConnection where needed.
+Consumers never cross thread boundaries to use the library.
+
+The only exception: `TopologyCoordinator::compositorRestarted()` may be
+emitted from the Wayland event dispatch context; it uses `QueuedConnection`
+by default so consumer slots run on the GUI thread.
+
+---
+
+## Testing Strategy
+
+All dependencies are injectable → unit tests run headless without Wayland.
+
+```cpp
+class MockTransport : public ILayerShellTransport { /* ... */ };
+class MockScreenProvider : public IScreenProvider { /* ... */ };
+
+void test_surface_state_machine() {
+    MockTransport t; MockScreenProvider s;
+    SurfaceFactory f({&t, &s});
+    auto* surface = f.create({.role = Roles::CenteredModal,
+                              .contentItem = std::make_unique<QQuickItem>()});
+    QCOMPARE(surface->state(), Surface::State::Constructed);
+    surface->show();
+    QCOMPARE(surface->state(), Surface::State::Shown);
+    surface->hide();
+    QCOMPARE(surface->state(), Surface::State::Hidden);
+}
+```
+
+Coverage targets:
+- State machine: every transition, including invalid ones (must not crash)
+- Registry diffing: add/remove/reorder screens
+- Topology debouncing: rapid `screensChanged` coalesces to one sync cycle
+- Compositor-lost callback: fires on `QGuiApplication::aboutToQuit` (best-effort; deeper hooks require PhosphorShell upstream support)
+- Role composition: `with*()` modifiers don't alias / share state
+
+---
+
+## Migration Path: PlasmaZones OverlayService
+
+Phase 1 — library lands (no PZ change):
+- `libs/phosphor-layer/` builds and exports targets
+- Unit tests pass
+
+Phase 2 — one-at-a-time consumer migration:
+1. `ShaderPreview` (simplest — singleton floating overlay) →
+   `factory.create({.role = Roles::FloatingOverlay, ...})`
+2. `LayoutPicker` and `SnapAssist` (singleton modals)
+3. `LayoutOsd` and `NavigationOsd` (per-screen pre-warmed)
+4. `ZoneSelector` (per-screen, keyboard-interactive)
+5. `MainOverlay` (most complex — virtual-screen-aware, per-screen, shader rendering)
+
+Each migration removes ~50–150 LOC from `overlayservice/*.cpp` and replaces
+it with a `SurfaceConfig` + `Role` composition. At completion, `OverlayService`
+keeps its domain logic (zone highlighting, snap assist content model) but all
+layer-shell machinery is gone.
+
+Phase 3 — PZ-specific `IScreenProvider` implementation:
+- PlasmaZones' virtual-screen subdivision plugs in via a
+  `VirtualScreenProvider : IScreenProvider` that exposes its v-screens as
+  QScreen objects (or a parallel abstraction if that proves unclean).
+
+---
+
+## Rejected Alternatives (with rationale)
+
+### Closed `enum class Role`
+Rejected: violates open/closed principle. Consumers would hard-code
+library-defined values and re-specify the same override combinations at every
+call site. Open value-type presets compose naturally and let apps build their
+own vocabulary.
+
+### Pooled `QQmlEngine` at SurfaceManager scope
+Rejected: hidden coupling. One surface's QML error or type registration
+becomes visible to sibling surfaces. Explicit sharing via `SurfaceConfig::
+sharedEngine` and `IQmlEngineProvider` is better: consumers who want pooling
+opt in; the default is isolation.
+
+Qt 6 shares parsed `QQmlCompilationUnit` across engines in the same process
+via a global type cache, so the memory argument for pooling is much weaker
+than it appears.
+
+### Single monolithic `SurfaceManager`
+Rejected: SRP violation. Creation, registry, and topology response have
+different reasons to change and different test setups. Splitting them into
+`SurfaceFactory` + `ScreenSurfaceRegistry` + `TopologyCoordinator` makes
+each piece usable independently (a singleton modal doesn't need topology
+handling at all).
+
+### Library-managed focus coordination
+Rejected: policy-in-library anti-pattern. "Exclusive surface A should demote
+other surfaces to OnDemand" is one application's policy, not all of them.
+Consumers call `show()`/`hide()` explicitly; the library exposes
+`KeyboardInteractivity` as a primitive.
+
+### Hard-wired `QGuiApplication::screens()` / `PhosphorShell::LayerSurface`
+Rejected: untestable and inflexible. Injected `IScreenProvider` +
+`ILayerShellTransport` make headless tests trivial and let PlasmaZones plug
+in virtual-screen support without the library knowing.
+
+### Mutable `SurfaceConfig` on live surfaces
+Rejected: wlr-layer-shell doesn't support most post-show property changes
+(layer, anchors, output, scope, keyboard all immutable per the protocol).
+Pretending otherwise would hide the recreation that's actually happening.
+Destroy + recreate is the honest model.
+
+---
+
+## Extensions (shipped in v1)
+
+- **`ISurfaceStore`**: key-value JSON persistence interface for surface-
+  related application state (which surfaces were visible, last-selected
+  options, etc.). Default impl `JsonSurfaceStore` uses `QSaveFile` for
+  atomic writes. The library does not auto-persist anything through
+  this interface — consumers decide what to save.
+- **`XdgToplevelTransport`**: fallback `ILayerShellTransport` for
+  compositors without wlr-layer-shell. Degrades gracefully: layer
+  stacking and exclusive zones are ignored, keyboard forced to
+  OnDemand, anchors become position hints. Lets PhosphorLayer run on
+  GNOME / nested sessions / non-Plasma compositors.
+- **`ISurfaceAnimator`**: hook point for show/hide transitions that
+  cannot be expressed in pure QML (pre-show measurement, orchestrated
+  multi-surface transitions). Default impl `NoOpSurfaceAnimator` calls
+  the completion callback synchronously; 99 % of consumers animate
+  in QML.
+- **Accessibility**: layered surfaces expose Qt's built-in QAccessible
+  tree natively through the QQuickItem content — no library-side
+  plumbing is required. Consumers add `Accessible.*` attached
+  properties to their QML the same way they would for any Qt Quick
+  application.
+
+---
+
+## Directory Layout
+
+```
+libs/phosphor-layer/
+├── CMakeLists.txt
+├── PhosphorLayerConfig.cmake.in
+├── include/
+│   └── PhosphorLayer/
+│       ├── PhosphorLayer.h        (umbrella header)
+│       ├── Role                   (forwarding)
+│       ├── Role.h
+│       ├── SurfaceConfig          (forwarding)
+│       ├── SurfaceConfig.h
+│       ├── Surface                (forwarding)
+│       ├── Surface.h
+│       ├── SurfaceFactory         (forwarding)
+│       ├── SurfaceFactory.h
+│       ├── ScreenSurfaceRegistry  (forwarding)
+│       ├── ScreenSurfaceRegistry.h
+│       ├── TopologyCoordinator    (forwarding)
+│       ├── TopologyCoordinator.h
+│       ├── IScreenProvider.h
+│       ├── ILayerShellTransport.h
+│       ├── IQmlEngineProvider.h
+│       ├── ISurfaceStore.h
+│       ├── ISurfaceAnimator.h
+│       └── defaults/
+│           ├── DefaultScreenProvider.h
+│           ├── PhosphorShellTransport.h
+│           ├── XdgToplevelTransport.h
+│           ├── JsonSurfaceStore.h
+│           └── NoOpSurfaceAnimator.h
+├── src/
+│   ├── role.cpp
+│   ├── surface.cpp              (state machine lives inside Surface::Impl)
+│   ├── surfacefactory.cpp
+│   ├── topologycoordinator.cpp
+│   ├── defaults/
+│   │   ├── defaultscreenprovider.cpp
+│   │   ├── phosphorshelltransport.cpp
+│   │   ├── xdgtopleveltransport.cpp
+│   │   └── jsonsurfacestore.cpp
+│   └── internal.h
+└── tests/
+    ├── CMakeLists.txt
+    ├── mocks/
+    │   ├── mocktransport.h
+    │   └── mockscreenprovider.h
+    ├── test_role.cpp
+    ├── test_surface.cpp
+    ├── test_factory.cpp
+    ├── test_registry.cpp
+    ├── test_topology.cpp
+    ├── test_content_url.cpp
+    ├── test_default_screen_provider.cpp
+    └── test_extensions.cpp
+```
+
+---
+
+## Open Questions
+
+Resolved during this design pass:
+- ✅ Pool vs per-surface engines → per-surface default, opt-in sharing
+- ✅ Enum vs value-type Role → value type with presets namespace
+- ✅ Focus coordination → consumer-owned
+- ✅ Single manager vs split → split (Factory/Registry/Coordinator)
+- ✅ Globals → none; everything hangs off injected instances
+
+Deferred to implementation:
+- How `IScreenProvider::focused()` is computed — likely consumer-defined.
+  Default impl may return `primary()` with a note that "focused" requires
+  compositor-specific hints.
+- Exact debounce strategy for `screensChanged` — start with 200 ms timer;
+  tune based on real hot-plug traces.
+- Whether `ScreenSurfaceRegistry` should be header-only (template) or
+  compiled via type erasure — probably keep the template in the header,
+  provide an `-impl.h` for heavy paths.

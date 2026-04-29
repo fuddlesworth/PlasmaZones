@@ -1,15 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// toggleFloatForWindow, calculateUnfloatRestore, windowUnsnappedForFloat
+// moved to SnapAdaptor (src/dbus/snapadaptor/commit.cpp).
+//
+// This file retains cross-mode float methods that stay on WTA:
+//   notifyDragOutUnsnap, getPreFloatZone, clearPreFloatZone,
+//   isWindowFloating, queryWindowFloating, setWindowFloating (WTS delegate),
+//   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
+
 #include "../windowtrackingadaptor.h"
-#include "../../autotile/AutotileEngine.h"
-#include "../../snap/SnapEngine.h"
-#include "../../core/geometryutils.h"
+#include "../../core/interfaces.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
+#include <PhosphorEngineApi/IPlacementEngine.h>
+#include <PhosphorEngineApi/PlacementEngineBase.h>
 
 namespace PlasmaZones {
 
@@ -27,48 +32,25 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
 
     QString screenId = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
-    windowUnsnappedForFloat(windowId);
+
+    // Delegate unsnap-for-float to the service directly (the SnapAdaptor
+    // method windowUnsnappedForFloat does the same thing, but this path
+    // doesn't need the SnapAdaptor detour for a WTS-level operation).
+    m_service->unsnapForFloat(windowId);
     setWindowFloating(windowId, true);
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
     // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped.
     if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
-        auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+        auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
         if (geo) {
-            // Emit size-only restore: use 0,0 position with the pre-snap dimensions.
-            // The effect applies width/height while preserving the window's current position.
-            QJsonObject geoJson;
-            geoJson[QLatin1String("x")] = 0;
-            geoJson[QLatin1String("y")] = 0;
-            geoJson[QLatin1String("width")] = geo->width();
-            geoJson[QLatin1String("height")] = geo->height();
-            geoJson[QLatin1String("sizeOnly")] = true;
-            Q_EMIT applyGeometryRequested(windowId,
-                                          QString::fromUtf8(QJsonDocument(geoJson).toJson(QJsonDocument::Compact)),
-                                          QString(), screenId);
-            m_service->clearPreTileGeometry(windowId);
+            Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
+            if (m_snapEngine) {
+                m_snapEngine->clearUnmanagedGeometry(windowId);
+            }
             qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
         }
     }
-}
-
-void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
-{
-    if (!validateWindowId(windowId, QStringLiteral("prepare float"))) {
-        return;
-    }
-
-    QString previousZoneId = m_service->zoneForWindow(windowId);
-    if (previousZoneId.isEmpty()) {
-        // Window was not snapped - no-op
-        qCDebug(lcDbusWindow) << "windowUnsnappedForFloat: window not in any zone:" << windowId;
-        return;
-    }
-
-    // Delegate to service
-    m_service->unsnapForFloat(windowId);
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped for float from zone" << previousZoneId;
 }
 
 bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneIdOut)
@@ -99,38 +81,6 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
     }
 }
 
-QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenId)
-{
-    QJsonObject result;
-    result[QLatin1String("found")] = false;
-
-    if (windowId.isEmpty()) {
-        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-    }
-
-    UnfloatResult unfloat = m_service->resolveUnfloatGeometry(windowId, screenId);
-    if (!unfloat.found) {
-        qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
-        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-    }
-
-    result[QLatin1String("found")] = true;
-    QJsonArray zoneArray;
-    for (const QString& z : unfloat.zoneIds) {
-        zoneArray.append(z);
-    }
-    result[QLatin1String("zoneIds")] = zoneArray;
-    result[QLatin1String("x")] = unfloat.geometry.x();
-    result[QLatin1String("y")] = unfloat.geometry.y();
-    result[QLatin1String("width")] = unfloat.geometry.width();
-    result[QLatin1String("height")] = unfloat.geometry.height();
-    result[QLatin1String("screenName")] = unfloat.screenId;
-
-    qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
-                          << "geo:" << unfloat.geometry;
-    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-}
-
 bool WindowTrackingAdaptor::isWindowFloating(const QString& windowId)
 {
     if (windowId.isEmpty()) {
@@ -159,13 +109,16 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
-    stateObj[QLatin1String("screenId")] = screen;
-    stateObj[QLatin1String("isFloating")] = floating;
-    stateObj[QLatin1String("changeType")] = floating ? QStringLiteral("floated") : QStringLiteral("unfloated");
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(windowId,
+                              WindowStateEntry{
+                                  windowId,
+                                  m_service->zoneForWindow(windowId),
+                                  screen,
+                                  floating,
+                                  floating ? QStringLiteral("floated") : QStringLiteral("unfloated"),
+                                  QStringList{},
+                                  false,
+                              });
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
@@ -174,31 +127,14 @@ QStringList WindowTrackingAdaptor::getFloatingWindows()
     return m_service->floatingWindows();
 }
 
-void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const QString& screenId)
-{
-    qCInfo(lcDbusWindow) << "toggleFloatForWindow: windowId=" << windowId << "screen=" << screenId;
-
-    if (!validateWindowId(windowId, QStringLiteral("toggle float"))) {
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("invalid_window"), QString(),
-                                  QString(), screenId);
-        return;
-    }
-
-    // Route to the correct engine based on screen mode
-    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
-        m_autotileEngine->toggleWindowFloat(windowId, screenId);
-    } else if (m_snapEngine) {
-        m_snapEngine->toggleWindowFloat(windowId, screenId);
-    }
-}
-
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
-    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo
                              << "screen=" << screenId;
-        Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(*geo), QString(), screenId);
+        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
+                                      false);
         return true;
     }
 
@@ -206,13 +142,11 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
     return false;
 }
 
-void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId, const QString& screenId)
-{
-    if (m_service->clearFloatingForSnap(windowId)) {
-        qCDebug(lcDbusWindow) << "Window" << windowId << "was floating, clearing floating state for snap";
-        Q_EMIT windowFloatingChanged(windowId, false, screenId);
-    }
-}
+// WindowTrackingAdaptor::clearFloatingStateForSnap was removed — all
+// snap-commit paths now route through WindowTrackingService::commitSnap
+// which handles clearing the floating state internally and emits
+// windowFloatingClearedForSnap, which this adaptor relays to its own
+// windowFloatingChanged D-Bus signal in the constructor wiring.
 
 void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating)
 {
@@ -223,11 +157,38 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating
                          << "screen=" << screenId;
 
-    // Route to the correct engine based on screen mode
+    // Route to the correct engine based on screen mode. Both directions go
+    // through the explicit cross-engine handoff contract when the window
+    // isn't yet tracked by the destination engine.
+    PhosphorEngineApi::PlacementEngineBase* dest = nullptr;
+    PhosphorEngineApi::PlacementEngineBase* source = nullptr;
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
-        m_autotileEngine->setWindowFloat(windowId, floating);
+        dest = m_autotileEngine.data();
+        source = m_snapEngine.data();
     } else if (m_snapEngine) {
-        m_snapEngine->setWindowFloat(windowId, floating);
+        dest = m_snapEngine.data();
+        source = m_autotileEngine.data();
+    }
+
+    if (dest && floating && !dest->isWindowTracked(windowId)) {
+        // Build the HandoffContext from whichever engine actually claims the
+        // window — fromEngineId stays empty when neither side tracks it (e.g.
+        // a brand-new floating dialog), so receive-side reasoning that depends
+        // on the source mode correctly degrades.
+        PhosphorEngineApi::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = screenId;
+        ctx.wasFloating = true;
+        if (source && source->isWindowTracked(windowId)) {
+            ctx.fromEngineId = source->engineId();
+            ctx.sourceGeometry = m_frameGeometry.value(windowId);
+            source->handoffRelease(windowId);
+        }
+        dest->handoffReceive(ctx);
+    }
+
+    if (dest) {
+        dest->setWindowFloat(windowId, floating);
     }
 }
 

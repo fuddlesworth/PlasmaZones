@@ -3,24 +3,43 @@
 
 #pragma once
 
-#include "../core/layoututils.h"
+#include "../core/unifiedlayoutlist.h"
+#include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
+namespace PhosphorZones {
+class Layout;
+class LayoutRegistry;
+}
+
+namespace PhosphorEngineApi {
+class PlacementEngineBase;
+}
+
 namespace PlasmaZones {
 
-class AutotileEngine;
-class LayoutManager;
 class Settings;
-class Layout;
 
 /**
  * @brief Controller for unified layout management (manual layouts)
  *
  * Handles:
  * - Quick layout switching (Meta+1-9)
- * - Layout cycling (Meta+[/])
+ * - PhosphorZones::Layout cycling (Meta+[/])
  * - ID-based layout tracking
  *
  * Usage:
@@ -39,12 +58,25 @@ class UnifiedLayoutController : public QObject
     Q_PROPERTY(QString currentLayoutId READ currentLayoutId)
 
 public:
-    explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
-                                     AutotileEngine* autotileEngine = nullptr, QObject* parent = nullptr);
+    /**
+     * @brief Construct a UnifiedLayoutController.
+     *
+     * @param algorithmRegistry Injected tile-algorithm registry. Borrowed —
+     *        composition root owns lifetime, must outlive the controller.
+     *        Passed explicitly rather than pulled via
+     *        @c autotileEngine->algorithmRegistry() so the DI contract is
+     *        visible at the constructor signature and the controller
+     *        keeps working in unit tests that stub the engine.
+     */
+    explicit UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
+                                     Phosphor::Screens::ScreenManager* screenManager,
+                                     PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+                                     PhosphorEngineApi::PlacementEngineBase* autotileEngine = nullptr,
+                                     QObject* parent = nullptr);
     ~UnifiedLayoutController() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout access
+    // PhosphorZones::Layout access
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -58,16 +90,16 @@ public:
     /**
      * @brief Get the full unified layout list
      */
-    QVector<UnifiedLayoutEntry> layouts() const;
+    QVector<PhosphorLayout::LayoutPreview> layouts() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout application
+    // PhosphorZones::Layout application
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * @brief Apply layout by number (1-based, for Meta+1-9 shortcuts)
      *
-     * @param number Layout number (1 = first layout)
+     * @param number PhosphorZones::Layout number (1 = first layout)
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutByNumber(int number);
@@ -75,7 +107,7 @@ public:
     /**
      * @brief Apply layout by ID
      *
-     * @param layoutId Layout UUID
+     * @param layoutId PhosphorZones::Layout UUID
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutById(const QString& layoutId);
@@ -89,7 +121,7 @@ public:
     Q_INVOKABLE bool applyLayoutByIndex(int index);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout cycling
+    // PhosphorZones::Layout cycling
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -156,11 +188,28 @@ public:
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
+    /**
+     * @brief Inject the daemon's bundle-owned autotile layout source.
+     *
+     * Optional — when set, @ref layouts reuses its preview cache across
+     * calls instead of constructing a transient source per call. Borrowed —
+     * caller owns it and must keep it alive for the controller's lifetime.
+     *
+     * @note Expected to be called at most once per controller, right after
+     * construction. The controller subscribes to the source's own
+     * @c contentsChanged here so cache invalidation routes through the
+     * single notifier the source already bridges from the registry.
+     * When the source pointer is replaced (currently unused, but a
+     * future multi-bundle composition root might), the previous
+     * subscription is disconnected first.
+     */
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is applied (for OSD)
      */
-    void layoutApplied(Layout* layout);
+    void layoutApplied(PhosphorZones::Layout* layout);
 
     /**
      * @brief Emitted when an autotile algorithm is applied
@@ -171,9 +220,9 @@ Q_SIGNALS:
 
 private:
     /**
-     * @brief Apply a unified layout entry
+     * @brief Apply a unified layout preview
      */
-    bool applyEntry(const UnifiedLayoutEntry& entry);
+    bool applyEntry(const PhosphorLayout::LayoutPreview& preview);
 
     /**
      * @brief Update current layout ID and emit signal
@@ -185,9 +234,13 @@ private:
      */
     int findCurrentIndex() const;
 
-    QPointer<LayoutManager> m_layoutManager;
+    QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<Settings> m_settings;
-    QPointer<AutotileEngine> m_autotileEngine;
+    QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
+    QPointer<PhosphorEngineApi::PlacementEngineBase> m_autotileEngine; ///< Auto-nulls if engine destroyed first
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
+    QMetaObject::Connection m_autotileSourceConnection; ///< contentsChanged subscription on m_autotileLayoutSource
 
     QString m_currentLayoutId;
     QString m_currentScreenName;
@@ -195,7 +248,7 @@ private:
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
-    mutable QVector<UnifiedLayoutEntry> m_cachedLayouts;
+    mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;
 };
 

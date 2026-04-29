@@ -6,7 +6,7 @@
  * @brief Unit tests for WindowTrackingService query operations
  *
  * Tests cover:
- * 1. Zone assignment (single and multi-zone)
+ * 1. PhosphorZones::Zone assignment (single and multi-zone)
  * 2. Screen and desktop tracking
  * 3. Unassign with signal emission
  * 4. Snap-all-windows calculations
@@ -27,15 +27,19 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
-#include "core/layoutmanager.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================
@@ -47,49 +51,49 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using StubSettingsQueries = StubSettings;
 
 // =========================================================================
-// Stub Zone Detector
+// Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorQueries : public IZoneDetector
+class StubZoneDetectorQueries : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorQueries(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
+    PhosphorZones::Layout* layout() const override
     {
         return m_layout;
     }
-    void setLayout(Layout* layout) override
+    void setLayout(PhosphorZones::Layout* layout) override
     {
         m_layout = layout;
     }
-    ZoneDetectionResult detectZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
     {
         return {};
     }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
     {
         return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -97,18 +101,18 @@ public:
     }
 
 private:
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
 // =========================================================================
 // Helper
 // =========================================================================
 
-static Layout* createTestLayout(int zoneCount, QObject* parent)
+static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
 {
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
+    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
     for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
         qreal x = static_cast<qreal>(i) / zoneCount;
         qreal w = 1.0 / zoneCount;
         zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
@@ -130,23 +134,31 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
+        m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
+        m_engine->setEngineSettings(m_settings);
+        m_service->setSnapState(m_engine->snapState());
+        m_service->setSnapEngine(m_engine);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
     }
 
     void cleanup()
     {
+        m_service->setSnapState(nullptr);
+        delete m_engine;
+        m_engine = nullptr;
         delete m_service;
         m_service = nullptr;
         delete m_zoneDetector;
@@ -161,7 +173,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P1: Zone Assignment
+    // P1: PhosphorZones::Zone Assignment
     // =====================================================================
 
     void testAssignWindowToZone_multiZone()
@@ -199,7 +211,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P1: Build Occupied Zone Set / Snap All
+    // P1: Build Occupied PhosphorZones::Zone Set / Snap All
     // =====================================================================
 
     void testBuildOccupiedZoneSet_excludesFloating()
@@ -228,6 +240,7 @@ private Q_SLOTS:
         QString screen = QStringLiteral("DP-1");
         QUuid zone0 = *Utils::parseUuid(m_zoneIds[0]);
         QUuid zone1 = *Utils::parseUuid(m_zoneIds[1]);
+        QUuid zone2 = *Utils::parseUuid(m_zoneIds[2]);
 
         QString onDesk1 = QStringLiteral("app1:win:111");
         QString onDesk2 = QStringLiteral("app2:win:222");
@@ -237,23 +250,24 @@ private Q_SLOTS:
         m_service->assignWindowToZone(onDesk2, m_zoneIds[1], screen, /*desktop=*/2);
         m_service->assignWindowToZone(pinned, m_zoneIds[2], screen, /*desktop=*/0);
 
-        // No filter: all three desktops collapse into one occupancy set.
+        // No filter (desktopFilter=0): every assignment counts, regardless of desktop.
         QSet<QUuid> unfiltered = m_service->buildOccupiedZoneSet(screen, /*desktopFilter=*/0);
         QVERIFY(unfiltered.contains(zone0));
         QVERIFY(unfiltered.contains(zone1));
+        QVERIFY(unfiltered.contains(zone2));
 
-        // Filter to desktop 1: only zone 0 (and the pinned zone) counts —
-        // zone 1, held by a window on desktop 2, must NOT be counted.
+        // Filter to desktop 1: zone held by desktop-2 window must NOT count;
+        // pinned (desktop=0) always counts.
         QSet<QUuid> filteredToDesktop1 = m_service->buildOccupiedZoneSet(screen, /*desktopFilter=*/1);
         QVERIFY(filteredToDesktop1.contains(zone0));
         QVERIFY(!filteredToDesktop1.contains(zone1));
-
-        // Pinned window (desktop 0) counts on every desktop.
-        QUuid zone2 = *Utils::parseUuid(m_zoneIds[2]);
         QVERIFY(filteredToDesktop1.contains(zone2));
+
+        // Filter to desktop 2: symmetric — zone held by desktop-1 window is skipped.
         QSet<QUuid> filteredToDesktop2 = m_service->buildOccupiedZoneSet(screen, /*desktopFilter=*/2);
-        QVERIFY(filteredToDesktop2.contains(zone2));
         QVERIFY(!filteredToDesktop2.contains(zone0));
+        QVERIFY(filteredToDesktop2.contains(zone1));
+        QVERIFY(filteredToDesktop2.contains(zone2));
     }
 
     void testCalculateSnapAllWindows_fillsEmptyZones()
@@ -263,14 +277,14 @@ private Q_SLOTS:
             QStringLiteral("new2:win:222"),
         };
 
-        QVector<RotationEntry> entries = m_service->calculateSnapAllWindows(unsnappedWindows, QString());
+        QVector<ZoneAssignmentEntry> entries = m_engine->calculateSnapAllWindowEntries(unsnappedWindows, QString());
 
         // In headless mode, result is empty (no screen -> no geometry)
         Q_UNUSED(entries);
     }
 
     // =====================================================================
-    // P1: Multi-Zone Geometry
+    // P1: Multi-PhosphorZones::Zone Geometry
     // =====================================================================
 
     void testMultiZoneGeometry_unionOfZones()
@@ -300,27 +314,22 @@ private Q_SLOTS:
 
     void testPreSnapGeometry_stableIdFallback()
     {
-        // Pre-snap geometry keyed by appId should be found when looking up by full windowId
         QString appId = QStringLiteral("dolphin");
         QString windowId = QStringLiteral("dolphin|a1b2c3d4-0000-0000-0000-000088888888");
 
-        QHash<QString, WindowTrackingService::PreTileGeometry> geos;
-        geos[appId] = {QRect(50, 100, 640, 480), QString()};
-        m_service->setPreTileGeometries(geos);
-
-        QVERIFY(m_service->hasPreTileGeometry(windowId));
-        auto geo = m_service->preTileGeometry(windowId);
-        QVERIFY(geo.has_value());
-        QCOMPARE(geo->width(), 640);
+        m_engine->storeUnmanagedGeometry(appId, QRect(50, 100, 640, 480), QString());
+        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
+        QCOMPARE(m_engine->unmanagedGeometry(appId).width(), 640);
     }
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsQueries* m_settings = nullptr;
     StubZoneDetectorQueries* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    SnapEngine* m_engine = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };
 

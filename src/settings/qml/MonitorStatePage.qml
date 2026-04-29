@@ -30,8 +30,8 @@ Flickable {
     property var _screenStates: []
     property string _selectedScreen: ""
     property int _revision: 0
-    // Aspect ratio of the currently selected monitor (width / height).
-    // Used to render the layout preview in the correct shape for portrait monitors.
+    // Aspect ratio of the currently selected screen (for layout preview).
+    // Falls back to the first screen if none is selected.
     readonly property real _selectedScreenAspectRatio: {
         var screens = settingsController.screens;
         var target = _selectedScreen;
@@ -48,7 +48,7 @@ Flickable {
                 break;
             }
         }
-        return 0; // 0 = let LayoutThumbnail use its default logic
+        return 0;
     }
 
     function _refresh() {
@@ -60,10 +60,10 @@ Flickable {
         var target = _selectedScreen;
         // If no screen selected, use first screen
         if (!target && _screenStates.length > 0)
-            target = _screenStates[0].screenName || "";
+            target = _screenStates[0].screenId || "";
 
         for (var i = 0; i < _screenStates.length; i++) {
-            if (_screenStates[i].screenName === target)
+            if (_screenStates[i].screenId === target)
                 return _screenStates[i];
 
         }

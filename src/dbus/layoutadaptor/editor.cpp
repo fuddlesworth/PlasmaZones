@@ -3,15 +3,15 @@
 
 #include "../layoutadaptor.h"
 #include "../../core/interfaces.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutfactory.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../../core/constants.h"
-#include "../../core/layoututils.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutUtils.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -65,9 +65,11 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
 
     const auto layouts = m_layoutManager->layouts();
     if (layouts.size() > layoutCountBefore) {
-        Layout* newLayout = layouts.last();
+        PhosphorZones::Layout* newLayout = layouts.last();
         qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
-        return newLayout->id().toString();
+        const QString newId = newLayout->id().toString();
+        Q_EMIT layoutCreated(newId);
+        return newId;
     }
 
     qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
@@ -90,7 +92,7 @@ void LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePat
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Update (Editor Support)
+// PhosphorZones::Layout Update (Editor Support)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool LayoutAdaptor::updateLayout(const QString& layoutJson)
@@ -104,32 +106,39 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         return false;
     }
     QJsonObject obj = *objOpt;
-    QString idStr = obj[JsonKeys::Id].toString();
+    QString idStr = obj[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
     // Handle autotile layout settings updates (gaps, visibility, shader only)
-    if (LayoutId::isAutotile(idStr)) {
-        QString algoId = LayoutId::extractAlgorithmId(idStr);
+    if (PhosphorLayout::LayoutId::isAutotile(idStr)) {
+        QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(idStr);
         QJsonObject overrides;
-        if (obj.contains(JsonKeys::ZonePadding))
-            overrides[JsonKeys::ZonePadding] = obj[JsonKeys::ZonePadding];
-        if (obj.contains(JsonKeys::OuterGap))
-            overrides[JsonKeys::OuterGap] = obj[JsonKeys::OuterGap];
-        if (obj.contains(JsonKeys::AllowedScreens))
-            overrides[JsonKeys::AllowedScreens] = obj[JsonKeys::AllowedScreens];
-        if (obj.contains(JsonKeys::AllowedDesktops))
-            overrides[JsonKeys::AllowedDesktops] = obj[JsonKeys::AllowedDesktops];
-        if (obj.contains(JsonKeys::AllowedActivities))
-            overrides[JsonKeys::AllowedActivities] = obj[JsonKeys::AllowedActivities];
-        if (obj.contains(JsonKeys::ShaderId))
-            overrides[JsonKeys::ShaderId] = obj[JsonKeys::ShaderId];
-        if (obj.contains(JsonKeys::ShaderParams))
-            overrides[JsonKeys::ShaderParams] = obj[JsonKeys::ShaderParams];
-        if (obj.contains(JsonKeys::OverlayDisplayMode))
-            overrides[JsonKeys::OverlayDisplayMode] = obj[JsonKeys::OverlayDisplayMode];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding))
+            overrides[::PhosphorZones::ZoneJsonKeys::ZonePadding] = obj[::PhosphorZones::ZoneJsonKeys::ZonePadding];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGap))
+            overrides[::PhosphorZones::ZoneJsonKeys::OuterGap] = obj[::PhosphorZones::ZoneJsonKeys::OuterGap];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::AllowedScreens))
+            overrides[::PhosphorZones::ZoneJsonKeys::AllowedScreens] =
+                obj[::PhosphorZones::ZoneJsonKeys::AllowedScreens];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::AllowedDesktops))
+            overrides[::PhosphorZones::ZoneJsonKeys::AllowedDesktops] =
+                obj[::PhosphorZones::ZoneJsonKeys::AllowedDesktops];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::AllowedActivities))
+            overrides[::PhosphorZones::ZoneJsonKeys::AllowedActivities] =
+                obj[::PhosphorZones::ZoneJsonKeys::AllowedActivities];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderId))
+            overrides[::PhosphorZones::ZoneJsonKeys::ShaderId] = obj[::PhosphorZones::ZoneJsonKeys::ShaderId];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams))
+            overrides[::PhosphorZones::ZoneJsonKeys::ShaderParams] = obj[::PhosphorZones::ZoneJsonKeys::ShaderParams];
+        if (obj.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode))
+            overrides[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] =
+                obj[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode];
         m_layoutManager->saveAutotileOverrides(algoId, overrides);
         qCInfo(lcDbusLayout) << "Saved autotile overrides for algorithm:" << algoId;
+        // Autotile override save mutates a single autotile preview entry, not
+        // the layout list itself. Emit layoutChanged only; layoutListChanged
+        // stays reserved for add/delete operations. SettingsController wires
+        // both signals to the same reload slot so no visible behavior changes.
         Q_EMIT layoutChanged(layoutJson);
-        Q_EMIT layoutListChanged();
         return true;
     }
 
@@ -145,44 +154,54 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     });
 
     // Update basic properties
-    layout->setName(obj[JsonKeys::Name].toString());
+    layout->setName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString());
 
     // Update per-layout gap overrides (-1 = use global setting)
-    if (obj.contains(JsonKeys::ZonePadding)) {
-        layout->setZonePadding(obj[JsonKeys::ZonePadding].toInt(-1));
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding)) {
+        layout->setZonePadding(obj[::PhosphorZones::ZoneJsonKeys::ZonePadding].toInt(-1));
     } else {
         layout->clearZonePaddingOverride();
     }
     // Set each gap field explicitly — avoid clearOuterGapOverride() which clobbers
     // per-side state before per-side keys are processed
-    layout->setOuterGap(obj.contains(JsonKeys::OuterGap) ? obj[JsonKeys::OuterGap].toInt(-1) : -1);
-    layout->setUsePerSideOuterGap(obj[JsonKeys::UsePerSideOuterGap].toBool(false));
-    layout->setOuterGapTop(obj.contains(JsonKeys::OuterGapTop) ? obj[JsonKeys::OuterGapTop].toInt(-1) : -1);
-    layout->setOuterGapBottom(obj.contains(JsonKeys::OuterGapBottom) ? obj[JsonKeys::OuterGapBottom].toInt(-1) : -1);
-    layout->setOuterGapLeft(obj.contains(JsonKeys::OuterGapLeft) ? obj[JsonKeys::OuterGapLeft].toInt(-1) : -1);
-    layout->setOuterGapRight(obj.contains(JsonKeys::OuterGapRight) ? obj[JsonKeys::OuterGapRight].toInt(-1) : -1);
+    layout->setOuterGap(obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGap)
+                            ? obj[::PhosphorZones::ZoneJsonKeys::OuterGap].toInt(-1)
+                            : -1);
+    layout->setUsePerSideOuterGap(obj[::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap].toBool(false));
+    layout->setOuterGapTop(obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGapTop)
+                               ? obj[::PhosphorZones::ZoneJsonKeys::OuterGapTop].toInt(-1)
+                               : -1);
+    layout->setOuterGapBottom(obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)
+                                  ? obj[::PhosphorZones::ZoneJsonKeys::OuterGapBottom].toInt(-1)
+                                  : -1);
+    layout->setOuterGapLeft(obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)
+                                ? obj[::PhosphorZones::ZoneJsonKeys::OuterGapLeft].toInt(-1)
+                                : -1);
+    layout->setOuterGapRight(obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGapRight)
+                                 ? obj[::PhosphorZones::ZoneJsonKeys::OuterGapRight].toInt(-1)
+                                 : -1);
 
     // Update per-layout overlay display mode override
-    if (obj.contains(JsonKeys::OverlayDisplayMode)) {
-        layout->setOverlayDisplayMode(obj[JsonKeys::OverlayDisplayMode].toInt(-1));
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)) {
+        layout->setOverlayDisplayMode(obj[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1));
     } else {
         layout->clearOverlayDisplayModeOverride();
     }
 
     // Update full screen geometry mode
-    layout->setUseFullScreenGeometry(obj[JsonKeys::UseFullScreenGeometry].toBool(false));
+    layout->setUseFullScreenGeometry(obj[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false));
 
     // Update aspect ratio classification
-    if (obj.contains(JsonKeys::AspectRatioClassKey)) {
-        layout->setAspectRatioClassInt(obj[JsonKeys::AspectRatioClassKey].toInt(0));
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)) {
+        layout->setAspectRatioClassInt(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey].toInt(0));
     } else {
         layout->setAspectRatioClassInt(0);
     }
 
     // Update shader settings
-    layout->setShaderId(obj[JsonKeys::ShaderId].toString());
-    if (obj.contains(JsonKeys::ShaderParams)) {
-        layout->setShaderParams(obj[JsonKeys::ShaderParams].toObject().toVariantMap());
+    layout->setShaderId(obj[::PhosphorZones::ZoneJsonKeys::ShaderId].toString());
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams)) {
+        layout->setShaderParams(obj[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap());
     } else {
         layout->setShaderParams(QVariantMap());
     }
@@ -192,63 +211,68 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         QStringList screens;
         QList<int> desktops;
         QStringList activities;
-        LayoutUtils::deserializeAllowLists(obj, screens, desktops, activities);
+        PhosphorZones::LayoutUtils::deserializeAllowLists(obj, screens, desktops, activities);
         layout->setAllowedScreens(screens);
         layout->setAllowedDesktops(desktops);
         layout->setAllowedActivities(activities);
     }
 
     // Update app-to-zone rules
-    if (obj.contains(JsonKeys::AppRules)) {
-        layout->setAppRules(AppRule::fromJsonArray(obj[JsonKeys::AppRules].toArray()));
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::AppRules)) {
+        layout->setAppRules(
+            PhosphorZones::AppRule::fromJsonArray(obj[::PhosphorZones::ZoneJsonKeys::AppRules].toArray()));
     }
 
     // Clear existing zones and add new ones
     layout->clearZones();
 
-    const auto zonesArray = obj[JsonKeys::Zones].toArray();
+    const auto zonesArray = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (const auto& zoneVal : zonesArray) {
         QJsonObject zoneObj = zoneVal.toObject();
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
 
-        zone->setName(zoneObj[JsonKeys::Name].toString());
-        zone->setZoneNumber(zoneObj[JsonKeys::ZoneNumber].toInt());
+        zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+        zone->setZoneNumber(zoneObj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt());
 
-        QJsonObject relGeo = zoneObj[JsonKeys::RelativeGeometry].toObject();
-        zone->setRelativeGeometry(QRectF(relGeo[JsonKeys::X].toDouble(), relGeo[JsonKeys::Y].toDouble(),
-                                         relGeo[JsonKeys::Width].toDouble(), relGeo[JsonKeys::Height].toDouble()));
+        QJsonObject relGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::RelativeGeometry].toObject();
+        zone->setRelativeGeometry(QRectF(relGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
+                                         relGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
+                                         relGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                                         relGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble()));
 
         // Per-zone geometry mode
-        zone->setGeometryModeInt(zoneObj[JsonKeys::GeometryMode].toInt(0));
-        if (zoneObj.contains(JsonKeys::FixedGeometry)) {
-            QJsonObject fixedGeo = zoneObj[JsonKeys::FixedGeometry].toObject();
-            zone->setFixedGeometry(QRectF(fixedGeo[JsonKeys::X].toDouble(), fixedGeo[JsonKeys::Y].toDouble(),
-                                          fixedGeo[JsonKeys::Width].toDouble(), fixedGeo[JsonKeys::Height].toDouble()));
+        zone->setGeometryModeInt(zoneObj[::PhosphorZones::ZoneJsonKeys::GeometryMode].toInt(0));
+        if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::FixedGeometry)) {
+            QJsonObject fixedGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::FixedGeometry].toObject();
+            zone->setFixedGeometry(QRectF(fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
+                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
+                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble()));
         }
 
-        QJsonObject appearance = zoneObj[JsonKeys::Appearance].toObject();
+        QJsonObject appearance = zoneObj[::PhosphorZones::ZoneJsonKeys::Appearance].toObject();
         if (!appearance.isEmpty()) {
-            zone->setHighlightColor(QColor(appearance[JsonKeys::HighlightColor].toString()));
-            zone->setInactiveColor(QColor(appearance[JsonKeys::InactiveColor].toString()));
-            zone->setBorderColor(QColor(appearance[JsonKeys::BorderColor].toString()));
+            zone->setHighlightColor(QColor(appearance[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString()));
+            zone->setInactiveColor(QColor(appearance[::PhosphorZones::ZoneJsonKeys::InactiveColor].toString()));
+            zone->setBorderColor(QColor(appearance[::PhosphorZones::ZoneJsonKeys::BorderColor].toString()));
 
-            if (appearance.contains(JsonKeys::ActiveOpacity)) {
-                zone->setActiveOpacity(appearance[JsonKeys::ActiveOpacity].toDouble());
+            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)) {
+                zone->setActiveOpacity(appearance[::PhosphorZones::ZoneJsonKeys::ActiveOpacity].toDouble());
             }
-            if (appearance.contains(JsonKeys::InactiveOpacity)) {
-                zone->setInactiveOpacity(appearance[JsonKeys::InactiveOpacity].toDouble());
+            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)) {
+                zone->setInactiveOpacity(appearance[::PhosphorZones::ZoneJsonKeys::InactiveOpacity].toDouble());
             }
-            if (appearance.contains(JsonKeys::BorderWidth)) {
-                zone->setBorderWidth(appearance[JsonKeys::BorderWidth].toInt());
+            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::BorderWidth)) {
+                zone->setBorderWidth(appearance[::PhosphorZones::ZoneJsonKeys::BorderWidth].toInt());
             }
-            if (appearance.contains(JsonKeys::BorderRadius)) {
-                zone->setBorderRadius(appearance[JsonKeys::BorderRadius].toInt());
+            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::BorderRadius)) {
+                zone->setBorderRadius(appearance[::PhosphorZones::ZoneJsonKeys::BorderRadius].toInt());
             }
-            if (appearance.contains(JsonKeys::UseCustomColors)) {
-                zone->setUseCustomColors(appearance[JsonKeys::UseCustomColors].toBool());
+            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::UseCustomColors)) {
+                zone->setUseCustomColors(appearance[::PhosphorZones::ZoneJsonKeys::UseCustomColors].toBool());
             }
-            if (appearance.contains(JsonKeys::OverlayDisplayMode)) {
-                zone->setOverlayDisplayMode(appearance[JsonKeys::OverlayDisplayMode].toInt(-1));
+            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)) {
+                zone->setOverlayDisplayMode(appearance[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1));
             }
         }
 
@@ -278,7 +302,7 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         return QString();
     }
 
-    auto* layout = Layout::fromJson(*objOpt, m_layoutManager);
+    auto* layout = PhosphorZones::Layout::fromJson(*objOpt, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";
         return QString();
@@ -287,7 +311,9 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     m_layoutManager->addLayout(layout);
 
     qCInfo(lcDbusLayout) << "Created layout from JSON:" << layout->id();
-    return layout->id().toString();
+    const QString newId = layout->id().toString();
+    Q_EMIT layoutCreated(newId);
+    return newId;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
