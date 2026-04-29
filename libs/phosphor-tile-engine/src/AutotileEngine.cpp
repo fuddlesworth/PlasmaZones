@@ -2887,6 +2887,38 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         }
     }
 
+    // Bounds clamp: shift zone position so the effective window rect (after
+    // KWin enforces min sizes) stays inside the screen. Without this, a zone
+    // narrower/shorter than the window's minSize lets KWin grow the window
+    // past the screen edge — and if an adjacent monitor is butted up to that
+    // edge, the window's center crosses into it, KWin reassigns its output,
+    // and the autotile engine ejects the window. Runs for all algorithms
+    // (including overlapping ones) since size-stealing isn't safe there but
+    // pure position shift is. Only adjusts position; sizes are preserved.
+    if (effectiveRespectMinimumSize(screenId) && !minSizes.isEmpty()) {
+        const int screenLeft = screen.x();
+        const int screenTop = screen.y();
+        const int screenRight = screen.x() + screen.width(); // exclusive
+        const int screenBottom = screen.y() + screen.height(); // exclusive
+        const QVector<QRect> preClampZones = zones;
+        for (int i = 0; i < zones.size() && i < minSizes.size(); ++i) {
+            QRect& zone = zones[i];
+            const QSize& minSize = minSizes[i];
+            const int effW = qMax(zone.width(), minSize.width());
+            const int effH = qMax(zone.height(), minSize.height());
+            if (zone.x() + effW > screenRight) {
+                zone.moveLeft(qMax(screenLeft, screenRight - effW));
+            }
+            if (zone.y() + effH > screenBottom) {
+                zone.moveTop(qMax(screenTop, screenBottom - effH));
+            }
+        }
+        if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled()) && zones != preClampZones) {
+            qCDebug(PhosphorTileEngine::lcTileEngine) << "clampZonesToScreen: zones adjusted"
+                                                      << "before=" << preClampZones << "after=" << zones;
+        }
+    }
+
     // Clamp zones to minimum 1x1 — algorithms or the constraint solver can
     // produce non-positive dimensions when minimum sizes exceed available space.
     for (QRect& zone : zones) {

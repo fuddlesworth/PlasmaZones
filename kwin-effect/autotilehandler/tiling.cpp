@@ -470,7 +470,31 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // receives the min-size report below and will retile with adjusted zones.
     const qreal dx = qMax(0.0, dw / 2.0);
     const qreal dy = qMax(0.0, dh / 2.0);
-    const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
+    QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
+
+    // Defensive bounds clamp: if the (oversized) window would extend past the
+    // screen containing the zone, shift it left/up so it stays on the same
+    // screen. Without this, a window whose min size exceeds its zone leaks
+    // into an adjacent monitor — KWin then reassigns the window's output and
+    // the autotile engine ejects it. The daemon-side bounds clamp in
+    // recalculateLayout already shifts zones to fit, so this is a backstop
+    // for cases where the zone still violates min size (script algorithms,
+    // unsatisfiable constraints, residual rounding).
+    if (auto* output = KWin::effects->screenAt(targetZone.center())) {
+        const QRect screenGeo = output->geometry();
+        // Use exclusive edges (x + width / y + height) since QRectF::right()
+        // and QRect::right() disagree (QRect is x+width-1, QRectF is x+width).
+        const qreal screenRight = screenGeo.x() + screenGeo.width();
+        const qreal screenBottom = screenGeo.y() + screenGeo.height();
+        if (centered.x() + centered.width() > screenRight) {
+            const qreal newX = qMax(static_cast<qreal>(screenGeo.x()), screenRight - centered.width());
+            centered.moveLeft(newX);
+        }
+        if (centered.y() + centered.height() > screenBottom) {
+            const qreal newY = qMax(static_cast<qreal>(screenGeo.y()), screenBottom - centered.height());
+            centered.moveTop(newY);
+        }
+    }
 
     // Already at the centered position — record and consume
     if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
