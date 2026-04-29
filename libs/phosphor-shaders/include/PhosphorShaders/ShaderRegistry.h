@@ -195,7 +195,18 @@ private:
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
     using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<ShaderInfo>;
-    std::unique_ptr<ScanStrategy> m_strategy;
+
+    /// Build + configure the scan strategy. Returns the base type so
+    /// the helper can be invoked from the ctor's member-init list while
+    /// staying agnostic of the subclass-private `ScanStrategy` typedef.
+    /// Defined in the .cpp to keep schema-specific parser / signature
+    /// hookups out of the public header.
+    static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(ShaderRegistry* self);
+
+    // Non-owning typed alias for the strategy the base owns. Populated
+    // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`
+    // — the cast is safe because we passed in the same instance.
+    ScanStrategy* m_strategy;
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;

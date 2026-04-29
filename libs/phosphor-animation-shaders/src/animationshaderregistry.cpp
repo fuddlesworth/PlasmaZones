@@ -102,16 +102,22 @@ void contributeSignature(QCryptographicHash& h, const AnimationShaderEffect& e)
 
 } // namespace
 
-AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
-    : MetadataPackRegistryBase(lcRegistry(), parent)
-    , m_strategy(std::make_unique<ScanStrategy>(parseEffect, [this]() {
-        Q_EMIT effectsChanged();
-    }))
+std::unique_ptr<PhosphorFsLoader::IScanStrategy>
+AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
 {
-    m_strategy->setPerEntryWatchPaths(effectWatchPaths);
-    m_strategy->setSignatureContrib(contributeSignature);
-    m_strategy->setLoggingCategory(&lcRegistry());
-    initWatcher(*m_strategy);
+    auto strategy = std::make_unique<ScanStrategy>(parseEffect, [self]() {
+        Q_EMIT self->effectsChanged();
+    });
+    strategy->setPerEntryWatchPaths(effectWatchPaths);
+    strategy->setSignatureContrib(contributeSignature);
+    strategy->setLoggingCategory(&lcRegistry());
+    return strategy;
+}
+
+AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
+    : MetadataPackRegistryBase(lcRegistry(), buildScanStrategy(this), parent)
+    , m_strategy(static_cast<ScanStrategy*>(strategy()))
+{
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;

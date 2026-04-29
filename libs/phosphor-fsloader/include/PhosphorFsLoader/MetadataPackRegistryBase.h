@@ -23,19 +23,24 @@ class IScanStrategy;
 /**
  * @brief QObject base for registries hosting a `MetadataPackScanStrategy<Payload>`.
  *
- * Owns the `WatchedDirectorySet` and provides the search-path management
- * surface (`addSearchPath`, `addSearchPaths`, `searchPaths`, `setUserPath`,
- * `refresh`) that every consumer of `MetadataPackScanStrategy<Payload>`
- * was hand-rolling identically. Subclasses own their typed strategy and
- * override `onUserPathChanged` to forward the new path into it.
+ * Owns BOTH the strategy and the `WatchedDirectorySet` and provides the
+ * search-path management surface (`addSearchPath`, `addSearchPaths`,
+ * `searchPaths`, `setUserPath`, `refresh`) that every consumer of
+ * `MetadataPackScanStrategy<Payload>` was hand-rolling identically.
+ * Subclasses pass an already-configured strategy into the base ctor and
+ * keep a typed raw-pointer alias for their own setter / accessor needs;
+ * they override `onUserPathChanged` to forward the new path into it.
  *
- * ## Two-phase init
+ * ## Single-phase init + ownership-driven destruction order
  *
- * Construction is split into ctor + `initWatcher` so the subclass can
- * build its typed strategy on its own member-init list (the strategy's
- * concrete `Payload` type is invisible to this base) and hand it to the
- * watcher inside the ctor body. `initWatcher` MUST be called exactly
- * once before any search-path call; assertion-checked in debug builds.
+ * The strategy is owned by the base via `std::unique_ptr<IScanStrategy>`
+ * passed into the ctor. `m_strategy` is declared BEFORE `m_watcher` so
+ * the watcher (which holds a borrowed reference to the strategy) is
+ * destroyed first — without this ordering, the watcher's reference would
+ * dangle during base-member teardown if the subclass also held the
+ * strategy. Subclasses keep a non-owning typed pointer, populated from
+ * `strategy()` in the subclass member-init list, for their own setter
+ * calls.
  *
  * ## Method naming
  *
@@ -55,6 +60,7 @@ class IScanStrategy;
 class PHOSPHORFSLOADER_EXPORT MetadataPackRegistryBase : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(MetadataPackRegistryBase)
 
 public:
     ~MetadataPackRegistryBase() override;
@@ -120,29 +126,27 @@ public:
 
 protected:
     /**
-     * @brief Construct the base. Subclass MUST call `initWatcher` from
-     *        its own ctor body before exposing the registry to callers.
+     * @brief Construct the base, taking ownership of @p strategy.
      *
-     * @param logCat  Category for the "Added search path" / refresh log
-     *                lines and any future base-level diagnostics. Stored
-     *                by reference; must outlive the registry (a
-     *                `Q_LOGGING_CATEGORY`-defined static is the standard
-     *                source).
-     */
-    explicit MetadataPackRegistryBase(const QLoggingCategory& logCat, QObject* parent = nullptr);
-
-    /**
-     * @brief Two-phase init: bind the watcher to the subclass-owned
-     *        strategy. Must be called exactly once from the subclass
-     *        ctor body, after the strategy is constructed.
+     * The subclass builds + configures its strategy (parser, watch
+     * extractors, signature contributor, logging category), then hands
+     * ownership in. Constructing the watcher happens here too — by the
+     * time the ctor returns, the registry is fully initialised and ready
+     * to accept search-path calls.
      *
-     * @param strategy  The typed strategy stored on the subclass. Must
-     *                  outlive the watcher (i.e. live as long as this
-     *                  registry); the subclass guarantees this by
-     *                  declaring the strategy member before invoking
-     *                  the base ctor.
+     * @param logCat   Category for the "Added search path" / refresh log
+     *                 lines and any future base-level diagnostics.
+     *                 Stored by reference; must outlive the registry (a
+     *                 `Q_LOGGING_CATEGORY`-defined static is the standard
+     *                 source).
+     * @param strategy The configured scan strategy. Must be non-null;
+     *                 ownership transfers to the base. The base
+     *                 guarantees the strategy outlives the watcher
+     *                 because `m_strategy` is declared before `m_watcher`
+     *                 in the private section (reverse-order destruction).
      */
-    void initWatcher(IScanStrategy& strategy);
+    MetadataPackRegistryBase(const QLoggingCategory& logCat, std::unique_ptr<IScanStrategy> strategy,
+                             QObject* parent = nullptr);
 
     /**
      * @brief Hook invoked from `setUserPath` when the path actually
@@ -152,15 +156,30 @@ protected:
      */
     virtual void onUserPathChanged(const QString& path) = 0;
 
+    /// Strategy accessor for subclasses. Returned as `IScanStrategy*` so
+    /// the base stays free of the consumer's `Payload` template parameter;
+    /// the subclass `static_cast`s back to its concrete strategy type.
+    /// Always non-null (the ctor enforces non-null at construction).
+    IScanStrategy* strategy() const
+    {
+        return m_strategy.get();
+    }
+
     /// Watcher accessor for subclasses that need direct ops not covered
-    /// by the base API (e.g. a `setDirectories` replacement). Returns
-    /// nullptr before `initWatcher` runs.
+    /// by the base API (e.g. a `setDirectories` replacement). Always
+    /// non-null after construction.
     WatchedDirectorySet* watcher() const
     {
         return m_watcher.get();
     }
 
 private:
+    // Declaration order is load-bearing for destruction safety: members
+    // are torn down in reverse declaration order, so `m_watcher` (which
+    // holds a borrowed reference into `*m_strategy`) MUST be declared
+    // AFTER `m_strategy`. Without this ordering, the strategy reference
+    // inside the watcher would dangle during base teardown.
+    std::unique_ptr<IScanStrategy> m_strategy;
     std::unique_ptr<WatchedDirectorySet> m_watcher;
     QString m_userPath;
     const QLoggingCategory* m_logCat;

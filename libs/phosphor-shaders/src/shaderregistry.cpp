@@ -308,37 +308,67 @@ bool shaderSubdirSkip(const QString& subdirName)
 }
 
 /// Hash schema-specific bits change-detection cares about. The strategy
-/// already mixes in `id`; this contributor adds path tuples, isUser,
-/// and frag mtime+size so an in-place edit on the fragment shader
-/// surfaces as a content change even when no metadata bytes moved.
+/// already mixes in `id`, `isUser`, and the metadata.json's size+mtime,
+/// so this contributor only adds the OUT-OF-METADATA state that affects
+/// rendering: the resolved frag/vert path strings, plus mtime+size for
+/// every shader source file (main frag + buffer-pass frags, if any) so
+/// an in-place edit on any of them surfaces as a content change even
+/// when no metadata.json byte moved. Without the buffer-pass mixin a
+/// multipass shader's effect.frag would re-fire on edit but a buffer-A
+/// edit would not — the rescan triggers via QFileSystemWatcher (the
+/// buffer files match the *.frag glob) but the signature wouldn't shift.
 void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::ShaderInfo& s)
 {
     h.addData(s.sourcePath.toUtf8());
     h.addData(QByteArrayView("|"));
     h.addData(s.vertexShaderPath.toUtf8());
     h.addData(QByteArrayView("|"));
-    h.addData(s.isUserShader ? "u" : "s");
-    h.addData(QByteArrayView("|"));
     const QFileInfo fragInfo(s.sourcePath);
     h.addData(QByteArray::number(fragInfo.size()));
     h.addData(QByteArrayView("|"));
     h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
+    h.addData(QByteArrayView("|"));
+    for (const QString& bp : s.bufferShaderPaths) {
+        h.addData(bp.toUtf8());
+        h.addData(QByteArrayView("|"));
+        const QFileInfo bi(bp);
+        h.addData(QByteArray::number(bi.size()));
+        h.addData(QByteArrayView("|"));
+        h.addData(QByteArray::number(bi.lastModified().toMSecsSinceEpoch()));
+        h.addData(QByteArrayView("|"));
+    }
 }
 
 } // namespace
 
-ShaderRegistry::ShaderRegistry(QObject* parent)
-    : MetadataPackRegistryBase(lcShaderRegistry(), parent)
-    , m_strategy(std::make_unique<ScanStrategy>(parseShader, [this]() {
-        Q_EMIT shadersChanged();
-    }))
+/// Build + configure the scan strategy and hand ownership to the caller
+/// as the upcasted base type (`IScanStrategy`) — the consumer of this
+/// helper is `MetadataPackRegistryBase`'s ctor, which doesn't see the
+/// `Payload` template parameter. The subclass recovers the typed pointer
+/// via `static_cast<ScanStrategy*>(strategy())` from its mem-init list.
+///
+/// Lifted out of the ctor so the base can take the unique_ptr in a
+/// single-phase init while the subclass still applies all the
+/// schema-specific setters. The OnCommit lambda captures @p self only
+/// as a pointer — by the time the lambda fires, the subclass ctor has
+/// finished and Q_EMIT dispatches through the full ShaderRegistry vtable.
+std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrategy(ShaderRegistry* self)
 {
-    m_strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
-    m_strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
-    m_strategy->setPerSubdirSkip(shaderSubdirSkip);
-    m_strategy->setSignatureContrib(contributeShaderSignature);
-    m_strategy->setLoggingCategory(&lcShaderRegistry());
-    initWatcher(*m_strategy);
+    auto strategy = std::make_unique<ScanStrategy>(parseShader, [self]() {
+        Q_EMIT self->shadersChanged();
+    });
+    strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
+    strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
+    strategy->setPerSubdirSkip(shaderSubdirSkip);
+    strategy->setSignatureContrib(contributeShaderSignature);
+    strategy->setLoggingCategory(&lcShaderRegistry());
+    return strategy;
+}
+
+ShaderRegistry::ShaderRegistry(QObject* parent)
+    : MetadataPackRegistryBase(lcShaderRegistry(), buildScanStrategy(this), parent)
+    , m_strategy(static_cast<ScanStrategy*>(strategy()))
+{
 }
 
 ShaderRegistry::~ShaderRegistry() = default;

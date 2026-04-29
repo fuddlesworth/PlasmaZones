@@ -93,7 +93,15 @@ protected:
 
 private:
     using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<AnimationShaderEffect>;
-    std::unique_ptr<ScanStrategy> m_strategy;
+
+    /// Build + configure the scan strategy. Returns the base type so
+    /// the helper can be invoked from the ctor's member-init list while
+    /// staying agnostic of the subclass-private `ScanStrategy` typedef.
+    static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(AnimationShaderRegistry* self);
+
+    // Non-owning typed alias for the strategy the base owns. Populated
+    // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`.
+    ScanStrategy* m_strategy;
 };
 
 } // namespace PhosphorAnimationShaders

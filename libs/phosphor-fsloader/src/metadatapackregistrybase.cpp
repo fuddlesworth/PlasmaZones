@@ -10,19 +10,18 @@
 
 namespace PhosphorFsLoader {
 
-MetadataPackRegistryBase::MetadataPackRegistryBase(const QLoggingCategory& logCat, QObject* parent)
+MetadataPackRegistryBase::MetadataPackRegistryBase(const QLoggingCategory& logCat,
+                                                   std::unique_ptr<IScanStrategy> strategy, QObject* parent)
     : QObject(parent)
+    , m_strategy(std::move(strategy))
+    , m_watcher(m_strategy ? std::make_unique<WatchedDirectorySet>(*m_strategy, this) : nullptr)
     , m_logCat(&logCat)
 {
+    Q_ASSERT_X(m_strategy, "MetadataPackRegistryBase",
+               "scan strategy must not be null — the watcher holds a borrowed reference to it");
 }
 
 MetadataPackRegistryBase::~MetadataPackRegistryBase() = default;
-
-void MetadataPackRegistryBase::initWatcher(IScanStrategy& strategy)
-{
-    Q_ASSERT_X(!m_watcher, "MetadataPackRegistryBase::initWatcher", "initWatcher called more than once");
-    m_watcher = std::make_unique<WatchedDirectorySet>(strategy, this);
-}
 
 void MetadataPackRegistryBase::addSearchPath(const QString& path, LiveReload liveReload)
 {
@@ -34,9 +33,6 @@ void MetadataPackRegistryBase::addSearchPath(const QString& path, LiveReload liv
 
 void MetadataPackRegistryBase::addSearchPaths(const QStringList& paths, LiveReload liveReload, RegistrationOrder order)
 {
-    Q_ASSERT_X(m_watcher, "MetadataPackRegistryBase::addSearchPaths",
-               "subclass forgot to call initWatcher() in its ctor body");
-
     // Pre-canonicalise + drop already-registered paths via the shared
     // helper — keeps the log line below from spamming "Added search path:
     // /foo/bar/" when /foo/bar is already registered (the base watcher's
@@ -59,15 +55,11 @@ void MetadataPackRegistryBase::addSearchPaths(const QStringList& paths, LiveRelo
 
 QStringList MetadataPackRegistryBase::searchPaths() const
 {
-    Q_ASSERT_X(m_watcher, "MetadataPackRegistryBase::searchPaths",
-               "subclass forgot to call initWatcher() in its ctor body");
     return m_watcher->directories();
 }
 
 void MetadataPackRegistryBase::setUserPath(const QString& path)
 {
-    Q_ASSERT_X(m_watcher, "MetadataPackRegistryBase::setUserPath",
-               "subclass forgot to call initWatcher() in its ctor body");
     if (m_userPath == path) {
         return; // idempotent — same value, no work to do
     }
@@ -85,8 +77,6 @@ void MetadataPackRegistryBase::setUserPath(const QString& path)
 
 void MetadataPackRegistryBase::refresh()
 {
-    Q_ASSERT_X(m_watcher, "MetadataPackRegistryBase::refresh",
-               "subclass forgot to call initWatcher() in its ctor body");
     qCDebug(*m_logCat) << "Refreshing registry";
     m_watcher->rescanNow();
 }

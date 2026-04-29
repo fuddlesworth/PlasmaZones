@@ -25,6 +25,7 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace PhosphorFsLoader {
 
@@ -136,6 +137,17 @@ namespace PhosphorFsLoader {
  * registry is. `Parser` / watch-extractor callables are stored by value
  * (typically `std::function`); they may capture state by pointer/reference
  * if the captured state outlives the registry.
+ *
+ * ## Setter timing
+ *
+ * All `setX` methods on this class (`setMaxEntries`, `setUserPath`,
+ * `setLoggingCategory`, `setPerEntryWatchPaths`, etc.) take effect on
+ * the **next** rescan. Calling them from inside a `Parser` /
+ * `SignatureContrib` / `OnCommit` callback (i.e. while a `performScan`
+ * is on the stack) is undefined — the running scan reads its own
+ * snapshot of the config at the top, and a mid-scan setter call would
+ * either be ignored or interleave inconsistently. Configure the strategy
+ * once during ctor / immediately after, then leave it alone.
  *
  * ## Thread safety
  *
@@ -393,20 +405,33 @@ PHOSPHORFSLOADER_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcMetadataPackScan)
 template<typename Payload>
 QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& directoriesInScanOrder)
 {
-    QHash<QString, Payload> fresh;
-
-    // Per-entry fingerprint (`metadata.json` size+mtime + `isUser`)
-    // captured during the parse loop and mixed into the SHA-1 signature
-    // below. Decoupled from `Payload` so the strategy can fingerprint
-    // file-system facts the parser doesn't necessarily store, and
-    // doesn't require Payload to expose them.
+    // Per-entry filesystem fingerprint (`metadata.json` size+mtime +
+    // `isUser`) captured during the parse loop and mixed into the SHA-1
+    // signature below. Decoupled from `Payload` so the strategy can
+    // fingerprint facts the parser doesn't necessarily store, without
+    // requiring Payload to expose them.
     struct EntryFingerprint
     {
         qint64 metadataSize = 0;
         qint64 metadataMtimeMs = 0;
         bool isUser = false;
     };
-    QHash<QString, EntryFingerprint> freshFingerprints;
+    // Single accumulator holding everything we need about an entry: id
+    // (for the signature key + final map key), fingerprint, payload.
+    // Sorted-by-id at the end of the parse pass so signature mixing and
+    // accessor population both consume a stable order without paying
+    // the cost of a parallel `QHash<QString, EntryFingerprint>`.
+    struct Entry
+    {
+        QString id;
+        EntryFingerprint fp;
+        Payload payload;
+    };
+    std::vector<Entry> entries;
+    // Tracks claimed ids for first-wins collision detection during the
+    // parse loop. Cheaper than a parallel `QHash<QString, Payload>` —
+    // one O(1) key insert per entry, no payload duplication.
+    QSet<QString> seenIds;
 
     QStringList desiredWatches;
 
@@ -451,7 +476,7 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             // Per-rescan entry-count DoS guard. Reverse-iteration scans
             // user-first / system-last, so cap-trip drops *system*
             // overflow rather than user overrides.
-            if (fresh.size() >= m_maxEntries) {
+            if (entries.size() >= static_cast<std::size_t>(m_maxEntries)) {
                 capTripped = true;
                 break;
             }
@@ -500,8 +525,10 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
                 continue;
             }
 
-            // Schema-specific parse.
-            std::optional<Payload> parsed = m_parser ? m_parser(subdirPath, doc.object(), isUserDir) : std::nullopt;
+            // Schema-specific parse. The ctor asserts `m_parser` is
+            // non-null and there is no setter to clear it, so it is
+            // safe to invoke unconditionally.
+            std::optional<Payload> parsed = m_parser(subdirPath, doc.object(), isUserDir);
             if (!parsed.has_value()) {
                 qCDebug(log) << "MetadataPackScanStrategy: parser declined" << metadataPath;
                 continue;
@@ -514,7 +541,7 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             // First-wins on id collision. Reverse-iteration means a
             // user-dir entry claims its id before any system-dir entry
             // can; a colliding system entry is silently shadowed.
-            if (fresh.contains(parsed->id)) {
+            if (seenIds.contains(parsed->id)) {
                 qCDebug(log) << "MetadataPackScanStrategy: id" << parsed->id
                              << "already registered from a higher-priority dir; shadowed at:" << subdirPath;
                 continue;
@@ -533,11 +560,12 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
             // rely on it), so a single mtime+size mix-in covers every
             // schema field without forcing per-field enumeration in
             // SignatureContrib.
-            const QString idCopy = parsed->id;
-            freshFingerprints.insert(
-                idCopy,
-                EntryFingerprint{metadataInfo.size(), metadataInfo.lastModified().toMSecsSinceEpoch(), isUserDir});
-            fresh.insert(idCopy, std::move(*parsed));
+            QString id = parsed->id;
+            seenIds.insert(id);
+            entries.push_back(
+                Entry{std::move(id),
+                      EntryFingerprint{metadataInfo.size(), metadataInfo.lastModified().toMSecsSinceEpoch(), isUserDir},
+                      std::move(*parsed)});
         }
     }
 
@@ -547,9 +575,16 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
                                     "paths or raise the cap.";
     }
 
+    // Sort by id once. Stable hash + stable accessor ordering both fall
+    // out of this single pass — no parallel structures, no second
+    // QHash::keys() + sort.
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        return a.id < b.id;
+    });
+
     // SHA-1 signature over (id, isUser, metadata.json size+mtime,
-    // payload-specific bytes). Stable iteration order is enforced via
-    // sorted ids; QHash randomisation never leaks into the signature.
+    // payload-specific bytes). Stable iteration order is the sorted
+    // entries vec; QHash randomisation never leaks into the signature.
     //
     // The strategy's own contribution (`isUser` + metadata size+mtime)
     // is load-bearing for change-only emit completeness: it catches
@@ -560,25 +595,27 @@ QStringList MetadataPackScanStrategy<Payload>::performScan(const QStringList& di
     // doesn't fingerprint would parse cleanly into a new payload but
     // the signal wouldn't fire — UI consumers would see stale data.
     QCryptographicHash hasher(QCryptographicHash::Sha1);
-    QList<QString> sortedIds = fresh.keys();
-    std::sort(sortedIds.begin(), sortedIds.end());
-    for (const QString& id : std::as_const(sortedIds)) {
-        const Payload& p = fresh.value(id);
-        const EntryFingerprint& fp = freshFingerprints.value(id);
-        hasher.addData(id.toUtf8());
+    for (const Entry& e : entries) {
+        hasher.addData(e.id.toUtf8());
         hasher.addData(QByteArrayView("|"));
-        hasher.addData(fp.isUser ? QByteArrayView("u") : QByteArrayView("s"));
+        hasher.addData(e.fp.isUser ? QByteArrayView("u") : QByteArrayView("s"));
         hasher.addData(QByteArrayView("|"));
-        hasher.addData(QByteArray::number(fp.metadataSize));
+        hasher.addData(QByteArray::number(e.fp.metadataSize));
         hasher.addData(QByteArrayView("|"));
-        hasher.addData(QByteArray::number(fp.metadataMtimeMs));
+        hasher.addData(QByteArray::number(e.fp.metadataMtimeMs));
         hasher.addData(QByteArrayView("|"));
         if (m_sigContrib) {
-            m_sigContrib(hasher, p);
+            m_sigContrib(hasher, e.payload);
         }
         hasher.addData(QByteArrayView("\n"));
     }
     const QByteArray signature = hasher.result();
+
+    QHash<QString, Payload> fresh;
+    fresh.reserve(static_cast<int>(entries.size()));
+    for (Entry& e : entries) {
+        fresh.insert(e.id, std::move(e.payload));
+    }
 
     const bool isFirstScan = !m_signatureSeeded;
     const bool changed = isFirstScan ? !fresh.isEmpty() : signature != m_lastSignature;
