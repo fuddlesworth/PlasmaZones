@@ -77,6 +77,12 @@ qt_add_qml_module(plasmazones-settings
         qml/GeneralPage.qml
         qml/SnappingAppearancePage.qml
         qml/SnappingEffectsPage.qml
+        qml/CurveThumbnail.qml
+        qml/CurveEditorDialog.qml
+        qml/SpringPreview.qml
+        qml/AnimationShaderParamEditor.qml
+        qml/EasingCurve.js
+        qml/SpringPhysics.js
         qml/SnappingBehaviorPage.qml
         qml/SnappingZoneSelectorPage.qml
         qml/TilingAppearancePage.qml
