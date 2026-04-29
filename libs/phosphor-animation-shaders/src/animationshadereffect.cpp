@@ -26,8 +26,6 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("fragmentShader"), fragmentShaderPath);
     if (!vertexShaderPath.isEmpty())
         obj.insert(QLatin1String("vertexShader"), vertexShaderPath);
-    if (!kwinFragmentShaderPath.isEmpty())
-        obj.insert(QLatin1String("kwinFragmentShader"), kwinFragmentShaderPath);
     if (!previewPath.isEmpty())
         obj.insert(QLatin1String("preview"), previewPath);
 
@@ -65,7 +63,6 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.category = obj.value(QLatin1String("category")).toString();
     e.fragmentShaderPath = obj.value(QLatin1String("fragmentShader")).toString();
     e.vertexShaderPath = obj.value(QLatin1String("vertexShader")).toString();
-    e.kwinFragmentShaderPath = obj.value(QLatin1String("kwinFragmentShader")).toString();
     e.previewPath = obj.value(QLatin1String("preview")).toString();
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
@@ -95,8 +92,6 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (author != other.author || version != other.version || category != other.category)
         return false;
     if (fragmentShaderPath != other.fragmentShaderPath || vertexShaderPath != other.vertexShaderPath)
-        return false;
-    if (kwinFragmentShaderPath != other.kwinFragmentShaderPath)
         return false;
     if (sourceDir != other.sourceDir || isUserEffect != other.isUserEffect)
         return false;

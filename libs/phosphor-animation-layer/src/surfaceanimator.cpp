@@ -9,6 +9,9 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorRendering/ShaderEffect.h>
+
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
@@ -20,6 +23,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTimer>
+#include <QUrl>
 
 #include <chrono>
 #include <memory>
@@ -144,15 +148,16 @@ public:
         QPointer<QQuickItem> target; ///< Auto-nulls if QML scene tears down mid-flight
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> opacity;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> scale;
-        /// Number of legs still running. 1 for opacity-only; 2 when a
-        /// scale leg is in flight too. `onComplete` fires when this hits
-        /// 0 to ensure both legs finish before notifying the caller.
+        std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> shaderTime;
+        QPointer<PhosphorRendering::ShaderEffect> shaderItem; ///< Transient child, torn down on completion
         int pendingLegs = 0;
         ISurfaceAnimator::CompletionCallback onComplete;
     };
 
-    Private(PhosphorAnimation::PhosphorProfileRegistry& registry, Config defaults)
+    Private(PhosphorAnimation::PhosphorProfileRegistry& registry,
+            PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry, Config defaults)
         : m_registry(registry)
+        , m_shaderRegistry(shaderRegistry)
         , m_defaultConfig(std::move(defaults))
     {
         // Animation driver: while any track is in flight, fire on the
@@ -202,6 +207,18 @@ public:
     /// non-completion termination path; consumers that need a "settled"
     /// signal (whether by completion or cancellation) must wrap their
     /// callback themselves.
+    void teardownShaderLeg(Track& track)
+    {
+        if (track.shaderTime) {
+            track.shaderTime->cancel();
+            m_pendingDestroy.push_back(std::move(track.shaderTime));
+        }
+        if (track.shaderItem) {
+            track.shaderItem->deleteLater();
+            track.shaderItem = nullptr;
+        }
+    }
+
     void cancelTracking(PhosphorLayer::Surface* surface)
     {
         const auto it = m_tracks.find(surface);
@@ -220,6 +237,7 @@ public:
             it->second.scale->cancel();
             m_pendingDestroy.push_back(std::move(it->second.scale));
         }
+        teardownShaderLeg(it->second);
         m_tracks.erase(it);
     }
 
@@ -278,6 +296,7 @@ public:
     ///                    legs settle.
     void runLeg(PhosphorLayer::Surface* surface, QQuickItem* target, qreal fromOpacity, qreal toOpacity,
                 const QString& opacityProfilePath, qreal fromScale, qreal toScale, const QString& scaleProfilePath,
+                const QString& shaderEffectId, const QString& shaderProfilePath,
                 ISurfaceAnimator::CompletionCallback onComplete)
     {
         // Supersede any in-flight animation on this surface BEFORE the
@@ -320,7 +339,9 @@ public:
         // QTimer drives advance() at 60Hz instead.
         PhosphorAnimation::IMotionClock* clock = &m_clock;
 
-        const int legCount = scaleProfilePath.isEmpty() ? 1 : 2;
+        const bool hasScaleLeg = !scaleProfilePath.isEmpty();
+        const bool hasShaderLeg = !shaderEffectId.isEmpty() && m_shaderRegistry;
+        const int legCount = 1 + (hasScaleLeg ? 1 : 0) + (hasShaderLeg ? 1 : 0);
 
         // Install the bookkeeping slot BEFORE the synchronous pre-state
         // writes below. `target->setOpacity(fromOpacity)` /
@@ -348,7 +369,7 @@ public:
         // doesn't paint a stale opacity for the one frame between
         // beginShow returning and the first AnimatedValue tick.
         target->setOpacity(fromOpacity);
-        if (!scaleProfilePath.isEmpty()) {
+        if (hasScaleLeg) {
             target->setScale(fromScale);
         }
 
@@ -373,8 +394,23 @@ public:
                 return;
             }
             it->second.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
-            if (!scaleProfilePath.isEmpty()) {
+            if (hasScaleLeg) {
                 it->second.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            }
+            if (hasShaderLeg) {
+                const auto eff = m_shaderRegistry->effect(shaderEffectId);
+                if (eff.isValid()) {
+                    auto* shaderItem = new PhosphorRendering::ShaderEffect(target);
+                    shaderItem->setShaderSource(QUrl::fromLocalFile(eff.fragmentShaderPath));
+                    shaderItem->setWidth(target->width());
+                    shaderItem->setHeight(target->height());
+                    shaderItem->setITime(0.0);
+                    shaderItem->setIResolution(QSizeF(target->width(), target->height()));
+                    static constexpr qreal kShaderOverlayZ = 1000;
+                    shaderItem->setZ(kShaderOverlayZ);
+                    it->second.shaderItem = shaderItem;
+                    it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                }
             }
         }
 
@@ -419,7 +455,7 @@ public:
                                           }));
         }
 
-        if (!scaleProfilePath.isEmpty()) {
+        if (hasScaleLeg) {
             auto it = m_tracks.find(surface);
             if (it == m_tracks.end() || !it->second.scale) {
                 // The opacity leg's start() (or one of its synchronous
@@ -442,6 +478,34 @@ public:
                                         [this, surface]() {
                                             legCompleted(surface);
                                         }));
+        }
+
+        if (hasShaderLeg) {
+            auto it = m_tracks.find(surface);
+            if (it == m_tracks.end() || !it->second.shaderTime || !it->second.shaderItem) {
+                return;
+            }
+            it->second.shaderTime->start(
+                0.0, 1.0,
+                buildSpec(
+                    resolveProfile(m_registry, shaderProfilePath.isEmpty() ? opacityProfilePath : shaderProfilePath),
+                    clock,
+                    /*onValueChanged=*/
+                    [this, surface](const qreal& v) {
+                        auto sit = m_tracks.find(surface);
+                        if (sit == m_tracks.end() || !sit->second.shaderItem || !sit->second.target) {
+                            return;
+                        }
+                        sit->second.shaderItem->setITime(v);
+                        sit->second.shaderItem->setWidth(sit->second.target->width());
+                        sit->second.shaderItem->setHeight(sit->second.target->height());
+                        sit->second.shaderItem->setIResolution(
+                            QSizeF(sit->second.target->width(), sit->second.target->height()));
+                    },
+                    /*onComplete=*/
+                    [this, surface]() {
+                        legCompleted(surface);
+                    }));
         }
 
         // Kick the driver so advance() starts firing on the next event-
@@ -496,6 +560,7 @@ public:
         if (it->second.scale) {
             m_pendingDestroy.push_back(std::move(it->second.scale));
         }
+        teardownShaderLeg(it->second);
         m_tracks.erase(it);
         if (onComplete) {
             onComplete();
@@ -540,6 +605,13 @@ public:
             if (it->second.scale) {
                 it->second.scale->advance();
             }
+            it = m_tracks.find(s);
+            if (it == m_tracks.end()) {
+                continue;
+            }
+            if (it->second.shaderTime) {
+                it->second.shaderTime->advance();
+            }
         }
         // Stop the driver if every track completed during this tick.
         if (m_tracks.empty() && m_driverTimer.isActive()) {
@@ -556,6 +628,7 @@ public:
     }
 
     PhosphorAnimation::PhosphorProfileRegistry& m_registry;
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     Config m_defaultConfig;
     /// Keyed on `Role::scopePrefix` because two `Role` instances with
     /// the same prefix are semantically the same role.
@@ -604,7 +677,13 @@ public:
 // ══════════════════════════════════════════════════════════════════════════
 
 SurfaceAnimator::SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry, Config defaults)
-    : d(std::make_unique<Private>(registry, std::move(defaults)))
+    : SurfaceAnimator(registry, nullptr, std::move(defaults))
+{
+}
+
+SurfaceAnimator::SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                                 PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry, Config defaults)
+    : d(std::make_unique<Private>(registry, shaderRegistry, std::move(defaults)))
 {
 }
 
@@ -651,6 +730,7 @@ SurfaceAnimator::~SurfaceAnimator()
             track.scale->cancel();
             d->m_pendingDestroy.push_back(std::move(track.scale));
         }
+        d->teardownShaderLeg(track);
     }
 
     // Drain the graveyard explicitly. This is defence-in-depth on top of
@@ -681,6 +761,11 @@ void SurfaceAnimator::setDefaultConfig(Config cfg)
 SurfaceAnimator::Config SurfaceAnimator::defaultConfig() const
 {
     return d->m_defaultConfig;
+}
+
+void SurfaceAnimator::setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry)
+{
+    d->m_shaderRegistry = registry;
 }
 
 void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete)
@@ -722,7 +807,7 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
     }
 
     d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
-              cfg.showScaleProfile, std::move(onComplete));
+              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, std::move(onComplete));
 }
 
 void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete)
@@ -742,7 +827,7 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
     const qreal fromScale = (cfg.hideScaleProfile.isEmpty() || !rootItem) ? 1.0 : rootItem->scale();
     const qreal toScale = cfg.hideScaleProfile.isEmpty() ? 1.0 : cfg.hideScaleTo;
     d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/0.0, cfg.hideProfile, fromScale, toScale,
-              cfg.hideScaleProfile, std::move(onComplete));
+              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, std::move(onComplete));
 }
 
 void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)

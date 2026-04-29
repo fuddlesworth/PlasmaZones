@@ -10,9 +10,14 @@
 #include <trigger_parser.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <effect/offscreeneffect.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
 #include <QJsonArray>
@@ -26,6 +31,7 @@
 #include <QRect>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <unordered_map>
 
@@ -79,7 +85,7 @@ class DragTracker;
  * - Keyboard modifier state via QGuiApplication
  * - Window move/resize state via isUserMove()
  */
-class PlasmaZonesEffect : public KWin::Effect
+class PlasmaZonesEffect : public KWin::OffscreenEffect
 {
     Q_OBJECT
 
@@ -481,6 +487,32 @@ private:
     /// time) outlives the animator on shutdown.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
+
+    // Phase 6: per-window shader transitions via OffscreenEffect.
+    // The registry is populated from the same search paths as the daemon's
+    // via loadShaderRegistryFromDbus(). Until then, effect lookups return
+    // invalid and shader transitions gracefully no-op.
+    PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
+    PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    struct CachedShader
+    {
+        std::unique_ptr<KWin::GLShader> shader;
+        int iTimeLoc = -1;
+        int iResolutionLoc = -1;
+    };
+    struct ShaderTransition
+    {
+        const CachedShader* cached = nullptr;
+    };
+    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    // Invariant: all ShaderTransition.cached pointers must be ended
+    // (via endShaderTransition) before any cache erasure.
+    std::map<QString, CachedShader> m_shaderCache;
+    void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
+    void endShaderTransition(KWin::EffectWindow* window);
+    void loadShaderProfileFromDbus();
+    void loadShaderRegistryFromDbus();
+
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
 
