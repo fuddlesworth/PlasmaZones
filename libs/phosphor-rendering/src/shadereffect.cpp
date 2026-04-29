@@ -6,7 +6,7 @@
 
 #include "internal.h"
 
-#include <PhosphorShell/IUniformExtension.h>
+#include <PhosphorShaders/IUniformExtension.h>
 
 #include <QFile>
 #include <QFileInfo>
@@ -109,13 +109,13 @@ ShaderEffect::~ShaderEffect()
 // Uniform Extension
 // ============================================================================
 
-void ShaderEffect::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension)
+void ShaderEffect::setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension)
 {
     m_uniformExtension = std::move(extension);
     update();
 }
 
-std::shared_ptr<PhosphorShell::IUniformExtension> ShaderEffect::uniformExtension() const
+std::shared_ptr<PhosphorShaders::IUniformExtension> ShaderEffect::uniformExtension() const
 {
     return m_uniformExtension;
 }

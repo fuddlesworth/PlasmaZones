@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <phosphorshell_export.h>
+#include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
@@ -21,7 +21,7 @@
 #include <array>
 #include <memory>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
 class IWallpaperProvider;
 
@@ -46,7 +46,7 @@ class IWallpaperProvider;
 /// shader-warming path's contract). Calling `searchPaths()` *from* a
 /// worker thread concurrently with a GUI-thread mutation is a data race;
 /// snapshot on the GUI thread first.
-class PHOSPHORSHELL_EXPORT ShaderRegistry : public QObject
+class PHOSPHORSHADERS_EXPORT ShaderPackRegistry : public QObject
 {
     Q_OBJECT
 
@@ -100,8 +100,8 @@ public:
         }
     };
 
-    explicit ShaderRegistry(QObject* parent = nullptr);
-    ~ShaderRegistry() override;
+    explicit ShaderPackRegistry(QObject* parent = nullptr);
+    ~ShaderPackRegistry() override;
 
     // ── Search paths ──────────────────────────────────────────────────
 
@@ -281,4 +281,4 @@ private:
     static int s_cachedWallpaperCropNextSlot;
 };
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

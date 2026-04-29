@@ -3,19 +3,19 @@
 
 #pragma once
 
-#include <phosphorshell_export.h>
+#include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <QString>
 #include <QStringList>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
 /// Resolves #include directives in GLSL shader source.
 ///
 /// Supports:
 /// - #include "path" — search relative to current file's directory, then include paths
 /// - #include <path> — search only in include paths (e.g. global shaders dir)
-class PHOSPHORSHELL_EXPORT ShaderIncludeResolver
+class PHOSPHORSHADERS_EXPORT ShaderIncludeResolver
 {
 public:
     static constexpr int MaxIncludeDepth = 10;
@@ -30,4 +30,4 @@ public:
                                   QString* outError = nullptr);
 };
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

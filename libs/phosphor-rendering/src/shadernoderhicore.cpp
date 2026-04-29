@@ -169,7 +169,7 @@ void ShaderNodeRhi::prepare()
         return;
     }
 
-    const int uboSize = static_cast<int>(sizeof(PhosphorShell::BaseUniforms))
+    const int uboSize = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms))
         + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
 
     if (!m_initialized) {

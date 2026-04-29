@@ -5,7 +5,7 @@
 
 #include <cstddef>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
 /// Time wrap period for float32 precision preservation.
 /// See docs/phosphorshell-api-design.md for details.
@@ -115,4 +115,4 @@ constexpr size_t K_BASE_SIZE = sizeof(BaseUniforms);
 
 } // namespace UboRegions
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

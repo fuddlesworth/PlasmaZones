@@ -5,8 +5,8 @@
 
 #include <PhosphorRendering/phosphorrendering_export.h>
 
-#include <PhosphorShell/BaseUniforms.h>
-#include <PhosphorShell/IUniformExtension.h>
+#include <PhosphorShaders/BaseUniforms.h>
+#include <PhosphorShaders/IUniformExtension.h>
 
 #include <QColor>
 #include <QImage>
@@ -120,9 +120,9 @@ public:
     void releaseResources() override;
 
     // ── Uniform Extension ──────────────────────────────────────────────
-    void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension);
+    void setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension);
     /** Access the currently-installed uniform extension (may be nullptr). */
-    std::shared_ptr<PhosphorShell::IUniformExtension> uniformExtension() const
+    std::shared_ptr<PhosphorShaders::IUniformExtension> uniformExtension() const
     {
         return m_uniformExtension;
     }
@@ -142,7 +142,7 @@ public:
     /**
      * @brief Write the consumer's two int slots inside BaseUniforms (offsets 88, 92).
      *
-     * See PhosphorShell::BaseUniforms for the full escape-hatch rationale.
+     * See PhosphorShaders::BaseUniforms for the full escape-hatch rationale.
      * Updating these fields is cheap: the library uploads only the 8-byte
      * K_APP_FIELDS region rather than the full scene header.
      */
@@ -248,7 +248,7 @@ private:
     std::atomic<bool> m_itemValid{true};
 
     // ── Uniform Extension ──────────────────────────────────────────────
-    std::shared_ptr<PhosphorShell::IUniformExtension> m_uniformExtension;
+    std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;
     /// Reused staging buffer for extension uploads — resized only when the
     /// extension's reported size changes (avoids a render-thread QByteArray
     /// allocation every frame that the extension is dirty).
@@ -340,7 +340,7 @@ private:
     qint64 m_lastDateRefreshMs = 0;
 
     // ── Base Uniforms ──────────────────────────────────────────────────
-    PhosphorShell::BaseUniforms m_baseUniforms = {};
+    PhosphorShaders::BaseUniforms m_baseUniforms = {};
 
     // Full-precision elapsed seconds (double). Split into iTime (wrapped lo) +
     // iTimeHi (wrap offset) at upload.

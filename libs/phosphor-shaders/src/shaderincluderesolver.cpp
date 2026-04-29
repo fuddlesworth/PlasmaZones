@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorShell/ShaderIncludeResolver.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 
 #include <QDir>
 #include <QFile>
@@ -10,7 +10,7 @@
 #include <QSet>
 #include <QTextStream>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
 namespace {
 
@@ -119,4 +119,4 @@ QString ShaderIncludeResolver::expandIncludes(const QString& source, const QStri
     return expandIncludesRecursive(source, currentFileDir, includePaths, 0, seenCanonical, outError);
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

@@ -14,7 +14,7 @@ namespace PhosphorRendering {
 // Uniform Extension
 // ============================================================================
 
-void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension)
+void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension)
 {
     // Early-return only if the pointer AND the reported extension size match.
     // Comparing purely by pointer (as an earlier revision did) would skip the
@@ -49,7 +49,7 @@ void ShaderNodeRhi::setTime(double time)
     m_uniformsDirty = true;
     m_timeDirty = true;
     const float newTimeHi =
-        static_cast<float>(std::floor(time / PhosphorShell::kShaderTimeWrap) * PhosphorShell::kShaderTimeWrap);
+        static_cast<float>(std::floor(time / PhosphorShaders::kShaderTimeWrap) * PhosphorShaders::kShaderTimeWrap);
     if (newTimeHi != m_timeHi) {
         m_timeHi = newTimeHi;
         m_timeHiDirty = true;

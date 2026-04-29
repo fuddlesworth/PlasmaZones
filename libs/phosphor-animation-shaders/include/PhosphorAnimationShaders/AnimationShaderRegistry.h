@@ -39,7 +39,7 @@ namespace PhosphorAnimationShaders {
  * ```
  *
  * The subdirectory name is decorative — the `id` field in metadata.json
- * is the registry key. This matches `PhosphorShell::ShaderRegistry`'s
+ * is the registry key. This matches `PhosphorShaders::ShaderPackRegistry`'s
  * convention for zone shaders.
  *
  * ## Search path ordering
@@ -48,7 +48,7 @@ namespace PhosphorAnimationShaders {
  * order; the strategy reverse-iterates to apply first-registration-wins,
  * yielding the canonical XDG semantic
  * `user > sys-highest > sys-mid > sys-lowest` on id collision. Same
- * convention as `PhosphorShell::ShaderRegistry` and the in-tree
+ * convention as `PhosphorShaders::ShaderPackRegistry` and the in-tree
  * `JsonScanStrategy` / `JsScanStrategy`.
  *
  * ## Live reload

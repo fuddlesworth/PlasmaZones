@@ -35,7 +35,7 @@ constexpr int kMaxEffects = 10'000;
 /// `metadata.json`, and reports the per-effect file paths the base must
 /// re-arm individual watches on after each rescan.
 ///
-/// Mirrors `PhosphorShell::ShaderRegistry::ShaderScanStrategy` — same
+/// Mirrors `PhosphorShaders::ShaderPackRegistry::ShaderScanStrategy` — same
 /// reverse-iterate / first-wins shape, same metadata.json convention. The
 /// difference is the parse target (`AnimationShaderEffect` vs the zone-
 /// shader `ShaderInfo`).
@@ -89,7 +89,7 @@ void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorF
     // helper — keeps the log line below from spamming "Added search path:
     // /foo/bar/" when /foo/bar is already registered (the base's
     // `registerDirectories` is silent on dedup, so the filter has to
-    // run upstream). Sister `PhosphorShell::ShaderRegistry` uses the
+    // run upstream). Sister `PhosphorShaders::ShaderPackRegistry` uses the
     // same helper for the same reason.
     const QStringList toRegister =
         PhosphorFsLoader::WatchedDirectorySet::filterNewSearchPaths(paths, m_watcher->directories());
@@ -143,7 +143,7 @@ QList<AnimationShaderEffect> AnimationShaderRegistry::availableEffects() const
     // intentionally randomised in Qt6 — without the sort, downstream
     // consumers (settings dropdowns, QML pickers, snapshot tests) see a
     // different effect order on every process launch. Mirrors the sort
-    // in `PhosphorShell::ShaderRegistry::availableShaders` for consistency
+    // in `PhosphorShaders::ShaderPackRegistry::availableShaders` for consistency
     // across both metadata.json-backed registries.
     QList<AnimationShaderEffect> sorted = m_effects.values();
     std::sort(sorted.begin(), sorted.end(), [](const AnimationShaderEffect& a, const AnimationShaderEffect& b) {
@@ -200,7 +200,7 @@ QStringList AnimationShaderRegistry::performScan(const QStringList& directoriesI
 
     // Reverse-iterate with first-registration-wins, matching the
     // IScanStrategy convention used by `JsonScanStrategy`,
-    // `JsScanStrategy`, and `PhosphorShell::ShaderRegistry`. Caller
+    // `JsScanStrategy`, and `PhosphorShaders::ShaderPackRegistry`. Caller
     // registers dirs in `[system-lowest, ..., system-highest, user]`
     // order; reversing here lets the user dir claim its effect IDs
     // before the system dirs are touched, which yields the canonical

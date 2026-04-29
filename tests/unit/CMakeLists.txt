@@ -342,7 +342,7 @@ add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.
 add_executable(test_wallpaper_crop ui/test_wallpaper_crop.cpp)
-target_link_libraries(test_wallpaper_crop PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShell::PhosphorShell)
+target_link_libraries(test_wallpaper_crop PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
 add_test(NAME test_wallpaper_crop COMMAND test_wallpaper_crop)
 
 # ═══════════════════════════════════════════════════════════════════════════════

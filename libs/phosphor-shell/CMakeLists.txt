@@ -1,10 +1,18 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShell — Wayland layer-shell surfaces with GPU-accelerated shader effects
+# PhosphorShell — Wayland layer-shell integration (wlr-layer-shell-v1)
 #
-# A Qt6/C++20 library for creating zwlr_layer_shell_v1 surfaces with optional
-# Shadertoy-compatible fragment shader rendering via Qt RHI.
+# A Qt6/C++20 library that wraps zwlr_layer_shell_v1 behind a Qt-friendly
+# QPA shell-integration plugin (`phosphorshell-qpa`) plus a thin
+# `LayerSurface` helper for setting layer-surface properties on a
+# QWindow. The shader pipeline (BaseUniforms, IUniformExtension,
+# ShaderIncludeResolver, IWallpaperProvider, ShaderPackRegistry) lives
+# in the sibling `phosphor-shaders` library — this lib is now purely
+# the Wayland integration. Phase D of the architecture refactor
+# (docs/phosphor-architecture-refactor-plan.md) renames this lib to
+# `phosphor-wayland` once the only remaining consumer is the QPA
+# plugin + LayerSurface.
 #
 # Can be built standalone or as a subdirectory of PlasmaZones.
 
@@ -32,21 +40,10 @@ include(GenerateExportHeader)
 # These are likely already found by the parent project when built in-tree.
 find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 
-# phosphor-fsloader — shared filesystem-loader scaffolding (used by
-# ShaderRegistry's WatchedDirectorySet + ShaderScanStrategy). find_package
-# is a no-op when building in-tree (parent CMakeLists adds the target
-# first); the explicit lookup lets the lib stand alone against an
-# installed PhosphorFsLoader.
-if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
-    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
-endif()
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()
-if(NOT TARGET Qt6::ShaderToolsPrivate)
-    find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
-endif()
-find_package(Qt6 REQUIRED COMPONENTS WaylandClient ShaderTools)
+find_package(Qt6 REQUIRED COMPONENTS WaylandClient)
 if(NOT TARGET Qt6::WaylandClientPrivate)
     find_package(Qt6WaylandClientPrivate REQUIRED)
 endif()
@@ -90,8 +87,6 @@ set_source_files_properties(
 # --- Public headers with Q_OBJECT (must be listed for AUTOMOC) ---
 set(phosphorshell_public_HDRS
     include/PhosphorShell/LayerSurface.h
-    include/PhosphorShell/ShaderRegistry.h
-    # ShaderEffect.h added when RHI render node is extracted
 )
 
 # --- Layer-shell sources ---
@@ -105,20 +100,9 @@ set(phosphorshell_layershell_SRCS
     ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
 )
 
-# --- Shader pipeline sources ---
-set(phosphorshell_shader_SRCS
-    src/shaderregistry.cpp
-    src/shaderincluderesolver.cpp
-    src/wallpaperprovider.cpp
-    # ShaderEffect + RenderNode RHI deferred until zone UBO generalization
-    # src/shadereffect.cpp
-    # src/rendernode_rhi.cpp
-)
-
 add_library(PhosphorShell SHARED
     ${phosphorshell_public_HDRS}
     ${phosphorshell_layershell_SRCS}
-    ${phosphorshell_shader_SRCS}
 )
 
 add_library(PhosphorShell::PhosphorShell ALIAS PhosphorShell)
@@ -161,15 +145,9 @@ target_link_libraries(PhosphorShell
     PUBLIC
         Qt6::Core
         Qt6::Gui
-        # PhosphorFsLoader is publicly exposed via ShaderRegistry's
-        # `LiveReload` parameter — consumers including
-        # `<PhosphorShell/ShaderRegistry.h>` need its headers on their
-        # include path.
-        PhosphorFsLoader::PhosphorFsLoader
     PRIVATE
         Qt6::GuiPrivate
         Qt6::WaylandClientPrivate
-        Qt6::ShaderToolsPrivate
         Wayland::Client
 )
 
@@ -281,12 +259,6 @@ if(NOT DEFINED QT6_INSTALL_PLUGINS)
 endif()
 install(TARGETS phosphorshell-qpa
     DESTINATION ${QT6_INSTALL_PLUGINS}/wayland-shell-integration
-)
-
-# GLSL include library
-install(DIRECTORY shaders/
-    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorshell/shaders
-    FILES_MATCHING PATTERN "*.glsl"
 )
 
 # Protocol XML (for downstream development)

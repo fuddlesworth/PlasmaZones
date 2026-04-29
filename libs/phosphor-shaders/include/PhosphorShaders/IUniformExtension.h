@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <phosphorshell_export.h>
+#include <PhosphorShaders/phosphorshaders_export.h>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
 /// Interface for appending custom uniform data after the base UBO layout.
 ///
@@ -14,7 +14,7 @@ namespace PhosphorShell {
 /// to fill the extension region.
 ///
 /// All methods may be called on the render thread.
-class PHOSPHORSHELL_EXPORT IUniformExtension
+class PHOSPHORSHADERS_EXPORT IUniformExtension
 {
 public:
     virtual ~IUniformExtension() = default;
@@ -40,4 +40,4 @@ public:
     virtual void clearDirty() = 0;
 };
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

@@ -5,8 +5,8 @@
 
 #include <cstddef>
 
-#include <PhosphorShell/BaseUniforms.h>
-#include <PhosphorShell/IUniformExtension.h>
+#include <PhosphorShaders/BaseUniforms.h>
+#include <PhosphorShaders/IUniformExtension.h>
 
 #include <QColor>
 #include <QRectF>
@@ -24,12 +24,12 @@ namespace PlasmaZones {
 constexpr int MaxZones = 64;
 
 // Re-export for code that uses PlasmaZones::kShaderTimeWrap
-using PhosphorShell::kShaderTimeWrap;
+using PhosphorShaders::kShaderTimeWrap;
 
 /**
  * @brief GPU uniform buffer layout — BaseUniforms + zone extension.
  *
- * The first 672 bytes are PhosphorShell::BaseUniforms (Shadertoy-compatible).
+ * The first 672 bytes are PhosphorShaders::BaseUniforms (Shadertoy-compatible).
  * The remaining bytes are the zone extension arrays.
  *
  * This matches the GLSL UBO declaration in common.glsl exactly:
@@ -37,8 +37,8 @@ using PhosphorShell::kShaderTimeWrap;
  */
 struct alignas(16) ZoneShaderUniforms
 {
-    // ── Base region (PhosphorShell::BaseUniforms, 672 bytes) ─────────
-    PhosphorShell::BaseUniforms base;
+    // ── Base region (PhosphorShaders::BaseUniforms, 672 bytes) ─────────
+    PhosphorShaders::BaseUniforms base;
 
     // ── PhosphorZones::Zone extension region (PlasmaZones-specific) ─────────────────
     float zoneRects[MaxZones][4];
@@ -49,23 +49,23 @@ struct alignas(16) ZoneShaderUniforms
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
 static_assert(offsetof(ZoneShaderUniforms, base) == 0, "base must be at offset 0");
-static_assert(offsetof(ZoneShaderUniforms, zoneRects) == sizeof(PhosphorShell::BaseUniforms),
+static_assert(offsetof(ZoneShaderUniforms, zoneRects) == sizeof(PhosphorShaders::BaseUniforms),
               "zoneRects must follow BaseUniforms with no gap");
 
 /**
  * @brief UBO region offsets for partial updates (reduces GPU bandwidth)
  *
- * Extends PhosphorShell::UboRegions with zone-specific regions.
+ * Extends PhosphorShaders::UboRegions with zone-specific regions.
  */
 namespace ZoneShaderUboRegions {
 
 // Re-export base regions
-using namespace PhosphorShell::UboRegions;
+using namespace PhosphorShaders::UboRegions;
 
 // Scene header: iResolution through end of BaseUniforms (before zone arrays)
 // Used when scene data changes but zone data hasn't.
 constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
-constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShell::BaseUniforms) - K_SCENE_HEADER_OFFSET;
+constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShaders::BaseUniforms) - K_SCENE_HEADER_OFFSET;
 
 // Scene data: iResolution through end of zone arrays (everything except
 // matrix/opacity at the front). Includes iTimeHi (unavoidable in a contiguous
@@ -75,8 +75,8 @@ constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, base.iResolu
 constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
 
 // PhosphorZones::Zone extension region
-constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShell::BaseUniforms);
-constexpr size_t K_ZONE_EXTENSION_SIZE = sizeof(ZoneShaderUniforms) - sizeof(PhosphorShell::BaseUniforms);
+constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShaders::BaseUniforms);
+constexpr size_t K_ZONE_EXTENSION_SIZE = sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms);
 
 } // namespace ZoneShaderUboRegions
 

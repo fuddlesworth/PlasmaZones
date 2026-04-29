@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorShell/IWallpaperProvider.h>
+#include <PhosphorShaders/IWallpaperProvider.h>
 
 #include <QDir>
 #include <QFile>
@@ -13,9 +13,9 @@
 #include <QTextStream>
 #include <QUrl>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
-Q_LOGGING_CATEGORY(lcWallpaper, "phosphorshell.wallpaper")
+Q_LOGGING_CATEGORY(lcWallpaper, "phosphorshaders.wallpaper")
 
 namespace {
 
@@ -288,4 +288,4 @@ std::unique_ptr<IWallpaperProvider> createWallpaperProvider()
     return std::make_unique<NullWallpaperProvider>();
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

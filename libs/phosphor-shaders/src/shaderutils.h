@@ -5,7 +5,7 @@
 #include <QLatin1String>
 #include <QString>
 
-namespace PhosphorShell {
+namespace PhosphorShaders {
 
 inline QString normalizeWrapMode(const QString& wrap)
 {
@@ -21,4 +21,4 @@ inline QString normalizeFilterMode(const QString& filter)
     return QStringLiteral("linear");
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorShaders

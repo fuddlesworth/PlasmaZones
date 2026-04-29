@@ -303,7 +303,7 @@ private Q_SLOTS:
     /// id. QHash iteration order is intentionally randomised in Qt6, so
     /// without an explicit sort downstream consumers (settings UI, QML
     /// pickers, snapshot tests) would see different ordering on every
-    /// process launch. The sister `PhosphorShell::ShaderRegistry`
+    /// process launch. The sister `PhosphorShaders::ShaderPackRegistry`
     /// applies the same sort for the same reason.
     void testAvailableEffects_isSortedById()
     {
