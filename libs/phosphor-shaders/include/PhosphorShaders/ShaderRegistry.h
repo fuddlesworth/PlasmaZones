@@ -5,6 +5,7 @@
 
 #include <PhosphorShaders/phosphorshaders_export.h>
 
+#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QHash>
@@ -240,29 +241,17 @@ Q_SIGNALS:
     void shaderCompilationFinished(const QString& shaderId, bool success, const QString& error);
 
 private:
-    class ShaderScanStrategy;
-    QStringList performScan(const QStringList& directoriesInScanOrder);
-
-    void loadShaderFromDir(const QString& shaderDir, bool isUserShader);
-    ShaderInfo loadShaderMetadata(const QString& shaderDir);
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
-    QHash<QString, ShaderInfo> m_shaders;
+    using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<ShaderInfo>;
+
     /// User-shader search path used to classify discovered shaders as
-    /// user vs system. Compared against each iterated search dir's
-    /// canonical form on every rescan — see `setUserShaderPath`.
+    /// user vs system. Mirrored into the strategy via setUserPath() on
+    /// every change.
     QString m_userShaderPath;
-    /// SHA-1 over the discovered-shader set's identification + on-disk
-    /// fingerprint (id, paths, isUserShader, frag mtime+size). Used by
-    /// `performScan` to gate `shadersChanged` to actual content changes
-    /// — the same change-only-emit pattern the sister `JsScanStrategy`
-    /// and `AnimationShaderRegistry` consumers use, and a deliberate
-    /// improvement on the legacy "fire on every watcher event" shape
-    /// that fanned settings-page redraws across every editor save.
-    QByteArray m_lastShadersSignature;
-    std::unique_ptr<ShaderScanStrategy> m_strategy;
+    std::unique_ptr<ScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;

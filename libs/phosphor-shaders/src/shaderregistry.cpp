@@ -5,8 +5,7 @@
 #include <PhosphorShaders/IWallpaperProvider.h>
 #include "shaderutils.h"
 
-#include <PhosphorFsLoader/DirectoryLoader.h>
-#include <PhosphorFsLoader/IScanStrategy.h>
+#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QColor>
@@ -28,17 +27,6 @@
 namespace PhosphorShaders {
 
 Q_LOGGING_CATEGORY(lcShaderRegistry, "phosphorshaders.shaderregistry")
-
-namespace {
-/// Hard cap on shaders discovered per rescan, summed across every
-/// registered search path. A pathological user dir with thousands of
-/// `metadata.json`-bearing subdirs would otherwise burn the GUI thread
-/// on every watcher fire. Mirrors `DirectoryLoader::kMaxEntries` and
-/// the sister `AnimationShaderRegistry`'s cap — same defensive
-/// rationale, identical magnitude. Typical shader counts are single
-/// digits so this is purely a DoS guard.
-constexpr int kMaxShaders = 10'000;
-} // namespace
 
 // Namespace UUID for generating deterministic shader IDs (UUID v5)
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
@@ -97,47 +85,254 @@ static QString shaderNameToUuid(const QString& name)
 // Construction / Destruction
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Scan strategy backing the shader registry's `WatchedDirectorySet`.
-/// Walks subdirectories of every registered search path, parses
-/// `metadata.json` per shader, and reports the file/subdir paths that
-/// the base must re-arm individual watches on after each rescan.
-///
-/// The base's `WatchedDirectorySet::directories()` is the single source
-/// of truth for the registered search paths — `searchPaths()` forwards
-/// to it directly so callers always see the canonicalised, deduplicated
-/// list (no second member to keep in lockstep).
-class ShaderRegistry::ShaderScanStrategy : public PhosphorFsLoader::IScanStrategy
+namespace {
+
+/// Parse a metadata.json root into a ShaderInfo. The caller (the
+/// strategy) has already validated the file exists, fits under
+/// kMaxFileBytes, parses as JSON, and has an object root. We own only
+/// the schema-specific bits.
+ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const QJsonObject& root)
 {
-public:
-    explicit ShaderScanStrategy(ShaderRegistry& reg)
-        : m_reg(&reg)
-    {
+    ShaderRegistry::ShaderInfo info;
+    QDir dir(shaderDir);
+
+    // Default name from directory name; the metadata `id` field overrides
+    // the UUID source if present, the `name` field overrides display
+    // only.
+    const QString shaderName = dir.dirName();
+    const QString metadataId = root.value(QLatin1String("id")).toString(shaderName);
+    info.id = QUuid::createUuidV5(ShaderNamespaceUuid, metadataId).toString();
+    info.name = root.value(QLatin1String("name")).toString(shaderName);
+    info.description = root.value(QLatin1String("description")).toString();
+    info.author = root.value(QLatin1String("author")).toString();
+    info.version = root.value(QLatin1String("version")).toString(QStringLiteral("1.0"));
+    info.category = root.value(QLatin1String("category")).toString();
+
+    // Fragment / vertex shader paths (default: effect.frag, zone.vert)
+    const QString fragShaderName = root.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag"));
+    const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString(QStringLiteral("zone.vert"));
+    info.sourcePath = dir.filePath(fragShaderName);
+    info.vertexShaderPath = dir.filePath(vertShaderName);
+
+    // Multi-pass: one or more buffer pass shaders (A->B->C->D).
+    info.isMultipass = root.value(QLatin1String("multipass")).toBool(false);
+    const QJsonArray bufferShadersArray = root.value(QLatin1String("bufferShaders")).toArray();
+    if (!bufferShadersArray.isEmpty()) {
+        for (int i = 0; i < qMin(bufferShadersArray.size(), 4); ++i) {
+            const QString name = bufferShadersArray.at(i).toString();
+            if (!name.isEmpty()) {
+                info.bufferShaderPaths.append(dir.filePath(name));
+            }
+        }
+    }
+    if (info.bufferShaderPaths.isEmpty()) {
+        const QString bufferShaderName =
+            root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
+        info.bufferShaderPaths.append(dir.filePath(bufferShaderName));
+    }
+    if (info.isMultipass) {
+        bool allExist = true;
+        for (const QString& path : info.bufferShaderPaths) {
+            if (!QFile::exists(path)) {
+                qCWarning(lcShaderRegistry) << "Multipass shader missing buffer shader:" << path;
+                allExist = false;
+                break;
+            }
+        }
+        if (!allExist) {
+            info.bufferShaderPaths.clear();
+        }
     }
 
-    QStringList performScan(const QStringList& directoriesInScanOrder) override
-    {
-        return m_reg->performScan(directoriesInScanOrder);
+    info.useWallpaper = root.value(QLatin1String("wallpaper")).toBool(false);
+    info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
+    const qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
+    info.bufferScale = qBound(0.125, scale, 1.0);
+    info.bufferWrap = normalizeWrapMode(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
+    info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
+
+    const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
+    if (!bufferWrapsArray.isEmpty()) {
+        for (const QJsonValue& v : bufferWrapsArray) {
+            info.bufferWraps.append(normalizeWrapMode(v.toString()));
+        }
+        const int needed = info.bufferShaderPaths.size();
+        while (info.bufferWraps.size() < needed) {
+            info.bufferWraps.append(info.bufferWrap);
+        }
+        while (info.bufferWraps.size() > needed) {
+            info.bufferWraps.removeLast();
+        }
     }
 
-private:
-    ShaderRegistry* m_reg;
-};
+    info.bufferFilter =
+        normalizeFilterMode(root.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear")));
+
+    const QJsonArray bufferFiltersArray = root.value(QLatin1String("bufferFilters")).toArray();
+    if (!bufferFiltersArray.isEmpty()) {
+        for (const QJsonValue& v : bufferFiltersArray) {
+            info.bufferFilters.append(normalizeFilterMode(v.toString()));
+        }
+        const int needed = info.bufferShaderPaths.size();
+        while (info.bufferFilters.size() < needed) {
+            info.bufferFilters.append(info.bufferFilter);
+        }
+        while (info.bufferFilters.size() > needed) {
+            info.bufferFilters.removeLast();
+        }
+    }
+
+    // Parameters
+    const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
+    for (const QJsonValue& paramValue : paramsArray) {
+        QJsonObject paramObj = paramValue.toObject();
+        ShaderRegistry::ParameterInfo param;
+        param.id = paramObj.value(QLatin1String("id")).toString();
+        param.name = paramObj.value(QLatin1String("name")).toString(param.id);
+        param.group = paramObj.value(QLatin1String("group")).toString();
+        param.type = paramObj.value(QLatin1String("type")).toString(QStringLiteral("float"));
+        param.slot = paramObj.value(QLatin1String("slot")).toInt(-1);
+        param.defaultValue = paramObj.value(QLatin1String("default")).toVariant();
+        param.minValue = paramObj.value(QLatin1String("min")).toVariant();
+        param.maxValue = paramObj.value(QLatin1String("max")).toVariant();
+        param.useZoneColor = paramObj.value(QLatin1String("use_zone_color")).toBool(false);
+        param.wrap = paramObj.value(QLatin1String("wrap")).toString();
+
+        if (!param.id.isEmpty()) {
+            info.parameters.append(param);
+        }
+    }
+
+    // Presets
+    const QJsonObject presetsObj = root.value(QLatin1String("presets")).toObject();
+    for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
+        const QJsonObject values = it.value().toObject();
+        QVariantMap presetValues;
+        for (auto vit = values.begin(); vit != values.end(); ++vit) {
+            presetValues[vit.key()] = vit.value().toVariant();
+        }
+        if (!presetValues.isEmpty()) {
+            info.presets[it.key()] = presetValues;
+        }
+    }
+
+    return info;
+}
+
+/// Strategy parser callback: parse + validate. Returns std::nullopt to
+/// skip the shader (missing frag, broken multipass, etc.); the strategy
+/// logs the per-file context.
+std::optional<ShaderRegistry::ShaderInfo> parseShader(const QString& shaderDir, const QJsonObject& root, bool isUserDir)
+{
+    ShaderRegistry::ShaderInfo info = parseShaderMetadata(shaderDir, root);
+    info.isUserShader = isUserDir;
+
+    // Multipass requires at least one buffer shader; missing → skip.
+    if (info.isMultipass && info.bufferShaderPaths.isEmpty()) {
+        qCWarning(lcShaderRegistry) << "Skipping multipass shader (missing buffer shader(s)):" << shaderDir;
+        return std::nullopt;
+    }
+
+    // Fragment shader must exist on disk.
+    if (!QFile::exists(info.sourcePath)) {
+        qCWarning(lcShaderRegistry) << "Shader missing fragment shader:" << info.sourcePath;
+        return std::nullopt;
+    }
+
+    // Construct the URL pointing at the fragment shader.
+    info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
+
+    // Optional preview image.
+    QDir dir(shaderDir);
+    const QString previewPath = dir.filePath(QStringLiteral("preview.png"));
+    if (QFile::exists(previewPath)) {
+        info.previewPath = previewPath;
+    }
+
+    return info;
+}
+
+/// Per-payload watch list — the shader subdir's `*.frag/*.vert/*.glsl/*.json`
+/// files. The strategy already adds the metadata.json itself; this adds
+/// every candidate edit target inside the shader pack so atomic-rename
+/// saves on any of them re-fire the rescan.
+QStringList shaderEntryWatchPaths(const ShaderRegistry::ShaderInfo& info)
+{
+    QStringList paths;
+    if (info.sourcePath.isEmpty()) {
+        return paths;
+    }
+    QDir dir(QFileInfo(info.sourcePath).absolutePath());
+    const QStringList shaderFiles = dir.entryList(
+        {QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"), QStringLiteral("*.json")},
+        QDir::Files);
+    paths.reserve(shaderFiles.size());
+    for (const QString& f : shaderFiles) {
+        paths.append(dir.filePath(f));
+    }
+    return paths;
+}
+
+/// Per-search-path watch additions: top-level shared GLSL/JSON includes
+/// (e.g. `common.glsl`, `audio.glsl`, `wallpaper.glsl`). These live
+/// alongside shader subdirs and any of them changing should re-fire the
+/// rescan.
+QStringList shaderTopLevelWatchPaths(const QString& searchPath)
+{
+    QStringList paths;
+    QDir dir(searchPath);
+    if (!dir.exists()) {
+        return paths;
+    }
+    const QStringList topFiles = dir.entryList({QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
+    paths.reserve(topFiles.size());
+    for (const QString& f : topFiles) {
+        paths.append(dir.filePath(f));
+    }
+    return paths;
+}
+
+/// Skip the reserved sentinel subdirectory `none` (means "no shader" in
+/// the consumer's UI).
+bool shaderSubdirSkip(const QString& subdirName)
+{
+    return subdirName == QLatin1String("none");
+}
+
+/// Hash schema-specific bits change-detection cares about. The strategy
+/// already mixes in `id`; this contributor adds path tuples, isUser,
+/// and frag mtime+size so an in-place edit on the fragment shader
+/// surfaces as a content change even when no metadata bytes moved.
+void contributeShaderSignature(QCryptographicHash& h, const ShaderRegistry::ShaderInfo& s)
+{
+    h.addData(s.sourcePath.toUtf8());
+    h.addData(QByteArrayView("|"));
+    h.addData(s.vertexShaderPath.toUtf8());
+    h.addData(QByteArrayView("|"));
+    h.addData(s.isUserShader ? "u" : "s");
+    h.addData(QByteArrayView("|"));
+    const QFileInfo fragInfo(s.sourcePath);
+    h.addData(QByteArray::number(fragInfo.size()));
+    h.addData(QByteArrayView("|"));
+    h.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
+}
+
+} // namespace
 
 ShaderRegistry::ShaderRegistry(QObject* parent)
     : QObject(parent)
+    , m_strategy(std::make_unique<ScanStrategy>(parseShader,
+                                                [this]() {
+                                                    Q_EMIT shadersChanged();
+                                                }))
+    , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
 {
     qCInfo(lcShaderRegistry) << "Shader effects enabled";
-
-    m_strategy = std::make_unique<ShaderScanStrategy>(*this);
-    m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this);
-    // `shadersChanged` fires from inside `performScan` when the scan's
-    // signature differs from the previous one — NOT on every
-    // `rescanCompleted`. Wiring through the base would emit on every
-    // watcher fire regardless of content change, fanning settings-page
-    // redraws and `SettingsAdaptor::invalidateShaderCaches` calls across
-    // every unrelated editor save in any registered shader dir.
-    // Matches the change-only emit pattern used by `ScriptedAlgorithmLoader`
-    // (SHA-1 signature) and `AnimationShaderRegistry` (`QHash::operator!=`).
+    m_strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
+    m_strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
+    m_strategy->setPerSubdirSkip(shaderSubdirSkip);
+    m_strategy->setSignatureContrib(contributeShaderSignature);
+    m_strategy->setLoggingCategory(&lcShaderRegistry());
 }
 
 ShaderRegistry::~ShaderRegistry() = default;
@@ -193,19 +388,13 @@ QStringList ShaderRegistry::searchPaths() const
 void ShaderRegistry::setUserShaderPath(const QString& path)
 {
     if (m_userShaderPath == path) {
-        return; // idempotent — same value, no work to do
+        return; // idempotent
     }
-    // Canonicalisation happens at compare time in `performScan` (so
-    // callers that pass a path which doesn't exist yet still get the
-    // right classification once it materialises). Store the raw input.
     m_userShaderPath = path;
+    m_strategy->setUserPath(path);
     // If search paths have already been registered, the prior scan baked
-    // in the OLD user-path classification — a synchronous rescan
-    // refreshes every shader's `isUserShader` flag against the new
-    // value. Without this, callers who set the user path AFTER
-    // `addSearchPaths` (against the documented order, but easy to slip
-    // up on) would silently get every shader flagged as system until an
-    // explicit `refresh()` ran.
+    // in the OLD user-path classification — synchronous rescan refreshes
+    // every shader's `isUserShader` flag against the new value.
     if (m_watcher && !m_watcher->directories().isEmpty()) {
         m_watcher->rescanNow();
     }
@@ -232,136 +421,12 @@ bool ShaderRegistry::isNoneShader(const QString& id)
 
 void ShaderRegistry::refresh()
 {
-    // Synchronous rescan — `m_watcher->rescanNow()` calls into
-    // `ShaderScanStrategy::performScan` on this stack, which clears and
-    // reloads `m_shaders` and returns the full watch list. The
-    // `rescanCompleted` signal connected in the constructor emits
-    // `shadersChanged` after the strategy returns.
+    // Synchronous rescan — re-walks every search path on the calling
+    // stack, replaces the strategy's pack map, and emits `shadersChanged`
+    // if the post-rescan signature differs from the pre-rescan signature.
     qCDebug(lcShaderRegistry) << "Refreshing shader registry";
     m_watcher->rescanNow();
-    qCInfo(lcShaderRegistry) << "Total shaders=" << m_shaders.size();
-}
-
-QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrder)
-{
-    m_shaders.clear();
-    QStringList desiredWatches;
-
-    // Resolve the user-shader path's canonical form ONCE per rescan
-    // (empty when no user path is configured or the configured path
-    // doesn't exist yet). Each iterated dir is canonicalised below and
-    // compared against this — match means the dir is the user path,
-    // and discovered shaders are flagged `isUserShader = true`.
-    const QString canonicalUserPath =
-        m_userShaderPath.isEmpty() ? QString() : QFileInfo(m_userShaderPath).canonicalFilePath();
-
-    // Reverse-iterate with first-registration-wins, matching the
-    // IScanStrategy convention used by `JsonScanStrategy` and
-    // `JsScanStrategy`. Caller registers dirs in
-    // `[system-lowest, ..., system-highest, user]` order; reversing
-    // here lets the user dir claim its shader IDs before the system
-    // dirs are touched, which yields the canonical XDG semantic
-    // `user > sys-highest > sys-mid > sys-lowest`.
-    //
-    // Single-pass enumeration: each subdir is dispatched to
-    // `loadShaderFromDir` and harvested for the per-rescan watch list
-    // in the same loop. The base re-arms `desiredWatches` every rescan
-    // to compensate for `cmake --install`'s delete+recreate inode
-    // churn.
-    bool capTripped = false;
-    for (auto dirIt = directoriesInScanOrder.crbegin(); dirIt != directoriesInScanOrder.crend() && !capTripped;
-         ++dirIt) {
-        const QString& searchPath = *dirIt;
-        QDir dirObj(searchPath);
-        if (!dirObj.exists()) {
-            qCDebug(lcShaderRegistry) << "Search path does not exist:" << searchPath;
-            continue;
-        }
-
-        // Classify the iterated dir as user vs system. Empty
-        // `canonicalUserPath` (no user path configured, or user dir
-        // doesn't exist yet) yields `false` for every dir — preserving
-        // the legacy default before this knob existed.
-        const bool isUserDir =
-            !canonicalUserPath.isEmpty() && QFileInfo(searchPath).canonicalFilePath() == canonicalUserPath;
-
-        const int beforeCount = m_shaders.size();
-        const QStringList subdirs = dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        for (const QString& subdir : subdirs) {
-            if (subdir == QLatin1String("none")) {
-                continue; // reserved sentinel for "no shader"
-            }
-            // Per-rescan shader-count DoS guard. Reverse-iteration
-            // scans user-first / system-last, so a cap-trip drops
-            // *system* overflow rather than user overrides — matches
-            // the user-wins-on-cap-trip property `JsonScanStrategy`
-            // enforces.
-            if (m_shaders.size() >= kMaxShaders) {
-                capTripped = true;
-                break;
-            }
-            const QString subPath = dirObj.filePath(subdir);
-            // Dispatch + watch-list harvest in one pass.
-            // `loadShaderFromDir` first-wins-skips on existing IDs (see
-            // its early-return when `m_shaders.contains`).
-            loadShaderFromDir(subPath, isUserDir);
-            desiredWatches.append(subPath);
-            QDir sub(subPath);
-            const QStringList shaderFiles = sub.entryList({QStringLiteral("*.frag"), QStringLiteral("*.vert"),
-                                                           QStringLiteral("*.glsl"), QStringLiteral("*.json")},
-                                                          QDir::Files);
-            for (const QString& file : shaderFiles) {
-                desiredWatches.append(sub.filePath(file));
-            }
-        }
-        // Top-level shared includes (common.glsl, audio.glsl, etc.).
-        const QStringList topFiles =
-            dirObj.entryList({QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
-        for (const QString& file : topFiles) {
-            desiredWatches.append(dirObj.filePath(file));
-        }
-        qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
-    }
-
-    if (capTripped) {
-        qCWarning(lcShaderRegistry).nospace() << "ShaderRegistry: reached shader cap (" << kMaxShaders
-                                              << ") — later shaders skipped to protect the GUI thread. Prune the "
-                                                 "watched search paths or raise kMaxShaders.";
-    }
-
-    // Change-only emit: hash a stable fingerprint of the discovered set
-    // and gate `shadersChanged` on a difference vs. the prior scan.
-    // Captures additions, removals, path renames, isUserShader flips
-    // (so `setUserShaderPath`-driven rescans propagate), and content
-    // edits (frag/vert mtime + size). Mirrors the SHA-1 signature shape
-    // already used by `ScriptedAlgorithmLoader` so the three loaders
-    // converge on one change-detection idiom.
-    QCryptographicHash hasher(QCryptographicHash::Sha1);
-    QList<QString> sortedIds = m_shaders.keys();
-    std::sort(sortedIds.begin(), sortedIds.end());
-    for (const QString& id : std::as_const(sortedIds)) {
-        const ShaderInfo& s = m_shaders.value(id);
-        hasher.addData(id.toUtf8());
-        hasher.addData(QByteArrayView("|"));
-        hasher.addData(s.sourcePath.toUtf8());
-        hasher.addData(QByteArrayView("|"));
-        hasher.addData(s.vertexShaderPath.toUtf8());
-        hasher.addData(QByteArrayView("|"));
-        hasher.addData(s.isUserShader ? "u" : "s");
-        hasher.addData(QByteArrayView("|"));
-        const QFileInfo fragInfo(s.sourcePath);
-        hasher.addData(QByteArray::number(fragInfo.size()));
-        hasher.addData(QByteArrayView("|"));
-        hasher.addData(QByteArray::number(fragInfo.lastModified().toMSecsSinceEpoch()));
-        hasher.addData(QByteArrayView("\n"));
-    }
-    const QByteArray signature = hasher.result();
-    if (signature != m_lastShadersSignature) {
-        m_lastShadersSignature = signature;
-        Q_EMIT shadersChanged();
-    }
-
-    return desiredWatches;
+    qCInfo(lcShaderRegistry) << "Total shaders=" << m_strategy->size();
 }
 
 void ShaderRegistry::reportShaderBakeStarted(const QString& shaderId)
@@ -374,238 +439,19 @@ void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool succ
     Q_EMIT shaderCompilationFinished(shaderId, success, error);
 }
 
-void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShader)
-{
-    QDir dir(shaderDir);
-    const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
-
-    // Metadata is required
-    const QFileInfo metadataInfo(metadataPath);
-    if (!metadataInfo.exists()) {
-        qCDebug(lcShaderRegistry) << "Skipping shader path=" << shaderDir << "reason=no metadata.json";
-        return;
-    }
-
-    // DoS guard: untrusted same-user metadata.json should not be able to
-    // stall the GUI thread with a 2 GB blob (`QFile::readAll` below).
-    // Reuse `DirectoryLoader::kMaxFileBytes` as the SSOT — same cap the
-    // sister `JsonScanStrategy` enforces on every loaded JSON file.
-    if (metadataInfo.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
-        qCWarning(lcShaderRegistry) << "Skipping oversized metadata.json:" << metadataPath << "(" << metadataInfo.size()
-                                    << "bytes, cap" << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes << ")";
-        return;
-    }
-
-    ShaderInfo info = loadShaderMetadata(shaderDir);
-    info.isUserShader = isUserShader;
-
-    // First-registration-wins. `performScan` reverse-iterates so the
-    // user dir is processed first; a subsequent system shader with a
-    // colliding id is shadowed and silently skipped here.
-    if (m_shaders.contains(info.id)) {
-        qCDebug(lcShaderRegistry) << "Shader id=" << info.id << "already registered from a higher-priority dir; "
-                                  << "shadowed at=" << shaderDir;
-        return;
-    }
-
-    // Multipass requires at least one buffer shader; treat missing as load failure
-    if (info.isMultipass && info.bufferShaderPaths.isEmpty()) {
-        qCWarning(lcShaderRegistry) << "Skipping multipass shader (missing buffer shader(s)):" << shaderDir;
-        return;
-    }
-
-    // Validate fragment shader exists
-    if (!QFile::exists(info.sourcePath)) {
-        qCWarning(lcShaderRegistry) << "Shader missing fragment shader:" << info.sourcePath;
-        return;
-    }
-
-    // shaderUrl points directly to the raw GLSL fragment shader
-    info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
-
-    qCDebug(lcShaderRegistry) << "Loaded shader name=" << info.name << "id=" << info.id
-                              << "source=" << (isUserShader ? "user" : "system") << "from=" << shaderDir;
-
-    // Check for preview image
-    const QString previewPath = dir.filePath(QStringLiteral("preview.png"));
-    if (QFile::exists(previewPath)) {
-        info.previewPath = previewPath;
-    }
-
-    m_shaders.insert(info.id, info);
-}
-
-ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& shaderDir)
-{
-    ShaderInfo info;
-    QDir dir(shaderDir);
-
-    // Default name from directory name, ID is UUID generated from name
-    const QString shaderName = dir.dirName();
-    info.id = shaderNameToUuid(shaderName);
-    info.name = shaderName; // Human-readable name defaults to directory name
-
-    const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
-    QFile file(metadataPath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return info;
-    }
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-    if (error.error != QJsonParseError::NoError) {
-        qCWarning(lcShaderRegistry) << "Failed to parse shader metadata:" << metadataPath << error.errorString();
-        return info;
-    }
-
-    QJsonObject root = doc.object();
-
-    // If metadata has an "id" field, use it to generate the UUID (for consistency)
-    // Otherwise use the directory name. The "name" field is for display only.
-    const QString metadataId = root.value(QLatin1String("id")).toString(shaderName);
-    info.id = shaderNameToUuid(metadataId);
-    info.name = root.value(QLatin1String("name")).toString(shaderName);
-    info.description = root.value(QLatin1String("description")).toString();
-    info.author = root.value(QLatin1String("author")).toString();
-    info.version = root.value(QLatin1String("version")).toString(QStringLiteral("1.0"));
-    info.category = root.value(QLatin1String("category")).toString();
-
-    // Get fragment/vertex shader paths (default: effect.frag, zone.vert)
-    const QString fragShaderName = root.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag"));
-    const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString(QStringLiteral("zone.vert"));
-    info.sourcePath = dir.filePath(fragShaderName);
-    info.vertexShaderPath = dir.filePath(vertShaderName);
-
-    // Multi-pass: one or more buffer pass shaders (A->B->C->D)
-    info.isMultipass = root.value(QLatin1String("multipass")).toBool(false);
-    const QJsonArray bufferShadersArray = root.value(QLatin1String("bufferShaders")).toArray();
-    if (!bufferShadersArray.isEmpty()) {
-        for (int i = 0; i < qMin(bufferShadersArray.size(), 4); ++i) {
-            const QString name = bufferShadersArray.at(i).toString();
-            if (!name.isEmpty()) {
-                info.bufferShaderPaths.append(dir.filePath(name));
-            }
-        }
-    }
-    if (info.bufferShaderPaths.isEmpty()) {
-        const QString bufferShaderName =
-            root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
-        info.bufferShaderPaths.append(dir.filePath(bufferShaderName));
-    }
-    if (info.isMultipass) {
-        bool allExist = true;
-        for (const QString& path : info.bufferShaderPaths) {
-            if (!QFile::exists(path)) {
-                qCWarning(lcShaderRegistry) << "Multipass shader missing buffer shader:" << path;
-                allExist = false;
-                break;
-            }
-        }
-        if (!allExist) {
-            info.bufferShaderPaths.clear();
-        }
-    }
-    // Desktop wallpaper subscription: shader opts in to receive wallpaper at binding 11
-    info.useWallpaper = root.value(QLatin1String("wallpaper")).toBool(false);
-
-    info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
-    qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
-    info.bufferScale = qBound(0.125, scale, 1.0);
-    info.bufferWrap = normalizeWrapMode(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
-
-    info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
-
-    const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
-    if (!bufferWrapsArray.isEmpty()) {
-        for (const QJsonValue& v : bufferWrapsArray) {
-            info.bufferWraps.append(normalizeWrapMode(v.toString()));
-        }
-        const int needed = info.bufferShaderPaths.size();
-        while (info.bufferWraps.size() < needed) {
-            info.bufferWraps.append(info.bufferWrap);
-        }
-        while (info.bufferWraps.size() > needed) {
-            info.bufferWraps.removeLast();
-        }
-    }
-
-    // Per-channel filter modes: "nearest", "linear", or "mipmap"
-    info.bufferFilter =
-        normalizeFilterMode(root.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear")));
-
-    const QJsonArray bufferFiltersArray = root.value(QLatin1String("bufferFilters")).toArray();
-    if (!bufferFiltersArray.isEmpty()) {
-        for (const QJsonValue& v : bufferFiltersArray) {
-            info.bufferFilters.append(normalizeFilterMode(v.toString()));
-        }
-        const int needed = info.bufferShaderPaths.size();
-        while (info.bufferFilters.size() < needed) {
-            info.bufferFilters.append(info.bufferFilter);
-        }
-        while (info.bufferFilters.size() > needed) {
-            info.bufferFilters.removeLast();
-        }
-    }
-
-    // Parse parameters
-    const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
-    for (const QJsonValue& paramValue : paramsArray) {
-        QJsonObject paramObj = paramValue.toObject();
-        ParameterInfo param;
-        param.id = paramObj.value(QLatin1String("id")).toString();
-        param.name = paramObj.value(QLatin1String("name")).toString(param.id);
-        param.group = paramObj.value(QLatin1String("group")).toString();
-        param.type = paramObj.value(QLatin1String("type")).toString(QStringLiteral("float"));
-        param.slot = paramObj.value(QLatin1String("slot")).toInt(-1);
-        param.defaultValue = paramObj.value(QLatin1String("default")).toVariant();
-        param.minValue = paramObj.value(QLatin1String("min")).toVariant();
-        param.maxValue = paramObj.value(QLatin1String("max")).toVariant();
-        param.useZoneColor = paramObj.value(QLatin1String("use_zone_color")).toBool(false);
-        param.wrap = paramObj.value(QLatin1String("wrap")).toString();
-
-        if (!param.id.isEmpty()) {
-            info.parameters.append(param);
-        }
-    }
-
-    // Parse presets (named parameter configurations)
-    const QJsonObject presetsObj = root.value(QLatin1String("presets")).toObject();
-    for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
-        const QJsonObject values = it.value().toObject();
-        QVariantMap presetValues;
-        for (auto vit = values.begin(); vit != values.end(); ++vit) {
-            presetValues[vit.key()] = vit.value().toVariant();
-        }
-        if (!presetValues.isEmpty()) {
-            info.presets[it.key()] = presetValues;
-        }
-    }
-
-    return info;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Query Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    // Sort by id for deterministic ordering. QHash iteration order is
-    // intentionally randomised in Qt6 — without the sort, downstream
-    // consumers (the daemon's bake-warm loop, settings dropdowns,
-    // QML model assignments) see a different shader order on every
-    // process launch, which surfaces as flaky snapshot tests and
-    // visible UI reordering between sessions.
-    QList<ShaderInfo> sorted = m_shaders.values();
-    std::sort(sorted.begin(), sorted.end(), [](const ShaderInfo& a, const ShaderInfo& b) {
-        return a.id < b.id;
-    });
-    return sorted;
+    // Strategy returns a sorted-by-id snapshot — single source of truth
+    // for QHash-randomisation-stable output across process launches.
+    return m_strategy->packs();
 }
 
 QVariantList ShaderRegistry::availableShadersVariant() const
 {
-    // Mirror availableShaders()'s sort — same rationale.
     const QList<ShaderInfo> sorted = availableShaders();
     QVariantList result;
     result.reserve(sorted.size());
@@ -617,23 +463,23 @@ QVariantList ShaderRegistry::availableShadersVariant() const
 
 ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString& id) const
 {
-    return m_shaders.value(id);
+    return m_strategy->pack(id);
 }
 
 QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
 {
-    if (!m_shaders.contains(id)) {
+    if (!m_strategy->contains(id)) {
         return QVariantMap();
     }
-    return shaderInfoToVariantMap(m_shaders.value(id));
+    return shaderInfoToVariantMap(m_strategy->pack(id));
 }
 
 QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
-    if (isNoneShader(id) || !m_shaders.contains(id)) {
+    if (isNoneShader(id) || !m_strategy->contains(id)) {
         return QUrl();
     }
-    return m_shaders.value(id).shaderUrl;
+    return m_strategy->pack(id).shaderUrl;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
