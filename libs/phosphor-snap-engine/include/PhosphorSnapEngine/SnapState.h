@@ -4,7 +4,7 @@
 #pragma once
 
 #include <phosphorsnapengine_export.h>
-#include <PhosphorEngineTypes/IPlacementState.h>
+#include <PhosphorEngineApi/IPlacementState.h>
 
 #include <QHash>
 #include <QJsonObject>

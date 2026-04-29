@@ -138,7 +138,7 @@ target_link_libraries(PhosphorTiles
         Qt6::Core
         Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
-        PhosphorEngineTypes::PhosphorEngineTypes
+        PhosphorEngineApi::PhosphorEngineApi
         # PhosphorFsLoader is publicly exposed via
         # ScriptedAlgorithmLoader's `LiveReload` parameter — consumers
         # including `<PhosphorTiles/ScriptedAlgorithmLoader.h>` need

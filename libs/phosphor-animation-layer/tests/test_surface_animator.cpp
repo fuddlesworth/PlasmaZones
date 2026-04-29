@@ -107,31 +107,35 @@ class TestSurfaceAnimator : public QObject
     Q_OBJECT
 
 private:
-    PhosphorProfileRegistry* m_registry = nullptr;
+    /// Per-test-class profile registry. Phase A3 of the architecture
+    /// refactor retired the prior `PhosphorProfileRegistry::instance()`
+    /// singleton — SurfaceAnimator now takes the registry by reference,
+    /// so the fixture owns one and threads it through every animator
+    /// construction below.
+    PhosphorProfileRegistry m_registry;
 
 private Q_SLOTS:
     void initTestCase()
     {
-        m_registry = &PhosphorProfileRegistry::instance();
-        m_registry->registerProfile(QStringLiteral("test.show"), makeProfile(20));
-        m_registry->registerProfile(QStringLiteral("test.hide"), makeProfile(20));
-        m_registry->registerProfile(QStringLiteral("test.scale-show"), makeProfile(20));
+        m_registry.registerProfile(QStringLiteral("test.show"), makeProfile(20));
+        m_registry.registerProfile(QStringLiteral("test.hide"), makeProfile(20));
+        m_registry.registerProfile(QStringLiteral("test.scale-show"), makeProfile(20));
     }
 
     void cleanupTestCase()
     {
-        m_registry->unregisterProfile(QStringLiteral("test.show"));
-        m_registry->unregisterProfile(QStringLiteral("test.hide"));
-        m_registry->unregisterProfile(QStringLiteral("test.scale-show"));
+        m_registry.unregisterProfile(QStringLiteral("test.show"));
+        m_registry.unregisterProfile(QStringLiteral("test.hide"));
+        m_registry.unregisterProfile(QStringLiteral("test.scale-show"));
     }
 
-    /// Default-constructed animator binds to the singleton registry and
+    /// Empty-defaults animator binds to the fixture-owned registry and
     /// has an empty defaultConfig (every field zero/empty). Hide on a
     /// surface with no opacity/scale config still resolves via library
     /// fallback Profile (150 ms OutCubic).
-    void ctor_default_uses_singleton()
+    void ctor_default_config_is_empty()
     {
-        SurfaceAnimator anim;
+        SurfaceAnimator anim(m_registry);
         const auto cfg = anim.defaultConfig();
         QVERIFY(cfg.showProfile.isEmpty());
         QVERIFY(cfg.hideProfile.isEmpty());
@@ -141,7 +145,7 @@ private Q_SLOTS:
     /// scopePrefix doesn't match fall back to default.
     void per_role_config_lookup()
     {
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
         SurfaceAnimator::Config special;
         special.showProfile = QStringLiteral("test.show");
         special.showScaleProfile = QStringLiteral("test.scale-show");
@@ -165,7 +169,7 @@ private Q_SLOTS:
     /// registered prefix with a '-' boundary, not by exact equality.
     void per_role_config_prefix_match()
     {
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
         SurfaceAnimator::Config base;
         base.showProfile = QStringLiteral("base.show");
         SurfaceAnimator::Config sibling;
@@ -225,7 +229,7 @@ private Q_SLOTS:
         cfg.showScaleProfile = QStringLiteral("test.scale-show");
         cfg.showScaleFrom = 0.5;
         cfg.hideProfile = QStringLiteral("test.hide");
-        SurfaceAnimator anim(cfg);
+        SurfaceAnimator anim(m_registry, cfg);
 
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         // Don't wire deps.animator — we want to drive the standalone
@@ -288,20 +292,21 @@ private Q_SLOTS:
         // Register an absurdly long profile first so we can detect the
         // reload took effect (the short profile finishes in tens of ms,
         // the long one wouldn't in our wait window).
-        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/5000));
+        m_registry.registerProfile(path, makeProfile(/*durationMs=*/5000));
         struct Cleanup
         {
+            PhosphorProfileRegistry& reg;
             QString p;
             ~Cleanup()
             {
-                PhosphorProfileRegistry::instance().unregisterProfile(p);
+                reg.unregisterProfile(p);
             }
-        } _{path};
+        } _{m_registry, path};
 
         SurfaceAnimator::Config cfg;
         cfg.showProfile = path;
         cfg.hideProfile = path;
-        SurfaceAnimator anim(cfg);
+        SurfaceAnimator anim(m_registry, cfg);
 
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
@@ -335,7 +340,7 @@ private Q_SLOTS:
         target->setScale(1.0);
 
         // Reload the profile to a 20ms duration — same path, new shape.
-        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/20));
+        m_registry.registerProfile(path, makeProfile(/*durationMs=*/20));
 
         // Second show: must pick up the reloaded profile and complete fast.
         anim.beginShow(surface, target, []() { });
@@ -356,7 +361,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
 
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
@@ -403,7 +408,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
 
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
@@ -449,7 +454,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
         SurfaceFactory f(deps);
@@ -498,7 +503,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
         SurfaceFactory f(deps);
@@ -561,7 +566,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
 
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
@@ -606,7 +611,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
         SurfaceFactory f(deps);
@@ -661,7 +666,7 @@ private Q_SLOTS:
     {
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
-        SurfaceAnimator anim(defaultsForTesting());
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
         auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
         deps.animator = &anim;
         SurfaceFactory f(deps);
@@ -702,19 +707,20 @@ private Q_SLOTS:
     /// overlay.
     void zero_duration_profile_completes_synchronously()
     {
-        PhosphorProfileRegistry::instance().registerProfile(QStringLiteral("test.zero"), makeProfile(0));
+        m_registry.registerProfile(QStringLiteral("test.zero"), makeProfile(0));
         struct Cleanup
         {
+            PhosphorProfileRegistry& reg;
             ~Cleanup()
             {
-                PhosphorProfileRegistry::instance().unregisterProfile(QStringLiteral("test.zero"));
+                reg.unregisterProfile(QStringLiteral("test.zero"));
             }
-        } _;
+        } _{m_registry};
 
         SurfaceAnimator::Config cfg;
         cfg.showProfile = QStringLiteral("test.zero");
         cfg.hideProfile = QStringLiteral("test.zero");
-        SurfaceAnimator anim(cfg);
+        SurfaceAnimator anim(m_registry, cfg);
 
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
@@ -784,7 +790,7 @@ private Q_SLOTS:
 
         // Standalone animator with a long-running profile so its track
         // entry is in-flight at the time we delete the animator.
-        auto* anim = new SurfaceAnimator(defaultsForTesting());
+        auto* anim = new SurfaceAnimator(m_registry, defaultsForTesting());
         bool completed = false;
         anim->beginShow(surface, target, [&completed]() {
             completed = true;
@@ -832,20 +838,21 @@ private Q_SLOTS:
         // a narrow window where the cancel + the per-tick callback
         // synchronisation race against test-runner scheduling.
         const QString path = QStringLiteral("test.cancel-during-tick");
-        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/200));
+        m_registry.registerProfile(path, makeProfile(/*durationMs=*/200));
         struct Cleanup
         {
+            PhosphorProfileRegistry& reg;
             QString p;
             ~Cleanup()
             {
-                PhosphorProfileRegistry::instance().unregisterProfile(p);
+                reg.unregisterProfile(p);
             }
-        } _{path};
+        } _{m_registry, path};
 
         SurfaceAnimator::Config cfg;
         cfg.showProfile = path;
         cfg.hideProfile = path;
-        SurfaceAnimator anim(cfg);
+        SurfaceAnimator anim(m_registry, cfg);
 
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
@@ -925,22 +932,23 @@ private Q_SLOTS:
     void cancel_from_scale_leg_during_two_leg_animation()
     {
         const QString path = QStringLiteral("test.two-leg-cancel");
-        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/200));
+        m_registry.registerProfile(path, makeProfile(/*durationMs=*/200));
         struct Cleanup
         {
+            PhosphorProfileRegistry& reg;
             QString p;
             ~Cleanup()
             {
-                PhosphorProfileRegistry::instance().unregisterProfile(p);
+                reg.unregisterProfile(p);
             }
-        } _{path};
+        } _{m_registry, path};
 
         SurfaceAnimator::Config cfg;
         cfg.showProfile = path;
         cfg.showScaleProfile = path;
         cfg.showScaleFrom = 0.5;
         cfg.hideProfile = path;
-        SurfaceAnimator anim(cfg);
+        SurfaceAnimator anim(m_registry, cfg);
 
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
@@ -1020,20 +1028,21 @@ private Q_SLOTS:
     {
         const QString path = QStringLiteral("test.reload-during-flight");
         // Start with a 200 ms profile.
-        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/200));
+        m_registry.registerProfile(path, makeProfile(/*durationMs=*/200));
         struct Cleanup
         {
+            PhosphorProfileRegistry& reg;
             QString p;
             ~Cleanup()
             {
-                PhosphorProfileRegistry::instance().unregisterProfile(p);
+                reg.unregisterProfile(p);
             }
-        } _{path};
+        } _{m_registry, path};
 
         SurfaceAnimator::Config cfg;
         cfg.showProfile = path;
         cfg.hideProfile = path;
-        SurfaceAnimator anim(cfg);
+        SurfaceAnimator anim(m_registry, cfg);
 
         PhosphorLayer::Testing::MockTransport t;
         PhosphorLayer::Testing::MockScreenProvider s;
@@ -1065,7 +1074,7 @@ private Q_SLOTS:
         // Replace the profile mid-flight with a 5000 ms one. If the
         // animator re-resolved per advance(), the in-flight animation
         // would suddenly slow to a crawl.
-        PhosphorProfileRegistry::instance().registerProfile(path, makeProfile(/*durationMs=*/5000));
+        m_registry.registerProfile(path, makeProfile(/*durationMs=*/5000));
 
         // The in-flight 200 ms animation must still finish within ~250 ms
         // of the original start. Allow generous headroom for CI jitter

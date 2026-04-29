@@ -27,7 +27,7 @@ set(plasmazones_core_SRCS
     core/translationloader.cpp
     core/animationbootstrap.h
     core/animationbootstrap.cpp
-    # wallpaperprovider moved to PhosphorShell
+    # wallpaperprovider moved to PhosphorShaders
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
@@ -82,7 +82,7 @@ set(plasmazones_core_SRCS
     common/layoutbundlebuilder.h
     core/supportreport.cpp
     core/supportreport.h
-    # layersurface + shaderregistry/params moved to PhosphorShell
+    # layersurface moved to PhosphorShell; shaderregistry/params moved to PhosphorShaders
     core/single_instance_service.cpp
     core/single_instance_service.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
@@ -94,7 +94,7 @@ set(plasmazones_core_SRCS
     core/activitymanager.cpp
     core/activitymanager.h
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
-    # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShell
+    # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders
     core/modifierutils.cpp
     core/modifierutils.h
     config/settings.cpp
@@ -192,7 +192,7 @@ set_source_files_properties(
     dbus/windowdragadaptor/drop.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
-# PhosphorShell headers are available via PUBLIC link dependency
+# PhosphorShaders + PhosphorShell headers are available via PUBLIC link dependencies
 
 target_link_libraries(plasmazones_core
     PUBLIC
@@ -217,6 +217,7 @@ target_link_libraries(plasmazones_core
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
         PhosphorScreens::PhosphorScreens
+        PhosphorShaders::PhosphorShaders
         PhosphorShell::PhosphorShell
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones

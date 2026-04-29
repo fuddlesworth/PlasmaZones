@@ -168,23 +168,31 @@ public:
     };
 
     /// Construct against an explicit registry with caller-supplied
-    /// defaults. Used by tests that want a scoped registry, and by
-    /// production code that wants explicit control. No default args —
-    /// the unity-build paths confused the overload resolution between
-    /// the registry-taking and singleton-taking ctors when either had a
-    /// default Config parameter.
+    /// defaults. The animator takes the registry by reference; the
+    /// registry must outlive the animator. Composition roots (daemon /
+    /// editor / settings) own one `PhosphorProfileRegistry` instance and
+    /// thread it through; tests construct a per-fixture registry and
+    /// pass it here. There is no default-singleton fallback — every
+    /// caller injects their own dependency.
     explicit SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry, Config defaults);
 
-    /// Full constructor with shader registry for Phase 6 transition effects.
+    /// Convenience: registry-only ctor with empty default config.
+    /// Equivalent to `SurfaceAnimator(registry, Config{})` but spelled
+    /// out as a separate overload so unity-build paths don't get
+    /// confused by a default-arg `Config{}` on the primary ctor (the
+    /// previous shape `Config defaults = Config{}` triggered a parse
+    /// ambiguity in the unity TU between the value-initialised default
+    /// arg and a function-declarator interpretation).
+    explicit SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry);
+
+    /// Full constructor with shader registry for Phase 6 transition
+    /// effects. Same DI contract as the registry-only ctors — caller
+    /// owns the AnimationShaderRegistry and threads it through; pass
+    /// `nullptr` to disable shader transitions. (No singleton fallback;
+    /// see `SurfaceAnimator(registry, defaults)` above for the
+    /// rationale.)
     SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& registry,
                     PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry, Config defaults);
-
-    /// Default ctor: bind to the process-wide singleton with empty default
-    /// config.
-    SurfaceAnimator();
-
-    /// Convenience: singleton registry + caller-supplied defaults.
-    explicit SurfaceAnimator(Config defaults);
 
     ~SurfaceAnimator() override;
     SurfaceAnimator(const SurfaceAnimator&) = delete;

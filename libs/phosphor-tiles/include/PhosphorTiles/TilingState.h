@@ -4,7 +4,7 @@
 #pragma once
 
 #include "AutotileConstants.h"
-#include <PhosphorEngineTypes/IPlacementState.h>
+#include <PhosphorEngineApi/IPlacementState.h>
 #include <phosphortiles_export.h>
 #include <QObject>
 #include <QJsonObject>

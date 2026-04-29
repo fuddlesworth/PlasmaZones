@@ -10,39 +10,44 @@
 #include <QtCore/QObject>
 #include <QtCore/QString>
 
+#include <atomic>
 #include <mutex>
 #include <optional>
 
 namespace PhosphorAnimation {
 
 /**
- * @brief Process-wide registry mapping profile path strings to `Profile` values.
+ * @brief Registry mapping profile path strings to `Profile` values.
  *
  * Phase 4 decision R — the path-string branch of `PhosphorMotionAnimation.profile`
- * resolves through this singleton. Consumers that want live-settings updates
- * (the success criterion: user-edited curve visibly affects shell animations
- * without a daemon restart) register their profiles here, then a settings
- * reload calls `registerProfile(path, updatedProfile)` to publish the update.
- * Every `PhosphorMotionAnimation` bound to `"<path>"` auto-re-resolves on the
- * emitted `profileChanged(path)` signal.
+ * resolves through the registry the composition root publishes. Consumers that
+ * want live-settings updates (the success criterion: user-edited curve visibly
+ * affects shell animations without a daemon restart) register their profiles
+ * here, then a settings reload calls `registerProfile(path, updatedProfile)`
+ * to publish the update. Every `PhosphorMotionAnimation` bound to `"<path>"`
+ * auto-re-resolves on the emitted `profileChanged(path)` signal.
  *
- * ## Why a singleton (and not per-consumer DI like `CurveRegistry`)
+ * ## Ownership: composition-root DI for C++, service-locator for QML
  *
- * Process-global by design so that the QML plugin's
- * `PhosphorMotionAnimation` — a QML-instantiable type with no native
- * owner the consumer can inject into — has a stable anchor without
- * per-consumer dependency injection. Every QML element instantiated
- * through `import org.phosphor.animation` must reach the same
- * registry instance the daemon populated, and QML has no ergonomic
- * hook for "pass this registry pointer through 15 layers of
- * declarative instantiation". The singleton is the simplest correct
- * shape for that.
+ * C++ consumers receive the registry by reference via constructor injection
+ * (e.g. `SurfaceAnimator(PhosphorProfileRegistry&, ...)`) — that side is
+ * straightforward dependency injection with no global state.
  *
- * To prevent cross-instance state leakage in tests and on daemon
- * restart, consumers MUST call `clear()` (or the owner-scoped
- * `clearOwner(tag)`) on teardown and before re-populating at startup.
- * The `PlasmaZones::Daemon` composition root does both, mirroring its
- * equivalent lifecycle hooks for the daemon-owned `CurveRegistry`.
+ * The QML side cannot be wired the same way: `PhosphorMotionAnimation`
+ * instances are created by the QML engine, not by a C++ owner with a
+ * pointer to thread through. The `setDefaultRegistry` / `defaultRegistry`
+ * static-handle pair is the bridge — a process-wide service locator that
+ * the composition root publishes its locally-owned registry into so QML
+ * callsites can find it. It is NOT a singleton in the lifetime sense
+ * (each process owns exactly one registry, constructed and destructed by
+ * the composition root, not lazily by the registry itself), but it IS a
+ * service locator: any caller can read it, any caller can overwrite it,
+ * and there is no compiler-enforced binding between writer and reader.
+ * The composition root publishes once at startup and clears the handle
+ * on teardown so a successive composition (tests, or a daemon
+ * reconfigure cycle) does not dangle into freed memory. Tests that want
+ * full isolation construct a per-fixture registry and bypass the static
+ * altogether.
  *
  * ## Consumer model
  *
@@ -61,20 +66,35 @@ namespace PhosphorAnimation {
  * default `AutoConnection` when the registry and receiver are on the
  * same thread).
  *
- * ## Lifetime
- *
- * Process-wide Meyers singleton. Destruction runs at process exit with
- * the usual no-dependency-on-other-singletons caveat; the registry
- * holds only `Profile` values (POD-ish) and doesn't reach into other
- * singletons, so ordering is irrelevant.
+ * `setDefaultRegistry` / `defaultRegistry` are also thread-safe — the
+ * static handle is `std::atomic<PhosphorProfileRegistry*>` with relaxed
+ * ordering (the publishing composition root must have fully constructed
+ * the registry before publishing, and the consumer side is a single
+ * pointer dereference that needs no happens-before with any other memory).
  */
 class PHOSPHORANIMATION_EXPORT PhosphorProfileRegistry : public QObject
 {
     Q_OBJECT
 
 public:
-    /// Process-wide singleton accessor.
-    static PhosphorProfileRegistry& instance();
+    explicit PhosphorProfileRegistry(QObject* parent = nullptr);
+    ~PhosphorProfileRegistry() override;
+
+    PhosphorProfileRegistry(const PhosphorProfileRegistry&) = delete;
+    PhosphorProfileRegistry& operator=(const PhosphorProfileRegistry&) = delete;
+
+    /// Publish @p registry as the process-wide default for QML callsites
+    /// (`PhosphorMotionAnimation { profile: "<path>" }`) to resolve against.
+    /// Called once by each composition root after constructing its own
+    /// registry; pass `nullptr` on teardown to drop the handle before the
+    /// registry destructs.
+    static void setDefaultRegistry(PhosphorProfileRegistry* registry);
+
+    /// Read-only view of the registry pointer published by
+    /// `setDefaultRegistry`. Returns `nullptr` when no composition root
+    /// has published yet — QML callsites then fall back to their library
+    /// defaults rather than crashing.
+    static PhosphorProfileRegistry* defaultRegistry();
 
     /// Resolve @p path to a `Profile` if registered; `std::nullopt`
     /// otherwise. The returned value is a copy — mutations on it do
@@ -205,11 +225,15 @@ Q_SIGNALS:
     void ownerReloaded(const QString& ownerTag);
 
 private:
-    PhosphorProfileRegistry();
-    ~PhosphorProfileRegistry() override;
-
-    PhosphorProfileRegistry(const PhosphorProfileRegistry&) = delete;
-    PhosphorProfileRegistry& operator=(const PhosphorProfileRegistry&) = delete;
+    /// Atomic so concurrent QML loaders (multiple QQmlEngine instances
+    /// on different threads — a background-prerender shell is the
+    /// canonical case) cannot race on install-vs-read. Pointer loads
+    /// are lock-free on every platform Qt supports; `relaxed` ordering
+    /// is sufficient because the registry object's own initialisation
+    /// is synchronised by the composition root's construction (the
+    /// pointed-to `PhosphorProfileRegistry` is already fully constructed
+    /// before the publishing thread calls setDefaultRegistry).
+    static std::atomic<PhosphorProfileRegistry*> s_defaultRegistry;
 
     mutable std::mutex m_mutex;
     QHash<QString, Profile> m_profiles;

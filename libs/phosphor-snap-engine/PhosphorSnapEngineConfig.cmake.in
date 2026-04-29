@@ -7,7 +7,6 @@ include(CMakeFindDependencyMacro)
 
 find_dependency(Qt6 6.6 COMPONENTS Core Gui)
 find_dependency(PhosphorEngineApi)
-find_dependency(PhosphorEngineTypes)
 find_dependency(PhosphorZones)
 find_dependency(PhosphorGeometry)
 find_dependency(PhosphorLayoutApi)

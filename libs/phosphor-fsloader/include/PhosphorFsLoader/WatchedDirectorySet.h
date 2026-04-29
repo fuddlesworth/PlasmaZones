@@ -141,7 +141,7 @@ public:
      *
      * The default is `Off` because this is the library primitive — tests,
      * batch imports, and explicit-refresh consumers compose against it.
-     * Higher-level consumer wrappers (`PhosphorShell::ShaderRegistry`,
+     * Higher-level consumer wrappers (`PhosphorShaders::ShaderPackRegistry`,
      * `PhosphorAnimationShaders::AnimationShaderRegistry`,
      * `ScriptedAlgorithmLoader`) flip the default to `On` because their
      * production callers always want hot-reload — that override is the
@@ -243,7 +243,7 @@ public:
     /// @p alreadyRegistered (and is not duplicated within @p candidates
     /// itself). Preserves caller order.
     ///
-    /// Both `addSearchPaths`-style entry points in `PhosphorShell::ShaderRegistry`
+    /// Both `addSearchPaths`-style entry points in `PhosphorShaders::ShaderPackRegistry`
     /// and `PhosphorAnimationShaders::AnimationShaderRegistry` use this
     /// to skip log-line spam when the same path is registered twice (the
     /// base's own `registerDirectories` is silent on dedup, so the log

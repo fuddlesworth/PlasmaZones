@@ -6,7 +6,7 @@
 #include "zoneshadercommon.h"
 
 #include <PhosphorRendering/ShaderEffect.h>
-#include <PhosphorShell/IUniformExtension.h>
+#include <PhosphorShaders/IUniformExtension.h>
 
 #include <plasmazones_rendering_export.h>
 #include <QImage>
@@ -148,7 +148,7 @@ public:
      * accept and ignore, so misuse fails loud at the earliest possible call
      * site.
      */
-    void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension) override;
+    void setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension) override;
 
 Q_SIGNALS:
     void zonesChanged();

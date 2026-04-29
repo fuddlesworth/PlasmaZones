@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Compatibility wrapper — forwards to PhosphorShell implementations.
+// Compatibility wrapper — forwards to PhosphorShaders implementations.
 
 #pragma once
 
-#include <PhosphorShell/ShaderRegistry.h> // pulls in phosphorshell_export.h
+#include <PhosphorShaders/ShaderPackRegistry.h> // pulls in phosphorshaders_export.h
 
-// PhosphorShell has the canonical implementations in its internal shaderutils.h.
+// PhosphorShaders has the canonical implementations in its internal shaderutils.h.
 // Re-declare identical inline functions here for PlasmaZones code that hasn't
-// been ported to use PhosphorShell directly.
+// been ported to use PhosphorShaders directly.
 
 #include <QLatin1String>
 #include <QString>

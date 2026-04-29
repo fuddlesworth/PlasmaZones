@@ -33,6 +33,10 @@ namespace PhosphorAnimationLayer {
 class SurfaceAnimator;
 } // namespace PhosphorAnimationLayer
 
+namespace PhosphorAnimation {
+class PhosphorProfileRegistry;
+} // namespace PhosphorAnimation
+
 namespace PhosphorZones {
 class Zone;
 }
@@ -132,9 +136,15 @@ public:
     ///                 every overlay path that resolves a shader by id.
     ///                 Nullable — passing nullptr disables shader-based
     ///                 overlays entirely (tests that don't exercise shaders).
+    /// @param profileRegistry Borrowed; must outlive this service.
+    ///                 Threaded into the SurfaceAnimator that drives every
+    ///                 overlay show/hide. Composition roots (the daemon)
+    ///                 own a single PhosphorProfileRegistry instance and
+    ///                 hand it through here — the singleton accessor is
+    ///                 gone (Phase A3 of the architecture refactor).
     /// @param parent Qt parent.
     explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
-                            QObject* parent = nullptr);
+                            PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent = nullptr);
     ~OverlayService() override;
 
     // IOverlayService interface
@@ -635,8 +645,11 @@ private:
      * Profile-resolved curves shared with in-window animations. Called
      * exactly once from the ctor; the animator's lifetime is tied to
      * `*this`.
+     *
+     * @param profileRegistry Borrowed; threaded into the SurfaceAnimator's
+     *                        constructor. Must outlive the animator.
      */
-    void setupSurfaceAnimator();
+    void setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry);
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
     void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl);

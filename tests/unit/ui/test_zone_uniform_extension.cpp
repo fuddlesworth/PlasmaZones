@@ -85,7 +85,7 @@ ZoneData makeZone(qreal x, qreal y, qreal w, qreal h, const QColor& fill, const 
 void TestZoneUniformExtension::extensionSize_matchesZoneShaderUniformsRegion()
 {
     ZoneUniformExtension ext;
-    const int expected = static_cast<int>(sizeof(ZoneShaderUniforms) - sizeof(PhosphorShell::BaseUniforms));
+    const int expected = static_cast<int>(sizeof(ZoneShaderUniforms) - sizeof(PhosphorShaders::BaseUniforms));
     QCOMPARE(ext.extensionSize(), expected);
     QCOMPARE(ext.extensionSize(), MaxZones * kArraysPerZone * kBytesPerVec4);
 }
@@ -359,7 +359,7 @@ void TestZoneUniformExtension::layout_matchesZoneShaderUniformsOffsets()
     std::vector<char> actual(ext.extensionSize(), 0);
     ext.write(actual.data(), 0);
 
-    const char* expectedZoneStart = reinterpret_cast<const char*>(&expected) + sizeof(PhosphorShell::BaseUniforms);
+    const char* expectedZoneStart = reinterpret_cast<const char*>(&expected) + sizeof(PhosphorShaders::BaseUniforms);
     if (std::memcmp(actual.data(), expectedZoneStart, ext.extensionSize()) != 0) {
         // Find first differing byte for diagnostic
         for (int i = 0; i < ext.extensionSize(); ++i) {

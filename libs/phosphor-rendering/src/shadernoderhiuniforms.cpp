@@ -130,7 +130,7 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
         m_extensionStaging.resize(extSize);
     }
     m_uniformExtension->write(m_extensionStaging.data(), 0);
-    const int extOffset = static_cast<int>(sizeof(PhosphorShell::BaseUniforms));
+    const int extOffset = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms));
     batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
     m_uniformExtension->clearDirty();
     m_extensionDirty = false;
@@ -170,7 +170,7 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 // region but skip the upload pass entirely — keep the mirror in sync.
 void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 {
-    using namespace PhosphorShell::UboRegions;
+    using namespace PhosphorShaders::UboRegions;
 
     const bool extensionHasData = m_uniformExtension && m_uniformExtension->extensionSize() > 0;
 
@@ -181,7 +181,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         if (batch) {
             if (!m_didFullUploadOnce) {
                 // Upload base uniforms
-                batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShell::BaseUniforms), &m_baseUniforms);
+                batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
                 // Upload extension data if present
                 if (extensionHasData) {
                     uploadExtensionToUbo(batch);
@@ -217,7 +217,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 }
                 // Defensive: if no granular flags set, do full base upload
                 if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
-                    batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShell::BaseUniforms), &m_baseUniforms);
+                    batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
                 }
             }
             if (!m_vboUploaded) {

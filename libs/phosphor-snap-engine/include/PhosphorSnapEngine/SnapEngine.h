@@ -4,7 +4,7 @@
 #pragma once
 
 #include <phosphorsnapengine_export.h>
-#include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorEngineApi/EngineTypes.h>
 #include <PhosphorEngineApi/IVirtualDesktopManager.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>

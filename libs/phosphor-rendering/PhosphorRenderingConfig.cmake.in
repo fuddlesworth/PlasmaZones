@@ -12,7 +12,7 @@ find_dependency(Qt6 COMPONENTS Core Gui Quick)
 # fails fast if the dev package isn't installed (instead of failing on the first
 # #include).
 find_dependency(Qt6GuiPrivate)
-find_dependency(PhosphorShell)
+find_dependency(PhosphorShaders)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorRenderingTargets.cmake")
 

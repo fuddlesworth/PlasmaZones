@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorRendering/ShaderCompiler.h>
-#include <PhosphorShell/ShaderIncludeResolver.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 
 #include "internal.h"
 
@@ -153,7 +153,7 @@ QString ShaderCompiler::loadAndExpand(const QString& path, const QStringList& in
 
     QString err;
     const QString expanded =
-        PhosphorShell::ShaderIncludeResolver::expandIncludes(raw, currentFileDir, searchPaths, &err);
+        PhosphorShaders::ShaderIncludeResolver::expandIncludes(raw, currentFileDir, searchPaths, &err);
     if (!err.isEmpty()) {
         if (outError)
             *outError = err;

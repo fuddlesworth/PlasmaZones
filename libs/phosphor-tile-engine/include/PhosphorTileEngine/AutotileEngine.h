@@ -5,7 +5,7 @@
 
 #include <phosphortileengine_export.h>
 #include <PhosphorEngineApi/PerScreenKeys.h>
-#include <PhosphorEngineTypes/EngineTypes.h>
+#include <PhosphorEngineApi/EngineTypes.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorEngineApi/IWindowRegistry.h>
 #include <PhosphorEngineApi/IWindowTrackingService.h>

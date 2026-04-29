@@ -24,19 +24,14 @@
 #
 # Depends on Qt6 Core + Gui only. Qt6 Quick becomes a transitive
 # dependency when the opt-in PHOSPHOR_ANIMATION_QUICK flag is ON
-# (adds QtQuickClock for QML-side animation drivers).
+# (adds QtQuickClock for QML-side animation drivers — used by
+# the sibling phosphor-animation-qml lib's QtQuickClockManager).
 #
 # Phase status:
 #   Phase 2  AnimationController base + WindowAnimator split      ✓ landed
 #   Phase 3  IMotionClock + AnimatedValue<T> unified runtime       ✓ landed
 #   Phase 4  QML module + loaders + settings migration             ✓ landed
-#            sub-commit 2: Q_GADGET scaffolding + ClockManager     ✓
-#            sub-commit 3: per-T PhosphorAnimatedValue wrappers    ✓
-#            sub-commit 4: PhosphorMotionAnimation + registry      ✓
-#            sub-commit 5: CurveLoader + ProfileLoader             ✓
-#            sub-commit 6: Settings → Profile JSON blob migration  ✓
-#            sub-commit 7: daemon ProfileRegistry wiring           ✓
-#            (in-tree QML call-site migration deferred — housekeeping)
+#            (Phase A1: QML module promoted to libs/phosphor-animation-qml/)
 #   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator) ✓ landed
 #   Phase 6  Shader-backed animation pipeline                      ✓ landed
 
@@ -76,18 +71,6 @@ endif()
 # don't pull Qt Quick into their link graph transitively.
 option(PHOSPHOR_ANIMATION_QUICK "Build QtQuickClock (requires Qt6::Quick)" OFF)
 if(PHOSPHOR_ANIMATION_QUICK)
-    find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
-endif()
-
-# Optional QML plugin (Phase 4) — builds org.phosphor.animation Q_GADGET
-# wrappers (PhosphorEasing / Spring / Curve / Profile) and the
-# QtQuickClockManager singleton. Implies PHOSPHOR_ANIMATION_QUICK
-# since the clock manager wraps QtQuickClock; the Quick flag is
-# auto-enabled when PHOSPHOR_ANIMATION_QML is ON so consumers only
-# need to flip the QML flag.
-option(PHOSPHOR_ANIMATION_QML "Build org.phosphor.animation QML module (requires Qt6::Quick + Qt6::Qml)" OFF)
-if(PHOSPHOR_ANIMATION_QML)
-    set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Auto-enabled by PHOSPHOR_ANIMATION_QML" FORCE)
     find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
 endif()
 
@@ -219,17 +202,6 @@ set_target_properties(PhosphorAnimation PROPERTIES
     VERSION ${PHOSPHORANIMATION_VERSION}
     SOVERSION 0
 )
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# QML module (optional)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# The QML module is a separate target — `PhosphorAnimationQml` —
-# depending on Quick + Qml. Gated behind PHOSPHOR_ANIMATION_QML so core
-# consumers that don't link QML surface don't pay the plugin build cost.
-if(PHOSPHOR_ANIMATION_QML)
-    add_subdirectory(qml)
-endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Tests
