@@ -30,12 +30,14 @@ QRect snapToRect(const QRectF& rf)
 
 void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold, int innerGap)
 {
-    if (zones.size() != minSizes.size()) {
+    if (zones.isEmpty() || minSizes.isEmpty()) {
         return;
     }
+    // Tolerate minSizes shorter/longer than zones — see header doc. Aligned
+    // with clampZonesToScreen so callers don't need to special-case the two.
     for (int i = 0; i < zones.size(); ++i) {
         QRect& zone = zones[i];
-        const QSize& minSize = minSizes[i];
+        const QSize minSize = (i < minSizes.size()) ? minSizes[i] : QSize();
         if (minSize.isEmpty()) {
             continue;
         }
@@ -84,6 +86,51 @@ void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes
         }
     }
     removeZoneOverlaps(zones, minSizes, innerGap);
+}
+
+void clampZonesToScreen(QVector<QRect>& zones, const QVector<QSize>& minSizes, const QRect& screen)
+{
+    if (!screen.isValid() || zones.isEmpty()) {
+        return;
+    }
+    const int screenLeft = screen.x();
+    const int screenTop = screen.y();
+    const int screenRight = screen.x() + screen.width(); // exclusive
+    const int screenBottom = screen.y() + screen.height(); // exclusive
+
+    // Order: right/bottom overflow first, then left/top underflow. Both passes
+    // can fire for the same zone only when effW > screenWidth (or effH >
+    // screenHeight) — the unsatisfiable case where the window is wider/taller
+    // than the screen. In that case the right-overflow branch already pins
+    // zone.x to screenLeft via the qMax, so the left-underflow check sees
+    // zone.x() == screenLeft and is a no-op. Convergence is therefore
+    // guaranteed without iteration.
+    for (int i = 0; i < zones.size(); ++i) {
+        QRect& zone = zones[i];
+        const QSize ms = (i < minSizes.size()) ? minSizes[i] : QSize(0, 0);
+        const int effW = std::max(zone.width(), std::max(0, ms.width()));
+        const int effH = std::max(zone.height(), std::max(0, ms.height()));
+
+        // Right/bottom overflow: shift left/up so the effective rect fits.
+        // qMax against screenLeft/screenTop pins the zone to the screen origin
+        // when the window is wider/taller than the screen — accepting overflow
+        // on the far side rather than placing the zone fully off-screen.
+        if (zone.x() + effW > screenRight) {
+            zone.moveLeft(std::max(screenLeft, screenRight - effW));
+        }
+        if (zone.y() + effH > screenBottom) {
+            zone.moveTop(std::max(screenTop, screenBottom - effH));
+        }
+        // Left/top underflow: a zone whose origin sits before the screen
+        // origin (algorithm bug or odd virtual-screen coordinates) gets
+        // snapped back to the boundary. Symmetric with the right/bottom case.
+        if (zone.x() < screenLeft) {
+            zone.moveLeft(screenLeft);
+        }
+        if (zone.y() < screenTop) {
+            zone.moveTop(screenTop);
+        }
+    }
 }
 
 void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, int innerGap)
