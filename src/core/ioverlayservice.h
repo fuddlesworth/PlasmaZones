@@ -114,7 +114,12 @@ public:
                                 const SnapAssistCandidateList& candidates) = 0;
     virtual void hideSnapAssist() = 0;
     virtual bool isSnapAssistVisible() const = 0;
-    virtual void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) = 0;
+    /// Deliver a thumbnail as raw ARGB32 pixels. @p pixels MUST be exactly
+    /// @p width * @p height * 4 bytes, tightly packed (no row padding),
+    /// non-premultiplied. Implementations must validate dimensions and the
+    /// pixel-buffer size before reconstructing a QImage.
+    virtual void setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+                                        const QByteArray& pixels) = 0;
 
     // Layout picker overlay (interactive layout browser)
     virtual void hideLayoutPicker() = 0;

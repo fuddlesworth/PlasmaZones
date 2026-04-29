@@ -34,8 +34,9 @@ namespace PlasmaZones {
  * daemon's previous ScreenShot2 path needed (concurrent CaptureWindow calls
  * could starve KWin's screenshot queue). Each completed image is posted
  * back to the daemon via @c org.plasmazones.Overlay.setSnapAssistThumbnail
- * as a base64 PNG data URL — the daemon decodes once into its bounded LRU
- * QImage cache and never carries the encoded form past that point.
+ * as raw ARGB32 (non-premultiplied) bytes plus dimensions — no PNG encode,
+ * no base64. The daemon validates the buffer shape and copies the bytes
+ * into a QImage that lands in its bounded LRU cache.
  */
 class SnapAssistThumbnailCapture : public QObject
 {
@@ -55,6 +56,11 @@ public:
     explicit SnapAssistThumbnailCapture(QObject* parent = nullptr);
     ~SnapAssistThumbnailCapture() override;
 
+    /// Default thumbnail bounding box. Single source of truth shared with
+    /// the QML scene's fallback (which is otherwise unreachable since the
+    /// C++ side always overrides @c boxSize before each render).
+    static constexpr QSize DefaultThumbnailSize = QSize(256, 256);
+
     /**
      * @brief Queue captures for the given candidates.
      *
@@ -66,7 +72,17 @@ public:
      * @param maxSize Bounding box for each thumbnail; aspect ratio
      *        preserved by WindowThumbnail itself.
      */
-    void captureCandidates(const QVector<Candidate>& candidates, QSize maxSize = QSize(256, 256));
+    void captureCandidates(const QVector<Candidate>& candidates, QSize maxSize = DefaultThumbnailSize);
+
+    /**
+     * @brief Drop the recently-posted bookkeeping.
+     *
+     * Called when the daemon's cache is known to be empty (daemon restart,
+     * service registration after a disconnect). Without this the kwin-effect
+     * would keep skipping captures for handles the daemon no longer holds,
+     * stranding snap-assist on icons until the LRU window rolls past.
+     */
+    void resetRecentlyPosted();
 
 private Q_SLOTS:
     void processNext();
@@ -89,14 +105,15 @@ private:
     void attemptCapture(Pending p, int delayMs, int retriesLeft);
 
     /// Mark @p handle as posted to the daemon, evicting the oldest entry
-    /// if the bookkeeping set is at capacity. Called only after a thumbnail
-    /// successfully posts; failures leave the handle un-tracked so the next
-    /// snap-assist invocation will retry.
+    /// if the bookkeeping set is at capacity. Called from the D-Bus
+    /// pending-call success path inside @ref postThumbnail so failed sends
+    /// leave the handle un-tracked and the next snap-assist invocation
+    /// retries.
     void markRecentlyPosted(const QUuid& handle);
 
     /// True when @p handle was recently posted to the daemon and is
     /// (probably) still resident in the daemon's bounded LRU cache.
-    /// Mirrors the daemon's @c SnapAssistThumbnailProvider::kCacheCapacity
+    /// Mirrors the daemon's @c SnapAssistThumbnailProvider::CacheCapacity
     /// so this side stays in sync with the daemon's eviction window.
     bool wasRecentlyPosted(const QUuid& handle) const;
 
@@ -104,9 +121,10 @@ private:
     /// effect deliberately doesn't depend on the daemon's header. If the
     /// daemon's capacity ever grows past this, the worst case is a spurious
     /// re-capture; if the daemon's shrinks below this, we'll skip captures
-    /// the daemon has already evicted (cache miss → QML icon fallback). In
-    /// either direction the failure is bounded and self-correcting.
-    static constexpr int kRecentPostedCapacity = 24;
+    /// the daemon has already evicted (cache miss → QML icon fallback).
+    /// Combined with @ref resetRecentlyPosted on daemon-ready transitions,
+    /// the failure modes are bounded and self-correcting.
+    static constexpr int RecentPostedCapacity = 24;
 
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;

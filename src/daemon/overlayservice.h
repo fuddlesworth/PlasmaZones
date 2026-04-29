@@ -308,7 +308,8 @@ public:
                         const SnapAssistCandidateList& candidates) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
-    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) override;
+    void setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+                                const QByteArray& pixels) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());

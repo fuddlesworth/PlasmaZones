@@ -7,7 +7,7 @@ namespace PlasmaZones {
 
 SnapAssistThumbnailProvider::SnapAssistThumbnailProvider()
     : QQuickImageProvider(QQuickImageProvider::Image)
-    , m_cache(kCacheCapacity)
+    , m_cache(CacheCapacity)
 {
 }
 
@@ -73,7 +73,7 @@ QString SnapAssistThumbnailProvider::urlFor(const QString& compositorHandle) con
 
 QString SnapAssistThumbnailProvider::makeUrl(const QString& handle, quint32 generation)
 {
-    return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(kProviderId), handle).arg(generation);
+    return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(ProviderId), handle).arg(generation);
 }
 
 QString SnapAssistThumbnailProvider::normaliseHandle(const QString& handle)

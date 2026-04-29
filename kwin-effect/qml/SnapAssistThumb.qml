@@ -12,10 +12,16 @@ import org.kde.kwin as KWinComponents
 Item {
     id: root
 
-    // QUuid of the EffectWindow being captured (EffectWindow::internalId()).
-    property var wId
+    // Unbraced UUID of the EffectWindow being captured
+    // (EffectWindow::internalId().toString(QUuid::WithoutBraces)). Typed as
+    // string so an unset value renders as the empty UUID inside KWin's
+    // QString→QUuid bridge — prevents the QML engine from logging a type
+    // mismatch on first paint before the C++ side calls setProperty.
+    property string wId: ""
     // Bounding box for the thumbnail; the WindowThumbnail honours its source
-    // window's aspect ratio inside this rect.
+    // window's aspect ratio inside this rect. C++ overrides this on every
+    // capture; the literal here is a fallback for QML preview tooling and
+    // matches @c SnapAssistThumbnailCapture::DefaultThumbnailSize.
     property size boxSize: Qt.size(256, 256)
 
     width: boxSize.width

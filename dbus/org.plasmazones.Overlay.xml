@@ -134,12 +134,18 @@
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon. Called by the kwin-effect after rendering a candidate window through KWin::OffscreenQuickScene + org.kde.kwin's WindowThumbnail. The daemon decodes once into a bounded LRU QImage cache and exposes the result to QML via image://plasmazones-snapassist/&lt;handle&gt;/&lt;generation&gt;. Caller is authenticated by resolving the sender's bus name to a PID and matching /proc/&lt;pid&gt;/comm against kwin_wayland or kwin_x11; non-kwin senders are silently dropped to avoid leaking the rejection signal to attackers probing the interface."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect; authenticated against /proc/&lt;pid&gt;/exe. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
-            <arg name="dataUrl" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="data:image/png;base64,... thumbnail image. Other schemes (file://, http://, ...) are rejected."/>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image width in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image height in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="pixels" type="ay" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tightly-packed ARGB32 (non-premultiplied) bytes, exactly width*height*4 long."/>
             </arg>
         </method>
 

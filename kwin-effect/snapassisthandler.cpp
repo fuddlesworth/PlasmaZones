@@ -132,6 +132,13 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
             });
 }
 
+void SnapAssistHandler::resetRecentlyPostedThumbnails()
+{
+    if (m_capture) {
+        m_capture->resetRecentlyPosted();
+    }
+}
+
 PhosphorProtocol::SnapAssistCandidateList
 SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
                                    const QSet<QString>& snappedWindowIds) const

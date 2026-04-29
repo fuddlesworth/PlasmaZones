@@ -111,7 +111,7 @@ void TestSnapAssistThumbnailProvider::reinsertProducesNewUrl()
 void TestSnapAssistThumbnailProvider::lruEvictionAtCapacity()
 {
     SnapAssistThumbnailProvider p;
-    const int cap = SnapAssistThumbnailProvider::kCacheCapacity;
+    const int cap = SnapAssistThumbnailProvider::CacheCapacity;
 
     QStringList handles;
     handles.reserve(cap + 4);
@@ -157,7 +157,7 @@ void TestSnapAssistThumbnailProvider::evictionDropsUrlState()
     // eviction reclaims it. After eviction, urlFor and requestImage both
     // return empty — there is no out-of-band map preserving the old URL.
     SnapAssistThumbnailProvider p;
-    const int cap = SnapAssistThumbnailProvider::kCacheCapacity;
+    const int cap = SnapAssistThumbnailProvider::CacheCapacity;
 
     const QString victim = brace(QUuid::createUuid());
     const QString victimUrl = p.insert(victim, solid(2, 2, Qt::red));
@@ -239,7 +239,7 @@ void TestSnapAssistThumbnailProvider::urlEmbedsHandleAndGeneration()
     const QString u1 = p.insert(braced, solid(2, 2, Qt::red));
     const QString u2 = p.insert(braced, solid(2, 2, Qt::green));
 
-    const QString prefix = QStringLiteral("image://") + QString::fromLatin1(SnapAssistThumbnailProvider::kProviderId)
+    const QString prefix = QStringLiteral("image://") + QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId)
         + QLatin1Char('/') + unbraced + QLatin1Char('/');
     QVERIFY(u1.startsWith(prefix));
     QVERIFY(u2.startsWith(prefix));

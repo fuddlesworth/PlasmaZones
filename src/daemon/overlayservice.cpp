@@ -350,9 +350,19 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // raw pointer remains valid for the engine's lifetime, which
                 // outlives every QML element it spawns, so QML callbacks
                 // that hit requestImage are safe.
+                //
+                // The engine's @c destroyed signal nulls @c m_thumbnailProvider
+                // before any subsequent D-Bus dispatch can dereference it.
+                // Without this hook, late @c setSnapAssistThumbnail traffic
+                // arriving after the engine is gone (e.g. forced
+                // SurfaceManager teardown outside @c ~OverlayService) would
+                // see a dangling raw pointer.
                 if (m_thumbnailProviderOwned) {
-                    engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::kProviderId),
+                    engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
                                             m_thumbnailProviderOwned.release());
+                    QObject::connect(&engine, &QObject::destroyed, this, [this]() {
+                        m_thumbnailProvider = nullptr;
+                    });
                 }
             },
         .pipelineCachePath = pipelineCachePath,

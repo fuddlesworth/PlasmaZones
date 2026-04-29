@@ -18,6 +18,7 @@
 #include <QDBusReply>
 #include <QDBusServiceWatcher>
 #include <QFile>
+#include <QFileInfo>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -235,15 +236,28 @@ bool OverlayAdaptor::isSnapAssistVisible()
     return m_overlayService ? m_overlayService->isSnapAssistVisible() : false;
 }
 
-void OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
+void OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+                                            const QByteArray& pixels)
 {
     if (!m_overlayService) {
+        return;
+    }
+    // Coarse byte cap before auth and any decode work. Headroom for a
+    // 1024² ARGB32 image (4 MiB) plus framing overhead, generous enough
+    // for the real 256² steady state (256 KiB) while rejecting payloads
+    // that would otherwise force the marshaller and the OverlayService
+    // validator to walk megabytes for a hostile sender. A finer-grained
+    // dimension/size match runs in OverlayService::setSnapAssistThumbnail.
+    static constexpr int MaxPixelBytes = 4 * 1024 * 1024 + 64;
+    if (pixels.size() > MaxPixelBytes) {
+        qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting oversize payload" << pixels.size() << "bytes for"
+                          << compositorHandle;
         return;
     }
     if (!authenticateKwinSender()) {
         return;
     }
-    m_overlayService->setSnapAssistThumbnail(compositorHandle, dataUrl);
+    m_overlayService->setSnapAssistThumbnail(compositorHandle, width, height, pixels);
 }
 
 bool OverlayAdaptor::authenticateKwinSender()
@@ -279,29 +293,30 @@ bool OverlayAdaptor::authenticateKwinSender()
     }
 
     const uint pid = pidReply.value();
-    // /proc/<pid>/comm is truncated to TASK_COMM_LEN (16) bytes by the kernel,
-    // which fits the kwin process names we accept. Reading the file is one
-    // syscall and the kernel guarantees per-PID liveness while we hold a
-    // reference via the bus connection's keepalive (the lookup above
-    // refcounted the credential).
-    QFile commFile(QStringLiteral("/proc/%1/comm").arg(pid));
-    if (!commFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnail: cannot read /proc/" << pid << "/comm — rejecting" << sender;
-        return false;
-    }
-    const QByteArray commLine = commFile.readLine().trimmed();
-    commFile.close();
-
+    // /proc/<pid>/exe is a kernel-maintained symlink to the actual binary
+    // path; unlike /proc/<pid>/comm it cannot be rewritten from userspace
+    // (no prctl(PR_SET_NAME) equivalent for the exe link). Compare the
+    // basename against the accepted set — full path differs by distro
+    // (/usr/bin vs /usr/lib/qt6/bin etc.) so basename matching is the
+    // portable form.
+    //
     // Project is Wayland-only (CLAUDE.md), but accept the X11 binary too —
     // the effect plugin runs inside whichever kwin variant the user is on,
-    // and a bare-metal X11 fallback still produces correctly-built thumbnails.
-    static const QByteArrayList kAcceptedComms = {
-        QByteArrayLiteral("kwin_wayland"),
-        QByteArrayLiteral("kwin_x11"),
+    // and a bare-metal X11 fallback still produces correctly-built
+    // thumbnails.
+    static const QStringList AcceptedExeBasenames = {
+        QStringLiteral("kwin_wayland"),
+        QStringLiteral("kwin_x11"),
     };
-    if (!kAcceptedComms.contains(commLine)) {
+    const QString exePath = QFile::symLinkTarget(QStringLiteral("/proc/%1/exe").arg(pid));
+    if (exePath.isEmpty()) {
+        qCWarning(lcDbus) << "setSnapAssistThumbnail: cannot resolve /proc/" << pid << "/exe — rejecting" << sender;
+        return false;
+    }
+    const QString exeBasename = QFileInfo(exePath).fileName();
+    if (!AcceptedExeBasenames.contains(exeBasename)) {
         qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting non-kwin sender" << sender << "pid=" << pid
-                          << "comm=" << commLine;
+                          << "exe=" << exePath;
         return false;
     }
 

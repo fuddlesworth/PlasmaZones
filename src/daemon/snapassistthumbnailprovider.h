@@ -18,7 +18,7 @@ namespace PlasmaZones {
  * URLs that the previous design accumulated for the daemon's whole session.
  * Two wins:
  *
- *   - Hard memory cap. @ref kCacheCapacity entries × 256² ARGB32 ≈ 6 MB worst
+ *   - Hard memory cap. @ref CacheCapacity entries × 256² ARGB32 ≈ 6 MB worst
  *     case. Long sessions that touch many windows discard the oldest entries
  *     instead of growing forever. Per-handle URL state lives inside the
  *     cache entry, so eviction reclaims it together with the image — no
@@ -45,9 +45,9 @@ class SnapAssistThumbnailProvider : public QQuickImageProvider
 {
 public:
     /// QML provider id — the host segment of `image://<id>/...`.
-    static constexpr const char* kProviderId = "plasmazones-snapassist";
+    static constexpr const char* ProviderId = "plasmazones-snapassist";
     /// Hard upper bound on cached thumbnails. 24 × 256² ARGB32 ≈ 6 MB.
-    static constexpr int kCacheCapacity = 24;
+    static constexpr int CacheCapacity = 24;
 
     SnapAssistThumbnailProvider();
 

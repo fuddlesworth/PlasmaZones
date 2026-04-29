@@ -191,7 +191,13 @@ Window {
                                     visible: !!(candidate && candidate.thumbnail)
                                     fillMode: Image.PreserveAspectFit
                                     source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
-                                    cache: false
+                                    // The provider URL embeds a monotonic generation token, so
+                                    // a re-insert always changes the source string and QML's
+                                    // QQuickPixmap cache invalidates correctly. Caching avoids
+                                    // re-entering the image-loader thread on every repaint of
+                                    // the snap-assist overlay (~12 candidates × multiple paints
+                                    // during the show animation).
+                                    cache: true
                                 }
 
                                 Kirigami.Icon {

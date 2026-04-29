@@ -236,30 +236,42 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
 }
 
-void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
+void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+                                            const QByteArray& pixels)
 {
-    // External entry point on the unauthenticated session bus, called by the
-    // kwin-effect after rendering a candidate window through KWin's
-    // OffscreenQuickScene + WindowThumbnail. Only the data:image/png;base64
-    // form is accepted — any other scheme is rejected. A previous revision
-    // also accepted file:// URLs, but that path was unused (the kwin-effect
-    // never produces them) and would have let any peer on the session bus
-    // ask the daemon to decode an arbitrary user-readable file into a
-    // 256×256 thumbnail addressable via the QML provider.
-    if (dataUrl.isEmpty()) {
+    // External entry point. The kwin-effect renders a candidate through
+    // KWin's OffscreenQuickScene + WindowThumbnail and posts the result as
+    // raw ARGB32 (non-premultiplied) pixels — no PNG encode, no base64.
+    // OverlayAdaptor::setSnapAssistThumbnail authenticates the sender and
+    // applies a coarse byte-cap before this slot runs; we still validate
+    // shape here because IOverlayService is a public C++ API and direct
+    // (non-D-Bus) callers may exist.
+    //
+    // Bounds: a 256² thumbnail is the steady-state size; 1024² is the
+    // ceiling. Anything larger is almost certainly a marshalling bug or a
+    // hostile sender that slipped past auth, and consumes excessive bytes
+    // to round-trip through the cache.
+    static constexpr int MaxDimension = 1024;
+    if (width <= 0 || height <= 0 || width > MaxDimension || height > MaxDimension) {
+        qCDebug(lcOverlay) << "setSnapAssistThumbnail: invalid dimensions" << width << "x" << height << "for"
+                           << compositorHandle;
         return;
     }
-    static const QString kDataPrefix = QStringLiteral("data:image/png;base64,");
-    if (!dataUrl.startsWith(kDataPrefix)) {
-        qCDebug(lcOverlay) << "setSnapAssistThumbnail: rejecting non-data URL for" << compositorHandle;
+    const qsizetype expectedBytes = qsizetype(width) * qsizetype(height) * 4;
+    if (pixels.size() != expectedBytes) {
+        qCDebug(lcOverlay) << "setSnapAssistThumbnail: pixel-buffer size mismatch — got" << pixels.size() << "expected"
+                           << expectedBytes << "for" << compositorHandle;
         return;
     }
-    const QByteArray bytes = QByteArray::fromBase64(QStringView{dataUrl}.mid(kDataPrefix.size()).toLatin1());
-    QImage image;
-    if (!image.loadFromData(bytes, "PNG") || image.isNull()) {
-        qCDebug(lcOverlay) << "setSnapAssistThumbnail: could not decode thumbnail for" << compositorHandle;
+    // QImage(uchar*, ...) constructs a non-owning view over the byte buffer;
+    // calling .copy() detaches into an owned image so the cache entry
+    // survives @p pixels going out of scope.
+    QImage view(reinterpret_cast<const uchar*>(pixels.constData()), width, height, width * 4, QImage::Format_ARGB32);
+    if (view.isNull()) {
+        qCDebug(lcOverlay) << "setSnapAssistThumbnail: QImage view construction failed for" << compositorHandle;
         return;
     }
+    QImage image = view.copy();
     updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
 }
 

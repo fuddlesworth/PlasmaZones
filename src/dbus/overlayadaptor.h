@@ -88,7 +88,7 @@ public Q_SLOTS:
                         const PlasmaZones::SnapAssistCandidateList& candidates);
     void hideSnapAssist();
     bool isSnapAssistVisible();
-    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl);
+    void setSnapAssistThumbnail(const QString& compositorHandle, int width, int height, const QByteArray& pixels);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);

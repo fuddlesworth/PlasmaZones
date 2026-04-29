@@ -48,6 +48,13 @@ public:
         return m_snapAssistEnabled;
     }
 
+    /// Forwards to @c SnapAssistThumbnailCapture::resetRecentlyPosted on the
+    /// underlying capture instance (no-op if capture wasn't lazily
+    /// constructed yet). Called from @c PlasmaZonesEffect's daemon-ready
+    /// path so the kwin-effect's view of "the daemon already holds these
+    /// thumbnails" is invalidated whenever the daemon's cache might be cold.
+    void resetRecentlyPostedThumbnails();
+
 private:
     PhosphorProtocol::SnapAssistCandidateList buildCandidates(const QString& excludeWindowId, const QString& screenId,
                                                               const QSet<QString>& snappedWindowIds) const;
