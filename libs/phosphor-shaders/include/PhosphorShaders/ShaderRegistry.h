@@ -48,7 +48,7 @@ class IWallpaperProvider;
 /// shader-warming path's contract). Calling `searchPaths()` *from* a
 /// worker thread concurrently with a GUI-thread mutation is a data race;
 /// snapshot on the GUI thread first.
-class PHOSPHORSHADERS_EXPORT ShaderPackRegistry : public QObject
+class PHOSPHORSHADERS_EXPORT ShaderRegistry : public QObject
 {
     Q_OBJECT
 
@@ -102,8 +102,8 @@ public:
         }
     };
 
-    explicit ShaderPackRegistry(QObject* parent = nullptr);
-    ~ShaderPackRegistry() override;
+    explicit ShaderRegistry(QObject* parent = nullptr);
+    ~ShaderRegistry() override;
 
     // ── Search paths ──────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ public:
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
 
-    /// Always true — once a `ShaderPackRegistry` is constructed, shader
+    /// Always true — once a `ShaderRegistry` is constructed, shader
     /// discovery and metadata are functional (the registry is purely a
     /// metadata-pack walker; actual shader compilation lives in the
     /// `phosphor-rendering` library which carries the `Qt6::ShaderTools`

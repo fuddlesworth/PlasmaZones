@@ -28,7 +28,7 @@ static constexpr int MaxWatchedFilesPerDir = 100;
 
 // Hard cap on scripts registered per rescan, summed across every
 // registered directory. Mirrors DirectoryLoader::kMaxEntries,
-// PhosphorShaders::ShaderPackRegistry::kMaxShaders, and AnimationShaderRegistry::
+// PhosphorShaders::ShaderRegistry::kMaxShaders, and AnimationShaderRegistry::
 // kMaxEffects — same defensive rationale, identical magnitude — so all
 // four fsloader-backed registries cap at the same scale. The per-dir
 // MaxWatchedFilesPerDir above is the secondary guard; this is the

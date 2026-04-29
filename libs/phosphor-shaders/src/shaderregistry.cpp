@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorShaders/ShaderPackRegistry.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorShaders/IWallpaperProvider.h>
 #include "shaderutils.h"
 
@@ -27,7 +27,7 @@
 
 namespace PhosphorShaders {
 
-Q_LOGGING_CATEGORY(lcShaderPackRegistry, "phosphorshaders.shaderpackregistry")
+Q_LOGGING_CATEGORY(lcShaderRegistry, "phosphorshaders.shaderregistry")
 
 namespace {
 /// Hard cap on shaders discovered per rescan, summed across every
@@ -52,7 +52,7 @@ static const char* const UniformColorNames[] = {"customColor1",  "customColor2",
                                                 "customColor9",  "customColor10", "customColor11", "customColor12",
                                                 "customColor13", "customColor14", "customColor15", "customColor16"};
 
-QString ShaderPackRegistry::ParameterInfo::uniformName() const
+QString ShaderRegistry::ParameterInfo::uniformName() const
 {
     if (slot < 0) {
         return QString();
@@ -106,10 +106,10 @@ static QString shaderNameToUuid(const QString& name)
 /// of truth for the registered search paths — `searchPaths()` forwards
 /// to it directly so callers always see the canonicalised, deduplicated
 /// list (no second member to keep in lockstep).
-class ShaderPackRegistry::ShaderScanStrategy : public PhosphorFsLoader::IScanStrategy
+class ShaderRegistry::ShaderScanStrategy : public PhosphorFsLoader::IScanStrategy
 {
 public:
-    explicit ShaderScanStrategy(ShaderPackRegistry& reg)
+    explicit ShaderScanStrategy(ShaderRegistry& reg)
         : m_reg(&reg)
     {
     }
@@ -120,13 +120,13 @@ public:
     }
 
 private:
-    ShaderPackRegistry* m_reg;
+    ShaderRegistry* m_reg;
 };
 
-ShaderPackRegistry::ShaderPackRegistry(QObject* parent)
+ShaderRegistry::ShaderRegistry(QObject* parent)
     : QObject(parent)
 {
-    qCInfo(lcShaderPackRegistry) << "Shader effects enabled";
+    qCInfo(lcShaderRegistry) << "Shader effects enabled";
 
     m_strategy = std::make_unique<ShaderScanStrategy>(*this);
     m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this);
@@ -140,13 +140,13 @@ ShaderPackRegistry::ShaderPackRegistry(QObject* parent)
     // (SHA-1 signature) and `AnimationShaderRegistry` (`QHash::operator!=`).
 }
 
-ShaderPackRegistry::~ShaderPackRegistry() = default;
+ShaderRegistry::~ShaderRegistry() = default;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Search Paths
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShaderPackRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
+void ShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
     // Single-path: priority direction is irrelevant — forward with the
     // canonical default. The `addSearchPaths` overload's `order`
@@ -154,8 +154,8 @@ void ShaderPackRegistry::addSearchPath(const QString& path, PhosphorFsLoader::Li
     addSearchPaths(QStringList{path}, liveReload, PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
 }
 
-void ShaderPackRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
-                                        PhosphorFsLoader::RegistrationOrder order)
+void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                    PhosphorFsLoader::RegistrationOrder order)
 {
     // Pre-canonicalise + drop already-registered paths via the shared
     // helper — keeps the log line below from spamming "Added search path:
@@ -176,11 +176,11 @@ void ShaderPackRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoad
     // canonical scan shape before the strategy runs.
     m_watcher->registerDirectories(toRegister, liveReload, order);
     for (const QString& path : std::as_const(toRegister)) {
-        qCInfo(lcShaderPackRegistry) << "Added search path:" << path;
+        qCInfo(lcShaderRegistry) << "Added search path:" << path;
     }
 }
 
-QStringList ShaderPackRegistry::searchPaths() const
+QStringList ShaderRegistry::searchPaths() const
 {
     // Delegate to the watcher — it is the single source of truth.
     // Keeping a parallel `m_searchPaths` member would be one canonical
@@ -190,7 +190,7 @@ QStringList ShaderPackRegistry::searchPaths() const
     return m_watcher->directories();
 }
 
-void ShaderPackRegistry::setUserShaderPath(const QString& path)
+void ShaderRegistry::setUserShaderPath(const QString& path)
 {
     if (m_userShaderPath == path) {
         return; // idempotent — same value, no work to do
@@ -215,13 +215,13 @@ void ShaderPackRegistry::setUserShaderPath(const QString& path)
 // Shader Identity Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString ShaderPackRegistry::noneShaderUuid()
+QString ShaderRegistry::noneShaderUuid()
 {
     // Empty string means "no shader" — keeps things simple
     return QString();
 }
 
-bool ShaderPackRegistry::isNoneShader(const QString& id)
+bool ShaderRegistry::isNoneShader(const QString& id)
 {
     return id.isEmpty();
 }
@@ -230,19 +230,19 @@ bool ShaderPackRegistry::isNoneShader(const QString& id)
 // Shader Discovery & Loading
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShaderPackRegistry::refresh()
+void ShaderRegistry::refresh()
 {
     // Synchronous rescan — `m_watcher->rescanNow()` calls into
     // `ShaderScanStrategy::performScan` on this stack, which clears and
     // reloads `m_shaders` and returns the full watch list. The
     // `rescanCompleted` signal connected in the constructor emits
     // `shadersChanged` after the strategy returns.
-    qCDebug(lcShaderPackRegistry) << "Refreshing shader registry";
+    qCDebug(lcShaderRegistry) << "Refreshing shader registry";
     m_watcher->rescanNow();
-    qCInfo(lcShaderPackRegistry) << "Total shaders=" << m_shaders.size();
+    qCInfo(lcShaderRegistry) << "Total shaders=" << m_shaders.size();
 }
 
-QStringList ShaderPackRegistry::performScan(const QStringList& directoriesInScanOrder)
+QStringList ShaderRegistry::performScan(const QStringList& directoriesInScanOrder)
 {
     m_shaders.clear();
     QStringList desiredWatches;
@@ -274,7 +274,7 @@ QStringList ShaderPackRegistry::performScan(const QStringList& directoriesInScan
         const QString& searchPath = *dirIt;
         QDir dirObj(searchPath);
         if (!dirObj.exists()) {
-            qCDebug(lcShaderPackRegistry) << "Search path does not exist:" << searchPath;
+            qCDebug(lcShaderRegistry) << "Search path does not exist:" << searchPath;
             continue;
         }
 
@@ -320,13 +320,13 @@ QStringList ShaderPackRegistry::performScan(const QStringList& directoriesInScan
         for (const QString& file : topFiles) {
             desiredWatches.append(dirObj.filePath(file));
         }
-        qCInfo(lcShaderPackRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
+        qCInfo(lcShaderRegistry) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << searchPath;
     }
 
     if (capTripped) {
-        qCWarning(lcShaderPackRegistry).nospace() << "ShaderPackRegistry: reached shader cap (" << kMaxShaders
-                                                  << ") — later shaders skipped to protect the GUI thread. Prune the "
-                                                     "watched search paths or raise kMaxShaders.";
+        qCWarning(lcShaderRegistry).nospace() << "ShaderRegistry: reached shader cap (" << kMaxShaders
+                                              << ") — later shaders skipped to protect the GUI thread. Prune the "
+                                                 "watched search paths or raise kMaxShaders.";
     }
 
     // Change-only emit: hash a stable fingerprint of the discovered set
@@ -364,17 +364,17 @@ QStringList ShaderPackRegistry::performScan(const QStringList& directoriesInScan
     return desiredWatches;
 }
 
-void ShaderPackRegistry::reportShaderBakeStarted(const QString& shaderId)
+void ShaderRegistry::reportShaderBakeStarted(const QString& shaderId)
 {
     Q_EMIT shaderCompilationStarted(shaderId);
 }
 
-void ShaderPackRegistry::reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error)
+void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error)
 {
     Q_EMIT shaderCompilationFinished(shaderId, success, error);
 }
 
-void ShaderPackRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShader)
+void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShader)
 {
     QDir dir(shaderDir);
     const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
@@ -382,7 +382,7 @@ void ShaderPackRegistry::loadShaderFromDir(const QString& shaderDir, bool isUser
     // Metadata is required
     const QFileInfo metadataInfo(metadataPath);
     if (!metadataInfo.exists()) {
-        qCDebug(lcShaderPackRegistry) << "Skipping shader path=" << shaderDir << "reason=no metadata.json";
+        qCDebug(lcShaderRegistry) << "Skipping shader path=" << shaderDir << "reason=no metadata.json";
         return;
     }
 
@@ -391,9 +391,8 @@ void ShaderPackRegistry::loadShaderFromDir(const QString& shaderDir, bool isUser
     // Reuse `DirectoryLoader::kMaxFileBytes` as the SSOT — same cap the
     // sister `JsonScanStrategy` enforces on every loaded JSON file.
     if (metadataInfo.size() > PhosphorFsLoader::DirectoryLoader::kMaxFileBytes) {
-        qCWarning(lcShaderPackRegistry) << "Skipping oversized metadata.json:" << metadataPath << "("
-                                        << metadataInfo.size() << "bytes, cap"
-                                        << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes << ")";
+        qCWarning(lcShaderRegistry) << "Skipping oversized metadata.json:" << metadataPath << "(" << metadataInfo.size()
+                                    << "bytes, cap" << PhosphorFsLoader::DirectoryLoader::kMaxFileBytes << ")";
         return;
     }
 
@@ -404,28 +403,28 @@ void ShaderPackRegistry::loadShaderFromDir(const QString& shaderDir, bool isUser
     // user dir is processed first; a subsequent system shader with a
     // colliding id is shadowed and silently skipped here.
     if (m_shaders.contains(info.id)) {
-        qCDebug(lcShaderPackRegistry) << "Shader id=" << info.id << "already registered from a higher-priority dir; "
-                                      << "shadowed at=" << shaderDir;
+        qCDebug(lcShaderRegistry) << "Shader id=" << info.id << "already registered from a higher-priority dir; "
+                                  << "shadowed at=" << shaderDir;
         return;
     }
 
     // Multipass requires at least one buffer shader; treat missing as load failure
     if (info.isMultipass && info.bufferShaderPaths.isEmpty()) {
-        qCWarning(lcShaderPackRegistry) << "Skipping multipass shader (missing buffer shader(s)):" << shaderDir;
+        qCWarning(lcShaderRegistry) << "Skipping multipass shader (missing buffer shader(s)):" << shaderDir;
         return;
     }
 
     // Validate fragment shader exists
     if (!QFile::exists(info.sourcePath)) {
-        qCWarning(lcShaderPackRegistry) << "Shader missing fragment shader:" << info.sourcePath;
+        qCWarning(lcShaderRegistry) << "Shader missing fragment shader:" << info.sourcePath;
         return;
     }
 
     // shaderUrl points directly to the raw GLSL fragment shader
     info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
 
-    qCDebug(lcShaderPackRegistry) << "Loaded shader name=" << info.name << "id=" << info.id
-                                  << "source=" << (isUserShader ? "user" : "system") << "from=" << shaderDir;
+    qCDebug(lcShaderRegistry) << "Loaded shader name=" << info.name << "id=" << info.id
+                              << "source=" << (isUserShader ? "user" : "system") << "from=" << shaderDir;
 
     // Check for preview image
     const QString previewPath = dir.filePath(QStringLiteral("preview.png"));
@@ -436,7 +435,7 @@ void ShaderPackRegistry::loadShaderFromDir(const QString& shaderDir, bool isUser
     m_shaders.insert(info.id, info);
 }
 
-ShaderPackRegistry::ShaderInfo ShaderPackRegistry::loadShaderMetadata(const QString& shaderDir)
+ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& shaderDir)
 {
     ShaderInfo info;
     QDir dir(shaderDir);
@@ -455,7 +454,7 @@ ShaderPackRegistry::ShaderInfo ShaderPackRegistry::loadShaderMetadata(const QStr
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
     if (error.error != QJsonParseError::NoError) {
-        qCWarning(lcShaderPackRegistry) << "Failed to parse shader metadata:" << metadataPath << error.errorString();
+        qCWarning(lcShaderRegistry) << "Failed to parse shader metadata:" << metadataPath << error.errorString();
         return info;
     }
 
@@ -497,7 +496,7 @@ ShaderPackRegistry::ShaderInfo ShaderPackRegistry::loadShaderMetadata(const QStr
         bool allExist = true;
         for (const QString& path : info.bufferShaderPaths) {
             if (!QFile::exists(path)) {
-                qCWarning(lcShaderPackRegistry) << "Multipass shader missing buffer shader:" << path;
+                qCWarning(lcShaderRegistry) << "Multipass shader missing buffer shader:" << path;
                 allExist = false;
                 break;
             }
@@ -589,7 +588,7 @@ ShaderPackRegistry::ShaderInfo ShaderPackRegistry::loadShaderMetadata(const QStr
 // Query Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QList<ShaderPackRegistry::ShaderInfo> ShaderPackRegistry::availableShaders() const
+QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
     // Sort by id for deterministic ordering. QHash iteration order is
     // intentionally randomised in Qt6 — without the sort, downstream
@@ -604,7 +603,7 @@ QList<ShaderPackRegistry::ShaderInfo> ShaderPackRegistry::availableShaders() con
     return sorted;
 }
 
-QVariantList ShaderPackRegistry::availableShadersVariant() const
+QVariantList ShaderRegistry::availableShadersVariant() const
 {
     // Mirror availableShaders()'s sort — same rationale.
     const QList<ShaderInfo> sorted = availableShaders();
@@ -616,12 +615,12 @@ QVariantList ShaderPackRegistry::availableShadersVariant() const
     return result;
 }
 
-ShaderPackRegistry::ShaderInfo ShaderPackRegistry::shader(const QString& id) const
+ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString& id) const
 {
     return m_shaders.value(id);
 }
 
-QVariantMap ShaderPackRegistry::shaderInfo(const QString& id) const
+QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
 {
     if (!m_shaders.contains(id)) {
         return QVariantMap();
@@ -629,7 +628,7 @@ QVariantMap ShaderPackRegistry::shaderInfo(const QString& id) const
     return shaderInfoToVariantMap(m_shaders.value(id));
 }
 
-QUrl ShaderPackRegistry::shaderUrl(const QString& id) const
+QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
     if (isNoneShader(id) || !m_shaders.contains(id)) {
         return QUrl();
@@ -641,7 +640,7 @@ QUrl ShaderPackRegistry::shaderUrl(const QString& id) const
 // Variant Map Conversion (merged from params.cpp)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QVariantMap ShaderPackRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
+QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
 {
     QVariantMap map;
     // Required fields (always set to non-empty strings)
@@ -703,7 +702,7 @@ QVariantMap ShaderPackRegistry::shaderInfoToVariantMap(const ShaderInfo& info) c
     return map;
 }
 
-QVariantMap ShaderPackRegistry::parameterInfoToVariantMap(const ParameterInfo& param) const
+QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param) const
 {
     QVariantMap map;
     map[QStringLiteral("id")] = param.id;
@@ -737,7 +736,7 @@ QVariantMap ShaderPackRegistry::parameterInfoToVariantMap(const ParameterInfo& p
 // Parameters, Presets & Validation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QVariantMap ShaderPackRegistry::presetParams(const QString& shaderId, const QString& presetName) const
+QVariantMap ShaderRegistry::presetParams(const QString& shaderId, const QString& presetName) const
 {
     const ShaderInfo info = shader(shaderId);
     if (!info.isValid() || !info.presets.contains(presetName)) {
@@ -747,7 +746,7 @@ QVariantMap ShaderPackRegistry::presetParams(const QString& shaderId, const QStr
     return validateAndCoerceParams(shaderId, info.presets.value(presetName));
 }
 
-QStringList ShaderPackRegistry::shaderPresetNames(const QString& shaderId) const
+QStringList ShaderRegistry::shaderPresetNames(const QString& shaderId) const
 {
     const ShaderInfo info = shader(shaderId);
     if (!info.isValid()) {
@@ -756,7 +755,7 @@ QStringList ShaderPackRegistry::shaderPresetNames(const QString& shaderId) const
     return info.presets.keys();
 }
 
-QVariantList ShaderPackRegistry::shaderPresetsVariant(const QString& shaderId) const
+QVariantList ShaderRegistry::shaderPresetsVariant(const QString& shaderId) const
 {
     const ShaderInfo info = shader(shaderId);
     if (!info.isValid()) {
@@ -772,7 +771,7 @@ QVariantList ShaderPackRegistry::shaderPresetsVariant(const QString& shaderId) c
     return result;
 }
 
-bool ShaderPackRegistry::validateParams(const QString& id, const QVariantMap& params) const
+bool ShaderRegistry::validateParams(const QString& id, const QVariantMap& params) const
 {
     const ShaderInfo info = shader(id);
     if (!info.isValid()) {
@@ -782,7 +781,7 @@ bool ShaderPackRegistry::validateParams(const QString& id, const QVariantMap& pa
     for (const ParameterInfo& param : info.parameters) {
         if (params.contains(param.id)) {
             if (!validateParameterValue(param, params.value(param.id))) {
-                qCWarning(lcShaderPackRegistry) << "Invalid shader parameter:" << param.id << "for shader:" << id;
+                qCWarning(lcShaderRegistry) << "Invalid shader parameter:" << param.id << "for shader:" << id;
                 return false;
             }
         }
@@ -790,7 +789,7 @@ bool ShaderPackRegistry::validateParams(const QString& id, const QVariantMap& pa
     return true;
 }
 
-bool ShaderPackRegistry::validateParameterValue(const ParameterInfo& param, const QVariant& value) const
+bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QVariant& value) const
 {
     if (param.type == QLatin1String("float")) {
         bool ok = false;
@@ -824,7 +823,7 @@ bool ShaderPackRegistry::validateParameterValue(const ParameterInfo& param, cons
     return true;
 }
 
-QVariantMap ShaderPackRegistry::validateAndCoerceParams(const QString& id, const QVariantMap& params) const
+QVariantMap ShaderRegistry::validateAndCoerceParams(const QString& id, const QVariantMap& params) const
 {
     QVariantMap result;
     const ShaderInfo info = shader(id);
@@ -842,7 +841,7 @@ QVariantMap ShaderPackRegistry::validateAndCoerceParams(const QString& id, const
     return result;
 }
 
-QVariantMap ShaderPackRegistry::defaultParams(const QString& id) const
+QVariantMap ShaderRegistry::defaultParams(const QString& id) const
 {
     QVariantMap result;
     const ShaderInfo info = shader(id);
@@ -856,16 +855,16 @@ QVariantMap ShaderPackRegistry::defaultParams(const QString& id) const
 // Wallpaper Path Resolution
 // ═══════════════════════════════════════════════════════════════════════════════
 
-std::unique_ptr<IWallpaperProvider> ShaderPackRegistry::s_wallpaperProvider;
-QString ShaderPackRegistry::s_cachedWallpaperPath;
-QImage ShaderPackRegistry::s_cachedWallpaperImage;
-qint64 ShaderPackRegistry::s_cachedWallpaperMtime = 0;
-QMutex ShaderPackRegistry::s_wallpaperCacheMutex;
-std::array<ShaderPackRegistry::WallpaperCropEntry, ShaderPackRegistry::CropCacheCapacity>
-    ShaderPackRegistry::s_cachedWallpaperCrops;
-int ShaderPackRegistry::s_cachedWallpaperCropNextSlot = 0;
+std::unique_ptr<IWallpaperProvider> ShaderRegistry::s_wallpaperProvider;
+QString ShaderRegistry::s_cachedWallpaperPath;
+QImage ShaderRegistry::s_cachedWallpaperImage;
+qint64 ShaderRegistry::s_cachedWallpaperMtime = 0;
+QMutex ShaderRegistry::s_wallpaperCacheMutex;
+std::array<ShaderRegistry::WallpaperCropEntry, ShaderRegistry::CropCacheCapacity>
+    ShaderRegistry::s_cachedWallpaperCrops;
+int ShaderRegistry::s_cachedWallpaperCropNextSlot = 0;
 
-QString ShaderPackRegistry::wallpaperPath()
+QString ShaderRegistry::wallpaperPath()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);
 
@@ -881,7 +880,7 @@ QString ShaderPackRegistry::wallpaperPath()
     return s_cachedWallpaperPath;
 }
 
-QImage ShaderPackRegistry::loadWallpaperImage()
+QImage ShaderRegistry::loadWallpaperImage()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);
 
@@ -909,11 +908,11 @@ QImage ShaderPackRegistry::loadWallpaperImage()
     }
     s_cachedWallpaperImage = img.convertToFormat(QImage::Format_RGBA8888);
     s_cachedWallpaperMtime = mtime;
-    qCDebug(lcShaderPackRegistry) << "Loaded and cached wallpaper image:" << path << s_cachedWallpaperImage.size();
+    qCDebug(lcShaderRegistry) << "Loaded and cached wallpaper image:" << path << s_cachedWallpaperImage.size();
     return s_cachedWallpaperImage;
 }
 
-QRect ShaderPackRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom)
+QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom)
 {
     if (wpSize.isEmpty() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
         return {};
@@ -972,7 +971,7 @@ QRect ShaderPackRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& ph
     return safe;
 }
 
-QImage ShaderPackRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& physGeom)
+QImage ShaderRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& physGeom)
 {
     QImage full = loadWallpaperImage();
     if (full.isNull() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
@@ -1019,7 +1018,7 @@ QImage ShaderPackRegistry::loadWallpaperImage(const QRect& subGeom, const QRect&
     return cropped;
 }
 
-void ShaderPackRegistry::invalidateWallpaperCache()
+void ShaderRegistry::invalidateWallpaperCache()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);
     s_cachedWallpaperPath.clear();
@@ -1036,8 +1035,7 @@ void ShaderPackRegistry::invalidateWallpaperCache()
 // Uniform Translation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QVariantMap ShaderPackRegistry::translateParamsToUniforms(const QString& shaderId,
-                                                          const QVariantMap& storedParams) const
+QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const
 {
     QVariantMap result;
     const ShaderInfo info = shader(shaderId);

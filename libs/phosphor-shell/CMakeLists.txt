@@ -7,7 +7,7 @@
 # QPA shell-integration plugin (`phosphorshell-qpa`) plus a thin
 # `LayerSurface` helper for setting layer-surface properties on a
 # QWindow. The shader pipeline (BaseUniforms, IUniformExtension,
-# ShaderIncludeResolver, IWallpaperProvider, ShaderPackRegistry) lives
+# ShaderIncludeResolver, IWallpaperProvider, ShaderRegistry) lives
 # in the sibling `phosphor-shaders` library — this lib is now purely
 # the Wayland integration. Phase D of the architecture refactor
 # (docs/phosphor-architecture-refactor-plan.md) renames this lib to

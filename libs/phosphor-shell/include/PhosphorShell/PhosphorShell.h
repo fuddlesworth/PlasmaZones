@@ -7,7 +7,7 @@
 /// Phase B1 of docs/phosphor-architecture-refactor-plan.md migrated the
 /// shader-domain headers (BaseUniforms, IUniformExtension,
 /// ShaderIncludeResolver, IWallpaperProvider, ShaderRegistry →
-/// ShaderPackRegistry) to the sibling `phosphor-shaders` library.
+/// ShaderRegistry) to the sibling `phosphor-shaders` library.
 /// Consumers wanting those types should `#include
 /// <PhosphorShaders/...>` directly. What remains here is the Wayland
 /// layer-shell integration.

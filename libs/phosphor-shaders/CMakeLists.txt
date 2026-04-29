@@ -5,7 +5,7 @@
 #
 # Shadertoy-compatible UBO layout (BaseUniforms), the consumer-side
 # IUniformExtension contract, GLSL #include resolver, wallpaper-provider
-# abstraction, and the metadata-pack-driven ShaderPackRegistry. The
+# abstraction, and the metadata-pack-driven ShaderRegistry. The
 # library is Wayland- and RHI-agnostic — phosphor-rendering builds on
 # top of the headers here, and phosphor-shell (the Wayland integration)
 # does not depend on it.
@@ -13,12 +13,12 @@
 # Phase B1 of docs/phosphor-architecture-refactor-plan.md: extracted
 # from phosphor-shell so the layer-shell QPA and shader concerns can be
 # reasoned about independently. The eventual Phase C1 target
-# `MetadataPackScanStrategy<Payload>` will let ShaderPackRegistry and
+# `MetadataPackScanStrategy<Payload>` will let ShaderRegistry and
 # AnimationShaderRegistry collapse onto the same pack-walker scaffold.
 #
 # Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
 # PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
-# downstream PlasmaZones code exposes ShaderPackRegistry to QML via
+# downstream PlasmaZones code exposes ShaderRegistry to QML via
 # context properties, so this lib stays C++-only. A `Phosphor.Shaders`
 # QML module can be added (alongside `QML_ELEMENT` annotations on the
 # C++ types) when an out-of-tree consumer needs `import Phosphor.Shaders`
@@ -44,7 +44,7 @@ include(GenerateExportHeader)
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
 
 # PhosphorFsLoader — shared filesystem-loader scaffolding (used by
-# ShaderPackRegistry's WatchedDirectorySet + ShaderScanStrategy).
+# ShaderRegistry's WatchedDirectorySet + ShaderScanStrategy).
 # find_package is a no-op when building in-tree (parent CMakeLists adds
 # the target first); the explicit lookup lets the lib stand alone
 # against an installed PhosphorFsLoader.
@@ -67,7 +67,7 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
     include/PhosphorShaders/ShaderIncludeResolver.h
-    include/PhosphorShaders/ShaderPackRegistry.h
+    include/PhosphorShaders/ShaderRegistry.h
 )
 
 # Extension-less Qt-style camelcase forwarders, installed alongside the .h files.
@@ -75,12 +75,12 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
     include/PhosphorShaders/ShaderIncludeResolver
-    include/PhosphorShaders/ShaderPackRegistry
+    include/PhosphorShaders/ShaderRegistry
 )
 
 set(phosphorshaders_SRCS
     src/shaderincluderesolver.cpp
-    src/shaderpackregistry.cpp
+    src/shaderregistry.cpp
     src/wallpaperprovider.cpp
 )
 
@@ -125,9 +125,9 @@ target_link_libraries(PhosphorShaders
     PUBLIC
         Qt6::Core
         Qt6::Gui
-        # PhosphorFsLoader is publicly exposed via ShaderPackRegistry's
+        # PhosphorFsLoader is publicly exposed via ShaderRegistry's
         # `LiveReload` parameter — consumers including
-        # `<PhosphorShaders/ShaderPackRegistry.h>` need its headers on
+        # `<PhosphorShaders/ShaderRegistry.h>` need its headers on
         # their include path.
         PhosphorFsLoader::PhosphorFsLoader
 )

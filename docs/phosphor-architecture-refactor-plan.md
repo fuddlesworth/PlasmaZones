@@ -87,7 +87,7 @@ Adopted from Quickshell's `<Brand>.<Capability>` discipline:
 | Library | One-line purpose | Owns | Does NOT own |
 |---|---|---|---|
 | **phosphor-fsloader** | Filesystem scan/watch + JSON envelope + **`MetadataPackScanStrategy<Payload>` (new)** | `WatchedDirectorySet`, `IScanStrategy`, `JsonEnvelopeValidator`, `MetadataPackScanStrategy` | Domain schema parsing |
-| **phosphor-shaders** *(new)* | Shader-domain primitives + unified registry + QML facade `Phosphor.Shaders` | `BaseUniforms`, `IUniformExtension`, `ShaderIncludeResolver`, `IWallpaperProvider`, **`ShaderPackRegistry`** | Wayland, RHI |
+| **phosphor-shaders** *(new)* | Shader-domain primitives + unified registry + QML facade `Phosphor.Shaders` | `BaseUniforms`, `IUniformExtension`, `ShaderIncludeResolver`, `IWallpaperProvider`, **`ShaderRegistry`** | Wayland, RHI |
 | **phosphor-wayland** *(rename of `phosphor-shell`)* | Wayland integration: wlr-layer-shell-v1 QPA plugin + `LayerSurface` | `LayerSurface`, `phosphorshell-qpa` plugin (renamed), wayland-scanner protocols | Shaders, rendering |
 | **phosphor-rendering** | Qt RHI shader rendering | `ShaderCompiler`, `ShaderEffect`, `ShaderNodeRhi` | Shader-pack discovery |
 | **phosphor-animation** | Motion primitives + Profile/Curve registries — **DI-only** | `CurveRegistry`, `PhosphorProfileRegistry` (DI), `QtQuickClockManager` (DI) | QML wrappers |
@@ -160,14 +160,14 @@ Six PRs across four phases. Each PR is atomic per the no-shims rule — no compa
 
 #### B1: Create `libs/phosphor-shaders/`; migrate shader-domain types out of `phosphor-shell`
 
-**Scope:** Move shader-domain headers + sources into a new `phosphor-shaders` library. Includes the existing `ShaderRegistry` move (renamed to `ShaderPackRegistry`). The unification with `AnimationShaderRegistry` happens in Phase C.
+**Scope:** Move shader-domain headers + sources into a new `phosphor-shaders` library. Includes the existing `ShaderRegistry` move (renamed to `ShaderRegistry`). The unification with `AnimationShaderRegistry` happens in Phase C.
 
 **Files moved (`phosphor-shell` → `phosphor-shaders`):**
 - `libs/phosphor-shell/include/PhosphorShell/BaseUniforms.h` → `libs/phosphor-shaders/include/PhosphorShaders/BaseUniforms.h`
 - `libs/phosphor-shell/include/PhosphorShell/IUniformExtension.h` → `…/IUniformExtension.h`
 - `libs/phosphor-shell/include/PhosphorShell/ShaderIncludeResolver.h` + `src/shaderincluderesolver.cpp` → `…`
 - `libs/phosphor-shell/include/PhosphorShell/IWallpaperProvider.h` + `src/wallpaperprovider.cpp` → `…`
-- `libs/phosphor-shell/include/PhosphorShell/ShaderRegistry.h` + `src/shaderregistry.cpp` → `…/ShaderPackRegistry.{h,cpp}` (rename)
+- `libs/phosphor-shell/include/PhosphorShell/ShaderRegistry.h` + `src/shaderregistry.cpp` → `…/ShaderRegistry.{h,cpp}` (rename)
 
 **New CMakeLists:** `libs/phosphor-shaders/CMakeLists.txt` declaring `Phosphor.Shaders` QML module via `qt_add_qml_module()`.
 
@@ -181,7 +181,7 @@ Six PRs across four phases. Each PR is atomic per the no-shims rule — no compa
 grep -rn 'PhosphorShell::\(BaseUniforms\|IUniformExtension\|ShaderIncludeResolver\|IWallpaperProvider\|ShaderRegistry\)' src/
 ```
 
-**`PlasmaZones::ShaderRegistry` (the subclass at `src/core/shaderregistry.h`):** rebases on `PhosphorShaders::ShaderPackRegistry`. The Q_INVOKABLE conveniences (`userShadersEnabled`, `userShaderDirectory`, `openUserShaderDirectory`) stay.
+**`PlasmaZones::ShaderRegistry` (the subclass at `src/core/shaderregistry.h`):** rebases on `PhosphorShaders::ShaderRegistry`. The Q_INVOKABLE conveniences (`userShadersEnabled`, `userShaderDirectory`, `openUserShaderDirectory`) stay.
 
 **Blast radius:** Largest of all PRs — header sweep across `src/`, `libs/phosphor-rendering/`, `libs/phosphor-shell/`, plus the new lib's CMake.
 **Blocks:** Phase C and Phase D.
@@ -199,12 +199,12 @@ grep -rn 'PhosphorShell::\(BaseUniforms\|IUniformExtension\|ShaderIncludeResolve
 **Blast radius:** Small (additive).
 **Blocks:** C2.
 
-#### C2: Re-implement `ShaderPackRegistry` on top of C1; collapse `AnimationShaderRegistry` registry plumbing
+#### C2: Re-implement `ShaderRegistry` on top of C1; collapse `AnimationShaderRegistry` registry plumbing
 
-**Scope:** `ShaderPackRegistry` (in `phosphor-shaders` after B1) becomes a thin specialisation of `MetadataPackScanStrategy<ShaderInfo>`. `AnimationShaderRegistry` (in `phosphor-animation-shaders`) becomes a thin specialisation of `MetadataPackScanStrategy<AnimationShaderEffect>` — **survives as a distinct lib** because `ShaderProfile`/`ShaderProfileTree` are unambiguously animation-domain.
+**Scope:** `ShaderRegistry` (in `phosphor-shaders` after B1) becomes a thin specialisation of `MetadataPackScanStrategy<ShaderInfo>`. `AnimationShaderRegistry` (in `phosphor-animation-shaders`) becomes a thin specialisation of `MetadataPackScanStrategy<AnimationShaderEffect>` — **survives as a distinct lib** because `ShaderProfile`/`ShaderProfileTree` are unambiguously animation-domain.
 
 **Files modified:**
-- `libs/phosphor-shaders/src/shaderpackregistry.cpp` — collapse onto `MetadataPackScanStrategy`
+- `libs/phosphor-shaders/src/shaderregistry.cpp` — collapse onto `MetadataPackScanStrategy`
 - `libs/phosphor-animation-shaders/src/animationshaderregistry.cpp` — collapse onto `MetadataPackScanStrategy`
 - Both files lose ~150 lines each of duplicated walker/cap/signature code
 
@@ -280,7 +280,7 @@ grep -rn 'PhosphorShell::\(BaseUniforms\|IUniformExtension\|ShaderIncludeResolve
 | # | Question | Resolution | Reasoning |
 |---|---|---|---|
 | 1 | Should `AnimationShaderRegistry` survive Phase C as a thin specialisation, or collapse into `phosphor-shaders` entirely? | **Survive** | `ShaderProfile`/`ShaderProfileTree` are unambiguously animation-domain — they fan out per `MotionEvent`. The lib retains its identity even after the registry plumbing lifts out. |
-| 2 | `phosphor-shaders` C++-only, or expose QML facade `Phosphor.Shaders`? | **QML facade** | Mirrors Quickshell's `Quickshell.Services.*` pattern: registry-style libs that QML consumes get a thin QML facade. `Phosphor.Shaders.ShaderPackRegistry` becomes importable from QML. |
+| 2 | `phosphor-shaders` C++-only, or expose QML facade `Phosphor.Shaders`? | **QML facade** | Mirrors Quickshell's `Quickshell.Services.*` pattern: registry-style libs that QML consumes get a thin QML facade. `Phosphor.Shaders.ShaderRegistry` becomes importable from QML. |
 | 3 | Adopt Quickshell's Reloadable + Generation pattern? | **Phase E (deferred)** | Today's per-registry atomic-swap model is sufficient for the loose cross-registry coupling that exists. Generation pattern becomes load-bearing once user-authored QML or scripted layouts cross-reference fsloader-discovered IDs. |
 | 4 | Where does `phosphor-engine-types` merge? | **Into `phosphor-engine-api`** | The namespace mismatch (`PhosphorEngineApi` namespace inside a `phosphor-engine-types` lib) was always going to be a rebrand trap. Headers move into `engine-api/`; the artificial split disappears. |
 
@@ -307,7 +307,7 @@ SPDX headers on every moved/created file. Per the no-shims rule, original copies
 - **A3**: Composition-root smoke tests (daemon startup, editor open, settings load) catch missing DI wiring. Tests that constructed via `instance()` rebind to the DI'd registry.
 - **B1**: Header sweep validated by full-suite `ctest --output-on-failure`. The shader-domain test files (`test_shaderregistry.cpp`, etc.) move from `phosphor-shell/tests/` to `phosphor-shaders/tests/`.
 - **C1**: New test file `test_metadatapackscanstrategy.cpp` with the contract pinned (existing registry tests inform the test list).
-- **C2**: Both registry test files (`test_shaderregistry.cpp` rebased on `ShaderPackRegistry`; `test_animationshaderregistry.cpp`) continue to pass — public API unchanged.
+- **C2**: Both registry test files (`test_shaderregistry.cpp` rebased on `ShaderRegistry`; `test_animationshaderregistry.cpp`) continue to pass — public API unchanged.
 - **D1**: Rename test discovery confirms no stale `PhosphorShell::` references survive.
 
 ---

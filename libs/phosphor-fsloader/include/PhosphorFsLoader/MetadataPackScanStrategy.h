@@ -31,7 +31,7 @@ namespace PhosphorFsLoader {
 /**
  * @brief Reusable scan strategy for `metadata.json`-driven subdirectory pack registries.
  *
- * Owns the cross-cutting scaffolding both `PhosphorShaders::ShaderPackRegistry`
+ * Owns the cross-cutting scaffolding both `PhosphorShaders::ShaderRegistry`
  * and `PhosphorAnimationShaders::AnimationShaderRegistry` were duplicating
  * verbatim:
  *
