@@ -158,7 +158,11 @@ Q_SIGNALS:
                                   const QString& screenId);
 
     /**
-     * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
+     * @brief Informational signal emitted when the Snap Assist overlay is shown.
+     *
+     * The kwin-effect drives thumbnail capture independently as part of the
+     * `showSnapAssist` call sequence (not in response to this signal); the
+     * signal is exposed for external observers (KCMs, debugging tools).
      */
     void snapAssistShown(const QString& screenId, const EmptyZoneList& emptyZones,
                          const SnapAssistCandidateList& candidates);

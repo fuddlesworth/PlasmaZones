@@ -169,7 +169,17 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // for windows the user has snap-assisted to recently. Misses fall back
     // to the icon path in QML; the effect's per-candidate D-Bus calls
     // arrive shortly after and update the candidate list in place.
-    m_snapAssistCandidates.clear();
+    //
+    // Build the list locally and swap at the end. m_snapAssistCandidates
+    // is read by updateSnapAssistCandidateThumbnail (D-Bus dispatch path);
+    // an interleaved iteration over a partially-built list would observe
+    // half-populated candidates. Single-thread today (D-Bus + QML both
+    // dispatch on the main thread) makes the interleave impossible, but
+    // a future setSnapAssistThumbnail invoked via QueuedConnection from
+    // a worker would break that invariant. Building locally pins the
+    // contract regardless of dispatch threading.
+    QVariantList rebuilt;
+    rebuilt.reserve(candidatesList.size());
     int cachedCount = 0;
     for (int i = 0; i < candidatesList.size(); ++i) {
         QVariantMap cand = candidatesList[i].toMap();
@@ -181,8 +191,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
                 ++cachedCount;
             }
         }
-        m_snapAssistCandidates.append(cand);
+        rebuilt.append(cand);
     }
+    m_snapAssistCandidates = std::move(rebuilt);
     qCDebug(lcOverlay) << "showSnapAssist:" << cachedCount << "cached thumbnails;"
                        << "remaining will arrive from kwin-effect via setSnapAssistThumbnail";
 

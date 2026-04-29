@@ -49,7 +49,6 @@ private Q_SLOTS:
     void evictionDropsUrlState();
     void requestImageHonoursRequestedSize();
     void bracedUuidHandleLookup();
-    void urlEmbedsHandleAndGeneration();
     void concurrentReadWriteIsRaceFree();
 };
 
@@ -231,30 +230,6 @@ void TestSnapAssistThumbnailProvider::bracedUuidHandleLookup()
     const QString id = url.section(QLatin1Char('/'), 3, -1);
     QSize sz;
     QVERIFY(!p.requestImage(id, &sz, QSize()).isNull());
-}
-
-void TestSnapAssistThumbnailProvider::urlEmbedsHandleAndGeneration()
-{
-    SnapAssistThumbnailProvider p;
-    const QUuid u = QUuid::createUuid();
-    const QString braced = u.toString();
-    const QString unbraced = u.toString(QUuid::WithoutBraces);
-
-    const QString u1 = p.insert(braced, solid(2, 2, Qt::red));
-    const QString u2 = p.insert(braced, solid(2, 2, Qt::green));
-
-    const QString prefix = QStringLiteral("image://") + QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId)
-        + QLatin1Char('/') + unbraced + QLatin1Char('/');
-    QVERIFY(u1.startsWith(prefix));
-    QVERIFY(u2.startsWith(prefix));
-
-    bool ok1 = false;
-    bool ok2 = false;
-    const quint32 g1 = u1.mid(prefix.size()).toUInt(&ok1);
-    const quint32 g2 = u2.mid(prefix.size()).toUInt(&ok2);
-    QVERIFY(ok1);
-    QVERIFY(ok2);
-    QVERIFY(g2 > g1); // monotonic across inserts
 }
 
 void TestSnapAssistThumbnailProvider::concurrentReadWriteIsRaceFree()

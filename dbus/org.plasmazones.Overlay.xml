@@ -165,7 +165,7 @@
             </arg>
         </signal>
         <signal name="snapAssistShown">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. The kwin-effect captures thumbnails for the candidates in-process (via OffscreenQuickScene + WindowThumbnail) and posts them back through setSnapAssistThumbnail."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted after the daemon has built the Snap Assist overlay. The kwin-effect drives thumbnail capture independently as part of the showSnapAssist call sequence (not in response to this signal); the signal is exposed for external observers (KCMs, debugging tools)."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID where snap occurred."/>
             </arg>

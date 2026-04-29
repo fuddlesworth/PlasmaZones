@@ -118,11 +118,12 @@ private:
     /// icon path otherwise.
     void attemptCapture(Pending p, int delayMs, int retriesLeft);
 
-    /// Mark @p handle as posted to the daemon, evicting the oldest entry
-    /// if the bookkeeping set is at capacity. Called from the D-Bus
+    /// Mark @p handle as posted to the daemon, evicting the least-recently-
+    /// used entry if the bookkeeping is at capacity. Called from the D-Bus
     /// pending-call success path inside @ref postThumbnail so failed sends
     /// leave the handle un-tracked and the next snap-assist invocation
-    /// retries.
+    /// retries. Re-marking an already-tracked handle bumps it to the
+    /// most-recently-used end (mirrors the daemon's QCache promote-on-insert).
     void markRecentlyPosted(const QUuid& handle);
 
     /// True when @p handle was recently posted to the daemon and is
@@ -131,20 +132,35 @@ private:
     /// so this side stays in sync with the daemon's eviction window.
     bool wasRecentlyPosted(const QUuid& handle) const;
 
+    /// Move @p handle to the most-recently-used end of the order queue.
+    /// Called from the @ref captureCandidates skip-recapture path AND the
+    /// @ref markRecentlyPosted re-mark path so this side mirrors the
+    /// daemon's QCache promote-on-access semantics. Without this, a
+    /// frequently re-snapped window drifts out of the bookkeeping window
+    /// in the order it was first posted, even though the daemon would
+    /// keep it MRU and never evict it — re-capturing redundantly when
+    /// the daemon still holds the entry.
+    /// No-op if @p handle isn't in the order queue (defensive against
+    /// invariant violations).
+    void bumpRecency(const QUuid& handle);
+
     /// Mirror of the daemon-side LRU cap, sourced from the shared
     /// @c PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity
     /// constant rather than a duplicate literal. A single bump in the
     /// shared header re-aligns both sides on rebuild — capacity drift
     /// across rebuilds is impossible.
     ///
-    /// Eviction *order* still differs across the boundary: the daemon
-    /// is true-LRU (its QCache promotes recency on every @c urlFor /
-    /// @c requestImage hit), this side is plain FIFO of first-post
-    /// times. Both drift directions have bounded fallbacks — if the
-    /// daemon evicts ahead of this FIFO, the effect skips a re-capture
-    /// and snap-assist falls back to icons until the FIFO rolls past;
-    /// if this FIFO evicts ahead of the daemon, the next capture is
-    /// wasted (re-posted into a slot the daemon already held). For the
+    /// Both sides are LRU: the daemon's QCache promotes recency on every
+    /// @c urlFor / @c requestImage hit; this side promotes via
+    /// @ref bumpRecency on every "we used the dedup state" event
+    /// (skip-recapture decision in @ref captureCandidates and re-mark
+    /// in @ref markRecentlyPosted). Promotion semantics aren't perfectly
+    /// symmetric — the daemon also promotes on QML's @c requestImage
+    /// (paint-time) which the effect can't observe — but the residual
+    /// drift in either direction has bounded fallbacks: if the daemon
+    /// evicts ahead of this side, the effect skips re-capture and
+    /// snap-assist falls back to icons; if this side evicts ahead of
+    /// the daemon, the next capture is a wasted re-post. For the
     /// daemon-restart case where the gap is unbounded,
     /// @ref resetRecentlyPosted clears the set on daemon-ready
     /// transitions so a cold daemon cache also resets the dedup state.

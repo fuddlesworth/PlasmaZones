@@ -11,14 +11,13 @@
 #include "../core/logging.h"
 #include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <QDBusConnection>
-#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 #include <QDBusServiceWatcher>
 #include <QFile>
 #include <QFileInfo>
@@ -264,12 +263,15 @@ bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
     if (!m_overlayService) {
         return false;
     }
-    // Coarse byte cap before auth and any decode work. Headroom for a
-    // 1024² ARGB32 image (4 MiB) plus framing overhead, generous enough
-    // for the real 256² steady state (256 KiB) while rejecting payloads
-    // that would otherwise force the marshaller and the OverlayService
-    // validator to walk megabytes for a hostile sender. A finer-grained
-    // dimension/size match runs in OverlayService::setSnapAssistThumbnail.
+    // Hard byte cap matching a 1024² ARGB32 image (4 MiB) plus framing
+    // overhead, generous for the 256² steady state (256 KiB). Note: by the
+    // time this slot runs, QtDBus has already deserialised the QByteArray —
+    // the marshaller cost is paid regardless. What this guard actually
+    // bounds is (a) downstream validation cost in OverlayService against
+    // an authenticated kwin-effect bug producing a too-large buffer, and
+    // (b) the daemon's QImage.copy() walk if the buffer slipped past auth.
+    // A finer-grained dimension/byte-count match runs in
+    // OverlayService::setSnapAssistThumbnail.
     static constexpr int MaxPixelBytes = 4 * 1024 * 1024 + 64;
     if (pixels.size() > MaxPixelBytes) {
         qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting oversize payload" << pixels.size() << "bytes for"
@@ -311,15 +313,20 @@ bool OverlayAdaptor::authenticateKwinSender()
     // (e.g. the very first call after a kwin restart). Acceptable cost:
     // one ~1ms GetConnectionUnixProcessID round-trip; subsequent calls
     // hit the cache.
+    //
+    // Bounded with the shared @c SyncCallTimeoutMs (500 ms) — the
+    // dbus-daemon's @c GetConnectionUnixProcessID is a hash lookup, so
+    // 500 ms is "definitely something is wrong" rather than a meaningful
+    // expected latency. Qt's default 25 s timeout would freeze the
+    // daemon's main thread (and every overlay it drives) under
+    // dbus-daemon stress; capping here keeps degradation graceful.
     QDBusConnection bus = connection();
-    auto* iface = bus.interface();
-    if (!iface) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnail: no D-Bus interface for sender PID lookup; rejecting" << sender;
-        return false;
-    }
-
-    QDBusReply<uint> pidReply = iface->servicePid(sender);
-    if (!pidReply.isValid() || pidReply.value() == 0) {
+    QDBusMessage pidMsg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("GetConnectionUnixProcessID"));
+    pidMsg << sender;
+    const QDBusMessage pidReplyMsg = bus.call(pidMsg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    if (pidReplyMsg.type() != QDBusMessage::ReplyMessage || pidReplyMsg.arguments().isEmpty()) {
         // Most commonly hit when a thumbnail call beats the pre-warm reply
         // and KWin disconnects mid-flight (PID has gone, GetConnectionUnixProcessID
         // returns NameHasNoOwner). Benign and self-healing — kwin's next
@@ -327,11 +334,15 @@ bool OverlayAdaptor::authenticateKwinSender()
         // routine session churn out of the warning channel; actual auth
         // rejections still log at warning level inside @ref validateExeAndTrust.
         qCDebug(lcDbus) << "setSnapAssistThumbnail: GetConnectionUnixProcessID failed for" << sender << "—"
-                        << pidReply.error().message();
+                        << pidReplyMsg.errorMessage();
+        return false;
+    }
+    const uint pid = pidReplyMsg.arguments().constFirst().toUInt();
+    if (pid == 0) {
         return false;
     }
 
-    return validateExeAndTrust(sender, pidReply.value());
+    return validateExeAndTrust(sender, pid);
 }
 
 bool OverlayAdaptor::validateExeAndTrust(const QString& uniqueName, uint pid)

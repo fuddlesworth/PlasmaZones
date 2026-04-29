@@ -70,6 +70,12 @@ void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& can
             continue;
         }
         if (wasRecentlyPosted(c.internalId)) {
+            // Promote: the handle is being "used" via the skip-recapture
+            // decision, mirroring the daemon's QCache promote-on-access.
+            // Without this, a frequently re-snapped window FIFOs out of
+            // the bookkeeping window even though the daemon keeps it MRU
+            // and never evicts it.
+            bumpRecency(c.internalId);
             ++skipped;
             continue;
         }
@@ -114,12 +120,13 @@ bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle) const
 void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
 {
     if (m_recentlyPostedSet.contains(handle)) {
-        // Already tracked — leave the queue position alone. Re-touching here
-        // would require an O(n) lookup-and-erase to refresh recency, and the
-        // daemon's QCache already handles per-handle recency on its own
-        // insert path. Keeping insertion order stable means the eviction
-        // bound mirrors first-post time, which is what we need to match the
-        // daemon's "saw N distinct handles" budget.
+        // Re-mark: bump to MRU so a re-posted handle (which the daemon
+        // also just promoted via QCache::insert) stays at the head of
+        // the order queue. The previous "leave queue position alone"
+        // behaviour drifted re-posted handles out of the dedup window
+        // in first-post order even though the daemon would never evict
+        // them, causing wasted re-captures.
+        bumpRecency(handle);
         return;
     }
     m_recentlyPostedSet.insert(handle);
@@ -127,6 +134,17 @@ void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
     while (m_recentlyPostedOrder.size() > RecentPostedCapacity) {
         const QUuid evicted = m_recentlyPostedOrder.dequeue();
         m_recentlyPostedSet.remove(evicted);
+    }
+}
+
+void SnapAssistThumbnailCapture::bumpRecency(const QUuid& handle)
+{
+    // QQueue::removeOne is O(n) over n=RecentPostedCapacity (24); trivially
+    // cheap for this cadence. Returns false if @p handle isn't present —
+    // in that case skip the enqueue, otherwise we'd add a duplicate and
+    // break the set/queue size invariant.
+    if (m_recentlyPostedOrder.removeOne(handle)) {
+        m_recentlyPostedOrder.enqueue(handle);
     }
 }
 
@@ -199,10 +217,12 @@ void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retr
         if (!m_scene || !m_scene->rootItem()) {
             qCDebug(lcSnapAssistCapture) << "attemptCapture: scene torn down — aborting" << p.internalId.toString();
             dropQueueAndIdle();
-            // Re-enter the queue loop so any captures enqueued between
-            // schedule and fire still get drained — a no-op when the
-            // queue is empty (idempotent).
-            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+            // No follow-up @c processNext kick: @c dropQueueAndIdle has
+            // already cleared the queue, so re-entering would be a no-op
+            // on an empty queue. The next @ref captureCandidates call
+            // will re-dispatch from scratch (and will hit the same
+            // scene-torn-down path inside @ref processNext if the scene
+            // never recovers, which logs at warning and discards cleanly).
             return;
         }
         m_scene->update();
@@ -266,7 +286,15 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setSnapAssistThumbnail"));
     msg << compositorHandle << width << height << pixels;
 
-    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    // Bound watcher accumulation if the daemon's main thread wedges. The
+    // post is genuinely async — 2 s is "definitely something is wrong,
+    // drop the watcher" rather than a meaningful expected latency. Without
+    // an explicit timeout the kwin-effect could otherwise leak a watcher
+    // per snap-assist candidate per show until Qt's default 25 s timeout
+    // expires, which under daemon stress turns a transient hang into
+    // accumulated compositor-process state.
+    constexpr int PostTimeoutMs = 2000;
+    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg, PostTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Capture @c this — the connect's context arg auto-disconnects the
     // lambda if `this` dies, so capture-by-pointer is safe across the
