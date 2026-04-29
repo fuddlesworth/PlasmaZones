@@ -357,13 +357,24 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // arriving after the engine is gone (e.g. forced
                 // SurfaceManager teardown outside @c ~OverlayService) would
                 // see a dangling raw pointer.
-                if (m_thumbnailProviderOwned) {
-                    engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
-                                            m_thumbnailProviderOwned.release());
-                    QObject::connect(&engine, &QObject::destroyed, this, [this]() {
-                        m_thumbnailProvider = nullptr;
-                    });
+                //
+                // Re-entrancy: if @c engineConfigurator is ever invoked again
+                // (a future SurfaceManager that recreates its engine), the
+                // unique_ptr will be empty after the first @c release(). Mint
+                // a fresh provider so the second engine isn't quietly
+                // unregistered from snap-assist thumbnails. Today the engine
+                // is single-instance for the daemon's lifetime, but defending
+                // here costs ~3 lines and removes a foot-gun if that
+                // invariant ever changes.
+                if (!m_thumbnailProviderOwned) {
+                    m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
+                    m_thumbnailProvider = m_thumbnailProviderOwned.get();
                 }
+                engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
+                                        m_thumbnailProviderOwned.release());
+                QObject::connect(&engine, &QObject::destroyed, this, [this]() {
+                    m_thumbnailProvider = nullptr;
+                });
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,

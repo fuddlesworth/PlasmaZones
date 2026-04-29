@@ -139,10 +139,19 @@ void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
 
 void SnapAssistThumbnailCapture::bumpRecency(const QUuid& handle)
 {
+    // Debug-build invariant guard: every caller (the @ref captureCandidates
+    // skip-recapture path and @ref markRecentlyPosted's re-mark branch) only
+    // reaches here after observing @c m_recentlyPostedSet.contains(handle).
+    // If the queue diverges from the set the set/queue size invariant has
+    // already broken — surface that early in debug rather than silently
+    // no-op'ing here. Compiles to nothing in release.
+    Q_ASSERT_X(m_recentlyPostedSet.contains(handle), "bumpRecency",
+               "called for a handle not in the set — set/queue invariant broken");
     // QQueue::removeOne is O(n) over n=RecentPostedCapacity (24); trivially
     // cheap for this cadence. Returns false if @p handle isn't present —
     // in that case skip the enqueue, otherwise we'd add a duplicate and
-    // break the set/queue size invariant.
+    // break the set/queue size invariant. (In debug builds the assert above
+    // catches this earlier; the runtime guard stays for release safety.)
     if (m_recentlyPostedOrder.removeOne(handle)) {
         m_recentlyPostedOrder.enqueue(handle);
     }

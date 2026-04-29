@@ -21,7 +21,11 @@
 #include <QDBusServiceWatcher>
 #include <QFile>
 #include <QFileInfo>
+#include <QLatin1StringView>
 #include <QTimer>
+
+#include <algorithm>
+#include <array>
 
 namespace PlasmaZones {
 
@@ -274,8 +278,14 @@ bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
     // OverlayService::setSnapAssistThumbnail.
     static constexpr int MaxPixelBytes = 4 * 1024 * 1024 + 64;
     if (pixels.size() > MaxPixelBytes) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting oversize payload" << pixels.size() << "bytes for"
-                          << compositorHandle;
+        // Don't log @c compositorHandle — this branch fires before
+        // @ref authenticateKwinSender, so the field is attacker-controlled
+        // and a hostile peer could steer arbitrary content (long strings,
+        // ANSI sequences) into the warning channel via a 5 MB blob. Length
+        // is enough to distinguish "empty handle" from "well-formed-looking
+        // handle" without quoting the bytes.
+        qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting oversize payload" << pixels.size()
+                          << "bytes (handle len=" << compositorHandle.size() << ")";
         return false;
     }
     if (!authenticateKwinSender()) {
@@ -365,10 +375,15 @@ bool OverlayAdaptor::validateExeAndTrust(const QString& uniqueName, uint pid)
     // ship (Arch / Fedora's session integration); without it auth fails
     // silently on packaged installs and snap-assist falls back to icons
     // for the daemon's whole session.
-    static const QStringList AcceptedExeBasenames = {
-        QStringLiteral("kwin_wayland"),
-        QStringLiteral("kwin_wayland_wrapper"),
-        QStringLiteral("kwin_x11"),
+    //
+    // QLatin1StringView array (rather than function-local static QStringList)
+    // so the basenames are zero-allocation constants resolved at compile
+    // time. The earlier QStringList form paid one-time heap allocations on
+    // first call via static initialisation.
+    static constexpr std::array<QLatin1StringView, 3> AcceptedExeBasenames = {
+        QLatin1StringView("kwin_wayland"),
+        QLatin1StringView("kwin_wayland_wrapper"),
+        QLatin1StringView("kwin_x11"),
     };
     const QString exePath = QFile::symLinkTarget(QStringLiteral("/proc/%1/exe").arg(pid));
     if (exePath.isEmpty()) {
@@ -376,7 +391,11 @@ bool OverlayAdaptor::validateExeAndTrust(const QString& uniqueName, uint pid)
         return false;
     }
     const QString exeBasename = QFileInfo(exePath).fileName();
-    if (!AcceptedExeBasenames.contains(exeBasename)) {
+    const bool accepted =
+        std::any_of(AcceptedExeBasenames.begin(), AcceptedExeBasenames.end(), [&exeBasename](QLatin1StringView v) {
+            return exeBasename == v;
+        });
+    if (!accepted) {
         qCWarning(lcDbus) << "validateExeAndTrust: rejecting non-kwin sender" << uniqueName << "pid=" << pid
                           << "exe=" << exePath;
         return false;
