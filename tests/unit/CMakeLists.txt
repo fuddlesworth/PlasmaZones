@@ -253,6 +253,18 @@ target_link_libraries(test_overlay_scope_prefixes
             PhosphorAnimationLayer::PhosphorAnimationLayer)
 add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
 
+# Snap-assist thumbnail provider: bounded LRU cache, monotonic URL
+# generation, eviction-tied URL state. Compiles the daemon source
+# directly because the provider lives in the plasmazonesd executable, not
+# plasmazones_core.
+add_executable(test_snap_assist_thumbnail_provider
+    daemon/test_snap_assist_thumbnail_provider.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/snapassistthumbnailprovider.cpp
+)
+target_link_libraries(test_snap_assist_thumbnail_provider
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick)
+add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumbnail_provider)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════

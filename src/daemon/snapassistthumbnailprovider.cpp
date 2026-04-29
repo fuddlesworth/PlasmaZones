@@ -18,8 +18,8 @@ QImage SnapAssistThumbnailProvider::requestImage(const QString& id, QSize* size,
     QImage out;
     {
         QMutexLocker lock(&m_mutex);
-        QImage* cached = m_cache.object(handle);
-        if (!cached || cached->isNull()) {
+        Entry* cached = m_cache.object(handle);
+        if (!cached || cached->image.isNull()) {
             if (size) {
                 *size = QSize(0, 0);
             }
@@ -28,7 +28,7 @@ QImage SnapAssistThumbnailProvider::requestImage(const QString& id, QSize* size,
         // QImage is implicitly shared — assignment bumps a refcount, not a
         // pixel copy. Lift the value out before unlocking so the cache can
         // evict the entry without invalidating the returned image.
-        out = *cached;
+        out = cached->image;
     }
 
     if (size) {
@@ -46,13 +46,12 @@ QString SnapAssistThumbnailProvider::insert(const QString& compositorHandle, QIm
     if (compositorHandle.isEmpty() || image.isNull()) {
         return QString();
     }
-    quint32 gen = 0;
-    {
-        QMutexLocker lock(&m_mutex);
-        gen = ++m_generations[compositorHandle];
-        m_cache.insert(compositorHandle, new QImage(std::move(image)));
-    }
-    return makeUrl(compositorHandle, gen);
+    QMutexLocker lock(&m_mutex);
+    const quint32 gen = ++m_generation;
+    const QString url = makeUrl(compositorHandle, gen);
+    auto* entry = new Entry{std::move(image), url};
+    m_cache.insert(compositorHandle, entry);
+    return url;
 }
 
 QString SnapAssistThumbnailProvider::urlFor(const QString& compositorHandle) const
@@ -61,10 +60,8 @@ QString SnapAssistThumbnailProvider::urlFor(const QString& compositorHandle) con
         return QString();
     }
     QMutexLocker lock(&m_mutex);
-    if (!m_cache.contains(compositorHandle)) {
-        return QString();
-    }
-    return makeUrl(compositorHandle, m_generations.value(compositorHandle));
+    Entry* cached = m_cache.object(compositorHandle);
+    return cached ? cached->url : QString();
 }
 
 QString SnapAssistThumbnailProvider::makeUrl(const QString& handle, quint32 generation)

@@ -134,12 +134,12 @@
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail from KWin script (WindowThumbnail + grabToImage). Called by plasmazones-snapassist script."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon. Called by the kwin-effect after rendering a candidate window through KWin::OffscreenQuickScene + org.kde.kwin's WindowThumbnail. The daemon decodes once into a bounded LRU QImage cache and exposes the result to QML via image://plasmazones-snapassist/&lt;handle&gt;/&lt;generation&gt;."/>
             <arg name="compositorHandle" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString())."/>
+                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
             <arg name="dataUrl" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="data:image/png;base64,... thumbnail image."/>
+                <annotation name="org.gtk.GDBus.DocString" value="data:image/png;base64,... thumbnail image. Other schemes (file://, http://, ...) are rejected."/>
             </arg>
         </method>
 
@@ -156,7 +156,7 @@
             </arg>
         </signal>
         <signal name="snapAssistShown">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails via WindowThumbnail and call setSnapAssistThumbnail."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. The kwin-effect captures thumbnails for the candidates in-process (via OffscreenQuickScene + WindowThumbnail) and posts them back through setSnapAssistThumbnail."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID where snap occurred."/>
             </arg>

@@ -6,7 +6,6 @@
 #include <PhosphorProtocol/WireTypes.h>
 
 #include <QObject>
-#include <QPointer>
 #include <QSet>
 #include <QString>
 
@@ -57,7 +56,7 @@ private:
     bool m_snapAssistEnabled = false;
     /// Lazy — constructed on first asyncShow that produces candidates.
     /// Owned via QObject parent (this); ~SnapAssistHandler tears it down.
-    QPointer<SnapAssistThumbnailCapture> m_capture;
+    SnapAssistThumbnailCapture* m_capture = nullptr;
 };
 
 } // namespace PlasmaZones

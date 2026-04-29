@@ -10,6 +10,8 @@
 #include <QBuffer>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QQuickItem>
@@ -30,6 +32,11 @@ namespace {
 /// snap-assist UI (which already shows icons immediately and fades thumbs in
 /// asynchronously).
 constexpr int kRenderSettleMs = 16;
+/// Retry delay used when the first render produced an empty buffer. Four
+/// frames at 60Hz: long enough for a stalled compositor frame to clear,
+/// short enough that the user still sees the thumbnail before the eye
+/// notices the fallback icon.
+constexpr int kRenderRetryMs = 64;
 
 QUrl thumbnailQmlUrl()
 {
@@ -48,10 +55,10 @@ void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& can
 {
     m_queue.clear();
     for (const auto& c : candidates) {
-        if (c.compositorHandle.isEmpty() || c.internalId.isNull()) {
+        if (c.internalId.isNull()) {
             continue;
         }
-        m_queue.enqueue({c.compositorHandle, c.internalId, maxSize});
+        m_queue.enqueue({c.internalId, maxSize});
     }
     if (m_queue.isEmpty() || m_busy) {
         return;
@@ -101,13 +108,25 @@ void SnapAssistThumbnailCapture::processNext()
     root->setProperty("boxSize", QVariant::fromValue(QSizeF(p.maxSize)));
     m_scene->setGeometry(QRect(QPoint(0, 0), p.maxSize));
 
-    QTimer::singleShot(kRenderSettleMs, this, [this, p]() {
+    attemptCapture(p, kRenderSettleMs, /*retriesLeft=*/1);
+}
+
+void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retriesLeft)
+{
+    QTimer::singleShot(delayMs, this, [this, p, retriesLeft]() {
         if (!m_scene) {
             m_busy = false;
             return;
         }
         m_scene->update();
         QImage image = m_scene->bufferAsImage();
+        if (image.isNull() && retriesLeft > 0) {
+            // Compositor occasionally drops the first frame after wId is
+            // bound. Wait one more frame interval — same Pending, no queue
+            // shuffle — before giving up.
+            attemptCapture(p, kRenderRetryMs, retriesLeft - 1);
+            return;
+        }
         if (!image.isNull()) {
             // bufferAsImage commonly returns Format_ARGB32_Premultiplied
             // (matches the FBO layout). Convert to plain ARGB32 so PNG
@@ -117,32 +136,43 @@ void SnapAssistThumbnailCapture::processNext()
             if (image.format() != QImage::Format_ARGB32) {
                 image = image.convertToFormat(QImage::Format_ARGB32);
             }
-            postThumbnail(p.compositorHandle, image);
+            postThumbnail(p.internalId, image);
         } else {
-            qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.compositorHandle << "produced empty image";
+            qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
+                                         << "produced empty image after retry";
         }
         QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
     });
 }
 
-void SnapAssistThumbnailCapture::postThumbnail(const QString& compositorHandle, const QImage& image)
+void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QImage& image)
 {
     QByteArray bytes;
     {
         QBuffer buffer(&bytes);
         buffer.open(QIODevice::WriteOnly);
         if (!image.save(&buffer, "PNG")) {
-            qCWarning(lcSnapAssistCapture) << "PNG encode failed for" << compositorHandle;
+            qCWarning(lcSnapAssistCapture) << "PNG encode failed for" << internalId.toString();
             return;
         }
     }
+    const QString compositorHandle = internalId.toString();
     const QString dataUrl = QStringLiteral("data:image/png;base64,") + QString::fromUtf8(bytes.toBase64());
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setSnapAssistThumbnail"));
     msg << compositorHandle << dataUrl;
-    QDBusConnection::sessionBus().asyncCall(msg);
+
+    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [compositorHandle](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError()) {
+            qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnail D-Bus call failed for" << compositorHandle << ":"
+                                         << w->error().message();
+        }
+    });
 }
 
 } // namespace PlasmaZones

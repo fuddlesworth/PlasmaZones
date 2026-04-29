@@ -113,7 +113,7 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                     if (id.isNull()) {
                         continue;
                     }
-                    captureList.append({c.compositorHandle, id});
+                    captureList.append({id});
                 }
                 m_capture->captureCandidates(captureList);
 

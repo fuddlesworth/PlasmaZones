@@ -238,28 +238,25 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
 
 void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
 {
-    // External entry point (D-Bus, called by KWin scripts that produce
-    // thumbnails inside the compositor). Accept the historic data:image/png;
-    // base64 form and a file:// URL form — the latter lets KWin scripts that
-    // grabToImage to a tmp file deliver pixels without paying the encode +
-    // base64 round-trip on the script side. Both decode to a QImage on the
-    // daemon side; the canonical URL QML loads is image://plasmazones-
-    // snapassist/<handle>/<gen>, produced by the provider on insert.
+    // External entry point on the unauthenticated session bus, called by the
+    // kwin-effect after rendering a candidate window through KWin's
+    // OffscreenQuickScene + WindowThumbnail. Only the data:image/png;base64
+    // form is accepted — any other scheme is rejected. A previous revision
+    // also accepted file:// URLs, but that path was unused (the kwin-effect
+    // never produces them) and would have let any peer on the session bus
+    // ask the daemon to decode an arbitrary user-readable file into a
+    // 256×256 thumbnail addressable via the QML provider.
     if (dataUrl.isEmpty()) {
         return;
     }
-    QImage image;
     static const QString kDataPrefix = QStringLiteral("data:image/png;base64,");
-    if (dataUrl.startsWith(kDataPrefix)) {
-        const QByteArray bytes = QByteArray::fromBase64(QStringView{dataUrl}.mid(kDataPrefix.size()).toLatin1());
-        image.loadFromData(bytes, "PNG");
-    } else if (dataUrl.startsWith(QLatin1String("file://"))) {
-        const QString path = QUrl(dataUrl).toLocalFile();
-        if (!path.isEmpty()) {
-            image.load(path);
-        }
+    if (!dataUrl.startsWith(kDataPrefix)) {
+        qCDebug(lcOverlay) << "setSnapAssistThumbnail: rejecting non-data URL for" << compositorHandle;
+        return;
     }
-    if (image.isNull()) {
+    const QByteArray bytes = QByteArray::fromBase64(QStringView{dataUrl}.mid(kDataPrefix.size()).toLatin1());
+    QImage image;
+    if (!image.loadFromData(bytes, "PNG") || image.isNull()) {
         qCDebug(lcOverlay) << "setSnapAssistThumbnail: could not decode thumbnail for" << compositorHandle;
         return;
     }

@@ -4,7 +4,6 @@
 #pragma once
 
 #include <QCache>
-#include <QHash>
 #include <QImage>
 #include <QMutex>
 #include <QQuickImageProvider>
@@ -21,18 +20,21 @@ namespace PlasmaZones {
  *
  *   - Hard memory cap. @ref kCacheCapacity entries × 256² ARGB32 ≈ 6 MB worst
  *     case. Long sessions that touch many windows discard the oldest entries
- *     instead of growing forever.
+ *     instead of growing forever. Per-handle URL state lives inside the
+ *     cache entry, so eviction reclaims it together with the image — no
+ *     out-of-band map that grows independently.
  *   - No PNG-encode + base64 round-trip. Captures land as @c QImage and stay
  *     as @c QImage; QML loads them through this provider on its image-loader
  *     thread.
  *
  * QML references thumbnails via the URL scheme
  * `image://plasmazones-snapassist/<compositorHandle>/<generation>`. The
- * generation token is bumped on every @ref insert for the same handle so QML's
- * own QQuickPixmap cache re-fetches when a fresh capture arrives. The
- * compositor-handle segment is a braced UUID (KWin EffectWindow::internalId
- * .toString()) — `{xxxxxxxx-xxxx-...}` — which contains no `/`, so a single
- * split on the first separator recovers it cleanly.
+ * generation token is bumped from a single monotonic counter on every
+ * @ref insert so QML's own QQuickPixmap cache re-fetches when a fresh capture
+ * arrives. The compositor-handle segment is a braced UUID
+ * (KWin EffectWindow::internalId.toString()) — `{xxxxxxxx-xxxx-...}` — which
+ * contains no `/`, so a single split on the first separator recovers it
+ * cleanly.
  *
  * @ref requestImage runs on Qt's image-loader worker thread; all reads and
  * writes go through @ref m_mutex.
@@ -52,8 +54,8 @@ public:
     /**
      * @brief Insert (or update) the thumbnail for @p compositorHandle.
      * @return the QML URL the caller hands to the @c Image element. Embeds a
-     *         per-handle generation counter so the URL changes on every
-     *         insert and QML re-fetches the (now-updated) image.
+     *         monotonically-increasing generation counter so the URL changes
+     *         on every insert and QML re-fetches the (now-updated) image.
      */
     QString insert(const QString& compositorHandle, QImage image);
 
@@ -67,14 +69,24 @@ public:
     QString urlFor(const QString& compositorHandle) const;
 
 private:
+    /// Cache entry — image plus the URL that names this generation. Storing
+    /// the URL inside the entry means LRU eviction reclaims the URL state
+    /// together with the image; no separate per-handle map can grow without
+    /// bound across long sessions.
+    struct Entry
+    {
+        QImage image;
+        QString url;
+    };
+
     static QString makeUrl(const QString& handle, quint32 generation);
 
     mutable QMutex m_mutex;
-    QCache<QString, QImage> m_cache;
-    // Per-handle generation counters survive cache eviction so a re-captured
-    // window after eviction still produces a URL distinct from any prior URL
-    // the QML side may have cached for the same handle.
-    QHash<QString, quint32> m_generations;
+    QCache<QString, Entry> m_cache;
+    /// Monotonic across the daemon's lifetime; never wraps in any realistic
+    /// session (32 bits = 4 G captures). Each insert produces a strictly
+    /// new URL, so QML's QQuickPixmap cache always re-fetches.
+    quint32 m_generation = 0;
 };
 
 } // namespace PlasmaZones

@@ -6,7 +6,6 @@
 #include <QObject>
 #include <QQueue>
 #include <QSize>
-#include <QString>
 #include <QUuid>
 #include <QVector>
 
@@ -42,13 +41,13 @@ class SnapAssistThumbnailCapture : public QObject
     Q_OBJECT
 
 public:
-    /// (compositorHandle, internalId) pair. compositorHandle is the QUuid in
-    /// braced toString() form — that's the key the daemon's image provider
-    /// uses; internalId is the same QUuid in raw form, which is what
-    /// WindowThumbnail's @c wId property accepts.
+    /// Each candidate is just a QUuid — the EffectWindow internal id that
+    /// WindowThumbnail's @c wId property accepts. The braced @c toString()
+    /// form is also the daemon's image-provider cache key, so we derive it
+    /// once at post time inside @ref postThumbnail rather than carrying both
+    /// representations through every queue entry.
     struct Candidate
     {
-        QString compositorHandle;
         QUuid internalId;
     };
 
@@ -73,14 +72,20 @@ private Q_SLOTS:
 
 private:
     void ensureScene();
-    void postThumbnail(const QString& compositorHandle, const QImage& image);
+    void postThumbnail(const QUuid& internalId, const QImage& image);
 
     struct Pending
     {
-        QString compositorHandle;
         QUuid internalId;
         QSize maxSize;
     };
+
+    /// Read back the current scene buffer for @p p; on a null buffer, retry
+    /// once with a longer delay before giving up. Compositor stalls
+    /// occasionally drop the very first frame after binding @c wId to a
+    /// fresh window; one retry is enough in practice and falls back to the
+    /// icon path otherwise.
+    void attemptCapture(Pending p, int delayMs, int retriesLeft);
 
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;
