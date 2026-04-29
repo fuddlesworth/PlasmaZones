@@ -21,6 +21,13 @@ ColumnLayout {
     property var _defaults: ({})
     property var _pending: ({})
 
+    function paramMin(pd, fallback) {
+        return pd && pd.min !== undefined ? pd.min : fallback;
+    }
+    function paramMax(pd, fallback) {
+        return pd && pd.max !== undefined ? pd.max : fallback;
+    }
+
     function loadFromBackend() {
         if (!root.effectId || root.effectId.length === 0) {
             root._params = [];
@@ -117,8 +124,8 @@ ColumnLayout {
 
             Slider {
                 Layout.fillWidth: true
-                from: parent.paramData ? (parent.paramData.min !== undefined ? parent.paramData.min : 0.0) : 0.0
-                to: parent.paramData ? (parent.paramData.max !== undefined ? parent.paramData.max : 1.0) : 1.0
+                from: root.paramMin(parent.paramData, 0.0)
+                to: root.paramMax(parent.paramData, 1.0)
                 value: parent.currentValue || 0
                 Accessible.name: parent.paramData ? (parent.paramData.name || parent.paramData.id || "") : ""
                 onMoved: root.commitParam(parent.paramData.id, value)
@@ -144,8 +151,8 @@ ColumnLayout {
 
             Slider {
                 Layout.fillWidth: true
-                from: parent.paramData ? (parent.paramData.min !== undefined ? parent.paramData.min : 0) : 0
-                to: parent.paramData ? (parent.paramData.max !== undefined ? parent.paramData.max : 10) : 10
+                from: root.paramMin(parent.paramData, 0)
+                to: root.paramMax(parent.paramData, 10)
                 stepSize: 1
                 value: parent.currentValue || 0
                 Accessible.name: parent.paramData ? (parent.paramData.name || parent.paramData.id || "") : ""
