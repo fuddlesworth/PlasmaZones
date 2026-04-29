@@ -495,17 +495,12 @@ void Daemon::setupAnimationShaderEffects()
     // fatal — the on-demand scan still runs without a watch.
     QDir().mkpath(userAnimDir);
 
-    // Mark the user dir BEFORE the initial scan so discovered effects'
-    // `isUserEffect` flag is set correctly on first commit. Settings UI
-    // / QML pickers consume this to render the "user" badge — without
-    // the explicit mark, every effect would surface as system.
     m_animationShaderRegistry->setUserShaderPath(userAnimDir);
-
-    // Single batched register — the underlying WatchedDirectorySet runs
-    // ONE synchronous scan for the whole batch, populates `m_effects`
-    // via the strategy, and emits `effectsChanged` once if non-empty.
-    // No follow-up `refresh()` — the registration path already scanned.
     m_animationShaderRegistry->addSearchPaths(animDirs);
+
+    if (m_overlayService) {
+        m_overlayService->setAnimationShaderRegistry(m_animationShaderRegistry.get());
+    }
 }
 
 Daemon::~Daemon()
@@ -1271,6 +1266,9 @@ void Daemon::stop()
     // process-global PhosphorProfileRegistry shed those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
+    if (m_overlayService) {
+        m_overlayService->setAnimationShaderRegistry(nullptr);
+    }
     m_animationShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown

@@ -53,6 +53,10 @@ namespace PhosphorSurfaces {
 class SurfaceManager;
 }
 
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
+
 namespace PlasmaZones {
 class WindowThumbnailService;
 class ShaderRegistry;
@@ -142,6 +146,7 @@ public:
 
     void updateLayout(PhosphorZones::Layout* layout) override;
     void updateSettings(ISettings* settings) override;
+    void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
     void updateGeometries() override;
 
     // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
@@ -461,6 +466,11 @@ private:
     /// time. MUST outlive m_surfaceFactory (the factory's Deps captures
     /// the animator pointer; surfaces it produces dispatch through it on
     /// every show/hide).
+    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
+    /// this OverlayService because m_animationShaderRegistry is declared
+    /// before m_overlayService in daemon.h — reverse destruction order
+    /// guarantees the registry outlives this service.
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
     std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
 

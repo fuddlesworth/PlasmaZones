@@ -85,6 +85,7 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the re-export and this target would break mysteriously. Named
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
+    PhosphorAnimationShaders::PhosphorAnimationShaders
 )
 
 # Include directories

@@ -19,6 +19,11 @@ void WindowAnimator::setOutputClockResolver(OutputClockResolver resolver)
     m_outputClockResolver = std::move(resolver);
 }
 
+void WindowAnimator::setOnAnimationCompleteCallback(AnimationCompleteCallback callback)
+{
+    m_onAnimationCompleteCallback = std::move(callback);
+}
+
 PhosphorAnimation::IMotionClock* WindowAnimator::clockForHandle(KWin::EffectWindow* window) const
 {
     // Resolve via the effect-provided per-output map. Fall back to the
@@ -121,6 +126,9 @@ void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window,
 {
     qCDebug(lcEffect) << "Window snap animation complete:" << static_cast<const void*>(window)
                       << "target:" << anim.to();
+    if (m_onAnimationCompleteCallback) {
+        m_onAnimationCompleteCallback(window);
+    }
 }
 
 void WindowAnimator::onAnimationReplaced(KWin::EffectWindow* window,

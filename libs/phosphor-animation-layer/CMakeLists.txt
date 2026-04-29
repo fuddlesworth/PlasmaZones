@@ -38,6 +38,12 @@ endif()
 if(NOT TARGET PhosphorAnimation::PhosphorAnimation)
     find_package(PhosphorAnimation CONFIG REQUIRED)
 endif()
+if(NOT TARGET PhosphorAnimationShaders::PhosphorAnimationShaders)
+    find_package(PhosphorAnimationShaders CONFIG REQUIRED)
+endif()
+if(NOT TARGET PhosphorRendering::PhosphorRendering)
+    find_package(PhosphorRendering CONFIG REQUIRED)
+endif()
 
 set(phosphoranimationlayer_SRCS
     src/surfaceanimator.cpp
@@ -74,6 +80,8 @@ target_link_libraries(PhosphorAnimationLayer
         Qt6::Quick
         PhosphorLayer::PhosphorLayer
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAnimationShaders::PhosphorAnimationShaders
+        PhosphorRendering::PhosphorRendering
 )
 
 set_target_properties(PhosphorAnimationLayer PROPERTIES
