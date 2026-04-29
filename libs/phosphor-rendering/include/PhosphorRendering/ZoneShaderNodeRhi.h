@@ -38,6 +38,21 @@ public:
     ~ZoneShaderNodeRhi() override;
 
     /**
+     * @brief Per-instance identifier, monotonically increasing across all
+     * ZoneShaderNodeRhi instances in this process.
+     *
+     * Host items use this instead of pointer equality to detect node
+     * recreation: when the scene graph destroys the previous node and
+     * allocates a new one (e.g. on releaseResources), the new node gets a
+     * fresh id. Pointer equality is ABA-vulnerable when the allocator reuses
+     * the address — instance ids are not.
+     */
+    quint64 instanceId() const
+    {
+        return m_instanceId;
+    }
+
+    /**
      * @brief Publish zone and highlighted counts to the shader.
      *
      * Writes BaseUniforms::appField0 (total) and appField1 (highlighted) — the
@@ -69,6 +84,7 @@ private:
     QImage m_transparentFallbackImage;
     std::unique_ptr<QRhiTexture> m_labelsTexture;
     std::unique_ptr<QRhiSampler> m_labelsSampler;
+    quint64 m_instanceId = 0;
     bool m_labelsTextureDirty = false;
     bool m_labelsInitialized = false;
     // Cap how many times we retry RHI texture/sampler creation. Without a cap,

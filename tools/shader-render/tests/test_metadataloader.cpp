@@ -287,6 +287,55 @@ private Q_SLOTS:
         QVERIFY(!mdDefault.wallpaper);
     }
 
+    void traversalEscapeFallsBack()
+    {
+        // A relative path containing `..` that escapes the metadata directory
+        // must be rejected at the boundary. The loader resolves the implicit
+        // default fragment filename (effect.frag) when fragmentShader is set to
+        // an escape attempt — an empty string falls back, but the file isn't
+        // present so loadShaderMetadata returns false at the existence check.
+        QTemporaryDir dir;
+        // Don't write effect.frag — we want the loader to fail when traversal
+        // is rejected and the default-fallback path doesn't exist.
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "../../../etc/passwd"
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        // Either fragmentShader resolves to empty (rejected traversal) and the
+        // existence check fails, or it stays as the rejected sentinel — either
+        // way, loadShaderMetadata must return false. Critical: it must not
+        // resolve to the literal /etc/passwd-style escape.
+        QVERIFY(!PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QVERIFY(!md.fragmentShader.contains(QStringLiteral("/etc/")));
+    }
+
+    void traversalEscapeOnImageSlotDropsPath()
+    {
+        // Image-slot paths that escape are silently dropped (loader still
+        // succeeds because the fragment shader is fine; just the image isn't
+        // populated). Pin that the escape attempt does NOT appear in
+        // userTextures.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("zone.vert"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "vertexShader": "zone.vert",
+            "parameters": [
+                {"id": "img", "type": "image", "slot": 0, "default": "../../../etc/passwd"}
+            ]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        for (const auto& texPath : md.userTextures) {
+            QVERIFY(!texPath.contains(QStringLiteral("/etc/")));
+        }
+    }
+
     void missingSlotFieldIsSilentlySkipped()
     {
         // A parameter without a slot field is treated as UI-only metadata

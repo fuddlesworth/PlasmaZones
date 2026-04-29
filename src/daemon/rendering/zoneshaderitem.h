@@ -38,8 +38,8 @@ namespace PlasmaZones {
  * shader rendering: Shadertoy uniforms, multipass, custom params/colors,
  * textures, status. This subclass adds zone-specific functionality:
  *
- * - PhosphorZones::Zone data array (QVariantList zones property for QML)
- * - PhosphorZones::Zone counting (zoneCount, highlightedCount)
+ * - Zone data array (QVariantList zones property for QML)
+ * - Zone counts (zoneCount, highlightedCount)
  * - Hovered zone highlight (hoveredZoneIndex)
  * - Labels texture (pre-rendered zone numbers)
  * - ZoneShaderNodeRhi creation (delegates to PhosphorRendering::ShaderNodeRhi)
@@ -61,11 +61,11 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
     // editor/main.cpp under the "PlasmaZones" module URI. QML_ELEMENT here
     // would be inert (no qt_add_qml_module target exists) and misleading.
 
-    // PhosphorZones::Zone data (zone-specific, not in parent)
+    // Zone data (zone-specific, not in parent)
     Q_PROPERTY(QVariantList zones READ zones WRITE setZones NOTIFY zonesChanged FINAL)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zoneCountChanged FINAL)
     Q_PROPERTY(int highlightedCount READ highlightedCount NOTIFY highlightedCountChanged FINAL)
-    /** PhosphorZones::Zone index under cursor for hover highlight (preview mode). -1 = none. Avoids full zones churn on
+    /** Index of the zone under the cursor for hover highlight (preview mode). -1 = none. Avoids full zones churn on
      * mouse move. */
     Q_PROPERTY(
         int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
@@ -77,7 +77,7 @@ public:
     explicit ZoneShaderItem(QQuickItem* parent = nullptr);
     ~ZoneShaderItem() override;
 
-    // PhosphorZones::Zone data getters/setters
+    // Zone data getters/setters
     const QVariantList& zones() const
     {
         return m_zones;
@@ -211,7 +211,7 @@ private:
      */
     void updateHoveredHighlightOnly();
 
-    // PhosphorZones::Zone data (main thread access)
+    // Zone data (main thread access)
     QVariantList m_zones;
     int m_zoneCount = 0;
     int m_highlightedCount = 0;

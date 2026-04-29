@@ -35,6 +35,7 @@ set(shader_render_SRCS
     audiomock.cpp
     encoder.h
     encoder.cpp
+    colorutil.h
 )
 
 add_executable(plasmazones-shader-render ${shader_render_SRCS})

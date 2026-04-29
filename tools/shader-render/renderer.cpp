@@ -154,18 +154,21 @@ protected:
             return node;
 
         // The scene graph can destroy and recreate the render node (e.g. on
-        // releaseResources / window hide). Detecting a pointer change resets
-        // the per-node "already pushed" flags so the new node gets the vertex
-        // shader and labels image re-applied — without this, the new node
-        // would render without them and the shader would silently misbehave.
+        // releaseResources / window hide). Compare instance ids — not raw
+        // pointers — to detect recreation: if the allocator happened to reuse
+        // the address of a freed node, pointer equality would silently miss
+        // the swap and the new node would render without our vertex shader
+        // and without labels bound at slot 1. Instance ids are monotonically
+        // unique across the process, so they're immune to that ABA case.
         // m_labelsDirty is forced even with an empty image so the node's
         // 1×1 transparent fallback gets bound at slot 1 — leaving the slot
         // unbound would render the SRB pipeline without uZoneLabels.
-        if (zoneNode != m_lastZoneNode) {
+        const quint64 currentId = zoneNode->instanceId();
+        if (currentId != m_lastZoneNodeId) {
             m_vertexLoaded = false;
             m_vertexLoadFailed = false;
             m_labelsDirty = true;
-            m_lastZoneNode = zoneNode;
+            m_lastZoneNodeId = currentId;
         }
 
         if (!m_vertexLoaded && !m_vertexLoadFailed && !m_vertexShaderPath.isEmpty()) {
@@ -198,7 +201,9 @@ private:
     int m_zoneCountHighlighted = 0;
     QImage m_labelsImage;
     bool m_labelsDirty = false;
-    PhosphorRendering::ZoneShaderNodeRhi* m_lastZoneNode = nullptr;
+    /// Instance id of the last ZoneShaderNodeRhi we pushed state into. 0 means
+    /// "never pushed" (counter starts at 1) so the first frame always installs.
+    quint64 m_lastZoneNodeId = 0;
 };
 
 QVector<PhosphorRendering::ZoneData> toRuntimeZones(const QVector<Zone>& srcZones)
@@ -219,11 +224,12 @@ QVector<PhosphorRendering::ZoneData> toRuntimeZones(const QVector<Zone>& srcZone
     return out;
 }
 
-void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetadata& md, const QSize& /*resolution*/)
+// iResolution is intentionally not seeded here: it is driven from the item's
+// width/height by ShaderEffect::syncBasePropertiesToNode every frame, so any
+// initial seed would be overwritten before the first sync. The function only
+// pushes shader-source / multipass / param / texture state.
+void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetadata& md)
 {
-    // iResolution is driven from the item's width/height by ShaderEffect::
-    // syncBasePropertiesToNode every frame, so seeding it here would be
-    // overwritten before the first sync — drop the redundant call.
     effect.setShaderSource(QUrl::fromLocalFile(md.fragmentShader));
 
     if (md.multipass) {
@@ -555,7 +561,7 @@ int Renderer::render(const RenderOptions& opts)
     // halo/chroma/text effects — an empty binding makes them silently absent.
     effect->setLabelsImage(buildLabelsImage(opts.zones, size));
 
-    seedShaderEffect(*effect, opts.metadata, size);
+    seedShaderEffect(*effect, opts.metadata);
 
     // Surface compile failures so a silent empty-frame loop isn't the first
     // sign something went wrong.

@@ -133,6 +133,29 @@ private Q_SLOTS:
             !PlasmaZones::ShaderRender::loadLayoutZones(QStringLiteral("/nonexistent/path.json"), QSize(1, 1), zones));
     }
 
+    void outOfRangeRectsAreClampedTo01()
+    {
+        // Contract: rect components are normalized [0, 1]. common.glsl's
+        // helpers multiply by iResolution, so a pixel-space rect would land
+        // off-screen and the shader would render black. Validate at the
+        // boundary instead of pushing garbage into the UBO.
+        QTemporaryDir dir;
+        const QString path = writeLayoutJson(dir, QStringLiteral(R"({
+            "zones": [
+                {"zoneNumber": 1, "relativeGeometry": {"x": -0.25, "y": 0.0, "width": 1.5, "height": 1.0}},
+                {"zoneNumber": 2, "relativeGeometry": {"x": 1920, "y": 1080, "width": 0.5, "height": 0.5}}
+            ]
+        })"));
+
+        QVector<PlasmaZones::ShaderRender::Zone> zones;
+        QVERIFY(PlasmaZones::ShaderRender::loadLayoutZones(path, QSize(1920, 1080), zones));
+        QCOMPARE(zones.size(), 2);
+        // Negative x clamped to 0; oversized width clamped to 1.
+        QCOMPARE(zones[0].rect, QRectF(0.0, 0.0, 1.0, 1.0));
+        // Pixel-space coordinates clamped to 1; in-range entries pass through.
+        QCOMPARE(zones[1].rect, QRectF(1.0, 1.0, 0.5, 0.5));
+    }
+
     void missingRelativeGeometryDefaultsToZeroRect()
     {
         // A zone object with no relativeGeometry pins the current behaviour:

@@ -5,12 +5,30 @@
 
 #include <QLoggingCategory>
 
+#include <atomic>
+
 namespace PhosphorRendering {
 
 Q_LOGGING_CATEGORY(lcZoneShader, "phosphorrendering.zoneshader")
 
+namespace {
+
+// Process-global counter for instance ids. Starts at 1 so 0 can serve as a
+// "never seen a node" sentinel for hosts that compare against a default-
+// constructed id. std::memory_order_relaxed: instance ids only need to be
+// unique, not cross-thread-ordered against unrelated state.
+std::atomic<quint64> g_zoneShaderNodeRhiInstanceCounter{0};
+
+quint64 nextInstanceId()
+{
+    return g_zoneShaderNodeRhiInstanceCounter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
+} // namespace
+
 ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     : ShaderNodeRhi(item)
+    , m_instanceId(nextInstanceId())
 {
     // The ZoneUniformExtension is owned by the host item and pushed down each
     // frame through ShaderEffect::syncBasePropertiesToNode(). No extension
@@ -121,13 +139,17 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         m_labelsTexture = std::move(resized);
     }
     QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-    if (batch) {
-        const QImage& src = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
-            ? m_labelsImage
-            : m_transparentFallbackImage;
-        batch->uploadTexture(m_labelsTexture.get(), src);
-        cb->resourceUpdate(batch);
+    if (!batch) {
+        // Pool exhausted (or backend wedged). Leave the dirty flag set so the
+        // next prepare() retries — clearing it here would silently drop the
+        // upload and the SRB would render against an unbacked or stale slot 1.
+        return;
     }
+    const QImage& src = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
+        ? m_labelsImage
+        : m_transparentFallbackImage;
+    batch->uploadTexture(m_labelsTexture.get(), src);
+    cb->resourceUpdate(batch);
     // Only clear the dirty flag after a successful upload completes.
     m_labelsTextureDirty = false;
 }

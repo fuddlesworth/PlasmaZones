@@ -3,6 +3,8 @@
 
 #include "metadataloader.h"
 
+#include "colorutil.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -24,25 +26,35 @@ namespace {
 constexpr QLatin1String kDefaultFragmentShaderFilename{"effect.frag"};
 constexpr QLatin1String kDefaultVertexShaderFilename{"zone.vert"};
 
-QColor parseHexColor(const QString& hex)
-{
-    QColor c(hex);
-    if (!c.isValid())
-        c = Qt::black;
-    return c;
-}
-
-// Resolve a relative path against the metadata directory.  Empty paths come
+// Resolve a relative path against the metadata directory. Empty paths come
 // back unchanged; everything else gets normalised through QDir::cleanPath so
 // `../foo.frag`-style entries don't show up as `…/dir/../foo.frag` in logs and
 // duplicate-detection.
+//
+// Boundary check: relative paths that resolve outside @p metadataDir (via `..`
+// segments or symlink-style absolute prefixes) are rejected with a warning and
+// an empty string so the loader fails closed rather than loading arbitrary
+// files. Absolute paths in the JSON are still allowed — the shader catalog
+// installer occasionally points at /usr/share/plasmazones/shaders/common — but
+// relative paths cannot escape their declared root.
 QString resolveRelative(const QString& metadataDir, const QString& maybeRelative)
 {
     if (maybeRelative.isEmpty())
         return QString();
     if (QFileInfo(maybeRelative).isAbsolute())
         return QDir::cleanPath(maybeRelative);
-    return QDir::cleanPath(QDir(metadataDir).filePath(maybeRelative));
+    const QString cleanedRoot = QDir::cleanPath(QDir(metadataDir).absolutePath());
+    const QString resolved = QDir::cleanPath(QDir(metadataDir).absoluteFilePath(maybeRelative));
+    // QDir::cleanPath collapses `..` segments, so an escape attempt is detected
+    // by a prefix mismatch on the cleaned-and-absolute paths. The trailing-`/`
+    // guard prevents `/foo` matching `/foobar` when metadataDir is `/foo`.
+    const QString rootWithSep = cleanedRoot.endsWith(QLatin1Char('/')) ? cleanedRoot : cleanedRoot + QLatin1Char('/');
+    if (resolved != cleanedRoot && !resolved.startsWith(rootWithSep)) {
+        qCWarning(lcMetadataLoader) << "rejecting path traversal: relative" << maybeRelative << "would resolve to"
+                                    << resolved << "outside metadata dir" << cleanedRoot;
+        return QString();
+    }
+    return resolved;
 }
 
 // PlasmaZones metadata uses a *flat* parameter slot index across all

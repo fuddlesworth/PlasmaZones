@@ -3,13 +3,19 @@
 
 #include "layoutloader.h"
 
+#include "colorutil.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PlasmaZones::ShaderRender {
+
+Q_LOGGING_CATEGORY(lcLayoutLoader, "plasmazones.shader-render.layout")
+
 namespace {
 
 // Default per-zone fill cycle, used when the layout JSON doesn't
@@ -24,12 +30,18 @@ const std::array<QColor, 6> kFillCycle = {{
     QColor::fromRgbF(0.75f, 0.52f, 0.99f, 0.35f), // purple-400
 }};
 
-QColor parseHexColor(const QString& hex, const QColor& fallback)
+// Clamp a normalized rect-component into [0, 1] and warn on out-of-range. The
+// loader contract says rects are normalized; common.glsl helpers multiply by
+// iResolution, so a stray pixel-space value would render off-screen and the
+// shader output would silently look broken.
+double clampNormalized(double value, const char* field, int zoneIdx)
 {
-    if (hex.isEmpty())
-        return fallback;
-    QColor c(hex);
-    return c.isValid() ? c : fallback;
+    if (value < 0.0 || value > 1.0) {
+        qCWarning(lcLayoutLoader) << "zone" << zoneIdx << "field" << field << "value" << value
+                                  << "out of normalized [0, 1] range — clamping";
+        return qBound(0.0, value, 1.0);
+    }
+    return value;
 }
 
 } // namespace
@@ -65,12 +77,13 @@ bool loadLayoutZones(const QString& layoutPath, const QSize& /*resolution*/, QVe
 
         // Zone rects must be NORMALIZED 0-1 — the shaders' common.glsl
         // helpers (zoneRectPos, zoneRectSize) multiply by iResolution
-        // themselves.  Passing pixel-space rects causes the in-zone
-        // tests to land off-screen and the shader to render black.
+        // themselves. Out-of-range values land off-screen, so clamp at the
+        // boundary with a warning instead of pushing garbage to the GPU.
         Zone zone;
-        zone.rect =
-            QRectF(geom.value(QLatin1String("x")).toDouble(), geom.value(QLatin1String("y")).toDouble(),
-                   geom.value(QLatin1String("width")).toDouble(), geom.value(QLatin1String("height")).toDouble());
+        zone.rect = QRectF(clampNormalized(geom.value(QLatin1String("x")).toDouble(), "x", idx),
+                           clampNormalized(geom.value(QLatin1String("y")).toDouble(), "y", idx),
+                           clampNormalized(geom.value(QLatin1String("width")).toDouble(), "width", idx),
+                           clampNormalized(geom.value(QLatin1String("height")).toDouble(), "height", idx));
 
         zone.zoneNumber = z.value(QLatin1String("zoneNumber")).toInt(idx + 1);
 
