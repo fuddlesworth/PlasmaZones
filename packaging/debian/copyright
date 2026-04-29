@@ -27,7 +27,7 @@ Files: libs/phosphor-config/*
 Copyright: 2026 fuddlesworth
 License: LGPL-2.1-or-later
 
-Files: libs/phosphor-shell/*
+Files: libs/phosphor-wayland/*
 Copyright: 2026 fuddlesworth
 License: LGPL-2.1-or-later
 

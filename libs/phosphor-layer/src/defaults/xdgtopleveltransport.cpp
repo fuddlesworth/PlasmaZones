@@ -114,7 +114,7 @@ XdgToplevelTransport::XdgToplevelTransport()
     // xdg_toplevel protocol lacks a dedicated global-removal signal, but the
     // Wayland connection is torn down on application shutdown the same way
     // wlr-layer-shell is. Firing on aboutToQuit covers the "clean exit" case
-    // and matches PhosphorShellTransport's behaviour so consumers can treat
+    // and matches PhosphorWaylandTransport's behaviour so consumers can treat
     // the two transports symmetrically.
     m_impl->m_aboutToQuitConnection = m_impl->m_broadcaster.hookAboutToQuit();
 }
@@ -182,7 +182,7 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
         // qCWarning so downgrades are visible in production logs.
         qCWarning(lcPhosphorLayer)
             << "XdgToplevelTransport: exclusive keyboard REQUESTED but xdg_toplevel is always OnDemand —"
-            << "focus may leak to other windows. Use PhosphorShellTransport on compositors with wlr-layer-shell.";
+            << "focus may leak to other windows. Use PhosphorWaylandTransport on compositors with wlr-layer-shell.";
     }
     if (!args.margins.isNull() || args.anchors != AnchorNone) {
         qCDebug(lcPhosphorLayer)

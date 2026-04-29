@@ -6,8 +6,8 @@
 //
 //   #include <multipass.glsl>
 
-#ifndef PHOSPHORSHELL_MULTIPASS_GLSL
-#define PHOSPHORSHELL_MULTIPASS_GLSL
+#ifndef PHOSPHORSHADERS_MULTIPASS_GLSL
+#define PHOSPHORSHADERS_MULTIPASS_GLSL
 
 layout(binding = 2) uniform sampler2D iChannel0;
 layout(binding = 3) uniform sampler2D iChannel1;

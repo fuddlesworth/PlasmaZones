@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerSurface.h>
 
 // Full definition needed for tests that directly construct LayerShellIntegration.
-#include "../../../libs/phosphor-shell/src/qpa/layershellintegration.h"
+#include "../../../libs/phosphor-wayland/src/qpa/layershellintegration.h"
 
 #include <QTest>
 #include <QSignalSpy>
@@ -12,7 +12,7 @@
 #include <QPointer>
 #include <QWindow>
 
-using namespace PhosphorShell;
+using namespace PhosphorWayland;
 
 class TestLayerSurface : public QObject
 {
@@ -110,7 +110,7 @@ private Q_SLOTS:
         QCOMPARE(surface->anchors(), LayerSurface::Anchors());
         QCOMPARE(surface->exclusiveZone(), int32_t(-1));
         QCOMPARE(surface->keyboardInteractivity(), LayerSurface::KeyboardInteractivityNone);
-        QCOMPARE(surface->scope(), QStringLiteral("phosphorshell"));
+        QCOMPARE(surface->scope(), QStringLiteral("phosphorwayland"));
         QCOMPARE(surface->screen(), nullptr);
         QCOMPARE(surface->margins(), QMargins());
     }
@@ -235,7 +235,7 @@ private Q_SLOTS:
         surface->setScope(QStringLiteral("new-scope"));
         // setScope after show returns early without emitting (scope is immutable)
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(surface->scope(), QStringLiteral("phosphorshell")); // original default unchanged
+        QCOMPARE(surface->scope(), QStringLiteral("phosphorwayland")); // original default unchanged
         window.close();
     }
 
@@ -391,7 +391,7 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::Anchors).toInt(), 0); // AnchorNone
         QCOMPARE(window.property(LayerSurfaceProps::ExclusiveZone).toInt(), -1);
         QCOMPARE(window.property(LayerSurfaceProps::Keyboard).toInt(), 0); // None
-        QCOMPARE(window.property(LayerSurfaceProps::Scope).toString(), QStringLiteral("phosphorshell"));
+        QCOMPARE(window.property(LayerSurfaceProps::Scope).toString(), QStringLiteral("phosphorwayland"));
         QCOMPARE(window.property(LayerSurfaceProps::MarginsLeft).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 0);

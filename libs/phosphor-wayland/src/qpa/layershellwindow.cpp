@@ -3,7 +3,7 @@
 
 #include "layershellwindow.h"
 #include "layershellintegration.h"
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerSurface.h>
 
 #include <QLoggingCategory>
 #include <qpa/qwindowsysteminterface.h>
@@ -12,9 +12,9 @@
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 
-Q_LOGGING_CATEGORY(lcLayerShellWindow, "phosphorshell.qpa.layershellwindow")
+Q_LOGGING_CATEGORY(lcLayerShellWindow, "phosphorwayland.qpa.layershellwindow")
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
 static const struct zwlr_layer_surface_v1_listener s_layerSurfaceListener = {
     .configure = LayerShellWindow::handleConfigure,
@@ -30,7 +30,7 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
 
     // Read initial properties from QWindow dynamic properties
     int layer = qwindow->property(LayerSurfaceProps::Layer).toInt();
-    // Scope default ("phosphorshell") is set by LayerSurface::get() — if still empty
+    // Scope default ("phosphorwayland") is set by LayerSurface::get() — if still empty
     // here, the caller explicitly wants no scope (or forgot to set one).
     QString scope = qwindow->property(LayerSurfaceProps::Scope).toString();
 
@@ -420,4 +420,4 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     self->m_waylandWindow = nullptr;
 }
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland

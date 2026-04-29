@@ -452,7 +452,7 @@ void Daemon::setupAnimationShaderEffects()
     // fatal — the on-demand scan still runs without a watch.
     QDir().mkpath(userAnimDir);
 
-    m_animationShaderRegistry->setUserShaderPath(userAnimDir);
+    m_animationShaderRegistry->setUserPath(userAnimDir);
     m_animationShaderRegistry->addSearchPaths(animDirs);
 
     if (m_overlayService) {

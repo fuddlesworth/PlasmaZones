@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <phosphorshell_export.h>
+#include <phosphorwayland_export.h>
 
 #include <utility>
 
@@ -13,7 +13,7 @@
 #include <QScreen>
 #include <QWindow>
 
-namespace PhosphorShell {
+namespace PhosphorWayland {
 
 /// Property keys used by LayerSurface ↔ QPA plugin communication.
 namespace LayerSurfaceProps {
@@ -32,7 +32,7 @@ inline constexpr const char* MarginsBottom = "_ps_margins_bottom";
 
 /// Wayland layer-shell surface backed by zwlr_layer_shell_v1.
 /// Pure Qt API — no Wayland types exposed.
-class PHOSPHORSHELL_EXPORT LayerSurface : public QObject
+class PHOSPHORWAYLAND_EXPORT LayerSurface : public QObject
 {
     Q_OBJECT
 
@@ -175,6 +175,6 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(LayerSurface::Anchors)
 
-} // namespace PhosphorShell
+} // namespace PhosphorWayland
 
-Q_DECLARE_METATYPE(PhosphorShell::LayerSurface*)
+Q_DECLARE_METATYPE(PhosphorWayland::LayerSurface*)

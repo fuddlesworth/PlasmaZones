@@ -284,12 +284,12 @@ add_test(NAME test_snap_assist_virtual COMMAND test_snap_assist_virtual)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_layersurface core/test_layersurface.cpp)
 target_link_libraries(test_layersurface PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::WaylandClientPrivate Wayland::Client plasmazones_core)
-# PhosphorShell private QPA headers + generated protocol headers
+# PhosphorWayland private QPA headers + generated protocol headers
 target_include_directories(test_layersurface PRIVATE
     ${CMAKE_BINARY_DIR}/src                                      # plasmazones_export.h
-    ${CMAKE_SOURCE_DIR}/libs/phosphor-shell/src                  # private QPA headers
-    ${CMAKE_BINARY_DIR}/libs/phosphor-shell                      # phosphorshell_export.h
-    ${CMAKE_BINARY_DIR}/libs/phosphor-shell/generated-protocols  # wlr-layer-shell protocol header
+    ${CMAKE_SOURCE_DIR}/libs/phosphor-wayland/src                  # private QPA headers
+    ${CMAKE_BINARY_DIR}/libs/phosphor-wayland                      # phosphorwayland_export.h
+    ${CMAKE_BINARY_DIR}/libs/phosphor-wayland/generated-protocols  # wlr-layer-shell protocol header
 )
 add_test(NAME test_layersurface COMMAND test_layersurface)
 

@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Depth buffer support for PhosphorShell shaders.
+// Depth buffer support for PhosphorShaders shaders.
 // Include to read the depth buffer from a previous pass.
 // To write depth, declare in your fragment shader:
 //   layout(location = 1) out float oDepth;
 // and assign: oDepth = yourDepthValue;
 
-#ifndef PHOSPHORSHELL_DEPTH_GLSL
-#define PHOSPHORSHELL_DEPTH_GLSL
+#ifndef PHOSPHORSHADERS_DEPTH_GLSL
+#define PHOSPHORSHADERS_DEPTH_GLSL
 
 layout(binding = 12) uniform sampler2D uDepthBuffer;
 

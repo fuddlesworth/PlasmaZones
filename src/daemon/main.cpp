@@ -6,8 +6,8 @@
 #include "../core/constants.h"
 #include "../config/configmigration.h"
 #include "../core/logging.h"
-#include <PhosphorShell/LayerShellPluginLoader.h>
-#include <PhosphorShell/LayerSurface.h>
+#include <PhosphorWayland/LayerShellPluginLoader.h>
+#include <PhosphorWayland/LayerSurface.h>
 #include "../core/translationloader.h"
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
     qputenv("DISABLE_MANGOHUD", "1");
 
     // Register our layer-shell QPA plugin before QGuiApplication
-    PhosphorShell::registerLayerShellPlugin();
+    PhosphorWayland::registerLayerShellPlugin();
 
     // Read rendering backend preference and probe Vulkan BEFORE QGuiApplication —
     // QQuickWindow::setGraphicsApi() must be called before the app object exists.
@@ -110,17 +110,17 @@ int main(int argc, char* argv[])
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
-    qRegisterMetaType<PhosphorShell::LayerSurface*>();
+    qRegisterMetaType<PhosphorWayland::LayerSurface*>();
 
     // Verify the layer-shell QPA plugin loaded successfully. If not, overlays will
     // be created as xdg_toplevel (wrong stacking/anchoring) — warn loudly.
-    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorShell::LayerSurface::isSupported()) {
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorWayland::LayerSurface::isSupported()) {
         qCCritical(lcDaemon) << "Layer-shell QPA plugin did not initialize —"
                              << "overlays will use xdg_toplevel (wrong stacking/anchoring)."
                              << "Zone overlays will appear as regular windows (visible in taskbar,"
                              << "wrong z-order, no keyboard grab). This compositor may not support"
                              << "zwlr_layer_shell_v1 (e.g. GNOME/Mutter)."
-                             << "Check that phosphorshell-qpa.so is installed to Qt's"
+                             << "Check that phosphorwayland-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 

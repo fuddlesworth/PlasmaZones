@@ -12,7 +12,7 @@
 #define PLASMAZONES_COMMON_GLSL
 
 layout(std140, binding = 0) uniform ZoneUniforms {
-    // ── Base uniforms (PhosphorShell::BaseUniforms, 672 bytes) ───────
+    // ── Base uniforms (PhosphorShaders::BaseUniforms, 672 bytes) ───────
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;            // wrapped lo part, always in [0, kShaderTimeWrap). Safe to use directly.

@@ -48,8 +48,17 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::Quick
     Qt6::QuickPrivate
     PhosphorRendering
-    PhosphorShell
+    PhosphorWayland
     PhosphorAudio
+)
+
+# The tool reuses the daemon's ZoneUniformExtension header so the
+# UBO layout matches the runtime exactly.  This is intentional
+# coupling — if/when the extension moves into a shared library
+# (probably libs/phosphor-wayland), drop this include and add the
+# library to target_link_libraries above.
+target_include_directories(plasmazones-shader-render PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/daemon/rendering
 )
 
 target_compile_features(plasmazones-shader-render PRIVATE cxx_std_20)

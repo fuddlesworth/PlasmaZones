@@ -27,13 +27,12 @@ namespace PhosphorTiles {
 static constexpr int MaxWatchedFilesPerDir = 100;
 
 // Hard cap on scripts registered per rescan, summed across every
-// registered directory. Mirrors DirectoryLoader::kMaxEntries,
-// PhosphorShaders::ShaderPackRegistry::kMaxShaders, and AnimationShaderRegistry::
-// kMaxEffects — same defensive rationale, identical magnitude — so all
-// four fsloader-backed registries cap at the same scale. The per-dir
-// MaxWatchedFilesPerDir above is the secondary guard; this is the
-// global one. Typical script counts are single digits; 10k is purely a
-// DoS guard.
+// registered directory. Mirrors DirectoryLoader::kMaxEntries and
+// MetadataPackScanStrategy::kDefaultMaxEntries — same defensive
+// rationale, identical magnitude — so all fsloader-backed registries
+// cap at the same scale. The per-dir MaxWatchedFilesPerDir above is the
+// secondary guard; this is the global one. Typical script counts are
+// single digits; 10k is purely a DoS guard.
 static constexpr int kMaxScripts = 10'000;
 
 /// Scan strategy backing the loader's `WatchedDirectorySet`. Forwards
