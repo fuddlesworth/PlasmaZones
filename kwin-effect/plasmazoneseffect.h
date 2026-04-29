@@ -502,9 +502,7 @@ private:
     };
     struct ShaderTransition
     {
-        KWin::GLShader* shader = nullptr;
-        int iTimeLoc = -1;
-        int iResolutionLoc = -1;
+        const CachedShader* cached = nullptr;
     };
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
     std::map<QString, CachedShader> m_shaderCache;

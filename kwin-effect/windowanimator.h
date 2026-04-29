@@ -54,10 +54,14 @@ public:
     /// clock (set via setClock) is used.
     using OutputClockResolver = std::function<PhosphorAnimation::IMotionClock*(KWin::LogicalOutput*)>;
 
+    using AnimationCompleteCallback = std::function<void(KWin::EffectWindow*)>;
+
     /// Install the per-output clock resolver. Safe to call at any time;
     /// takes effect for subsequent `startAnimation` calls. In-flight
     /// animations keep the clock captured at their own start time.
     void setOutputClockResolver(OutputClockResolver resolver);
+
+    void setOnAnimationCompleteCallback(AnimationCompleteCallback callback);
 
     /// Apply translate offset + scale transform to @p data so the window
     /// renders at the current interpolated visual position/size. No-op
@@ -84,6 +88,7 @@ protected:
 
 private:
     OutputClockResolver m_outputClockResolver;
+    AnimationCompleteCallback m_onAnimationCompleteCallback;
 };
 
 } // namespace PlasmaZones

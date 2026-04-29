@@ -506,16 +506,19 @@ void SettingsAdaptor::initializeRegistry()
     // Phase 6: shader search paths (read-only, for KWin effect registry population).
     // Serialized as a JSON array string — QStringList in QDBusVariant can
     // deserialize as QDBusArgument on the receiving side, making toStringList()
-    // return empty.
+    // return empty. Cached on first access since XDG dirs don't change at runtime.
     m_getters[QStringLiteral("animationShaderSearchPaths")] = []() {
-        QStringList paths =
-            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
-                                      QStandardPaths::LocateDirectory);
-        const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-            + QStringLiteral("/plasmazones/animations");
-        if (!paths.contains(userDir))
-            paths.append(userDir);
-        return QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact));
+        static const QString cached = [] {
+            QStringList paths =
+                QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
+                                          QStandardPaths::LocateDirectory);
+            const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                + QStringLiteral("/plasmazones/animations");
+            if (!paths.contains(userDir))
+                paths.append(userDir);
+            return QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact));
+        }();
+        return cached;
     };
     m_schemas[QStringLiteral("animationShaderSearchPaths")] = QStringLiteral("string");
 

@@ -197,6 +197,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     m_windowAnimator->setOutputClockResolver([this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
         return clockForOutput(output);
     });
+    m_windowAnimator->setOnAnimationCompleteCallback([this](KWin::EffectWindow* w) {
+        endShaderTransition(w);
+    });
+    connect(&m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+            [this]() {
+                for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end();) {
+                    KWin::EffectWindow* w = it->first;
+                    ++it;
+                    endShaderTransition(w);
+                }
+                m_shaderCache.clear();
+            });
 
     // Frame-geometry shadow flush timer. Debounces per-window
     // windowFrameGeometryChanged signals and pushes the latest geometry to
@@ -3435,13 +3447,6 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(targetFrame);
         }
 
-        {
-            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
-            if (!shaderProfile.effectiveEffectId().isEmpty()) {
-                beginShaderTransition(window, shaderProfile.effectiveEffectId());
-            }
-        }
-
         if (m_windowAnimator->hasAnimation(window)) {
             if (m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
                 return; // Already animating to this target
@@ -3472,6 +3477,13 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             }
         } else {
             m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
+        }
+
+        if (m_windowAnimator->hasAnimation(window)) {
+            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
+            if (!shaderProfile.effectiveEffectId().isEmpty()) {
+                beginShaderTransition(window, shaderProfile.effectiveEffectId());
+            }
         }
 
         repaintSnapRegions(window, oldFrame, geo);
@@ -4064,22 +4076,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     m_windowAnimator->applyTransform(w, data);
 
     auto sit = m_shaderTransitions.find(w);
-    if (sit != m_shaderTransitions.end() && sit->second.shader) {
+    if (sit != m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
         const auto* anim = m_windowAnimator->animationFor(w);
         if (anim && anim->isAnimating()) {
             const qreal progress = qBound(0.0, anim->state().value, 1.0);
+            KWin::GLShader* shader = sit->second.cached->shader.get();
 
-            KWin::ShaderBinder binder(sit->second.shader);
-            sit->second.shader->setUniform(sit->second.iTimeLoc, static_cast<float>(progress));
+            KWin::ShaderBinder binder(shader);
+            shader->setUniform(sit->second.cached->iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
-            sit->second.shader->setUniform(sit->second.iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            shader->setUniform(sit->second.cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
         }
         endShaderTransition(w);
     }
 
-    KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const QString& effectId)
@@ -4122,12 +4135,10 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const 
 
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
-    transition.shader = cachedEntry.shader.get();
-    transition.iTimeLoc = cachedEntry.iTimeLoc;
-    transition.iResolutionLoc = cachedEntry.iResolutionLoc;
+    transition.cached = &cachedEntry;
 
     redirect(window);
-    setShader(window, transition.shader);
+    setShader(window, cachedEntry.shader.get());
     m_shaderTransitions.emplace(window, std::move(transition));
 }
 
@@ -4164,6 +4175,11 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                 paths.append(entry.toString());
         }
         if (!paths.isEmpty()) {
+            for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end();) {
+                KWin::EffectWindow* w = it->first;
+                ++it;
+                endShaderTransition(w);
+            }
             m_shaderCache.clear();
             m_animationShaderRegistry.addSearchPaths(paths);
         }
