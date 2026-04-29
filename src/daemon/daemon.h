@@ -551,7 +551,7 @@ private:
     /// `plasmazones/animations` from XDG data dirs and monitors for
     /// user-dropped packs via QFileSystemWatcher. Declared BEFORE
     /// m_overlayService (which holds a borrowed pointer via
-    /// m_pendingShaderRegistry) so reverse-order destruction tears
+    /// m_animShaderRegistry) so reverse-order destruction tears
     /// the service down before this registry.
     std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
 

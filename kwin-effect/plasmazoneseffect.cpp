@@ -63,6 +63,9 @@ namespace {
 constexpr QLatin1String TriggerModifierField("modifier");
 constexpr QLatin1String TriggerMouseButtonField("mouseButton");
 
+constexpr const char kUniformITime[] = "iTime";
+constexpr const char kUniformIResolution[] = "iResolution";
+
 // Upper bound on how long the effect waits for the daemon's endDrag reply.
 // If the daemon is blocked (layout recompute, overlay teardown, heavy
 // handler), exceeding this budget means the compositor would otherwise
@@ -4082,7 +4085,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             const qreal progress = qBound(0.0, anim->state().value, 1.0);
             KWin::GLShader* shader = sit->second.cached->shader.get();
 
-            KWin::ShaderBinder binder(shader);
             shader->setUniform(sit->second.cached->iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
             shader->setUniform(sit->second.cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
@@ -4125,8 +4127,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const 
         }
 
         CachedShader cached;
-        cached.iTimeLoc = shader->uniformLocation("iTime");
-        cached.iResolutionLoc = shader->uniformLocation("iResolution");
+        cached.iTimeLoc = shader->uniformLocation(kUniformITime);
+        cached.iResolutionLoc = shader->uniformLocation(kUniformIResolution);
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
@@ -4148,6 +4150,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         return;
     auto it = m_shaderTransitions.find(window);
     if (it != m_shaderTransitions.end()) {
+        setShader(window, nullptr);
         unredirect(window);
         m_shaderTransitions.erase(it);
     }
@@ -4159,6 +4162,8 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
         const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
         if (doc.isObject()) {
             m_shaderProfileTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+        } else {
+            qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
         }
     });
 }
@@ -4175,12 +4180,6 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                 paths.append(entry.toString());
         }
         if (!paths.isEmpty()) {
-            for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end();) {
-                KWin::EffectWindow* w = it->first;
-                ++it;
-                endShaderTransition(w);
-            }
-            m_shaderCache.clear();
             m_animationShaderRegistry.addSearchPaths(paths);
         }
     });

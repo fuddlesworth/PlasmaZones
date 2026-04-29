@@ -19,6 +19,10 @@
 
 namespace PlasmaZones {
 
+namespace {
+constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
+}
+
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_settings(settings)
@@ -492,7 +496,7 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("shaderProfileTree")] = [concrete](const QVariant& v) -> bool {
             const QString raw = v.toString();
-            if (raw.size() > 64 * 1024)
+            if (raw.size() > kMaxShaderProfileTreeBytes)
                 return false;
             const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
             if (!doc.isObject())

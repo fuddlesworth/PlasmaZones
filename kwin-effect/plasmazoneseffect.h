@@ -505,6 +505,8 @@ private:
         const CachedShader* cached = nullptr;
     };
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    // Invariant: all ShaderTransition.cached pointers must be ended
+    // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
     void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
     void endShaderTransition(KWin::EffectWindow* window);

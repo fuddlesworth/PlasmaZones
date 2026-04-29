@@ -470,7 +470,7 @@ private:
     /// this OverlayService because m_animationShaderRegistry is declared
     /// before m_overlayService in daemon.h — reverse destruction order
     /// guarantees the registry outlives this service.
-    PhosphorAnimationShaders::AnimationShaderRegistry* m_pendingShaderRegistry = nullptr;
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
     std::unique_ptr<PhosphorAnimationLayer::SurfaceAnimator> m_surfaceAnimator;
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
 

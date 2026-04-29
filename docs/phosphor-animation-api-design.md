@@ -1688,12 +1688,11 @@ deliverables — each is a standalone PR:
    (CLI, scripting) can read/write per-event shader selections. Same
    JSON-blob-over-D-Bus pattern as `animationProfile`. ~30 LOC.
 
-Note: separate KWin variant shaders (`effect_kwin.frag`) are NOT
-needed. `PhosphorRendering::ShaderNodeRhi` handles texture binding
-and coordinate conventions at the RHI level — the same `effect.frag`
-source works on both the QtQuick and KWin paint paths. The
-`kwinFragmentShaderPath` field has been removed from
-`AnimationShaderEffect` — all effects use a single `fragmentShaderPath`.
+5. ~~**KWin variant shaders.**~~ NOT needed. `PhosphorRendering::ShaderNodeRhi`
+   handles texture binding and coordinate conventions at the RHI level —
+   the same `effect.frag` source works on both the QtQuick and KWin paint
+   paths. The `kwinFragmentShaderPath` field has been removed from
+   `AnimationShaderEffect` — all effects use a single `fragmentShaderPath`.
 
 ### Parallel housekeeping (not phased — can run alongside any phase)
 
