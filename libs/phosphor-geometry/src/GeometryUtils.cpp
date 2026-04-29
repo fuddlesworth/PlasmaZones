@@ -98,6 +98,13 @@ void clampZonesToScreen(QVector<QRect>& zones, const QVector<QSize>& minSizes, c
     const int screenRight = screen.x() + screen.width(); // exclusive
     const int screenBottom = screen.y() + screen.height(); // exclusive
 
+    // Order: right/bottom overflow first, then left/top underflow. Both passes
+    // can fire for the same zone only when effW > screenWidth (or effH >
+    // screenHeight) — the unsatisfiable case where the window is wider/taller
+    // than the screen. In that case the right-overflow branch already pins
+    // zone.x to screenLeft via the qMax, so the left-underflow check sees
+    // zone.x() == screenLeft and is a no-op. Convergence is therefore
+    // guaranteed without iteration.
     for (int i = 0; i < zones.size(); ++i) {
         QRect& zone = zones[i];
         const QSize ms = (i < minSizes.size()) ? minSizes[i] : QSize(0, 0);

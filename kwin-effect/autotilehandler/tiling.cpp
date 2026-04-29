@@ -498,6 +498,7 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         const qreal screenTop = screenGeo.y();
         const qreal screenRight = screenGeo.x() + screenGeo.width();
         const qreal screenBottom = screenGeo.y() + screenGeo.height();
+        const QRectF preClamp = centered;
         if (centered.x() + centered.width() > screenRight) {
             centered.moveLeft(qMax(screenLeft, screenRight - centered.width()));
         }
@@ -512,6 +513,13 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         }
         if (centered.y() < screenTop) {
             centered.moveTop(screenTop);
+        }
+        // Symmetric with daemon-side clampZonesToScreen logging: when the
+        // clamp actually fired, log the before/after so a "clamp ran but
+        // didn't fix it" report is diagnosable from one side.
+        if (Q_UNLIKELY(lcEffect().isDebugEnabled()) && centered.topLeft() != preClamp.topLeft()) {
+            qCDebug(lcEffect) << "Autotile centering: clamp adjusted" << windowId << "from" << preClamp.topLeft()
+                              << "to" << centered.topLeft() << "screen=" << screenGeo;
         }
     } else {
         // screenAt may return null if the zone center happens to fall in the

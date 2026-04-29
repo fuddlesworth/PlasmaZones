@@ -273,6 +273,75 @@ private Q_SLOTS:
             QCOMPARE(zones[i].size(), originalSizes[i]);
         }
     }
+
+    // ─── enforceWindowMinSizes shares the tolerant-vector contract ────────
+    // PR #388 aligned enforceWindowMinSizes' behavior on mismatched vector
+    // sizes with clampZonesToScreen's: both tolerate minSizes shorter than
+    // zones (treating missing entries as no minimum). These tests lock in
+    // that shared contract so the two functions don't drift apart again.
+
+    void test_enforce_minSizesShorterThanZones_stillEnforcesPrefix()
+    {
+        // minSizes covers only the first zone; the second has no minimum and
+        // must be left untouched. Pre-PR #388, the size-mismatch early-return
+        // would have left BOTH zones untouched (the production bug — proven
+        // by zones[0] needing to actually grow here).
+        //
+        // Sizing: greedy stealer caps each steal at neighbor.width() / 3, so
+        // pick a deficit ≤ donor/3 (here 100 ≤ 300) to verify enforcement
+        // happens in a single pass.
+        QVector<QRect> zones = {
+            QRect(0, 0, 300, 900), // below 400 min — should grow by 100
+            QRect(300, 0, 300, 900), // donor neighbor (300/3 = 100 max steal)
+        };
+        // Qt's QSize::isEmpty() returns true if either dim ≤ 0, so a
+        // single-axis constraint must use a 1px sentinel on the unused axis.
+        // Matches the convention in tests/unit/core/test_geometry_utils_minsizes.cpp.
+        const QVector<QSize> minSizes = {QSize(400, 1)}; // only one entry
+        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        // First zone grew toward its 400 min by stealing from the donor.
+        QVERIFY2(zones[0].width() >= 400,
+                 qPrintable(QStringLiteral("zone[0].width() %1 should be >= 400").arg(zones[0].width())));
+        // Total width preserved (stealing is zero-sum).
+        QCOMPARE(zones[0].width() + zones[1].width(), 600);
+    }
+
+    void test_enforce_minSizesLongerThanZones_extraEntriesIgnored()
+    {
+        // Extra trailing minSizes past zones.size() must not crash and must
+        // not affect the existing zones' enforcement.
+        QVector<QRect> zones = {
+            QRect(0, 0, 200, 900),
+            QRect(200, 0, 400, 900),
+        };
+        const QVector<QRect> originalZones = zones;
+        const QVector<QSize> minSizes = {
+            QSize(0, 0),
+            QSize(0, 0), //
+            QSize(99999, 99999), // extra entry past zones.size() — must be ignored
+        };
+        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        // No constraint active on either real zone → nothing should change.
+        QCOMPARE(zones, originalZones);
+    }
+
+    void test_enforce_emptyMinSizes_noOp()
+    {
+        // Documented contract: empty minSizes is a no-op (nothing to enforce).
+        // Distinct from clampZonesToScreen, which would still clamp by zone size.
+        QVector<QRect> zones = {QRect(0, 0, 100, 100), QRect(2000, 0, 100, 100)};
+        const QVector<QRect> originalZones = zones;
+        PhosphorGeometry::enforceWindowMinSizes(zones, {}, /*gapThreshold=*/5);
+        QCOMPARE(zones, originalZones);
+    }
+
+    void test_enforce_emptyZones_noOp()
+    {
+        QVector<QRect> zones;
+        const QVector<QSize> minSizes = {QSize(400, 400)};
+        PhosphorGeometry::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
+        QVERIFY(zones.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestGeometryUtilsClamp)
