@@ -548,20 +548,36 @@ private:
     // engine is created (engineConfigurator below); after that the engine
     // owns the provider and outlives every QML reference into it.
     //
-    // Lifetime invariant — relies on single-threaded destruction:
-    // when ~QQmlEngine runs (inside ~SurfaceManager, declared earlier in
-    // this class so it destructs LATER than `this`'s body but BEFORE
-    // m_thumbnailProvider in reverse-decl order), the engine's
-    // image-provider registry is torn down mid-destructor and only THEN
-    // does QObject::destroyed fire. Between those two points the raw
-    // pointer is briefly dangling. The connect() in engineConfigurator
-    // routes destroyed→`m_thumbnailProvider = nullptr` on the same thread
-    // as the destructor, so no concurrent reader can witness the dangling
-    // value. Cross-thread access to the provider goes through QML's own
-    // image-loader path (requestImage), which Qt blocks during engine
-    // destruction. If the destruction-thread invariant ever changes
-    // (e.g. SurfaceManager teardown moves to a worker thread) this needs
-    // a QMutex / atomic guard.
+    // Lifetime invariant — single-threaded teardown with no event-loop
+    // pumping during the destructor window. Concretely:
+    //
+    //   1. ~QQmlEngine body destroys the registered image providers —
+    //      the underlying SnapAssistThumbnailProvider object is freed
+    //      here.
+    //   2. ~QObject body emits `destroyed`; the lambda installed in
+    //      engineConfigurator fires and sets m_thumbnailProvider to
+    //      nullptr.
+    //
+    // Between (1) and (2) the borrowed raw pointer is briefly dangling
+    // — the lambda runs *after* the provider has been deleted because
+    // C++ destruction order is derived-then-base. Safety in this window
+    // rests on two independent facts, not on ordering:
+    //
+    //   - ~QQmlEngine does not pump the main-thread event loop, so no
+    //     posted D-Bus dispatch / QObject event can run on this thread
+    //     during the window. Same-thread readers physically cannot
+    //     witness the dangling pointer.
+    //   - Cross-thread reads go through QML's image-loader path
+    //     (requestImage); Qt drains in-flight image requests as part of
+    //     the engine teardown that destroys the providers, so no
+    //     worker-thread reader is in flight either.
+    //
+    // If the teardown invariant ever changes — SurfaceManager teardown
+    // moving to a worker thread, an engine-recreation path, or anything
+    // that pumps the event loop inside ~QQmlEngine — replace
+    // m_thumbnailProvider with std::atomic and serialise the lambda
+    // null-out against readers. The current safety is contract-level,
+    // not structural.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
     // PhosphorZones::Layout Picker overlay (interactive layout browser)

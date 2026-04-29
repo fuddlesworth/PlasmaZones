@@ -41,9 +41,17 @@ inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 //       can seed its tracked-screen cache from the daemon's authoritative
 //       answer instead of re-deriving from geometry (which races with VS
 //       reconfig).
+//   v3: setSnapAssistThumbnail signature changed from (s, s data:URL) to
+//       (s, i, i, ay raw ARGB32) returning b. Thumbnail capture moved
+//       out of the daemon and into the kwin-effect (OffscreenQuickScene
+//       + WindowThumbnail through KWin's live compositor texture);
+//       daemon ScreenShot2 D-Bus dependency and the matching
+//       X-KDE-DBUS-Restricted-Interfaces gate are dropped. Mismatched
+//       peers fail the bridge handshake instead of producing
+//       method-not-found at first thumbnail post.
 //
-inline constexpr int ApiVersion = 2;
-inline constexpr int MinPeerApiVersion = 2;
+inline constexpr int ApiVersion = 3;
+inline constexpr int MinPeerApiVersion = 3;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

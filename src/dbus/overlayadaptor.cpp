@@ -320,8 +320,14 @@ bool OverlayAdaptor::authenticateKwinSender()
 
     QDBusReply<uint> pidReply = iface->servicePid(sender);
     if (!pidReply.isValid() || pidReply.value() == 0) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnail: GetConnectionUnixProcessID failed for" << sender << "—"
-                          << pidReply.error().message();
+        // Most commonly hit when a thumbnail call beats the pre-warm reply
+        // and KWin disconnects mid-flight (PID has gone, GetConnectionUnixProcessID
+        // returns NameHasNoOwner). Benign and self-healing — kwin's next
+        // registration re-fires the pre-warm. Demoted from qCWarning to keep
+        // routine session churn out of the warning channel; actual auth
+        // rejections still log at warning level inside @ref validateExeAndTrust.
+        qCDebug(lcDbus) << "setSnapAssistThumbnail: GetConnectionUnixProcessID failed for" << sender << "—"
+                        << pidReply.error().message();
         return false;
     }
 
@@ -344,9 +350,13 @@ bool OverlayAdaptor::validateExeAndTrust(const QString& uniqueName, uint pid)
     // Project is Wayland-only (CLAUDE.md), but accept the X11 binary too —
     // the effect plugin runs inside whichever kwin variant the user is on,
     // and a bare-metal X11 fallback still produces correctly-built
-    // thumbnails.
+    // thumbnails. `kwin_wayland_wrapper` is the launcher shim some distros
+    // ship (Arch / Fedora's session integration); without it auth fails
+    // silently on packaged installs and snap-assist falls back to icons
+    // for the daemon's whole session.
     static const QStringList AcceptedExeBasenames = {
         QStringLiteral("kwin_wayland"),
+        QStringLiteral("kwin_wayland_wrapper"),
         QStringLiteral("kwin_x11"),
     };
     const QString exePath = QFile::symLinkTarget(QStringLiteral("/proc/%1/exe").arg(pid));

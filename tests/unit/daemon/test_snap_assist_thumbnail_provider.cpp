@@ -13,6 +13,9 @@
 #include <QString>
 #include <QUuid>
 
+#include <atomic>
+#include <thread>
+
 using PlasmaZones::SnapAssistThumbnailProvider;
 
 namespace {
@@ -47,6 +50,7 @@ private Q_SLOTS:
     void requestImageHonoursRequestedSize();
     void bracedUuidHandleLookup();
     void urlEmbedsHandleAndGeneration();
+    void concurrentReadWriteIsRaceFree();
 };
 
 void TestSnapAssistThumbnailProvider::insertAndRequestRoundTrip()
@@ -251,6 +255,71 @@ void TestSnapAssistThumbnailProvider::urlEmbedsHandleAndGeneration()
     QVERIFY(ok1);
     QVERIFY(ok2);
     QVERIFY(g2 > g1); // monotonic across inserts
+}
+
+void TestSnapAssistThumbnailProvider::concurrentReadWriteIsRaceFree()
+{
+    // Provider's @c m_mutex serialises @c insert (main thread, on D-Bus
+    // dispatch) against @c requestImage / @c urlFor (QML image-loader
+    // worker thread). This stress test runs a writer and a reader
+    // against the same handles in parallel; under TSan / ASan the
+    // expectation is no race report and no torn read of the QImage
+    // implicitly-shared refcount.
+    SnapAssistThumbnailProvider p;
+    const QString h1 = brace(QUuid::createUuid());
+    const QString h2 = brace(QUuid::createUuid());
+    p.insert(h1, solid(32, 32, Qt::red));
+    p.insert(h2, solid(32, 32, Qt::blue));
+
+    constexpr int kIterations = 5000;
+    std::atomic<int> validReads{0};
+    std::atomic<int> nullReads{0};
+    std::atomic<bool> sawWrongSize{false};
+
+    std::thread writer([&p, &h1, &h2]() {
+        for (int i = 0; i < kIterations; ++i) {
+            const QString& h = (i % 2) ? h1 : h2;
+            const Qt::GlobalColor c = (i % 3 == 0) ? Qt::red : ((i % 3 == 1) ? Qt::green : Qt::blue);
+            p.insert(h, solid(32, 32, c));
+        }
+    });
+
+    std::thread reader([&]() {
+        for (int i = 0; i < kIterations; ++i) {
+            const QString& h = (i % 2) ? h1 : h2;
+            const QString u = p.urlFor(h);
+            if (u.isEmpty()) {
+                ++nullReads;
+                continue;
+            }
+            QSize sz;
+            const QString id = u.section(QLatin1Char('/'), 3, -1);
+            const QImage img = p.requestImage(id, &sz, QSize());
+            if (img.isNull()) {
+                // Eviction can race urlFor → requestImage at LRU boundary;
+                // the provider's contract is "either the image or a null
+                // result," not "always the image." A null reply here is
+                // valid; record it separately so a wedge would still show
+                // up as zero validReads.
+                ++nullReads;
+            } else {
+                ++validReads;
+                if (img.size() != QSize(32, 32)) {
+                    sawWrongSize = true;
+                }
+            }
+        }
+    });
+
+    writer.join();
+    reader.join();
+
+    // QVERIFY/QCOMPARE on the test thread; no calls into QtTest from the
+    // worker threads (those macros aren't documented as thread-safe).
+    QVERIFY2(!sawWrongSize, "requestImage returned an image with the wrong size — torn read across the mutex.");
+    QCOMPARE(validReads + nullReads, kIterations);
+    QVERIFY2(validReads.load() > 0,
+             "Reader observed zero valid images across 5000 iterations — provider is not serving concurrent readers.");
 }
 
 QTEST_MAIN(TestSnapAssistThumbnailProvider)

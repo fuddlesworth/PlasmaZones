@@ -58,9 +58,13 @@ public:
     explicit SnapAssistThumbnailCapture(QObject* parent = nullptr);
     ~SnapAssistThumbnailCapture() override;
 
-    /// Default thumbnail bounding box. Single source of truth shared with
-    /// the QML scene's fallback (which is otherwise unreachable since the
-    /// C++ side always overrides @c boxSize before each render).
+    /// Default thumbnail bounding box. C++ overrides @c boxSize on the
+    /// QML root before every render via setProperty, so the QML literal
+    /// fallback (in SnapAssistThumb.qml) is unreachable in production —
+    /// it exists only to keep the QML scene previewable in Qt Creator's
+    /// QML tooling. Kept here as the canonical value and as the default
+    /// argument for @ref captureCandidates; if you change the size,
+    /// update the QML literal so design-time previews still match.
     static constexpr QSize DefaultThumbnailSize = QSize(256, 256);
 
     /**
@@ -93,6 +97,14 @@ private:
     void ensureScene();
     void postThumbnail(const QUuid& internalId, const QImage& image);
 
+    /// Common cleanup for early-bail paths in @ref processNext and the
+    /// @ref attemptCapture timer lambda: drop the in-flight queue and
+    /// release @c m_busy so a subsequent @ref captureCandidates can
+    /// dispatch fresh work. Leaving @c m_busy=true without a follow-up
+    /// dispatch would silently wedge the queue forever, so every error
+    /// exit must route through here (or set both fields inline).
+    void dropQueueAndIdle();
+
     struct Pending
     {
         QUuid internalId;
@@ -122,13 +134,24 @@ private:
     /// Mirror of the daemon-side LRU cap, sourced from the shared
     /// @c PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity
     /// constant rather than a duplicate literal. A single bump in the
-    /// shared header re-aligns both sides on rebuild; the prior pattern
-    /// of two unrelated `24`s in the daemon and the effect could drift
-    /// silently and leave the effect believing the daemon held entries
-    /// it had already evicted. @ref resetRecentlyPosted clears the set
-    /// on daemon-ready transitions so a daemon restart with a cold cache
-    /// also resets the dedup state.
+    /// shared header re-aligns both sides on rebuild — capacity drift
+    /// across rebuilds is impossible.
+    ///
+    /// Eviction *order* still differs across the boundary: the daemon
+    /// is true-LRU (its QCache promotes recency on every @c urlFor /
+    /// @c requestImage hit), this side is plain FIFO of first-post
+    /// times. Both drift directions have bounded fallbacks — if the
+    /// daemon evicts ahead of this FIFO, the effect skips a re-capture
+    /// and snap-assist falls back to icons until the FIFO rolls past;
+    /// if this FIFO evicts ahead of the daemon, the next capture is
+    /// wasted (re-posted into a slot the daemon already held). For the
+    /// daemon-restart case where the gap is unbounded,
+    /// @ref resetRecentlyPosted clears the set on daemon-ready
+    /// transitions so a cold daemon cache also resets the dedup state.
     static constexpr int RecentPostedCapacity = PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity;
+    static_assert(RecentPostedCapacity > 0,
+                  "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
+                  "assumes the just-inserted handle survives the capacity check.");
 
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;

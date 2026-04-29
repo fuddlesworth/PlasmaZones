@@ -130,6 +130,12 @@ void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
     }
 }
 
+void SnapAssistThumbnailCapture::dropQueueAndIdle()
+{
+    m_queue.clear();
+    m_busy = false;
+}
+
 void SnapAssistThumbnailCapture::ensureScene()
 {
     if (m_scene) {
@@ -164,8 +170,7 @@ void SnapAssistThumbnailCapture::processNext()
         // dropped past the @ref qCWarning that names the failing resource.
         qCWarning(lcSnapAssistCapture) << "processNext: scene unavailable — dropping" << m_queue.size()
                                        << "queued capture(s); snap-assist will fall back to icons.";
-        m_queue.clear();
-        m_busy = false;
+        dropQueueAndIdle();
         return;
     }
     m_busy = true;
@@ -193,8 +198,10 @@ void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retr
         // would silently wedge the queue forever.
         if (!m_scene || !m_scene->rootItem()) {
             qCDebug(lcSnapAssistCapture) << "attemptCapture: scene torn down — aborting" << p.internalId.toString();
-            m_queue.clear();
-            m_busy = false;
+            dropQueueAndIdle();
+            // Re-enter the queue loop so any captures enqueued between
+            // schedule and fire still get drained — a no-op when the
+            // queue is empty (idempotent).
             QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
             return;
         }
@@ -234,17 +241,22 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     // Image is already Format_ARGB32 by the caller. Pack tight (no row
     // padding) so the daemon can reconstruct via QImage(uchar*, w, h,
     // bytesPerLine=w*4, Format_ARGB32) without having to communicate the
-    // stride. QImage::bytesPerLine for Format_ARGB32 with width N is N*4
-    // when the row is naturally aligned; we copy line-by-line to be
-    // unconditionally tight regardless of Qt's internal alignment policy.
+    // stride. Qt's internal stride for Format_ARGB32 is naturally 4-aligned
+    // and almost always equals width*4; on that fast-path one bulk memcpy
+    // beats a per-row loop. Fall back to the row loop only when Qt has
+    // padded the stride (rare — typically only for non-aligned widths).
     const int width = image.width();
     const int height = image.height();
     const qsizetype rowBytes = qsizetype(width) * 4;
     QByteArray pixels;
     pixels.resize(rowBytes * height);
     char* dst = pixels.data();
-    for (int y = 0; y < height; ++y) {
-        std::memcpy(dst + y * rowBytes, image.constScanLine(y), rowBytes);
+    if (image.bytesPerLine() == rowBytes) {
+        std::memcpy(dst, image.constBits(), rowBytes * height);
+    } else {
+        for (int y = 0; y < height; ++y) {
+            std::memcpy(dst + y * rowBytes, image.constScanLine(y), rowBytes);
+        }
     }
 
     const QString compositorHandle = internalId.toString();

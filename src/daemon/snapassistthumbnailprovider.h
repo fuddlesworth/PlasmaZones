@@ -50,9 +50,16 @@ public:
     static constexpr const char* ProviderId = "plasmazones-snapassist";
     /// Hard upper bound on cached thumbnails. Sourced from the shared
     /// PhosphorProtocol constant so the daemon and the kwin-effect's
-    /// recent-posted dedup set are always sized off a single literal — no
-    /// window where the effect believes the daemon holds entries the daemon
-    /// has already evicted under LRU pressure.
+    /// recent-posted dedup set are always sized off a single literal —
+    /// capacity drift across rebuilds is impossible.
+    ///
+    /// Note: only *capacity* is shared. Eviction *order* differs — this
+    /// side is true-LRU (urlFor / requestImage promotes recency), the
+    /// effect is plain FIFO of first-post times. The resulting drift in
+    /// either direction has bounded fallbacks (icon fallback on the
+    /// effect side, wasted re-capture on the daemon side); see the
+    /// matching comment on @c SnapAssistThumbnailCapture::RecentPostedCapacity
+    /// for the full treatment.
     static constexpr int CacheCapacity = PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity;
 
     SnapAssistThumbnailProvider();
