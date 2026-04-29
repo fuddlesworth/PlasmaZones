@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
     QCommandLineOption outOpt(
         QStringList() << QStringLiteral("o") << QStringLiteral("out"),
         QStringLiteral("Output path. Extension picks the format: .webm/.mp4 = encoded video, "
-                       ".png = numbered sequence (out_0001.png, ...). Defaults to <shader>.webm."),
+                       ".png = numbered sequence (out_000001.png, ...). Defaults to <shader>.webm."),
         QStringLiteral("path"));
     parser.addOption(outOpt);
 
@@ -194,6 +194,20 @@ int main(int argc, char* argv[])
         if (!outputSize.isValid()) {
             std::cerr << "error: --output-size must be WxH\n";
             return 2;
+        }
+    }
+
+    // Aspect-ratio mismatch silently stretches the frame (encoder uses
+    // IgnoreAspectRatio). For batch jobs writing the docs site this is a
+    // footgun — warn at the boundary so authors notice before regenerating
+    // dozens of clips.
+    if (outputSize != resolution) {
+        const double srcAspect = static_cast<double>(resolution.width()) / resolution.height();
+        const double dstAspect = static_cast<double>(outputSize.width()) / outputSize.height();
+        if (!qFuzzyCompare(srcAspect + 1.0, dstAspect + 1.0)) {
+            std::cerr << "warning: --resolution " << resolution.width() << "x" << resolution.height() << " (aspect "
+                      << srcAspect << ") differs from --output-size " << outputSize.width() << "x"
+                      << outputSize.height() << " (aspect " << dstAspect << ") — frames will be stretched\n";
         }
     }
 
@@ -252,25 +266,22 @@ int main(int argc, char* argv[])
 
     // ── Render ──────────────────────────────────────────────────
     PlasmaZones::ShaderRender::RenderOptions opts;
-    opts.metadataPath = metadataPath;
     opts.metadata = metadata;
     opts.zones = zones;
     opts.resolution = resolution;
-    opts.outputSize = outputSize;
     opts.frameCount = frameCount;
     opts.fps = fps;
     opts.audio = audio.get();
 
-    PlasmaZones::ShaderRender::Renderer renderer;
-    PlasmaZones::ShaderRender::FrameSink* sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
+    auto sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);
     if (!sink) {
         std::cerr << "error: couldn't create output sink for " << outPath.toStdString() << "\n";
         return 1;
     }
-    opts.sink = sink;
+    opts.sink = sink.get();
 
+    PlasmaZones::ShaderRender::Renderer renderer;
     const int rc = renderer.render(opts);
-    delete sink;
     if (rc != 0) {
         std::cerr << "error: render failed (code " << rc << ")\n";
         return rc;

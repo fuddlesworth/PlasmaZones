@@ -21,10 +21,15 @@ QT_BEGIN_NAMESPACE
 class QSGNode;
 QT_END_NAMESPACE
 
-namespace PlasmaZones {
+// ZoneShaderNodeRhi and ZoneUniformExtension live in PhosphorRendering and
+// are surfaced into PlasmaZones via the using-declarations in
+// zoneshadercommon.h / zoneuniformextension.h. The zoneshadernoderhi.h /
+// zoneuniformextension.h shim headers are included transitively below — no
+// forward declarations needed (and they would conflict with the typedefs).
+#include "zoneshadernoderhi.h"
+#include "zoneuniformextension.h"
 
-class ZoneShaderNodeRhi;
-class ZoneUniformExtension;
+namespace PlasmaZones {
 
 /**
  * @brief QQuickItem for rendering zone overlays with custom shaders
@@ -33,8 +38,8 @@ class ZoneUniformExtension;
  * shader rendering: Shadertoy uniforms, multipass, custom params/colors,
  * textures, status. This subclass adds zone-specific functionality:
  *
- * - PhosphorZones::Zone data array (QVariantList zones property for QML)
- * - PhosphorZones::Zone counting (zoneCount, highlightedCount)
+ * - Zone data array (QVariantList zones property for QML)
+ * - Zone counts (zoneCount, highlightedCount)
  * - Hovered zone highlight (hoveredZoneIndex)
  * - Labels texture (pre-rendered zone numbers)
  * - ZoneShaderNodeRhi creation (delegates to PhosphorRendering::ShaderNodeRhi)
@@ -56,11 +61,11 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
     // editor/main.cpp under the "PlasmaZones" module URI. QML_ELEMENT here
     // would be inert (no qt_add_qml_module target exists) and misleading.
 
-    // PhosphorZones::Zone data (zone-specific, not in parent)
+    // Zone data (zone-specific, not in parent)
     Q_PROPERTY(QVariantList zones READ zones WRITE setZones NOTIFY zonesChanged FINAL)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zoneCountChanged FINAL)
     Q_PROPERTY(int highlightedCount READ highlightedCount NOTIFY highlightedCountChanged FINAL)
-    /** PhosphorZones::Zone index under cursor for hover highlight (preview mode). -1 = none. Avoids full zones churn on
+    /** Index of the zone under the cursor for hover highlight (preview mode). -1 = none. Avoids full zones churn on
      * mouse move. */
     Q_PROPERTY(
         int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
@@ -72,7 +77,7 @@ public:
     explicit ZoneShaderItem(QQuickItem* parent = nullptr);
     ~ZoneShaderItem() override;
 
-    // PhosphorZones::Zone data getters/setters
+    // Zone data getters/setters
     const QVariantList& zones() const
     {
         return m_zones;
@@ -173,6 +178,19 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
 
     /**
+     * @brief Override the parent's render-node factory to produce ZoneShaderNodeRhi.
+     *
+     * Both ShaderEffect subclasses (this and shader-render's RenderEffect) now
+     * route node creation through the parent's createShaderNode() hook, so the
+     * node-type contract lives in one place. The override of updatePaintNode
+     * above still exists because the load semantics differ (vertex shader
+     * loaded before fragment, plus zone data sync) — a future refactor that
+     * folds those into hook methods would remove the override entirely without
+     * touching this factory.
+     */
+    PhosphorRendering::ShaderNodeRhi* createShaderNode() override;
+
+    /**
      * @brief Handle geometry changes — re-parse zones with new resolution
      */
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
@@ -193,7 +211,7 @@ private:
      */
     void updateHoveredHighlightOnly();
 
-    // PhosphorZones::Zone data (main thread access)
+    // Zone data (main thread access)
     QVariantList m_zones;
     int m_zoneCount = 0;
     int m_highlightedCount = 0;

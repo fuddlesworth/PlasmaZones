@@ -3,13 +3,19 @@
 
 #include "layoutloader.h"
 
+#include "colorutil.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PlasmaZones::ShaderRender {
+
+Q_LOGGING_CATEGORY(lcLayoutLoader, "plasmazones.shader-render.layout")
+
 namespace {
 
 // Default per-zone fill cycle, used when the layout JSON doesn't
@@ -24,18 +30,31 @@ const std::array<QColor, 6> kFillCycle = {{
     QColor::fromRgbF(0.75f, 0.52f, 0.99f, 0.35f), // purple-400
 }};
 
-QColor parseHexColor(const QString& hex, const QColor& fallback)
+// Clamp a normalized rect-component into [0, 1] and warn on out-of-range. The
+// loader contract says rects are normalized; common.glsl helpers multiply by
+// iResolution, so a stray pixel-space value would render off-screen and the
+// shader output would silently look broken.
+double clampNormalized(double value, const char* field, int zoneIdx)
 {
-    if (hex.isEmpty())
-        return fallback;
-    QColor c(hex);
-    return c.isValid() ? c : fallback;
+    if (value < 0.0 || value > 1.0) {
+        qCWarning(lcLayoutLoader) << "zone" << zoneIdx << "field" << field << "value" << value
+                                  << "out of normalized [0, 1] range — clamping";
+        return qBound(0.0, value, 1.0);
+    }
+    return value;
 }
 
 } // namespace
 
-bool loadLayoutZones(const QString& layoutPath, const QSize& resolution, QVector<Zone>& outZones)
+bool loadLayoutZones(const QString& layoutPath, const QSize& /*resolution*/, QVector<Zone>& outZones)
 {
+    // The contract is "fill the out vector with zones from the JSON". A caller
+    // that pre-populates the vector would otherwise see false-positive success
+    // when a layout's zones array is empty (the final !isEmpty() check below
+    // would still see the pre-existing entries). Clear up-front so the return
+    // value reflects what THIS call actually parsed.
+    outZones.clear();
+
     QFile f(layoutPath);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return false;
@@ -48,8 +67,6 @@ bool loadLayoutZones(const QString& layoutPath, const QSize& resolution, QVector
     const QJsonObject obj = doc.object();
     const QJsonArray zoneArr = obj.value(QLatin1String("zones")).toArray();
 
-    const qreal w = resolution.width();
-    const qreal h = resolution.height();
     int idx = 0;
 
     for (const auto& v : zoneArr) {
@@ -58,10 +75,15 @@ bool loadLayoutZones(const QString& layoutPath, const QSize& resolution, QVector
         const QJsonObject z = v.toObject();
         const QJsonObject geom = z.value(QLatin1String("relativeGeometry")).toObject();
 
+        // Zone rects must be NORMALIZED 0-1 — the shaders' common.glsl
+        // helpers (zoneRectPos, zoneRectSize) multiply by iResolution
+        // themselves. Out-of-range values land off-screen, so clamp at the
+        // boundary with a warning instead of pushing garbage to the GPU.
         Zone zone;
-        zone.rect = QRectF(geom.value(QLatin1String("x")).toDouble() * w, geom.value(QLatin1String("y")).toDouble() * h,
-                           geom.value(QLatin1String("width")).toDouble() * w,
-                           geom.value(QLatin1String("height")).toDouble() * h);
+        zone.rect = QRectF(clampNormalized(geom.value(QLatin1String("x")).toDouble(), "x", idx),
+                           clampNormalized(geom.value(QLatin1String("y")).toDouble(), "y", idx),
+                           clampNormalized(geom.value(QLatin1String("width")).toDouble(), "width", idx),
+                           clampNormalized(geom.value(QLatin1String("height")).toDouble(), "height", idx));
 
         zone.zoneNumber = z.value(QLatin1String("zoneNumber")).toInt(idx + 1);
 
@@ -73,10 +95,12 @@ bool loadLayoutZones(const QString& layoutPath, const QSize& resolution, QVector
             parseHexColor(z.value(QLatin1String("borderColor")).toString(), QColor::fromRgbF(0.9f, 0.93f, 1.0f, 0.55f));
         zone.borderWidth = z.value(QLatin1String("borderWidth")).toDouble(1.5);
         zone.borderRadius = z.value(QLatin1String("borderRadius")).toDouble(8.0);
-        // Highlight every zone for previews — without at least one
-        // active zone, audio-reactive and "vitality"-driven shaders
-        // render in their dormant state, which isn't representative.
-        zone.isHighlighted = true;
+        // The renderer cycles isHighlighted through zones over time
+        // (see Renderer::render's frame loop) so each zone gets a
+        // turn at the "active" / vivid state and the dormant state
+        // is also visible.  Leave the flag false here — the cycle
+        // is what makes the demo representative of real use.
+        zone.isHighlighted = false;
 
         outZones.append(zone);
         ++idx;

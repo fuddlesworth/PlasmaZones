@@ -184,7 +184,8 @@ PAL::SurfaceAnimator::Config buildDefaultConfig()
 /// LayoutOsd / NavigationOsd: identical fade-and-pop shape. The visual
 /// treatment is meant to read the same across the two OSDs, so a single
 /// shared config keeps tuning edits consistent. OutBack-overshoot scale
-/// pop preserved from the original QML hand-roll.
+/// pop preserved from the original QML hand-roll. Explicit empty shader
+/// fields suppress GCC's -Wmissing-field-initializers under designated init.
 PAL::SurfaceAnimator::Config buildOsdConfig()
 {
     return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
@@ -192,7 +193,11 @@ PAL::SurfaceAnimator::Config buildOsdConfig()
                                         .showScaleProfile = osdPop(),
                                         .hideScaleProfile = osdHide(),
                                         .showScaleFrom = 0.8,
-                                        .hideScaleTo = 0.9};
+                                        .hideScaleTo = 0.9,
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
 }
 
 /// LayoutPicker: same osd shape as buildOsdConfig but with a softer
@@ -205,19 +210,27 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig()
                                         .showScaleProfile = osdPop(),
                                         .hideScaleProfile = osdHide(),
                                         .showScaleFrom = 0.9,
-                                        .hideScaleTo = 0.95};
+                                        .hideScaleTo = 0.95,
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
 }
 
 /// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
 /// the hide animation actually paints). Opacity-only — explicit empty
-/// scale fields suppress GCC's -Wmissing-field-initializers under
-/// designated init.
+/// scale and shader fields suppress GCC's -Wmissing-field-initializers
+/// under designated init.
 PAL::SurfaceAnimator::Config buildZoneSelectorConfig()
 {
     return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
                                         .hideProfile = widgetFadeOut(),
                                         .showScaleProfile = {},
-                                        .hideScaleProfile = {}};
+                                        .hideScaleProfile = {},
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
 }
 
 /// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
@@ -229,7 +242,11 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig()
     return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
                                         .hideProfile = {},
                                         .showScaleProfile = {},
-                                        .hideScaleProfile = {}};
+                                        .hideScaleProfile = {},
+                                        .showShaderEffectId = {},
+                                        .hideShaderEffectId = {},
+                                        .showShaderProfile = {},
+                                        .hideShaderProfile = {}};
 }
 
 } // namespace
