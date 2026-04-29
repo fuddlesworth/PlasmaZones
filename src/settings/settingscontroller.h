@@ -36,6 +36,8 @@ class ScriptedAlgorithmLoader;
 #include <optional>
 
 #include "algorithmservice.h"
+#include "animationsettingscontroller.h"
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
@@ -87,6 +89,7 @@ class SettingsController : public QObject
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
+    Q_PROPERTY(AnimationSettingsController* animationPage READ animationPage CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -383,6 +386,10 @@ public:
     {
         return m_generalPage;
     }
+    AnimationSettingsController* animationPage() const
+    {
+        return m_animationPage;
+    }
 
     // ── Running window picker (async flow) ──────────────────────────────────
     //
@@ -591,6 +598,8 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
+    AnimationSettingsController* m_animationPage = nullptr;
+    std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
 
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;

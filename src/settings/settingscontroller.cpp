@@ -284,6 +284,25 @@ SettingsController::SettingsController(QObject* parent)
     m_snappingEffectsPage = new SnappingEffectsController(this);
     m_tilingAppearancePage = new TilingAppearanceController(this);
 
+    // Phase 6: animation shader transition settings. The registry scans the
+    // same XDG paths the daemon uses so the settings app sees the same
+    // installed effects. LiveReload is on by default so user-dropped packs
+    // appear without restarting the settings app.
+    m_animationShaderRegistry = std::make_unique<PhosphorAnimationShaders::AnimationShaderRegistry>();
+    {
+        QStringList animDirs =
+            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
+                                      QStandardPaths::LocateDirectory);
+        std::reverse(animDirs.begin(), animDirs.end());
+        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/animations");
+        if (!animDirs.contains(userAnimDir))
+            animDirs.append(userAnimDir);
+        m_animationShaderRegistry->addSearchPaths(animDirs);
+        m_animationShaderRegistry->setUserPath(userAnimDir);
+    }
+    m_animationPage = new AnimationSettingsController(&m_settings, m_animationShaderRegistry.get(), this);
+
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
     // custom-parameter CRUD surface. Borrows the algorithm registry this
     // controller already owns; declared as a unique_ptr AFTER
