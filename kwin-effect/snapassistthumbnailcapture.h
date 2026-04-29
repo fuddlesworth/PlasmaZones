@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QObject>
 #include <QQueue>
 #include <QSet>
@@ -117,14 +119,16 @@ private:
     /// so this side stays in sync with the daemon's eviction window.
     bool wasRecentlyPosted(const QUuid& handle) const;
 
-    /// Mirror of the daemon-side LRU cap. Kept here as a literal — the
-    /// effect deliberately doesn't depend on the daemon's header. If the
-    /// daemon's capacity ever grows past this, the worst case is a spurious
-    /// re-capture; if the daemon's shrinks below this, we'll skip captures
-    /// the daemon has already evicted (cache miss → QML icon fallback).
-    /// Combined with @ref resetRecentlyPosted on daemon-ready transitions,
-    /// the failure modes are bounded and self-correcting.
-    static constexpr int RecentPostedCapacity = 24;
+    /// Mirror of the daemon-side LRU cap, sourced from the shared
+    /// @c PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity
+    /// constant rather than a duplicate literal. A single bump in the
+    /// shared header re-aligns both sides on rebuild; the prior pattern
+    /// of two unrelated `24`s in the daemon and the effect could drift
+    /// silently and leave the effect believing the daemon held entries
+    /// it had already evicted. @ref resetRecentlyPosted clears the set
+    /// on daemon-ready transitions so a daemon restart with a cold cache
+    /// also resets the dedup state.
+    static constexpr int RecentPostedCapacity = PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity;
 
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;

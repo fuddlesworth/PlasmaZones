@@ -15,6 +15,9 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusReply>
 #include <QDBusServiceWatcher>
 #include <QFile>
@@ -54,6 +57,25 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDet
         [this](const QString& screenId, const EmptyZoneList& emptyZones, const SnapAssistCandidateList& candidates) {
             Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
         });
+
+    // Pre-warm the kwin trust cache so the first @c setSnapAssistThumbnail
+    // of a session is a one-set-lookup hit instead of a sync
+    // GetConnectionUnixProcessID round-trip from inside the D-Bus method
+    // handler. Watcher armed for both directions so a kwin restart re-fires
+    // the pre-warm; the existing per-sender unregistration watchers
+    // installed by @ref validateExeAndTrust handle trust eviction on the
+    // way out.
+    m_kwinWatcher = new QDBusServiceWatcher(QStringLiteral("org.kde.KWin"), QDBusConnection::sessionBus(),
+                                            QDBusServiceWatcher::WatchForRegistration, this);
+    QObject::connect(m_kwinWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
+        prewarmKwinTrust();
+    });
+    // Initial fire — covers the steady-state case where kwin came up
+    // before plasmazones (the universal case for compositor + session
+    // services). If kwin isn't running yet, GetNameOwner returns an
+    // error, the pre-warm bails, and the WatchForRegistration callback
+    // above will retry when kwin lands.
+    prewarmKwinTrust();
 }
 
 void OverlayAdaptor::showOverlay()
@@ -236,11 +258,11 @@ bool OverlayAdaptor::isSnapAssistVisible()
     return m_overlayService ? m_overlayService->isSnapAssistVisible() : false;
 }
 
-void OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                             const QByteArray& pixels)
 {
     if (!m_overlayService) {
-        return;
+        return false;
     }
     // Coarse byte cap before auth and any decode work. Headroom for a
     // 1024² ARGB32 image (4 MiB) plus framing overhead, generous enough
@@ -252,12 +274,16 @@ void OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
     if (pixels.size() > MaxPixelBytes) {
         qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting oversize payload" << pixels.size() << "bytes for"
                           << compositorHandle;
-        return;
+        return false;
     }
     if (!authenticateKwinSender()) {
-        return;
+        return false;
     }
-    m_overlayService->setSnapAssistThumbnail(compositorHandle, width, height, pixels);
+    // Forward the service's accepted/rejected bool verbatim so the kwin-
+    // effect's recently-posted dedup window only marks handles the daemon
+    // actually stored. Treating any silent rejection as success would
+    // strand snap-assist on icons until the dedup FIFO rolls past.
+    return m_overlayService->setSnapAssistThumbnail(compositorHandle, width, height, pixels);
 }
 
 bool OverlayAdaptor::authenticateKwinSender()
@@ -278,6 +304,13 @@ bool OverlayAdaptor::authenticateKwinSender()
         return true;
     }
 
+    // Slow-path fallback. The pre-warm chain (@ref prewarmKwinTrust →
+    // @ref resolvePidAndTrust → @ref validateExeAndTrust) primes the
+    // cache before any thumbnail call lands in steady state, so this
+    // sync block runs only when a thumbnail call races a fresh pre-warm
+    // (e.g. the very first call after a kwin restart). Acceptable cost:
+    // one ~1ms GetConnectionUnixProcessID round-trip; subsequent calls
+    // hit the cache.
     QDBusConnection bus = connection();
     auto* iface = bus.interface();
     if (!iface) {
@@ -292,7 +325,15 @@ bool OverlayAdaptor::authenticateKwinSender()
         return false;
     }
 
-    const uint pid = pidReply.value();
+    return validateExeAndTrust(sender, pidReply.value());
+}
+
+bool OverlayAdaptor::validateExeAndTrust(const QString& uniqueName, uint pid)
+{
+    if (m_trustedKwinSenders.contains(uniqueName)) {
+        return true;
+    }
+
     // /proc/<pid>/exe is a kernel-maintained symlink to the actual binary
     // path; unlike /proc/<pid>/comm it cannot be rewritten from userspace
     // (no prctl(PR_SET_NAME) equivalent for the exe link). Compare the
@@ -310,12 +351,12 @@ bool OverlayAdaptor::authenticateKwinSender()
     };
     const QString exePath = QFile::symLinkTarget(QStringLiteral("/proc/%1/exe").arg(pid));
     if (exePath.isEmpty()) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnail: cannot resolve /proc/" << pid << "/exe — rejecting" << sender;
+        qCWarning(lcDbus) << "validateExeAndTrust: cannot resolve /proc/" << pid << "/exe — rejecting" << uniqueName;
         return false;
     }
     const QString exeBasename = QFileInfo(exePath).fileName();
     if (!AcceptedExeBasenames.contains(exeBasename)) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting non-kwin sender" << sender << "pid=" << pid
+        qCWarning(lcDbus) << "validateExeAndTrust: rejecting non-kwin sender" << uniqueName << "pid=" << pid
                           << "exe=" << exePath;
         return false;
     }
@@ -323,14 +364,79 @@ bool OverlayAdaptor::authenticateKwinSender()
     // Cache the trusted bus name and arm a watcher that drops it from the
     // trust set the moment the bus name's owner disappears. Without this,
     // a kwin restart followed by a (rapid) PID reuse on a new short-lived
-    // process binding the same unique-name could inherit trust.
-    m_trustedKwinSenders.insert(sender);
-    auto* watcher = new QDBusServiceWatcher(sender, bus, QDBusServiceWatcher::WatchForUnregistration, this);
+    // process binding the same unique-name could inherit trust. The kwin
+    // well-known-name watcher armed in the constructor handles the
+    // re-prewarm side; this per-unique-name watcher handles trust eviction.
+    m_trustedKwinSenders.insert(uniqueName);
+    auto* watcher = new QDBusServiceWatcher(uniqueName, QDBusConnection::sessionBus(),
+                                            QDBusServiceWatcher::WatchForUnregistration, this);
     QObject::connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this, watcher](const QString& service) {
         m_trustedKwinSenders.remove(service);
         watcher->deleteLater();
     });
+    qCDebug(lcDbus) << "validateExeAndTrust: admitted" << uniqueName << "pid=" << pid << "exe=" << exePath;
     return true;
+}
+
+void OverlayAdaptor::prewarmKwinTrust()
+{
+    // Async leg 1: resolve org.kde.KWin → unique bus name. KWin is the
+    // compositor and the universal pattern is for it to register before
+    // plasmazones starts; pre-warm at construction is a cache hit in
+    // steady state, and a no-op (logged at debug) when kwin isn't up yet
+    // — m_kwinWatcher's WatchForRegistration callback retries on
+    // registration.
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                                       QStringLiteral("org.freedesktop.DBus"), QStringLiteral("GetNameOwner"));
+    msg << QStringLiteral("org.kde.KWin");
+    auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            qCDebug(lcDbus) << "prewarmKwinTrust: GetNameOwner(org.kde.KWin) failed —" << reply.error().message()
+                            << "(retrying on next NameOwnerChanged)";
+            return;
+        }
+        const QString uniqueName = reply.value();
+        if (uniqueName.isEmpty()) {
+            return;
+        }
+        resolvePidAndTrust(uniqueName);
+    });
+}
+
+void OverlayAdaptor::resolvePidAndTrust(const QString& uniqueName)
+{
+    if (m_trustedKwinSenders.contains(uniqueName)) {
+        return;
+    }
+    // Async leg 2: resolve unique name → PID. Both legs use asyncCall so
+    // the daemon's main thread never blocks on the dbus-daemon for the
+    // pre-warm path — the sync fallback in @ref authenticateKwinSender
+    // remains for the race window where a thumbnail beats the pre-warm.
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("GetConnectionUnixProcessID"));
+    msg << uniqueName;
+    auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, uniqueName](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<uint> reply = *w;
+        if (reply.isError()) {
+            qCDebug(lcDbus) << "prewarmKwinTrust: GetConnectionUnixProcessID failed for" << uniqueName << ":"
+                            << reply.error().message();
+            return;
+        }
+        const uint pid = reply.value();
+        if (pid == 0) {
+            return;
+        }
+        validateExeAndTrust(uniqueName, pid);
+    });
 }
 
 } // namespace PlasmaZones

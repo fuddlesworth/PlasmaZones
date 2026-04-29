@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QCache>
 #include <QImage>
 #include <QMutex>
@@ -46,8 +48,12 @@ class SnapAssistThumbnailProvider : public QQuickImageProvider
 public:
     /// QML provider id — the host segment of `image://<id>/...`.
     static constexpr const char* ProviderId = "plasmazones-snapassist";
-    /// Hard upper bound on cached thumbnails. 24 × 256² ARGB32 ≈ 6 MB.
-    static constexpr int CacheCapacity = 24;
+    /// Hard upper bound on cached thumbnails. Sourced from the shared
+    /// PhosphorProtocol constant so the daemon and the kwin-effect's
+    /// recent-posted dedup set are always sized off a single literal — no
+    /// window where the effect believes the daemon holds entries the daemon
+    /// has already evicted under LRU pressure.
+    static constexpr int CacheCapacity = PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity;
 
     SnapAssistThumbnailProvider();
 

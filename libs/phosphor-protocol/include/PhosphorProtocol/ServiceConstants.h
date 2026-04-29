@@ -53,4 +53,13 @@ inline constexpr int MinPeerApiVersion = 2;
 // gracefully to caller-side defaults when the daemon is unresponsive.
 inline constexpr int SyncCallTimeoutMs = 500;
 
+// Shared cap for the snap-assist thumbnail LRU. The daemon sizes its
+// QCache<QString, QImage> against this; the kwin-effect mirrors it for the
+// "skip recently-posted handle" dedup window. Keeping the literal here
+// (rather than two unrelated `static constexpr int`s in the daemon and the
+// effect) means a future tuning bump moves both sides atomically — there
+// is no longer a window where the effect believes the daemon holds entries
+// the daemon has already evicted. 24 × 256² ARGB32 ≈ 6 MB on the daemon.
+inline constexpr int SnapAssistThumbnailCacheCapacity = 24;
+
 } // namespace PhosphorProtocol::Service

@@ -187,16 +187,24 @@ Window {
                                 height: width
 
                                 Image {
-                                    anchors.fill: parent
-                                    visible: !!(candidate && candidate.thumbnail)
-                                    fillMode: Image.PreserveAspectFit
-                                    source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
                                     // The provider URL embeds a monotonic generation token, so
                                     // a re-insert always changes the source string and QML's
                                     // QQuickPixmap cache invalidates correctly. Caching avoids
                                     // re-entering the image-loader thread on every repaint of
                                     // the snap-assist overlay (~12 candidates × multiple paints
                                     // during the show animation).
+
+                                    anchors.fill: parent
+                                    visible: !!(candidate && candidate.thumbnail)
+                                    fillMode: Image.PreserveAspectFit
+                                    source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
+                                    // Memory bound: each insert mints a new URL, and the prior
+                                    // URL stays pinned in the process-global QQuickPixmap cache
+                                    // until that cache's own LRU evicts it. The QML cache is
+                                    // bounded independently of the daemon's QCache (size driven
+                                    // by Qt's own QML_DISK_CACHE_PATH / pixmap-cache budget,
+                                    // tunable via QML_PIXMAP_CACHE_LIMIT for an operator who
+                                    // sees the snap-assist working set growing on long sessions).
                                     cache: true
                                 }
 

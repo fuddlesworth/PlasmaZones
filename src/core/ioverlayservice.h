@@ -118,7 +118,15 @@ public:
     /// @p width * @p height * 4 bytes, tightly packed (no row padding),
     /// non-premultiplied. Implementations must validate dimensions and the
     /// pixel-buffer size before reconstructing a QImage.
-    virtual void setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+    ///
+    /// @return true iff the implementation stored the thumbnail in its
+    ///         cache. False on validation failure or post-shutdown teardown.
+    ///         Callers (compositor effects) use this to decide whether to
+    ///         mark the handle as recently-posted; treating a false reply
+    ///         as success would strand future snap-assists on icons because
+    ///         the dedup window would skip a re-capture for an entry the
+    ///         daemon never actually stored.
+    virtual bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                         const QByteArray& pixels) = 0;
 
     // Layout picker overlay (interactive layout browser)

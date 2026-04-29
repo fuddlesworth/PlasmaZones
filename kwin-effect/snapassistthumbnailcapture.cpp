@@ -14,6 +14,7 @@
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QQuickItem>
@@ -75,8 +76,14 @@ void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& can
         m_queue.enqueue({c.internalId, maxSize});
     }
     if (skipped > 0) {
-        qCDebug(lcSnapAssistCapture) << "captureCandidates: skipped" << skipped << "recently-posted of"
-                                     << candidates.size() << "; queued=" << m_queue.size();
+        // Info-level: this is the visible signal that the recently-posted
+        // dedup window is doing its job (or, if it ever skips when the
+        // daemon's cache is cold, that the cap-drift fallback path described
+        // on RecentPostedCapacity has kicked in). Without this at info, an
+        // operator chasing a "thumbnails not appearing" report has to
+        // enable kwin.effect.plasmazones.* debug logs first.
+        qCInfo(lcSnapAssistCapture) << "captureCandidates: skipped" << skipped << "recently-posted of"
+                                    << candidates.size() << "; queued=" << m_queue.size();
     }
     if (m_queue.isEmpty() || m_busy) {
         return;
@@ -89,8 +96,12 @@ void SnapAssistThumbnailCapture::resetRecentlyPosted()
     if (m_recentlyPostedSet.isEmpty() && m_recentlyPostedOrder.isEmpty()) {
         return;
     }
-    qCDebug(lcSnapAssistCapture) << "resetRecentlyPosted: dropping" << m_recentlyPostedSet.size()
-                                 << "tracked handles (daemon cache assumed empty)";
+    // Info-level: drops happen at daemon-ready transitions only, so they're
+    // rare and meaningful (daemon restart / first registration). An operator
+    // diagnosing "snap-assist thumbnails are blank after restart" should see
+    // this in the default-warning log rules.
+    qCInfo(lcSnapAssistCapture) << "resetRecentlyPosted: dropping" << m_recentlyPostedSet.size()
+                                << "tracked handles (daemon cache assumed empty)";
     m_recentlyPostedSet.clear();
     m_recentlyPostedOrder.clear();
 }
@@ -246,17 +257,28 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Capture @c this — the connect's context arg auto-disconnects the
-    // lambda if `this` dies, so capture-by-pointer is safe across the call
-    // round-trip. Mark-recently-posted only fires on the success path: if
-    // the daemon rejected the call (auth failure, decode failure, daemon
-    // shut down), the recent-set must stay clean so the next snap-assist
-    // invocation retries the capture instead of stranding on icons.
+    // lambda if `this` dies, so capture-by-pointer is safe across the
+    // call round-trip. Mark-recently-posted is gated on the daemon's
+    // explicit `accepted` reply, NOT just on transport success. The
+    // daemon's slot is `bool`-returning and replies @c false on every
+    // silent rejection path (auth failure, oversize-payload cap,
+    // dimension/byte-count mismatch, post-shutdown engine teardown) —
+    // treating those as success would mark the handle in the dedup
+    // window, skip the next capture, and strand snap-assist on icons
+    // until the FIFO rolls past.
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
                      [this, internalId, compositorHandle](QDBusPendingCallWatcher* w) {
                          w->deleteLater();
-                         if (w->isError()) {
+                         QDBusPendingReply<bool> reply = *w;
+                         if (reply.isError()) {
                              qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnail D-Bus call failed for"
-                                                          << compositorHandle << ":" << w->error().message();
+                                                          << compositorHandle << ":" << reply.error().message();
+                             return;
+                         }
+                         if (!reply.value()) {
+                             qCDebug(lcSnapAssistCapture)
+                                 << "setSnapAssistThumbnail rejected by daemon for" << compositorHandle
+                                 << "— leaving handle out of recently-posted set so the next snap-assist re-captures.";
                              return;
                          }
                          markRecentlyPosted(internalId);

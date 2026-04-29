@@ -134,7 +134,7 @@
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect; authenticated against /proc/&lt;pid&gt;/exe. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect; authenticated against /proc/&lt;pid&gt;/exe. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
@@ -146,6 +146,9 @@
             </arg>
             <arg name="pixels" type="ay" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Tightly-packed ARGB32 (non-premultiplied) bytes, exactly width*height*4 long."/>
+            </arg>
+            <arg name="accepted" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon stored the thumbnail in its LRU cache. False on auth failure, oversize-payload rejection, dimension/byte-count mismatch, or post-shutdown engine teardown. Callers use this to decide whether to mark the handle as recently-posted; a false reply must NOT be treated as success."/>
             </arg>
         </method>
 

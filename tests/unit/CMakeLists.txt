@@ -261,8 +261,12 @@ add_executable(test_snap_assist_thumbnail_provider
     daemon/test_snap_assist_thumbnail_provider.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/snapassistthumbnailprovider.cpp
 )
+# PhosphorProtocol pulls in ServiceConstants.h's
+# SnapAssistThumbnailCacheCapacity that the provider's CacheCapacity now
+# resolves against — header-only constant, no .so coupling beyond the
+# include path.
 target_link_libraries(test_snap_assist_thumbnail_provider
-    PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick)
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorProtocol::PhosphorProtocol)
 add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumbnail_provider)
 
 # ═══════════════════════════════════════════════════════════════════════════════

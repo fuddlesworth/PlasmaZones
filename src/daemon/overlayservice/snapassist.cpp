@@ -236,7 +236,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
 }
 
-void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                             const QByteArray& pixels)
 {
     // External entry point. The kwin-effect renders a candidate through
@@ -247,6 +247,11 @@ void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     // shape here because IOverlayService is a public C++ API and direct
     // (non-D-Bus) callers may exist.
     //
+    // Return value drives the caller's recently-posted dedup set. A false
+    // return MUST keep the handle out of the dedup window so the next
+    // snap-assist for that window re-captures instead of stranding on the
+    // icon fallback.
+    //
     // Bounds: a 256² thumbnail is the steady-state size; 1024² is the
     // ceiling. Anything larger is almost certainly a marshalling bug or a
     // hostile sender that slipped past auth, and consumes excessive bytes
@@ -255,37 +260,39 @@ void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     if (width <= 0 || height <= 0 || width > MaxDimension || height > MaxDimension) {
         qCDebug(lcOverlay) << "setSnapAssistThumbnail: invalid dimensions" << width << "x" << height << "for"
                            << compositorHandle;
-        return;
+        return false;
     }
     const qsizetype expectedBytes = qsizetype(width) * qsizetype(height) * 4;
     if (pixels.size() != expectedBytes) {
         qCDebug(lcOverlay) << "setSnapAssistThumbnail: pixel-buffer size mismatch — got" << pixels.size() << "expected"
                            << expectedBytes << "for" << compositorHandle;
-        return;
+        return false;
     }
     // QImage(uchar*, ...) constructs a non-owning view over the byte buffer;
     // calling .copy() detaches into an owned image so the cache entry
-    // survives @p pixels going out of scope.
+    // survives @p pixels going out of scope. With dimensions and byte count
+    // already validated above the constructor cannot produce a null image,
+    // so no isNull guard is needed before .copy().
     QImage view(reinterpret_cast<const uchar*>(pixels.constData()), width, height, width * 4, QImage::Format_ARGB32);
-    if (view.isNull()) {
-        qCDebug(lcOverlay) << "setSnapAssistThumbnail: QImage view construction failed for" << compositorHandle;
-        return;
-    }
     QImage image = view.copy();
-    updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
+    return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
 }
 
-void OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
+bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
 {
     if (image.isNull() || !m_thumbnailProvider) {
-        return;
+        return false;
     }
     const QString providerUrl = m_thumbnailProvider->insert(compositorHandle, std::move(image));
     if (providerUrl.isEmpty()) {
-        return;
+        return false;
     }
+    // Cache insert succeeded — from the caller's perspective the daemon
+    // holds the handle even if the snap-assist overlay isn't currently
+    // open. The provider URL stays valid until LRU eviction; a future
+    // showSnapAssist will pick it up via urlFor().
     if (!m_snapAssistWindow || !m_snapAssistWindow->isVisible()) {
-        return;
+        return true;
     }
     for (int i = 0; i < m_snapAssistCandidates.size(); ++i) {
         QVariantMap cand = m_snapAssistCandidates[i].toMap();
@@ -297,6 +304,7 @@ void OverlayService::updateSnapAssistCandidateThumbnail(const QString& composito
             break;
         }
     }
+    return true;
 }
 
 bool OverlayService::eventFilter(QObject* obj, QEvent* event)

@@ -308,7 +308,7 @@ public:
                         const SnapAssistCandidateList& candidates) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
-    void setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
+    bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                 const QByteArray& pixels) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
@@ -547,10 +547,21 @@ private:
     // owned unique_ptr releases ownership to the QQmlEngine the moment the
     // engine is created (engineConfigurator below); after that the engine
     // owns the provider and outlives every QML reference into it.
-    // @ref m_thumbnailProvider remains a borrowed raw pointer either way,
-    // valid for as long as `*this` is alive (member destruction order
-    // tears down the SurfaceManager-owned engine before this raw pointer
-    // becomes meaningful, so the use-after-free hazard is bounded).
+    //
+    // Lifetime invariant — relies on single-threaded destruction:
+    // when ~QQmlEngine runs (inside ~SurfaceManager, declared earlier in
+    // this class so it destructs LATER than `this`'s body but BEFORE
+    // m_thumbnailProvider in reverse-decl order), the engine's
+    // image-provider registry is torn down mid-destructor and only THEN
+    // does QObject::destroyed fire. Between those two points the raw
+    // pointer is briefly dangling. The connect() in engineConfigurator
+    // routes destroyed→`m_thumbnailProvider = nullptr` on the same thread
+    // as the destructor, so no concurrent reader can witness the dangling
+    // value. Cross-thread access to the provider goes through QML's own
+    // image-loader path (requestImage), which Qt blocks during engine
+    // destruction. If the destruction-thread invariant ever changes
+    // (e.g. SurfaceManager teardown moves to a worker thread) this needs
+    // a QMutex / atomic guard.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
     // PhosphorZones::Layout Picker overlay (interactive layout browser)
@@ -663,8 +674,11 @@ private:
      */
     void setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry);
 
-    /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
-    void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
+    /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML.
+     *  @return true iff the image was inserted into the bounded LRU cache.
+     *          False if the provider was torn down (engine destroyed) or the
+     *          image was null after format conversion. */
+    bool updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland
