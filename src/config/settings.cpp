@@ -157,15 +157,11 @@ void Settings::load()
     const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
     const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
 
-    // Shader profile tree is also not a Q_PROPERTY (the signal lives on
-    // ISettings, the value is stored as a JSON blob via the Store). The
-    // reflective Q_PROPERTY loop above won't fire its NOTIFY signal, so
-    // capture the JSON string directly and re-emit if changed. Without
-    // this the daemon's overlayservice — which subscribes to
-    // shaderProfileTreeChanged via overlayservice/settings.cpp:77 —
-    // never picks up cross-process tree edits via reloadSettings().
-    const QString shaderTreeBefore =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    // shaderProfileTree is now a Q_PROPERTY (shaderProfileTreeJson)
+    // declared in settings.h, so the reflective Q_PROPERTY loop below
+    // re-emits its NOTIFY (shaderProfileTreeChanged) automatically when
+    // the value changes during reparseConfiguration — no custom
+    // shapshot/diff path needed.
 
     m_configBackend->reparseConfiguration();
 
@@ -215,11 +211,6 @@ void Settings::load()
         Q_EMIT disabledActivitiesChanged(Mode::Snapping);
     if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
         Q_EMIT disabledActivitiesChanged(Mode::Autotile);
-
-    const QString shaderTreeAfter =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    if (shaderTreeAfter != shaderTreeBefore)
-        Q_EMIT shaderProfileTreeChanged();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -1021,6 +1012,23 @@ void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfil
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(), json);
     Q_EMIT shaderProfileTreeChanged();
     Q_EMIT settingsChanged();
+}
+
+QString Settings::shaderProfileTreeJson() const
+{
+    return QString::fromUtf8(QJsonDocument(shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setShaderProfileTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject())
+        return;
+    setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────

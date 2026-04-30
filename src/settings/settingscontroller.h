@@ -620,14 +620,6 @@ private:
     QString m_externalEditPage; // Non-empty: setNeedsSave(true) targets this instead of m_activePage
     bool m_saving = false;
     bool m_loading = false;
-    /// True while servicing onExternalSettingsChanged. Suppresses
-    /// AnimationsPageController::revertPending() in the boomerang load()
-    /// (the daemon's settingsChanged signal that fires after our own
-    /// notifyReload). Without this guard, every setShaderOverride
-    /// would silently revert itself: the snapshot is older than the
-    /// disk we just wrote, so replaying it overwrites our own change
-    /// with stale data.
-    bool m_externalSync = false;
 
     // PhosphorZones::Layout state
     QVariantList m_layouts;

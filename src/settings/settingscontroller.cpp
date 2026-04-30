@@ -612,20 +612,13 @@ void SettingsController::setActivePage(const QString& page)
 void SettingsController::load()
 {
     m_loading = true;
-    // Animation pages persist edits to disk immediately for live
-    // preview (per-event JSON files + ShaderProfileTree blob), so
-    // m_settings.load() alone wouldn't undo them. The page controller
-    // keeps its own pre-edit snapshot from this session — replay it
-    // first so the daemon's FS watcher and our QML pages see the
-    // revert before any other refresh.
-    //
-    // ONLY for user-initiated Discard. External-sync load() (the
-    // boomerang from our own notifyReload, where the daemon's
-    // settingsChanged D-Bus signal triggers onExternalSettingsChanged)
-    // must NOT revert: the snapshot's pre-edit state is older than the
-    // disk we just told the daemon to read, so revertPending would
-    // overwrite the latest disk write with stale data.
-    if (m_animationsPage && !m_externalSync)
+    // Animation pages persist per-event motion overrides as separate
+    // files (file-per-path under ~/.local/share/plasmazones/profiles/);
+    // m_settings.load() alone wouldn't restore them on Discard. The
+    // page controller's pre-edit snapshot rewinds those files. Shader
+    // overrides don't need this — they ride Settings::load()'s
+    // Q_PROPERTY re-emit like every other page setting.
+    if (m_animationsPage)
         m_animationsPage->revertPending();
     m_settings.load();
     m_screenHelper.refreshScreens();
@@ -748,15 +741,7 @@ void SettingsController::onSettingsPropertyChanged()
 void SettingsController::onExternalSettingsChanged()
 {
     if (!m_saving) {
-        // Suppress AnimationsPageController::revertPending in the
-        // boomerang path: a setShaderOverride call writes the tree,
-        // calls notifyReload, the daemon reads the new file and emits
-        // settingsChanged, and we receive it here. The snapshot in the
-        // animations controller is older than the disk we just wrote;
-        // reverting would overwrite our own write with stale data.
-        m_externalSync = true;
         load();
-        m_externalSync = false;
     }
 }
 

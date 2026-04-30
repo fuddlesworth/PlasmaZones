@@ -6,8 +6,6 @@
 #include "../core/isettings.h"
 #include "dbusutils.h"
 
-#include <QLoggingCategory>
-
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -31,8 +29,6 @@
 #include <algorithm>
 
 namespace PlasmaZones {
-
-Q_LOGGING_CATEGORY(lcAnimShader, "plasmazones.animations.shader")
 
 namespace {
 
@@ -195,24 +191,15 @@ void AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
     m_pendingFileSnapshots.insert(filePath, f.readAll());
 }
 
-void AnimationsPageController::snapshotShaderTreeIfFirst()
-{
-    if (!m_settings || m_pendingShaderTreeSnapshot.has_value())
-        return;
-    const auto json = QJsonDocument(m_settings->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact);
-    m_pendingShaderTreeSnapshot = QString::fromUtf8(json);
-}
-
 bool AnimationsPageController::hasPendingChanges() const
 {
-    return !m_pendingFileSnapshots.isEmpty() || m_pendingShaderTreeSnapshot.has_value();
+    return !m_pendingFileSnapshots.isEmpty();
 }
 
 void AnimationsPageController::commitPending()
 {
     const bool had = hasPendingChanges();
     m_pendingFileSnapshots.clear();
-    m_pendingShaderTreeSnapshot.reset();
     if (had)
         Q_EMIT pendingChangesChanged();
 }
@@ -268,15 +255,11 @@ void AnimationsPageController::revertPending()
     }
     m_pendingFileSnapshots.clear();
 
-    // Restore shader tree if we touched it.
-    if (m_pendingShaderTreeSnapshot.has_value() && m_settings) {
-        const auto doc = QJsonDocument::fromJson(m_pendingShaderTreeSnapshot->toUtf8());
-        if (doc.isObject()) {
-            m_settings->setShaderProfileTree(ShaderProfileTree::fromJson(doc.object()));
-            DaemonDBus::notifyReload();
-        }
-        m_pendingShaderTreeSnapshot.reset();
-    }
+    // Shader tree no longer needs custom revert plumbing — it's now a
+    // standard Q_PROPERTY (Settings::shaderProfileTreeJson) and
+    // SettingsController::load() reads it back automatically via
+    // Settings::load() → reparseConfiguration → meta-object NOTIFY loop,
+    // identical to every other page.
 
     // Bulk emit so QML sub-pages refresh exactly the rows that moved.
     for (const QString& path : overrideEvents)
@@ -739,12 +722,7 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
     if (!m_settings || path.isEmpty())
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
-    const auto profile = tree.resolve(path);
-    const auto map = shaderProfileToMap(profile);
-    qCInfo(lcAnimShader).nospace() << "resolvedShaderProfile path=" << path << " hasOverride=" << tree.hasOverride(path)
-                                   << " resolved=" << profile.effectId.value_or(QStringLiteral("(unset)"))
-                                   << " mapEffectId=" << map.value(QStringLiteral("effectId")).toString();
-    return map;
+    return shaderProfileToMap(tree.resolve(path));
 }
 
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
@@ -761,40 +739,23 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (effectId.isEmpty())
         return clearShaderOverride(path);
 
-    snapshotShaderTreeIfFirst();
-
+    // Standard pattern (matches every other settings page): write
+    // through Settings::setShaderProfileTree. The shaderProfileTreeJson
+    // Q_PROPERTY emits NOTIFY, the SettingsController meta-object loop
+    // catches it and calls setNeedsSave automatically. Daemon sync
+    // happens at Save time via SettingsController::save() →
+    // DaemonDBus::notifyReload — no per-edit notify here, no snapshot,
+    // no custom dirty plumbing.
     ShaderProfile profile;
     profile.effectId = effectId;
     if (!parameters.isEmpty())
         profile.parameters = parameters;
 
     ShaderProfileTree tree = m_settings->shaderProfileTree();
-    qCInfo(lcAnimShader).nospace() << "setShaderOverride path=" << path << " effectId=" << effectId
-                                   << " preWriteHasOverride=" << tree.hasOverride(path);
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
 
-    // Verify the write landed before notifyReload runs.
-    const auto verify = m_settings->shaderProfileTree();
-    qCInfo(lcAnimShader).nospace() << "  postWrite hasOverride=" << verify.hasOverride(path)
-                                   << " resolved=" << verify.resolve(path).effectId.value_or(QStringLiteral("(unset)"));
-
-    // Cross-process push: the daemon's Settings doesn't auto-reread
-    // its config file, and the local setShaderProfileTree call above
-    // only fires the in-process signal. notifyReload triggers
-    // SettingsAdaptor::reloadSettings → daemon Settings::load →
-    // (with the patched load() in settings.cpp) re-emits
-    // shaderProfileTreeChanged → applyShaderProfilesToAnimator runs
-    // and the next animation tick uses the new shader.
-    DaemonDBus::notifyReload();
-
-    // Verify the write SURVIVED the boomerang.
-    const auto postBoomerang = m_settings->shaderProfileTree();
-    qCInfo(lcAnimShader).nospace() << "  postReload hasOverride=" << postBoomerang.hasOverride(path) << " resolved="
-                                   << postBoomerang.resolve(path).effectId.value_or(QStringLiteral("(unset)"));
-
     Q_EMIT shaderProfileChanged(path);
-    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -806,12 +767,9 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     if (!tree.hasOverride(path))
         return false;
-    snapshotShaderTreeIfFirst();
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
-    DaemonDBus::notifyReload();
     Q_EMIT shaderProfileChanged(path);
-    Q_EMIT pendingChangesChanged();
     return true;
 }
 

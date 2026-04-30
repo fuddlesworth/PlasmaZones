@@ -277,26 +277,16 @@ private:
     /// before the write/delete so revert can put it back.
     void snapshotFileIfFirst(const QString& filePath);
 
-    /// Capture the shader tree's current JSON serialization if not
-    /// already snapshotted. Symmetric helper for shader edits, which
-    /// flow through the single Settings::shaderProfileTree blob rather
-    /// than per-file storage.
-    void snapshotShaderTreeIfFirst();
-
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
 
     /// Pre-edit file contents keyed by absolute path. `std::nullopt`
     /// means "the file did not exist before this session." Mutated only
-    /// from the GUI thread.
+    /// from the GUI thread. Shader-tree edits don't go through this
+    /// snapshot — they ride the standard Settings::load() Q_PROPERTY
+    /// re-emit path like every other settings page.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
-
-    /// Shader-tree-level snapshot for ShaderProfileTree edits — the
-    /// tree is one Q_PROPERTY blob, so a per-file snapshot wouldn't
-    /// help. Stored as the raw JSON string for round-trip simplicity.
-    /// `std::nullopt` = no shader edits this session.
-    std::optional<QString> m_pendingShaderTreeSnapshot;
 };
 
 } // namespace PlasmaZones
