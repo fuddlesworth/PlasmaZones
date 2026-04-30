@@ -270,6 +270,14 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QString},
+        // ShaderProfileTree — JSON blob mapping ProfilePaths to per-event
+        // shader assignments. Without this entry Store::write silently
+        // rejects every setShaderProfileTree call (the Store guards against
+        // writes to undeclared keys), so the per-event shader picker
+        // appears to land but nothing actually persists. Default is the
+        // empty-tree marker; ShaderProfileTree::fromJson treats it as no
+        // overrides on read.
+        {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QString},
     };
 }
 
