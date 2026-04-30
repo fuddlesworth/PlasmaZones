@@ -90,6 +90,11 @@ QString ShaderNodeRhi::loadAndExpandShader(const QString& path, QString* outErro
 
 QRhi* ShaderNodeRhi::safeRhi() const
 {
+    // Hold m_itemMutex across the dereference so a concurrent invalidateItem()
+    // can't slip in between the m_item->window() call and m_item being
+    // destroyed. Without the lock, a TOCTOU window between the m_itemValid
+    // check and the deref crashes inside QQuickItem::window().
+    std::lock_guard<std::mutex> guard(m_itemMutex);
     return (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi()
                                                                                        : nullptr;
 }
@@ -124,7 +129,17 @@ ShaderNodeRhi::~ShaderNodeRhi()
 
 void ShaderNodeRhi::invalidateItem()
 {
+    // Acquire m_itemMutex first — this blocks until any in-flight
+    // prepare()/render()/rect()/safeRhi() call on the render thread releases
+    // it. Only THEN do we set the flag and null the pointer. After
+    // invalidateItem() returns the GUI-thread caller can safely destroy the
+    // QQuickItem, knowing no dereference can race against the destruction.
+    // We also null m_item itself so any future dereference (against a missed
+    // flag check) is a clean nullptr crash rather than a dangling-pointer
+    // UB read.
+    std::lock_guard<std::mutex> guard(m_itemMutex);
     m_itemValid.store(false, std::memory_order_release);
+    m_item = nullptr;
 }
 
 QSGRenderNode::StateFlags ShaderNodeRhi::changedStates() const
@@ -140,6 +155,7 @@ QSGRenderNode::RenderingFlags ShaderNodeRhi::flags() const
 
 QRectF ShaderNodeRhi::rect() const
 {
+    std::lock_guard<std::mutex> guard(m_itemMutex);
     if (m_itemValid.load(std::memory_order_acquire) && m_item) {
         return QRectF(0, 0, m_item->width(), m_item->height());
     }
@@ -152,12 +168,29 @@ QRectF ShaderNodeRhi::rect() const
 
 void ShaderNodeRhi::prepare()
 {
-    if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
-        qCDebug(lcShaderNode) << "prepare(): bail — itemValid:" << m_itemValid.load() << "item:" << (m_item != nullptr)
-                              << "window:" << (m_item && m_item->window());
-        return;
+    // Snapshot every m_item-derived value we need under the lock, then drop
+    // the lock for the long resource-creation/upload body below. Holding the
+    // lock for the entire prepare() would needlessly block GUI-thread item
+    // destruction; holding it only across the deref window is enough — once
+    // we have local copies of the window/size/dpr, the item can disappear
+    // safely (we never touch m_item again in this call).
+    QRhi* rhi = nullptr;
+    qreal itemWidth = 0.0;
+    qreal itemHeight = 0.0;
+    qreal itemDpr = -1.0;
+    {
+        std::lock_guard<std::mutex> guard(m_itemMutex);
+        if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
+            qCDebug(lcShaderNode) << "prepare(): bail — itemValid:" << m_itemValid.load()
+                                  << "item:" << (m_item != nullptr) << "window:" << (m_item && m_item->window());
+            return;
+        }
+        QQuickWindow* win = m_item->window();
+        rhi = win->rhi();
+        itemWidth = m_item->width();
+        itemHeight = m_item->height();
+        itemDpr = win->devicePixelRatio();
     }
-    QRhi* rhi = m_item->window()->rhi();
     if (!rhi) {
         qCDebug(lcShaderNode) << "prepare(): bail — rhi is null";
         return;
@@ -181,8 +214,7 @@ void ShaderNodeRhi::prepare()
         qCInfo(lcShaderNode) << "ShaderNodeRhi INIT — backend:" << rhi->backendName()
                              << "driver:" << rhi->driverInfo().deviceName
                              << "Y-up framebuffer:" << rhi->isYUpInFramebuffer() << "RT pixelSize:" << rt->pixelSize()
-                             << "item size:" << m_item->width() << "x" << m_item->height()
-                             << "DPR:" << (m_item->window() ? m_item->window()->devicePixelRatio() : -1)
+                             << "item size:" << itemWidth << "x" << itemHeight << "DPR:" << itemDpr
                              << "iResolution:" << m_width << "x" << m_height << "UBO size:" << uboSize;
         // Create VBO (fullscreen quad)
         m_vbo.reset(
@@ -300,6 +332,11 @@ void ShaderNodeRhi::prepare()
                 m_shaderError = QStringLiteral("Vertex shader: ")
                     + (vertResult.error.isEmpty() ? QStringLiteral("compilation failed (no details)")
                                                   : vertResult.error);
+                // Surface compile errors at warning level — without this,
+                // the only sign of a broken shader is the per-frame
+                // "render(): bail — shaderReady: false" debug message,
+                // which buries the actual GLSL diagnostic.
+                qCWarning(lcShaderNode) << "Shader compile failed (" << m_vertexPath << "):" << m_shaderError;
                 return;
             }
             auto fragResult = ShaderCompiler::compile(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
@@ -308,6 +345,7 @@ void ShaderNodeRhi::prepare()
                 m_shaderError = QStringLiteral("Fragment shader: ")
                     + (fragResult.error.isEmpty() ? QStringLiteral("compilation failed (no details)")
                                                   : fragResult.error);
+                qCWarning(lcShaderNode) << "Shader compile failed (" << m_fragmentPath << "):" << m_shaderError;
                 return;
             }
             m_shaderReady = true;
@@ -494,22 +532,29 @@ void ShaderNodeRhi::render(const RenderState* state)
     int vpY = 0;
     int vpW = outputSize.width();
     int vpH = outputSize.height();
-    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0
-        && m_item->height() > 0) {
-        QQuickWindow* win = m_item->window();
-        const qreal dpr = win->devicePixelRatio();
-        const int itemPxW = qRound(m_item->width() * dpr);
-        const int itemPxH = qRound(m_item->height() * dpr);
-        const bool isLayerFbo = qAbs(outputSize.width() - itemPxW) <= 1 && qAbs(outputSize.height() - itemPxH) <= 1;
-        if (!isLayerFbo) {
-            const QPointF topLeft = m_item->mapToItem(win->contentItem(), QPointF(0, 0));
-            vpX = qRound(topLeft.x() * dpr);
-            vpY = qRound(topLeft.y() * dpr);
-            vpX = qBound(0, vpX, outputSize.width() - 1);
-            vpY = qBound(0, vpY, outputSize.height() - 1);
+    // Compute viewport/scissor from item geometry under the lock — every
+    // m_item dereference (width, height, mapToItem, window) needs to happen
+    // atomically with respect to invalidateItem(). After this block we use
+    // only the local viewport ints, which are immune to item destruction.
+    {
+        std::lock_guard<std::mutex> guard(m_itemMutex);
+        if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0
+            && m_item->height() > 0) {
+            QQuickWindow* win = m_item->window();
+            const qreal dpr = win->devicePixelRatio();
+            const int itemPxW = qRound(m_item->width() * dpr);
+            const int itemPxH = qRound(m_item->height() * dpr);
+            const bool isLayerFbo = qAbs(outputSize.width() - itemPxW) <= 1 && qAbs(outputSize.height() - itemPxH) <= 1;
+            if (!isLayerFbo) {
+                const QPointF topLeft = m_item->mapToItem(win->contentItem(), QPointF(0, 0));
+                vpX = qRound(topLeft.x() * dpr);
+                vpY = qRound(topLeft.y() * dpr);
+                vpX = qBound(0, vpX, outputSize.width() - 1);
+                vpY = qBound(0, vpY, outputSize.height() - 1);
+            }
+            vpW = qBound(1, itemPxW, outputSize.width() - vpX);
+            vpH = qBound(1, itemPxH, outputSize.height() - vpY);
         }
-        vpW = qBound(1, itemPxW, outputSize.width() - vpX);
-        vpH = qBound(1, itemPxH, outputSize.height() - vpY);
     }
     cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
     cb->setScissor(QRhiScissor(vpX, vpY, vpW, vpH));

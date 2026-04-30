@@ -23,6 +23,7 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <mutex>
 
 #include <rhi/qrhi.h>
 
@@ -246,6 +247,17 @@ private:
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
+
+    /// Serialises every m_item dereference (prepare/render/rect/safeRhi) against
+    /// invalidateItem(). The atomic flag alone is insufficient: a render-thread
+    /// prepare() that passed the m_itemValid check can race with a GUI-thread
+    /// QQuickItem destructor mid-function — the flag flips, but the in-flight
+    /// dereference still sees a dangling pointer and SIGSEGVs inside
+    /// QQuickItem::window(). Holding this mutex around both sides forces
+    /// invalidateItem() to wait until the in-flight call returns, so the flag
+    /// is observed atomically with respect to subsequent dereferences.
+    /// `mutable` so the const accessors (rect/safeRhi) can lock.
+    mutable std::mutex m_itemMutex;
 
     // ── Uniform Extension ──────────────────────────────────────────────
     std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;

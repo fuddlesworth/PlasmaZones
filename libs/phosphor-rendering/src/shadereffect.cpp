@@ -17,6 +17,39 @@
 namespace PhosphorRendering {
 
 // ============================================================================
+// Default identity vertex shader
+// ============================================================================
+//
+// Pushed to the node whenever a fragment-only consumer (e.g. SurfaceAnimator
+// transition shaders, generic ShaderEffect QML usage) sets a fragmentShader
+// without supplying its own vertex stage. The pipeline requires both stages
+// to compile — without this fallback the bake bails with "Vertex or fragment
+// shader source is empty" and m_shaderReady stays false forever, which the
+// render path surfaces as a silent "render(): bail — shaderReady: false".
+//
+// Geometry-aware effects (slide/popin/morph/etc.) that need to translate or
+// scale the quad must override this by calling node->setVertexShaderSource()
+// or node->loadVertexShader() through a subclass — ZoneShaderItem is the
+// in-tree example of that pattern.
+//
+// The QuadVertices buffer (see internal.h) emits positions in clip space
+// (-1..1) so a pass-through is sufficient. We deliberately avoid binding
+// the UBO here: SRB binding 0 is registered for both stages in the
+// pipeline, but glslang strips the unused declaration during SPIR-V bake,
+// keeping the default stage independent of any consumer-side UBO layout.
+constexpr QLatin1String kDefaultVertexShaderSource{R"(#version 450
+
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 texcoord;
+layout(location = 0) out vec2 vTexCoord;
+
+void main() {
+    vTexCoord = texcoord;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+)"};
+
+// ============================================================================
 // DRY helpers
 // ============================================================================
 
@@ -768,6 +801,17 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
             if (!fragPath.isEmpty()) {
                 node->setShaderIncludePaths(m_shaderIncludePaths);
+                // Push the default identity vertex shader before loading
+                // the fragment stage. The pipeline requires both stages
+                // to compile — without this, fragment-only consumers
+                // (SurfaceAnimator's transition effects, plain QML
+                // ShaderEffect users) leave m_vertexShaderSource empty
+                // and the bake aborts with "Vertex or fragment shader
+                // source is empty". Subclasses that need geometry-aware
+                // vertex stages (e.g. ZoneShaderItem with its zone.vert)
+                // override updatePaintNode() entirely and bypass this
+                // base implementation.
+                node->setVertexShaderSource(QString(kDefaultVertexShaderSource));
                 if (node->loadFragmentShader(fragPath)) {
                     node->invalidateShader();
                     setStatus(Status::Ready);
@@ -776,6 +820,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     if (errorMsg.isEmpty()) {
                         errorMsg = QStringLiteral("Shader loading failed");
                     }
+                    qCWarning(lcShaderNode) << "Fragment shader load failed:" << fragPath << "—" << errorMsg;
                     setError(errorMsg);
                 }
             }
