@@ -271,12 +271,20 @@ Window {
             SequentialAnimation {
                 id: flashAnimation
 
+                // Layout-switch flash. The path was historically "zone.flash"
+                // (a custom leaf outside the ProfilePaths taxonomy), which
+                // walk-up resolution from "zone" baseline still served, but it
+                // was invisible to the shader-tree wire-up because the daemon's
+                // ZoneLayoutSwitchIn ProfilePath never matched. Renamed to
+                // zone.layoutSwitchIn for taxonomy parity — the same flash
+                // animation now responds to the same path that drives the
+                // C++-side resnap shader on slotApplyGeometriesBatch.
                 PhosphorMotionAnimation {
                     target: flashOverlay
                     properties: "opacity"
                     from: 0.3
                     to: 0
-                    profile: "zone.flash"
+                    profile: "zone.layoutSwitchIn"
                 }
 
             }

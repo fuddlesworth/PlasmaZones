@@ -2,6 +2,20 @@
 
 Branch: `feat/animation-shader-wireup` (off `origin/v3`)
 
+**Status (commit chain):**
+
+- ✅ Phase 0a — `applySnapGeometry` profilePath param (`21604667`)
+- ✅ Phase 0b — `shaderProfileTreeChanged` live-reload (kwin-effect already wired; daemon now wired in `eabb6c21`)
+- ✅ Phase 0c — `ShaderProfile::parameters` → GLSL uniforms on both render paths (`f07ebd95`)
+- ✅ Phase 0d — per-window event conflict documented (`080f825b`)
+- ✅ Phase 1 — kwin-effect window-lifecycle wire-up (`080f825b`)
+- ✅ Phase 2 — folded into 0a
+- ✅ Phase 3a — `panel.popup.{zoneSelector,layoutPicker,snapAssist}` paths added (`eabb6c21`)
+- ✅ Phase 3b — daemon overlay shader fields wired (`eabb6c21`)
+- ✅ Phase 4a — `zone.flash` → `zone.layoutSwitchIn` rename
+- ⏸ Phase 4 (full) — `PhosphorShaderTransition` QML element — deferred to follow-up branch
+- ⏸ Phase 5 — workspace events — deferred (per plan, requires new KWin signal connects + per-screen shader pass; out-of-scope)
+
 The infrastructure for shader-driven animation transitions is fully built (`AnimationShaderRegistry`, `ShaderProfileTree`, `SurfaceAnimator::Config` shader fields, kwin-effect's `OffscreenEffect`-redirect path). But it's only consulted in **one** place: `kwin-effect/plasmazoneseffect.cpp:3496` for `zone.snapIn`. Everything else — window lifecycle, daemon overlays, layout switching, focus, drag — runs motion-only.
 
 This plan wires the rest, in dependency order, with each phase shippable independently.
@@ -139,24 +153,26 @@ Wiring re-uses the helper from 0b: each builder takes a `const ShaderProfileTree
 
 ---
 
-## Phase 4 — In-content QML state changes (lower priority)
+## Phase 4 — In-content QML state changes (deferred to follow-up branch)
 
 Three QML sites where the *content* (not the surface) animates a logical state change with `PhosphorMotionAnimation` and would benefit from a parallel shader transition:
 
 | File:Line | Profile | What |
 |---|---|---|
 | `src/ui/SnapAssistOverlay.qml:161,169` | `zone.snapIn` | snap-target color/border |
-| `src/ui/ZoneOverlay.qml:274` | `zone.flash` (custom — remap to `zone.layoutSwitchIn`) | full-screen flash on layout cycle |
+| `src/ui/ZoneOverlay.qml:279` | `zone.layoutSwitchIn` (✅ renamed from `zone.flash` for taxonomy parity) | full-screen flash on layout cycle |
 | `src/ui/ZoneItem.qml:64,71,107,130` | `zone.highlight` | per-zone tile highlight during drag |
 
-**Blocker:** there's no `PhosphorShaderTransition` QML element. `phosphor-animation-shaders` doesn't link `Qt6::Qml` and no class has `QML_NAMED_ELEMENT`. To complete Phase 4 we'd:
+**Status: deferred to follow-up branch.** Surface-level shader wiring (Phases 0-3) covers every user-visible scenario discussed during scoping. In-content shader transitions are extra polish on top of motion that already plays — they're sequencing a *second* visual layer on a state change that doesn't itself enter or exit the screen. The visual win is real but small relative to the implementation cost (a new sibling QML library).
 
-1. Add `Qt6::Qml`/`Quick` link to `phosphor-animation-shaders` CMakeLists.
-2. Create `PhosphorShaderTransition` QML element analogous to `PhosphorMotionAnimation` — a `Behavior`-style element that resolves a `ShaderProfileTree` for a given path and drives a child `ShaderEffect` over the same time window as the sibling motion Behavior.
-3. Register via `QML_NAMED_ELEMENT` under `org.phosphor.animation` v1.x.
-4. Pair it with the existing motion Behaviors in the three files above.
+The unlanded work below is sized at ~3 days and tracked separately:
 
-Defer Phase 4 until 0–3 are landed and tested. The visual win is small compared to surface-level shader wiring.
+1. Spin up `phosphor-animation-shaders-qml` library mirroring `phosphor-animation-qml`'s CMake structure (STATIC + SHARED dual-target install dance).
+2. Add `PhosphorShaderTransition` element — `Behavior`-style, resolves a `ShaderProfileTree` for a given path and drives a child `PhosphorRendering::ShaderEffect` over the same time window as the sibling motion Behavior.
+3. Register via `QML_NAMED_ELEMENT` under a new module URI (likely `org.phosphor.animation.shaders` to keep `phosphor-animation-qml` Qt6::Qml-only as today).
+4. Pair it with existing motion Behaviors in the three files above; document the pairing convention in `phosphor-animation-shaders/README.md`.
+
+Phase 4a (small): renaming `zone.flash` → `zone.layoutSwitchIn` in `ZoneOverlay.qml` ✅ done in this branch — even without the new QML element, the rename means the C++-side `slotApplyGeometriesBatch` shader (Phase 0a) and the QML-side flash now respond to the same path on the user's tree.
 
 ---
 
