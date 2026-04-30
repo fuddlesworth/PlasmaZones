@@ -82,6 +82,37 @@ public:
 
 namespace {
 
+/// Recursive visual-tree search for an objectName-tagged QQuickItem. Used
+/// to locate a `shaderAnchor` opt-in inside an animator target.
+///
+/// Cannot use `QObject::findChild<QQuickItem*>(name, FindChildrenRecursively)`
+/// because Window-rooted QML doesn't QObject-parent its inner items to
+/// `Window::contentItem` — Qt uses a separate QQuickRootItem as the
+/// content item, and the user's QML root (the `Window`'s default
+/// children) ends up QObject-parented to the Window itself, not to
+/// contentItem. `findChild` from contentItem (which is the
+/// SurfaceAnimator's `target` for window-rooted surfaces) walks an
+/// effectively empty subtree and never reaches the inner PopupFrame
+/// tagged with `objectName: "shaderAnchor"`. Walking the visual
+/// `childItems()` tree finds it because `parentItem()` always points
+/// to contentItem regardless of the QObject relationship.
+QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
+{
+    if (!root) {
+        return nullptr;
+    }
+    if (root->objectName() == QLatin1String("shaderAnchor")) {
+        return root;
+    }
+    const auto kids = root->childItems();
+    for (QQuickItem* child : kids) {
+        if (QQuickItem* found = findShaderAnchorRecursive(child)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 /// Resolve a Profile path through the registry, falling back to a library-
 /// default Profile (durationOverride applies the library default duration via
 /// the Profile's own resolution chain — `withDefaults` fills in unset fields).
@@ -437,8 +468,7 @@ public:
                 // their visible card in via `objectName: "shaderAnchor"`
                 // in QML; we look that up here.
                 QQuickItem* shaderAnchor = target;
-                if (auto* anchored =
-                        target->findChild<QQuickItem*>(QStringLiteral("shaderAnchor"), Qt::FindChildrenRecursively)) {
+                if (QQuickItem* anchored = findShaderAnchorRecursive(target)) {
                     shaderAnchor = anchored;
                 }
 
