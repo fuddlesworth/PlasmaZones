@@ -340,7 +340,22 @@ public:
         PhosphorAnimation::IMotionClock* clock = &m_clock;
 
         const bool hasScaleLeg = !scaleProfilePath.isEmpty();
-        const bool hasShaderLeg = !shaderEffectId.isEmpty() && m_shaderRegistry;
+
+        // Resolve the shader effect up front so `legCount` counts only
+        // legs that will actually start. Without this, a stale or typo'd
+        // `shaderEffectId` in the user's profile tree (or a registry that
+        // hasn't loaded the referenced pack yet) counts toward
+        // `pendingLegs` but never reaches `start()` — the eff-validity
+        // check below would skip constructing `shaderItem` / `shaderTime`,
+        // and the start-shader-leg block at the bottom of `runLeg`
+        // early-returns when those are null. Result: `pendingLegs` would
+        // never decrement to zero and the consumer's `onComplete` would
+        // never fire (animation hangs mid-show / mid-hide).
+        PhosphorAnimationShaders::AnimationShaderEffect resolvedShaderEff;
+        if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
+            resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
+        }
+        const bool hasShaderLeg = resolvedShaderEff.isValid();
         const int legCount = 1 + (hasScaleLeg ? 1 : 0) + (hasShaderLeg ? 1 : 0);
 
         // Install the bookkeeping slot BEFORE the synchronous pre-state
@@ -398,37 +413,37 @@ public:
                 it->second.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
             if (hasShaderLeg) {
-                const auto eff = m_shaderRegistry->effect(shaderEffectId);
-                if (eff.isValid()) {
-                    auto* shaderItem = new PhosphorRendering::ShaderEffect(target);
-                    shaderItem->setShaderSource(QUrl::fromLocalFile(eff.fragmentShaderPath));
-                    shaderItem->setWidth(target->width());
-                    shaderItem->setHeight(target->height());
-                    shaderItem->setITime(0.0);
-                    shaderItem->setIResolution(QSizeF(target->width(), target->height()));
-                    // Translate friendly parameter ids (e.g. {"direction": 1,
-                    // "parallax": 0.2}) to the canonical
-                    // `customParams<N>_<x|y|z|w>` slot keys both runtimes
-                    // consume. The translation honours the metadata
-                    // declaration order — see
-                    // `AnimationShaderRegistry::translateAnimationParams` for
-                    // the exact slot allocation. Always called (even with
-                    // empty `shaderParameters`) so declared defaults still
-                    // populate the slots — without it, the customParams
-                    // region holds the (-1, -1, -1, -1) sentinel ShaderEffect
-                    // ships with and the shader sees garbage for parameters
-                    // it expected to read.
-                    const QVariantMap translated =
-                        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff,
-                                                                                                    shaderParameters);
-                    if (!translated.isEmpty()) {
-                        shaderItem->setShaderParams(translated);
-                    }
-                    static constexpr qreal kShaderOverlayZ = 1000;
-                    shaderItem->setZ(kShaderOverlayZ);
-                    it->second.shaderItem = shaderItem;
-                    it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                // `resolvedShaderEff` is guaranteed-valid by the
+                // `hasShaderLeg = resolvedShaderEff.isValid()` upstream
+                // — no second registry lookup needed here.
+                auto* shaderItem = new PhosphorRendering::ShaderEffect(target);
+                shaderItem->setShaderSource(QUrl::fromLocalFile(resolvedShaderEff.fragmentShaderPath));
+                shaderItem->setWidth(target->width());
+                shaderItem->setHeight(target->height());
+                shaderItem->setITime(0.0);
+                shaderItem->setIResolution(QSizeF(target->width(), target->height()));
+                // Translate friendly parameter ids (e.g. {"direction": 1,
+                // "parallax": 0.2}) to the canonical
+                // `customParams<N>_<x|y|z|w>` slot keys both runtimes
+                // consume. The translation honours the metadata
+                // declaration order — see
+                // `AnimationShaderRegistry::translateAnimationParams` for
+                // the exact slot allocation. Always called (even with
+                // empty `shaderParameters`) so declared defaults still
+                // populate the slots — without it, the customParams
+                // region holds the (-1, -1, -1, -1) sentinel ShaderEffect
+                // ships with and the shader sees garbage for parameters
+                // it expected to read.
+                const QVariantMap translated =
+                    PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(resolvedShaderEff,
+                                                                                                shaderParameters);
+                if (!translated.isEmpty()) {
+                    shaderItem->setShaderParams(translated);
                 }
+                static constexpr qreal kShaderOverlayZ = 1000;
+                shaderItem->setZ(kShaderOverlayZ);
+                it->second.shaderItem = shaderItem;
+                it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
         }
 
