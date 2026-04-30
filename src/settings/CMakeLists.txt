@@ -129,12 +129,19 @@ qt_add_qml_module(plasmazones-settings
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
-        # Animations page — Phase 1 salvage from PR #291. Standalone
+        # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in
-        # later phases.
+        # later phases. Phase 2 widgets (CurveThumbnail, SpringPreview,
+        # CurveEditorDialog) bind to (omega, zeta) per
+        # `PhosphorAnimation::Spring`. CurvePresets is a singleton
+        # consumed by every Animations sub-page and the editor dialog.
         qml/AnimatedBoxTrack.qml
         qml/AnimationSubPage.qml
         qml/AnimationSubPageHeader.qml
+        qml/CurveEditorDialog.qml
+        qml/CurvePresets.qml
+        qml/CurveThumbnail.qml
+        qml/SpringPreview.qml
         qml/EasingCurve.js
         qml/SpringPhysics.js
         qml/SettingsCard.qml

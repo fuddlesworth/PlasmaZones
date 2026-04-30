@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "EasingCurve.js" as Easing
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -19,12 +20,12 @@ Item {
     property string curve: root.defaultCurve
     property int animationDuration: 150
     property bool previewEnabled: true
-    readonly property int canvasHeight: 240
-    readonly property int boxTrackHeight: 36
-    readonly property int boxSize: 22
-    readonly property int handleRadius: 10
-    readonly property int canvasPad: 24
-    readonly property int handleHitRadius: 18
+    readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
+    readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
+    readonly property int boxSize: Math.round(Kirigami.Units.gridUnit * 1.5)
+    readonly property int canvasPad: Math.round(Kirigami.Units.gridUnit * 1.5)
+    readonly property int handleRadius: Math.round(Kirigami.Units.gridUnit * 0.6)
+    readonly property int handleHitRadius: Math.round(Kirigami.Units.gridUnit * 1.1)
     // Y range: [-1, 2] mapped to canvas, allowing overshoot
     readonly property real yMin: -1
     readonly property real yMax: 2
@@ -38,9 +39,10 @@ Item {
     // Named curve state — set imperatively by parseCurve(), not via binding,
     // to avoid reading stale _parsedCurveType before parseCurve() runs.
     property string curveType: "bezier"
-    property real elasticAmplitude: 1
+    property real curveAmplitude: 1
     property real elasticPeriod: 0.3
     property int bouncesCount: 3
+    property bool _initializing: true
     // Known named curve types for validation
     readonly property var _knownCurveTypes: ["elastic-in", "elastic-out", "elastic-in-out", "bounce-in", "bounce-out", "bounce-in-out"]
     readonly property bool isBezier: curveType === "bezier"
@@ -81,7 +83,7 @@ Item {
             var isBounce = (name === "bounce-in" || name === "bounce-out" || name === "bounce-in-out");
             // Reset to defaults before applying params to avoid stale values
             // from a previous curve type leaking through
-            elasticAmplitude = 1;
+            curveAmplitude = 1;
             elasticPeriod = 0.3;
             bouncesCount = 3;
             if (params) {
@@ -89,7 +91,7 @@ Item {
                 if (parts.length >= 1) {
                     var a = parseFloat(parts[0]);
                     if (isFinite(a))
-                        elasticAmplitude = Math.max(0.5, Math.min(3, a));
+                        curveAmplitude = Math.max(0.5, Math.min(3, a));
 
                 }
                 if (parts.length >= 2) {
@@ -131,7 +133,7 @@ Item {
 
     function _resetToDefault() {
         curveType = "bezier";
-        elasticAmplitude = 1;
+        curveAmplitude = 1;
         elasticPeriod = 0.3;
         bouncesCount = 3;
         var def = root.defaultCurve.split(",");
@@ -141,7 +143,9 @@ Item {
             cp2x = parseFloat(def[2]);
             cp2y = parseFloat(def[3]);
         }
-        root.curveEdited(root.formatCurve());
+        if (!root._initializing)
+            root.curveEdited(root.formatCurve());
+
     }
 
     // Format control point values back into a curve string
@@ -171,53 +175,9 @@ Item {
         return t;
     }
 
-    // Elastic Out: a * 2^(-10t) * sin((t - s) * 2pi/p) + 1
-    function evaluateElasticOut(t, amp, per) {
-        if (t <= 0)
-            return 0;
-
-        if (t >= 1)
-            return 1;
-
-        var a = Math.max(1, amp);
-        var s = per / (2 * Math.PI) * Math.asin(1 / a);
-        return a * Math.pow(2, -10 * t) * Math.sin((t - s) * 2 * Math.PI / per) + 1;
-    }
-
-    // Generalized Bounce Out: n bounce arcs, amplitude-scaled dip heights
-    function evaluateBounceOut(t, amp, n) {
-        if (t <= 0)
-            return 0;
-
-        if (t >= 1)
-            return 1;
-
-        var r = 0.5; // restitution coefficient
-        n = Math.max(1, Math.min(8, n));
-        // Base arc duration so all arcs fit in [0, 1]
-        var S = (1 - Math.pow(r, n)) / (1 - r);
-        var d = 1 / (1 + S);
-        // First half-arc: parabolic rise from 0 to 1
-        if (t < d) {
-            var u0 = t / d;
-            return u0 * u0;
-        }
-        // Subsequent full arcs
-        var tAccum = d;
-        for (var k = 0; k < n; k++) {
-            var dk = d * Math.pow(r, k);
-            if (t < tAccum + dk || k === n - 1) {
-                var u = (t - tAccum) / dk;
-                var height = Math.pow(r, 2 * (k + 1));
-                var dip = 1 - 4 * (u - 0.5) * (u - 0.5);
-                return 1 - height * amp * dip;
-            }
-            tAccum += dk;
-        }
-        return 1;
-    }
-
-    // Evaluate the easing for a given progress x in [0,1]
+    // Evaluate the easing for a given progress x in [0,1].
+    // Named curves (elastic/bounce) delegate to EasingCurve.js; bezier uses
+    // the local solveBezierX + cubicBezier for interactive drag-handle fidelity.
     function evaluateEasing(x) {
         if (x <= 0)
             return 0;
@@ -226,29 +186,17 @@ Item {
             return 1;
 
         var ct = root.curveType;
-        switch (ct) {
-        case "elastic-out":
-            return evaluateElasticOut(x, root.elasticAmplitude, root.elasticPeriod);
-        case "elastic-in":
-            return 1 - evaluateElasticOut(1 - x, root.elasticAmplitude, root.elasticPeriod);
-        case "elastic-in-out":
-            if (x < 0.5)
-                return (1 - evaluateElasticOut(1 - 2 * x, root.elasticAmplitude, root.elasticPeriod)) * 0.5;
-
-            return evaluateElasticOut(2 * x - 1, root.elasticAmplitude, root.elasticPeriod) * 0.5 + 0.5;
-        case "bounce-out":
-            return evaluateBounceOut(x, root.elasticAmplitude, root.bouncesCount);
-        case "bounce-in":
-            return 1 - evaluateBounceOut(1 - x, root.elasticAmplitude, root.bouncesCount);
-        case "bounce-in-out":
-            if (x < 0.5)
-                return (1 - evaluateBounceOut(1 - 2 * x, root.elasticAmplitude, root.bouncesCount)) * 0.5;
-
-            return evaluateBounceOut(2 * x - 1, root.elasticAmplitude, root.bouncesCount) * 0.5 + 0.5;
-        default:
-            break;
+        // Named curves: build the curve string and delegate to EasingCurve.js
+        if (ct !== "bezier") {
+            var curveStr = ct;
+            var isElastic = (ct.indexOf("elastic") >= 0);
+            if (isElastic)
+                curveStr = ct + ":" + root.curveAmplitude.toFixed(2) + "," + root.elasticPeriod.toFixed(2);
+            else if (ct.indexOf("bounce") >= 0)
+                curveStr = ct + ":" + root.curveAmplitude.toFixed(2) + "," + root.bouncesCount;
+            return Easing.evaluate(x, curveStr);
         }
-        // Bezier
+        // Bezier: use local solver for drag-handle precision
         var t = solveBezierX(cp1x, cp2x, x);
         return cubicBezier(cp1y, cp2y, t);
     }
@@ -288,9 +236,9 @@ Item {
         if (_knownCurveTypes.indexOf(ct) >= 0) {
             var isElastic = (ct === "elastic-in" || ct === "elastic-out" || ct === "elastic-in-out");
             if (isElastic)
-                return ct + "(" + root.elasticAmplitude.toFixed(2) + ", " + root.elasticPeriod.toFixed(2) + ")";
+                return ct + "(" + root.curveAmplitude.toFixed(2) + ", " + root.elasticPeriod.toFixed(2) + ")";
 
-            return ct + "(" + root.elasticAmplitude.toFixed(2) + ", " + root.bouncesCount + ")";
+            return ct + "(" + root.curveAmplitude.toFixed(2) + ", " + root.bouncesCount + ")";
         }
         return ct;
     }
@@ -300,15 +248,16 @@ Item {
             return ;
 
         animTimer.stop();
-        animBox.x = 0;
+        boxTrack.animBox.x = 0;
         curveCanvas.requestPaint();
         replayDelay.restart();
     }
 
     Accessible.name: i18n("Animation easing curve editor")
+    Accessible.role: Accessible.Graphic
     Accessible.description: i18n("Drag the control points to customize the animation curve. Click to replay the preview.")
     implicitHeight: layout.implicitHeight
-    implicitWidth: 400
+    implicitWidth: Kirigami.Units.gridUnit * 25
     onCurveChanged: {
         if (!dragArea.activeHandle) {
             parseCurve();
@@ -318,6 +267,7 @@ Item {
     }
     Component.onCompleted: {
         parseCurve();
+        root._initializing = false;
         curveCanvas.requestPaint();
         Qt.callLater(replay);
     }
@@ -348,10 +298,10 @@ Item {
             var totalDuration = Math.max(root.animationDuration, 50);
             var progress = Math.min(elapsed / totalDuration, 1);
             var easedProgress = root.evaluateEasing(progress);
-            var trackWidth = Math.max(0, animBox.parent.width - root.boxSize);
-            animBox.x = Math.max(0, Math.min(trackWidth, easedProgress * trackWidth));
+            var trackWidth = Math.max(0, boxTrack.animBox.parent.width - root.boxSize);
+            boxTrack.animBox.x = Math.max(0, Math.min(trackWidth, easedProgress * trackWidth));
             if (progress >= 1) {
-                animBox.x = trackWidth;
+                boxTrack.animBox.x = trackWidth;
                 animTimer.stop();
             }
         }
@@ -364,12 +314,16 @@ Item {
         spacing: 0
 
         // Interactive curve canvas
-        Item {
+        Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: root.canvasHeight
+            radius: Kirigami.Units.smallSpacing * 2
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
+            color: Kirigami.Theme.alternateBackgroundColor
             ToolTip.visible: dragArea.containsMouse
             ToolTip.text: root.isBezier ? i18n("Drag control points to customize the animation curve. Click to replay.") : i18n("Click to replay the animation preview.")
-            ToolTip.delay: 500
+            ToolTip.delay: Kirigami.Units.toolTipDelay
 
             Canvas {
                 id: curveCanvas
@@ -393,34 +347,43 @@ Item {
                     var gw = w - pad * 2;
                     var gh = h - pad * 2;
                     ctx.clearRect(0, 0, w, h);
-                    // Subtle background fill
-                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.4);
-                    ctx.fillRect(0, 0, w, h);
-                    // Reference lines at y=0 and y=1
-                    var refColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
-                    ctx.strokeStyle = refColor;
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([]);
+                    // Resolve colors fresh each paint so theme context is always current
+                    var accentStr = Kirigami.Theme.highlightColor.toString();
+                    var gridStr = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08).toString();
                     var yZero = root.yToCanvas(0, gh);
                     var yOne = root.yToCanvas(1, gh);
-                    ctx.beginPath();
-                    ctx.moveTo(pad, yZero);
-                    ctx.lineTo(pad + gw, yZero);
-                    ctx.stroke();
+                    // Horizontal grid lines at 0.25 increments
+                    ctx.strokeStyle = gridStr;
+                    ctx.lineWidth = 0.5;
+                    ctx.setLineDash([]);
+                    for (var gy = 0; gy <= 1; gy += 0.25) {
+                        var py = root.yToCanvas(gy, gh);
+                        ctx.beginPath();
+                        ctx.moveTo(pad, py);
+                        ctx.lineTo(pad + gw, py);
+                        ctx.stroke();
+                    }
+                    // Vertical grid lines at 0.2 increments
+                    for (var gx = 0; gx <= 1; gx += 0.2) {
+                        var px = pad + gx * gw;
+                        ctx.beginPath();
+                        ctx.moveTo(px, pad);
+                        ctx.lineTo(px, pad + gh);
+                        ctx.stroke();
+                    }
+                    // Reference lines at y=0 and y=1 (themed positive color, dashed)
+                    var pc = Kirigami.Theme.positiveTextColor;
+                    ctx.strokeStyle = Qt.rgba(pc.r, pc.g, pc.b, 0.6).toString();
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([6, 4]);
                     ctx.beginPath();
                     ctx.moveTo(pad, yOne);
                     ctx.lineTo(pad + gw, yOne);
                     ctx.stroke();
-                    // Grid lines (vertical, dashed)
-                    ctx.strokeStyle = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1);
-                    ctx.setLineDash([2, 4]);
-                    for (var j = 0; j <= 4; j++) {
-                        var gx = pad + gw * j / 4;
-                        ctx.beginPath();
-                        ctx.moveTo(gx, pad);
-                        ctx.lineTo(gx, pad + gh);
-                        ctx.stroke();
-                    }
+                    ctx.beginPath();
+                    ctx.moveTo(pad, yZero);
+                    ctx.lineTo(pad + gw, yZero);
+                    ctx.stroke();
                     ctx.setLineDash([]);
                     // Linear diagonal reference (P0 to P3)
                     ctx.strokeStyle = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.2);
@@ -451,8 +414,8 @@ Item {
                         ctx.stroke();
                         ctx.setLineDash([]);
                         // Cubic bezier curve (highlighted)
-                        ctx.strokeStyle = Kirigami.Theme.highlightColor;
-                        ctx.lineWidth = 2.5;
+                        ctx.strokeStyle = accentStr;
+                        ctx.lineWidth = 2;
                         ctx.beginPath();
                         ctx.moveTo(p0x, p0y);
                         ctx.bezierCurveTo(h1x, h1y, h2x, h2y, p3x, p3y);
@@ -470,8 +433,8 @@ Item {
                     } else {
                         // === NON-BEZIER: polyline sampled from evaluateEasing ===
                         var nSamples = 200;
-                        ctx.strokeStyle = Kirigami.Theme.highlightColor;
-                        ctx.lineWidth = 2.5;
+                        ctx.strokeStyle = accentStr;
+                        ctx.lineWidth = 2;
                         ctx.beginPath();
                         for (var si = 0; si <= nSamples; si++) {
                             var sx = si / nSamples;
@@ -494,12 +457,32 @@ Item {
                         ctx.fill();
                     }
                     // Axis labels
-                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4);
-                    ctx.font = "9px sans-serif";
+                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4).toString();
+                    ctx.font = Kirigami.Theme.smallFont.pointSize + "pt sans-serif";
                     ctx.textAlign = "right";
-                    ctx.fillText("0", pad - 3, yZero + 3);
-                    ctx.fillText("1", pad - 3, yOne + 3);
+                    ctx.fillText("1", pad - 4, yOne + 4);
+                    ctx.fillText("0", pad - 4, yZero + 4);
                 }
+            }
+
+            Connections {
+                function onHighlightColorChanged() {
+                    curveCanvas.requestPaint();
+                }
+
+                function onTextColorChanged() {
+                    curveCanvas.requestPaint();
+                }
+
+                function onBackgroundColorChanged() {
+                    curveCanvas.requestPaint();
+                }
+
+                function onPositiveTextColorChanged() {
+                    curveCanvas.requestPaint();
+                }
+
+                target: Kirigami.Theme
             }
 
             // Single MouseArea for all handle interaction
@@ -541,6 +524,7 @@ Item {
                     return 0;
                 }
 
+                Accessible.name: i18n("Drag to adjust easing curve control points")
                 anchors.fill: parent
                 hoverEnabled: true
                 preventStealing: true // Crucial: prevents parent ScrollView from stealing vertical drag
@@ -620,56 +604,12 @@ Item {
         }
 
         // Animated box track
-        Item {
+        AnimatedBoxTrack {
+            id: boxTrack
+
             Layout.fillWidth: true
             Layout.preferredHeight: root.boxTrackHeight
-
-            // Track rail
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: root.boxSize / 2
-                anchors.rightMargin: root.boxSize / 2
-                height: 3
-                radius: 1.5
-                color: Kirigami.Theme.disabledTextColor
-            }
-
-            // Start marker
-            Rectangle {
-                x: root.boxSize / 2 - 1
-                anchors.verticalCenter: parent.verticalCenter
-                width: 2
-                height: 12
-                radius: 1
-                color: Kirigami.Theme.disabledTextColor
-                opacity: 0.4
-            }
-
-            // End marker
-            Rectangle {
-                x: parent.width - root.boxSize / 2 - 1
-                anchors.verticalCenter: parent.verticalCenter
-                width: 2
-                height: 12
-                radius: 1
-                color: Kirigami.Theme.disabledTextColor
-                opacity: 0.4
-            }
-
-            // Animated box
-            Rectangle {
-                id: animBox
-
-                width: root.boxSize
-                height: root.boxSize
-                radius: root.boxSize / 5
-                y: (parent.height - height) / 2
-                x: 0
-                color: Kirigami.Theme.highlightColor
-            }
-
+            boxSize: root.boxSize
         }
 
     }

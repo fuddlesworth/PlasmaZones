@@ -16,7 +16,7 @@ import org.kde.kirigami as Kirigami
  *   - appSettings: the settings backend object
  *   - constants: root object providing sliderPreferredWidth, sliderValueLabelWidth
  *   - animationsEnabled: whether animations are currently enabled
- *   - easingPreview: the EasingPreview component (for curveType, elasticAmplitude, etc.)
+ *   - easingPreview: the EasingPreview component (for curveType, curveAmplitude, etc.)
  */
 ColumnLayout {
     id: easingRoot
@@ -343,7 +343,7 @@ ColumnLayout {
             from: curveInfo.isElastic ? 1 : 0.5
             to: 3
             stepSize: 0.1
-            value: easingRoot.easingPreview.elasticAmplitude
+            value: easingRoot.easingPreview.curveAmplitude
             formatValue: function(v) {
                 return v.toFixed(1);
             }
@@ -375,7 +375,7 @@ ColumnLayout {
             valueSuffix: ""
             onMoved: (value) => {
                 var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+                var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
             }
         }
@@ -399,7 +399,7 @@ ColumnLayout {
             }
             onMoved: (value) => {
                 var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+                var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + value.toFixed(2);
             }
         }
