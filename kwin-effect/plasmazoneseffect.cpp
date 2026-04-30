@@ -4288,9 +4288,21 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // audio/wallpaper/multipass) are intentionally not populated
             // here — they belong to overlay shaders, not animation
             // transitions.
-            shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
-            const QRectF geo = w->frameGeometry();
-            shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            //
+            // Guard every setUniform against `loc < 0`. GL silently
+            // ignores -1, so this is defence in depth rather than a
+            // correctness fix today, but the symmetric guard makes the
+            // intent ("only push uniforms the shader actually declared")
+            // explicit at all three uniform sites instead of just
+            // customParams. A future GL backend that doesn't honour the
+            // -1-is-noop convention would otherwise UB.
+            if (cached->iTimeLoc >= 0) {
+                shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
+            }
+            if (cached->iResolutionLoc >= 0) {
+                const QRectF geo = w->frameGeometry();
+                shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            }
             for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                 const int loc = cached->customParamsLoc[slot];
                 if (loc < 0)
@@ -4379,7 +4391,23 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
 
-    endShaderTransition(window);
+    // Detect supersession before the teardown so we can skip the
+    // redundant unredirect+redirect cycle. KWin's offscreen-effect
+    // pipeline reallocates the offscreen render target on every
+    // unredirect→redirect, and a back-to-back supersession (e.g. an
+    // autotile-reorder drag firing window.move at 60 Hz) would
+    // otherwise pay that cost every frame.
+    const auto existingIt = m_shaderTransitions.find(window);
+    const bool isSameWindowSupersession = existingIt != m_shaderTransitions.end();
+    if (isSameWindowSupersession) {
+        // Erase the prior bookkeeping but skip the unredirect — we're
+        // about to re-shader this same window. setShader() below
+        // overwrites the shader pointer; no need to null it first.
+        m_shaderTransitions.erase(existingIt);
+    }
+    // else: window is not currently shaderized; falls through to the
+    // redirect() call below (no-op endShaderTransition since the map
+    // doesn't have the entry).
 
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
@@ -4417,7 +4445,12 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         transition.startTimeMs = shaderClockNowMs();
     }
 
-    redirect(window);
+    if (!isSameWindowSupersession) {
+        redirect(window);
+    }
+    // setShader is unconditional — it replaces any prior shader pointer
+    // (idempotent for the same shader, so even a same-effect
+    // supersession is correct here).
     setShader(window, cachedEntry.shader.get());
     m_shaderTransitions.emplace(window, std::move(transition));
 }

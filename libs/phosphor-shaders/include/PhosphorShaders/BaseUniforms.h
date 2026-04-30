@@ -94,10 +94,34 @@ static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 byt
 // canonical GLSL header MUST be updated to match (and all in-tree
 // `effect.frag` files re-baked, since their `customParams[N]` `#define`
 // macros encode the slot positions).
+//
+// Every field declared in `animation_uniforms.glsl` is pinned here. A
+// previous revision asserted only iTime / iResolution / customParams /
+// customColors, which left the door open to a reorder that swapped
+// {iTimeDelta, iFrame, _appField0, _appField1, iMouse, iDate} amongst
+// themselves while preserving the four asserted offsets — silent
+// miscompile for any future animation shader that reads the in-between
+// fields. The full coverage below catches that.
+static_assert(offsetof(BaseUniforms, qt_Matrix) == 0,
+              "BaseUniforms::qt_Matrix must remain at std140 offset 0 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, qt_Opacity) == 64,
+              "BaseUniforms::qt_Opacity must remain at std140 offset 64 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, iTime) == 68,
               "BaseUniforms::iTime must remain at std140 offset 68 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iTimeDelta) == 72,
+              "BaseUniforms::iTimeDelta must remain at std140 offset 72 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iFrame) == 76,
+              "BaseUniforms::iFrame must remain at std140 offset 76 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, iResolution) == 80,
               "BaseUniforms::iResolution must remain at std140 offset 80 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, appField0) == 88,
+              "BaseUniforms::appField0 must remain at std140 offset 88 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, appField1) == 92,
+              "BaseUniforms::appField1 must remain at std140 offset 92 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iMouse) == 96,
+              "BaseUniforms::iMouse must remain at std140 offset 96 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iDate) == 112,
+              "BaseUniforms::iDate must remain at std140 offset 112 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, customParams) == 128,
               "BaseUniforms::customParams must remain at std140 offset 128 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, customColors) == 256,

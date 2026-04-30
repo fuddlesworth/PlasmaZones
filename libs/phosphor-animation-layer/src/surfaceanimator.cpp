@@ -440,6 +440,15 @@ public:
                 if (!translated.isEmpty()) {
                     shaderItem->setShaderParams(translated);
                 }
+                // Z-order cap for the shader overlay child. Picks a value
+                // higher than any conventional QML z stacking inside daemon
+                // overlay surfaces (typical content sits at z ≤ 100, dropdowns
+                // / tooltips at z ≤ 500). If a future overlay needs to
+                // render *above* the shader transition leg, raise this
+                // constant in lockstep with the offending child's z — there
+                // is no automatic "always-on-top" guarantee, just an
+                // empirically-large value chosen to dominate today's
+                // overlay tree.
                 static constexpr qreal kShaderOverlayZ = 1000;
                 shaderItem->setZ(kShaderOverlayZ);
                 it->second.shaderItem = shaderItem;

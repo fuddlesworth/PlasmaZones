@@ -77,4 +77,47 @@ inline QString slotKey(int slot)
 
 } // namespace CustomParams
 
+/// Canonical key format for the `customColors[N]` slots in `BaseUniforms`.
+/// Sibling to `CustomParams::slotKey` — the slot-keyed map decoder in
+/// `PhosphorRendering::ShaderEffect::setShaderParams` consumes both formats.
+///
+/// Color params produce keys of the form `"customColor<N>"` where `N` is
+/// 1-based. There is no sub-component split because each color occupies a
+/// full vec4 (rgba) — so the single-arg overload is the only one needed.
+///
+/// Three current consumers:
+///
+///   • `PhosphorShaders::ShaderRegistry::ParameterInfo::uniformName()` —
+///     overlay-shader encoder for color params (uses internal lookup
+///     table; identical output)
+///   • `PhosphorRendering::ShaderEffect::setShaderParams` — decoder for
+///     both runtime paths
+///   • `AnimationShaderRegistry::translateAnimationParams` — animation
+///     shaders don't currently emit color params (the function silently
+///     skips them with a load-time warning at parse), but when the first
+///     color-typed animation param lands the encoder will route through
+///     this helper.
+///
+/// Lifted alongside `CustomParams::slotKey` so a future format drift
+/// (renaming the prefix, switching to 0-based indexing, etc.) only has to
+/// change here and every consumer stays in sync.
+namespace CustomColors {
+
+/// Number of color slots in `BaseUniforms::customColors[16]`.
+inline constexpr int kColorCount = 16;
+
+/// Format a customColor key from a 0-based slot index. Slot 0 →
+/// `"customColor1"`, slot 15 → `"customColor16"`. Out-of-range values
+/// return an empty `QString` rather than wrapping around — same
+/// graceful-degradation contract as `CustomParams::slotKey(int)`.
+inline QString colorKey(int slot)
+{
+    if (slot < 0 || slot >= kColorCount) {
+        return {};
+    }
+    return QStringLiteral("customColor") + QString::number(slot + 1);
+}
+
+} // namespace CustomColors
+
 } // namespace PhosphorShaders

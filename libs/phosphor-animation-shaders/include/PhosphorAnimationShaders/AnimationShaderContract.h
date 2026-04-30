@@ -93,6 +93,27 @@ namespace AnimationShaderContract {
 /// animator state value; daemon: `SurfaceAnimator::runLeg`'s
 /// `shaderTime->start(0.0, 1.0, ...)`). Authors should `clamp(iTime,
 /// 0.0, 1.0)` defensively in case a future timeline overshoots.
+///
+/// **Curve shape is NOT guaranteed to be linear.** Both runtimes feed
+/// `iTime` through the resolved `Profile`'s easing curve:
+///
+///   • Compositor (kwin-effect): `paintWindow` reads progress from either
+///     the time-based (`(now - startTimeMs) / durationMs`, linear) or
+///     `m_windowAnimator->animationFor(w)` (curved by the geometry
+///     animation's profile). Lifecycle events ride the linear branch;
+///     `zone.*` events ride the curved one.
+///   • Daemon (SurfaceAnimator): the `shaderTime` AnimatedValue runs
+///     under the resolved `showShaderProfile` / `hideShaderProfile`
+///     curve, falling back to the opacity profile's curve when the
+///     shader profile is empty. So an OutCubic opacity profile makes
+///     `iTime` arrive on an OutCubic ramp, not a linear ramp.
+///
+/// Authors writing `mix(a, b, iTime)` should be aware: if the resolved
+/// curve is non-linear, the visual blend follows that curve. If a shader
+/// requires linear progress, register a Linear-curve profile and bind it
+/// via `showShaderProfile`. Most transitions look better with a curved
+/// `iTime` (the curve smooths the visual progression), so this is the
+/// documented default rather than a forced linear override.
 inline constexpr const char* kITime = "iTime";
 
 /// `vec2 iResolution` — surface size in logical pixels. Window frame

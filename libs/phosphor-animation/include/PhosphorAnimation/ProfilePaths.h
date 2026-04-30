@@ -49,6 +49,7 @@ namespace PhosphorAnimation {
  *     ├── osd                ┐ on-screen display, feedback
  *     │   ├── osd.show
  *     │   ├── osd.hide
+ *     │   ├── osd.pop          (scale-leg show)
  *     │   └── osd.dim
  *     │
  *     ├── panel              ┐ docks, bars, notifications
@@ -60,7 +61,8 @@ namespace PhosphorAnimation {
  *     │       │   └── panel.popup.zoneSelector.hide
  *     │       ├── panel.popup.layoutPicker
  *     │       │   ├── panel.popup.layoutPicker.show
- *     │       │   └── panel.popup.layoutPicker.hide
+ *     │       │   ├── panel.popup.layoutPicker.hide
+ *     │       │   └── panel.popup.layoutPicker.popIn   (scale leg)
  *     │       └── panel.popup.snapAssist
  *     │           └── panel.popup.snapAssist.show   (no .hide — destroy-on-hide)
  *     │
@@ -123,6 +125,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WorkspaceOverview;
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
 PHOSPHORANIMATION_EXPORT extern const QString OsdShow;
 PHOSPHORANIMATION_EXPORT extern const QString OsdHide;
+PHOSPHORANIMATION_EXPORT extern const QString OsdPop; ///< Scale-leg show profile for OSDs (data/profiles/osd.pop.json)
 PHOSPHORANIMATION_EXPORT extern const QString OsdDim;
 
 // panel.*
@@ -149,6 +152,13 @@ PHOSPHORANIMATION_EXPORT extern const QString PanelPopupZoneSelectorHide;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPicker;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerShow;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerHide;
+/// Scale-leg show profile for LayoutPicker. The picker is the only
+/// non-OSD surface with a scale envelope (zone selector and snap assist
+/// are opacity-only); putting its scale leg under a dedicated path keeps
+/// it tunable independently from the genuine OSD's `osd.pop`. Hide-leg
+/// scale reuses `PanelPopupLayoutPickerHide` (same coupling pattern OSD
+/// uses for `osd.hide`); a future `PopOut` split would land here.
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerPopIn;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssistShow;
 
@@ -200,8 +210,35 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCub
  * for per-event override editing. Extension paths added at runtime via
  * ProfileTree::setOverride() are NOT included here — enumerate the tree
  * itself for those.
+ *
+ * **Reserved paths are excluded.** A path is "reserved" when it lives in
+ * the taxonomy but has no consumer that fires it (today: `cursor.drag`
+ * and `zone.layoutSwitchOut`). A settings UI surfacing a reserved path
+ * would let the user assign a shader to it that never plays — confusing
+ * UX. Use `isReservedPath()` to detect these explicitly if a UI needs to
+ * include them with an "(unimplemented)" annotation.
  */
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
+
+/**
+ * @brief True when @p path is in the taxonomy but has no built-in producer.
+ *
+ * Reserved paths exist as named slots so plugins / future PlasmaZones
+ * versions can wire them without a library change, but no consumer in
+ * the current build fires them. `allBuiltInPaths()` filters these out
+ * so settings UIs don't surface assignable slots that silently no-op.
+ *
+ * Currently reserved:
+ *   - `cursor.drag` — the kwin-effect's previous wire-up was
+ *     guaranteed-shadowed by `window.move` (last-event-wins on the same
+ *     window), so it never rendered. Reserved for a future
+ *     cursor-decoration / drag-shadow surface.
+ *   - `zone.layoutSwitchOut` — the symmetric counterpart of
+ *     `zone.layoutSwitchIn`. The QML-side flash and C++-side resnap
+ *     shader both consume `zone.layoutSwitchIn`; the outgoing direction
+ *     has no distinct consumer today.
+ */
+PHOSPHORANIMATION_EXPORT bool isReservedPath(const QString& path);
 
 /**
  * @brief Walk @p path up one level.

@@ -273,8 +273,7 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     };
 
     for (int i = 0; i < kMaxCustomColors; ++i) {
-        const QString key = QStringLiteral("customColor") + QString::number(i + 1);
-        setCustomColorAt(i, extractColor(key, customColorAt(i)));
+        setCustomColorAt(i, extractColor(PhosphorShaders::CustomColors::colorKey(i), customColorAt(i)));
     }
 
     Q_EMIT shaderParamsChanged();

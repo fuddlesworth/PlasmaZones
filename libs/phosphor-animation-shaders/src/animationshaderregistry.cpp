@@ -69,6 +69,31 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         e.previewPath = dir.filePath(e.previewPath);
     }
 
+    // Diagnostic: animation shaders cannot currently consume `color`
+    // typed parameters — `translateAnimationParams` skips them silently
+    // because no built-in pack declares one and the
+    // customColor<N>-aware encoder branch hasn't been written. Surface
+    // the limitation HERE (load-time, once per pack) so an author who
+    // tries to declare a color param sees a journal warning naming the
+    // pack and parameter, rather than silently observing default values
+    // in the shader.
+    //
+    // Use noquote() so QString fields render as bare text — without it,
+    // QDebug's default operator<<(QString) wraps each field in quotes
+    // (`'"id"'` instead of `'id'`), which makes the journal message
+    // harder to read and breaks downstream tooling that pattern-matches
+    // on the field text.
+    for (const auto& param : e.parameters) {
+        if (param.type == QLatin1String("color")) {
+            qCWarning(lcRegistry).nospace().noquote()
+                << "Animation effect '" << e.id << "' (in " << effectDir << ") declares color parameter '" << param.id
+                << "' — color-typed animation params are not yet supported and "
+                   "will be ignored at transition time. Move the effect to "
+                   "data/shaders/ (overlay path) or convert the parameter to "
+                   "float/int/bool with manual color encoding.";
+        }
+    }
+
     return e;
 }
 
@@ -179,11 +204,12 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         // Color parameters would consume customColor<N> rather than a
         // float sub-slot; not currently used by any built-in animation
         // shader. When the first one lands, extend this branch to map
-        // color → "customColor<N>" with its own counter. Skipped silently
-        // here — surfacing this on every transition begin would just spam
-        // the log; loader-time validation is the right level for such a
-        // schema-mismatch warning, and there is none today because no
-        // built-in pack declares a color-typed animation param.
+        // color → "customColor<N>" with its own counter, using
+        // `PhosphorShaders::CustomColors::colorKey` as the canonical
+        // formatter. Skipped silently here at translation time —
+        // surfacing this on every transition begin would just spam the
+        // log; the diagnostic lives at load time in `parseEffect`,
+        // which fires a single qCWarning per pack at registry scan.
         if (type == QLatin1String("color")) {
             continue;
         }

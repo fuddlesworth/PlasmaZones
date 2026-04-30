@@ -3,13 +3,17 @@
 
 #include <PhosphorAnimationShaders/AnimationShaderContract.h>
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorShaders/CustomParamsKey.h>
 
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -566,6 +570,90 @@ private Q_SLOTS:
             "void main() {}\n");
         const QByteArray rewritten = AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src);
         QCOMPARE(QString::fromUtf8(rewritten).trimmed(), src.trimmed());
+    }
+
+    // ── colorKey ─────────────────────────────────────────────────────
+    //
+    // Sibling helper to `CustomParams::slotKey` for the `customColors[N]`
+    // region. ShaderEffect::setShaderParams's color-decoder branch and
+    // (when the first color-typed animation param ships) the registry
+    // encoder both consume keys produced here. Pin the format so a
+    // future drift fragments at most this single test, not three call
+    // sites.
+
+    void testColorKey()
+    {
+        using PhosphorShaders::CustomColors::colorKey;
+        // 0-based input → 1-based output, matching the GLSL author
+        // convention (`customColor1` is the first slot).
+        QCOMPARE(colorKey(0), QStringLiteral("customColor1"));
+        QCOMPARE(colorKey(1), QStringLiteral("customColor2"));
+        QCOMPARE(colorKey(15), QStringLiteral("customColor16"));
+        // Out-of-range — empty, mirroring `slotKey(int)`'s graceful-
+        // degradation contract. Wrap-around would silently collide with a
+        // valid in-range key.
+        QVERIFY(colorKey(-1).isEmpty());
+        QVERIFY(colorKey(16).isEmpty());
+        QVERIFY(colorKey(100).isEmpty());
+    }
+
+    // ── parseEffect color-param diagnostic ───────────────────────────
+    //
+    // Animation shaders cannot consume `color`-typed parameters today —
+    // `translateAnimationParams` skips them silently because no built-in
+    // pack declares one and the customColor<N>-aware encoder hasn't been
+    // written. The runtime drop is the right behaviour, but a silent
+    // drop with no diagnostic leaves authors observing default values
+    // with no clue why. Pin the load-time warning that surfaces the
+    // limitation once per pack at registration time.
+
+    void testColorParamEmitsLoadTimeWarning()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        const QString effectDir = tmp.path() + QStringLiteral("/with-color");
+        QDir().mkpath(effectDir);
+
+        // Write a metadata.json that declares a color parameter. Mirrors
+        // a hypothetical user-authored animation shader that inadvertently
+        // tries to use the overlay-shader color-uniform contract.
+        QJsonObject root;
+        root.insert(QLatin1String("id"), QStringLiteral("with-color"));
+        root.insert(QLatin1String("name"), QStringLiteral("with-color"));
+        root.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        root.insert(QLatin1String("category"), QStringLiteral("Test"));
+        QJsonArray params;
+        QJsonObject p;
+        p.insert(QLatin1String("id"), QStringLiteral("tint"));
+        p.insert(QLatin1String("type"), QStringLiteral("color"));
+        params.append(p);
+        root.insert(QLatin1String("parameters"), params);
+
+        QFile mf(effectDir + QStringLiteral("/metadata.json"));
+        QVERIFY(mf.open(QIODevice::WriteOnly));
+        mf.write(QJsonDocument(root).toJson());
+        mf.close();
+        QFile frag(effectDir + QStringLiteral("/effect.frag"));
+        QVERIFY(frag.open(QIODevice::WriteOnly));
+        frag.write("void main() {}");
+        frag.close();
+
+        // QTest::ignoreMessage matches the leading text of the qWarning
+        // — the warning is intentionally verbose with effect id, dir
+        // path, and parameter id; partial-match suffices to pin the
+        // diagnostic exists and names the offending pack.
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral(".*Animation effect 'with-color'.*declares color parameter 'tint'.*")));
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+
+        // The pack still registers — the warning is informational, not a
+        // rejection. translateAnimationParams will skip the color param
+        // at transition time per the documented runtime semantics.
+        QVERIFY(registry.hasEffect(QStringLiteral("with-color")));
     }
 };
 
