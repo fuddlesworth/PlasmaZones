@@ -303,6 +303,13 @@ SettingsController::SettingsController(QObject* parent)
     // is guaranteed since m_settings is the first member declared).
     m_generalPage = new GeneralPageController(&m_settings, this);
 
+    // Animations page sub-controller — Q_PROPERTY surface for the new
+    // animation-event drilldown. Independent of `Settings`: per-event
+    // overrides persist as JSON files under
+    // `~/.local/share/plasmazones/profiles/`, picked up by the daemon's
+    // existing `PhosphorAnimation::ProfileLoader` watch.
+    m_animationsPage = new AnimationsPageController(this);
+
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
     m_screenHelper.refreshScreens();

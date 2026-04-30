@@ -36,6 +36,7 @@ class ScriptedAlgorithmLoader;
 #include <optional>
 
 #include "algorithmservice.h"
+#include "animationspagecontroller.h"
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
@@ -87,6 +88,7 @@ class SettingsController : public QObject
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
+    Q_PROPERTY(AnimationsPageController* animationsPage READ animationsPage CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -383,6 +385,10 @@ public:
     {
         return m_generalPage;
     }
+    AnimationsPageController* animationsPage() const
+    {
+        return m_animationsPage;
+    }
 
     // ── Running window picker (async flow) ──────────────────────────────────
     //
@@ -591,6 +597,7 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
+    AnimationsPageController* m_animationsPage = nullptr;
 
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;

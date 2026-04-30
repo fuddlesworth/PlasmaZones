@@ -11,6 +11,8 @@ set(plasmazones_settings_SRCS
     settingscontroller.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
+    animationspagecontroller.h
+    animationspagecontroller.cpp
     editorpagecontroller.h
     editorpagecontroller.cpp
     generalpagecontroller.h

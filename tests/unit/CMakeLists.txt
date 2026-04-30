@@ -453,6 +453,24 @@ add_executable(test_snapping_behavior_controller
 target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
+# Phase 0 of the animation-settings UI rework: AnimationsPageController
+# round-trips per-event override files in `<userProfilesDir>/<path>.json`,
+# walks the ProfilePaths inheritance chain for resolvedProfile(), and
+# surfaces the built-in taxonomy as section-grouped lists for the QML
+# drilldown. Compiles the controller source directly (it lives in the
+# plasmazones-settings executable, not plasmazones_core).
+add_executable(test_animations_page_controller
+    settings/test_animations_page_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+)
+target_link_libraries(test_animations_page_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorAnimation::PhosphorAnimation
+)
+add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
+
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)
