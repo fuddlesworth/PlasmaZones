@@ -506,6 +506,13 @@ private:
     struct CachedShader
     {
         std::unique_ptr<KWin::GLShader> shader;
+        /// `iTime` and `iResolution` are the only built-in uniforms exposed by
+        /// the animation-shader contract (see
+        /// `PhosphorAnimationShaders::AnimationShaderContract`). Overlay-only
+        /// uniforms (`iMouse`, `iDate`, `customParams[8]`, `customColors[16]`,
+        /// audio/wallpaper/multipass) are intentionally NOT populated on this
+        /// path — they belong to overlay shaders that include `common.glsl`
+        /// and run through the daemon's RHI / `BaseUniforms` UBO.
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
         /// Per-effect declared parameters resolved to uniform locations once at

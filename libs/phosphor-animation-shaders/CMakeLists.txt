@@ -54,6 +54,7 @@ set(phosphoranimationshaders_SRCS
 
 set(phosphoranimationshaders_public_HDRS
     include/PhosphorAnimationShaders/PhosphorAnimationShaders.h
+    include/PhosphorAnimationShaders/AnimationShaderContract.h
     include/PhosphorAnimationShaders/AnimationShaderEffect.h
     include/PhosphorAnimationShaders/AnimationShaderRegistry.h
     include/PhosphorAnimationShaders/ShaderProfile.h

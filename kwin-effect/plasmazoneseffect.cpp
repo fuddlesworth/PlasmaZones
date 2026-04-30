@@ -12,6 +12,8 @@
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <PhosphorAnimationShaders/AnimationShaderContract.h>
+
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -63,9 +65,6 @@ namespace {
 // Duplicated from daemon's configkeys.h — effect cannot include daemon headers
 constexpr QLatin1String TriggerModifierField("modifier");
 constexpr QLatin1String TriggerMouseButtonField("mouseButton");
-
-constexpr const char kUniformITime[] = "iTime";
-constexpr const char kUniformIResolution[] = "iResolution";
 
 /// Monotonic milliseconds since steady_clock epoch. Used by time-based shader
 /// transitions for elapsed-progress math. We deliberately avoid
@@ -4274,6 +4273,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             const CachedShader* cached = transition.cached;
             KWin::GLShader* shader = cached->shader.get();
 
+            // Animation-shader contract (PhosphorAnimationShaders::
+            // AnimationShaderContract): iTime is 0..1 progress and
+            // iResolution is the viewport size, plus per-effect declared
+            // parameters below. Overlay-only uniforms (iMouse, iDate,
+            // customParams[], customColors[], audio/wallpaper/multipass)
+            // are intentionally NOT populated here — they're an overlay
+            // shader concern, not part of the cross-runtime animation
+            // contract.
             shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
             shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
@@ -4347,8 +4354,13 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
 
         CachedShader cached;
-        cached.iTimeLoc = shader->uniformLocation(kUniformITime);
-        cached.iResolutionLoc = shader->uniformLocation(kUniformIResolution);
+        // Animation-shader contract — names sourced from
+        // `PhosphorAnimationShaders::AnimationShaderContract` so the kwin
+        // path and the daemon's animation-shader path agree on what a
+        // transition shader can rely on.
+        cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
+        cached.iResolutionLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
         // Resolve every declared parameter's uniform location once at compile
         // time so paintWindow only does a vector walk per frame, not a string
         // hash lookup. uniformLocation returns -1 for parameters the shader
