@@ -68,6 +68,19 @@ target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# Mark CurvePresets.qml as a QML singleton BEFORE the qt_add_qml_module
+# call below. `qt_add_qml_module`'s auto-detection of `pragma Singleton`
+# is unreliable on Qt 6.11 with our generator setup: the qmldir entry
+# came out as a plain `CurvePresets 1.0 qml/CurvePresets.qml` — no
+# `singleton` keyword — and consumers ended up accessing the QML *type*
+# instead of the singleton instance ("TypeError: Property 'X' of object
+# CurvePresets is not a function" at first AnimationEventCard /
+# CurveEditorDialog load). Setting QT_QML_SINGLETON_TYPE on the source
+# file forces qt_add_qml_module to write the `singleton` keyword. This
+# MUST come before qt_add_qml_module — the function reads the property
+# at registration time, not at link time.
+set_source_files_properties(qml/CurvePresets.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
     VERSION 1.0

@@ -13,15 +13,26 @@ import org.kde.kirigami as Kirigami
  * sliders, duration, sequence mode, stagger interval, and minimum distance.
  *
  * Required properties:
- *   - appSettings: the settings backend object
  *   - constants: root object providing sliderPreferredWidth, sliderValueLabelWidth
  *   - animationsEnabled: whether animations are currently enabled
  *   - easingPreview: the EasingPreview component (for curveType, curveAmplitude, etc.)
+ *
+ * `appSettings` is resolved internally via `settingsController.settings`
+ * rather than passed as a required property — that pattern was breaking
+ * inside `qmlcachegen`'s AOT-compiled bindings when the parent wrote
+ * `appSettings: appSettings`. The right-hand `appSettings` was
+ * occasionally evaluated before context-property propagation settled,
+ * leaving `easingRoot.appSettings` undefined and every subsequent
+ * `animation*` access throwing "Cannot read property 'X' of undefined".
+ * Going through `settingsController.settings` skirts that timing
+ * window — the controller is also a context property but it's a
+ * stable object reference whose `settings` accessor is non-null by
+ * SettingsController contract.
  */
 ColumnLayout {
     id: easingRoot
 
-    required property var appSettings
+    readonly property var appSettings: settingsController.settings
     required property var constants
     required property bool animationsEnabled
     required property var easingPreview

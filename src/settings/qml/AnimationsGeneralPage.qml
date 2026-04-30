@@ -74,7 +74,10 @@ AnimationSubPage {
             // a per-event-card shape is a future cleanup phase.
             EasingSettings {
                 Layout.fillWidth: true
-                appSettings: appSettings
+                // `appSettings` is resolved internally via
+                // settingsController.settings — see EasingSettings.qml's
+                // header comment for the qmlcachegen timing-window
+                // explanation.
                 constants: page
                 animationsEnabled: animationsCard.toggleChecked
                 easingPreview: easingPreview

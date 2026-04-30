@@ -26,6 +26,14 @@ import org.kde.kirigami as Kirigami
  */
 ColumnLayout {
     // ── Per-type row components ──────────────────────────────────────
+    // SettingsRow's `default property alias content: controlContainer.data`
+    // re-parents children into an inner Row, so `parent` inside the
+    // control resolves to that inner Row (which has no `value` /
+    // `paramInfo` properties) — not to the SettingsRow declaring them.
+    // Every delegate below references `row` / `row.value` / `row.paramInfo`
+    // by id instead, which sidesteps the silent re-parent and stops the
+    // 15× "Unable to assign [undefined] to double" warnings the
+    // `parent.value` form was producing on every shader-effect load.
 
     id: root
 
@@ -40,6 +48,33 @@ ColumnLayout {
             return currentParams[paramId];
 
         return fallback;
+    }
+
+    /// Type-safe default for a parameter row. Animation packs frequently
+    /// declare parameters without an explicit `default` value in
+    /// metadata.json, which left `paramValue` returning undefined and
+    /// the row's typed `value` Q_PROPERTY tripping
+    /// "Unable to assign [undefined] to double" on every Loader load
+    /// (40+ warnings per shader assignment in journalctl). Falling back
+    /// to a type-appropriate zero/false/transparent here keeps the
+    /// editor showing predictable initial state regardless of how
+    /// thorough the pack author was — and matches the on-the-wire
+    /// shape the animation runtime would synthesize anyway.
+    function paramInitialValue(modelData) {
+        var v = paramValue(modelData.id, modelData.defaultValue);
+        if (v !== undefined)
+            return v;
+
+        switch (modelData.type) {
+        case "bool":
+            return false;
+        case "color":
+            return "#ffffffff";
+        case "int":
+        case "float":
+        default:
+            return 0;
+        }
     }
 
     function commit(paramId, value) {
@@ -86,7 +121,7 @@ ColumnLayout {
             onLoaded: {
                 if (item) {
                     item.paramInfo = modelData;
-                    item.value = root.paramValue(modelData.id, modelData.defaultValue);
+                    item.value = root.paramInitialValue(modelData);
                 }
             }
         }
@@ -107,6 +142,8 @@ ColumnLayout {
         id: floatRow
 
         SettingsRow {
+            id: row
+
             property var paramInfo: ({
             })
             property real value: 0
@@ -114,16 +151,16 @@ ColumnLayout {
             title: paramInfo.name || ""
 
             SettingsSlider {
-                Accessible.name: paramInfo.name || ""
-                from: paramInfo.minValue !== undefined ? paramInfo.minValue : 0
-                to: paramInfo.maxValue !== undefined ? paramInfo.maxValue : 1
+                Accessible.name: row.paramInfo.name || ""
+                from: row.paramInfo.minValue !== undefined ? row.paramInfo.minValue : 0
+                to: row.paramInfo.maxValue !== undefined ? row.paramInfo.maxValue : 1
                 stepSize: 0.01
-                value: parent.value
+                value: row.value
                 formatValue: function(v) {
                     return v.toFixed(2);
                 }
                 onMoved: function(v) {
-                    root.commit(parent.paramInfo.id, v);
+                    root.commit(row.paramInfo.id, v);
                 }
             }
 
@@ -135,6 +172,8 @@ ColumnLayout {
         id: intRow
 
         SettingsRow {
+            id: row
+
             property var paramInfo: ({
             })
             property int value: 0
@@ -142,13 +181,13 @@ ColumnLayout {
             title: paramInfo.name || ""
 
             SettingsSlider {
-                Accessible.name: paramInfo.name || ""
-                from: paramInfo.minValue !== undefined ? paramInfo.minValue : 0
-                to: paramInfo.maxValue !== undefined ? paramInfo.maxValue : 100
+                Accessible.name: row.paramInfo.name || ""
+                from: row.paramInfo.minValue !== undefined ? row.paramInfo.minValue : 0
+                to: row.paramInfo.maxValue !== undefined ? row.paramInfo.maxValue : 100
                 stepSize: 1
-                value: parent.value
+                value: row.value
                 onMoved: function(v) {
-                    root.commit(parent.paramInfo.id, Math.round(v));
+                    root.commit(row.paramInfo.id, Math.round(v));
                 }
             }
 
@@ -160,6 +199,8 @@ ColumnLayout {
         id: boolRow
 
         SettingsRow {
+            id: row
+
             property var paramInfo: ({
             })
             property bool value: false
@@ -167,10 +208,10 @@ ColumnLayout {
             title: paramInfo.name || ""
 
             SettingsSwitch {
-                checked: parent.value
-                accessibleName: paramInfo.name || ""
+                checked: row.value
+                accessibleName: row.paramInfo.name || ""
                 onToggled: function(v) {
-                    root.commit(parent.paramInfo.id, v);
+                    root.commit(row.paramInfo.id, v);
                 }
             }
 

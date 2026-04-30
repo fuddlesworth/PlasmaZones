@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+// `pragma Singleton` MUST appear before any `import` — Qt silently ignores
+// it when placed below the imports, which leaves the qmldir entry as a
+// plain `CurvePresets 1.0 …` line instead of `singleton CurvePresets 1.0
+// …`. Consumers then access the QML *type* rather than its singleton
+// instance, so `CurvePresets.curveDisplayName(...)` resolves to undefined
+// and every page that touches presets crashes at startup with
+// "TypeError: Property 'X' of object CurvePresets is not a function".
 pragma Singleton
 
 /**

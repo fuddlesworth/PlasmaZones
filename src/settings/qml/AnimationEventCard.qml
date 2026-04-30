@@ -372,9 +372,36 @@ Item {
                 description: i18n("Apply a shader transition to this event")
 
                 WideComboBox {
+                    // `availableShaderEffects()` is a Q_INVOKABLE — QML's
+                    // binding engine can't observe internal state of an
+                    // opaque function call, so a plain
+                    // `readonly property var _effects: …availableShaderEffects()`
+                    // evaluates exactly once and never refreshes. That broke
+                    // the saved-shader display at startup: when the registry
+                    // is still warming up (XDG scan completes asynchronously
+                    // on some setups) the first read returns an empty list,
+                    // `_indexOf("glitch")` falls through to 0, and the combo
+                    // sticks on "None" forever even after the registry
+                    // populates and emits `shaderEffectsChanged`.
+                    // Standard binding pattern (mirrors stickyHandlingCombo
+                    // in SnappingBehaviorPage): bind currentIndex to the
+                    // source-of-truth, write back through the controller in
+                    // onActivated. The controller routes through Settings::
+                    // setShaderProfileTree → shaderProfileTreeJson Q_PROPERTY
+                    // NOTIFY → SettingsController meta-object loop catches
+                    // it for dirty tracking.
+
                     id: shaderCombo
 
-                    readonly property var _effects: settingsController.animationsPage.availableShaderEffects()
+                    // Tying the binding to a counter that ticks on the
+                    // controller's `shaderEffectsChanged` signal turns the
+                    // function call into a reactive binding without needing
+                    // a Q_PROPERTY surface for the effects list.
+                    property int _effectsRev: 0
+                    readonly property var _effects: {
+                        _effectsRev; // re-evaluate when the registry signals
+                        return settingsController.animationsPage.availableShaderEffects();
+                    }
                     readonly property var _modelLabels: {
                         var labels = [i18n("None")];
                         for (var i = 0; i < _effects.length; i++) labels.push(_effects[i].name || _effects[i].id)
@@ -395,14 +422,28 @@ Item {
 
                     Accessible.name: i18n("Shader effect")
                     model: _modelLabels
-                    // Standard binding pattern (mirrors stickyHandlingCombo
-                    // in SnappingBehaviorPage): bind currentIndex to the
-                    // source-of-truth, write back through the controller in
-                    // onActivated. The controller routes through Settings::
-                    // setShaderProfileTree → shaderProfileTreeJson Q_PROPERTY
-                    // NOTIFY → SettingsController meta-object loop catches
-                    // it for dirty tracking.
-                    currentIndex: _indexOf(root.currentShaderEffectId)
+                    // Binding intentionally inlines the lookup rather than
+                    // delegating to `_indexOf`: QML's reactive engine can
+                    // only re-evaluate when the bindings's expression reads
+                    // a tracked property, and a function-call boundary
+                    // breaks that tracking on some Qt versions. Inlining
+                    // makes both `_effects` (so newly-loaded effects
+                    // re-resolve the saved id to its real index) and
+                    // `root.currentShaderEffectId` (so refreshShaderFromTree
+                    // mutations refresh the combo) load-bearing
+                    // dependencies of the binding.
+                    currentIndex: {
+                        var id = root.currentShaderEffectId;
+                        if (!id || id.length === 0)
+                            return 0;
+
+                        for (var i = 0; i < _effects.length; i++) {
+                            if (_effects[i].id === id)
+                                return i + 1;
+
+                        }
+                        return 0;
+                    }
                     onActivated: function(index) {
                         if (index === 0) {
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
@@ -412,6 +453,15 @@ Item {
                             }));
                         }
                     }
+
+                    Connections {
+                        function onShaderEffectsChanged() {
+                            ++shaderCombo._effectsRev;
+                        }
+
+                        target: settingsController.animationsPage
+                    }
+
                 }
 
             }
