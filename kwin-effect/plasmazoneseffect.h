@@ -531,6 +531,27 @@ private:
         /// declared default when this map doesn't carry a value for the key.
         QVariantMap parameters;
     };
+    /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
+    /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
+    /// @ref endShaderTransition before installing the new entry. So if two
+    /// distinct events fire shaders on the same window in quick succession
+    /// (e.g. window.move while zone.snapIn is mid-flight), the second
+    /// transition replaces the first. The shader timeline is also stolen from
+    /// @c m_windowAnimator's single per-window animation slot — there is no
+    /// independent shader-only timeline, no stacked composition.
+    ///
+    /// In practice events that target the same window are short (≤300 ms) and
+    /// rarely overlap: zone.snapIn runs to completion before window.focus
+    /// fires, drag-related events are mutually exclusive by phase, etc. The
+    /// visible effect of overlap is "the second event's shader wins for the
+    /// remaining duration," which is closer to user intent than "shaders
+    /// composite multiplicatively" in most cases.
+    ///
+    /// If testing surfaces visible regressions from overlap, the upgrade path
+    /// is option B in docs/animation-shader-wireup-plan.md Phase 0d:
+    /// @c std::unordered_map&lt;EffectWindow*, std::vector&lt;ShaderTransition&gt;&gt; with
+    /// each transition holding its own AnimatedValue&lt;qreal&gt;, plus a
+    /// composition rule per shader. Significantly more complex; not done here.
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
@@ -539,6 +560,24 @@ private:
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
+
+    /// Resolve @p profilePath against the shader profile tree and, if a non-empty
+    /// effect id resolves, kick off a @ref beginShaderTransition on @p window
+    /// with a timer-driven @ref endShaderTransition after @p durationMs.
+    ///
+    /// Used for window-lifecycle events (open, close, focus, minimize, maximize,
+    /// move, resize) where there is no @c m_windowAnimator animation to end the
+    /// transition for us — those animations are owned by KWin's own effects or
+    /// happen instantaneously, so we drive the shader leg on its own timer.
+    /// Events that already drive an animator-tracked geometry change (zone.*)
+    /// go through @ref applySnapGeometry's chokepoint instead and let the
+    /// animator's completion callback tear down the shader.
+    ///
+    /// No-op when the profile resolves to empty effectId (user hasn't assigned
+    /// a shader to this path), the registry doesn't have the effect yet, or
+    /// the window pointer is null. Same null-tolerance contract as
+    /// @ref beginShaderTransition.
+    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;

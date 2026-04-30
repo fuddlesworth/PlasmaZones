@@ -234,6 +234,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
 
+                // cursor.drag shader transition: fires once at drag start.
+                // Conceptually a *cursor* event but applied per-window since
+                // OffscreenEffect operates per-window. The shader rides the
+                // drag duration via animationDurationMs * 4 (typical drags
+                // last several hundred ms; teardown happens automatically on
+                // dragStopped via the windowDeleted/effectsChanged cleanup
+                // chain or the timer below, whichever fires first).
+                tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::CursorDrag, animationDurationMs());
+
                 // Fire beginDrag async to get a daemon-authoritative policy.
                 // While the reply is pending, we
                 // default m_currentDragPolicy to a conservative snap-path so
@@ -692,6 +701,13 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // window.open shader transition: fires once for every newly-mapped
+    // window we handle. KWin's stock fade-in handles the *motion* (alpha
+    // fade-in over a few frames), so the shader leg layers a transition
+    // effect on top. tryBeginShaderForEvent silently no-ops when the user
+    // hasn't assigned a shader to window.open in their tree.
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs());
+
     // Populate the daemon's WindowRegistry with this window's initial metadata.
     // Runs before any other daemon notification so consumers querying the
     // registry from their windowOpened handlers see a record (sessions 2+).
@@ -795,7 +811,12 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // The daemon clears its side in windowClosed().
     m_navigationHandler->setWindowFloating(getWindowId(w), false);
 
+    // Tear down any in-flight zone.* shader transition first — this window
+    // is going away and we don't want a half-faded zone shader fighting the
+    // fresh window.close shader. Then layer the close shader on top of
+    // whatever fade-out KWin applies as part of the close animation.
     endShaderTransition(w);
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs());
     m_windowAnimator->removeAnimation(w);
 
     const QString closedWindowId = getWindowId(w);
@@ -1020,6 +1041,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
+        // window.move / window.resize shader transitions: KWin's interactive
+        // move/resize is its own animation system (Window::moveResize via
+        // pointer drag), but we layer an effect-side shader for visual
+        // feedback. windowStartUserMovedResized doesn't disambiguate the
+        // two; w->isUserResize() does — interactive resize sets it, plain
+        // move leaves it false. Each direction can take its own shader
+        // assignment. tryBeginShaderForEvent silently no-ops if the user
+        // didn't assign a shader to the path.
+        if (window) {
+            tryBeginShaderForEvent(window,
+                                   window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
+                                                          : PhosphorAnimation::ProfilePaths::WindowMove,
+                                   animationDurationMs());
+        }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowFinishMoveResize(window);
@@ -1028,6 +1063,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Track when user manually unmaximizes a monocle-maximized window
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMaximizedStateChanged);
+
+    // window.maximize / window.unmaximize shader transition. Sibling lambda
+    // to the AutotileHandler hookup above (autotile drives the snap-back
+    // logic; we drive the shader leg). Maximize state isn't a clean
+    // ternary — KWin can flag horizontal-only or vertical-only — but for
+    // shader purposes we just care "fully maximized vs anything else."
+    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
+            [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
+                if (!window) {
+                    return;
+                }
+                const bool fullyMaximized = horizontal && vertical;
+                tryBeginShaderForEvent(window,
+                                       fullyMaximized ? PhosphorAnimation::ProfilePaths::WindowMaximize
+                                                      : PhosphorAnimation::ProfilePaths::WindowUnmaximize,
+                                       animationDurationMs());
+            });
 
     // Track when a monocle-maximized window goes fullscreen
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_autotileHandler.get(),
@@ -2975,6 +3027,15 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 
     const bool minimized = w->isMinimized();
 
+    // window.minimize / window.unminimize shader transition. KWin handles the
+    // motion (the minimize-to-taskbar zoom is a separate stock effect chain),
+    // we layer the shader effect on top via redirect. Gated on the live
+    // minimized state so each direction can have its own profile.
+    tryBeginShaderForEvent(w,
+                           minimized ? PhosphorAnimation::ProfilePaths::WindowMinimize
+                                     : PhosphorAnimation::ProfilePaths::WindowUnminimize,
+                           animationDurationMs());
+
     if (minimized) {
         if (isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
@@ -3729,6 +3790,12 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
         return;
     }
 
+    // window.focus shader transition. Fires after the rejection-filter cascade
+    // so we don't shader plasmashell surfaces, dialogs, etc. — only "real"
+    // app windows the user expects to see focus feedback on. Independent of
+    // daemon-readiness gating below; the shader runs locally.
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
+
     if (!isDaemonReady("notify windowActivated")) {
         return;
     }
@@ -4236,6 +4303,30 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         unredirect(window);
         m_shaderTransitions.erase(it);
     }
+}
+
+void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs)
+{
+    if (!window) {
+        return;
+    }
+    const auto profile = m_shaderProfileTree.resolve(profilePath);
+    if (profile.effectiveEffectId().isEmpty()) {
+        return; // user hasn't assigned a shader to this path
+    }
+    beginShaderTransition(window, profile);
+    // Window-lifecycle events (open, close, focus, min/max, move/resize) don't
+    // ride a m_windowAnimator-tracked geometry animation, so the transition
+    // has nothing to fall off and would stay redirected forever. Drive a
+    // timer at the resolved profile's duration to tear down. windowDeleted
+    // and effectsChanged also clean up via direct endShaderTransition; the
+    // timer is the steady-state path.
+    QPointer<KWin::EffectWindow> safeWindow(window);
+    QTimer::singleShot(durationMs, this, [this, safeWindow]() {
+        if (safeWindow) {
+            endShaderTransition(safeWindow);
+        }
+    });
 }
 
 void PlasmaZonesEffect::loadShaderProfileFromDbus()
