@@ -245,6 +245,35 @@ void ShaderEffect::setShaderSource(const QUrl& source)
     update();
 }
 
+void ShaderEffect::setSourceItem(QQuickItem* item)
+{
+    if (m_sourceItem.data() == item) {
+        return;
+    }
+    m_sourceItem = item;
+    if (item) {
+        // Force `layer.enabled = true` so the QQuickItem becomes a
+        // texture provider. Without this, `item->textureProvider()`
+        // returns nullptr for ordinary items and the per-frame texture
+        // pickup in updatePaintNode would silently no-op. Already-true
+        // is harmless — Qt's layer property is idempotent. We don't
+        // restore the previous value on unset because we can't know
+        // whether the consumer wanted layer for other reasons; callers
+        // that need symmetric teardown should track and reset
+        // `layer.enabled` themselves.
+        if (!item->isTextureProvider()) {
+            item->setProperty("layer.enabled", true);
+        }
+    }
+    // Mark the SRB dirty so prepare() rebuilds with the new texture
+    // binding on the next render cycle. Without this, a sourceItem
+    // change after the SRB is already created leaves the old (or
+    // null) source bound until something else dirties the pipeline.
+    m_shaderDirty = true;
+    Q_EMIT sourceItemChanged();
+    update();
+}
+
 void ShaderEffect::setShaderParams(const QVariantMap& params)
 {
     if (m_shaderParams == params) {
@@ -785,6 +814,17 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     for (int i = 0; i < kMaxUserTextures; ++i) {
         node->setUserTexture(i, m_userTextureImages[i]);
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
+    }
+
+    // ── Sync source texture provider (slot 0 / binding 7 override) ───
+    // Pushed every paint pass so a setSourceItem(...) call after the
+    // node already exists picks up immediately, and so a torn-down
+    // source (QPointer auto-nulls) clears the binding instead of
+    // leaving a dangling provider in the node.
+    if (m_sourceItem && m_sourceItem->isTextureProvider()) {
+        node->setSourceTextureProvider(m_sourceItem->textureProvider());
+    } else {
+        node->setSourceTextureProvider(nullptr);
     }
 
     // Uniform extension is synced inside syncBasePropertiesToNode() above.

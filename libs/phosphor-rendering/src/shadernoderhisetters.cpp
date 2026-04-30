@@ -232,6 +232,20 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     resetAllBindingsAndPipelines();
 }
 
+void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
+{
+    if (m_sourceTextureProvider.data() == provider) {
+        return;
+    }
+    m_sourceTextureProvider = provider;
+    // Clear the cached binding-7 texture pointer so the SRB build sees
+    // a "different texture" on the next prepare() and rebuilds bindings.
+    // Without this, swapping providers (or going from provider-set to
+    // null) would silently keep the old binding live.
+    m_lastSourceRhiTexture = nullptr;
+    resetAllBindingsAndPipelines();
+}
+
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
 {
     if (m_wallpaperImage.cacheKey() == image.cacheKey()) {

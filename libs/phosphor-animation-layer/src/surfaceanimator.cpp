@@ -17,12 +17,10 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 
 #include <QHash>
-#include <QImage>
 #include <QLoggingCategory>
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
-#include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QUrl>
@@ -425,111 +423,112 @@ public:
                 // `hasShaderLeg = resolvedShaderEff.isValid()` upstream
                 // — no second registry lookup needed here.
                 //
-                // Resolve the shader anchor: by default the animator
-                // target (window->contentItem() for window-rooted
-                // surfaces, the explicit rootItem otherwise). Window-
-                // rooted popups (LayoutPicker / ZoneSelector / SnapAssist
-                // / OSD-style overlays) place their visible card as a
-                // smaller centered child of a fullscreen backdrop — the
-                // contentItem is the entire wayland surface but the
-                // pixels the user reads as "the popup" cover only that
-                // child. Without an opt-out, a fragment shader sized to
-                // the contentItem renders pixelate / glitch / dissolve
-                // across the whole screen rather than on the popup card.
-                //
-                // Surfaces opt in by tagging their visible-content item
-                // with `objectName: "shaderAnchor"` in QML. We look up
-                // that name within the target's child tree; when found
-                // the shader is parented to and sized after the anchor,
-                // so the visual is constrained to the popup. Surfaces
-                // that already use a tightly-scoped rootItem (no
-                // fullscreen backdrop) need no annotation — the default
-                // target already covers exactly the right area.
+                // ── Anchor resolution ────────────────────────────────
+                // The "shader anchor" is the QQuickItem we want the
+                // transition shader to operate on visually. By default
+                // it's the animator target (window->contentItem() for
+                // window-rooted surfaces, the explicit rootItem
+                // otherwise). Window-rooted popups (LayoutPicker /
+                // ZoneSelector / SnapAssist / OSD-style overlays) place
+                // their visible card as a smaller centered child of a
+                // fullscreen backdrop — the contentItem is the entire
+                // wayland surface but the pixels the user reads as
+                // "the popup" cover only that child. Surfaces opt
+                // their visible card in via `objectName: "shaderAnchor"`
+                // in QML; we look that up here.
                 QQuickItem* shaderAnchor = target;
                 if (auto* anchored =
                         target->findChild<QQuickItem*>(QStringLiteral("shaderAnchor"), Qt::FindChildrenRecursively)) {
                     shaderAnchor = anchored;
                 }
-                auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderAnchor);
+
+                // ── Live-texture wiring ──────────────────────────────
+                // Force `layer.enabled = true` on the anchor so Qt
+                // renders it to an FBO and exposes the result via
+                // `QQuickItem::textureProvider()`. The shader effect
+                // (created below as a SIBLING of the anchor — not a
+                // child — to keep its own output out of the layer
+                // and avoid feedback) binds that provider as iChannel0
+                // and samples it every frame. This replaces the
+                // previous async `grabToImage` snapshot path: the
+                // texture is live, so it picks up the QML's actual
+                // pixels for both show legs (where the QML hasn't
+                // rendered yet at runLeg entry — the layer renders it
+                // before the shader's first sample) and hide legs.
+                //
+                // We deliberately DO NOT clear layer.enabled when the
+                // leg ends: re-enabling it for every transition would
+                // pay a per-toggle FBO allocation cost, and keeping
+                // the layer alive between transitions has no
+                // user-visible cost (the layer simply blits its texture
+                // each frame, which the GPU handles trivially). If
+                // memory pressure ever becomes an issue, this is the
+                // place to add a paired disable in legCompleted.
+                shaderAnchor->setProperty("layer.enabled", true);
+
+                // The shader effect must NOT live inside the layer's
+                // capture region — if it did, every frame's shader
+                // output would land in the next frame's layer texture
+                // and feedback-loop into pixelate-on-pixelate.
+                // Park it as a sibling under the anchor's parentItem.
+                // For surfaces where the anchor IS the target (no
+                // dedicated `shaderAnchor` child), parentItem is
+                // typically the window's contentItem; the shader still
+                // ends up outside the anchor's tree by virtue of the
+                // sibling relationship.
+                QQuickItem* shaderParent = shaderAnchor->parentItem();
+                if (!shaderParent) {
+                    // Fallback: if the anchor has no parent (rare —
+                    // typically only when target IS contentItem and
+                    // there's no shaderAnchor child), keep the legacy
+                    // child-of-anchor parenting. Sampling will still
+                    // work because the layer texture is double-buffered
+                    // by Qt's scene graph; one frame of feedback is
+                    // visually negligible for a 200ms transition.
+                    shaderParent = shaderAnchor;
+                }
+                auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderParent);
                 shaderItem->setShaderSource(QUrl::fromLocalFile(resolvedShaderEff.fragmentShaderPath));
+                shaderItem->setX(shaderParent == shaderAnchor ? 0.0 : shaderAnchor->x());
+                shaderItem->setY(shaderParent == shaderAnchor ? 0.0 : shaderAnchor->y());
                 shaderItem->setWidth(shaderAnchor->width());
                 shaderItem->setHeight(shaderAnchor->height());
                 shaderItem->setITime(0.0);
                 shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
+                // Bind the anchor's layer texture as iChannel0 (slot 0,
+                // SRB binding 7). Every paint pass on the shader
+                // effect re-fetches the provider's current QRhiTexture
+                // and rebuilds the SRB on identity change (FBO
+                // re-allocation on resize / device-loss).
+                shaderItem->setSourceItem(shaderAnchor);
+
                 // Translate friendly parameter ids (e.g. {"direction": 1,
                 // "parallax": 0.2}) to the canonical
                 // `customParams<N>_<x|y|z|w>` slot keys both runtimes
-                // consume. The translation honours the metadata
-                // declaration order — see
-                // `AnimationShaderRegistry::translateAnimationParams` for
-                // the exact slot allocation. Always called (even with
-                // empty `shaderParameters`) so declared defaults still
-                // populate the slots — without it, the customParams
-                // region holds the (-1, -1, -1, -1) sentinel ShaderEffect
-                // ships with and the shader sees garbage for parameters
-                // it expected to read.
+                // consume. Always called (even with empty
+                // shaderParameters) so declared defaults populate the
+                // slots — without it the customParams region holds the
+                // (-1, -1, -1, -1) sentinel and the shader sees garbage
+                // for parameters it expected to read.
                 const QVariantMap translated =
                     PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(resolvedShaderEff,
                                                                                                 shaderParameters);
                 if (!translated.isEmpty()) {
                     shaderItem->setShaderParams(translated);
                 }
-                // Z-order cap for the shader overlay child. Picks a value
-                // higher than any conventional QML z stacking inside daemon
-                // overlay surfaces (typical content sits at z ≤ 100, dropdowns
-                // / tooltips at z ≤ 500). If a future overlay needs to
-                // render *above* the shader transition leg, raise this
-                // constant in lockstep with the offending child's z — there
-                // is no automatic "always-on-top" guarantee, just an
-                // empirically-large value chosen to dominate today's
-                // overlay tree.
+                // Z-order cap for the shader effect. Picks a value
+                // higher than any conventional QML z stacking so the
+                // shader's output covers the layer's blit of the
+                // anchor sitting underneath. Without this the user
+                // would see the anchor's un-pixelated rendering and
+                // the shader's pixelated rendering simultaneously
+                // (since both are drawn — layer.enabled doesn't
+                // suppress the anchor's blit).
                 static constexpr qreal kShaderOverlayZ = 1000;
                 shaderItem->setZ(kShaderOverlayZ);
                 it->second.shaderItem = shaderItem;
                 it->second.shaderAnchor = shaderAnchor;
                 it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
-
-                // Capture the rendered surface and bind it as the shader's
-                // iChannel0 (user-texture binding 7) so the shader can
-                // operate ON the visible pixels rather than emitting its
-                // own placeholder visual on top. `grabToImage` is async
-                // (the result lands one render-thread cycle later); the
-                // shader's first frame samples the all-transparent
-                // fallback texture PhosphorRendering::ShaderEffect ships
-                // with — visually a no-op until the grab arrives, which
-                // is the desired behaviour: the shader fades in from
-                // "nothing" rather than from a stale frame.
-                //
-                // Sized to a max edge of 2048px so a 4K-anchor surface
-                // still grabs in a single frame; the per-cell pixelation
-                // / dissolve / glitch effects don't need pixel-perfect
-                // resolution and the smaller texture cuts upload time.
-                //
-                // For HIDE legs the anchor is at full opacity at runLeg
-                // entry — the grab captures the visible state, the
-                // animation runs, the shader pixelates the captured
-                // texture as `qt_Opacity` falls 1→0. For SHOW legs the
-                // anchor is at fromOpacity=0 when this code runs (the
-                // setOpacity above is synchronous), so the grab returns
-                // a transparent texture; the shader is consequently
-                // invisible until the anchor's underlying QML renders
-                // for real, which is acceptable for first show. Future
-                // work: render-to-texture on a hidden FBO so show legs
-                // can sample the final QML before it ever paints.
-                if (QQuickItem* anchorForGrab = it->second.shaderAnchor.data()) {
-                    QSharedPointer<QQuickItemGrabResult> grab = anchorForGrab->grabToImage();
-                    if (grab) {
-                        QPointer<PhosphorRendering::ShaderEffect> weakShader = shaderItem;
-                        QObject::connect(grab.data(), &QQuickItemGrabResult::ready, shaderItem, [weakShader, grab]() {
-                            if (PhosphorRendering::ShaderEffect* live = weakShader.data()) {
-                                // setUserTexture takes a QImage; the grab result
-                                // is alive for the lifetime of the captured
-                                // QSharedPointer in this lambda's capture list.
-                                live->setUserTexture(0, grab->image());
-                            }
-                        });
-                    }
-                }
             }
         }
 
@@ -629,6 +628,20 @@ public:
                         sit->second.shaderItem->setWidth(anchor->width());
                         sit->second.shaderItem->setHeight(anchor->height());
                         sit->second.shaderItem->setIResolution(QSizeF(anchor->width(), anchor->height()));
+                        // Track anchor position in the parent's
+                        // coordinate space — the shader effect is now
+                        // a sibling (not a child) of the anchor, so
+                        // anchor moves caused by Layouts / Anchors /
+                        // explicit x,y changes need to be mirrored or
+                        // the shader output drifts off the visible
+                        // card. We only update if the shader's parent
+                        // matches the anchor's parent (the sibling
+                        // case); the fallback "parented to anchor"
+                        // path leaves x/y at 0.
+                        if (sit->second.shaderItem->parentItem() == anchor->parentItem()) {
+                            sit->second.shaderItem->setX(anchor->x());
+                            sit->second.shaderItem->setY(anchor->y());
+                        }
                     },
                     /*onComplete=*/
                     [this, surface]() {

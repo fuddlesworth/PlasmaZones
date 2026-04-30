@@ -328,6 +328,35 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
+    // Source-texture-provider plumbing for slot 0 / binding 7. When a
+    // provider is set we own a dedicated sampler (separate from the
+    // user-texture-0 sampler so callers that mix the two paths don't
+    // step on each other) and detect QRhiTexture identity changes —
+    // the underlying FBO can be re-allocated on resize / device-loss
+    // and the SRB must be rebuilt against the fresh pointer or
+    // sampling crashes inside the RHI.
+    if (m_sourceTextureProvider) {
+        if (!m_sourceSampler) {
+            m_sourceSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            if (!m_sourceSampler->create()) {
+                m_sourceSampler.reset();
+            } else {
+                resetAllBindingsAndPipelines();
+            }
+        }
+        if (QSGTexture* sgTex = m_sourceTextureProvider->texture()) {
+            QRhiTexture* rhiTex = sgTex->rhiTexture();
+            if (rhiTex != m_lastSourceRhiTexture) {
+                m_lastSourceRhiTexture = rhiTex;
+                resetAllBindingsAndPipelines();
+            }
+        } else if (m_lastSourceRhiTexture) {
+            m_lastSourceRhiTexture = nullptr;
+            resetAllBindingsAndPipelines();
+        }
+    }
+
     // Desktop wallpaper texture upload (binding 11)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
         m_wallpaperDirty = false;
@@ -396,6 +425,14 @@ void ShaderNodeRhi::releaseRhiResources()
         m_userTextureSamplers[i].reset();
         m_userTextureDirty[i] = true;
     }
+    // Source-texture sampler is RHI-owned and must be reset on
+    // device-loss. The QPointer<QSGTextureProvider> survives — its
+    // QRhiTexture pointer will simply differ on the next prepare()
+    // (because Qt's layer system rebuilt the FBO too) and the SRB
+    // rebuild detection in uploadDirtyTextures will pick it up.
+    m_sourceSampler.reset();
+    m_lastSourceRhiTexture = nullptr;
+
     m_wallpaperTexture.reset();
     m_wallpaperSampler.reset();
     m_wallpaperDirty = true;

@@ -12,8 +12,10 @@
 #include <QImage>
 #include <QMatrix4x4>
 #include <QPointF>
+#include <QPointer>
 #include <QQuickItem>
 #include <QSGRenderNode>
+#include <QSGTextureProvider>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -176,6 +178,26 @@ public:
     void setWallpaperTexture(const QImage& image);
     void setUseWallpaper(bool use);
     void setUseDepthBuffer(bool use);
+
+    /// @brief Live texture-provider override for user-texture slot 0
+    ///        (SRB binding 7 / `iChannel0`).
+    ///
+    /// When set, every SRB rebuild reads
+    /// `provider->texture()->rhiTexture()` and binds that — superseding
+    /// whatever QImage was uploaded via setUserTexture(0, ...). The
+    /// provider must outlive the node OR be cleared with `nullptr`
+    /// before destruction; we hold a QPointer so a torn-down provider
+    /// nulls out cleanly. Designed for QQuickItem::textureProvider()
+    /// returns from layer-enabled items, where the underlying
+    /// QSGTexture identity changes when the FBO is recreated (resize,
+    /// device-loss); the SRB-rebuild detection in `prepare()` notices
+    /// that change and refreshes the binding without the consumer
+    /// having to re-call this setter every frame.
+    void setSourceTextureProvider(QSGTextureProvider* provider);
+    QSGTextureProvider* sourceTextureProvider() const
+    {
+        return m_sourceTextureProvider.data();
+    }
 
     // ── Multi-pass Buffers ─────────────────────────────────────────────
     void setBufferShaderPath(const QString& path);
@@ -396,6 +418,21 @@ private:
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
     std::array<QString, kMaxUserTextures> m_userTextureWraps;
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
+
+    // ── Source texture override (slot 0 / binding 7) ───────────────────
+    // Texture-provider source — typically a `QQuickItem::textureProvider()`
+    // for a layer-enabled item. When non-null this supersedes
+    // m_userTextures[0] in the SRB build, so the shader's iChannel0
+    // samples a live QML render instead of a static QImage upload.
+    // m_sourceSampler is owned here (not a user-texture sampler) so we
+    // can keep slot 0's user-texture sampler available for callers that
+    // mix the two paths. m_lastSourceRhiTexture caches the QRhiTexture*
+    // we last bound; when the provider's underlying texture changes
+    // (FBO recreation on resize / device-loss) we drop the SRB so the
+    // next rebuild picks up the new pointer.
+    QPointer<QSGTextureProvider> m_sourceTextureProvider;
+    std::unique_ptr<QRhiSampler> m_sourceSampler;
+    QRhiTexture* m_lastSourceRhiTexture = nullptr;
 
     // ── Depth buffer (binding 12) ──────────────────────────────────────
     bool m_useDepthBuffer = false;

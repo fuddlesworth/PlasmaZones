@@ -514,7 +514,31 @@ bool ShaderNodeRhi::ensurePipeline()
 
 void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
 {
+    // Slot 0 (binding 7) override: a `setSourceTextureProvider`-supplied
+    // live texture takes precedence over any QImage-uploaded user
+    // texture at the same slot. The provider's QRhiTexture is fetched
+    // here (not cached as a member because we want every SRB rebuild
+    // to see the freshest pointer — the cache lives in m_lastSourceRhiTexture
+    // for change-detection only). m_sourceSampler is created lazily in
+    // uploadDirtyTextures; if it hasn't materialised yet (first frame
+    // before prepare() ran the upload pass) we fall through to the
+    // QImage user-texture path so the binding still resolves to
+    // *something* and the SRB build doesn't omit binding 7 entirely.
+    bool sourceBound = false;
+    if (m_sourceTextureProvider && m_sourceSampler) {
+        if (QSGTexture* sgTex = m_sourceTextureProvider->texture()) {
+            if (QRhiTexture* rhiTex = sgTex->rhiTexture()) {
+                bindings.append(QRhiShaderResourceBinding::sampledTexture(7, QRhiShaderResourceBinding::FragmentStage,
+                                                                          rhiTex, m_sourceSampler.get()));
+                sourceBound = true;
+            }
+        }
+    }
+
     for (int t = 0; t < kMaxUserTextures; ++t) {
+        if (sourceBound && t == 0) {
+            continue; // skip the QImage path for slot 0; already overridden
+        }
         if (m_userTextures[t] && m_userTextureSamplers[t]) {
             bindings.append(QRhiShaderResourceBinding::sampledTexture(7 + t, QRhiShaderResourceBinding::FragmentStage,
                                                                       m_userTextures[t].get(),
