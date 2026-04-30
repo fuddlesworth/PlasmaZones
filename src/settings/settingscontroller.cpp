@@ -330,6 +330,14 @@ SettingsController::SettingsController(QObject* parent)
     // by the daemon's existing `PhosphorAnimation::ProfileLoader` watch;
     // shader assignments persist via Settings::shaderProfileTree.
     m_animationsPage = new AnimationsPageController(m_animationShaderRegistry, &m_settings, this);
+    // Mark dirty whenever the user has unsaved animation changes the
+    // Discard button could revert. We don't auto-clear when pending
+    // becomes false (commit/revert do that explicitly) — that would
+    // race with `setNeedsSave(false)` in load()/save().
+    connect(m_animationsPage, &AnimationsPageController::pendingChangesChanged, this, [this]() {
+        if (!m_loading && !m_saving && m_animationsPage->hasPendingChanges())
+            setNeedsSave(true);
+    });
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -604,6 +612,14 @@ void SettingsController::setActivePage(const QString& page)
 void SettingsController::load()
 {
     m_loading = true;
+    // Animation pages persist edits to disk immediately for live
+    // preview (per-event JSON files + ShaderProfileTree blob), so
+    // m_settings.load() alone wouldn't undo them. The page controller
+    // keeps its own pre-edit snapshot from this session — replay it
+    // first so the daemon's FS watcher and our QML pages see the
+    // revert before any other refresh.
+    if (m_animationsPage)
+        m_animationsPage->revertPending();
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
@@ -637,6 +653,13 @@ void SettingsController::save()
 
     // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
+
+    // Animations write to disk immediately, so commit just clears the
+    // session snapshot — there's nothing left to flush. After this the
+    // user can no longer Discard back to the pre-session state for any
+    // animation edits made so far.
+    if (m_animationsPage)
+        m_animationsPage->commitPending();
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.

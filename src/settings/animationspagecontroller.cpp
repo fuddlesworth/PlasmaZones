@@ -174,6 +174,114 @@ void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
     m_userProfilesDirOverride = dir;
 }
 
+// ─── Pending-changes snapshot machinery ────────────────────────────────
+
+void AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
+{
+    if (filePath.isEmpty() || m_pendingFileSnapshots.contains(filePath))
+        return;
+    QFile f(filePath);
+    if (!f.exists()) {
+        m_pendingFileSnapshots.insert(filePath, std::nullopt);
+        return;
+    }
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    m_pendingFileSnapshots.insert(filePath, f.readAll());
+}
+
+void AnimationsPageController::snapshotShaderTreeIfFirst()
+{
+    if (!m_settings || m_pendingShaderTreeSnapshot.has_value())
+        return;
+    const auto json = QJsonDocument(m_settings->shaderProfileTree().toJson()).toJson(QJsonDocument::Compact);
+    m_pendingShaderTreeSnapshot = QString::fromUtf8(json);
+}
+
+bool AnimationsPageController::hasPendingChanges() const
+{
+    return !m_pendingFileSnapshots.isEmpty() || m_pendingShaderTreeSnapshot.has_value();
+}
+
+void AnimationsPageController::commitPending()
+{
+    const bool had = hasPendingChanges();
+    m_pendingFileSnapshots.clear();
+    m_pendingShaderTreeSnapshot.reset();
+    if (had)
+        Q_EMIT pendingChangesChanged();
+}
+
+void AnimationsPageController::revertPending()
+{
+    using namespace PhosphorAnimation;
+    using namespace PhosphorAnimationShaders;
+
+    if (!hasPendingChanges())
+        return;
+
+    // Categorize affected paths so the right "data changed" signals
+    // fire at the end. Filenames in profilesDir map to either an event
+    // override (path matches ProfilePaths::) or a user preset
+    // (everything else); files in motionSetsDir map to motion sets.
+    const QString profilesDir = userProfilesDir();
+    const QString setsDir = userMotionSetsDir();
+    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
+    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
+
+    QStringList overrideEvents;
+    bool anyPreset = false;
+    bool anyMotionSet = false;
+
+    for (auto it = m_pendingFileSnapshots.cbegin(); it != m_pendingFileSnapshots.cend(); ++it) {
+        const QString& filePath = it.key();
+        const auto& content = it.value();
+
+        // Restore: write back content, or delete if didn't exist.
+        if (!content.has_value()) {
+            QFile::remove(filePath);
+        } else {
+            QSaveFile f(filePath);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                f.write(*content);
+                f.commit();
+            }
+        }
+
+        // Classify so the right signal goes out.
+        const QFileInfo info(filePath);
+        const QString absDir = info.absolutePath();
+        const QString stem = info.completeBaseName();
+        if (absDir == setsDir) {
+            anyMotionSet = true;
+        } else if (absDir == profilesDir) {
+            if (knownPathSet.contains(stem))
+                overrideEvents.append(stem);
+            else
+                anyPreset = true;
+        }
+    }
+    m_pendingFileSnapshots.clear();
+
+    // Restore shader tree if we touched it.
+    if (m_pendingShaderTreeSnapshot.has_value() && m_settings) {
+        const auto doc = QJsonDocument::fromJson(m_pendingShaderTreeSnapshot->toUtf8());
+        if (doc.isObject()) {
+            m_settings->setShaderProfileTree(ShaderProfileTree::fromJson(doc.object()));
+        }
+        m_pendingShaderTreeSnapshot.reset();
+    }
+
+    // Bulk emit so QML sub-pages refresh exactly the rows that moved.
+    for (const QString& path : overrideEvents)
+        Q_EMIT overrideChanged(path);
+    if (anyPreset)
+        Q_EMIT userPresetsChanged();
+    if (anyMotionSet)
+        Q_EMIT motionSetsChanged();
+    Q_EMIT pendingChangesChanged();
+}
+
 // ─── Path discovery ────────────────────────────────────────────────────
 
 QString AnimationsPageController::sectionForPath(const QString& path) const
@@ -351,13 +459,16 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     if (!QDir().mkpath(dir))
         return false;
 
+    const QString filePath = profileFilePath(path);
+    snapshotFileIfFirst(filePath);
+
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     // The `name` field is what ProfileLoader's envelope helper reads to
     // assign the registry path (per ProfileLoader.h schema docs). Always
     // overwrite — the QML map shouldn't carry a stale name.
     obj.insert(jsonNameKey(), path);
 
-    QSaveFile file(profileFilePath(path));
+    QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
@@ -365,6 +476,7 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
         return false;
 
     Q_EMIT overrideChanged(path);
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -376,9 +488,11 @@ bool AnimationsPageController::clearOverride(const QString& path)
     QFile file(filePath);
     if (!file.exists())
         return false;
+    snapshotFileIfFirst(filePath);
     if (!file.remove())
         return false;
     Q_EMIT overrideChanged(path);
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -448,6 +562,8 @@ bool AnimationsPageController::addUserPreset(const QString& name, const QVariant
     if (!QDir().mkpath(dir))
         return false;
 
+    snapshotFileIfFirst(filePath);
+
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.insert(jsonNameKey(), name);
 
@@ -459,6 +575,7 @@ bool AnimationsPageController::addUserPreset(const QString& name, const QVariant
         return false;
 
     Q_EMIT userPresetsChanged();
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -499,10 +616,12 @@ bool AnimationsPageController::removeUserPreset(const QString& name)
     QFile file(filePath);
     if (!file.exists())
         return false;
+    snapshotFileIfFirst(filePath);
     if (!file.remove())
         return false;
 
     Q_EMIT userPresetsChanged();
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -631,6 +750,8 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (effectId.isEmpty())
         return clearShaderOverride(path);
 
+    snapshotShaderTreeIfFirst();
+
     ShaderProfile profile;
     profile.effectId = effectId;
     if (!parameters.isEmpty())
@@ -641,6 +762,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     m_settings->setShaderProfileTree(tree);
 
     Q_EMIT shaderProfileChanged(path);
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -652,9 +774,11 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     if (!tree.hasOverride(path))
         return false;
+    snapshotShaderTreeIfFirst();
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
     Q_EMIT shaderProfileChanged(path);
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -768,6 +892,8 @@ bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const
         }
     }
 
+    snapshotFileIfFirst(filePath);
+
     QJsonObject root;
     root.insert(QStringLiteral("name"), name);
     if (!description.isEmpty())
@@ -783,6 +909,7 @@ bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const
         return false;
 
     Q_EMIT motionSetsChanged();
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -796,9 +923,11 @@ bool AnimationsPageController::removeMotionSet(const QString& name)
     QFile file(filePath);
     if (!file.exists())
         return false;
+    snapshotFileIfFirst(filePath);
     if (!file.remove())
         return false;
     Q_EMIT motionSetsChanged();
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 

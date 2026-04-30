@@ -116,6 +116,16 @@ Item {
         return i18n("%1 ms", root.currentDuration);
     }
 
+    /// Human-readable shader name (uses the registry's `name` field with
+    /// the effect ID as a fallback). Empty when no shader is assigned.
+    function shaderSummary() {
+        if (!root.currentShaderEffectId || root.currentShaderEffectId.length === 0)
+            return "";
+
+        var info = settingsController.animationsPage.shaderEffectInfo(root.currentShaderEffectId);
+        return (info && info.name && info.name.length > 0) ? info.name : root.currentShaderEffectId;
+    }
+
     function refreshShaderFromTree() {
         var resolved = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
         root.currentShaderEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
@@ -226,6 +236,30 @@ Item {
                 text: i18n("Current: %1", root.inheritSummaryText())
                 font.italic: true
                 color: Kirigami.Theme.disabledTextColor
+            }
+
+            // Shader-assigned indicator — visible regardless of timing
+            // override state since the two persist independently.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.shaderSummary().length > 0
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    source: "preferences-desktop-display"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    color: Kirigami.Theme.highlightColor
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: i18n("Shader: %1", root.shaderSummary())
+                    color: Kirigami.Theme.highlightColor
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                }
+
             }
 
             // ── Override controls ─────────────────────────────────────

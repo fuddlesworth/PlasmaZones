@@ -3,11 +3,15 @@
 
 #pragma once
 
+#include <QByteArray>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <optional>
 
 namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
@@ -210,6 +214,12 @@ Q_SIGNALS:
     /// Emitted on any successful add/removeMotionSet or apply.
     void motionSetsChanged();
 
+    /// Emitted whenever `hasPendingChanges()` may have flipped. The
+    /// SettingsController's slot calls `setNeedsSave(true)` when there
+    /// are pending changes; emits with `false`-equivalent state on
+    /// commit/revert too so the slot can re-evaluate.
+    void pendingChangesChanged();
+
 public:
     // ── Motion sets (Phase 7) ────────────────────────────────────────
 
@@ -234,6 +244,27 @@ public:
     /// Delete a saved motion-set file.
     Q_INVOKABLE bool removeMotionSet(const QString& name);
 
+    // ── Save / Discard integration (Phase 8) ─────────────────────────
+    //
+    // Animation edits write to disk immediately for live preview, but we
+    // still want the standard "Discard" button to revert this session's
+    // changes. The controller keeps a per-file snapshot of pre-edit
+    // content (or "did not exist" sentinel); commit clears it, revert
+    // restores files from it.
+
+    /// True iff there are unsaved changes the user could still discard.
+    bool hasPendingChanges() const;
+
+    /// Forget the snapshot — every change so far is now "saved." Called
+    /// from `SettingsController::save()`.
+    void commitPending();
+
+    /// Restore every file in the snapshot to its pre-edit state and
+    /// clear the snapshot. Called from `SettingsController::load()`
+    /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
+    /// `motionSetsChanged`/`shaderProfileChanged` so QML refreshes.
+    void revertPending();
+
 private:
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;
@@ -241,9 +272,31 @@ private:
     QString presetFilePath(const QString& presetName) const;
     QString motionSetFilePath(const QString& setName) const;
 
+    /// Capture @p filePath's current content into the snapshot if not
+    /// already snapshotted. Called by every file-mutating method just
+    /// before the write/delete so revert can put it back.
+    void snapshotFileIfFirst(const QString& filePath);
+
+    /// Capture the shader tree's current JSON serialization if not
+    /// already snapshotted. Symmetric helper for shader edits, which
+    /// flow through the single Settings::shaderProfileTree blob rather
+    /// than per-file storage.
+    void snapshotShaderTreeIfFirst();
+
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
+
+    /// Pre-edit file contents keyed by absolute path. `std::nullopt`
+    /// means "the file did not exist before this session." Mutated only
+    /// from the GUI thread.
+    QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
+
+    /// Shader-tree-level snapshot for ShaderProfileTree edits — the
+    /// tree is one Q_PROPERTY blob, so a per-file snapshot wouldn't
+    /// help. Stored as the raw JSON string for round-trip simplicity.
+    /// `std::nullopt` = no shader edits this session.
+    std::optional<QString> m_pendingShaderTreeSnapshot;
 };
 
 } // namespace PlasmaZones

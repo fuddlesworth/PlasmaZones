@@ -489,6 +489,112 @@ private Q_SLOTS:
         QVERIFY(c.availableMotionSets().isEmpty());
     }
 
+    // ─── Pending changes / commit / revert ────────────────────────────────
+
+    void hasPendingChanges_falseInitially()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        QVERIFY(!c.hasPendingChanges());
+    }
+
+    void setOverride_emitsPendingChangesChanged()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.hasPendingChanges());
+    }
+
+    void revertPending_restoresPreEditFile()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Establish a pre-edit baseline: write 100 ms.
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 100}}));
+        c.commitPending();
+        QVERIFY(!c.hasPendingChanges());
+
+        // Edit to 250 ms → should snapshot the 100ms file.
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QCOMPARE(c.rawProfile(QStringLiteral("zone.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+
+        // Revert → file content restored to 100 ms.
+        c.revertPending();
+        QVERIFY(!c.hasPendingChanges());
+        QCOMPARE(c.rawProfile(QStringLiteral("zone.snapIn")).value(QStringLiteral("duration")).toInt(), 100);
+    }
+
+    void revertPending_deletesFilesThatDidntExistBefore()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Fresh override on a path with no prior file.
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 200}}));
+        QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
+
+        c.revertPending();
+        QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
+    }
+
+    void revertPending_emitsOverrideChangedPerPath()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 200}}));
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 300}}));
+
+        QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
+        c.revertPending();
+
+        // Two paths reverted → two emissions (one per file). Order is
+        // hash-iteration so we check membership rather than position.
+        QCOMPARE(spy.count(), 2);
+        QStringList emitted;
+        for (const auto& args : spy)
+            emitted << args.at(0).toString();
+        QVERIFY(emitted.contains(QStringLiteral("zone.snapIn")));
+        QVERIFY(emitted.contains(QStringLiteral("osd.show")));
+    }
+
+    void commitPending_clearsSnapshotWithoutEmittingDataChanged()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(c.hasPendingChanges());
+
+        // commitPending clears the snapshot and only emits
+        // pendingChangesChanged (once). It must NOT re-fire the
+        // per-path overrideChanged or the data signals — the user just
+        // saved, no rows visually moved.
+        QSignalSpy pendingSpy(&c, &AnimationsPageController::pendingChangesChanged);
+        QSignalSpy overrideSpy(&c, &AnimationsPageController::overrideChanged);
+        c.commitPending();
+        QVERIFY(!c.hasPendingChanges());
+        QCOMPARE(pendingSpy.count(), 1);
+        QCOMPARE(overrideSpy.count(), 0);
+    }
+
     void resolvedProfile_partialLeafFillsFromParentAndDefaults()
     {
         QTemporaryDir tmp;
