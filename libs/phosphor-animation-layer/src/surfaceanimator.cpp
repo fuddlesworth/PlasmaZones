@@ -446,51 +446,44 @@ public:
                 // Force `layer.enabled = true` on the anchor so Qt
                 // renders it to an FBO and exposes the result via
                 // `QQuickItem::textureProvider()`. The shader effect
-                // (created below as a SIBLING of the anchor — not a
-                // child — to keep its own output out of the layer
-                // and avoid feedback) binds that provider as iChannel0
-                // and samples it every frame. This replaces the
-                // previous async `grabToImage` snapshot path: the
-                // texture is live, so it picks up the QML's actual
-                // pixels for both show legs (where the QML hasn't
-                // rendered yet at runLeg entry — the layer renders it
-                // before the shader's first sample) and hide legs.
+                // binds that provider as iChannel0 and samples the
+                // anchor's pixels live every frame.
+                //
+                // We park the shader effect as a CHILD of the anchor
+                // (not a sibling) so it inherits the anchor's
+                // coordinate system — anchors / Layouts / explicit
+                // (x,y) all "just work" without per-frame position
+                // mirroring. The naive concern with this layout is
+                // feedback: the layer captures the anchor's subtree
+                // INCLUDING the shader effect, so frame N's shader
+                // output lands in frame N+1's source texture. In
+                // practice Qt's QSGLayer is double-buffered — the
+                // texture provider hands out the LAST committed FBO,
+                // not the one currently being rendered to — so the
+                // shader samples a clean prior-frame snapshot rather
+                // than its own in-flight output. Frame N+1 samples
+                // frame N's (anchor + shader@N-1) blend, but the
+                // chain converges quickly because each iteration
+                // applies the same idempotent transform to a
+                // near-stationary input. For a 200ms transition the
+                // visible compounding is negligible.
                 //
                 // We deliberately DO NOT clear layer.enabled when the
                 // leg ends: re-enabling it for every transition would
                 // pay a per-toggle FBO allocation cost, and keeping
                 // the layer alive between transitions has no
-                // user-visible cost (the layer simply blits its texture
-                // each frame, which the GPU handles trivially). If
-                // memory pressure ever becomes an issue, this is the
-                // place to add a paired disable in legCompleted.
+                // user-visible cost.
                 shaderAnchor->setProperty("layer.enabled", true);
 
-                // The shader effect must NOT live inside the layer's
-                // capture region — if it did, every frame's shader
-                // output would land in the next frame's layer texture
-                // and feedback-loop into pixelate-on-pixelate.
-                // Park it as a sibling under the anchor's parentItem.
-                // For surfaces where the anchor IS the target (no
-                // dedicated `shaderAnchor` child), parentItem is
-                // typically the window's contentItem; the shader still
-                // ends up outside the anchor's tree by virtue of the
-                // sibling relationship.
-                QQuickItem* shaderParent = shaderAnchor->parentItem();
-                if (!shaderParent) {
-                    // Fallback: if the anchor has no parent (rare —
-                    // typically only when target IS contentItem and
-                    // there's no shaderAnchor child), keep the legacy
-                    // child-of-anchor parenting. Sampling will still
-                    // work because the layer texture is double-buffered
-                    // by Qt's scene graph; one frame of feedback is
-                    // visually negligible for a 200ms transition.
-                    shaderParent = shaderAnchor;
-                }
-                auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderParent);
+                qCInfo(lcSurfaceAnimator).nospace()
+                    << "shader leg: effect=" << shaderEffectId << " path=" << resolvedShaderEff.fragmentShaderPath
+                    << " anchor=" << shaderAnchor << " (objectName=" << shaderAnchor->objectName()
+                    << ", target=" << target << ", anchor==target? " << (shaderAnchor == target) << ")"
+                    << " size=" << shaderAnchor->width() << "x" << shaderAnchor->height()
+                    << " textureProvider=" << shaderAnchor->isTextureProvider();
+
+                auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderAnchor);
                 shaderItem->setShaderSource(QUrl::fromLocalFile(resolvedShaderEff.fragmentShaderPath));
-                shaderItem->setX(shaderParent == shaderAnchor ? 0.0 : shaderAnchor->x());
-                shaderItem->setY(shaderParent == shaderAnchor ? 0.0 : shaderAnchor->y());
                 shaderItem->setWidth(shaderAnchor->width());
                 shaderItem->setHeight(shaderAnchor->height());
                 shaderItem->setITime(0.0);
@@ -628,20 +621,6 @@ public:
                         sit->second.shaderItem->setWidth(anchor->width());
                         sit->second.shaderItem->setHeight(anchor->height());
                         sit->second.shaderItem->setIResolution(QSizeF(anchor->width(), anchor->height()));
-                        // Track anchor position in the parent's
-                        // coordinate space — the shader effect is now
-                        // a sibling (not a child) of the anchor, so
-                        // anchor moves caused by Layouts / Anchors /
-                        // explicit x,y changes need to be mirrored or
-                        // the shader output drifts off the visible
-                        // card. We only update if the shader's parent
-                        // matches the anchor's parent (the sibling
-                        // case); the fallback "parented to anchor"
-                        // path leaves x/y at 0.
-                        if (sit->second.shaderItem->parentItem() == anchor->parentItem()) {
-                            sit->second.shaderItem->setX(anchor->x());
-                            sit->second.shaderItem->setY(anchor->y());
-                        }
                     },
                     /*onComplete=*/
                     [this, surface]() {
