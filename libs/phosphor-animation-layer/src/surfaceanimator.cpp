@@ -586,6 +586,43 @@ public:
                 it->second.shaderItem = shaderItem;
                 it->second.shaderAnchor = shaderAnchor;
                 it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+
+                // Live-track the anchor's size so the shader effect
+                // mirrors any geometry change immediately, not just on
+                // the next 16ms animation tick. The construction-time
+                // `setWidth`/`setHeight` reads above can land while the
+                // wayland surface is still 0x0 (parent hasn't been
+                // configured) — anchors.centerIn resolves the inner
+                // PopupFrame against a 0x0 parent which produces the
+                // -330,-193 660x385 geometry the journal showed. The
+                // anchor's width/height settle to the right value as
+                // soon as Qt's layout pass re-runs after the surface
+                // configure event; mirror them then so the shader
+                // covers the popup card from frame zero rather than
+                // briefly drawing at the stale 0x0 size.
+                //
+                // Signal-receiver targets (shaderItem) own the
+                // connection lifetime via auto-disconnect on shaderItem
+                // teardown — no explicit disconnect needed in
+                // legCompleted. Lambda captures shaderAnchor as
+                // QPointer-safe by virtue of routing through the
+                // tracks map; if the anchor disappears mid-flight, the
+                // lambda's setWidth call to a torn-down item is moot
+                // (Qt's QQuickItem destructor severs all signal
+                // emissions before deletion).
+                auto syncGeometry = [shaderItem, shaderAnchor]() {
+                    shaderItem->setWidth(shaderAnchor->width());
+                    shaderItem->setHeight(shaderAnchor->height());
+                    shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
+                };
+                QObject::connect(shaderAnchor, &QQuickItem::widthChanged, shaderItem, syncGeometry);
+                QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
+                // Sync once immediately in case the anchor's size
+                // already differs from what we read at the top of the
+                // shader-leg block (a layout pass between the anchor
+                // resolution and here would otherwise leave the first
+                // frame stale).
+                syncGeometry();
             }
         }
 
