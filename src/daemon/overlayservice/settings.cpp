@@ -28,6 +28,7 @@ void OverlayService::setSettings(ISettings* settings)
             disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
             disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
             disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::shaderProfileTreeChanged, this, nullptr);
         }
         // Disconnect the specific shadersChanged lambda we stashed below.
         // disconnect(src, sig, this, nullptr) would sever ALL slots on this
@@ -64,6 +65,20 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
+
+            // Shader profile tree drives the per-overlay shader effect (osd.show,
+            // panel.popup.zoneSelector, etc.). Push it into the SurfaceAnimator
+            // now that settings are available, and re-push on every edit so
+            // users editing the tree at runtime see the new effects on the next
+            // show — no daemon restart needed. registerConfigForRole only
+            // affects subsequent show()/hide(), so animations mid-flight keep
+            // their bound config (matches motion-tree live-reload semantics).
+            applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+            connect(m_settings, &ISettings::shaderProfileTreeChanged, this, [this]() {
+                if (m_settings) {
+                    applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                }
+            });
 
             // Hot-reload shaders when files change on disk.
             // ShaderRegistry detects file changes via QFileSystemWatcher and emits

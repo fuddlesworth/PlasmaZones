@@ -55,6 +55,9 @@ namespace PhosphorAnimation {
  *     │   ├── panel.slideIn
  *     │   ├── panel.slideOut
  *     │   └── panel.popup
+ *     │       ├── panel.popup.zoneSelector
+ *     │       ├── panel.popup.layoutPicker
+ *     │       └── panel.popup.snapAssist
  *     │
  *     ├── cursor             ┐ pointer / input feedback
  *     │   ├── cursor.hover
@@ -121,6 +124,14 @@ PHOSPHORANIMATION_EXPORT extern const QString Panel;
 PHOSPHORANIMATION_EXPORT extern const QString PanelSlideIn;
 PHOSPHORANIMATION_EXPORT extern const QString PanelSlideOut;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopup;
+// panel.popup.* — popup-style overlay sub-paths so users can tune zone selector,
+// layout picker, and snap-assist independently while still inheriting from
+// panel.popup as a baseline. Setting `panel.popup` covers all three; overriding
+// e.g. `panel.popup.layoutPicker` lets the picker diverge while siblings stay
+// on the baseline. Walk-up inheritance handles this automatically.
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupZoneSelector;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPicker;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssist;
 
 // cursor.*
 PHOSPHORANIMATION_EXPORT extern const QString Cursor;

@@ -36,7 +36,10 @@
 #include "vulkan_support.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimationLayer/SurfaceAnimator.h>
+#include <PhosphorAnimationShaders/ShaderProfile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
@@ -170,6 +173,17 @@ const QString& widgetFadeOut()
 // instead of reusing `osdHide`.
 
 namespace PAL = PhosphorAnimationLayer;
+namespace PAS = PhosphorAnimationShaders;
+
+/// Resolve a path against the shader profile tree. A default-constructed
+/// tree (empty baseline + no overrides) resolves every path to an empty
+/// effect id, equivalent to "no shader leg" — motion runs alone, identical
+/// to the pre-shader-wireup behaviour. The setSettings() handler later
+/// re-registers configs with the live tree once settings exist.
+QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)
+{
+    return tree.resolve(path).effectiveEffectId();
+}
 
 /// Default config — empty. Surfaces that route through the animator
 /// without a registered config fall back to AnimatedValue's library
@@ -181,72 +195,78 @@ PAL::SurfaceAnimator::Config buildDefaultConfig()
     return PAL::SurfaceAnimator::Config{};
 }
 
-/// LayoutOsd / NavigationOsd: identical fade-and-pop shape. The visual
-/// treatment is meant to read the same across the two OSDs, so a single
-/// shared config keeps tuning edits consistent. OutBack-overshoot scale
-/// pop preserved from the original QML hand-roll. Explicit empty shader
-/// fields suppress GCC's -Wmissing-field-initializers under designated init.
-PAL::SurfaceAnimator::Config buildOsdConfig()
+/// LayoutOsd / NavigationOsd: identical fade-and-pop shape. Shader leg
+/// resolves osd.show / osd.hide from the user's tree so OSDs can fly in
+/// (slide), dissolve, etc. independently of zone or popup events.
+PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 {
-    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
-                                        .hideProfile = osdHide(),
-                                        .showScaleProfile = osdPop(),
-                                        .hideScaleProfile = osdHide(),
-                                        .showScaleFrom = 0.8,
-                                        .hideScaleTo = 0.9,
-                                        .showShaderEffectId = {},
-                                        .hideShaderEffectId = {},
-                                        .showShaderProfile = {},
-                                        .hideShaderProfile = {}};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = osdShow(),
+        .hideProfile = osdHide(),
+        .showScaleProfile = osdPop(),
+        .hideScaleProfile = osdHide(),
+        .showScaleFrom = 0.8,
+        .hideScaleTo = 0.9,
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::OsdShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::OsdHide),
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::OsdShow,
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::OsdHide};
 }
 
-/// LayoutPicker: same osd shape as buildOsdConfig but with a softer
-/// scale envelope (0.9→1 instead of 0.8→1). The picker is a larger
-/// surface so the overshoot reads as a pop rather than a slam.
-PAL::SurfaceAnimator::Config buildLayoutPickerConfig()
+/// LayoutPicker: same OSD-style shape with softer scale envelope (0.9→1
+/// vs 0.8→1) since the picker is a larger surface. Shader leg keys on
+/// panel.popup.layoutPicker so the picker can diverge from zone selector
+/// and snap-assist while all three inherit panel.popup's baseline by
+/// default (walk-up resolution).
+PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree)
 {
-    return PAL::SurfaceAnimator::Config{.showProfile = osdShow(),
-                                        .hideProfile = osdHide(),
-                                        .showScaleProfile = osdPop(),
-                                        .hideScaleProfile = osdHide(),
-                                        .showScaleFrom = 0.9,
-                                        .hideScaleTo = 0.95,
-                                        .showShaderEffectId = {},
-                                        .hideShaderEffectId = {},
-                                        .showShaderProfile = {},
-                                        .hideShaderProfile = {}};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = osdShow(),
+        .hideProfile = osdHide(),
+        .showScaleProfile = osdPop(),
+        .hideScaleProfile = osdHide(),
+        .showScaleFrom = 0.9,
+        .hideScaleTo = 0.95,
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker),
+        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker),
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker,
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker};
 }
 
 /// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
-/// the hide animation actually paints). Opacity-only — explicit empty
-/// scale and shader fields suppress GCC's -Wmissing-field-initializers
-/// under designated init.
-PAL::SurfaceAnimator::Config buildZoneSelectorConfig()
+/// the hide animation actually paints). Opacity-only on motion. Shader
+/// leg keys on panel.popup.zoneSelector with the same path on both legs
+/// — symmetric show/hide is the natural default; users can split via
+/// future per-leg paths if needed.
+PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree)
 {
-    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
-                                        .hideProfile = widgetFadeOut(),
-                                        .showScaleProfile = {},
-                                        .hideScaleProfile = {},
-                                        .showShaderEffectId = {},
-                                        .hideShaderEffectId = {},
-                                        .showShaderProfile = {},
-                                        .hideShaderProfile = {}};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = panelPopup(),
+        .hideProfile = widgetFadeOut(),
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector),
+        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector),
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector,
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector};
 }
 
 /// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
 /// (keepMappedOnHide=false), so ~Surface synchronously cancels any
 /// in-flight beginHide before the hide animation can paint a frame.
-/// Registering a hideProfile here would be dead code; leave it empty.
-PAL::SurfaceAnimator::Config buildSnapAssistConfig()
+/// Registering hide-leg shader fields would be dead code identical to
+/// the motion-leg hideProfile = {} policy; leave them empty.
+PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
 {
-    return PAL::SurfaceAnimator::Config{.showProfile = panelPopup(),
-                                        .hideProfile = {},
-                                        .showScaleProfile = {},
-                                        .hideScaleProfile = {},
-                                        .showShaderEffectId = {},
-                                        .hideShaderEffectId = {},
-                                        .showShaderProfile = {},
-                                        .hideShaderProfile = {}};
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = panelPopup(),
+        .hideProfile = {},
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist),
+        .hideShaderEffectId = {},
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist,
+        .hideShaderProfile = {}};
 }
 
 } // namespace
@@ -279,10 +299,28 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // surfaces are scoped `plasmazones-notification-{screenId}-{gen}`
     // and resolve to this config via the animator's longest-prefix
     // lookup.
-    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig());
-    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig());
-    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig());
-    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig());
+    //
+    // Initial registration runs with an empty tree — m_settings is wired
+    // later via setSettings(). A default-constructed tree resolves every
+    // path to an empty effect id, so this pass installs motion-only
+    // configs (identical to the pre-shader-wireup behaviour). Once
+    // settings exist, setSettings calls applyShaderProfilesToAnimator
+    // again with the live tree, and connects shaderProfileTreeChanged
+    // for live-reload. This keeps the constructor's invariant ("animator
+    // is ready before any Surface is created") while deferring the
+    // shader wiring to the moment settings are available.
+    applyShaderProfilesToAnimator(PAS::ShaderProfileTree{});
+}
+
+void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree& tree)
+{
+    if (!m_surfaceAnimator) {
+        return;
+    }
+    m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig(tree));
+    m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
+    m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
+    m_surfaceAnimator->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig(tree));
 }
 
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
