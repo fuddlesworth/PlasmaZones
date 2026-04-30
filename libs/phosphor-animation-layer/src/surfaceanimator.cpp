@@ -503,7 +503,14 @@ public:
                 // pay a per-toggle FBO allocation cost, and keeping
                 // the layer alive between transitions has no
                 // user-visible cost.
-                shaderAnchor->setProperty("layer.enabled", true);
+                // Two-step access — see ShaderEffect::setSourceItem for
+                // the full rationale. Single-step
+                // setProperty("layer.enabled", true) creates a dynamic
+                // QObject property of that exact name; it never reaches
+                // QQuickItemLayer and `isTextureProvider()` stays false.
+                if (QObject* layer = shaderAnchor->property("layer").value<QObject*>()) {
+                    layer->setProperty("enabled", true);
+                }
 
                 qCInfo(lcSurfaceAnimator).nospace()
                     << "shader leg: effect=" << shaderEffectId << " path=" << resolvedShaderEff.fragmentShaderPath

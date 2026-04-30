@@ -253,16 +253,32 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
     m_sourceItem = item;
     if (item) {
         // Force `layer.enabled = true` so the QQuickItem becomes a
-        // texture provider. Without this, `item->textureProvider()`
-        // returns nullptr for ordinary items and the per-frame texture
-        // pickup in updatePaintNode would silently no-op. Already-true
-        // is harmless — Qt's layer property is idempotent. We don't
-        // restore the previous value on unset because we can't know
-        // whether the consumer wanted layer for other reasons; callers
-        // that need symmetric teardown should track and reset
-        // `layer.enabled` themselves.
+        // texture provider. The naive single-step
+        // `item->setProperty("layer.enabled", true)` doesn't work —
+        // Qt's meta-object system doesn't auto-resolve nested property
+        // paths; the call sets a brand new dynamic property called
+        // "layer.enabled" on the item without ever touching
+        // QQuickItemLayer. Diagnostic logging confirmed this:
+        // `isTextureProvider()` stayed false immediately after a
+        // setProperty call that "succeeded".
+        //
+        // The two-step access via `item->property("layer")` resolves
+        // the QQuickItemLayer sub-object (a QObject in its own right)
+        // and `layer->setProperty("enabled", true)` flips the real
+        // backing flag, which synchronously triggers QSGLayer creation
+        // and makes `isTextureProvider()` return true. Already-true is
+        // idempotent — Qt's layer property setter early-returns on
+        // unchanged values.
+        //
+        // We don't restore the previous value on unset because we
+        // can't know whether the consumer wanted layer for other
+        // reasons; callers that need symmetric teardown should track
+        // and reset `layer.enabled` themselves.
         if (!item->isTextureProvider()) {
-            item->setProperty("layer.enabled", true);
+            QObject* layer = item->property("layer").value<QObject*>();
+            if (layer) {
+                layer->setProperty("enabled", true);
+            }
         }
     }
     // Mark the SRB dirty so prepare() rebuilds with the new texture
