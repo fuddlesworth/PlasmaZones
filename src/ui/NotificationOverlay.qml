@@ -161,6 +161,18 @@ Window {
     Loader {
         id: loader
 
+        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
+        // walks the visual tree for `objectName: "shaderAnchor"` and
+        // (only when found) enables `layer.enabled` on it so the shader
+        // can sample the OSD's actual rendered pixels via iChannel0.
+        // Without this tag the leg falls back to the QQuickRootItem
+        // target, where layer-enable would break the scene-graph render
+        // (already gated off in surfaceanimator.cpp), leaving
+        // pixelate / dissolve / glitch as visible-only-on-LayoutPicker.
+        // The Loader is the natural mount point — its bounds match the
+        // visible OSD content area, and it stays valid across mode
+        // flips even when its child is rebuilt.
+        objectName: "shaderAnchor"
         anchors.fill: parent
         sourceComponent: {
             switch (root.mode) {
