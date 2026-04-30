@@ -18,6 +18,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimationShaders/ShaderProfile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include "config/configbackends.h"
 
 #include "../../../src/config/settings.h"
@@ -1097,6 +1099,51 @@ private Q_SLOTS:
      * the specific NOTIFY signal once per real change, and the value
      * round-trips through save/reload via the WindowHandling group.
      */
+    /// PR #390 + Phase 6: setShaderProfileTree must actually persist.
+    /// The Animations schema in settingsschema.cpp must declare
+    /// `shaderProfileTreeKey`, otherwise PhosphorConfig::Store::write
+    /// rejects the JSON blob and the override silently disappears.
+    /// Symptom from the field: shader picker resets to "None"
+    /// immediately after every selection because the next read returns
+    /// the unchanged on-disk value.
+    void testShaderProfileTree_setRoundTripsThroughDisk()
+    {
+        IsolatedConfigGuard guard;
+
+        // Write a one-override tree through Settings A; verify the
+        // round-trip via shaderProfileTree() in the SAME instance.
+        {
+            Settings a;
+            PhosphorAnimationShaders::ShaderProfileTree tree;
+            PhosphorAnimationShaders::ShaderProfile profile;
+            profile.effectId = QStringLiteral("pixelate");
+            tree.setOverride(QStringLiteral("osd.show"), profile);
+            QSignalSpy spy(&a, &Settings::shaderProfileTreeChanged);
+            a.setShaderProfileTree(tree);
+            QCOMPARE(spy.count(), 1);
+
+            const auto reread = a.shaderProfileTree();
+            QVERIFY(reread.hasOverride(QStringLiteral("osd.show")));
+            const auto entry = reread.directOverride(QStringLiteral("osd.show"));
+            QVERIFY(entry.effectId.has_value());
+            QCOMPARE(*entry.effectId, QStringLiteral("pixelate"));
+        }
+
+        // Open a fresh Settings on the same isolated config — the value
+        // must survive the file load. This is the cross-process path:
+        // the daemon's Settings reads the same disk file the settings
+        // app wrote.
+        {
+            Settings b;
+            const auto reread = b.shaderProfileTree();
+            QVERIFY2(reread.hasOverride(QStringLiteral("osd.show")),
+                     "ShaderProfileTree must persist across Settings instances");
+            const auto entry = reread.directOverride(QStringLiteral("osd.show"));
+            QVERIFY(entry.effectId.has_value());
+            QCOMPARE(*entry.effectId, QStringLiteral("pixelate"));
+        }
+    }
+
     void testAutoAssignAllLayouts_defaultSetterRoundtrip()
     {
         IsolatedConfigGuard guard;
