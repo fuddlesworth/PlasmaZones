@@ -405,6 +405,90 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    // ─── Motion sets ──────────────────────────────────────────────────────
+
+    void saveCurrentAsMotionSet_capturesPathOverridesOnly()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Mix of path overrides and a user preset
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 222}}));
+        QVERIFY(
+            c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("curve"), QStringLiteral("spring:10,0.7")}}));
+        QVERIFY(
+            c.addUserPreset(QStringLiteral("My Preset"), {{QStringLiteral("curve"), QStringLiteral("0.5,0,0.5,1")}}));
+
+        QSignalSpy spy(&c, &AnimationsPageController::motionSetsChanged);
+        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("My Set"), QStringLiteral("test set")));
+        QCOMPARE(spy.count(), 1);
+
+        const QVariantList sets = c.availableMotionSets();
+        QCOMPARE(sets.size(), 1);
+        const QVariantMap set = sets.first().toMap();
+        QCOMPARE(set.value(QStringLiteral("name")).toString(), QStringLiteral("My Set"));
+        // Should capture the 2 path overrides, NOT the preset
+        QCOMPARE(set.value(QStringLiteral("overrideCount")).toInt(), 2);
+    }
+
+    void applyMotionSet_writesPerPathFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Build set, then clear overrides, then apply
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 333}}));
+        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("snappy-set"), QString()));
+        QVERIFY(c.clearOverride(QStringLiteral("zone.snapIn")));
+        QVERIFY(!c.hasOverride(QStringLiteral("zone.snapIn")));
+
+        QVERIFY(c.applyMotionSet(QStringLiteral("snappy-set")));
+        QVERIFY(c.hasOverride(QStringLiteral("zone.snapIn")));
+        QCOMPARE(c.rawProfile(QStringLiteral("zone.snapIn")).value(QStringLiteral("duration")).toInt(), 333);
+    }
+
+    void applyMotionSet_mergesPreservesOtherPaths()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Save a set with one path
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 222}}));
+        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("set-a"), QString()));
+        QVERIFY(c.clearOverride(QStringLiteral("zone.snapIn")));
+
+        // Set an UNRELATED override
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 555}}));
+
+        // Apply set-a; osd.show should still be 555 (merge, not replace)
+        QVERIFY(c.applyMotionSet(QStringLiteral("set-a")));
+        QCOMPARE(c.rawProfile(QStringLiteral("osd.show")).value(QStringLiteral("duration")).toInt(), 555);
+        QVERIFY(c.hasOverride(QStringLiteral("zone.snapIn")));
+    }
+
+    void removeMotionSet_emitsAndDeletes()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 222}}));
+        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("To Remove"), QString()));
+        QCOMPARE(c.availableMotionSets().size(), 1);
+
+        QSignalSpy spy(&c, &AnimationsPageController::motionSetsChanged);
+        QVERIFY(c.removeMotionSet(QStringLiteral("To Remove")));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.availableMotionSets().isEmpty());
+    }
+
     void resolvedProfile_partialLeafFillsFromParentAndDefaults()
     {
         QTemporaryDir tmp;

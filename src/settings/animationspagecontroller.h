@@ -207,10 +207,39 @@ Q_SIGNALS:
     /// rebind without poking at the registry directly.
     void shaderEffectsChanged();
 
+    /// Emitted on any successful add/removeMotionSet or apply.
+    void motionSetsChanged();
+
+public:
+    // ── Motion sets (Phase 7) ────────────────────────────────────────
+
+    /// Lists the user's saved motion-set files. Each row:
+    ///   { name, description, overrideCount, slug }
+    Q_INVOKABLE QVariantList availableMotionSets() const;
+
+    /// Reads the motion-set file at @p name and writes one per-path
+    /// override file for every entry. "Merge" semantics: existing
+    /// overrides at paths NOT in the set are preserved. Emits
+    /// `overrideChanged()` for each path written. @return true on
+    /// successful read + per-path writes.
+    Q_INVOKABLE bool applyMotionSet(const QString& name);
+
+    /// Snapshots the current set of per-path override files into a
+    /// motion-set JSON under
+    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. @p
+    /// description is freeform metadata for the UI; pass an empty
+    /// string to omit.
+    Q_INVOKABLE bool saveCurrentAsMotionSet(const QString& name, const QString& description);
+
+    /// Delete a saved motion-set file.
+    Q_INVOKABLE bool removeMotionSet(const QString& name);
+
 private:
     QString userProfilesDir() const;
+    QString userMotionSetsDir() const;
     QString profileFilePath(const QString& path) const;
     QString presetFilePath(const QString& presetName) const;
+    QString motionSetFilePath(const QString& setName) const;
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;

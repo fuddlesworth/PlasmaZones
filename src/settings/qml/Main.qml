@@ -192,6 +192,10 @@ ApplicationWindow {
             "label": i18n("Presets"),
             "iconName": "bookmarks"
         }, {
+            "name": "animations-motionsets",
+            "label": i18n("Motion Sets"),
+            "iconName": "color-palette"
+        }, {
             "name": "animations-shaders",
             "label": i18n("Shaders"),
             "iconName": "preferences-desktop-display"
@@ -229,6 +233,7 @@ ApplicationWindow {
         "animations-cursor": "AnimationsCursorPage.qml",
         "animations-widget": "AnimationsWidgetPage.qml",
         "animations-presets": "AnimationsPresetsPage.qml",
+        "animations-motionsets": "AnimationsMotionSetsPage.qml",
         "animations-shaders": "AnimationsShadersPage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)

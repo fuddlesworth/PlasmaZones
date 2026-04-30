@@ -575,6 +575,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-cursor"),
         QStringLiteral("animations-widget"),
         QStringLiteral("animations-presets"),
+        QStringLiteral("animations-motionsets"),
         QStringLiteral("animations-shaders"),
     };
     return pages;

@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -276,6 +277,22 @@ QString AnimationsPageController::presetFilePath(const QString& presetName) cons
     if (slug.isEmpty())
         return {};
     return userProfilesDir() + QLatin1Char('/') + slug + QStringLiteral(".json");
+}
+
+QString AnimationsPageController::userMotionSetsDir() const
+{
+    if (!m_userProfilesDirOverride.isEmpty())
+        return m_userProfilesDirOverride + QStringLiteral("/motionsets");
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    return base + QStringLiteral("/plasmazones/motionsets");
+}
+
+QString AnimationsPageController::motionSetFilePath(const QString& setName) const
+{
+    const QString slug = slugifyPresetName(setName);
+    if (slug.isEmpty())
+        return {};
+    return userMotionSetsDir() + QLatin1Char('/') + slug + QStringLiteral(".json");
 }
 
 bool AnimationsPageController::hasOverride(const QString& path) const
@@ -638,6 +655,150 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
     Q_EMIT shaderProfileChanged(path);
+    return true;
+}
+
+// ─── Motion sets ───────────────────────────────────────────────────────
+
+QVariantList AnimationsPageController::availableMotionSets() const
+{
+    QVariantList result;
+    QDir dir(userMotionSetsDir());
+    if (!dir.exists())
+        return result;
+
+    const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    for (const QFileInfo& info : files) {
+        QFile f(info.absoluteFilePath());
+        if (!f.open(QIODevice::ReadOnly))
+            continue;
+        const auto doc = QJsonDocument::fromJson(f.readAll());
+        if (!doc.isObject())
+            continue;
+        const QJsonObject obj = doc.object();
+
+        QVariantMap row;
+        row.insert(QStringLiteral("name"), obj.value(QStringLiteral("name")).toString());
+        row.insert(QStringLiteral("description"), obj.value(QStringLiteral("description")).toString());
+        row.insert(QStringLiteral("slug"), info.completeBaseName());
+        row.insert(QStringLiteral("overrideCount"), obj.value(QStringLiteral("overrides")).toArray().size());
+        result.append(row);
+    }
+    return result;
+}
+
+bool AnimationsPageController::applyMotionSet(const QString& name)
+{
+    using namespace PhosphorAnimation;
+    if (name.isEmpty())
+        return false;
+
+    const QString filePath = motionSetFilePath(name);
+    if (filePath.isEmpty())
+        return false;
+
+    QFile f(filePath);
+    if (!f.exists() || !f.open(QIODevice::ReadOnly))
+        return false;
+    const auto doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject())
+        return false;
+
+    const QJsonArray overrides = doc.object().value(QStringLiteral("overrides")).toArray();
+    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
+    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
+
+    bool wroteAny = false;
+    for (const QJsonValue& v : overrides) {
+        const QJsonObject entry = v.toObject();
+        const QString path = entry.value(QStringLiteral("path")).toString();
+        // Only honor known event paths — a hand-edited set with a
+        // path-typo shouldn't write a stray non-path override file.
+        if (path.isEmpty() || !knownPathSet.contains(path))
+            continue;
+        const QJsonObject profile = entry.value(QStringLiteral("profile")).toObject();
+        if (setOverride(path, profile.toVariantMap()))
+            wroteAny = true;
+    }
+    if (wroteAny)
+        Q_EMIT motionSetsChanged();
+    return wroteAny;
+}
+
+bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const QString& description)
+{
+    using namespace PhosphorAnimation;
+    if (name.isEmpty())
+        return false;
+
+    const QString filePath = motionSetFilePath(name);
+    if (filePath.isEmpty())
+        return false;
+
+    if (!QDir().mkpath(userMotionSetsDir()))
+        return false;
+
+    // Walk the profiles dir, pick out files whose `name` matches a
+    // known event path. Build a sparse `overrides` array; non-path
+    // names (presets) are skipped.
+    QJsonArray overrides;
+    QDir profilesDir(userProfilesDir());
+    if (profilesDir.exists()) {
+        const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
+        const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
+        const auto files = profilesDir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+        for (const QFileInfo& info : files) {
+            QFile f(info.absoluteFilePath());
+            if (!f.open(QIODevice::ReadOnly))
+                continue;
+            const auto doc = QJsonDocument::fromJson(f.readAll());
+            if (!doc.isObject())
+                continue;
+            const QJsonObject obj = doc.object();
+            const QString entryName = obj.value(jsonNameKey()).toString();
+            if (!knownPathSet.contains(entryName))
+                continue;
+
+            QJsonObject profile = obj;
+            profile.remove(jsonNameKey());
+            QJsonObject entry;
+            entry.insert(QStringLiteral("path"), entryName);
+            entry.insert(QStringLiteral("profile"), profile);
+            overrides.append(entry);
+        }
+    }
+
+    QJsonObject root;
+    root.insert(QStringLiteral("name"), name);
+    if (!description.isEmpty())
+        root.insert(QStringLiteral("description"), description);
+    root.insert(QStringLiteral("version"), 1);
+    root.insert(QStringLiteral("overrides"), overrides);
+
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    if (!file.commit())
+        return false;
+
+    Q_EMIT motionSetsChanged();
+    return true;
+}
+
+bool AnimationsPageController::removeMotionSet(const QString& name)
+{
+    if (name.isEmpty())
+        return false;
+    const QString filePath = motionSetFilePath(name);
+    if (filePath.isEmpty())
+        return false;
+    QFile file(filePath);
+    if (!file.exists())
+        return false;
+    if (!file.remove())
+        return false;
+    Q_EMIT motionSetsChanged();
     return true;
 }
 
