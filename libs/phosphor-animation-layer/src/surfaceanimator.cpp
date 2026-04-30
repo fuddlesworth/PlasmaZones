@@ -296,7 +296,7 @@ public:
     ///                    legs settle.
     void runLeg(PhosphorLayer::Surface* surface, QQuickItem* target, qreal fromOpacity, qreal toOpacity,
                 const QString& opacityProfilePath, qreal fromScale, qreal toScale, const QString& scaleProfilePath,
-                const QString& shaderEffectId, const QString& shaderProfilePath,
+                const QString& shaderEffectId, const QString& shaderProfilePath, const QVariantMap& shaderParameters,
                 ISurfaceAnimator::CompletionCallback onComplete)
     {
         // Supersede any in-flight animation on this surface BEFORE the
@@ -406,6 +406,15 @@ public:
                     shaderItem->setHeight(target->height());
                     shaderItem->setITime(0.0);
                     shaderItem->setIResolution(QSizeF(target->width(), target->height()));
+                    // Per-event parameter overrides resolved by the consumer
+                    // from `ShaderProfile::effectiveParameters()`. Keys map 1:1
+                    // to the effect's declared parameter ids and to the GLSL
+                    // uniform names; ShaderEffect / ShaderNodeRhi push them
+                    // into the RHI uniform block on the next render pass.
+                    // Empty map = use the shader's declared defaults.
+                    if (!shaderParameters.isEmpty()) {
+                        shaderItem->setShaderParams(shaderParameters);
+                    }
                     static constexpr qreal kShaderOverlayZ = 1000;
                     shaderItem->setZ(kShaderOverlayZ);
                     it->second.shaderItem = shaderItem;
@@ -802,7 +811,8 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
     }
 
     d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
-              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, std::move(onComplete));
+              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, cfg.showShaderParameters,
+              std::move(onComplete));
 }
 
 void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete)
@@ -822,7 +832,8 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
     const qreal fromScale = (cfg.hideScaleProfile.isEmpty() || !rootItem) ? 1.0 : rootItem->scale();
     const qreal toScale = cfg.hideScaleProfile.isEmpty() ? 1.0 : cfg.hideScaleTo;
     d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/0.0, cfg.hideProfile, fromScale, toScale,
-              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, std::move(onComplete));
+              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, cfg.hideShaderParameters,
+              std::move(onComplete));
 }
 
 void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)

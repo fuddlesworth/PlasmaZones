@@ -66,7 +66,9 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                  .showShaderEffectId = {},
                                                  .hideShaderEffectId = {},
                                                  .showShaderProfile = {},
-                                                 .hideShaderProfile = {}};
+                                                 .hideShaderProfile = {},
+                                                 .showShaderParameters = {},
+                                                 .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::Notification, osdConfig);
 
     const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = QStringLiteral("osd.show"),
@@ -78,7 +80,9 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                           .showShaderEffectId = {},
                                                           .hideShaderEffectId = {},
                                                           .showShaderProfile = {},
-                                                          .hideShaderProfile = {}};
+                                                          .hideShaderProfile = {},
+                                                          .showShaderParameters = {},
+                                                          .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::LayoutPicker, layoutPickerConfig);
 
     const PAL::SurfaceAnimator::Config zoneSelectorConfig{.showProfile = QStringLiteral("panel.popup"),
@@ -88,7 +92,9 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                           .showShaderEffectId = {},
                                                           .hideShaderEffectId = {},
                                                           .showShaderProfile = {},
-                                                          .hideShaderProfile = {}};
+                                                          .hideShaderProfile = {},
+                                                          .showShaderParameters = {},
+                                                          .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::ZoneSelector, zoneSelectorConfig);
 
     const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = QStringLiteral("panel.popup"),
@@ -98,7 +104,9 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                         .showShaderEffectId = {},
                                                         .hideShaderEffectId = {},
                                                         .showShaderProfile = {},
-                                                        .hideShaderProfile = {}};
+                                                        .hideShaderProfile = {},
+                                                        .showShaderParameters = {},
+                                                        .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::SnapAssist, snapAssistConfig);
 
     return anim;

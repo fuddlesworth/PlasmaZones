@@ -12,6 +12,7 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimationShaders/ShaderProfile.h>
 #include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
@@ -507,16 +508,34 @@ private:
         std::unique_ptr<KWin::GLShader> shader;
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
+        /// Per-effect declared parameters resolved to uniform locations once at
+        /// shader-compile time. Cached so paintWindow doesn't re-query
+        /// uniformLocation() per frame. Each binding carries the parameter's
+        /// declared type and default so we can fall back when a transition's
+        /// ShaderProfile didn't override it.
+        struct ParamBinding
+        {
+            QString id; ///< matches the AnimationShaderEffect parameter id AND the GLSL uniform name
+            int loc = -1; ///< uniform location, -1 if the shader doesn't actually use this param
+            QString type; ///< "float" | "int" | "bool" | "color"
+            QVariant defaultValue;
+        };
+        std::vector<ParamBinding> paramBindings;
     };
     struct ShaderTransition
     {
         const CachedShader* cached = nullptr;
+        /// ShaderProfile::effectiveParameters() at begin time. Per-event overrides
+        /// the user set in the profile tree; per-frame paintWindow looks up each
+        /// CachedShader::paramBindings entry by id, falling back to the binding's
+        /// declared default when this map doesn't carry a value for the key.
+        QVariantMap parameters;
     };
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
-    void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
+    void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();

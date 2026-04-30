@@ -3515,7 +3515,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         if (m_windowAnimator->hasAnimation(window)) {
             const auto shaderProfile = m_shaderProfileTree.resolve(profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
-                beginShaderTransition(window, shaderProfile.effectiveEffectId());
+                beginShaderTransition(window, shaderProfile);
             }
         }
 
@@ -4116,11 +4116,42 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         const auto* anim = m_windowAnimator->animationFor(w);
         if (anim && anim->isAnimating()) {
             const qreal progress = qBound(0.0, anim->state().value, 1.0);
-            KWin::GLShader* shader = sit->second.cached->shader.get();
+            const auto& transition = sit->second;
+            const CachedShader* cached = transition.cached;
+            KWin::GLShader* shader = cached->shader.get();
 
-            shader->setUniform(sit->second.cached->iTimeLoc, static_cast<float>(progress));
+            shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
-            shader->setUniform(sit->second.cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            // Per-event shader parameters: walk the cached binding list (one
+            // entry per effect-declared parameter, with uniform location resolved
+            // at compile time). Pull the value from the transition's resolved
+            // ShaderProfile parameters; fall back to the effect's declared
+            // default when the user's profile didn't override it. This is the
+            // path that makes `parameters: {direction: 1}` on the slide effect
+            // actually steer the shader — without it, the user's overrides
+            // silently no-op.
+            for (const auto& pb : cached->paramBindings) {
+                if (pb.loc < 0) {
+                    continue; // shader doesn't reference this param — skip
+                }
+                const QVariant value = transition.parameters.value(pb.id, pb.defaultValue);
+                if (pb.type == QLatin1String("int")) {
+                    shader->setUniform(pb.loc, value.toInt());
+                } else if (pb.type == QLatin1String("bool")) {
+                    shader->setUniform(pb.loc, value.toBool() ? 1 : 0);
+                } else if (pb.type == QLatin1String("color")) {
+                    const QColor c = value.value<QColor>();
+                    shader->setUniform(pb.loc,
+                                       QVector4D(static_cast<float>(c.redF()), static_cast<float>(c.greenF()),
+                                                 static_cast<float>(c.blueF()), static_cast<float>(c.alphaF())));
+                } else {
+                    // Default to float (covers "float" type and any unknown
+                    // type the metadata may declare). toFloat handles ints
+                    // gracefully, so a stray int value here is non-fatal.
+                    shader->setUniform(pb.loc, value.toFloat());
+                }
+            }
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
         }
@@ -4130,8 +4161,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
-void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const QString& effectId)
+void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
+                                              const PhosphorAnimationShaders::ShaderProfile& profile)
 {
+    const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
         return;
 
@@ -4162,6 +4195,21 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const 
         CachedShader cached;
         cached.iTimeLoc = shader->uniformLocation(kUniformITime);
         cached.iResolutionLoc = shader->uniformLocation(kUniformIResolution);
+        // Resolve every declared parameter's uniform location once at compile
+        // time so paintWindow only does a vector walk per frame, not a string
+        // hash lookup. uniformLocation returns -1 for parameters the shader
+        // didn't actually reference (e.g. an effect declares `parallax` but a
+        // distro-tweaked shader optimised it out) — we keep the binding so
+        // metadata stays authoritative, paintWindow skips loc == -1 entries.
+        cached.paramBindings.reserve(eff.parameters.size());
+        for (const auto& paramInfo : eff.parameters) {
+            CachedShader::ParamBinding pb;
+            pb.id = paramInfo.id;
+            pb.loc = shader->uniformLocation(paramInfo.id.toUtf8().constData());
+            pb.type = paramInfo.type;
+            pb.defaultValue = paramInfo.defaultValue;
+            cached.paramBindings.push_back(std::move(pb));
+        }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
@@ -4171,6 +4219,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const 
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
     transition.cached = &cachedEntry;
+    transition.parameters = profile.effectiveParameters();
 
     redirect(window);
     setShader(window, cachedEntry.shader.get());

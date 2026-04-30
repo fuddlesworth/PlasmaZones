@@ -185,6 +185,14 @@ QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& p
     return tree.resolve(path).effectiveEffectId();
 }
 
+/// Resolve a path against the shader profile tree and extract the per-event
+/// parameter overrides. Empty map when the profile didn't override anything
+/// — the shader runs with its declared defaults from metadata.json.
+QVariantMap resolveShaderParameters(const PAS::ShaderProfileTree& tree, const QString& path)
+{
+    return tree.resolve(path).effectiveParameters();
+}
+
 /// Default config — empty. Surfaces that route through the animator
 /// without a registered config fall back to AnimatedValue's library
 /// default (150 ms OutCubic), same as a missing-profile lookup. Every
@@ -210,7 +218,9 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
         .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::OsdShow),
         .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::OsdHide),
         .showShaderProfile = PhosphorAnimation::ProfilePaths::OsdShow,
-        .hideShaderProfile = PhosphorAnimation::ProfilePaths::OsdHide};
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::OsdHide,
+        .showShaderParameters = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::OsdShow),
+        .hideShaderParameters = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::OsdHide)};
 }
 
 /// LayoutPicker: same OSD-style shape with softer scale envelope (0.9→1
@@ -220,6 +230,7 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 /// default (walk-up resolution).
 PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree)
 {
+    const auto params = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker);
     return PAL::SurfaceAnimator::Config{
         .showProfile = osdShow(),
         .hideProfile = osdHide(),
@@ -230,7 +241,9 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
         .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker),
         .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker),
         .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker,
-        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker};
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker,
+        .showShaderParameters = params,
+        .hideShaderParameters = params};
 }
 
 /// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
@@ -240,6 +253,7 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
 /// future per-leg paths if needed.
 PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree)
 {
+    const auto params = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector);
     return PAL::SurfaceAnimator::Config{
         .showProfile = panelPopup(),
         .hideProfile = widgetFadeOut(),
@@ -248,7 +262,9 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
         .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector),
         .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector),
         .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector,
-        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector};
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector,
+        .showShaderParameters = params,
+        .hideShaderParameters = params};
 }
 
 /// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
@@ -266,7 +282,9 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree&
         .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist),
         .hideShaderEffectId = {},
         .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist,
-        .hideShaderProfile = {}};
+        .hideShaderProfile = {},
+        .showShaderParameters = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist),
+        .hideShaderParameters = {}};
 }
 
 } // namespace
