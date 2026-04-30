@@ -530,6 +530,25 @@ private:
         /// CachedShader::paramBindings entry by id, falling back to the binding's
         /// declared default when this map doesn't carry a value for the key.
         QVariantMap parameters;
+        /// Two-mode progress source.
+        /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
+        ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
+        ///   computes `progress = clamp01((now - startTimeMs) / durationMs)`.
+        ///   Used by lifecycle events (window.open/close/focus/etc., cursor.drag)
+        ///   that have no `m_windowAnimator` animation to ride.
+        /// • `durationMs == 0`: animator-driven — paintWindow reads progress
+        ///   from `m_windowAnimator->animationFor(w)->state().value`. Used by
+        ///   zone.* events that flow through `applySnapGeometry` and inherit
+        ///   the geometry animation's timeline.
+        qint64 startTimeMs = 0;
+        int durationMs = 0;
+        /// Monotonic per-window generation. Each `beginShaderTransition` bumps
+        /// the counter for that window; the timer-driven `endShaderTransition`
+        /// scheduled by `tryBeginShaderForEvent` captures the generation at
+        /// schedule time and bails on fire if the live transition has been
+        /// superseded — without this, a stale timer would tear down a fresh
+        /// transition that replaced it before it had a chance to play out.
+        quint64 generation = 0;
     };
     /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
     /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
@@ -556,7 +575,28 @@ private:
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
-    void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile);
+    /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
+    /// inside @ref beginShaderTransition every time a transition installs;
+    /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the
+    /// generation it captured at schedule time against the live transition's
+    /// generation before tearing down. Mismatch = a successor replaced us;
+    /// don't kill the successor.
+    quint64 m_shaderTransitionGenerationCounter = 0;
+    /// Per-window edge-detection for windowMaximizedStateChanged. KWin can
+    /// fire that signal twice for a single user-driven maximize transition
+    /// (axis-by-axis), and we only want the WindowMaximize / WindowUnmaximize
+    /// shader to fire on the actual edge, not on the intermediate
+    /// vertical-only / horizontal-only state. Cleared on windowDeleted.
+    QHash<KWin::EffectWindow*, bool> m_lastFullyMaximized;
+    /// Last window we fired a window.focus shader on. KWin emits
+    /// `windowActivated` on virtual-desktop / activity / re-stack churn even
+    /// when the focused window didn't actually change; gating on this avoids
+    /// shader spam. QPointer auto-nulls on window destroy so a fresh window
+    /// reusing the address can't false-match. Cleared explicitly on
+    /// windowDeleted (defence in depth) and on window destroy via QPointer.
+    QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
+    void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
+                               int durationMs = 0);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
