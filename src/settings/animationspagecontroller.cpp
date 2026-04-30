@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -84,6 +85,33 @@ void mergeMissingFields(QVariantMap& target, const QVariantMap& source)
             target.insert(it.key(), it.value());
         }
     }
+}
+
+/// Filesystem-safe slug for a user-supplied preset name. Lowercase
+/// alphanumerics keep their identity; everything else collapses to a
+/// hyphen. Preserves dots so display-style identifiers ("my.curve")
+/// round-trip naturally; rejects empty results so an all-symbol name
+/// fails the write rather than silently writing to ".json".
+QString slugifyPresetName(const QString& name)
+{
+    QString out;
+    out.reserve(name.size());
+    bool lastWasDash = false;
+    for (QChar c : name) {
+        const QChar lower = c.toLower();
+        if (lower.isLetterOrNumber() || lower == QLatin1Char('.')) {
+            out.append(lower);
+            lastWasDash = false;
+        } else if (!lastWasDash) {
+            out.append(QLatin1Char('-'));
+            lastWasDash = true;
+        }
+    }
+    while (out.startsWith(QLatin1Char('-')))
+        out.remove(0, 1);
+    while (out.endsWith(QLatin1Char('-')))
+        out.chop(1);
+    return out;
 }
 
 /// Fill any unset fields in @p profile with the `Profile::Default*`
@@ -219,6 +247,14 @@ QString AnimationsPageController::profileFilePath(const QString& path) const
     return userProfilesDir() + QLatin1Char('/') + path + QStringLiteral(".json");
 }
 
+QString AnimationsPageController::presetFilePath(const QString& presetName) const
+{
+    const QString slug = slugifyPresetName(presetName);
+    if (slug.isEmpty())
+        return {};
+    return userProfilesDir() + QLatin1Char('/') + slug + QStringLiteral(".json");
+}
+
 bool AnimationsPageController::hasOverride(const QString& path) const
 {
     if (path.isEmpty())
@@ -303,6 +339,130 @@ bool AnimationsPageController::clearOverride(const QString& path)
     if (!file.remove())
         return false;
     Q_EMIT overrideChanged(path);
+    return true;
+}
+
+// ─── Preset library ────────────────────────────────────────────────────
+
+QVariantList AnimationsPageController::userPresets() const
+{
+    using namespace PhosphorAnimation;
+
+    QVariantList result;
+    QDir dir(userProfilesDir());
+    if (!dir.exists())
+        return result;
+
+    // Convert to QSet for O(1) membership checks; allBuiltInPaths() is
+    // already filtered for reserved entries but we double-check
+    // isReservedPath() so a future schema bump that loosens the
+    // taxonomy doesn't quietly start surfacing reserved-path files as
+    // "presets."
+    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
+    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
+
+    const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    for (const QFileInfo& info : entries) {
+        const QJsonObject obj = readProfileJson(info.absoluteFilePath());
+        if (obj.isEmpty())
+            continue;
+
+        // readProfileJson strips the `name` field; re-read it here
+        // because we need it both for the filter and for the QML row
+        // identity.
+        QFile raw(info.absoluteFilePath());
+        if (!raw.open(QIODevice::ReadOnly))
+            continue;
+        const auto rawDoc = QJsonDocument::fromJson(raw.readAll());
+        if (!rawDoc.isObject())
+            continue;
+        const QString name = rawDoc.object().value(jsonNameKey()).toString();
+        if (name.isEmpty() || knownPathSet.contains(name) || ProfilePaths::isReservedPath(name))
+            continue;
+
+        QVariantMap entry = obj.toVariantMap();
+        entry.insert(QStringLiteral("name"), name);
+        result.append(entry);
+    }
+    return result;
+}
+
+bool AnimationsPageController::addUserPreset(const QString& name, const QVariantMap& profileJson)
+{
+    using namespace PhosphorAnimation;
+
+    if (name.isEmpty())
+        return false;
+
+    // Reject names that match a built-in event path — the file would
+    // collide with an override slot and the daemon would treat the
+    // preset as a path-bound profile.
+    if (ProfilePaths::allBuiltInPaths().contains(name) || ProfilePaths::isReservedPath(name))
+        return false;
+
+    const QString filePath = presetFilePath(name);
+    if (filePath.isEmpty())
+        return false;
+
+    const QString dir = userProfilesDir();
+    if (!QDir().mkpath(dir))
+        return false;
+
+    QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
+    obj.insert(jsonNameKey(), name);
+
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    if (!file.commit())
+        return false;
+
+    Q_EMIT userPresetsChanged();
+    return true;
+}
+
+bool AnimationsPageController::removeUserPreset(const QString& name)
+{
+    if (name.isEmpty())
+        return false;
+
+    // Try the slug-derived path first; fall back to a directory scan
+    // for the file whose `name` field matches. The fallback covers the
+    // edge case where the slug rule changes between writes (e.g. the
+    // user upgraded across a slugify revision and an old file's name
+    // no longer round-trips through the new slug).
+    QString filePath = presetFilePath(name);
+    if (!filePath.isEmpty() && !QFileInfo::exists(filePath))
+        filePath.clear();
+
+    if (filePath.isEmpty()) {
+        QDir dir(userProfilesDir());
+        const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files);
+        for (const QFileInfo& info : entries) {
+            QFile raw(info.absoluteFilePath());
+            if (!raw.open(QIODevice::ReadOnly))
+                continue;
+            const auto doc = QJsonDocument::fromJson(raw.readAll());
+            if (!doc.isObject())
+                continue;
+            if (doc.object().value(jsonNameKey()).toString() == name) {
+                filePath = info.absoluteFilePath();
+                break;
+            }
+        }
+    }
+
+    if (filePath.isEmpty())
+        return false;
+
+    QFile file(filePath);
+    if (!file.exists())
+        return false;
+    if (!file.remove())
+        return false;
+
+    Q_EMIT userPresetsChanged();
     return true;
 }
 

@@ -310,6 +310,101 @@ private Q_SLOTS:
         QCOMPARE(resolved.value(QStringLiteral("duration")).toInt(), 333);
     }
 
+    // ─── User preset library ──────────────────────────────────────────────
+
+    void addUserPreset_writesFileWithSlugFilename()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
+        QVERIFY(c.addUserPreset(
+            QStringLiteral("My Snappy Spring!"),
+            {{QStringLiteral("curve"), QStringLiteral("spring:14.0,0.7")}, {QStringLiteral("duration"), 200}}));
+        QCOMPARE(spy.count(), 1);
+
+        // Slugified filename: lowercase, non-alnum collapsed to '-',
+        // trailing '-' trimmed.
+        QVERIFY(QFileInfo::exists(tmp.path() + QStringLiteral("/my-snappy-spring.json")));
+    }
+
+    void userPresets_excludesPathNamedFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Preset file
+        QVERIFY(
+            c.addUserPreset(QStringLiteral("My Curve"), {{QStringLiteral("curve"), QStringLiteral("0.5,0,0.5,1")}}));
+        // Override file at a known path
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 250}}));
+
+        // userPresets sees ONLY the preset, not the override
+        const QVariantList presets = c.userPresets();
+        QCOMPARE(presets.size(), 1);
+        QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("My Curve"));
+    }
+
+    void addUserPreset_rejectsKnownPathNames()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
+        // "zone.snapIn" is a known event path — would shadow the
+        // override slot.
+        QVERIFY(!c.addUserPreset(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 100}}));
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(c.userPresets().isEmpty());
+    }
+
+    void addUserPreset_rejectsEmptyAndAllSymbol()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(!c.addUserPreset(QString(), {{QStringLiteral("duration"), 100}}));
+        // All-symbol slugifies to empty → reject (would write to ".json")
+        QVERIFY(!c.addUserPreset(QStringLiteral("@@@"), {{QStringLiteral("duration"), 100}}));
+    }
+
+    void removeUserPreset_emitsAndDeletes()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(
+            c.addUserPreset(QStringLiteral("To Delete"), {{QStringLiteral("curve"), QStringLiteral("spring:10,0.5")}}));
+        QCOMPARE(c.userPresets().size(), 1);
+
+        QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
+        QVERIFY(c.removeUserPreset(QStringLiteral("To Delete")));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.userPresets().isEmpty());
+    }
+
+    void removeUserPreset_unknownReturnsFalse()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
+        QVERIFY(!c.removeUserPreset(QStringLiteral("nonexistent")));
+        QCOMPARE(spy.count(), 0);
+    }
+
     void resolvedProfile_partialLeafFillsFromParentAndDefaults()
     {
         QTemporaryDir tmp;

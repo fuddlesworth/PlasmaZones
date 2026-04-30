@@ -26,9 +26,9 @@ Kirigami.Dialog {
     property real _workingOmega: springOmega
     property real _workingZeta: springZeta
     property bool _savingPreset: false
-    // True while the preset CRUD lands in Phase 5. The "Save as Preset…"
-    // footer hides until then so the dialog has no broken affordances.
-    readonly property bool _userPresetsAvailable: false
+    // Phase 5 wires AnimationsPageController.addUserPreset; the
+    // "Save as Preset…" footer is functional now.
+    readonly property bool _userPresetsAvailable: true
 
     signal curveApplied(string curve)
     signal springApplied(real omega, real zeta)
@@ -342,7 +342,22 @@ Kirigami.Dialog {
                     }
                 }
                 onAccepted: {
-                    // Phase 5: route through settingsController.animationsPage.addUserPreset(...)
+                    var trimmed = text.trim();
+                    if (trimmed.length === 0)
+                        return ;
+
+                    // Build a Profile JSON shaped like Profile::toJson():
+                    // a single `curve` string (easing wire format or
+                    // "spring:omega,zeta") plus duration. The controller
+                    // stamps `name` automatically.
+                    var profile = {
+                        "duration": appSettings.animationDuration
+                    };
+                    if (root.timingMode === CurvePresets.timingModeEasing)
+                        profile.curve = root._workingCurve;
+                    else
+                        profile.curve = "spring:" + root._workingOmega.toFixed(2) + "," + root._workingZeta.toFixed(2);
+                    settingsController.animationsPage.addUserPreset(trimmed, profile);
                     root._savingPreset = false;
                 }
                 Keys.onEscapePressed: root._savingPreset = false

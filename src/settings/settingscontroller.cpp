@@ -553,6 +553,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-panel"),
         QStringLiteral("animations-cursor"),
         QStringLiteral("animations-widget"),
+        QStringLiteral("animations-presets"),
     };
     return pages;
 }

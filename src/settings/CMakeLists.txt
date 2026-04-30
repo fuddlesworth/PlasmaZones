@@ -143,6 +143,7 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsGeneralPage.qml
         qml/AnimationsOsdPage.qml
         qml/AnimationsPanelPage.qml
+        qml/AnimationsPresetsPage.qml
         qml/AnimationsWidgetPage.qml
         qml/AnimationsWindowPage.qml
         qml/AnimationsWorkspacePage.qml

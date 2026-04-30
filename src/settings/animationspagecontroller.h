@@ -120,6 +120,23 @@ public:
     /// file was removed.
     Q_INVOKABLE bool clearOverride(const QString& path);
 
+    /// Library of user-saved Profile presets. Each entry is a Profile JSON
+    /// (`curve`, `duration`, `name`, …) sitting in the same `profiles/`
+    /// dir as overrides — distinguished by the `name` field NOT matching
+    /// any `ProfilePaths::` constant. Entries with a `curve` starting
+    /// with `"spring:"` are spring presets; everything else is easing.
+    Q_INVOKABLE QVariantList userPresets() const;
+
+    /// Save @p profileJson under @p name as a user preset. Rejects names
+    /// that collide with a built-in `ProfilePaths::` event path so a
+    /// preset can't accidentally shadow an override slot. @return true
+    /// on a successful disk write. Emits `userPresetsChanged()`.
+    Q_INVOKABLE bool addUserPreset(const QString& name, const QVariantMap& profileJson);
+
+    /// Delete the user preset whose `name` field matches @p name.
+    /// @return true on a successful delete. Emits `userPresetsChanged()`.
+    Q_INVOKABLE bool removeUserPreset(const QString& name);
+
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -130,9 +147,13 @@ Q_SIGNALS:
     /// affected event path.
     void overrideChanged(const QString& path);
 
+    /// Emitted on any successful add/removeUserPreset.
+    void userPresetsChanged();
+
 private:
     QString userProfilesDir() const;
     QString profileFilePath(const QString& path) const;
+    QString presetFilePath(const QString& presetName) const;
 
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
 };

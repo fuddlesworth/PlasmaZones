@@ -185,7 +185,12 @@ ApplicationWindow {
         }, {
             "name": "animations-widget",
             "label": i18n("Widget"),
-            "iconName": "preferences-desktop-effects"
+            "iconName": "preferences-desktop-effects",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-presets",
+            "label": i18n("Presets"),
+            "iconName": "bookmarks"
         }]
     })
     // Page component map -- loaded on demand by Loader
@@ -218,7 +223,8 @@ ApplicationWindow {
         "animations-osd": "AnimationsOsdPage.qml",
         "animations-panel": "AnimationsPanelPage.qml",
         "animations-cursor": "AnimationsCursorPage.qml",
-        "animations-widget": "AnimationsWidgetPage.qml"
+        "animations-widget": "AnimationsWidgetPage.qml",
+        "animations-presets": "AnimationsPresetsPage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({
