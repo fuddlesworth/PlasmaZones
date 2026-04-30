@@ -539,8 +539,19 @@ bool AnimationsPageController::addUserPreset(const QString& name, const QVariant
 
     // Reject names that match a built-in event path — the file would
     // collide with an override slot and the daemon would treat the
-    // preset as a path-bound profile.
-    if (ProfilePaths::allBuiltInPaths().contains(name) || ProfilePaths::isReservedPath(name))
+    // preset as a path-bound profile. Check both the original name
+    // and the slug because slugify lowercases everything: without the
+    // slug check, addUserPreset("Window", …) would slugify to "window"
+    // and write the SAME file as the override for path "window",
+    // silently destroying the user's existing override and producing a
+    // file whose `name` field ("Window") no longer matches the filename
+    // stem ("window") — ProfileLoader's envelope check then rejects or
+    // misroutes the load.
+    const QString slug = slugifyPresetName(name);
+    if (slug.isEmpty())
+        return false;
+    if (ProfilePaths::allBuiltInPaths().contains(name) || ProfilePaths::isReservedPath(name)
+        || ProfilePaths::allBuiltInPaths().contains(slug) || ProfilePaths::isReservedPath(slug))
         return false;
 
     const QString filePath = presetFilePath(name);
@@ -754,8 +765,10 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
-
-    Q_EMIT shaderProfileChanged(path);
+    // No explicit shaderProfileChanged emit — setShaderProfileTree fires
+    // shaderProfileTreeChanged, which the constructor's lambda translates
+    // into a path-agnostic shaderProfileChanged broadcast. Emitting here
+    // would double-fire the signal.
     return true;
 }
 
@@ -769,7 +782,8 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
         return false;
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
-    Q_EMIT shaderProfileChanged(path);
+    // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
+    // No double emit.
     return true;
 }
 
@@ -835,8 +849,12 @@ bool AnimationsPageController::applyMotionSet(const QString& name)
         if (setOverride(path, profile.toVariantMap()))
             wroteAny = true;
     }
-    if (wroteAny)
-        Q_EMIT motionSetsChanged();
+    // Don't emit motionSetsChanged here — the saved-set list is
+    // unchanged; only per-path overrides moved (setOverride already
+    // emitted overrideChanged + pendingChangesChanged for each).
+    // Emitting motionSetsChanged would mislead QML pages that listen
+    // for set-list mutations into refreshing the list and clearing
+    // their _saving flag mid-flow.
     return wroteAny;
 }
 

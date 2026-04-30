@@ -604,12 +604,13 @@ public:
                 // Signal-receiver targets (shaderItem) own the
                 // connection lifetime via auto-disconnect on shaderItem
                 // teardown — no explicit disconnect needed in
-                // legCompleted. Lambda captures shaderAnchor as
-                // QPointer-safe by virtue of routing through the
-                // tracks map; if the anchor disappears mid-flight, the
-                // lambda's setWidth call to a torn-down item is moot
-                // (Qt's QQuickItem destructor severs all signal
-                // emissions before deletion).
+                // legCompleted. Lambda captures shaderAnchor as a raw
+                // pointer; what makes that safe is Qt's auto-disconnect
+                // on sender destruction: when shaderAnchor is torn down
+                // its widthChanged/heightChanged connections are severed
+                // before any final emission, so the lambda never runs
+                // against a dangling pointer. The same applies on the
+                // receiver side if shaderItem dies first.
                 auto syncGeometry = [shaderItem, shaderAnchor]() {
                     shaderItem->setWidth(shaderAnchor->width());
                     shaderItem->setHeight(shaderAnchor->height());

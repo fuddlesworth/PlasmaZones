@@ -161,7 +161,7 @@ void Settings::load()
     // declared in settings.h, so the reflective Q_PROPERTY loop below
     // re-emits its NOTIFY (shaderProfileTreeChanged) automatically when
     // the value changes during reparseConfiguration — no custom
-    // shapshot/diff path needed.
+    // snapshot/diff path needed.
 
     m_configBackend->reparseConfiguration();
 

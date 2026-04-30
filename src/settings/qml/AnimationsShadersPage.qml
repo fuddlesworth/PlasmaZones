@@ -18,6 +18,11 @@ Flickable {
     id: root
 
     property var effectList: settingsController.animationsPage.availableShaderEffects()
+    // Cached at component creation so the binding doesn't re-invoke
+    // userShaderDirectory() on every paint — the Q_INVOKABLE runs
+    // QStandardPaths::writableLocation + mkpath, which is wasteful to
+    // hit per-frame. The directory is stable for the process lifetime.
+    readonly property string _userShaderDir: settingsController.animationsPage.userShaderDirectory()
 
     contentHeight: content.implicitHeight
     clip: true
@@ -62,7 +67,7 @@ Flickable {
 
                     Label {
                         Layout.fillWidth: true
-                        text: settingsController.animationsPage.userShaderDirectory()
+                        text: root._userShaderDir
                         elide: Text.ElideMiddle
                         font: Kirigami.Theme.smallFont
                     }
