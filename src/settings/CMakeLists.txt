@@ -136,8 +136,10 @@ qt_add_qml_module(plasmazones-settings
         # `PhosphorAnimation::Spring`. CurvePresets is a singleton
         # consumed by every Animations sub-page and the editor dialog.
         qml/AnimatedBoxTrack.qml
+        qml/AnimationEventCard.qml
         qml/AnimationSubPage.qml
         qml/AnimationSubPageHeader.qml
+        qml/AnimationsZonePage.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
         qml/CurveThumbnail.qml

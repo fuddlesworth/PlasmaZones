@@ -8,6 +8,11 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
+    // Animations drilldown — Phase 3 lands the Zone sub-page; the
+    // remaining ProfilePaths sections (Window / Workspace / OSD /
+    // Panel / Cursor / Widget / Presets / Motion Sets / Shaders)
+    // join in Phases 4-7.
+
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals
@@ -51,6 +56,12 @@ ApplicationWindow {
         "name": "tiling",
         "label": i18n("Tiling"),
         "iconName": "window-duplicate",
+        "hasChildren": true,
+        "hasDividerAfter": false
+    }, {
+        "name": "animations",
+        "label": i18n("Animations"),
+        "iconName": "media-playback-start",
         "hasChildren": true,
         "hasDividerAfter": true
     }, {
@@ -141,6 +152,11 @@ ApplicationWindow {
             "name": "tiling-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
+        }],
+        "animations": [{
+            "name": "animations-zone",
+            "label": i18n("Zone"),
+            "iconName": "view-split-left-right"
         }]
     })
     // Page component map -- loaded on demand by Loader
@@ -165,7 +181,8 @@ ApplicationWindow {
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
-        "about": "AboutPage.qml"
+        "about": "AboutPage.qml",
+        "animations-zone": "AnimationsZonePage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({
