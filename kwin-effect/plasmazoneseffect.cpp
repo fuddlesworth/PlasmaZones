@@ -2534,7 +2534,11 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             QRect sizeOnlyGeo(qRound(currentFrame.x()), qRound(currentFrame.y()), width, height);
             qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << windowId << width << "x"
                              << height;
-            applySnapGeometry(w, sizeOnlyGeo);
+            // Drag-out unsnap: the daemon kept us at the drop position but restored pre-snap
+            // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
+            // not an in-zone resize.
+            applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                              PhosphorAnimation::ProfilePaths::ZoneSnapOut);
         }
         return;
     }
@@ -2574,7 +2578,12 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
     }
 
-    applySnapGeometry(w, geometry);
+    // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
+    // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
+    // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
+    applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                      zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::ZoneSnapOut
+                                       : PhosphorAnimation::ProfilePaths::ZoneSnapIn);
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -2652,9 +2661,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         savedStack.append(QPointer<KWin::EffectWindow>(w));
     }
 
+    // Map the daemon's action string to a shader-tree ProfilePath. "resnap" / "retile" are layout
+    // changes (different layout or autotile recompute) — semantically a layout switch. "rotate"
+    // moves windows between existing zones in the same layout — a snap-in. Default to ZoneSnapIn
+    // for unknown actions (forward-compat with future daemon-emitted strings).
+    const QString batchProfilePath = (action == QLatin1String("resnap") || action == QLatin1String("retile"))
+        ? PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchIn
+        : PhosphorAnimation::ProfilePaths::ZoneSnapIn;
+
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending](int i) {
+        [this, pending, batchProfilePath](int i) {
             const auto& p = pending[i];
             if (!p.window) {
                 return;
@@ -2675,7 +2692,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const auto guard = qScopeGuard([this] {
                 m_inDaemonGeometryApply = false;
             });
-            applySnapGeometry(p.window, p.geometry);
+            applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
+                              /*skipAnimation=*/false, batchProfilePath);
         },
         [this, savedStack, action]() {
             // Restore z-order after all geometries applied
@@ -3267,7 +3285,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                             kw->cancelInteractiveMoveResize();
                         }
                     }
-                    applySnapGeometry(safeWindow, geo);
+                    // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
+                    applySnapGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                      PhosphorAnimation::ProfilePaths::ZoneSnapOut);
                     break;
                 }
                 }
@@ -3359,7 +3379,7 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          bool skipAnimation)
+                                          bool skipAnimation, const QString& profilePath)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -3435,10 +3455,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         QPointer<KWin::EffectWindow> safeWindow = window;
         auto conn = std::make_shared<QMetaObject::Connection>();
         *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                        [this, safeWindow, geo, skipAnimation, conn](KWin::EffectWindow*) {
+                        [this, safeWindow, geo, skipAnimation, profilePath, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, skipAnimation);
+                                applySnapGeometry(safeWindow, geo, false, skipAnimation, profilePath);
                             }
                         });
         return;
@@ -3493,7 +3513,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
-            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
+            const auto shaderProfile = m_shaderProfileTree.resolve(profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile.effectiveEffectId());
             }
@@ -3543,7 +3563,10 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
     QRect geometry(static_cast<int>(frame.x()), static_cast<int>(frame.y()), width, height);
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
-    applySnapGeometry(window, geometry, true);
+    // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
+    // Logically a snap-out (the window is leaving zone-managed sizing).
+    applySnapGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
+                      PhosphorAnimation::ProfilePaths::ZoneSnapOut);
 }
 
 void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,

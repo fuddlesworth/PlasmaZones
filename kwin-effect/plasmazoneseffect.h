@@ -10,6 +10,7 @@
 #include <trigger_parser.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 #include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <effect/effect.h>
@@ -347,8 +348,15 @@ private:
     // Apply snap geometry to window.
     // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
+    //
+    // profilePath drives the shader-transition resolve (see ShaderProfileTree). This used to be
+    // hardcoded to "zone.snapIn" inside applySnapGeometry, which fired the same shader for every
+    // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
+    // Callers now pass the logical event path so the shader tree can route each one independently.
+    // Default is ZoneSnapIn for source compatibility with the legacy hardcoded path.
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
-                           bool skipAnimation = false);
+                           bool skipAnimation = false,
+                           const QString& profilePath = PhosphorAnimation::ProfilePaths::ZoneSnapIn);
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
