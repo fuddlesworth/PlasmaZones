@@ -468,54 +468,67 @@ public:
                 // their visible card in via `objectName: "shaderAnchor"`
                 // in QML; we look that up here.
                 QQuickItem* shaderAnchor = target;
+                bool foundExplicitAnchor = false;
                 if (QQuickItem* anchored = findShaderAnchorRecursive(target)) {
                     shaderAnchor = anchored;
+                    foundExplicitAnchor = true;
                 }
 
                 // ── Live-texture wiring ──────────────────────────────
-                // Force `layer.enabled = true` on the anchor so Qt
-                // renders it to an FBO and exposes the result via
-                // `QQuickItem::textureProvider()`. The shader effect
-                // binds that provider as iChannel0 and samples the
-                // anchor's pixels live every frame.
+                // Only enable the layer when we found an EXPLICIT
+                // `objectName: "shaderAnchor"` child. Forcing
+                // `layer.enabled = true` on the fallback target — which
+                // is `Window::contentItem`, a QQuickRootItem — breaks
+                // Qt's scene graph: the root item IS the rendering
+                // destination, so making it a layer source asks Qt to
+                // render the root to a texture and then blit that
+                // texture back through... the root. Qt handles this by
+                // skipping the render entirely (or producing UB),
+                // which surfaced as "OSDs aren't rendering at all" the
+                // moment we tried to enable a layer on a target that
+                // was the QQuickRootItem.
                 //
-                // We park the shader effect as a CHILD of the anchor
-                // (not a sibling) so it inherits the anchor's
-                // coordinate system — anchors / Layouts / explicit
-                // (x,y) all "just work" without per-frame position
-                // mirroring. The naive concern with this layout is
-                // feedback: the layer captures the anchor's subtree
-                // INCLUDING the shader effect, so frame N's shader
-                // output lands in frame N+1's source texture. In
-                // practice Qt's QSGLayer is double-buffered — the
-                // texture provider hands out the LAST committed FBO,
-                // not the one currently being rendered to — so the
-                // shader samples a clean prior-frame snapshot rather
-                // than its own in-flight output. Frame N+1 samples
-                // frame N's (anchor + shader@N-1) blend, but the
-                // chain converges quickly because each iteration
-                // applies the same idempotent transform to a
-                // near-stationary input. For a 200ms transition the
-                // visible compounding is negligible.
+                // Surfaces that opt into the live-texture path get the
+                // proper layer-enabled behaviour. Surfaces that don't
+                // tag a shaderAnchor still animate (opacity / scale
+                // legs run normally) and get the shader-effect-as-child
+                // overlay; the shader's iChannel0 falls through to the
+                // user-texture-0 path (transparent fallback if no
+                // QImage is set), so the shader output is invisible
+                // unless someone wires that up. Future work: tag the
+                // visible card inside OSDs with `objectName:
+                // "shaderAnchor"` so OSD pixelate / dissolve / glitch
+                // work the same way as LayoutPicker's.
+                //
+                // The naive concern with putting the shader as a
+                // CHILD of a layer-enabled anchor is feedback (the
+                // layer captures the shader's own output into the
+                // next frame's texture). Qt's QSGLayer presents the
+                // last-committed FBO to the texture provider, so the
+                // shader samples a clean prior-frame snapshot — at
+                // 200ms transition lengths any compounding is
+                // visually negligible.
                 //
                 // We deliberately DO NOT clear layer.enabled when the
                 // leg ends: re-enabling it for every transition would
-                // pay a per-toggle FBO allocation cost, and keeping
-                // the layer alive between transitions has no
-                // user-visible cost.
-                // Two-step access — see ShaderEffect::setSourceItem for
-                // the full rationale. Single-step
-                // setProperty("layer.enabled", true) creates a dynamic
-                // QObject property of that exact name; it never reaches
-                // QQuickItemLayer and `isTextureProvider()` stays false.
-                if (QObject* layer = shaderAnchor->property("layer").value<QObject*>()) {
-                    layer->setProperty("enabled", true);
+                // pay a per-toggle FBO allocation cost.
+                if (foundExplicitAnchor) {
+                    // Two-step access — see ShaderEffect::setSourceItem
+                    // for the full rationale. Single-step
+                    // setProperty("layer.enabled", true) creates a
+                    // dynamic QObject property of that exact name; it
+                    // never reaches QQuickItemLayer and
+                    // isTextureProvider() stays false.
+                    if (QObject* layer = shaderAnchor->property("layer").value<QObject*>()) {
+                        layer->setProperty("enabled", true);
+                    }
                 }
 
                 qCInfo(lcSurfaceAnimator).nospace()
                     << "shader leg: effect=" << shaderEffectId << " path=" << resolvedShaderEff.fragmentShaderPath
                     << " anchor=" << shaderAnchor << " (objectName=" << shaderAnchor->objectName()
-                    << ", target=" << target << ", anchor==target? " << (shaderAnchor == target) << ")"
+                    << ", target=" << target << ", anchor==target? " << (shaderAnchor == target) << ", explicitAnchor? "
+                    << foundExplicitAnchor << ")"
                     << " size=" << shaderAnchor->width() << "x" << shaderAnchor->height()
                     << " textureProvider=" << shaderAnchor->isTextureProvider();
 
@@ -530,7 +543,21 @@ public:
                 // effect re-fetches the provider's current QRhiTexture
                 // and rebuilds the SRB on identity change (FBO
                 // re-allocation on resize / device-loss).
-                shaderItem->setSourceItem(shaderAnchor);
+                //
+                // Only bind when an explicit anchor exists: when the
+                // fallback target is the QQuickRootItem, we deliberately
+                // didn't enable its layer (would break rendering — see
+                // the explicit-anchor gate above) so it isn't a
+                // texture provider, and ShaderEffect::setSourceItem
+                // would try to enable layer on the root, re-introducing
+                // the OSD-doesn't-render bug. Falling through here
+                // leaves iChannel0 at the user-texture-0 path
+                // (transparent fallback for now); the shader is
+                // visually a no-op for those surfaces but the rest of
+                // the leg (opacity / scale animation) still runs.
+                if (foundExplicitAnchor) {
+                    shaderItem->setSourceItem(shaderAnchor);
+                }
 
                 // Translate friendly parameter ids (e.g. {"direction": 1,
                 // "parallax": 0.2}) to the canonical
