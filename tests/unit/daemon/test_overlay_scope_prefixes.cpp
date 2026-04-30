@@ -17,7 +17,7 @@
  * matching PzRoles base, the lookup silently falls back to the empty
  * default config and every show/hide runs on the library's 150 ms
  * OutCubic fallback instead of the configured `osd.show` /
- * `panel.popup` / etc.
+ * `panel.popup.zoneSelector.show` / etc.
  *
  * The previous safety net was a single Q_ASSERT_X in
  * createZoneSelectorWindow — debug-only, and only covered ZoneSelector.
@@ -66,39 +66,60 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                  .showShaderEffectId = {},
                                                  .hideShaderEffectId = {},
                                                  .showShaderProfile = {},
-                                                 .hideShaderProfile = {}};
+                                                 .hideShaderProfile = {},
+                                                 .showShaderParameters = {},
+                                                 .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::Notification, osdConfig);
 
-    const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = QStringLiteral("osd.show"),
-                                                          .hideProfile = QStringLiteral("osd.hide"),
-                                                          .showScaleProfile = QStringLiteral("osd.pop"),
-                                                          .hideScaleProfile = QStringLiteral("osd.hide"),
-                                                          .showScaleFrom = 0.9,
-                                                          .hideScaleTo = 0.95,
-                                                          .showShaderEffectId = {},
-                                                          .hideShaderEffectId = {},
-                                                          .showShaderProfile = {},
-                                                          .hideShaderProfile = {}};
+    // LayoutPicker — popup surface family. Path-family separation means
+    // every leg resolves under `panel.popup.layoutPicker.*`, NOT under
+    // `osd.*`. A regression that re-bundles LayoutPicker onto osd paths
+    // (or accidentally leaves it on the OSD family during a refactor)
+    // would surface as a config-mismatch in this test fixture.
+    const PAL::SurfaceAnimator::Config layoutPickerConfig{
+        .showProfile = QStringLiteral("panel.popup.layoutPicker.show"),
+        .hideProfile = QStringLiteral("panel.popup.layoutPicker.hide"),
+        .showScaleProfile = QStringLiteral("panel.popup.layoutPicker.popIn"),
+        .hideScaleProfile = QStringLiteral("panel.popup.layoutPicker.hide"),
+        .showScaleFrom = 0.9,
+        .hideScaleTo = 0.95,
+        .showShaderEffectId = {},
+        .hideShaderEffectId = {},
+        .showShaderProfile = {},
+        .hideShaderProfile = {},
+        .showShaderParameters = {},
+        .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::LayoutPicker, layoutPickerConfig);
 
-    const PAL::SurfaceAnimator::Config zoneSelectorConfig{.showProfile = QStringLiteral("panel.popup"),
-                                                          .hideProfile = QStringLiteral("widget.fadeOut"),
-                                                          .showScaleProfile = {},
-                                                          .hideScaleProfile = {},
-                                                          .showShaderEffectId = {},
-                                                          .hideShaderEffectId = {},
-                                                          .showShaderProfile = {},
-                                                          .hideShaderProfile = {}};
+    // ZoneSelector — popup surface family, dedicated `.show` / `.hide`
+    // leaves under `panel.popup.zoneSelector.*`. Previously borrowed
+    // `panel.popup` (show) and `widget.fadeOut` (hide); now its own
+    // family.
+    const PAL::SurfaceAnimator::Config zoneSelectorConfig{
+        .showProfile = QStringLiteral("panel.popup.zoneSelector.show"),
+        .hideProfile = QStringLiteral("panel.popup.zoneSelector.hide"),
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = {},
+        .hideShaderEffectId = {},
+        .showShaderProfile = {},
+        .hideShaderProfile = {},
+        .showShaderParameters = {},
+        .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::ZoneSelector, zoneSelectorConfig);
 
-    const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = QStringLiteral("panel.popup"),
+    // SnapAssist — popup surface family, dedicated `.show` leaf.
+    // Previously borrowed `panel.popup` directly; now its own.
+    const PAL::SurfaceAnimator::Config snapAssistConfig{.showProfile = QStringLiteral("panel.popup.snapAssist.show"),
                                                         .hideProfile = {},
                                                         .showScaleProfile = {},
                                                         .hideScaleProfile = {},
                                                         .showShaderEffectId = {},
                                                         .hideShaderEffectId = {},
                                                         .showShaderProfile = {},
-                                                        .hideShaderProfile = {}};
+                                                        .hideShaderProfile = {},
+                                                        .showShaderParameters = {},
+                                                        .hideShaderParameters = {}};
     anim->registerConfigForRole(PzRoles::SnapAssist, snapAssistConfig);
 
     return anim;
@@ -173,38 +194,73 @@ private Q_SLOTS:
     /// only catches divergence in debug builds; this test catches it in
     /// release too. Pre-fix the daemon used "plasmazones-selector-..."
     /// which did NOT prefix-match "plasmazones-zone-selector".
-    void zone_selector_scope_resolves_to_panel_popup()
+    ///
+    /// Also pins the surface-family separation: ZoneSelector lives under
+    /// `panel.popup.zoneSelector.*`, NOT under the shared `panel.popup`
+    /// baseline or the generic `widget.fadeOut` it previously borrowed.
+    /// A regression that re-bundles ZoneSelector onto the shared paths
+    /// would surface here.
+    void zone_selector_scope_resolves_to_dedicated_paths()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::ZoneSelector, QStringLiteral("DP-1/vs:0"), 12);
         const auto cfg = anim->configForRole(role);
-        QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
-        QCOMPARE(cfg.hideProfile, QStringLiteral("widget.fadeOut"));
+        QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup.zoneSelector.show"));
+        QCOMPARE(cfg.hideProfile, QStringLiteral("panel.popup.zoneSelector.hide"));
     }
 
-    void snap_assist_scope_resolves_to_panel_popup()
+    /// SnapAssist: dedicated `panel.popup.snapAssist.show` path. Empty
+    /// hideProfile because the surface destroys-on-hide and the hide
+    /// animation never paints.
+    void snap_assist_scope_resolves_to_dedicated_path()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::SnapAssist, QStringLiteral("DP-1"), 5);
         const auto cfg = anim->configForRole(role);
-        QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup"));
+        QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup.snapAssist.show"));
         // SnapAssist deliberately has empty hideProfile (destroy-on-hide).
         QVERIFY(cfg.hideProfile.isEmpty());
     }
 
-    void layout_picker_scope_resolves_to_softer_envelope()
+    /// LayoutPicker: dedicated `panel.popup.layoutPicker.*` paths
+    /// (previously borrowed osd.* — surface-family separation moved it
+    /// off the OSD family so JSON edits to `osd.hide` no longer leak
+    /// into the picker's hide animation).
+    void layout_picker_scope_resolves_to_dedicated_paths()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
         const auto role = perInstanceRole(PzRoles::LayoutPicker, QStringLiteral("DP-1"), 1);
         const auto cfg = anim->configForRole(role);
-        QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
-        QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
+        QCOMPARE(cfg.showProfile, QStringLiteral("panel.popup.layoutPicker.show"));
+        QCOMPARE(cfg.hideProfile, QStringLiteral("panel.popup.layoutPicker.hide"));
+        QCOMPARE(cfg.showScaleProfile, QStringLiteral("panel.popup.layoutPicker.popIn"));
         // LayoutPicker uses 0.9 (softer than OSD's 0.8) intentionally.
         QCOMPARE(cfg.showScaleFrom, 0.9);
         QCOMPARE(cfg.hideScaleTo, 0.95);
+    }
+
+    /// Surface-family separation invariant: a JSON edit to `osd.hide`
+    /// (genuine OSD hide path) MUST NOT leak into LayoutPicker's hide.
+    /// Pre-separation, LayoutPicker borrowed `osd.show`/`osd.hide`/
+    /// `osd.pop`, so any per-OSD timing tweak would also reshape the
+    /// picker — exactly the coupling the user asked to break. Pin the
+    /// invariant: no LayoutPicker leg references an `osd.*` path.
+    void layout_picker_does_not_borrow_osd_paths()
+    {
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
+        const auto cfg = anim->configForRole(PzRoles::LayoutPicker);
+        QVERIFY2(!cfg.showProfile.startsWith(QStringLiteral("osd.")),
+                 "LayoutPicker.showProfile must not live under osd.* — surface families are partitioned");
+        QVERIFY2(!cfg.hideProfile.startsWith(QStringLiteral("osd.")),
+                 "LayoutPicker.hideProfile must not live under osd.* — surface families are partitioned");
+        QVERIFY2(!cfg.showScaleProfile.startsWith(QStringLiteral("osd.")),
+                 "LayoutPicker.showScaleProfile must not live under osd.* — surface families are partitioned");
+        QVERIFY2(!cfg.hideScaleProfile.startsWith(QStringLiteral("osd.")),
+                 "LayoutPicker.hideScaleProfile must not live under osd.* — surface families are partitioned");
     }
 
     /// Regression: longest-prefix matching must respect `-` boundaries.
@@ -236,7 +292,8 @@ private Q_SLOTS:
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
         QCOMPARE(anim->configForRole(PzRoles::Notification).showProfile, QStringLiteral("osd.show"));
-        QCOMPARE(anim->configForRole(PzRoles::ZoneSelector).showProfile, QStringLiteral("panel.popup"));
+        QCOMPARE(anim->configForRole(PzRoles::ZoneSelector).showProfile,
+                 QStringLiteral("panel.popup.zoneSelector.show"));
     }
 
     /// An unregistered role falls back to the empty default config, NOT

@@ -20,6 +20,8 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+
 #include <PhosphorLayer/PhosphorLayer.h>
 
 #include "mocks/mockscreenprovider.h"
@@ -1086,6 +1088,80 @@ private Q_SLOTS:
                      800),
                  "in-flight animation must not pick up the reloaded profile mid-flight — "
                  "Profile is captured by value at start() time, not re-resolved per advance()");
+
+        delete surface;
+    }
+
+    /// Regression: a non-empty `showShaderEffectId` that the registry can't
+    /// resolve must NOT count toward `pendingLegs`. The bug was: `runLeg`
+    /// counted `1 + scale + shader = N` legs upfront, but the shader-leg
+    /// setup block silently skipped on `!eff.isValid()`, leaving the start
+    /// block to early-return on the missing `shaderItem`. Result: opacity
+    /// + scale legs decremented to N-2, the shader leg never started, and
+    /// `pendingLegs` got stuck above zero — `onComplete` never fired and
+    /// the show animation hung indefinitely.
+    ///
+    /// In production this would manifest the moment a user's
+    /// `Animations.ShaderProfileTree` referenced an effectId the
+    /// `AnimationShaderRegistry` hadn't loaded (typo, removed pack,
+    /// unfinished initial scan): every popup show / hide would freeze
+    /// mid-fade-in.
+    void beginShow_with_unresolvable_shader_effect_still_completes()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+
+        // AnimationShaderRegistry with no packs registered — `effect("foo")`
+        // will return a default-constructed (`!isValid()`) AnimationShaderEffect.
+        PhosphorAnimationShaders::AnimationShaderRegistry shaderRegistry;
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = QStringLiteral("test.show");
+        cfg.hideProfile = QStringLiteral("test.hide");
+        cfg.showShaderEffectId = QStringLiteral("nonexistent_effect");
+        cfg.showShaderProfile = QStringLiteral("test.show");
+        SurfaceAnimator anim(m_registry, cfg);
+        anim.setAnimationShaderRegistry(&shaderRegistry);
+
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorLayer::Roles::CenteredModal;
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("unresolvable-shader-test");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        int onCompleteCallCount = 0;
+        anim.beginShow(surface, target, [&onCompleteCallCount]() {
+            ++onCompleteCallCount;
+        });
+
+        // Opacity must reach terminal — the regular legs run normally.
+        QVERIFY(waitFor(
+            [target] {
+                return target->opacity() >= 0.999;
+            },
+            500));
+
+        // The bug: `pendingLegs` would never reach zero because the shader
+        // leg was counted but never started. With the fix, `hasShaderLeg`
+        // is gated on `eff.isValid()` upstream, so an unresolvable
+        // effectId is excluded from the leg count and `onComplete` fires
+        // when opacity (the only real leg) settles.
+        QVERIFY2(waitFor(
+                     [&onCompleteCallCount] {
+                         return onCompleteCallCount == 1;
+                     },
+                     500),
+                 "show animation must complete even when shaderEffectId doesn't resolve in the registry");
 
         delete surface;
     }

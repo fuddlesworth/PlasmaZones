@@ -10,7 +10,9 @@
 #include <trigger_parser.h>
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimationShaders/ShaderProfile.h>
 #include <PhosphorAnimationShaders/ShaderProfileTree.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
@@ -30,6 +32,7 @@
 #include <QPointer>
 #include <QRect>
 
+#include <array>
 #include <functional>
 #include <map>
 #include <memory>
@@ -347,8 +350,15 @@ private:
     // Apply snap geometry to window.
     // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
+    //
+    // profilePath drives the shader-transition resolve (see ShaderProfileTree). This used to be
+    // hardcoded to "zone.snapIn" inside applySnapGeometry, which fired the same shader for every
+    // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
+    // Callers now pass the logical event path so the shader tree can route each one independently.
+    // Default is ZoneSnapIn for source compatibility with the legacy hardcoded path.
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
-                           bool skipAnimation = false);
+                           bool skipAnimation = false,
+                           const QString& profilePath = PhosphorAnimation::ProfilePaths::ZoneSnapIn);
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -497,21 +507,125 @@ private:
     struct CachedShader
     {
         std::unique_ptr<KWin::GLShader> shader;
+        /// Animation-shader contract uniform locations (see
+        /// `PhosphorAnimationShaders::AnimationShaderContract`). Per-effect
+        /// declared parameters land in the `customParams[N]` slots — the
+        /// translation from friendly parameter ids (e.g. `direction`) to
+        /// slot keys is performed by
+        /// `AnimationShaderRegistry::translateAnimationParams` when the
+        /// transition starts; paintWindow just pushes vec4s.
+        ///
+        /// Overlay-only uniforms (`iMouse`, `iDate`, `iTimeDelta`,
+        /// `iFrame`, `customColors[]`, audio/wallpaper/multipass) are
+        /// intentionally NOT populated on this path — they belong to
+        /// overlay shaders, not animation transitions.
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
+        /// Cached locations for `customParams[0]` … `customParams[7]`.
+        /// -1 when the shader didn't declare that slot (e.g. an effect
+        /// with two parameters references only `customParams[0]`).
+        std::array<int, 8> customParamsLoc = {-1, -1, -1, -1, -1, -1, -1, -1};
     };
     struct ShaderTransition
     {
         const CachedShader* cached = nullptr;
+        /// `customParams[N]` slot values resolved at transition begin time.
+        /// `AnimationShaderRegistry::translateAnimationParams` translates
+        /// the friendly parameter map (e.g. `{"direction": 1, "parallax":
+        /// 0.2}`) to slot keys (`{"customParams1_x": 1, "customParams1_y":
+        /// 0.2}`); we pack those into vec4s here so paintWindow only does
+        /// 8 setUniform calls per frame, not per-frame string lookups.
+        /// Slots with no declared parameters stay at (0, 0, 0, 0).
+        std::array<QVector4D, 8> customParamsValues = {QVector4D(), QVector4D(), QVector4D(), QVector4D(),
+                                                       QVector4D(), QVector4D(), QVector4D(), QVector4D()};
+        /// Two-mode progress source.
+        /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
+        ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
+        ///   computes `progress = clamp01((now - startTimeMs) / durationMs)`.
+        ///   Used by lifecycle events (window.open/close/focus/etc.) that
+        ///   have no `m_windowAnimator` animation to ride.
+        /// • `durationMs == 0`: animator-driven — paintWindow reads progress
+        ///   from `m_windowAnimator->animationFor(w)->state().value`. Used by
+        ///   zone.* events that flow through `applySnapGeometry` and inherit
+        ///   the geometry animation's timeline.
+        qint64 startTimeMs = 0;
+        int durationMs = 0;
+        /// Monotonic per-window generation. Each `beginShaderTransition` bumps
+        /// the counter for that window; the timer-driven `endShaderTransition`
+        /// scheduled by `tryBeginShaderForEvent` captures the generation at
+        /// schedule time and bails on fire if the live transition has been
+        /// superseded — without this, a stale timer would tear down a fresh
+        /// transition that replaced it before it had a chance to play out.
+        quint64 generation = 0;
     };
+    /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
+    /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
+    /// @ref endShaderTransition before installing the new entry. So if two
+    /// distinct events fire shaders on the same window in quick succession
+    /// (e.g. window.move while zone.snapIn is mid-flight), the second
+    /// transition replaces the first. The shader timeline is also stolen from
+    /// @c m_windowAnimator's single per-window animation slot — there is no
+    /// independent shader-only timeline, no stacked composition.
+    ///
+    /// In practice events that target the same window are short (≤300 ms) and
+    /// rarely overlap: zone.snapIn runs to completion before window.focus
+    /// fires, drag-related events are mutually exclusive by phase, etc. The
+    /// visible effect of overlap is "the second event's shader wins for the
+    /// remaining duration," which is closer to user intent than "shaders
+    /// composite multiplicatively" in most cases.
+    ///
+    /// If testing surfaces visible regressions from overlap, the upgrade path
+    /// is option B in docs/animation-shader-wireup-plan.md Phase 0d:
+    /// @c std::unordered_map&lt;EffectWindow*, std::vector&lt;ShaderTransition&gt;&gt; with
+    /// each transition holding its own AnimatedValue&lt;qreal&gt;, plus a
+    /// composition rule per shader. Significantly more complex; not done here.
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
-    void beginShaderTransition(KWin::EffectWindow* window, const QString& effectId);
+    /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
+    /// inside @ref beginShaderTransition every time a transition installs;
+    /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the
+    /// generation it captured at schedule time against the live transition's
+    /// generation before tearing down. Mismatch = a successor replaced us;
+    /// don't kill the successor.
+    quint64 m_shaderTransitionGenerationCounter = 0;
+    /// Per-window edge-detection for windowMaximizedStateChanged. KWin can
+    /// fire that signal twice for a single user-driven maximize transition
+    /// (axis-by-axis), and we only want the WindowMaximize / WindowUnmaximize
+    /// shader to fire on the actual edge, not on the intermediate
+    /// vertical-only / horizontal-only state. Cleared on windowDeleted.
+    QHash<KWin::EffectWindow*, bool> m_lastFullyMaximized;
+    /// Last window we fired a window.focus shader on. KWin emits
+    /// `windowActivated` on virtual-desktop / activity / re-stack churn even
+    /// when the focused window didn't actually change; gating on this avoids
+    /// shader spam. QPointer auto-nulls on window destroy so a fresh window
+    /// reusing the address can't false-match. Cleared explicitly on
+    /// windowDeleted (defence in depth) and on window destroy via QPointer.
+    QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
+    void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
+                               int durationMs = 0);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
+
+    /// Resolve @p profilePath against the shader profile tree and, if a non-empty
+    /// effect id resolves, kick off a @ref beginShaderTransition on @p window
+    /// with a timer-driven @ref endShaderTransition after @p durationMs.
+    ///
+    /// Used for window-lifecycle events (open, close, focus, minimize, maximize,
+    /// move, resize) where there is no @c m_windowAnimator animation to end the
+    /// transition for us — those animations are owned by KWin's own effects or
+    /// happen instantaneously, so we drive the shader leg on its own timer.
+    /// Events that already drive an animator-tracked geometry change (zone.*)
+    /// go through @ref applySnapGeometry's chokepoint instead and let the
+    /// animator's completion callback tear down the shader.
+    ///
+    /// No-op when the profile resolves to empty effectId (user hasn't assigned
+    /// a shader to this path), the registry doesn't have the effect yet, or
+    /// the window pointer is null. Same null-tolerance contract as
+    /// @ref beginShaderTransition.
+    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;

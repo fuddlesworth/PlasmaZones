@@ -6,14 +6,14 @@
 
 #version 450
 
-uniform float iTime;
-uniform vec2 iResolution;
-uniform float intensity;
-uniform float blockSize;
-uniform float rgbSplit;
+#include "../_shared/animation_uniforms.glsl"
 
-in vec2 fragCoord;
-out vec4 fragColor;
+// metadata.json declaration order → customParams[0] sub-slots
+#define intensity customParams[0].x
+#define blockSize customParams[0].y
+#define rgbSplit  customParams[0].z
+
+layout(location = 0) out vec4 fragColor;
 
 float hash(vec2 p)
 {

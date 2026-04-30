@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimationShaders/AnimationShaderContract.h>
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
@@ -8,6 +9,7 @@
 #include <QDir>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QStringList>
 
 #include <optional>
 
@@ -65,6 +67,31 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     }
     if (!e.previewPath.isEmpty()) {
         e.previewPath = dir.filePath(e.previewPath);
+    }
+
+    // Diagnostic: animation shaders cannot currently consume `color`
+    // typed parameters — `translateAnimationParams` skips them silently
+    // because no built-in pack declares one and the
+    // customColor<N>-aware encoder branch hasn't been written. Surface
+    // the limitation HERE (load-time, once per pack) so an author who
+    // tries to declare a color param sees a journal warning naming the
+    // pack and parameter, rather than silently observing default values
+    // in the shader.
+    //
+    // Use noquote() so QString fields render as bare text — without it,
+    // QDebug's default operator<<(QString) wraps each field in quotes
+    // (`'"id"'` instead of `'id'`), which makes the journal message
+    // harder to read and breaks downstream tooling that pattern-matches
+    // on the field text.
+    for (const auto& param : e.parameters) {
+        if (param.type == QLatin1String("color")) {
+            qCWarning(lcRegistry).nospace().noquote()
+                << "Animation effect '" << e.id << "' (in " << effectDir << ") declares color parameter '" << param.id
+                << "' — color-typed animation params are not yet supported and "
+                   "will be ignored at transition time. Move the effect to "
+                   "data/shaders/ (overlay path) or convert the parameter to "
+                   "float/int/bool with manual color encoding.";
+        }
     }
 
     return e;
@@ -149,6 +176,162 @@ bool AnimationShaderRegistry::hasEffect(const QString& id) const
 QStringList AnimationShaderRegistry::effectIds() const
 {
     return m_typedStrategy->packIds();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Parameter translation
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Mirrors `PhosphorShaders::ShaderRegistry::translateParamsToUniforms`
+// in shape but uses metadata declaration order to assign slots, since
+// `AnimationShaderEffect::ParameterInfo` does not carry an explicit
+// `slot` field (animation effects historically used named default-block
+// uniforms and never needed slot allocation). Both runtime execution
+// sites consume the slot-keyed map this returns and write the values
+// into `customParams[N]` of the canonical animation UBO.
+
+QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationShaderEffect& effect,
+                                                              const QVariantMap& friendlyParams)
+{
+    QVariantMap result;
+    if (!effect.isValid() || effect.parameters.isEmpty()) {
+        return result;
+    }
+
+    int floatSlot = 0; // sub-slot index in [0, 32) — fills customParams1_x..customParams8_w
+    for (const auto& param : effect.parameters) {
+        const QString& type = param.type;
+        // Color parameters would consume customColor<N> rather than a
+        // float sub-slot; not currently used by any built-in animation
+        // shader. When the first one lands, extend this branch to map
+        // color → "customColor<N>" with its own counter, using
+        // `PhosphorShaders::CustomColors::colorKey` as the canonical
+        // formatter. Skipped silently here at translation time —
+        // surfacing this on every transition begin would just spam the
+        // log; the diagnostic lives at load time in `parseEffect`,
+        // which fires a single qCWarning per pack at registry scan.
+        if (type == QLatin1String("color")) {
+            continue;
+        }
+
+        if (floatSlot >= AnimationShaderContract::kMaxParameterSlots) {
+            qWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                 << AnimationShaderContract::kMaxParameterSlots
+                                 << "-slot customParams budget; dropping param" << param.id;
+            continue;
+        }
+
+        const QString uniformKey = AnimationShaderContract::slotKey(floatSlot);
+
+        // Resolve the value: friendly map > declared default > 0.0.
+        QVariant value;
+        const auto it = friendlyParams.constFind(param.id);
+        if (it != friendlyParams.constEnd()) {
+            value = *it;
+        } else if (param.defaultValue.isValid() && !param.defaultValue.isNull()) {
+            value = param.defaultValue;
+        } else {
+            value = 0.0;
+        }
+
+        // Coerce booleans to 0/1 floats so the UBO slot is always
+        // numeric. Floats and ints both round-trip through QVariant::toFloat
+        // in the consumer; no extra coercion needed here.
+        if (type == QLatin1String("bool")) {
+            value = value.toBool() ? 1.0f : 0.0f;
+        }
+
+        result[uniformKey] = value;
+        ++floatSlot;
+    }
+
+    return result;
+}
+
+QVariantMap AnimationShaderRegistry::translateAnimationParams(const QString& effectId,
+                                                              const QVariantMap& friendlyParams) const
+{
+    return translateAnimationParams(effect(effectId), friendlyParams);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Canonical UBO → default-block uniform rewrite
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Animation shaders ship as `#version 450` GLSL with a canonical
+// `layout(std140, binding = 0) uniform AnimationUniforms { ... };` block
+// (see `data/animations/_shared/animation_uniforms.glsl`). Runtimes
+// without UBO-binding support — `KWin::GLShader`'s `setUniform(loc, val)`
+// API addresses default-block uniforms only — need the source rewritten
+// before compile. Daemon Qt-RHI / SPIR-V keeps the canonical form and
+// uploads the UBO directly, so it doesn't call this helper.
+//
+// The rewriter is deliberately line-based and pinned to the canonical
+// layout (open-brace on the same line as `uniform NAME`, close-brace
+// `};` on its own line). This is exactly what
+// `animation_uniforms.glsl` produces; an author writing a divergent
+// declaration would slip past it. The bake test
+// (`tests/unit/ui/test_animation_shader_bake.cpp`) catches GLSL
+// regressions on the daemon side; the registry test suite
+// (`tests/test_animationshaderregistry.cpp`) pins the rewriter
+// behaviour for the kwin side.
+
+QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QString& expandedShaderSource)
+{
+    QStringList output;
+    const QStringList lines = expandedShaderSource.split(QLatin1Char('\n'));
+    bool inUboBlock = false;
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (!inUboBlock) {
+            // Detect `layout(std140, binding = N) uniform NAME {` (any
+            // whitespace tolerated). We only handle the same-line open
+            // brace; the canonical animation_uniforms.glsl writes it
+            // that way, and an author deviating would be caught by the
+            // bake test on the daemon side anyway.
+            const bool isUboOpen = trimmed.startsWith(QLatin1String("layout(std140"))
+                && trimmed.contains(QLatin1String("uniform")) && trimmed.endsWith(QLatin1Char('{'));
+            if (isUboOpen) {
+                inUboBlock = true;
+                continue; // drop the opening line
+            }
+            output.append(line);
+            continue;
+        }
+        // Inside the UBO block. Strip a trailing `// comment` from the
+        // closing brace as well as field declarations so authors can
+        // annotate the canonical header without breaking the rewriter.
+        QString workingLine = line;
+        const int commentIdx = workingLine.indexOf(QLatin1String("//"));
+        if (commentIdx >= 0) {
+            workingLine = workingLine.left(commentIdx);
+        }
+        const QString workingTrimmed = workingLine.trimmed();
+        if (workingTrimmed == QLatin1String("};")) {
+            inUboBlock = false;
+            continue; // drop the closing line
+        }
+        // Skip lines that are pure-comment / blank — they have no field
+        // declaration to translate.
+        if (workingTrimmed.isEmpty() || !workingTrimmed.endsWith(QLatin1Char(';'))) {
+            continue;
+        }
+        QString decl = workingTrimmed;
+        decl.chop(1); // remove trailing ';'
+
+        // Drop fields that are not part of the animation contract on the
+        // classic-GL path. KWin manages its own scene-graph transform /
+        // opacity; `_appField0` / `_appField1` are pure padding that
+        // exists only to keep the std140 alignment in sync with the
+        // daemon's BaseUniforms.
+        if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
+            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))) {
+            continue;
+        }
+
+        output.append(QStringLiteral("uniform %1;").arg(decl));
+    }
+    return output.join(QLatin1Char('\n')).toUtf8();
 }
 
 } // namespace PhosphorAnimationShaders

@@ -690,6 +690,23 @@ private:
      */
     void setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry);
 
+    /**
+     * @brief Re-register every per-role config with the supplied shader profile
+     *        tree. Called from setSettings (initial wire-up after settings
+     *        become available) and from the @c shaderProfileTreeChanged signal
+     *        (live reload when the user edits the tree).
+     *
+     * @c registerConfigForRole only affects subsequent Surface::show()/hide()
+     * lookups — surfaces mid-animation keep the config they bound at
+     * beginShow/beginHide. That mirrors motion-tree live-reload semantics.
+     *
+     * A default-constructed tree (empty baseline + no overrides) silently
+     * resolves every path to an empty effect id — same end result as the
+     * pre-shader-wireup motion-only behaviour. Used during the initial
+     * @c setupSurfaceAnimator pass before @c m_settings is wired.
+     */
+    void applyShaderProfilesToAnimator(const PhosphorAnimationShaders::ShaderProfileTree& tree);
+
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML.
      *  @return true iff the image was inserted into the bounded LRU cache.
      *          False if the provider was torn down (engine destroyed) or the

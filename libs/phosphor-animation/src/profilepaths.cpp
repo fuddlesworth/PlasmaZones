@@ -40,6 +40,7 @@ const QString WorkspaceOverview = QStringLiteral("workspace.overview");
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
 const QString OsdHide = QStringLiteral("osd.hide");
+const QString OsdPop = QStringLiteral("osd.pop");
 const QString OsdDim = QStringLiteral("osd.dim");
 
 // panel.*
@@ -47,6 +48,15 @@ const QString Panel = QStringLiteral("panel");
 const QString PanelSlideIn = QStringLiteral("panel.slideIn");
 const QString PanelSlideOut = QStringLiteral("panel.slideOut");
 const QString PanelPopup = QStringLiteral("panel.popup");
+const QString PanelPopupZoneSelector = QStringLiteral("panel.popup.zoneSelector");
+const QString PanelPopupZoneSelectorShow = QStringLiteral("panel.popup.zoneSelector.show");
+const QString PanelPopupZoneSelectorHide = QStringLiteral("panel.popup.zoneSelector.hide");
+const QString PanelPopupLayoutPicker = QStringLiteral("panel.popup.layoutPicker");
+const QString PanelPopupLayoutPickerShow = QStringLiteral("panel.popup.layoutPicker.show");
+const QString PanelPopupLayoutPickerHide = QStringLiteral("panel.popup.layoutPicker.hide");
+const QString PanelPopupLayoutPickerPopIn = QStringLiteral("panel.popup.layoutPicker.popIn");
+const QString PanelPopupSnapAssist = QStringLiteral("panel.popup.snapAssist");
+const QString PanelPopupSnapAssistShow = QStringLiteral("panel.popup.snapAssist.show");
 
 // cursor.*
 const QString Cursor = QStringLiteral("cursor");
@@ -77,6 +87,13 @@ QStringList allBuiltInPaths()
 {
     // Ordered to match taxonomy tree walk — category root, then leaves.
     // Useful as-is for settings UI that renders an indented list.
+    //
+    // Reserved paths (CursorDrag, ZoneLayoutSwitchOut) are intentionally
+    // omitted — they're defined in the taxonomy as named slots but have
+    // no consumer firing them, so a settings UI surfacing them would
+    // create an assignable slot that silently never plays. Callers that
+    // need the full taxonomy (including reserved slots) can append from
+    // `isReservedPath()`-aware enumeration.
     return {
         Global,
         Window,
@@ -95,7 +112,6 @@ QStringList allBuiltInPaths()
         ZoneSnapResize,
         ZoneHighlight,
         ZoneLayoutSwitchIn,
-        ZoneLayoutSwitchOut,
         Workspace,
         WorkspaceSwitchIn,
         WorkspaceSwitchOut,
@@ -103,15 +119,24 @@ QStringList allBuiltInPaths()
         Osd,
         OsdShow,
         OsdHide,
+        OsdPop,
         OsdDim,
         Panel,
         PanelSlideIn,
         PanelSlideOut,
         PanelPopup,
+        PanelPopupZoneSelector,
+        PanelPopupZoneSelectorShow,
+        PanelPopupZoneSelectorHide,
+        PanelPopupLayoutPicker,
+        PanelPopupLayoutPickerShow,
+        PanelPopupLayoutPickerHide,
+        PanelPopupLayoutPickerPopIn,
+        PanelPopupSnapAssist,
+        PanelPopupSnapAssistShow,
         Cursor,
         CursorHover,
         CursorClick,
-        CursorDrag,
         Shader,
         ShaderOpen,
         ShaderClose,
@@ -128,6 +153,13 @@ QStringList allBuiltInPaths()
         WidgetAccordion,
         WidgetProgress,
     };
+}
+
+bool isReservedPath(const QString& path)
+{
+    // Single source of truth for "in the taxonomy but unwired" paths.
+    // Mirrored in ProfilePaths.h docstring for `allBuiltInPaths()`.
+    return path == CursorDrag || path == ZoneLayoutSwitchOut;
 }
 
 QString parentPath(const QString& path)

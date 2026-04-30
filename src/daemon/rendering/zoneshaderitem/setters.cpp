@@ -93,55 +93,12 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         return;
     }
 
-    // Call parent to store and emit
+    // Base class stores the map and parses the canonical slot-keyed
+    // entries (customParams1_x..customParams8_w into customParams[8],
+    // customColor1..customColor16 into customColors[16]). Anything that
+    // overflows that contract — uTexture<N> path / wrap / svgSize, the
+    // ZoneShaderItem-only image-loading fields below — we still own.
     PhosphorRendering::ShaderEffect::setShaderParams(params);
-
-    // Extract float params: customParams1_x through customParams8_w (slots 0-31).
-    // Uses the indexed customParamAt / setCustomParamAt API on the base class
-    // so we don't need two 8-entry tables of member-function pointers.
-    auto extractFloat = [&params](const QString& key, float defaultVal) -> float {
-        const auto it = params.constFind(key);
-        if (it == params.constEnd()) {
-            return defaultVal;
-        }
-        bool ok = false;
-        const float val = it->toFloat(&ok);
-        return ok ? val : defaultVal;
-    };
-
-    for (int i = 0; i < 8; ++i) {
-        QVector4D cp = customParamAt(i);
-        const QString prefix = QStringLiteral("customParams") + QString::number(i + 1) + QLatin1Char('_');
-        cp.setX(extractFloat(prefix + QLatin1Char('x'), cp.x()));
-        cp.setY(extractFloat(prefix + QLatin1Char('y'), cp.y()));
-        cp.setZ(extractFloat(prefix + QLatin1Char('z'), cp.z()));
-        cp.setW(extractFloat(prefix + QLatin1Char('w'), cp.w()));
-        setCustomParamAt(i, cp);
-    }
-
-    // Color params: customColor1-16
-    auto extractColor = [&params](const QString& key, const QColor& defaultVal) -> QColor {
-        const auto it = params.constFind(key);
-        if (it == params.constEnd()) {
-            return defaultVal;
-        }
-        const QVariant& val = *it;
-        if (val.canConvert<QColor>()) {
-            return val.value<QColor>();
-        }
-        if (val.typeId() == QMetaType::QString) {
-            QColor color(val.toString());
-            if (color.isValid()) {
-                return color;
-            }
-        }
-        return defaultVal;
-    };
-
-    for (int i = 0; i < 16; ++i) {
-        const QString key = QStringLiteral("customColor") + QString::number(i + 1);
-        setCustomColorAt(i, extractColor(key, customColorAt(i)));
-    }
 
     // User texture params: uTexture0-3 paths, wrap modes, and SVG render sizes
     for (int i = 0; i < 4; ++i) {

@@ -12,9 +12,17 @@
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <PhosphorAnimationShaders/AnimationShaderContract.h>
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
+
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <memory>
 #include <QDBusArgument>
+#include <QFileInfo>
+#include <QVector4D>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -63,8 +71,18 @@ namespace {
 constexpr QLatin1String TriggerModifierField("modifier");
 constexpr QLatin1String TriggerMouseButtonField("mouseButton");
 
-constexpr const char kUniformITime[] = "iTime";
-constexpr const char kUniformIResolution[] = "iResolution";
+/// Monotonic milliseconds since steady_clock epoch. Used by time-based shader
+/// transitions for elapsed-progress math. We deliberately avoid
+/// QDateTime::currentMSecsSinceEpoch — wall-clock isn't monotonic, and an NTP
+/// adjustment mid-transition can run elapsed backwards (or jump it past the
+/// duration) and either freeze or prematurely tear down the shader leg.
+/// std::chrono::steady_clock matches the clock the phosphor-animation-layer
+/// SurfaceAnimator already uses for its motion ticks.
+inline qint64 shaderClockNowMs()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
 
 // Upper bound on how long the effect waits for the daemon's endDrag reply.
 // If the daemon is blocked (layout recompute, overlay teardown, heavy
@@ -233,6 +251,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             [this](KWin::EffectWindow* w, const QString& windowId, const QRectF& geometry) {
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
+
+                // Note: `cursor.drag` is intentionally NOT wired here. The
+                // OffscreenEffect pipeline operates on window content; firing
+                // a shader at drag start through it is indistinguishable from
+                // `window.move`, and synchronously colliding with the
+                // `windowStartUserMovedResized` lambda's `window.move` install
+                // means whichever fires second wins (it would be `window.move`
+                // here). See `ProfilePaths::CursorDrag` doc comment — the path
+                // is reserved for a future cursor-decoration / drag-shadow
+                // surface.
 
                 // Fire beginDrag async to get a daemon-authoritative policy.
                 // While the reply is pending, we
@@ -466,6 +494,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             m_windowIdReverse.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        // Drop per-window shader-event bookkeeping. m_lastFocusShaderWindow is
+        // a QPointer that auto-nulls on destroy, so it's already cleaned up;
+        // m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
+        // erase here to keep it bounded across long sessions.
+        m_lastFullyMaximized.remove(w);
     });
 
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
@@ -692,6 +725,13 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // window.open shader transition: fires once for every newly-mapped
+    // window we handle. KWin's stock fade-in handles the *motion* (alpha
+    // fade-in over a few frames), so the shader leg layers a transition
+    // effect on top. tryBeginShaderForEvent silently no-ops when the user
+    // hasn't assigned a shader to window.open in their tree.
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs());
+
     // Populate the daemon's WindowRegistry with this window's initial metadata.
     // Runs before any other daemon notification so consumers querying the
     // registry from their windowOpened handlers see a record (sessions 2+).
@@ -795,7 +835,12 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // The daemon clears its side in windowClosed().
     m_navigationHandler->setWindowFloating(getWindowId(w), false);
 
+    // Tear down any in-flight zone.* shader transition first — this window
+    // is going away and we don't want a half-faded zone shader fighting the
+    // fresh window.close shader. Then layer the close shader on top of
+    // whatever fade-out KWin applies as part of the close animation.
     endShaderTransition(w);
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs());
     m_windowAnimator->removeAnimation(w);
 
     const QString closedWindowId = getWindowId(w);
@@ -1020,6 +1065,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
+        // window.move / window.resize shader transitions: KWin's interactive
+        // move/resize is its own animation system (Window::moveResize via
+        // pointer drag), but we layer an effect-side shader for visual
+        // feedback. windowStartUserMovedResized doesn't disambiguate the
+        // two; w->isUserResize() does — interactive resize sets it, plain
+        // move leaves it false. Each direction can take its own shader
+        // assignment. tryBeginShaderForEvent silently no-ops if the user
+        // didn't assign a shader to the path.
+        if (window) {
+            tryBeginShaderForEvent(window,
+                                   window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
+                                                          : PhosphorAnimation::ProfilePaths::WindowMove,
+                                   animationDurationMs());
+        }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowFinishMoveResize(window);
@@ -1028,6 +1087,35 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Track when user manually unmaximizes a monocle-maximized window
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMaximizedStateChanged);
+
+    // window.maximize / window.unmaximize shader transition. Sibling lambda
+    // to the AutotileHandler hookup above (autotile drives the snap-back
+    // logic; we drive the shader leg).
+    //
+    // KWin emits windowMaximizedStateChanged once per axis flip — a
+    // user-driven left-half-snap → fully-maximize sequence fires twice
+    // (vertical-only first, then fully-maximized). Without an edge filter
+    // we'd start the WindowUnmaximize shader for the intermediate state,
+    // then immediately install WindowMaximize on the next emission, with
+    // the timer-driven teardown of the first racing the install of the
+    // second. Track the last fully-maximized state per window and only
+    // fire on actual edge transitions.
+    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
+            [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
+                if (!window) {
+                    return;
+                }
+                const bool fullyMaximized = horizontal && vertical;
+                const bool wasFullyMaximized = m_lastFullyMaximized.value(window, false);
+                if (fullyMaximized == wasFullyMaximized) {
+                    return; // intermediate axis-only flip, no shader
+                }
+                m_lastFullyMaximized.insert(window, fullyMaximized);
+                tryBeginShaderForEvent(window,
+                                       fullyMaximized ? PhosphorAnimation::ProfilePaths::WindowMaximize
+                                                      : PhosphorAnimation::ProfilePaths::WindowUnmaximize,
+                                       animationDurationMs());
+            });
 
     // Track when a monocle-maximized window goes fullscreen
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_autotileHandler.get(),
@@ -2534,7 +2622,11 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             QRect sizeOnlyGeo(qRound(currentFrame.x()), qRound(currentFrame.y()), width, height);
             qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << windowId << width << "x"
                              << height;
-            applySnapGeometry(w, sizeOnlyGeo);
+            // Drag-out unsnap: the daemon kept us at the drop position but restored pre-snap
+            // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
+            // not an in-zone resize.
+            applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                              PhosphorAnimation::ProfilePaths::ZoneSnapOut);
         }
         return;
     }
@@ -2574,7 +2666,12 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
     }
 
-    applySnapGeometry(w, geometry);
+    // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
+    // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
+    // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
+    applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                      zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::ZoneSnapOut
+                                       : PhosphorAnimation::ProfilePaths::ZoneSnapIn);
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -2652,9 +2749,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         savedStack.append(QPointer<KWin::EffectWindow>(w));
     }
 
+    // Map the daemon's action string to a shader-tree ProfilePath. "resnap" / "retile" are layout
+    // changes (different layout or autotile recompute) — semantically a layout switch. "rotate"
+    // moves windows between existing zones in the same layout — a snap-in. Default to ZoneSnapIn
+    // for unknown actions (forward-compat with future daemon-emitted strings).
+    const QString batchProfilePath = (action == QLatin1String("resnap") || action == QLatin1String("retile"))
+        ? PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchIn
+        : PhosphorAnimation::ProfilePaths::ZoneSnapIn;
+
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending](int i) {
+        [this, pending, batchProfilePath](int i) {
             const auto& p = pending[i];
             if (!p.window) {
                 return;
@@ -2675,7 +2780,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const auto guard = qScopeGuard([this] {
                 m_inDaemonGeometryApply = false;
             });
-            applySnapGeometry(p.window, p.geometry);
+            applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
+                              /*skipAnimation=*/false, batchProfilePath);
         },
         [this, savedStack, action]() {
             // Restore z-order after all geometries applied
@@ -2956,6 +3062,15 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     }
 
     const bool minimized = w->isMinimized();
+
+    // window.minimize / window.unminimize shader transition. KWin handles the
+    // motion (the minimize-to-taskbar zoom is a separate stock effect chain),
+    // we layer the shader effect on top via redirect. Gated on the live
+    // minimized state so each direction can have its own profile.
+    tryBeginShaderForEvent(w,
+                           minimized ? PhosphorAnimation::ProfilePaths::WindowMinimize
+                                     : PhosphorAnimation::ProfilePaths::WindowUnminimize,
+                           animationDurationMs());
 
     if (minimized) {
         if (isWindowFloating(windowId)) {
@@ -3267,7 +3382,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                             kw->cancelInteractiveMoveResize();
                         }
                     }
-                    applySnapGeometry(safeWindow, geo);
+                    // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
+                    applySnapGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                      PhosphorAnimation::ProfilePaths::ZoneSnapOut);
                     break;
                 }
                 }
@@ -3359,7 +3476,7 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          bool skipAnimation)
+                                          bool skipAnimation, const QString& profilePath)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -3435,10 +3552,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         QPointer<KWin::EffectWindow> safeWindow = window;
         auto conn = std::make_shared<QMetaObject::Connection>();
         *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                        [this, safeWindow, geo, skipAnimation, conn](KWin::EffectWindow*) {
+                        [this, safeWindow, geo, skipAnimation, profilePath, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, skipAnimation);
+                                applySnapGeometry(safeWindow, geo, false, skipAnimation, profilePath);
                             }
                         });
         return;
@@ -3493,9 +3610,9 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
-            const auto shaderProfile = m_shaderProfileTree.resolve(QStringLiteral("zone.snapIn"));
+            const auto shaderProfile = m_shaderProfileTree.resolve(profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
-                beginShaderTransition(window, shaderProfile.effectiveEffectId());
+                beginShaderTransition(window, shaderProfile);
             }
         }
 
@@ -3543,7 +3660,10 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
     QRect geometry(static_cast<int>(frame.x()), static_cast<int>(frame.y()), width, height);
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
-    applySnapGeometry(window, geometry, true);
+    // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
+    // Logically a snap-out (the window is leaving zone-managed sizing).
+    applySnapGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
+                      PhosphorAnimation::ProfilePaths::ZoneSnapOut);
 }
 
 void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
@@ -3704,6 +3824,23 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
         || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
         || w->isModal() || w->isPopupWindow()) {
         return;
+    }
+
+    // window.focus shader transition. Fires after the rejection-filter cascade
+    // so we don't shader plasmashell surfaces, dialogs, etc. — only "real"
+    // app windows the user expects to see focus feedback on. Independent of
+    // daemon-readiness gating below; the shader runs locally.
+    //
+    // Gate on a same-window check because KWin's windowActivated also fires
+    // on virtual-desktop and activity switches, on re-stacking, and on
+    // Wayland focus-stealing arbitration even when the focused window didn't
+    // actually change. Without this gate the shader spams every desktop /
+    // activity switch. m_lastFocusShaderWindow is a QPointer that auto-nulls
+    // on window destroy, so a fresh window reusing the address can't
+    // false-match.
+    if (m_lastFocusShaderWindow.data() != w) {
+        m_lastFocusShaderWindow = w;
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
     }
 
     if (!isDaemonReady("notify windowActivated")) {
@@ -4068,14 +4205,37 @@ void PlasmaZonesEffect::postPaintScreen()
 {
     // Schedule targeted repaints for active animations instead of full-screen
     m_windowAnimator->scheduleRepaints();
+    // Lifecycle-event shader transitions (window.*) ride a monotonic
+    // steady-clock timer rather than m_windowAnimator. The animator-driven
+    // scheduleRepaints above won't request frames for them, so paintWindow
+    // would only fire on actual window damage — leaving iTime stuck. Walk
+    // the transition map and schedule a repaint for each window with an
+    // active time-based transition. Animator-driven transitions
+    // (durationMs == 0) are repainted by m_windowAnimator already; skip.
+    if (!m_shaderTransitions.empty()) {
+        const qint64 now = shaderClockNowMs();
+        for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end(); ++it) {
+            const ShaderTransition& transition = it->second;
+            if (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs) {
+                KWin::EffectWindow* w = it->first;
+                if (w && !w->isDeleted()) {
+                    KWin::effects->addRepaint(w->expandedGeometry().toRect());
+                }
+            }
+        }
+    }
     KWin::effects->postPaintScreen();
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                        std::chrono::milliseconds presentTime)
 {
-    if (w && m_windowAnimator->hasAnimation(w)) {
-        // Mark as transformed so paintWindow applies our translate+scale
+    if (w && (m_windowAnimator->hasAnimation(w) || m_shaderTransitions.find(w) != m_shaderTransitions.end())) {
+        // Mark as transformed so paintWindow applies our translate+scale, and
+        // so the OffscreenEffect redirect drives full-window repaints for the
+        // shader leg's iTime advance even when the underlying window content
+        // hasn't changed (lifecycle-event shaders need this — without the
+        // transformed flag, paintWindow only fires on actual window damage).
         data.setTransformed();
     }
 
@@ -4090,14 +4250,65 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 
     auto sit = m_shaderTransitions.find(w);
     if (sit != m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
-        const auto* anim = m_windowAnimator->animationFor(w);
-        if (anim && anim->isAnimating()) {
-            const qreal progress = qBound(0.0, anim->state().value, 1.0);
-            KWin::GLShader* shader = sit->second.cached->shader.get();
+        const auto& transition = sit->second;
+        // Two progress sources, picked by the transition's mode (see
+        // ShaderTransition's docstring). Lifecycle events (window.*)
+        // started via tryBeginShaderForEvent set durationMs > 0 and drive
+        // progress from monotonic steady-clock elapsed; zone.* events flowed
+        // through applySnapGeometry leave durationMs = 0 and ride the
+        // m_windowAnimator timeline so the shader matches the geometry
+        // animation.
+        qreal progress = 0.0;
+        bool active = false;
+        if (transition.durationMs > 0) {
+            const qint64 now = shaderClockNowMs();
+            const qint64 elapsed = now - transition.startTimeMs;
+            if (elapsed >= 0 && elapsed <= transition.durationMs) {
+                progress = qreal(elapsed) / qreal(transition.durationMs);
+                active = true;
+            }
+        } else {
+            const auto* anim = m_windowAnimator->animationFor(w);
+            if (anim && anim->isAnimating()) {
+                progress = qBound(0.0, anim->state().value, 1.0);
+                active = true;
+            }
+        }
+        if (active) {
+            const CachedShader* cached = transition.cached;
+            KWin::GLShader* shader = cached->shader.get();
 
-            shader->setUniform(sit->second.cached->iTimeLoc, static_cast<float>(progress));
-            const QRectF geo = w->frameGeometry();
-            shader->setUniform(sit->second.cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            // Animation-shader contract — see
+            // `PhosphorAnimationShaders::AnimationShaderContract`. iTime
+            // is 0..1 progress, iResolution is the surface size, and
+            // per-effect declared parameters land in `customParams[N]`
+            // slots populated at transition begin time by
+            // `translateAnimationParams`. Overlay-only uniforms
+            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `customColors[]`,
+            // audio/wallpaper/multipass) are intentionally not populated
+            // here — they belong to overlay shaders, not animation
+            // transitions.
+            //
+            // Guard every setUniform against `loc < 0`. GL silently
+            // ignores -1, so this is defence in depth rather than a
+            // correctness fix today, but the symmetric guard makes the
+            // intent ("only push uniforms the shader actually declared")
+            // explicit at all three uniform sites instead of just
+            // customParams. A future GL backend that doesn't honour the
+            // -1-is-noop convention would otherwise UB.
+            if (cached->iTimeLoc >= 0) {
+                shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
+            }
+            if (cached->iResolutionLoc >= 0) {
+                const QRectF geo = w->frameGeometry();
+                shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+            }
+            for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+                const int loc = cached->customParamsLoc[slot];
+                if (loc < 0)
+                    continue; // shader didn't declare / reference this slot
+                shader->setUniform(loc, transition.customParamsValues[slot]);
+            }
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
         }
@@ -4107,49 +4318,139 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
-void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window, const QString& effectId)
+void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
+                                              const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs)
 {
+    const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
+        return;
+
+    const auto eff = m_animationShaderRegistry.effect(effectId);
+    if (!eff.isValid())
         return;
 
     auto cacheIt = m_shaderCache.find(effectId);
     if (cacheIt == m_shaderCache.end()) {
-        const auto eff = m_animationShaderRegistry.effect(effectId);
-        if (!eff.isValid())
-            return;
-
+        // Resolve `#include "..."` directives so the canonical
+        // `animation_uniforms.glsl` is inline before the rewriter runs.
+        // The daemon side resolves includes inside ShaderCompiler;
+        // we mirror that here so authors maintain one source.
         QFile shaderFile(eff.fragmentShaderPath);
         if (!shaderFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
             return;
         }
-        const QByteArray shaderSource = shaderFile.readAll();
-        if (shaderSource.isEmpty()) {
+        const QString rawSource = QString::fromUtf8(shaderFile.readAll());
+        if (rawSource.isEmpty()) {
             qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
             return;
         }
+        QString includeError;
+        const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
+        const QString expanded =
+            PhosphorShaders::ShaderIncludeResolver::expandIncludes(rawSource, currentDir, QStringList(), &includeError);
+        if (expanded.isEmpty()) {
+            qCWarning(lcEffect) << "Failed to expand shader includes for" << effectId << ":" << includeError;
+            return;
+        }
+
+        // Convert the canonical UBO declaration to default-block
+        // uniforms KWin's classic-GL pipeline can bind. Lives in the
+        // animation-shaders library (alongside the contract) so the
+        // rewriter can be unit-tested without a compositor session;
+        // see `tests/test_animationshaderregistry.cpp`.
+        const QByteArray rewritten =
+            PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(expanded);
 
         auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
-                                                                            shaderSource);
+                                                                            rewritten);
         if (!shader || !shader->isValid()) {
             qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
             return;
         }
 
         CachedShader cached;
-        cached.iTimeLoc = shader->uniformLocation(kUniformITime);
-        cached.iResolutionLoc = shader->uniformLocation(kUniformIResolution);
+        // Animation-shader contract — names sourced from
+        // `PhosphorAnimationShaders::AnimationShaderContract`. Both the
+        // daemon overlay-surface execution site and this compositor
+        // window-content execution site resolve the same names.
+        cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
+        cached.iResolutionLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
+        // Cache `customParams[0]` … `customParams[7]` element locations.
+        // Each declared parameter lands in one of these slots — see
+        // `AnimationShaderRegistry::translateAnimationParams` for the
+        // exact mapping. -1 for slots the shader didn't reference (e.g.
+        // a one-param effect optimises away customParams[1..7]).
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+            const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomParamsArray)
+                + '[' + QByteArray::number(slot) + ']';
+            cached.customParamsLoc[slot] = shader->uniformLocation(name.constData());
+        }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
 
-    endShaderTransition(window);
+    // Detect supersession before the teardown so we can skip the
+    // redundant unredirect+redirect cycle. KWin's offscreen-effect
+    // pipeline reallocates the offscreen render target on every
+    // unredirect→redirect, and a back-to-back supersession (e.g. an
+    // autotile-reorder drag firing window.move at 60 Hz) would
+    // otherwise pay that cost every frame.
+    const auto existingIt = m_shaderTransitions.find(window);
+    const bool isSameWindowSupersession = existingIt != m_shaderTransitions.end();
+    if (isSameWindowSupersession) {
+        // Erase the prior bookkeeping but skip the unredirect — we're
+        // about to re-shader this same window. setShader() below
+        // overwrites the shader pointer; no need to null it first.
+        m_shaderTransitions.erase(existingIt);
+    }
+    // else: window is not currently shaderized; falls through to the
+    // redirect() call below (no-op endShaderTransition since the map
+    // doesn't have the entry).
 
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
     transition.cached = &cachedEntry;
 
-    redirect(window);
+    // Translate the friendly parameter map (e.g. {"direction": 1,
+    // "parallax": 0.2}) to slot keys, then pack each
+    // `customParams<N>_<x|y|z|w>` set into a vec4 we can blast in one
+    // setUniform call per slot. Translation honours the metadata
+    // declaration order — same allocation the daemon's
+    // SurfaceAnimator::runLeg path uses, so a single ShaderProfile
+    // produces identical visuals on either runtime.
+    const QVariantMap translated =
+        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, profile.effectiveParameters());
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+        auto pull = [&](char component) -> float {
+            const QString key = PhosphorAnimationShaders::AnimationShaderContract::slotKey(slot, component);
+            const auto it = translated.constFind(key);
+            if (it == translated.constEnd())
+                return 0.0f;
+            bool ok = false;
+            const float v = it->toFloat(&ok);
+            return ok ? v : 0.0f;
+        };
+        transition.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+    }
+    // Bump generation for every install so the timer-driven teardown in
+    // tryBeginShaderForEvent can detect supersession (a fresh transition
+    // installed before the prior timer fires) and bail without killing the
+    // successor. Counter is monotonic per-process; 64-bit so practically
+    // unbounded.
+    transition.generation = ++m_shaderTransitionGenerationCounter;
+    if (durationMs > 0) {
+        transition.durationMs = durationMs;
+        transition.startTimeMs = shaderClockNowMs();
+    }
+
+    if (!isSameWindowSupersession) {
+        redirect(window);
+    }
+    // setShader is unconditional — it replaces any prior shader pointer
+    // (idempotent for the same shader, so even a same-effect
+    // supersession is correct here).
     setShader(window, cachedEntry.shader.get());
     m_shaderTransitions.emplace(window, std::move(transition));
 }
@@ -4159,11 +4460,55 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     if (!window)
         return;
     auto it = m_shaderTransitions.find(window);
-    if (it != m_shaderTransitions.end()) {
+    if (it == m_shaderTransitions.end()) {
+        return;
+    }
+    // Guard against teardown on a window that's already been destroyed
+    // (windowDeleted may have raced our timer). setShader / unredirect on a
+    // deleted EffectWindow is undefined behaviour in KWin's offscreen-effect
+    // pipeline; just drop our bookkeeping. The windowDeleted handler at the
+    // KWin::effects connection erases m_shaderTransitions for the same
+    // window, so this is a defence-in-depth against ordering races.
+    if (!window->isDeleted()) {
         setShader(window, nullptr);
         unredirect(window);
-        m_shaderTransitions.erase(it);
     }
+    m_shaderTransitions.erase(it);
+}
+
+void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs)
+{
+    if (!window || durationMs <= 0) {
+        return;
+    }
+    const auto profile = m_shaderProfileTree.resolve(profilePath);
+    if (profile.effectiveEffectId().isEmpty()) {
+        return; // user hasn't assigned a shader to this path
+    }
+    beginShaderTransition(window, profile, durationMs);
+    // Capture the just-installed transition's generation so the deferred
+    // teardown bails if a successor has replaced us by the time the timer
+    // fires. Without this, two events overlapping on the same window
+    // (window.move during zone.snapIn, window.focus interrupting
+    // window.maximize) leave a stale timer that tears down the SUCCESSOR
+    // when its own timer hasn't fired yet.
+    auto it = m_shaderTransitions.find(window);
+    if (it == m_shaderTransitions.end()) {
+        return; // beginShaderTransition no-op'd (compile fail / invalid id)
+    }
+    const quint64 myGeneration = it->second.generation;
+    QPointer<KWin::EffectWindow> safeWindow(window);
+    QTimer::singleShot(durationMs, this, [this, safeWindow, myGeneration]() {
+        if (!safeWindow) {
+            return;
+        }
+        auto it = m_shaderTransitions.find(safeWindow);
+        if (it != m_shaderTransitions.end() && it->second.generation == myGeneration) {
+            endShaderTransition(safeWindow);
+        }
+        // else: a newer transition replaced us (last-event-wins) and owns
+        // its own timer — leave it alone.
+    });
 }
 
 void PlasmaZonesEffect::loadShaderProfileFromDbus()

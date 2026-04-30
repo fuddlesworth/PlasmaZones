@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -165,6 +166,15 @@ public:
         /// the shader leg reuses the opacity profile's curve and duration.
         QString showShaderProfile;
         QString hideShaderProfile;
+        /// Per-event shader parameter overrides forwarded to
+        /// `PhosphorRendering::ShaderEffect::setShaderParams` on the
+        /// shader leg. Keys are the effect's declared parameter ids
+        /// (e.g. `direction`, `grain`). Resolved by the consumer from
+        /// `ShaderProfile::effectiveParameters()` at config-register
+        /// time; the animator forwards them verbatim. Empty → shader
+        /// runs with its declared defaults.
+        QVariantMap showShaderParameters;
+        QVariantMap hideShaderParameters;
     };
 
     /// Construct against an explicit registry with caller-supplied

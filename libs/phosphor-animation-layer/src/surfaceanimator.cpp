@@ -296,7 +296,7 @@ public:
     ///                    legs settle.
     void runLeg(PhosphorLayer::Surface* surface, QQuickItem* target, qreal fromOpacity, qreal toOpacity,
                 const QString& opacityProfilePath, qreal fromScale, qreal toScale, const QString& scaleProfilePath,
-                const QString& shaderEffectId, const QString& shaderProfilePath,
+                const QString& shaderEffectId, const QString& shaderProfilePath, const QVariantMap& shaderParameters,
                 ISurfaceAnimator::CompletionCallback onComplete)
     {
         // Supersede any in-flight animation on this surface BEFORE the
@@ -340,7 +340,22 @@ public:
         PhosphorAnimation::IMotionClock* clock = &m_clock;
 
         const bool hasScaleLeg = !scaleProfilePath.isEmpty();
-        const bool hasShaderLeg = !shaderEffectId.isEmpty() && m_shaderRegistry;
+
+        // Resolve the shader effect up front so `legCount` counts only
+        // legs that will actually start. Without this, a stale or typo'd
+        // `shaderEffectId` in the user's profile tree (or a registry that
+        // hasn't loaded the referenced pack yet) counts toward
+        // `pendingLegs` but never reaches `start()` — the eff-validity
+        // check below would skip constructing `shaderItem` / `shaderTime`,
+        // and the start-shader-leg block at the bottom of `runLeg`
+        // early-returns when those are null. Result: `pendingLegs` would
+        // never decrement to zero and the consumer's `onComplete` would
+        // never fire (animation hangs mid-show / mid-hide).
+        PhosphorAnimationShaders::AnimationShaderEffect resolvedShaderEff;
+        if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
+            resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
+        }
+        const bool hasShaderLeg = resolvedShaderEff.isValid();
         const int legCount = 1 + (hasScaleLeg ? 1 : 0) + (hasShaderLeg ? 1 : 0);
 
         // Install the bookkeeping slot BEFORE the synchronous pre-state
@@ -398,19 +413,46 @@ public:
                 it->second.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
             if (hasShaderLeg) {
-                const auto eff = m_shaderRegistry->effect(shaderEffectId);
-                if (eff.isValid()) {
-                    auto* shaderItem = new PhosphorRendering::ShaderEffect(target);
-                    shaderItem->setShaderSource(QUrl::fromLocalFile(eff.fragmentShaderPath));
-                    shaderItem->setWidth(target->width());
-                    shaderItem->setHeight(target->height());
-                    shaderItem->setITime(0.0);
-                    shaderItem->setIResolution(QSizeF(target->width(), target->height()));
-                    static constexpr qreal kShaderOverlayZ = 1000;
-                    shaderItem->setZ(kShaderOverlayZ);
-                    it->second.shaderItem = shaderItem;
-                    it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                // `resolvedShaderEff` is guaranteed-valid by the
+                // `hasShaderLeg = resolvedShaderEff.isValid()` upstream
+                // — no second registry lookup needed here.
+                auto* shaderItem = new PhosphorRendering::ShaderEffect(target);
+                shaderItem->setShaderSource(QUrl::fromLocalFile(resolvedShaderEff.fragmentShaderPath));
+                shaderItem->setWidth(target->width());
+                shaderItem->setHeight(target->height());
+                shaderItem->setITime(0.0);
+                shaderItem->setIResolution(QSizeF(target->width(), target->height()));
+                // Translate friendly parameter ids (e.g. {"direction": 1,
+                // "parallax": 0.2}) to the canonical
+                // `customParams<N>_<x|y|z|w>` slot keys both runtimes
+                // consume. The translation honours the metadata
+                // declaration order — see
+                // `AnimationShaderRegistry::translateAnimationParams` for
+                // the exact slot allocation. Always called (even with
+                // empty `shaderParameters`) so declared defaults still
+                // populate the slots — without it, the customParams
+                // region holds the (-1, -1, -1, -1) sentinel ShaderEffect
+                // ships with and the shader sees garbage for parameters
+                // it expected to read.
+                const QVariantMap translated =
+                    PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(resolvedShaderEff,
+                                                                                                shaderParameters);
+                if (!translated.isEmpty()) {
+                    shaderItem->setShaderParams(translated);
                 }
+                // Z-order cap for the shader overlay child. Picks a value
+                // higher than any conventional QML z stacking inside daemon
+                // overlay surfaces (typical content sits at z ≤ 100, dropdowns
+                // / tooltips at z ≤ 500). If a future overlay needs to
+                // render *above* the shader transition leg, raise this
+                // constant in lockstep with the offending child's z — there
+                // is no automatic "always-on-top" guarantee, just an
+                // empirically-large value chosen to dominate today's
+                // overlay tree.
+                static constexpr qreal kShaderOverlayZ = 1000;
+                shaderItem->setZ(kShaderOverlayZ);
+                it->second.shaderItem = shaderItem;
+                it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
         }
 
@@ -802,7 +844,8 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
     }
 
     d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/1.0, cfg.showProfile, fromScale, toScale,
-              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, std::move(onComplete));
+              cfg.showScaleProfile, cfg.showShaderEffectId, cfg.showShaderProfile, cfg.showShaderParameters,
+              std::move(onComplete));
 }
 
 void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete)
@@ -822,7 +865,8 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
     const qreal fromScale = (cfg.hideScaleProfile.isEmpty() || !rootItem) ? 1.0 : rootItem->scale();
     const qreal toScale = cfg.hideScaleProfile.isEmpty() ? 1.0 : cfg.hideScaleTo;
     d->runLeg(surface, rootItem, fromOpacity, /*toOpacity=*/0.0, cfg.hideProfile, fromScale, toScale,
-              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, std::move(onComplete));
+              cfg.hideScaleProfile, cfg.hideShaderEffectId, cfg.hideShaderProfile, cfg.hideShaderParameters,
+              std::move(onComplete));
 }
 
 void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)

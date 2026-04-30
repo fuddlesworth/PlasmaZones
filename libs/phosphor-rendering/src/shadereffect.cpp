@@ -6,6 +6,7 @@
 
 #include "internal.h"
 
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
 #include <QFile>
@@ -217,6 +218,64 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
         return;
     }
     m_shaderParams = params;
+
+    // Parse the canonical slot-keyed entries that both registries
+    // (`PhosphorShaders::ShaderRegistry::translateParamsToUniforms` for
+    // overlay shaders, `PhosphorAnimationShaders::AnimationShaderRegistry::
+    // translateAnimationParams` for animation shaders) emit:
+    //   • `customParams1_x` … `customParams8_w` → `m_customParams[0..7]`
+    //   • `customColor1`     … `customColor16`  → `m_customColors[0..15]`
+    //
+    // Slot-key format comes from `PhosphorShaders::CustomParams::slotKey`
+    // — the cross-library canonical helper alongside `BaseUniforms`.
+    //
+    // Until this lived in the base class, only `ZoneShaderItem` (overlay)
+    // performed the parse — animation shaders driven by bare `ShaderEffect`
+    // (e.g. `SurfaceAnimator::runLeg` for daemon overlay-surface
+    // transitions) silently dropped every declared parameter. Now any
+    // consumer that calls `setShaderParams` with translated keys lands the
+    // values in the UBO via `setCustomParamAt` / `setCustomColorAt`.
+    auto extractFloat = [&params](const QString& key, float defaultVal) -> float {
+        const auto it = params.constFind(key);
+        if (it == params.constEnd()) {
+            return defaultVal;
+        }
+        bool ok = false;
+        const float val = it->toFloat(&ok);
+        return ok ? val : defaultVal;
+    };
+
+    for (int i = 0; i < kMaxCustomParams; ++i) {
+        QVector4D cp = customParamAt(i);
+        cp.setX(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'x'), cp.x()));
+        cp.setY(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'y'), cp.y()));
+        cp.setZ(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'z'), cp.z()));
+        cp.setW(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'w'), cp.w()));
+        setCustomParamAt(i, cp);
+    }
+
+    auto extractColor = [&params](const QString& key, const QColor& defaultVal) -> QColor {
+        const auto it = params.constFind(key);
+        if (it == params.constEnd()) {
+            return defaultVal;
+        }
+        const QVariant& val = *it;
+        if (val.canConvert<QColor>()) {
+            return val.value<QColor>();
+        }
+        if (val.typeId() == QMetaType::QString) {
+            QColor color(val.toString());
+            if (color.isValid()) {
+                return color;
+            }
+        }
+        return defaultVal;
+    };
+
+    for (int i = 0; i < kMaxCustomColors; ++i) {
+        setCustomColorAt(i, extractColor(PhosphorShaders::CustomColors::colorKey(i), customColorAt(i)));
+    }
+
     Q_EMIT shaderParamsChanged();
     update();
 }

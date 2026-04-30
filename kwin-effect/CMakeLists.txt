@@ -94,6 +94,12 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
     PhosphorAnimationShaders::PhosphorAnimationShaders
+    # ShaderIncludeResolver: kwin-effect resolves `#include` directives
+    # in animation shader source before running the UBO→default-block
+    # rewriter (KWin::GLShader's classic-GL pipeline doesn't bind UBOs;
+    # see `AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock`
+    # in libs/phosphor-animation-shaders).
+    PhosphorShaders::PhosphorShaders
 )
 
 # Include directories

@@ -64,6 +64,7 @@ endif()
 
 set(phosphorshaders_public_HDRS
     include/PhosphorShaders/BaseUniforms.h
+    include/PhosphorShaders/CustomParamsKey.h
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
     include/PhosphorShaders/ShaderIncludeResolver.h

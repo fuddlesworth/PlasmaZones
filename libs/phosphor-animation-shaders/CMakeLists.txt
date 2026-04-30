@@ -41,6 +41,15 @@ if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader CONFIG REQUIRED)
 endif()
 
+# Header-only consumption of `<PhosphorShaders/CustomParamsKey.h>` — the
+# canonical formatter for `customParams<N>_<x|y|z|w>` slot keys lives in
+# phosphor-shaders alongside `BaseUniforms`. Keeping a single source of
+# truth across the four call sites that build/parse this format means
+# any future format change lands in one place.
+if(NOT TARGET PhosphorShaders::PhosphorShaders)
+    find_package(PhosphorShaders CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorAnimationShaders Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -54,6 +63,7 @@ set(phosphoranimationshaders_SRCS
 
 set(phosphoranimationshaders_public_HDRS
     include/PhosphorAnimationShaders/PhosphorAnimationShaders.h
+    include/PhosphorAnimationShaders/AnimationShaderContract.h
     include/PhosphorAnimationShaders/AnimationShaderEffect.h
     include/PhosphorAnimationShaders/AnimationShaderRegistry.h
     include/PhosphorAnimationShaders/ShaderProfile.h
@@ -92,6 +102,7 @@ target_link_libraries(PhosphorAnimationShaders
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
         PhosphorFsLoader::PhosphorFsLoader
+        PhosphorShaders::PhosphorShaders
 )
 
 set_target_properties(PhosphorAnimationShaders PROPERTIES
