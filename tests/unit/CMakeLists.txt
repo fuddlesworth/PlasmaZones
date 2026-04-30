@@ -468,6 +468,8 @@ target_link_libraries(test_animations_page_controller
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAnimationShaders::PhosphorAnimationShaders
+        plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 

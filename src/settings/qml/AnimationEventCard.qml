@@ -52,6 +52,15 @@ Item {
     property string currentEasingCurve: "0.33,1.00,0.68,1.00"
     property real currentSpringOmega: 12
     property real currentSpringZeta: 1
+    // ── Shader assignment (Phase 6) ──────────────────────────────────
+    // Per-event shader override is independent of the motion override
+    // toggle: a user can pick a shader for an event without overriding
+    // its timing. Persistence routes through Settings::shaderProfile-
+    // Tree (NOT the Profile-loader pipeline), so signal handling for
+    // refreshes is separate.
+    property string currentShaderEffectId: ""
+    property var currentShaderParams: ({
+    })
     readonly property string currentCurveString: {
         if (currentTimingMode === CurvePresets.timingModeSpring)
             return "spring:" + currentSpringOmega.toFixed(2) + "," + currentSpringZeta.toFixed(2);
@@ -107,6 +116,13 @@ Item {
         return i18n("%1 ms", root.currentDuration);
     }
 
+    function refreshShaderFromTree() {
+        var resolved = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
+        root.currentShaderEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
+        root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({
+        });
+    }
+
     function refreshFromTree() {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
         var resolved = settingsController.animationsPage.resolvedProfile(root.eventPath);
@@ -149,7 +165,10 @@ Item {
 
     implicitHeight: card.implicitHeight
     Layout.fillWidth: true
-    Component.onCompleted: refreshFromTree()
+    Component.onCompleted: {
+        refreshFromTree();
+        refreshShaderFromTree();
+    }
 
     // Pick up changes from any path in the tree — could be this event
     // (user toggled override) or an ancestor (we're inheriting from it
@@ -158,6 +177,10 @@ Item {
     Connections {
         function onOverrideChanged(path) {
             root.refreshFromTree();
+        }
+
+        function onShaderProfileChanged(path) {
+            root.refreshShaderFromTree();
         }
 
         target: settingsController.animationsPage
@@ -302,6 +325,66 @@ Item {
 
                 }
 
+            }
+
+            // ── Shader effect picker (independent of timing override) ─
+            // Visible always (when card is enabled) — users can drop a
+            // shader on an event without touching its timing.
+            SettingsSeparator {
+            }
+
+            SettingsRow {
+                title: i18n("Shader effect")
+                description: i18n("Apply a shader transition to this event")
+
+                WideComboBox {
+                    id: shaderCombo
+
+                    readonly property var _effects: settingsController.animationsPage.availableShaderEffects()
+                    readonly property var _modelLabels: {
+                        var labels = [i18n("None")];
+                        for (var i = 0; i < _effects.length; i++) labels.push(_effects[i].name || _effects[i].id)
+                        return labels;
+                    }
+
+                    function _indexOf(effectId) {
+                        if (!effectId || effectId.length === 0)
+                            return 0;
+
+                        for (var i = 0; i < _effects.length; i++) {
+                            if (_effects[i].id === effectId)
+                                return i + 1;
+
+                        }
+                        return 0;
+                    }
+
+                    Accessible.name: i18n("Shader effect")
+                    model: _modelLabels
+                    currentIndex: _indexOf(root.currentShaderEffectId)
+                    onActivated: function(index) {
+                        if (index === 0) {
+                            settingsController.animationsPage.clearShaderOverride(root.eventPath);
+                        } else {
+                            var effect = _effects[index - 1];
+                            settingsController.animationsPage.setShaderOverride(root.eventPath, effect.id, root.currentShaderParams || ({
+                            }));
+                        }
+                    }
+                }
+
+            }
+
+            // Inline parameter editor surfaces only when an effect is
+            // assigned and that effect declares parameters.
+            AnimationShaderParamEditor {
+                Layout.fillWidth: true
+                effectId: root.currentShaderEffectId
+                currentParams: root.currentShaderParams
+                onParamsChanged: function(next) {
+                    root.currentShaderParams = next;
+                    settingsController.animationsPage.setShaderOverride(root.eventPath, root.currentShaderEffectId, next);
+                }
             }
 
         }

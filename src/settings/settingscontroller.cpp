@@ -29,6 +29,7 @@
 #include "dbusutils.h"
 #include "version.h"
 
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -303,12 +304,32 @@ SettingsController::SettingsController(QObject* parent)
     // is guaranteed since m_settings is the first member declared).
     m_generalPage = new GeneralPageController(&m_settings, this);
 
+    // Animation shader registry — settings-side mirror of the daemon's.
+    // Both processes scan the same XDG dirs independently; FS watching
+    // keeps each in sync without IPC. Mirrors daemon.cpp:setupAnimation
+    // ShaderEffects (XDG search paths + user dir, materialised before
+    // registration so the watcher attaches a direct watch).
+    m_animationShaderRegistry = new PhosphorAnimationShaders::AnimationShaderRegistry(this);
+    {
+        QStringList animDirs =
+            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
+                                      QStandardPaths::LocateDirectory);
+        std::reverse(animDirs.begin(), animDirs.end());
+        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/animations");
+        if (!animDirs.contains(userAnimDir))
+            animDirs.append(userAnimDir);
+        QDir().mkpath(userAnimDir);
+        m_animationShaderRegistry->setUserPath(userAnimDir);
+        m_animationShaderRegistry->addSearchPaths(animDirs);
+    }
+
     // Animations page sub-controller — Q_PROPERTY surface for the new
-    // animation-event drilldown. Independent of `Settings`: per-event
-    // overrides persist as JSON files under
-    // `~/.local/share/plasmazones/profiles/`, picked up by the daemon's
-    // existing `PhosphorAnimation::ProfileLoader` watch.
-    m_animationsPage = new AnimationsPageController(this);
+    // animation-event drilldown. Per-event motion overrides persist as
+    // JSON files under `~/.local/share/plasmazones/profiles/`, picked up
+    // by the daemon's existing `PhosphorAnimation::ProfileLoader` watch;
+    // shader assignments persist via Settings::shaderProfileTree.
+    m_animationsPage = new AnimationsPageController(m_animationShaderRegistry, &m_settings, this);
 
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
@@ -554,6 +575,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-cursor"),
         QStringLiteral("animations-widget"),
         QStringLiteral("animations-presets"),
+        QStringLiteral("animations-shaders"),
     };
     return pages;
 }

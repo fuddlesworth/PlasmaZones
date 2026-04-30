@@ -191,6 +191,10 @@ ApplicationWindow {
             "name": "animations-presets",
             "label": i18n("Presets"),
             "iconName": "bookmarks"
+        }, {
+            "name": "animations-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-display"
         }]
     })
     // Page component map -- loaded on demand by Loader
@@ -224,7 +228,8 @@ ApplicationWindow {
         "animations-panel": "AnimationsPanelPage.qml",
         "animations-cursor": "AnimationsCursorPage.qml",
         "animations-widget": "AnimationsWidgetPage.qml",
-        "animations-presets": "AnimationsPresetsPage.qml"
+        "animations-presets": "AnimationsPresetsPage.qml",
+        "animations-shaders": "AnimationsShadersPage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({

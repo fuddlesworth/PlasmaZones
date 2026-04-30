@@ -9,7 +9,13 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
+
 namespace PlasmaZones {
+
+class ISettings;
 
 /// Q_PROPERTY surface for the "Animations" settings page.
 ///
@@ -46,7 +52,13 @@ class AnimationsPageController : public QObject
     Q_PROPERTY(qreal springZetaMax READ springZetaMax CONSTANT)
 
 public:
-    explicit AnimationsPageController(QObject* parent = nullptr);
+    /// @param shaderRegistry Optional — when null, all `*ShaderEffects()` /
+    ///        `*ShaderProfile()` Q_INVOKABLEs return empty results so unit
+    ///        tests can construct the controller without an animation
+    ///        bootstrap.
+    /// @param settings Optional — when null, shader-tree CRUD is a no-op.
+    explicit AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry = nullptr,
+                                      ISettings* settings = nullptr, QObject* parent = nullptr);
 
     qreal springOmegaMin() const
     {
@@ -137,6 +149,44 @@ public:
     /// @return true on a successful delete. Emits `userPresetsChanged()`.
     Q_INVOKABLE bool removeUserPreset(const QString& name);
 
+    // ── Shader effects (Phase 6) ─────────────────────────────────────
+
+    /// Installed `AnimationShaderEffect`s flattened to a QML-friendly list.
+    /// Each row: id / name / description / author / version / category /
+    /// isUserEffect / parameters (QVariantList of ParameterInfo maps).
+    Q_INVOKABLE QVariantList availableShaderEffects() const;
+
+    /// Single-effect lookup. Empty map when @p effectId is unknown.
+    Q_INVOKABLE QVariantMap shaderEffectInfo(const QString& effectId) const;
+
+    /// Just the parameters list for @p effectId — convenience for the
+    /// per-event shader-param editor.
+    Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
+
+    /// XDG-writable user shader directory; create if missing.
+    Q_INVOKABLE QString userShaderDirectory() const;
+
+    /// Open the user shader directory in the system file manager.
+    Q_INVOKABLE void openUserShaderDirectory() const;
+
+    /// Per-event shader override read.
+    /// @return `{ effectId: QString, parameters: QVariantMap }` or empty
+    /// when no override is set at this exact path.
+    Q_INVOKABLE QVariantMap rawShaderProfile(const QString& path) const;
+
+    /// Walk the parent chain to resolve the effective shader assignment
+    /// for @p path. Returns an empty map if no ancestor has one.
+    Q_INVOKABLE QVariantMap resolvedShaderProfile(const QString& path) const;
+
+    /// Assign @p effectId (with optional @p parameters) to @p path.
+    /// An empty @p effectId clears the assignment at this path,
+    /// equivalent to `clearShaderOverride(path)`.
+    Q_INVOKABLE bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
+
+    /// Remove the shader override at @p path; ancestors take over via
+    /// `ShaderProfileTree::resolve` walk-up.
+    Q_INVOKABLE bool clearShaderOverride(const QString& path);
+
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -150,11 +200,20 @@ Q_SIGNALS:
     /// Emitted on any successful add/removeUserPreset.
     void userPresetsChanged();
 
+    /// Emitted on any successful set/clearShaderOverride.
+    void shaderProfileChanged(const QString& path);
+
+    /// Re-emit of `AnimationShaderRegistry::effectsChanged` so QML can
+    /// rebind without poking at the registry directly.
+    void shaderEffectsChanged();
+
 private:
     QString userProfilesDir() const;
     QString profileFilePath(const QString& path) const;
     QString presetFilePath(const QString& presetName) const;
 
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
+    ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
 };
 

@@ -3,10 +3,17 @@
 
 #include "animationspagecontroller.h"
 
+#include "../core/isettings.h"
+
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimationShaders/AnimationShaderEffect.h>
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimationShaders/ShaderProfile.h>
+#include <PhosphorAnimationShaders/ShaderProfileTree.h>
 
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +22,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -140,9 +148,24 @@ void fillLibraryDefaults(QVariantMap& profile)
 
 // ─── Construction ──────────────────────────────────────────────────────
 
-AnimationsPageController::AnimationsPageController(QObject* parent)
+AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry,
+                                                   ISettings* settings, QObject* parent)
     : QObject(parent)
+    , m_shaderRegistry(shaderRegistry)
+    , m_settings(settings)
 {
+    if (m_shaderRegistry) {
+        connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+                &AnimationsPageController::shaderEffectsChanged);
+    }
+    if (m_settings) {
+        connect(m_settings, &ISettings::shaderProfileTreeChanged, this, [this]() {
+            // Path-agnostic broadcast — the tree is a single Q_PROPERTY so we
+            // can't tell which path moved without diffing. QML pages refresh
+            // every visible event card on this signal which is cheap enough.
+            Q_EMIT shaderProfileChanged(QString());
+        });
+    }
 }
 
 void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
@@ -463,6 +486,158 @@ bool AnimationsPageController::removeUserPreset(const QString& name)
         return false;
 
     Q_EMIT userPresetsChanged();
+    return true;
+}
+
+// ─── Shader effects ────────────────────────────────────────────────────
+
+namespace {
+
+QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo& p)
+{
+    QVariantMap m;
+    m.insert(QStringLiteral("id"), p.id);
+    m.insert(QStringLiteral("name"), p.name);
+    m.insert(QStringLiteral("type"), p.type);
+    m.insert(QStringLiteral("defaultValue"), p.defaultValue);
+    m.insert(QStringLiteral("minValue"), p.minValue);
+    m.insert(QStringLiteral("maxValue"), p.maxValue);
+    return m;
+}
+
+QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEffect& effect)
+{
+    QVariantMap m;
+    m.insert(QStringLiteral("id"), effect.id);
+    m.insert(QStringLiteral("name"), effect.name);
+    m.insert(QStringLiteral("description"), effect.description);
+    m.insert(QStringLiteral("author"), effect.author);
+    m.insert(QStringLiteral("version"), effect.version);
+    m.insert(QStringLiteral("category"), effect.category);
+    m.insert(QStringLiteral("isUserEffect"), effect.isUserEffect);
+    QVariantList params;
+    params.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters) {
+        params.append(parameterInfoToMap(p));
+    }
+    m.insert(QStringLiteral("parameters"), params);
+    return m;
+}
+
+QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& profile)
+{
+    QVariantMap m;
+    if (profile.effectId)
+        m.insert(QStringLiteral("effectId"), *profile.effectId);
+    if (profile.parameters)
+        m.insert(QStringLiteral("parameters"), *profile.parameters);
+    return m;
+}
+
+} // namespace
+
+QVariantList AnimationsPageController::availableShaderEffects() const
+{
+    QVariantList result;
+    if (!m_shaderRegistry)
+        return result;
+    const auto effects = m_shaderRegistry->availableEffects();
+    result.reserve(effects.size());
+    for (const auto& effect : effects)
+        result.append(effectToMap(effect));
+    return result;
+}
+
+QVariantMap AnimationsPageController::shaderEffectInfo(const QString& effectId) const
+{
+    if (!m_shaderRegistry || effectId.isEmpty() || !m_shaderRegistry->hasEffect(effectId))
+        return {};
+    return effectToMap(m_shaderRegistry->effect(effectId));
+}
+
+QVariantList AnimationsPageController::shaderParameters(const QString& effectId) const
+{
+    if (!m_shaderRegistry || effectId.isEmpty() || !m_shaderRegistry->hasEffect(effectId))
+        return {};
+    const auto effect = m_shaderRegistry->effect(effectId);
+    QVariantList result;
+    result.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters)
+        result.append(parameterInfoToMap(p));
+    return result;
+}
+
+QString AnimationsPageController::userShaderDirectory() const
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString dir = base + QStringLiteral("/plasmazones/animations");
+    QDir().mkpath(dir);
+    return dir;
+}
+
+void AnimationsPageController::openUserShaderDirectory() const
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectory()));
+}
+
+QVariantMap AnimationsPageController::rawShaderProfile(const QString& path) const
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings || path.isEmpty())
+        return {};
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    if (!tree.hasOverride(path))
+        return {};
+    return shaderProfileToMap(tree.directOverride(path));
+}
+
+QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path) const
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings || path.isEmpty())
+        return {};
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    return shaderProfileToMap(tree.resolve(path));
+}
+
+bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
+                                                 const QVariantMap& parameters)
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings || path.isEmpty())
+        return false;
+
+    // Empty effectId == clear assignment at this exact path. Mirrors
+    // ShaderProfile's "engaged-empty means no effect" semantics in a
+    // clean QML idiom — callers don't have to construct a partial map
+    // to clear.
+    if (effectId.isEmpty())
+        return clearShaderOverride(path);
+
+    ShaderProfile profile;
+    profile.effectId = effectId;
+    if (!parameters.isEmpty())
+        profile.parameters = parameters;
+
+    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    tree.setOverride(path, profile);
+    m_settings->setShaderProfileTree(tree);
+
+    Q_EMIT shaderProfileChanged(path);
+    return true;
+}
+
+bool AnimationsPageController::clearShaderOverride(const QString& path)
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings || path.isEmpty())
+        return false;
+    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    if (!tree.hasOverride(path))
+        return false;
+    tree.clearOverride(path);
+    m_settings->setShaderProfileTree(tree);
+    Q_EMIT shaderProfileChanged(path);
     return true;
 }
 

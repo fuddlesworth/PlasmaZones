@@ -25,6 +25,10 @@ class AlgorithmRegistry;
 class ScriptedAlgorithmLoader;
 }
 
+namespace PhosphorAnimationShaders {
+class AnimationShaderRegistry;
+}
+
 #include <QHash>
 #include <QObject>
 #include <QSet>
@@ -597,6 +601,12 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
+    /// Parented to `this` so Qt manages lifetime; the raw pointer is fine
+    /// because every consumer is also a child of this controller and Qt's
+    /// child cleanup walks in reverse-insertion order. Constructed before
+    /// m_animationsPage so the page controller's non-owned pointer
+    /// outlives the page through child-destruction order.
+    PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
 
     DaemonController m_daemonController;
