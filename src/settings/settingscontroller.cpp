@@ -514,7 +514,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     static const QHash<QString, QString> redirects{
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
-        {QStringLiteral("animations"), QStringLiteral("animations-zone")},
+        {QStringLiteral("animations"), QStringLiteral("animations-general")},
     };
     return redirects;
 }
@@ -545,7 +545,14 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
+        QStringLiteral("animations-general"),
+        QStringLiteral("animations-window"),
         QStringLiteral("animations-zone"),
+        QStringLiteral("animations-workspace"),
+        QStringLiteral("animations-osd"),
+        QStringLiteral("animations-panel"),
+        QStringLiteral("animations-cursor"),
+        QStringLiteral("animations-widget"),
     };
     return pages;
 }

@@ -139,6 +139,13 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationEventCard.qml
         qml/AnimationSubPage.qml
         qml/AnimationSubPageHeader.qml
+        qml/AnimationsCursorPage.qml
+        qml/AnimationsGeneralPage.qml
+        qml/AnimationsOsdPage.qml
+        qml/AnimationsPanelPage.qml
+        qml/AnimationsWidgetPage.qml
+        qml/AnimationsWindowPage.qml
+        qml/AnimationsWorkspacePage.qml
         qml/AnimationsZonePage.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml

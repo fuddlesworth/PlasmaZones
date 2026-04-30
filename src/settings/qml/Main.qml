@@ -154,9 +154,38 @@ ApplicationWindow {
             "iconName": "bookmark"
         }],
         "animations": [{
+            "name": "animations-general",
+            "label": i18n("General"),
+            "iconName": "configure",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-window",
+            "label": i18n("Window"),
+            "iconName": "window"
+        }, {
             "name": "animations-zone",
             "label": i18n("Zone"),
             "iconName": "view-split-left-right"
+        }, {
+            "name": "animations-workspace",
+            "label": i18n("Workspace"),
+            "iconName": "virtual-desktops"
+        }, {
+            "name": "animations-osd",
+            "label": i18n("OSD"),
+            "iconName": "view-pim-notes"
+        }, {
+            "name": "animations-panel",
+            "label": i18n("Panel"),
+            "iconName": "view-list-details"
+        }, {
+            "name": "animations-cursor",
+            "label": i18n("Cursor"),
+            "iconName": "input-mouse"
+        }, {
+            "name": "animations-widget",
+            "label": i18n("Widget"),
+            "iconName": "preferences-desktop-effects"
         }]
     })
     // Page component map -- loaded on demand by Loader
@@ -182,7 +211,14 @@ ApplicationWindow {
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
         "about": "AboutPage.qml",
-        "animations-zone": "AnimationsZonePage.qml"
+        "animations-general": "AnimationsGeneralPage.qml",
+        "animations-window": "AnimationsWindowPage.qml",
+        "animations-zone": "AnimationsZonePage.qml",
+        "animations-workspace": "AnimationsWorkspacePage.qml",
+        "animations-osd": "AnimationsOsdPage.qml",
+        "animations-panel": "AnimationsPanelPage.qml",
+        "animations-cursor": "AnimationsCursorPage.qml",
+        "animations-widget": "AnimationsWidgetPage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({
