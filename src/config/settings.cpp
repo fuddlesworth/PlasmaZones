@@ -157,6 +157,16 @@ void Settings::load()
     const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
     const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
 
+    // Shader profile tree is also not a Q_PROPERTY (the signal lives on
+    // ISettings, the value is stored as a JSON blob via the Store). The
+    // reflective Q_PROPERTY loop above won't fire its NOTIFY signal, so
+    // capture the JSON string directly and re-emit if changed. Without
+    // this the daemon's overlayservice — which subscribes to
+    // shaderProfileTreeChanged via overlayservice/settings.cpp:77 —
+    // never picks up cross-process tree edits via reloadSettings().
+    const QString shaderTreeBefore =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+
     m_configBackend->reparseConfiguration();
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -205,6 +215,11 @@ void Settings::load()
         Q_EMIT disabledActivitiesChanged(Mode::Snapping);
     if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
         Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+
+    const QString shaderTreeAfter =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    if (shaderTreeAfter != shaderTreeBefore)
+        Q_EMIT shaderProfileTreeChanged();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────

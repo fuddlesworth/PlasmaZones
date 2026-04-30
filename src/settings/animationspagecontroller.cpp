@@ -4,6 +4,7 @@
 #include "animationspagecontroller.h"
 
 #include "../core/isettings.h"
+#include "dbusutils.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
@@ -268,6 +269,7 @@ void AnimationsPageController::revertPending()
         const auto doc = QJsonDocument::fromJson(m_pendingShaderTreeSnapshot->toUtf8());
         if (doc.isObject()) {
             m_settings->setShaderProfileTree(ShaderProfileTree::fromJson(doc.object()));
+            DaemonDBus::notifyReload();
         }
         m_pendingShaderTreeSnapshot.reset();
     }
@@ -761,6 +763,15 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
 
+    // Cross-process push: the daemon's Settings doesn't auto-reread
+    // its config file, and the local setShaderProfileTree call above
+    // only fires the in-process signal. notifyReload triggers
+    // SettingsAdaptor::reloadSettings → daemon Settings::load →
+    // (with the patched load() in settings.cpp) re-emits
+    // shaderProfileTreeChanged → applyShaderProfilesToAnimator runs
+    // and the next animation tick uses the new shader.
+    DaemonDBus::notifyReload();
+
     Q_EMIT shaderProfileChanged(path);
     Q_EMIT pendingChangesChanged();
     return true;
@@ -777,6 +788,7 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     snapshotShaderTreeIfFirst();
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
+    DaemonDBus::notifyReload();
     Q_EMIT shaderProfileChanged(path);
     Q_EMIT pendingChangesChanged();
     return true;
