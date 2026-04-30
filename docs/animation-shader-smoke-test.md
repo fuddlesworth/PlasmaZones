@@ -65,9 +65,9 @@ Layout picker morphs; everything else (zone selector, snap-assist, OSD, all `win
 
 ### Caveats
 
-- **kwin-effect uniform contract** — only `iTime`, `iResolution`, and the effect's declared `parameters` are guaranteed. Effects that read `iMouse`, `iTimeDelta`, `iFrame`, or buffer-shader inputs work on the daemon path only.
+- **Animation-shader uniform contract** — animation/transition shaders (`data/animations/*`, loaded by `AnimationShaderRegistry`) expose `iTime` (0..1 progress), `iResolution`, and per-effect declared parameters via `customParams[N].xyz` slots in metadata declaration order. The contract is identical on both execution sites — compositor (window-content) and daemon (overlay-surface). See `PhosphorAnimationShaders::AnimationShaderContract` and `data/animations/_shared/animation_uniforms.glsl`. **Overlay-only uniforms** (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `iTimeHi`, `customColors[]`, audio / wallpaper / multipass textures, etc.) are **not** part of this contract — they belong to overlay shaders (`data/shaders/*`, loaded by `PhosphorShaders::ShaderRegistry`) and are populated only by the daemon's `ZoneShaderItem` overlay path. An animation shader that reads them will get zero / undefined values on either execution site; if you need them, the effect belongs in `data/shaders/`, not `data/animations/`.
 - **Per-window event conflict** — last-event-wins on overlap. If `window.move` and `zone.snapIn` fire on the same window in quick succession, the second wins.
-- **Daemon-overlay hide leg on snap-assist** — `panel.popup.snapAssist` only fires on **show**; the hide leg is empty because snap-assist destroys-on-hide, the hide animation never paints a frame.
-- **Workspace events** — `workspace.switchIn`, `workspace.switchOut`, `workspace.overview` are **not** consulted by either the kwin-effect or daemon. Stock KWin effects own those transitions.
+- **Daemon overlay-surface hide leg on snap-assist** — `panel.popup.snapAssist` only fires on **show**; the hide leg is empty because snap-assist destroys-on-hide, the hide animation never paints a frame.
+- **Workspace events** — `workspace.switchIn`, `workspace.switchOut`, `workspace.overview` are **not** consulted by either execution site. Stock KWin effects own those transitions.
 
 See `docs/animation-shader-wireup-plan.md` for the full plan and the deferred Phase 4 / Phase 5 work.
