@@ -36,6 +36,15 @@ namespace PhosphorShaders {
 /// stays in sync.
 namespace CustomParams {
 
+/// Number of `vec4` slots in `BaseUniforms::customParams[8]`.
+inline constexpr int kVecCount = 8;
+
+/// Number of float sub-slots across all vec4s (4 × kVecCount). Caps the
+/// flat-index space used by `slotKey(int slot)` and the per-effect
+/// parameter budget enforced by `AnimationShaderContract::kMaxParameterSlots`
+/// (which forwards to this constant).
+inline constexpr int kFlatSlotCount = 4 * kVecCount;
+
 /// Format a customParams slot key from explicit `(vec, comp)` pair.
 /// `vec` is the 0..7 index into `customParams[8]` (the array slot);
 /// `comp` is `'x'`, `'y'`, `'z'`, or `'w'` (the float sub-slot inside
@@ -46,15 +55,22 @@ inline QString slotKey(int vec, char comp)
     return QStringLiteral("customParams") + QString::number(vec + 1) + QLatin1Char('_') + QLatin1Char(comp);
 }
 
-/// Format a customParams slot key from a flat sub-slot index in [0, 32).
-/// Slot 0 → `"customParams1_x"`, slot 4 → `"customParams2_x"`, etc. Caller
-/// is responsible for bounds-checking against
-/// `AnimationShaderContract::kMaxParameterSlots` (or equivalent); out-of-
-/// range values produce keys that no decoder will match, which is the
-/// graceful-degradation behaviour we want — values silently drop rather
-/// than overflow into adjacent UBO regions.
+/// Format a customParams slot key from a flat sub-slot index in
+/// [0, `kFlatSlotCount`). Slot 0 → `"customParams1_x"`, slot 4 →
+/// `"customParams2_x"`, etc.
+///
+/// Out-of-range values return an empty `QString` rather than wrapping
+/// around — wrap-around would silently collide with a valid in-range key
+/// (e.g. `slot = -1` would otherwise produce the same string as `slot = 3`
+/// in two's-complement modulo arithmetic, corrupting the decoder's UBO
+/// upload). The empty-string behaviour is graceful-degradation: no
+/// decoder ever matches the empty key, so the value drops cleanly rather
+/// than overflowing into an adjacent slot.
 inline QString slotKey(int slot)
 {
+    if (slot < 0 || slot >= kFlatSlotCount) {
+        return {};
+    }
     static constexpr char kComponents[4] = {'x', 'y', 'z', 'w'};
     return slotKey(slot / 4, kComponents[slot & 3]);
 }

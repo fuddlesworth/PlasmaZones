@@ -461,6 +461,26 @@ private Q_SLOTS:
         QCOMPARE(slotKey(7, 'w'), QStringLiteral("customParams8_w"));
     }
 
+    /// Flat-slot overload covers the in-range path the registry encoder
+    /// actually uses (translateAnimationParams calls `slotKey(floatSlot)`),
+    /// plus the boundary policy: out-of-range slots return an empty
+    /// QString rather than wrapping around to a valid in-range key.
+    /// Wrap-around would silently collide with another slot and corrupt
+    /// the decoder's UBO upload — pin the empty-on-OOB contract here.
+    void testSlotKeyFlatIndex()
+    {
+        using PhosphorAnimationShaders::AnimationShaderContract::slotKey;
+        // In-range — same outputs as the (vec, comp) overload.
+        QCOMPARE(slotKey(0), QStringLiteral("customParams1_x"));
+        QCOMPARE(slotKey(3), QStringLiteral("customParams1_w"));
+        QCOMPARE(slotKey(4), QStringLiteral("customParams2_x"));
+        QCOMPARE(slotKey(31), QStringLiteral("customParams8_w"));
+        // Out-of-range — empty, not a wrapped-around collision.
+        QVERIFY(slotKey(-1).isEmpty());
+        QVERIFY(slotKey(32).isEmpty());
+        QVERIFY(slotKey(100).isEmpty());
+    }
+
     // ── rewriteCanonicalUboToDefaultBlock ────────────────────────────
     //
     // The kwin-effect's classic-GL path can't bind UBOs, so it rewrites

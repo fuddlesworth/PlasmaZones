@@ -106,14 +106,16 @@ inline constexpr const char* kIResolution = "iResolution";
 /// default-block uniforms `customParams[0]..customParams[7]`).
 inline constexpr const char* kCustomParamsArray = "customParams";
 
-/// Number of `vec4` slots in the `customParams` array. Matches
-/// `PhosphorShaders::BaseUniforms::customParams[8]`.
-inline constexpr int kMaxCustomParams = 8;
+/// Number of `vec4` slots in the `customParams` array. Forwards to the
+/// canonical constant in `<PhosphorShaders/CustomParamsKey.h>` so a
+/// single source of truth governs both libraries.
+inline constexpr int kMaxCustomParams = PhosphorShaders::CustomParams::kVecCount;
 
 /// Number of float sub-slots (4 per vec4 × 8 vec4s). Caps the count of
 /// declared parameters an animation shader can carry without spilling
-/// into a region the daemon's overlay extension owns.
-inline constexpr int kMaxParameterSlots = 32;
+/// into a region the daemon's overlay extension owns. Forwards to the
+/// canonical constant in `<PhosphorShaders/CustomParamsKey.h>`.
+inline constexpr int kMaxParameterSlots = PhosphorShaders::CustomParams::kFlatSlotCount;
 
 /// Format a `customParams` slot key — thin forwarder onto
 /// `PhosphorShaders::CustomParams::slotKey`, the cross-library canonical

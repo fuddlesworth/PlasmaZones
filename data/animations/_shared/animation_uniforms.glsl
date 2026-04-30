@@ -14,13 +14,14 @@
 //   • Compositor window-content execution (kwin-effect KWin::GLShader,
 //     classic GL). KWin's shader pipeline does not bind UBOs, so the
 //     kwin-effect runs a small source rewriter
-//     (`rewriteAnimationShaderForKwin` in plasmazoneseffect.cpp) that
-//     strips this `layout(std140, binding=0) uniform AnimationUniforms`
-//     block and re-emits each field as a default-block uniform before
-//     handing the source to KWin::ShaderManager::generateCustomShader.
-//     `qt_Matrix` and `qt_Opacity` are dropped on the kwin path (KWin
-//     manages its own scene-graph transform / opacity); `_appField0` /
-//     `_appField1` are dropped (padding only).
+//     (`AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock` in
+//     libs/phosphor-animation-shaders) that strips this
+//     `layout(std140, binding=0) uniform AnimationUniforms` block and
+//     re-emits each field as a default-block uniform before handing the
+//     source to KWin::ShaderManager::generateCustomShader. `qt_Matrix`
+//     and `qt_Opacity` are dropped on the kwin path (KWin manages its
+//     own scene-graph transform / opacity); `_appField0` / `_appField1`
+//     are dropped (padding only).
 //
 // Author guidance: include this file from each animation shader's
 // effect.frag with `#include "animation_uniforms.glsl"`. Do not declare
