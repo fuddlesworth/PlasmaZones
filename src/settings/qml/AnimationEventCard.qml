@@ -128,7 +128,9 @@ Item {
 
     function refreshShaderFromTree() {
         var resolved = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
-        root.currentShaderEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
+        var nextEffect = (resolved && resolved.effectId) ? resolved.effectId : "";
+        console.log("[ShaderRefresh]", root.eventPath, "→ resolved=", JSON.stringify(resolved), " nextEffect=", nextEffect, " was=", root.currentShaderEffectId);
+        root.currentShaderEffectId = nextEffect;
         root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({
         });
     }
@@ -374,6 +376,13 @@ Item {
                 WideComboBox {
                     id: shaderCombo
 
+                    // Suppresses the boomerang where setShaderOverride →
+                    // shaderProfileTreeChanged → refreshShaderFromTree →
+                    // currentShaderEffectId set → currentIndex binding fires
+                    // → ComboBox sees a model change in the same tick and
+                    // resets currentIndex to 0. Set true while we're
+                    // imperatively resyncing from refreshShaderFromTree.
+                    property bool _syncingFromRefresh: false
                     readonly property var _effects: settingsController.animationsPage.availableShaderEffects()
                     readonly property var _modelLabels: {
                         var labels = [i18n("None")];
@@ -393,18 +402,45 @@ Item {
                         return 0;
                     }
 
+                    function syncFromState() {
+                        var idx = _indexOf(root.currentShaderEffectId);
+                        console.log("[ShaderCombo.sync]", root.eventPath, " effectId=", root.currentShaderEffectId, " indexOf=", idx, " was currentIndex=", currentIndex, " effectsCount=", _effects.length);
+                        _syncingFromRefresh = true;
+                        currentIndex = idx;
+                        _syncingFromRefresh = false;
+                    }
+
                     Accessible.name: i18n("Shader effect")
                     model: _modelLabels
-                    currentIndex: _indexOf(root.currentShaderEffectId)
+                    // Sync once at construction; further updates flow through
+                    // the Connections below (no live binding to stay clear of
+                    // binding-break-on-user-write semantics).
+                    Component.onCompleted: syncFromState()
                     onActivated: function(index) {
+                        console.log("[ShaderCombo.activated]", root.eventPath, " index=", index, " syncing=", _syncingFromRefresh);
+                        if (_syncingFromRefresh)
+                            return ;
+
                         if (index === 0) {
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
                         } else {
                             var effect = _effects[index - 1];
+                            console.log("[ShaderCombo.activated]   → setShaderOverride", root.eventPath, effect.id);
                             settingsController.animationsPage.setShaderOverride(root.eventPath, effect.id, root.currentShaderParams || ({
                             }));
                         }
                     }
+
+                    // Re-sync currentIndex imperatively whenever the resolved
+                    // shader changes — including after our own write.
+                    Connections {
+                        function onCurrentShaderEffectIdChanged() {
+                            shaderCombo.syncFromState();
+                        }
+
+                        target: root
+                    }
+
                 }
 
             }

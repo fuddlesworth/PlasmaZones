@@ -25,9 +25,13 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include "config/settings.h"
 #include "settings/animationspagecontroller.h"
+#include "../helpers/IsolatedConfigGuard.h"
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
@@ -593,6 +597,58 @@ private Q_SLOTS:
         QVERIFY(!c.hasPendingChanges());
         QCOMPARE(pendingSpy.count(), 1);
         QCOMPARE(overrideSpy.count(), 0);
+    }
+
+    // ─── Shader override end-to-end (the actual user flow) ──────────────
+
+    /// Simulates the full AnimationEventCard combo flow:
+    ///   user clicks pixelate
+    ///     → setShaderOverride(path, "pixelate", {})
+    ///   refresh fires
+    ///     → resolvedShaderProfile(path) → expect effectId="pixelate"
+    /// If resolvedShaderProfile returns empty effectId here, the QML
+    /// combo would snap back to "None" — mirrors the user's symptom.
+    void setShaderOverride_resolveReturnsTheJustWrittenEffect()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString path = QStringLiteral("osd.show");
+
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("pixelate"), {}));
+
+        const QVariantMap raw = c.rawShaderProfile(path);
+        const QVariantMap resolved = c.resolvedShaderProfile(path);
+
+        // Raw read MUST contain effectId=pixelate.
+        QCOMPARE(raw.value(QStringLiteral("effectId")).toString(), QStringLiteral("pixelate"));
+        // Resolved read (what the QML refresh path uses) MUST too.
+        QCOMPARE(resolved.value(QStringLiteral("effectId")).toString(), QStringLiteral("pixelate"));
+    }
+
+    /// Symptom-mirroring test: pick A, then immediately pick B.
+    /// Both reads must return the corresponding effect.
+    void setShaderOverride_repeatedPicksPreserveLatest()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString path = QStringLiteral("osd.show");
+
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("pixelate"));
+
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("dissolve"), {}));
+        QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("glitch"), {}));
+        QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(), QStringLiteral("glitch"));
     }
 
     void resolvedProfile_partialLeafFillsFromParentAndDefaults()
