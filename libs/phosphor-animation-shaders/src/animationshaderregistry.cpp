@@ -151,4 +151,80 @@ QStringList AnimationShaderRegistry::effectIds() const
     return m_typedStrategy->packIds();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Parameter translation
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Mirrors `PhosphorShaders::ShaderRegistry::translateParamsToUniforms`
+// in shape but uses metadata declaration order to assign slots, since
+// `AnimationShaderEffect::ParameterInfo` does not carry an explicit
+// `slot` field (animation effects historically used named default-block
+// uniforms and never needed slot allocation). Both runtime execution
+// sites consume the slot-keyed map this returns and write the values
+// into `customParams[N]` of the canonical animation UBO.
+
+QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationShaderEffect& effect,
+                                                              const QVariantMap& friendlyParams)
+{
+    QVariantMap result;
+    if (!effect.isValid() || effect.parameters.isEmpty()) {
+        return result;
+    }
+
+    int floatSlot = 0; // sub-slot index in [0, 32) — fills customParams1_x..customParams8_w
+    for (const auto& param : effect.parameters) {
+        const QString& type = param.type;
+        // Color parameters would consume customColor<N> rather than a
+        // float sub-slot; not currently used by any built-in animation
+        // shader. When the first one lands, extend this branch to map
+        // color → "customColor<N>" with its own counter.
+        if (type == QLatin1String("color")) {
+            qWarning(lcRegistry) << "translateAnimationParams: color params not yet supported (effect=" << effect.id
+                                 << ", param=" << param.id << ")";
+            continue;
+        }
+
+        if (floatSlot >= 32) {
+            qWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id
+                                 << "exceeds 32-slot customParams budget; dropping param" << param.id;
+            continue;
+        }
+
+        const int vecIndex = floatSlot / 4; // 0..7
+        const int compIndex = floatSlot % 4; // 0..3 → x/y/z/w
+        static const char component[] = {'x', 'y', 'z', 'w'};
+        const QString uniformKey = QStringLiteral("customParams") + QString::number(vecIndex + 1) + QLatin1Char('_')
+            + QLatin1Char(component[compIndex]);
+
+        // Resolve the value: friendly map > declared default > 0.0.
+        QVariant value;
+        const auto it = friendlyParams.constFind(param.id);
+        if (it != friendlyParams.constEnd()) {
+            value = *it;
+        } else if (param.defaultValue.isValid() && !param.defaultValue.isNull()) {
+            value = param.defaultValue;
+        } else {
+            value = 0.0;
+        }
+
+        // Coerce booleans to 0/1 floats so the UBO slot is always
+        // numeric. Floats and ints both round-trip through QVariant::toFloat
+        // in the consumer; no extra coercion needed here.
+        if (type == QLatin1String("bool")) {
+            value = value.toBool() ? 1.0f : 0.0f;
+        }
+
+        result[uniformKey] = value;
+        ++floatSlot;
+    }
+
+    return result;
+}
+
+QVariantMap AnimationShaderRegistry::translateAnimationParams(const QString& effectId,
+                                                              const QVariantMap& friendlyParams) const
+{
+    return translateAnimationParams(effect(effectId), friendlyParams);
+}
+
 } // namespace PhosphorAnimationShaders

@@ -13,11 +13,16 @@
 #include <PhosphorIdentity/WindowId.h>
 
 #include <PhosphorAnimationShaders/AnimationShaderContract.h>
+#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <memory>
 #include <QDBusArgument>
+#include <QFileInfo>
+#include <QVector4D>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -4273,45 +4278,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             const CachedShader* cached = transition.cached;
             KWin::GLShader* shader = cached->shader.get();
 
-            // Animation-shader contract (PhosphorAnimationShaders::
-            // AnimationShaderContract): iTime is 0..1 progress and
-            // iResolution is the viewport size, plus per-effect declared
-            // parameters below. Overlay-only uniforms (iMouse, iDate,
-            // customParams[], customColors[], audio/wallpaper/multipass)
-            // are intentionally NOT populated here — they're an overlay
-            // shader concern, not part of the cross-runtime animation
-            // contract.
+            // Animation-shader contract — see
+            // `PhosphorAnimationShaders::AnimationShaderContract`. iTime
+            // is 0..1 progress, iResolution is the surface size, and
+            // per-effect declared parameters land in `customParams[N]`
+            // slots populated at transition begin time by
+            // `translateAnimationParams`. Overlay-only uniforms
+            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `customColors[]`,
+            // audio/wallpaper/multipass) are intentionally not populated
+            // here — they belong to overlay shaders, not animation
+            // transitions.
             shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
             const QRectF geo = w->frameGeometry();
             shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
-            // Per-event shader parameters: walk the cached binding list (one
-            // entry per effect-declared parameter, with uniform location resolved
-            // at compile time). Pull the value from the transition's resolved
-            // ShaderProfile parameters; fall back to the effect's declared
-            // default when the user's profile didn't override it. This is the
-            // path that makes `parameters: {direction: 1}` on the slide effect
-            // actually steer the shader — without it, the user's overrides
-            // silently no-op.
-            for (const auto& pb : cached->paramBindings) {
-                if (pb.loc < 0) {
-                    continue; // shader doesn't reference this param — skip
-                }
-                const QVariant value = transition.parameters.value(pb.id, pb.defaultValue);
-                if (pb.type == QLatin1String("int")) {
-                    shader->setUniform(pb.loc, value.toInt());
-                } else if (pb.type == QLatin1String("bool")) {
-                    shader->setUniform(pb.loc, value.toBool() ? 1 : 0);
-                } else if (pb.type == QLatin1String("color")) {
-                    const QColor c = value.value<QColor>();
-                    shader->setUniform(pb.loc,
-                                       QVector4D(static_cast<float>(c.redF()), static_cast<float>(c.greenF()),
-                                                 static_cast<float>(c.blueF()), static_cast<float>(c.alphaF())));
-                } else {
-                    // Default to float (covers "float" type and any unknown
-                    // type the metadata may declare). toFloat handles ints
-                    // gracefully, so a stray int value here is non-fatal.
-                    shader->setUniform(pb.loc, value.toFloat());
-                }
+            for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+                const int loc = cached->customParamsLoc[slot];
+                if (loc < 0)
+                    continue; // shader didn't declare / reference this slot
+                shader->setUniform(loc, transition.customParamsValues[slot]);
             }
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
@@ -4322,6 +4306,85 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Animation shader source pipeline (kwin-effect side)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Animation shaders ship as `#version 450` GLSL with a canonical
+// `layout(std140, binding = 0) uniform AnimationUniforms { ... };` block
+// so the daemon's Qt-RHI / SPIR-V baker accepts them. KWin's
+// `KWin::GLShader` runs classic GL — its `setUniform(loc, val)` API
+// addresses default-block uniforms only, not UBO members, and there is
+// no compositor-side equivalent of the daemon's `m_ubo` upload. Without
+// rewriting the source, every shader's uniforms would compile fine but
+// read uninitialised memory at runtime.
+//
+// The rewriter turns the canonical UBO declaration into default-block
+// uniform lines KWin's pipeline can bind. It is intentionally line-based
+// and relies on the canonical layout in
+// `data/animations/_shared/animation_uniforms.glsl` — not a general
+// GLSL parser. If an author writes a divergent UBO declaration the
+// rewriter will silently leave it intact (and the shader won't read its
+// values on this path). The bake-check test in `tests/unit/animation/`
+// guards the canonical case.
+namespace {
+
+QByteArray rewriteAnimationShaderForKwin(const QString& expandedSource)
+{
+    QStringList output;
+    const QStringList lines = expandedSource.split(QLatin1Char('\n'));
+    bool inUboBlock = false;
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (!inUboBlock) {
+            // Detect `layout(std140, binding = N) uniform NAME {` (any
+            // whitespace tolerated). Open-brace may sit on the same line
+            // or the next; the canonical animation_uniforms.glsl puts
+            // it on the same line so we only handle that case.
+            const bool isUboOpen = trimmed.startsWith(QLatin1String("layout(std140"))
+                && trimmed.contains(QLatin1String("uniform")) && trimmed.endsWith(QLatin1Char('{'));
+            if (isUboOpen) {
+                inUboBlock = true;
+                continue; // drop the opening line
+            }
+            output.append(line);
+            continue;
+        }
+        // Inside the UBO block.
+        if (trimmed == QLatin1String("};")) {
+            inUboBlock = false;
+            continue; // drop the closing line
+        }
+        // Strip trailing line comment and surrounding whitespace, then
+        // require a terminating semicolon. Skip lines that are pure
+        // comments / blank — they have no field declaration.
+        QString decl = line;
+        const int commentIdx = decl.indexOf(QLatin1String("//"));
+        if (commentIdx >= 0) {
+            decl = decl.left(commentIdx);
+        }
+        decl = decl.trimmed();
+        if (decl.isEmpty() || !decl.endsWith(QLatin1Char(';'))) {
+            continue;
+        }
+        decl.chop(1); // remove trailing ';'
+
+        // Drop fields that are not part of the animation contract on
+        // this path. KWin manages its own scene-graph transform / opacity;
+        // _appField0 / _appField1 are pure padding that exists only to
+        // keep the std140 alignment in sync with the daemon's BaseUniforms.
+        if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
+            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))) {
+            continue;
+        }
+
+        output.append(QStringLiteral("uniform %1;").arg(decl));
+    }
+    return output.join(QLatin1Char('\n')).toUtf8();
+}
+
+} // namespace
+
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs)
 {
@@ -4329,25 +4392,41 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (effectId.isEmpty() || !window)
         return;
 
+    const auto eff = m_animationShaderRegistry.effect(effectId);
+    if (!eff.isValid())
+        return;
+
     auto cacheIt = m_shaderCache.find(effectId);
     if (cacheIt == m_shaderCache.end()) {
-        const auto eff = m_animationShaderRegistry.effect(effectId);
-        if (!eff.isValid())
-            return;
-
+        // Resolve `#include "..."` directives so the canonical
+        // `animation_uniforms.glsl` is inline before the rewriter runs.
+        // The daemon side resolves includes inside ShaderCompiler;
+        // we mirror that here so authors maintain one source.
         QFile shaderFile(eff.fragmentShaderPath);
         if (!shaderFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
             return;
         }
-        const QByteArray shaderSource = shaderFile.readAll();
-        if (shaderSource.isEmpty()) {
+        const QString rawSource = QString::fromUtf8(shaderFile.readAll());
+        if (rawSource.isEmpty()) {
             qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
             return;
         }
+        QString includeError;
+        const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
+        const QString expanded =
+            PhosphorShaders::ShaderIncludeResolver::expandIncludes(rawSource, currentDir, QStringList(), &includeError);
+        if (expanded.isEmpty()) {
+            qCWarning(lcEffect) << "Failed to expand shader includes for" << effectId << ":" << includeError;
+            return;
+        }
+
+        // Convert the canonical UBO declaration to default-block
+        // uniforms KWin's classic-GL pipeline can bind.
+        const QByteArray rewritten = rewriteAnimationShaderForKwin(expanded);
 
         auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
-                                                                            shaderSource);
+                                                                            rewritten);
         if (!shader || !shader->isValid()) {
             qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
             return;
@@ -4355,26 +4434,21 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
 
         CachedShader cached;
         // Animation-shader contract — names sourced from
-        // `PhosphorAnimationShaders::AnimationShaderContract` so the kwin
-        // path and the daemon's animation-shader path agree on what a
-        // transition shader can rely on.
+        // `PhosphorAnimationShaders::AnimationShaderContract`. Both the
+        // daemon overlay-surface execution site and this compositor
+        // window-content execution site resolve the same names.
         cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
         cached.iResolutionLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
-        // Resolve every declared parameter's uniform location once at compile
-        // time so paintWindow only does a vector walk per frame, not a string
-        // hash lookup. uniformLocation returns -1 for parameters the shader
-        // didn't actually reference (e.g. an effect declares `parallax` but a
-        // distro-tweaked shader optimised it out) — we keep the binding so
-        // metadata stays authoritative, paintWindow skips loc == -1 entries.
-        cached.paramBindings.reserve(eff.parameters.size());
-        for (const auto& paramInfo : eff.parameters) {
-            CachedShader::ParamBinding pb;
-            pb.id = paramInfo.id;
-            pb.loc = shader->uniformLocation(paramInfo.id.toUtf8().constData());
-            pb.type = paramInfo.type;
-            pb.defaultValue = paramInfo.defaultValue;
-            cached.paramBindings.push_back(std::move(pb));
+        // Cache `customParams[0]` … `customParams[7]` element locations.
+        // Each declared parameter lands in one of these slots — see
+        // `AnimationShaderRegistry::translateAnimationParams` for the
+        // exact mapping. -1 for slots the shader didn't reference (e.g.
+        // a one-param effect optimises away customParams[1..7]).
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+            const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomParamsArray)
+                + '[' + QByteArray::number(slot) + ']';
+            cached.customParamsLoc[slot] = shader->uniformLocation(name.constData());
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
@@ -4385,7 +4459,29 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     const auto& cachedEntry = cacheIt->second;
     ShaderTransition transition;
     transition.cached = &cachedEntry;
-    transition.parameters = profile.effectiveParameters();
+
+    // Translate the friendly parameter map (e.g. {"direction": 1,
+    // "parallax": 0.2}) to slot keys, then pack each
+    // `customParams<N>_<x|y|z|w>` set into a vec4 we can blast in one
+    // setUniform call per slot. Translation honours the metadata
+    // declaration order — same allocation the daemon's
+    // SurfaceAnimator::runLeg path uses, so a single ShaderProfile
+    // produces identical visuals on either runtime.
+    const QVariantMap translated =
+        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, profile.effectiveParameters());
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+        auto pull = [&](char component) -> float {
+            const QString key =
+                QStringLiteral("customParams") + QString::number(slot + 1) + QLatin1Char('_') + QLatin1Char(component);
+            const auto it = translated.constFind(key);
+            if (it == translated.constEnd())
+                return 0.0f;
+            bool ok = false;
+            const float v = it->toFloat(&ok);
+            return ok ? v : 0.0f;
+        };
+        transition.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+    }
     // Bump generation for every install so the timer-driven teardown in
     // tryBeginShaderForEvent can detect supersession (a fresh transition
     // installed before the prior timer fires) and bail without killing the

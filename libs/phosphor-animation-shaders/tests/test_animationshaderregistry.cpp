@@ -335,6 +335,112 @@ private Q_SLOTS:
         QCOMPARE(ids.at(1), QStringLiteral("kappa"));
         QCOMPARE(ids.at(2), QStringLiteral("zulu"));
     }
+
+    // ── translateAnimationParams ─────────────────────────────────────
+    //
+    // Slot allocation contract: parameters fill `customParams<N>_<x|y|z|w>`
+    // in metadata declaration order, with N starting at 1 and components
+    // x/y/z/w within a vec4. Both runtimes consume the resulting map; a
+    // shader.frag reads the corresponding `customParams[N-1].xyz` slot
+    // via the `#define` macros each effect.frag declares. A regression
+    // here would silently break parameter delivery on both render
+    // execution sites.
+
+    void testTranslateAnimationParamsSlotAllocation()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("slide");
+        eff.fragmentShaderPath = QStringLiteral("effect.frag");
+        // Two float params — should land in customParams1_x, customParams1_y.
+        AnimationShaderEffect::ParameterInfo p1;
+        p1.id = QStringLiteral("direction");
+        p1.type = QStringLiteral("int");
+        p1.defaultValue = 0;
+        AnimationShaderEffect::ParameterInfo p2;
+        p2.id = QStringLiteral("parallax");
+        p2.type = QStringLiteral("float");
+        p2.defaultValue = 0.0;
+        eff.parameters = {p1, p2};
+
+        const QVariantMap friendly{{QStringLiteral("direction"), 1}, {QStringLiteral("parallax"), 0.2}};
+        const QVariantMap translated = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+
+        QCOMPARE(translated.size(), 2);
+        QCOMPARE(translated.value(QStringLiteral("customParams1_x")).toInt(), 1);
+        QCOMPARE(translated.value(QStringLiteral("customParams1_y")).toDouble(), 0.2);
+        QVERIFY(!translated.contains(QStringLiteral("direction"))); // friendly keys dropped
+    }
+
+    void testTranslateAnimationParamsFallsBackToDeclaredDefaults()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("dissolve");
+        eff.fragmentShaderPath = QStringLiteral("effect.frag");
+        AnimationShaderEffect::ParameterInfo grain;
+        grain.id = QStringLiteral("grain");
+        grain.type = QStringLiteral("float");
+        grain.defaultValue = 0.05;
+        AnimationShaderEffect::ParameterInfo softness;
+        softness.id = QStringLiteral("softness");
+        softness.type = QStringLiteral("float");
+        softness.defaultValue = 0.1;
+        eff.parameters = {grain, softness};
+
+        // Friendly map empty → both slots get metadata defaults.
+        const QVariantMap translated = AnimationShaderRegistry::translateAnimationParams(eff, QVariantMap());
+        QCOMPARE(translated.value(QStringLiteral("customParams1_x")).toDouble(), 0.05);
+        QCOMPARE(translated.value(QStringLiteral("customParams1_y")).toDouble(), 0.1);
+    }
+
+    void testTranslateAnimationParamsBoolCoerced()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-bool");
+        eff.fragmentShaderPath = QStringLiteral("effect.frag");
+        AnimationShaderEffect::ParameterInfo p;
+        p.id = QStringLiteral("flag");
+        p.type = QStringLiteral("bool");
+        p.defaultValue = false;
+        eff.parameters = {p};
+
+        const QVariantMap translatedTrue =
+            AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("flag"), true}});
+        QCOMPARE(translatedTrue.value(QStringLiteral("customParams1_x")).toFloat(), 1.0f);
+
+        const QVariantMap translatedFalse =
+            AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("flag"), false}});
+        QCOMPARE(translatedFalse.value(QStringLiteral("customParams1_x")).toFloat(), 0.0f);
+    }
+
+    void testTranslateAnimationParamsCrossesVec4Boundary()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-five");
+        eff.fragmentShaderPath = QStringLiteral("effect.frag");
+        // Five float params: 0..3 fill customParams1_x..customParams1_w,
+        // the fifth lands in customParams2_x.
+        for (int i = 0; i < 5; ++i) {
+            AnimationShaderEffect::ParameterInfo p;
+            p.id = QStringLiteral("p%1").arg(i);
+            p.type = QStringLiteral("float");
+            p.defaultValue = double(i);
+            eff.parameters.append(p);
+        }
+        const QVariantMap translated = AnimationShaderRegistry::translateAnimationParams(eff, QVariantMap());
+        QCOMPARE(translated.value(QStringLiteral("customParams1_x")).toDouble(), 0.0);
+        QCOMPARE(translated.value(QStringLiteral("customParams1_y")).toDouble(), 1.0);
+        QCOMPARE(translated.value(QStringLiteral("customParams1_z")).toDouble(), 2.0);
+        QCOMPARE(translated.value(QStringLiteral("customParams1_w")).toDouble(), 3.0);
+        QCOMPARE(translated.value(QStringLiteral("customParams2_x")).toDouble(), 4.0);
+    }
+
+    void testTranslateAnimationParamsEmptyForInvalidEffect()
+    {
+        AnimationShaderEffect invalid; // no id, no frag — isValid() == false
+        const QVariantMap translated =
+            AnimationShaderRegistry::translateAnimationParams(invalid, {{QStringLiteral("foo"), 1.0}});
+        QVERIFY(translated.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderRegistry)

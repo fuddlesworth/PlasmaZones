@@ -12,6 +12,7 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -84,6 +85,31 @@ public:
     AnimationShaderEffect effect(const QString& id) const;
     bool hasEffect(const QString& id) const;
     QStringList effectIds() const;
+
+    /// Translate a friendly parameter map into the canonical
+    /// `customParams<N>_<x|y|z|w>` slot keys consumed by both runtimes
+    /// that drive animation shaders. Slots are allocated in metadata
+    /// declaration order — the first declared float/int/bool param fills
+    /// `customParams1_x`, the second `customParams1_y`, …, the fifth
+    /// `customParams2_x`, etc., up to 32 slots
+    /// (`AnimationShaderContract::kMaxParameterSlots`).
+    ///
+    /// Bool values become `0.0` or `1.0`. Missing keys fall back to the
+    /// metadata-declared default, then to `0.0`. Unknown parameter ids
+    /// in `friendlyParams` are silently ignored. Color parameters are
+    /// **not** currently translated — animation effects don't declare
+    /// them today; if they do, this helper will need a separate
+    /// `customColor<N>` mapping (see `AnimationShaderContract`).
+    ///
+    /// Returns an empty map when `effectId` resolves to no registered
+    /// effect or when the effect declares no parameters.
+    QVariantMap translateAnimationParams(const QString& effectId, const QVariantMap& friendlyParams) const;
+
+    /// Static counterpart for callers that already hold the resolved
+    /// `AnimationShaderEffect` (e.g. the kwin-effect's per-frame
+    /// translation). Same slot-allocation contract as the registry-keyed
+    /// overload.
+    static QVariantMap translateAnimationParams(const AnimationShaderEffect& effect, const QVariantMap& friendlyParams);
 
 Q_SIGNALS:
     void effectsChanged();

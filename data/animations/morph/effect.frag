@@ -6,13 +6,13 @@
 
 #version 450
 
-uniform float iTime;
-uniform vec2 iResolution;
-uniform float warpStrength;
-uniform float warpFrequency;
+#include "../_shared/animation_uniforms.glsl"
 
-in vec2 fragCoord;
-out vec4 fragColor;
+// metadata.json declaration order → customParams[0] sub-slots
+#define warpStrength  customParams[0].x
+#define warpFrequency customParams[0].y
+
+layout(location = 0) out vec4 fragColor;
 
 void main()
 {

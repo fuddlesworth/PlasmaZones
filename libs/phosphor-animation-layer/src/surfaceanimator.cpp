@@ -406,14 +406,23 @@ public:
                     shaderItem->setHeight(target->height());
                     shaderItem->setITime(0.0);
                     shaderItem->setIResolution(QSizeF(target->width(), target->height()));
-                    // Per-event parameter overrides resolved by the consumer
-                    // from `ShaderProfile::effectiveParameters()`. Keys map 1:1
-                    // to the effect's declared parameter ids and to the GLSL
-                    // uniform names; ShaderEffect / ShaderNodeRhi push them
-                    // into the RHI uniform block on the next render pass.
-                    // Empty map = use the shader's declared defaults.
-                    if (!shaderParameters.isEmpty()) {
-                        shaderItem->setShaderParams(shaderParameters);
+                    // Translate friendly parameter ids (e.g. {"direction": 1,
+                    // "parallax": 0.2}) to the canonical
+                    // `customParams<N>_<x|y|z|w>` slot keys both runtimes
+                    // consume. The translation honours the metadata
+                    // declaration order — see
+                    // `AnimationShaderRegistry::translateAnimationParams` for
+                    // the exact slot allocation. Always called (even with
+                    // empty `shaderParameters`) so declared defaults still
+                    // populate the slots — without it, the customParams
+                    // region holds the (-1, -1, -1, -1) sentinel ShaderEffect
+                    // ships with and the shader sees garbage for parameters
+                    // it expected to read.
+                    const QVariantMap translated =
+                        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff,
+                                                                                                    shaderParameters);
+                    if (!translated.isEmpty()) {
+                        shaderItem->setShaderParams(translated);
                     }
                     static constexpr qreal kShaderOverlayZ = 1000;
                     shaderItem->setZ(kShaderOverlayZ);

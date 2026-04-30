@@ -32,6 +32,7 @@
 #include <QPointer>
 #include <QRect>
 
+#include <array>
 #include <functional>
 #include <map>
 #include <memory>
@@ -506,37 +507,37 @@ private:
     struct CachedShader
     {
         std::unique_ptr<KWin::GLShader> shader;
-        /// `iTime` and `iResolution` are the only built-in uniforms exposed by
-        /// the animation-shader contract (see
-        /// `PhosphorAnimationShaders::AnimationShaderContract`). Overlay-only
-        /// uniforms (`iMouse`, `iDate`, `customParams[8]`, `customColors[16]`,
-        /// audio/wallpaper/multipass) are intentionally NOT populated on this
-        /// path — they belong to overlay shaders that include `common.glsl`
-        /// and run through the daemon's RHI / `BaseUniforms` UBO.
+        /// Animation-shader contract uniform locations (see
+        /// `PhosphorAnimationShaders::AnimationShaderContract`). Per-effect
+        /// declared parameters land in the `customParams[N]` slots — the
+        /// translation from friendly parameter ids (e.g. `direction`) to
+        /// slot keys is performed by
+        /// `AnimationShaderRegistry::translateAnimationParams` when the
+        /// transition starts; paintWindow just pushes vec4s.
+        ///
+        /// Overlay-only uniforms (`iMouse`, `iDate`, `iTimeDelta`,
+        /// `iFrame`, `customColors[]`, audio/wallpaper/multipass) are
+        /// intentionally NOT populated on this path — they belong to
+        /// overlay shaders, not animation transitions.
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
-        /// Per-effect declared parameters resolved to uniform locations once at
-        /// shader-compile time. Cached so paintWindow doesn't re-query
-        /// uniformLocation() per frame. Each binding carries the parameter's
-        /// declared type and default so we can fall back when a transition's
-        /// ShaderProfile didn't override it.
-        struct ParamBinding
-        {
-            QString id; ///< matches the AnimationShaderEffect parameter id AND the GLSL uniform name
-            int loc = -1; ///< uniform location, -1 if the shader doesn't actually use this param
-            QString type; ///< "float" | "int" | "bool" | "color"
-            QVariant defaultValue;
-        };
-        std::vector<ParamBinding> paramBindings;
+        /// Cached locations for `customParams[0]` … `customParams[7]`.
+        /// -1 when the shader didn't declare that slot (e.g. an effect
+        /// with two parameters references only `customParams[0]`).
+        std::array<int, 8> customParamsLoc = {-1, -1, -1, -1, -1, -1, -1, -1};
     };
     struct ShaderTransition
     {
         const CachedShader* cached = nullptr;
-        /// ShaderProfile::effectiveParameters() at begin time. Per-event overrides
-        /// the user set in the profile tree; per-frame paintWindow looks up each
-        /// CachedShader::paramBindings entry by id, falling back to the binding's
-        /// declared default when this map doesn't carry a value for the key.
-        QVariantMap parameters;
+        /// `customParams[N]` slot values resolved at transition begin time.
+        /// `AnimationShaderRegistry::translateAnimationParams` translates
+        /// the friendly parameter map (e.g. `{"direction": 1, "parallax":
+        /// 0.2}`) to slot keys (`{"customParams1_x": 1, "customParams1_y":
+        /// 0.2}`); we pack those into vec4s here so paintWindow only does
+        /// 8 setUniform calls per frame, not per-frame string lookups.
+        /// Slots with no declared parameters stay at (0, 0, 0, 0).
+        std::array<QVector4D, 8> customParamsValues = {QVector4D(), QVector4D(), QVector4D(), QVector4D(),
+                                                       QVector4D(), QVector4D(), QVector4D(), QVector4D()};
         /// Two-mode progress source.
         /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
         ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow

@@ -6,13 +6,16 @@
 
 #version 450
 
-uniform float iTime;
-uniform vec2 iResolution;
-uniform float direction;
-uniform float fadeWidth;
+#include "../_shared/animation_uniforms.glsl"
 
-in vec2 fragCoord;
-out vec4 fragColor;
+// metadata.json declaration order → customParams[0] sub-slots.
+// `direction` is metadata-typed `int`; the registry packs ints into
+// the same float slot space, so we read it as a float and round at
+// the use site.
+#define direction customParams[0].x
+#define fadeWidth customParams[0].y
+
+layout(location = 0) out vec4 fragColor;
 
 void main()
 {
