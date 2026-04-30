@@ -242,7 +242,17 @@ Window {
 
             id: container
 
-            objectName: "zoneSelectorContainer"
+            // Shader-anchor opt-in: SurfaceAnimator's shader leg looks up
+            // an `objectName: "shaderAnchor"` child of the animator target
+            // and parents the transition shader to it (sized after it).
+            // Without this, the wayland surface is fullscreen and the
+            // shader (pixelate / glitch / dissolve / …) renders across
+            // the whole screen instead of the visible selector card.
+            // Original objectName was `zoneSelectorContainer` — see
+            // selector_update.cpp which polish()s this item by name. The
+            // rename is matched in lockstep there; both consumers use
+            // the new canonical animator-hook name.
+            objectName: "shaderAnchor"
             width: root.containerWidth
             height: root.containerHeight
             backgroundColor: root.backgroundColor

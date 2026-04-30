@@ -17,10 +17,12 @@
 #include <PhosphorLayer/SurfaceConfig.h>
 
 #include <QHash>
+#include <QImage>
 #include <QLoggingCategory>
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
+#include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QUrl>
@@ -146,6 +148,12 @@ public:
     struct Track
     {
         QPointer<QQuickItem> target; ///< Auto-nulls if QML scene tears down mid-flight
+        /// Item the shader effect is parented to and sized after. Equal to
+        /// `target` unless the surface marked a smaller child with
+        /// `objectName: "shaderAnchor"` — see runLeg's anchor-resolution
+        /// comment for the contract. QPointer so a torn-down anchor
+        /// auto-nulls instead of dangling through the per-frame size sync.
+        QPointer<QQuickItem> shaderAnchor;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> opacity;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> scale;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> shaderTime;
@@ -416,12 +424,38 @@ public:
                 // `resolvedShaderEff` is guaranteed-valid by the
                 // `hasShaderLeg = resolvedShaderEff.isValid()` upstream
                 // — no second registry lookup needed here.
-                auto* shaderItem = new PhosphorRendering::ShaderEffect(target);
+                //
+                // Resolve the shader anchor: by default the animator
+                // target (window->contentItem() for window-rooted
+                // surfaces, the explicit rootItem otherwise). Window-
+                // rooted popups (LayoutPicker / ZoneSelector / SnapAssist
+                // / OSD-style overlays) place their visible card as a
+                // smaller centered child of a fullscreen backdrop — the
+                // contentItem is the entire wayland surface but the
+                // pixels the user reads as "the popup" cover only that
+                // child. Without an opt-out, a fragment shader sized to
+                // the contentItem renders pixelate / glitch / dissolve
+                // across the whole screen rather than on the popup card.
+                //
+                // Surfaces opt in by tagging their visible-content item
+                // with `objectName: "shaderAnchor"` in QML. We look up
+                // that name within the target's child tree; when found
+                // the shader is parented to and sized after the anchor,
+                // so the visual is constrained to the popup. Surfaces
+                // that already use a tightly-scoped rootItem (no
+                // fullscreen backdrop) need no annotation — the default
+                // target already covers exactly the right area.
+                QQuickItem* shaderAnchor = target;
+                if (auto* anchored =
+                        target->findChild<QQuickItem*>(QStringLiteral("shaderAnchor"), Qt::FindChildrenRecursively)) {
+                    shaderAnchor = anchored;
+                }
+                auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderAnchor);
                 shaderItem->setShaderSource(QUrl::fromLocalFile(resolvedShaderEff.fragmentShaderPath));
-                shaderItem->setWidth(target->width());
-                shaderItem->setHeight(target->height());
+                shaderItem->setWidth(shaderAnchor->width());
+                shaderItem->setHeight(shaderAnchor->height());
                 shaderItem->setITime(0.0);
-                shaderItem->setIResolution(QSizeF(target->width(), target->height()));
+                shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
                 // Translate friendly parameter ids (e.g. {"direction": 1,
                 // "parallax": 0.2}) to the canonical
                 // `customParams<N>_<x|y|z|w>` slot keys both runtimes
@@ -452,7 +486,50 @@ public:
                 static constexpr qreal kShaderOverlayZ = 1000;
                 shaderItem->setZ(kShaderOverlayZ);
                 it->second.shaderItem = shaderItem;
+                it->second.shaderAnchor = shaderAnchor;
                 it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+
+                // Capture the rendered surface and bind it as the shader's
+                // iChannel0 (user-texture binding 7) so the shader can
+                // operate ON the visible pixels rather than emitting its
+                // own placeholder visual on top. `grabToImage` is async
+                // (the result lands one render-thread cycle later); the
+                // shader's first frame samples the all-transparent
+                // fallback texture PhosphorRendering::ShaderEffect ships
+                // with — visually a no-op until the grab arrives, which
+                // is the desired behaviour: the shader fades in from
+                // "nothing" rather than from a stale frame.
+                //
+                // Sized to a max edge of 2048px so a 4K-anchor surface
+                // still grabs in a single frame; the per-cell pixelation
+                // / dissolve / glitch effects don't need pixel-perfect
+                // resolution and the smaller texture cuts upload time.
+                //
+                // For HIDE legs the anchor is at full opacity at runLeg
+                // entry — the grab captures the visible state, the
+                // animation runs, the shader pixelates the captured
+                // texture as `qt_Opacity` falls 1→0. For SHOW legs the
+                // anchor is at fromOpacity=0 when this code runs (the
+                // setOpacity above is synchronous), so the grab returns
+                // a transparent texture; the shader is consequently
+                // invisible until the anchor's underlying QML renders
+                // for real, which is acceptable for first show. Future
+                // work: render-to-texture on a hidden FBO so show legs
+                // can sample the final QML before it ever paints.
+                if (QQuickItem* anchorForGrab = it->second.shaderAnchor.data()) {
+                    QSharedPointer<QQuickItemGrabResult> grab = anchorForGrab->grabToImage();
+                    if (grab) {
+                        QPointer<PhosphorRendering::ShaderEffect> weakShader = shaderItem;
+                        QObject::connect(grab.data(), &QQuickItemGrabResult::ready, shaderItem, [weakShader, grab]() {
+                            if (PhosphorRendering::ShaderEffect* live = weakShader.data()) {
+                                // setUserTexture takes a QImage; the grab result
+                                // is alive for the lifetime of the captured
+                                // QSharedPointer in this lambda's capture list.
+                                live->setUserTexture(0, grab->image());
+                            }
+                        });
+                    }
+                }
             }
         }
 
@@ -535,14 +612,23 @@ public:
                     /*onValueChanged=*/
                     [this, surface](const qreal& v) {
                         auto sit = m_tracks.find(surface);
-                        if (sit == m_tracks.end() || !sit->second.shaderItem || !sit->second.target) {
+                        if (sit == m_tracks.end() || !sit->second.shaderItem) {
+                            return;
+                        }
+                        // Size from the shader's actual parent (the anchor),
+                        // not from `target`. The two diverge for window-
+                        // rooted popups that opted into a smaller anchor —
+                        // syncing against `target` there would stretch the
+                        // shader back to fullscreen on every frame and
+                        // defeat the anchor opt-in.
+                        QQuickItem* anchor = sit->second.shaderAnchor.data();
+                        if (!anchor) {
                             return;
                         }
                         sit->second.shaderItem->setITime(v);
-                        sit->second.shaderItem->setWidth(sit->second.target->width());
-                        sit->second.shaderItem->setHeight(sit->second.target->height());
-                        sit->second.shaderItem->setIResolution(
-                            QSizeF(sit->second.target->width(), sit->second.target->height()));
+                        sit->second.shaderItem->setWidth(anchor->width());
+                        sit->second.shaderItem->setHeight(anchor->height());
+                        sit->second.shaderItem->setIResolution(QSizeF(anchor->width(), anchor->height()));
                     },
                     /*onComplete=*/
                     [this, surface]() {

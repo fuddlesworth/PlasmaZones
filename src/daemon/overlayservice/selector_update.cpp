@@ -225,7 +225,11 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
             gridItem->polish();
             gridItem->update();
         }
-        if (auto* containerItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContainer"))) {
+        // Was `zoneSelectorContainer`; renamed to `shaderAnchor` so
+        // SurfaceAnimator's shader leg can scope the transition effect to
+        // the visible selector card instead of the fullscreen wayland
+        // surface. The rename is matched in `ZoneSelectorWindow.qml`.
+        if (auto* containerItem = findQmlItemByName(contentRoot, QStringLiteral("shaderAnchor"))) {
             containerItem->polish();
             containerItem->update();
         }
