@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="560" viewBox="0 0 540 560">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+    </style>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Dimmed background -->
+  <rect width="540" height="560" fill="#0a0c0e" opacity="0.85" rx="12"/>
+
+  <!-- Dialog window -->
+  <rect x="20" y="16" width="500" height="528" rx="12" fill="#232629" filter="url(#shadow)"/>
+
+  <!-- Titlebar -->
+  <rect x="20" y="16" width="500" height="42" rx="12" fill="#2a2e32"/>
+  <rect x="20" y="38" width="500" height="20" fill="#2a2e32"/>
+  <text x="40" y="43" fill="#eff0f1" font-size="13" font-weight="600" font-family="Inter, sans-serif">Customize Curve — Zone Snap In</text>
+  <circle cx="496" cy="37" r="10" fill="#3d4349"/>
+  <text x="492" y="41" fill="#bdc3c7" font-size="12" font-family="Inter, sans-serif">&#x2715;</text>
+
+  <!-- ============================================================ -->
+  <!-- SPRING PREVIEW -->
+  <!-- ============================================================ -->
+  <rect x="50" y="72" width="440" height="180" rx="8" fill="#1b1e20"/>
+
+  <!-- Wall -->
+  <rect x="68" y="88" width="4" height="38" rx="1" fill="#4d5357"/>
+
+  <!-- Spring coils -->
+  <path d="M72,107 L82,96 L92,118 L102,96 L112,118 L122,96 L132,118 L142,96 L152,107" fill="none" stroke="#7f8c8d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Ball -->
+  <circle cx="168" cy="107" r="11" fill="#3daee9"/>
+
+  <!-- Ghost positions -->
+  <circle cx="240" cy="107" r="9" fill="#3daee9" opacity="0.08"/>
+  <circle cx="195" cy="107" r="9" fill="#3daee9" opacity="0.15"/>
+  <circle cx="215" cy="107" r="9" fill="#3daee9" opacity="0.12"/>
+
+  <!-- Target -->
+  <line x1="210" y1="90" x2="210" y2="124" stroke="#27ae60" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="216" y="96" fill="#27ae60" font-size="8" font-family="Inter, sans-serif">target</text>
+
+  <!-- Graph -->
+  <rect x="60" y="140" width="420" height="100" rx="4" fill="#1b1e20"/>
+  <line x1="80" y1="190" x2="460" y2="190" stroke="#3d4349" stroke-width="1"/>
+  <line x1="80" y1="150" x2="80" y2="230" stroke="#3d4349" stroke-width="1"/>
+  <line x1="80" y1="170" x2="460" y2="170" stroke="#27ae60" stroke-width="0.5" stroke-dasharray="4,3"/>
+
+  <!-- Underdamped curve -->
+  <path d="M80,228 C100,130 120,128 145,158 C170,188 180,186 200,175 C220,164 228,165 245,170 C262,175 266,174 280,172 C294,170 300,170 320,170 L460,170" fill="none" stroke="#3daee9" stroke-width="2" stroke-linecap="round"/>
+
+  <text x="68" y="174" fill="#4d5357" font-size="8" text-anchor="end" font-family="Inter, sans-serif">1.0</text>
+  <text x="68" y="194" fill="#4d5357" font-size="8" text-anchor="end" font-family="Inter, sans-serif">0.0</text>
+
+  <!-- ============================================================ -->
+  <!-- SPRING SETTINGS -->
+  <!-- ============================================================ -->
+  <line x1="40" y1="268" x2="500" y2="268" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Preset -->
+  <text x="50" y="296" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Preset</text>
+  <text x="50" y="310" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Quick-select spring behavior</text>
+  <rect x="360" y="284" width="150" height="30" rx="6" fill="#31363b"/>
+  <text x="376" y="304" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Bouncy</text>
+  <text x="490" y="304" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="40" y1="326" x2="500" y2="326" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Damping ratio -->
+  <text x="50" y="354" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Damping ratio</text>
+  <text x="50" y="368" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&lt; 1 bouncy, = 1 critical, &gt; 1 overdamped</text>
+  <rect x="310" y="350" width="140" height="5" rx="2.5" fill="#3d4349"/>
+  <rect x="310" y="350" width="56" height="5" rx="2.5" fill="#3daee9"/>
+  <circle cx="366" cy="352" r="7" fill="#eff0f1"/>
+  <text x="470" y="358" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">0.50</text>
+
+  <line x1="40" y1="384" x2="500" y2="384" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Stiffness -->
+  <text x="50" y="412" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Stiffness</text>
+  <text x="50" y="426" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Higher = faster spring response</text>
+  <rect x="310" y="408" width="140" height="5" rx="2.5" fill="#3d4349"/>
+  <rect x="310" y="408" width="56" height="5" rx="2.5" fill="#3daee9"/>
+  <circle cx="366" cy="410" r="7" fill="#eff0f1"/>
+  <text x="476" y="416" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">600</text>
+
+  <line x1="40" y1="442" x2="500" y2="442" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Epsilon -->
+  <text x="50" y="470" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Epsilon</text>
+  <text x="50" y="484" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Convergence threshold (lower = longer)</text>
+  <rect x="310" y="466" width="140" height="5" rx="2.5" fill="#3d4349"/>
+  <rect x="310" y="466" width="20" height="5" rx="2.5" fill="#3daee9"/>
+  <circle cx="330" cy="468" r="7" fill="#eff0f1"/>
+  <text x="466" y="474" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">0.001</text>
+
+  <!-- ============================================================ -->
+  <!-- FOOTER -->
+  <!-- ============================================================ -->
+  <line x1="20" y1="500" x2="520" y2="500" stroke="#31363b" stroke-width="1"/>
+
+  <rect x="350" y="510" width="76" height="32" rx="6" fill="#31363b"/>
+  <text x="372" y="530" fill="#bdc3c7" font-size="12" font-family="Inter, sans-serif">Cancel</text>
+
+  <rect x="434" y="510" width="76" height="32" rx="6" fill="#3daee9"/>
+  <text x="457" y="530" fill="#ffffff" font-size="12" font-weight="600" font-family="Inter, sans-serif">Apply</text>
+</svg>

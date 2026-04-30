@@ -129,6 +129,14 @@ qt_add_qml_module(plasmazones-settings
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
+        # Animations page — Phase 1 salvage from PR #291. Standalone
+        # widgets + JS helpers; sub-pages and per-event cards land in
+        # later phases.
+        qml/AnimatedBoxTrack.qml
+        qml/AnimationSubPage.qml
+        qml/AnimationSubPageHeader.qml
+        qml/EasingCurve.js
+        qml/SpringPhysics.js
         qml/SettingsCard.qml
         qml/GapsSettingsCard.qml
         qml/OsdCard.qml

@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="700" viewBox="0 0 1040 700">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .window-bg { fill: #1a1d1f; }
+      .titlebar { fill: #2a2e32; }
+      .sidebar-bg { fill: #232629; }
+      .content-bg { fill: #1b1e20; }
+      .text-title { fill: #eff0f1; font-size: 13px; font-weight: 600; }
+      .text-primary { fill: #eff0f1; font-size: 13px; }
+      .text-active { fill: #3daee9; font-size: 13px; font-weight: 600; }
+      .text-dim { fill: #7f8c8d; font-size: 11px; }
+      .divider { stroke: #31363b; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <!-- Window frame -->
+  <rect class="window-bg" width="1040" height="700" rx="12"/>
+
+  <!-- Titlebar -->
+  <rect class="titlebar" x="0" y="0" width="1040" height="36" rx="12"/>
+  <rect class="titlebar" x="0" y="12" width="1040" height="24"/>
+  <!-- Window controls -->
+  <circle cx="20" cy="18" r="6" fill="#ed6a5e"/>
+  <circle cx="40" cy="18" r="6" fill="#f5bf4f"/>
+  <circle cx="60" cy="18" r="6" fill="#62c554"/>
+  <!-- Title -->
+  <text x="520" y="23" text-anchor="middle" fill="#bdc3c7" font-size="12" font-family="Inter, sans-serif">PlasmaZones Settings</text>
+
+  <!-- ============================================================ -->
+  <!-- SIDEBAR (left) -->
+  <!-- ============================================================ -->
+  <rect class="sidebar-bg" x="0" y="36" width="260" height="664" rx="0"/>
+  <!-- Bottom left corner -->
+  <rect class="sidebar-bg" x="0" y="688" width="12" height="12"/>
+  <rect x="0" y="688" width="12" height="12" rx="12" fill="#1a1d1f"/>
+
+  <!-- Search -->
+  <rect x="12" y="48" width="236" height="32" rx="6" fill="#2a2e32"/>
+  <text x="36" y="68" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Search settings...</text>
+  <g transform="translate(18, 58)">
+    <circle cx="5" cy="5" r="4" fill="none" stroke="#7f8c8d" stroke-width="1.2"/>
+    <line x1="8" y1="8" x2="10" y2="10" stroke="#7f8c8d" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Back button -->
+  <rect x="4" y="90" width="252" height="36" rx="6" fill="#2a2e32"/>
+  <text x="18" y="113" fill="#3daee9" font-size="15" font-family="Inter, sans-serif">&#x2039;</text>
+  <text x="32" y="113" fill="#3daee9" font-size="12" font-weight="600" font-family="Inter, sans-serif">Animations</text>
+
+  <!-- General (active) -->
+  <rect x="4" y="134" width="252" height="36" rx="6" fill="#3daee9" opacity="0.12"/>
+  <g transform="translate(16, 144)">
+    <circle cx="8" cy="8" r="6" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <circle cx="8" cy="4" r="1.5" fill="#3daee9"/>
+    <circle cx="4" cy="12" r="1.5" fill="#3daee9"/>
+    <circle cx="12" cy="12" r="1.5" fill="#3daee9"/>
+  </g>
+  <text class="text-active" x="38" y="157">General</text>
+
+  <line x1="16" y1="176" x2="244" y2="176" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Zone Snap -->
+  <rect x="4" y="182" width="252" height="36" rx="6" opacity="0"/>
+  <g transform="translate(16, 192)">
+    <rect x="0" y="0" width="7" height="16" rx="1" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+    <rect x="9" y="0" width="7" height="16" rx="1" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+  </g>
+  <text class="text-primary" x="38" y="205">Zone Snap</text>
+
+  <!-- Fades -->
+  <rect x="4" y="220" width="252" height="36" rx="6" opacity="0"/>
+  <g transform="translate(16, 230)">
+    <rect x="0" y="0" width="16" height="16" rx="2" fill="none" stroke="#bdc3c7" stroke-width="1.1" opacity="0.5"/>
+  </g>
+  <text class="text-primary" x="38" y="243">Fades</text>
+
+  <!-- Layout Switch -->
+  <rect x="4" y="258" width="252" height="36" rx="6" opacity="0"/>
+  <g transform="translate(16, 268)">
+    <rect x="0" y="0" width="7" height="7" rx="1" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+    <rect x="9" y="0" width="7" height="7" rx="1" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+    <rect x="0" y="9" width="16" height="7" rx="1" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+  </g>
+  <text class="text-primary" x="38" y="281">Layout Switch</text>
+
+  <!-- Border -->
+  <rect x="4" y="296" width="252" height="36" rx="6" opacity="0"/>
+  <g transform="translate(16, 306)">
+    <rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="#bdc3c7" stroke-width="1.8"/>
+  </g>
+  <text class="text-primary" x="38" y="319">Border</text>
+
+  <!-- Preview -->
+  <rect x="4" y="334" width="252" height="36" rx="6" opacity="0"/>
+  <g transform="translate(16, 344)">
+    <circle cx="8" cy="8" r="7" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+    <polygon points="6,4 13,8 6,12" fill="#bdc3c7"/>
+  </g>
+  <text class="text-primary" x="38" y="357">Preview</text>
+
+  <line x1="16" y1="376" x2="244" y2="376" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Shaders -->
+  <rect x="4" y="382" width="252" height="36" rx="6" opacity="0"/>
+  <g transform="translate(16, 392)">
+    <rect x="0" y="0" width="16" height="16" rx="2" fill="none" stroke="#bdc3c7" stroke-width="1.1"/>
+    <path d="M3,13 L5,6 L8,11 L11,3 L13,9" fill="none" stroke="#bdc3c7" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text class="text-primary" x="38" y="405">Shaders</text>
+
+  <!-- ============================================================ -->
+  <!-- CONTENT AREA (right) — General page -->
+  <!-- ============================================================ -->
+  <rect class="content-bg" x="260" y="36" width="780" height="664"/>
+  <!-- Bottom right corner -->
+  <rect class="content-bg" x="1028" y="688" width="12" height="12"/>
+  <rect x="1028" y="688" width="12" height="12" rx="12" fill="#1a1d1f"/>
+
+  <!-- Card -->
+  <rect x="280" y="52" width="740" height="620" rx="10" fill="#232629"/>
+
+  <!-- Card header -->
+  <rect x="280" y="52" width="740" height="44" rx="10" fill="#2a2e32"/>
+  <rect x="280" y="76" width="740" height="20" fill="#2a2e32"/>
+  <text x="300" y="80" fill="#eff0f1" font-size="14" font-weight="600" font-family="Inter, sans-serif">Animations</text>
+
+  <!-- Toggle ON -->
+  <rect x="976" y="66" width="32" height="18" rx="9" fill="#27ae60" opacity="0.35"/>
+  <circle cx="998" cy="75" r="7" fill="#27ae60"/>
+  <circle cx="998" cy="75" r="5" fill="#eff0f1"/>
+
+  <!-- Easing Preview (compact) -->
+  <rect x="400" y="108" width="500" height="150" rx="8" fill="#1b1e20"/>
+
+  <!-- Mini grid -->
+  <line x1="420" y1="118" x2="420" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="480" y1="118" x2="480" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="540" y1="118" x2="540" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="600" y1="118" x2="600" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="660" y1="118" x2="660" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="720" y1="118" x2="720" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="780" y1="118" x2="780" y2="236" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="420" y1="148" x2="880" y2="148" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="420" y1="178" x2="880" y2="178" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="420" y1="208" x2="880" y2="208" stroke="#2a2e32" stroke-width="0.5"/>
+
+  <!-- Bezier curve -->
+  <path d="M420,236 C540,236 660,118 880,118" fill="none" stroke="#3daee9" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Control handles -->
+  <line x1="420" y1="236" x2="540" y2="236" stroke="#3daee9" stroke-width="0.8" opacity="0.4"/>
+  <line x1="880" y1="118" x2="660" y2="118" stroke="#3daee9" stroke-width="0.8" opacity="0.4"/>
+  <circle cx="540" cy="236" r="5" fill="#3daee9"/>
+  <circle cx="540" cy="236" r="2.5" fill="#1b1e20"/>
+  <circle cx="660" cy="118" r="5" fill="#3daee9"/>
+  <circle cx="660" cy="118" r="2.5" fill="#1b1e20"/>
+
+  <!-- Animated box -->
+  <rect x="420" y="244" width="460" height="8" rx="3" fill="#2a2e32"/>
+  <rect x="610" y="243" width="14" height="10" rx="3" fill="#3daee9"/>
+
+  <!-- Settings rows -->
+  <line x1="300" y1="272" x2="1000" y2="272" stroke="#31363b" stroke-width="1"/>
+
+  <text x="300" y="296" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Default timing mode</text>
+  <text x="300" y="312" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Timing used when events don't override</text>
+  <rect x="870" y="284" width="120" height="30" rx="5" fill="#31363b"/>
+  <text x="883" y="304" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Easing</text>
+  <text x="972" y="304" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="300" y1="326" x2="1000" y2="326" stroke="#31363b" stroke-width="1"/>
+
+  <text x="300" y="350" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Style</text>
+  <text x="300" y="366" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Animation curve style</text>
+  <rect x="870" y="338" width="120" height="30" rx="5" fill="#31363b"/>
+  <text x="883" y="358" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Standard</text>
+  <text x="972" y="358" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="300" y1="380" x2="1000" y2="380" stroke="#31363b" stroke-width="1"/>
+
+  <text x="300" y="404" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Direction</text>
+  <text x="300" y="420" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Ease In / Ease Out / In-Out</text>
+  <rect x="870" y="392" width="120" height="30" rx="5" fill="#31363b"/>
+  <text x="883" y="412" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Ease Out</text>
+  <text x="972" y="412" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="300" y1="434" x2="1000" y2="434" stroke="#31363b" stroke-width="1"/>
+
+  <text x="300" y="458" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Duration</text>
+  <text x="300" y="474" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Total animation time in milliseconds</text>
+  <rect x="770" y="456" width="160" height="5" rx="2.5" fill="#3d4349"/>
+  <rect x="770" y="456" width="80" height="5" rx="2.5" fill="#3daee9"/>
+  <circle cx="850" cy="458" r="7" fill="#eff0f1"/>
+  <text x="952" y="464" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">300 ms</text>
+
+  <line x1="300" y1="488" x2="1000" y2="488" stroke="#31363b" stroke-width="1"/>
+
+  <text x="300" y="512" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Multiple windows</text>
+  <text x="300" y="528" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Animate several windows at once</text>
+  <rect x="870" y="500" width="120" height="30" rx="5" fill="#31363b"/>
+  <text x="883" y="520" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">All at once</text>
+  <text x="972" y="520" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="300" y1="542" x2="1000" y2="542" stroke="#31363b" stroke-width="1"/>
+
+  <text x="300" y="566" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Minimum distance</text>
+  <text x="300" y="582" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">Currently: always animate, no threshold</text>
+  <rect x="930" y="556" width="60" height="28" rx="5" fill="#31363b"/>
+  <text x="950" y="575" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">0 px</text>
+
+  <!-- Breadcrumb at bottom -->
+  <text x="650" y="684" text-anchor="middle" fill="#4d5357" font-size="10" font-family="Inter, sans-serif">PlasmaZones Settings &gt; Animations &gt; General</text>
+</svg>

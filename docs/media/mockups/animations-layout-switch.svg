@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="340" viewBox="0 0 680 340">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .bg { fill: #1b1e20; }
+      .card { fill: #232629; }
+      .text-title { fill: #eff0f1; font-size: 14px; font-weight: 600; }
+      .text-info { fill: #3daee9; font-size: 11px; }
+      .text-inherit { fill: #7f8c8d; font-size: 11px; font-style: italic; }
+      .text-parent { fill: #bdc3c7; font-size: 13px; font-weight: 500; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="680" height="340" rx="12"/>
+
+  <!-- Layout Switch parent -->
+  <rect class="card" x="20" y="16" width="640" height="76" rx="10"/>
+  <rect x="20" y="16" width="640" height="48" rx="10" fill="#262a2e"/>
+  <rect x="20" y="44" width="640" height="20" fill="#262a2e"/>
+  <text class="text-parent" x="40" y="46">Layout Switch (parent defaults)</text>
+  <text x="512" y="46" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="32" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="43" r="9" fill="#7f8c8d"/>
+  <text class="text-inherit" x="58" y="79">Inherits all values from Global (Easing, 300ms, Morph)</text>
+
+  <!-- Layout Switch In -->
+  <rect class="card" x="20" y="108" width="640" height="100" rx="10"/>
+  <rect x="20" y="108" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="136" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="138">Layout Switch In</text>
+  <text x="512" y="138" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="124" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="135" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 168)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="175">Inheriting from: Layout Switch &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="191">Current: Easing, 300ms, Standard (Ease Out), Morph</text>
+
+  <!-- Layout Switch Out -->
+  <rect class="card" x="20" y="224" width="640" height="100" rx="10"/>
+  <rect x="20" y="224" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="252" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="254">Layout Switch Out</text>
+  <text x="512" y="254" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="240" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="251" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 284)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="291">Inheriting from: Layout Switch &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="307">Current: Easing, 300ms, Standard (Ease Out), Morph</text>
+</svg>

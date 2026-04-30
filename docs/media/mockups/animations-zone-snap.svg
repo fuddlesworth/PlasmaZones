@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="680" viewBox="0 0 680 680">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .bg { fill: #1b1e20; }
+      .card { fill: #232629; }
+      .text-title { fill: #eff0f1; font-size: 14px; font-weight: 600; }
+      .text-primary { fill: #eff0f1; font-size: 13px; }
+      .text-desc { fill: #7f8c8d; font-size: 11px; }
+      .text-value { fill: #eff0f1; font-size: 12px; font-weight: 500; }
+      .text-info { fill: #3daee9; font-size: 11px; }
+      .text-inherit { fill: #7f8c8d; font-size: 11px; font-style: italic; }
+      .text-parent { fill: #bdc3c7; font-size: 13px; font-weight: 500; }
+      .divider { stroke: #31363b; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="680" height="680" rx="12"/>
+
+  <!-- ============================================================ -->
+  <!-- CARD 1: Zone Snap In (Override OFF) -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="16" width="640" height="100" rx="10"/>
+  <rect x="20" y="16" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="44" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="46">Zone Snap In</text>
+  <text x="512" y="46" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="32" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="43" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 76)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="83">Inheriting from: Zone Snap &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="99">Current: Easing, 300ms, Standard (Ease Out), Morph</text>
+
+  <!-- ============================================================ -->
+  <!-- CARD 2: Zone Snap Out (Override ON - compact with mini curve) -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="132" width="640" height="320" rx="10"/>
+  <rect x="20" y="132" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="160" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="162">Zone Snap Out</text>
+  <text x="512" y="162" fill="#27ae60" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="148" width="40" height="22" rx="11" fill="#27ae60" opacity="0.35"/>
+  <circle cx="597" cy="159" r="9" fill="#27ae60"/>
+  <circle cx="597" cy="159" r="6" fill="#eff0f1"/>
+
+  <!-- Mini curve thumbnail (left side) -->
+  <rect x="40" y="194" width="100" height="66" rx="6" fill="#1b1e20" stroke="#31363b" stroke-width="1"/>
+  <!-- Mini bezier curve inside -->
+  <path d="M50,250 C70,250 82,202 130,202" fill="none" stroke="#3daee9" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- "Ease Out" label under mini -->
+  <text x="90" y="272" text-anchor="middle" fill="#5d6367" font-size="8" font-family="Inter, sans-serif">Ease Out Quart</text>
+
+  <!-- Right side controls -->
+  <!-- Timing mode -->
+  <text x="160" y="206" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Timing mode</text>
+  <rect x="486" y="192" width="150" height="30" rx="6" fill="#31363b"/>
+  <text x="502" y="212" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Easing</text>
+  <text x="614" y="212" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="160" y1="230" x2="640" y2="230" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Animation style -->
+  <text x="160" y="252" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Animation style</text>
+  <rect x="486" y="238" width="150" height="30" rx="6" fill="#31363b"/>
+  <text x="502" y="258" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Pop In</text>
+  <text x="614" y="258" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="160" y1="276" x2="640" y2="276" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Scale start -->
+  <text x="160" y="298" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Scale start</text>
+  <rect x="440" y="290" width="140" height="5" rx="2.5" fill="#3d4349"/>
+  <rect x="440" y="290" width="122" height="5" rx="2.5" fill="#3daee9"/>
+  <circle cx="562" cy="292" r="7" fill="#eff0f1"/>
+  <text x="604" y="298" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">87%</text>
+
+  <line x1="160" y1="316" x2="640" y2="316" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Duration -->
+  <text x="160" y="338" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Duration</text>
+  <rect x="440" y="330" width="140" height="5" rx="2.5" fill="#3d4349"/>
+  <rect x="440" y="330" width="42" height="5" rx="2.5" fill="#3daee9"/>
+  <circle cx="482" cy="332" r="7" fill="#eff0f1"/>
+  <text x="596" y="338" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">200 ms</text>
+
+  <line x1="160" y1="356" x2="640" y2="356" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Curve preset -->
+  <text x="160" y="378" fill="#eff0f1" font-size="12" font-family="Inter, sans-serif">Curve preset</text>
+  <rect x="486" y="364" width="150" height="30" rx="6" fill="#31363b"/>
+  <text x="502" y="384" fill="#eff0f1" font-size="11" font-weight="500" font-family="Inter, sans-serif">Snappy (Quart)</text>
+  <text x="614" y="384" fill="#7f8c8d" font-size="10" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <!-- Customize Curve button -->
+  <rect x="160" y="406" width="170" height="32" rx="6" fill="#31363b" stroke="#3daee9" stroke-width="1" opacity="0.8"/>
+  <text x="194" y="426" fill="#3daee9" font-size="12" font-family="Inter, sans-serif">Customize Curve...</text>
+
+  <!-- ============================================================ -->
+  <!-- CARD 3: Zone Snap Resize (Override OFF) -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="468" width="640" height="100" rx="10"/>
+  <rect x="20" y="468" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="496" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="498">Zone Snap Resize</text>
+  <text x="512" y="498" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="484" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="495" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 528)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="535">Inheriting from: Zone Snap &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="551">Current: Easing, 300ms, Standard (Ease Out), Morph</text>
+
+  <!-- ============================================================ -->
+  <!-- CARD 4: Zone Snap parent -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="584" width="640" height="76" rx="10"/>
+  <rect x="20" y="584" width="640" height="48" rx="10" fill="#262a2e"/>
+  <rect x="20" y="612" width="640" height="20" fill="#262a2e"/>
+  <text class="text-parent" x="40" y="614">Zone Snap (parent defaults)</text>
+  <text x="512" y="614" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="600" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="611" r="9" fill="#7f8c8d"/>
+  <text class="text-inherit" x="58" y="647">Inherits all values from Global</text>
+
+  <!-- Page label -->
+  <text x="340" y="674" text-anchor="middle" fill="#4d5357" font-size="10" font-family="Inter, sans-serif">Animations &gt; Zone Snap</text>
+</svg>
