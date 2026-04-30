@@ -17,7 +17,7 @@
  * matching PzRoles base, the lookup silently falls back to the empty
  * default config and every show/hide runs on the library's 150 ms
  * OutCubic fallback instead of the configured `osd.show` /
- * `panel.popup` / etc.
+ * `panel.popup.zoneSelector.show` / etc.
  *
  * The previous safety net was a single Q_ASSERT_X in
  * createZoneSelectorWindow — debug-only, and only covered ZoneSelector.

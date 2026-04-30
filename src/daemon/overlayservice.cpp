@@ -132,9 +132,14 @@ namespace {
 //     `osd.hide` affects OSDs and ONLY OSDs.
 //   - **Popup family (`panel.popup.<surface>.*`)** — non-OSD overlay
 //     surfaces. Each gets its own leaf paths under
-//     `panel.popup.{layoutPicker, zoneSelector, snapAssist}.{show, hide,
-//     popIn}`. A JSON edit to `panel.popup.layoutPicker.hide` affects
-//     ONLY the layout picker; siblings are unaffected.
+//     `panel.popup.<surface>` per surface's needs:
+//       • `panel.popup.layoutPicker.{show, hide, popIn}` (opacity legs +
+//         scale show; hide-scale couples to `.hide`)
+//       • `panel.popup.zoneSelector.{show, hide}` (opacity-only)
+//       • `panel.popup.snapAssist.show` (destroy-on-hide; no `.hide`
+//         leaf because no frame ever paints)
+//     A JSON edit to `panel.popup.layoutPicker.hide` affects ONLY the
+//     layout picker; siblings are unaffected.
 //
 // Built-in defaults for every path ship under `data/profiles/`. The
 // PhosphorProfileRegistry's `resolve()` is exact-match (no walk-up), so
@@ -287,17 +292,19 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
 /// Only `panel.popup.snapAssist.show` is meaningful — `.hide` is
 /// intentionally absent from the taxonomy because no frame ever paints.
 ///
-/// **Inheritance caveat:** unlike LayoutPicker / ZoneSelector / OSD
-/// which honour walk-up resolution from `panel.popup` to both legs,
-/// SnapAssist's hide leg deliberately drops the user's tree entirely.
-/// A user setting `panel.popup` to dissolve will still see the OSD,
-/// LayoutPicker, ZoneSelector hide with the dissolve effect — but the
-/// SnapAssist hide leg never runs because destroy-on-hide tears the
-/// surface down first. Wiring the resolve here would be contract-pure
-/// but contract-pure-and-runtime-no-op; if someone ever flips
-/// `keepMappedOnHide` to true, restore the `resolveShaderEffect(tree,
-/// PanelPopupSnapAssistHide)` line below in lockstep with adding the
-/// new path constant.
+/// **Inheritance caveat (popup-family-only).** ShaderProfileTree::resolve
+/// walks parent paths, so within the popup family a user setting
+/// `panel.popup` to dissolve cascades to LayoutPicker and ZoneSelector
+/// (both legs) and to SnapAssist's show leg via the chain
+/// `panel.popup.<surface>.<leg>` → `panel.popup.<surface>` →
+/// `panel.popup` → `global`. SnapAssist's HIDE leg deliberately drops
+/// that walk-up — the surface destroys before paint, so the resolve
+/// would be contract-pure-and-runtime-no-op. The genuine OSD
+/// (`osd.show`/`osd.hide`) is in a separate subtree and is NOT touched
+/// by `panel.popup` overrides regardless. If someone ever flips
+/// `keepMappedOnHide` to true on snap-assist, restore the
+/// `resolveShaderEffect(tree, PanelPopupSnapAssistHide)` line below in
+/// lockstep with adding the new path constant.
 PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
