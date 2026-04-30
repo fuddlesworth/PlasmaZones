@@ -1148,6 +1148,84 @@ private Q_SLOTS:
     /// Mimics the AnimationEventCard combo flow where each combo
     /// activation calls the controller and a refresh re-reads.
     /// If a write disappears between cycles, this catches it.
+    /// Smoking-gun test for the field bug: if the schema doesn't declare
+    /// ShaderProfileTree, Settings::save() — and specifically its
+    /// purgeStaleKeys phase — wipes the override from disk. A daemon
+    /// running an old binary without the schema entry from commit 94712511
+    /// will hit this.
+    void testShaderProfileTree_survivesSaveCycle()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings a;
+            PhosphorAnimationShaders::ShaderProfileTree tree;
+            PhosphorAnimationShaders::ShaderProfile profile;
+            profile.effectId = QStringLiteral("pixelate");
+            tree.setOverride(QStringLiteral("panel"), profile);
+            a.setShaderProfileTree(tree);
+            // save() runs purgeStaleKeys + the schema flush loop.
+            // Without the schema entry, the override gets purged here.
+            a.save();
+        }
+
+        // Re-open and confirm the override survived the save.
+        {
+            Settings b;
+            const auto reread = b.shaderProfileTree();
+            QVERIFY2(reread.hasOverride(QStringLiteral("panel")),
+                     "ShaderProfileTree override must survive Settings::save() — schema entry missing?");
+            const auto entry = reread.directOverride(QStringLiteral("panel"));
+            QVERIFY(entry.effectId.has_value());
+            QCOMPARE(*entry.effectId, QStringLiteral("pixelate"));
+        }
+    }
+
+    /// Verify the shaderProfileTreeJson Q_PROPERTY's NOTIFY actually
+    /// fires from Settings::load() when the on-disk value changes. This
+    /// is what feeds the daemon's overlayservice — without the emit,
+    /// applyShaderProfilesToAnimator never runs and shaders never
+    /// reach the SurfaceAnimator on Save → notifyReload.
+    void testShaderProfileTreeChanged_firesOnLoadWhenValueDiffers()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed disk with one tree, then mutate via a separate Settings
+        // instance writing the file out.
+        {
+            Settings a;
+            PhosphorAnimationShaders::ShaderProfileTree tree;
+            PhosphorAnimationShaders::ShaderProfile profile;
+            profile.effectId = QStringLiteral("pixelate");
+            tree.setOverride(QStringLiteral("panel"), profile);
+            a.setShaderProfileTree(tree);
+            a.save();
+        }
+
+        // Open a fresh Settings; the Q_PROPERTY load loop should emit
+        // shaderProfileTreeChanged when load() reads the new disk value.
+        Settings b;
+        QSignalSpy spy(&b, &Settings::shaderProfileTreeChanged);
+
+        // Modify the file externally (simulating the daemon's view of
+        // a settings-app write that happened after `b` constructed).
+        {
+            Settings c;
+            PhosphorAnimationShaders::ShaderProfileTree tree;
+            PhosphorAnimationShaders::ShaderProfile profile;
+            profile.effectId = QStringLiteral("dissolve");
+            tree.setOverride(QStringLiteral("panel"), profile);
+            c.setShaderProfileTree(tree);
+            c.save();
+        }
+
+        b.load();
+        QVERIFY2(spy.count() >= 1,
+                 "Settings::load() must re-emit shaderProfileTreeChanged when the on-disk value differs");
+        QCOMPARE(b.shaderProfileTree().directOverride(QStringLiteral("panel")).effectId.value(),
+                 QStringLiteral("dissolve"));
+    }
+
     void testShaderProfileTree_repeatedSetReadCycle()
     {
         IsolatedConfigGuard guard;
