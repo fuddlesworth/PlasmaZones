@@ -6,6 +6,7 @@
 
 #include "internal.h"
 
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
 #include <QFile>
@@ -225,12 +226,8 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     //   • `customParams1_x` … `customParams8_w` → `m_customParams[0..7]`
     //   • `customColor1`     … `customColor16`  → `m_customColors[0..15]`
     //
-    // The canonical helper for the customParams key format is
-    // `PhosphorAnimationShaders::AnimationShaderContract::slotKey`
-    // (`<PhosphorAnimationShaders/AnimationShaderContract.h>`); its inline
-    // body is mirrored below to avoid forcing this library to depend on
-    // phosphor-animation-shaders for one inline function. If the format
-    // ever changes, both sites must move together.
+    // Slot-key format comes from `PhosphorShaders::CustomParams::slotKey`
+    // — the cross-library canonical helper alongside `BaseUniforms`.
     //
     // Until this lived in the base class, only `ZoneShaderItem` (overlay)
     // performed the parse — animation shaders driven by bare `ShaderEffect`
@@ -250,11 +247,10 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
 
     for (int i = 0; i < kMaxCustomParams; ++i) {
         QVector4D cp = customParamAt(i);
-        const QString prefix = QStringLiteral("customParams") + QString::number(i + 1) + QLatin1Char('_');
-        cp.setX(extractFloat(prefix + QLatin1Char('x'), cp.x()));
-        cp.setY(extractFloat(prefix + QLatin1Char('y'), cp.y()));
-        cp.setZ(extractFloat(prefix + QLatin1Char('z'), cp.z()));
-        cp.setW(extractFloat(prefix + QLatin1Char('w'), cp.w()));
+        cp.setX(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'x'), cp.x()));
+        cp.setY(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'y'), cp.y()));
+        cp.setZ(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'z'), cp.z()));
+        cp.setW(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'w'), cp.w()));
         setCustomParamAt(i, cp);
     }
 

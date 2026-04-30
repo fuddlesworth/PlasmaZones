@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorShaders/CustomParamsKey.h>
+
 #include <QString>
 
 namespace PhosphorAnimationShaders {
@@ -113,21 +115,22 @@ inline constexpr int kMaxCustomParams = 8;
 /// into a region the daemon's overlay extension owns.
 inline constexpr int kMaxParameterSlots = 32;
 
-/// Format a `customParams` slot key. `vec` is 0..7 (which `vec4` slot in
-/// the array), `comp` is `'x'`, `'y'`, `'z'`, or `'w'`. Returns e.g.
-/// `"customParams1_x"` for `(0, 'x')` — note the **1-based** vector index
-/// in the key vs the 0-based parameter, matching what GLSL authors write
-/// in their `#define direction customParams[0].x` macros plus one for the
-/// daemon's UBO key.
-///
-/// Both the encoder (`AnimationShaderRegistry::translateAnimationParams`)
-/// and the two decoders (`PhosphorRendering::ShaderEffect::setShaderParams`,
-/// the kwin-effect's per-transition pack) consume this exact format. Any
-/// future change to the format MUST land here so all three sites stay in
-/// sync; that's the entire reason this helper exists.
+/// Format a `customParams` slot key — thin forwarder onto
+/// `PhosphorShaders::CustomParams::slotKey`, the cross-library canonical
+/// helper. Kept here so animation-shader call sites can refer to a name
+/// inside this contract namespace and consumers don't need to import the
+/// phosphor-shaders header directly. See
+/// `<PhosphorShaders/CustomParamsKey.h>` for the format, the rationale,
+/// and the full list of consumers.
 inline QString slotKey(int vec, char comp)
 {
-    return QStringLiteral("customParams") + QString::number(vec + 1) + QLatin1Char('_') + QLatin1Char(comp);
+    return PhosphorShaders::CustomParams::slotKey(vec, comp);
+}
+
+/// Flat-slot overload: `slot` is 0..31 across the 8 `vec4` slots.
+inline QString slotKey(int slot)
+{
+    return PhosphorShaders::CustomParams::slotKey(slot);
 }
 
 /// @par Std140 offset contract

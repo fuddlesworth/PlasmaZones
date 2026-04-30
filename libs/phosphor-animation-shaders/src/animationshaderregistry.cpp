@@ -195,10 +195,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             continue;
         }
 
-        const int vecIndex = floatSlot / 4; // 0..7
-        const int compIndex = floatSlot % 4; // 0..3 → x/y/z/w
-        static const char component[] = {'x', 'y', 'z', 'w'};
-        const QString uniformKey = AnimationShaderContract::slotKey(vecIndex, component[compIndex]);
+        const QString uniformKey = AnimationShaderContract::slotKey(floatSlot);
 
         // Resolve the value: friendly map > declared default > 0.0.
         QVariant value;
