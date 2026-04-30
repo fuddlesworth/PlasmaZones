@@ -111,6 +111,28 @@ public:
     /// overload.
     static QVariantMap translateAnimationParams(const AnimationShaderEffect& effect, const QVariantMap& friendlyParams);
 
+    /// Rewrite the canonical `layout(std140, binding = 0) uniform
+    /// AnimationUniforms { ... };` block (from
+    /// `data/animations/_shared/animation_uniforms.glsl`) into default-block
+    /// uniform declarations a classic-GL pipeline can bind. Used by
+    /// runtimes that cannot bind UBOs through their shader-program API
+    /// (notably `KWin::GLShader`, which addresses default-block uniforms
+    /// only).
+    ///
+    /// Input must already have `#include` directives expanded so the
+    /// canonical UBO block is in the source as a literal (the rewriter is
+    /// line-based; it does not run the GLSL preprocessor itself). Fields
+    /// that are pure-padding on the classic-GL path — `qt_Matrix` /
+    /// `qt_Opacity` (KWin manages its own scene-graph transform/opacity)
+    /// and the `_appField0` / `_appField1` std140 alignment slots — are
+    /// dropped during rewrite.
+    ///
+    /// Idempotent on input that has no canonical UBO block (returns the
+    /// source unchanged). Returns the rewritten source as UTF-8 bytes
+    /// since classic-GL shader compilers accept `const char*` /
+    /// `QByteArray` directly without an extra UTF-16 round trip.
+    static QByteArray rewriteCanonicalUboToDefaultBlock(const QString& expandedShaderSource);
+
 Q_SIGNALS:
     void effectsChanged();
 

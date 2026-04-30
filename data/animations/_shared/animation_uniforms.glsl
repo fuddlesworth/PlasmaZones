@@ -30,6 +30,14 @@
 // for the exact slot mapping (float/int/bool fill 32 sub-slots in 8
 // vec4s, color fills `customColors[16]` in a separate region not
 // declared here).
+//
+// Layout-drift guard: the offsets below MUST stay aligned with
+// `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
+// `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
+// for `iTime`, `iResolution`, `customParams`, `customColors`; if any of
+// those asserts fails after a `BaseUniforms` change, this header has to
+// move in lockstep. The bake test in `tests/unit/ui/test_animation_shader_bake.cpp`
+// surfaces GLSL-side drift by running `qsb` over every built-in shader.
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL

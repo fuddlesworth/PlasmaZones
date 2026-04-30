@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <QString>
+
 namespace PhosphorAnimationShaders {
 
 /// Cross-runtime named-uniform contract for **animation/transition shaders**.
@@ -110,6 +112,40 @@ inline constexpr int kMaxCustomParams = 8;
 /// declared parameters an animation shader can carry without spilling
 /// into a region the daemon's overlay extension owns.
 inline constexpr int kMaxParameterSlots = 32;
+
+/// Format a `customParams` slot key. `vec` is 0..7 (which `vec4` slot in
+/// the array), `comp` is `'x'`, `'y'`, `'z'`, or `'w'`. Returns e.g.
+/// `"customParams1_x"` for `(0, 'x')` — note the **1-based** vector index
+/// in the key vs the 0-based parameter, matching what GLSL authors write
+/// in their `#define direction customParams[0].x` macros plus one for the
+/// daemon's UBO key.
+///
+/// Both the encoder (`AnimationShaderRegistry::translateAnimationParams`)
+/// and the two decoders (`PhosphorRendering::ShaderEffect::setShaderParams`,
+/// the kwin-effect's per-transition pack) consume this exact format. Any
+/// future change to the format MUST land here so all three sites stay in
+/// sync; that's the entire reason this helper exists.
+inline QString slotKey(int vec, char comp)
+{
+    return QStringLiteral("customParams") + QString::number(vec + 1) + QLatin1Char('_') + QLatin1Char(comp);
+}
+
+/// @par Std140 offset contract
+/// The canonical `data/animations/_shared/animation_uniforms.glsl` UBO
+/// declares its fields at the same byte offsets as the prefix of
+/// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
+/// struct). That alignment is what lets a single `effect.frag` source
+/// run on both runtimes without per-runtime overrides.
+///
+/// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
+/// statements in `<PhosphorShaders/BaseUniforms.h>` for `iTime`,
+/// `iResolution`, `customParams`, and `customColors`. If anyone reorders
+/// `BaseUniforms`, those asserts fail at compile time and the canonical
+/// GLSL header has to be updated to match. The GLSL side is exercised
+/// at build time by `tests/unit/ui/test_animation_shader_bake.cpp`,
+/// which runs every built-in animation shader through `qsb` (which in
+/// turn computes std140 offsets) — a layout drift would surface there
+/// as a bake failure.
 
 } // namespace AnimationShaderContract
 

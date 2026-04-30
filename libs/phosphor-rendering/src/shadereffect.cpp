@@ -225,6 +225,13 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     //   • `customParams1_x` … `customParams8_w` → `m_customParams[0..7]`
     //   • `customColor1`     … `customColor16`  → `m_customColors[0..15]`
     //
+    // The canonical helper for the customParams key format is
+    // `PhosphorAnimationShaders::AnimationShaderContract::slotKey`
+    // (`<PhosphorAnimationShaders/AnimationShaderContract.h>`); its inline
+    // body is mirrored below to avoid forcing this library to depend on
+    // phosphor-animation-shaders for one inline function. If the format
+    // ever changes, both sites must move together.
+    //
     // Until this lived in the base class, only `ZoneShaderItem` (overlay)
     // performed the parse — animation shaders driven by bare `ShaderEffect`
     // (e.g. `SurfaceAnimator::runLeg` for daemon overlay-surface

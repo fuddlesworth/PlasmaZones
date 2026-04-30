@@ -224,13 +224,14 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 }
 
 /// LayoutPicker: same OSD-style shape with softer scale envelope (0.9→1
-/// vs 0.8→1) since the picker is a larger surface. Shader leg keys on
-/// panel.popup.layoutPicker so the picker can diverge from zone selector
-/// and snap-assist while all three inherit panel.popup's baseline by
-/// default (walk-up resolution).
+/// vs 0.8→1) since the picker is a larger surface. Shader legs key on
+/// distinct `.show` / `.hide` leaves so a user can dissolve in and slide
+/// out (or any asymmetric pair). Both leaves walk up to
+/// `panel.popup.layoutPicker` and on to `panel.popup`, so a user who
+/// wants symmetric treatment overrides the surface path once and skips
+/// the leaves — same shape as the OSD's `osd.show` / `osd.hide` schema.
 PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree)
 {
-    const auto params = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker);
     return PAL::SurfaceAnimator::Config{
         .showProfile = osdShow(),
         .hideProfile = osdHide(),
@@ -238,40 +239,43 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
         .hideScaleProfile = osdHide(),
         .showScaleFrom = 0.9,
         .hideScaleTo = 0.95,
-        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker),
-        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker),
-        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker,
-        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPicker,
-        .showShaderParameters = params,
-        .hideShaderParameters = params};
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPickerShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPickerHide),
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPickerShow,
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupLayoutPickerHide,
+        .showShaderParameters =
+            resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPickerShow),
+        .hideShaderParameters =
+            resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupLayoutPickerHide)};
 }
 
 /// ZoneSelector: pop-in show + fade-out hide (keepMappedOnHide=true so
 /// the hide animation actually paints). Opacity-only on motion. Shader
-/// leg keys on panel.popup.zoneSelector with the same path on both legs
-/// — symmetric show/hide is the natural default; users can split via
-/// future per-leg paths if needed.
+/// legs key on distinct `.show` / `.hide` leaves; walk-up resolution
+/// covers the symmetric case via `panel.popup.zoneSelector` and on to
+/// `panel.popup`.
 PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree)
 {
-    const auto params = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector);
     return PAL::SurfaceAnimator::Config{
         .showProfile = panelPopup(),
         .hideProfile = widgetFadeOut(),
         .showScaleProfile = {},
         .hideScaleProfile = {},
-        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector),
-        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector),
-        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector,
-        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelector,
-        .showShaderParameters = params,
-        .hideShaderParameters = params};
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelectorShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelectorHide),
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelectorShow,
+        .hideShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupZoneSelectorHide,
+        .showShaderParameters =
+            resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelectorShow),
+        .hideShaderParameters =
+            resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupZoneSelectorHide)};
 }
 
 /// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
 /// (keepMappedOnHide=false), so ~Surface synchronously cancels any
 /// in-flight beginHide before the hide animation can paint a frame.
-/// Registering hide-leg shader fields would be dead code identical to
-/// the motion-leg hideProfile = {} policy; leave them empty.
+/// Only `panel.popup.snapAssist.show` is meaningful — `.hide` is
+/// intentionally absent from the taxonomy because no frame ever paints.
 PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
 {
     return PAL::SurfaceAnimator::Config{
@@ -279,11 +283,12 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree&
         .hideProfile = {},
         .showScaleProfile = {},
         .hideScaleProfile = {},
-        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist),
+        .showShaderEffectId = resolveShaderEffect(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssistShow),
         .hideShaderEffectId = {},
-        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist,
+        .showShaderProfile = PhosphorAnimation::ProfilePaths::PanelPopupSnapAssistShow,
         .hideShaderProfile = {},
-        .showShaderParameters = resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssist),
+        .showShaderParameters =
+            resolveShaderParameters(tree, PhosphorAnimation::ProfilePaths::PanelPopupSnapAssistShow),
         .hideShaderParameters = {}};
 }
 

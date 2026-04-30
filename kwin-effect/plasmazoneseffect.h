@@ -542,8 +542,8 @@ private:
         /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
         ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
         ///   computes `progress = clamp01((now - startTimeMs) / durationMs)`.
-        ///   Used by lifecycle events (window.open/close/focus/etc., cursor.drag)
-        ///   that have no `m_windowAnimator` animation to ride.
+        ///   Used by lifecycle events (window.open/close/focus/etc.) that
+        ///   have no `m_windowAnimator` animation to ride.
         /// • `durationMs == 0`: animator-driven — paintWindow reads progress
         ///   from `m_windowAnimator->animationFor(w)->state().value`. Used by
         ///   zone.* events that flow through `applySnapGeometry` and inherit

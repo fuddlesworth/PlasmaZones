@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimationShaders/AnimationShaderContract.h>
 #include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
 
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
@@ -440,6 +441,111 @@ private Q_SLOTS:
         const QVariantMap translated =
             AnimationShaderRegistry::translateAnimationParams(invalid, {{QStringLiteral("foo"), 1.0}});
         QVERIFY(translated.isEmpty());
+    }
+
+    // ── slotKey ──────────────────────────────────────────────────────
+    //
+    // Both the registry encoder and the two decoders (kwin-effect's
+    // per-transition pack, ShaderEffect::setShaderParams in phosphor-rendering)
+    // build customParams keys via this single helper. Pin the format —
+    // any drift here would fragment the contract across three call sites.
+
+    void testSlotKey()
+    {
+        using PhosphorAnimationShaders::AnimationShaderContract::slotKey;
+        QCOMPARE(slotKey(0, 'x'), QStringLiteral("customParams1_x"));
+        QCOMPARE(slotKey(0, 'y'), QStringLiteral("customParams1_y"));
+        QCOMPARE(slotKey(0, 'z'), QStringLiteral("customParams1_z"));
+        QCOMPARE(slotKey(0, 'w'), QStringLiteral("customParams1_w"));
+        QCOMPARE(slotKey(1, 'x'), QStringLiteral("customParams2_x"));
+        QCOMPARE(slotKey(7, 'w'), QStringLiteral("customParams8_w"));
+    }
+
+    // ── rewriteCanonicalUboToDefaultBlock ────────────────────────────
+    //
+    // The kwin-effect's classic-GL path can't bind UBOs, so it rewrites
+    // the canonical animation UBO into default-block uniforms before
+    // compile. Pin the rewriter's behaviour against the canonical layout
+    // plus the deliberate drops (qt_Matrix, qt_Opacity, _appField0/1).
+    // Used to live in an anonymous namespace inside the kwin-effect plugin
+    // where it was untestable; lifting it here makes it pinnable.
+
+    void testRewriteCanonicalUboHappyPath()
+    {
+        const QString src = QStringLiteral(
+            "#version 450\n"
+            "layout(std140, binding = 0) uniform AnimationUniforms {\n"
+            "    mat4 qt_Matrix;\n"
+            "    float qt_Opacity;\n"
+            "    float iTime;\n"
+            "    vec2 iResolution;\n"
+            "    int _appField0;\n"
+            "    int _appField1;\n"
+            "    vec4 customParams[8];\n"
+            "};\n"
+            "void main() {}\n");
+        const QByteArray rewritten = AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src);
+        const QString out = QString::fromUtf8(rewritten);
+        // Header preserved.
+        QVERIFY(out.contains(QStringLiteral("#version 450")));
+        // Layout block opening / closing dropped.
+        QVERIFY(!out.contains(QStringLiteral("layout(std140")));
+        QVERIFY(!out.contains(QStringLiteral("};")));
+        // Contract fields present as default-block uniforms.
+        QVERIFY(out.contains(QStringLiteral("uniform float iTime;")));
+        QVERIFY(out.contains(QStringLiteral("uniform vec2 iResolution;")));
+        QVERIFY(out.contains(QStringLiteral("uniform vec4 customParams[8];")));
+        // Drop list applied.
+        QVERIFY(!out.contains(QStringLiteral("qt_Matrix")));
+        QVERIFY(!out.contains(QStringLiteral("qt_Opacity")));
+        QVERIFY(!out.contains(QStringLiteral("_appField0")));
+        QVERIFY(!out.contains(QStringLiteral("_appField1")));
+        // Body preserved.
+        QVERIFY(out.contains(QStringLiteral("void main()")));
+    }
+
+    void testRewriteCanonicalUboToleratesTrailingCommentsInBlock()
+    {
+        const QString src = QStringLiteral(
+            "layout(std140, binding = 0) uniform AnimationUniforms {\n"
+            "    float iTime;     // animation progress\n"
+            "    // pure-comment line\n"
+            "    vec2 iResolution; // surface size\n"
+            "};\n");
+        const QString out = QString::fromUtf8(AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src));
+        QVERIFY(out.contains(QStringLiteral("uniform float iTime;")));
+        QVERIFY(out.contains(QStringLiteral("uniform vec2 iResolution;")));
+        // Pure-comment lines inside the block are dropped (they have no
+        // declaration to translate).
+        QVERIFY(!out.contains(QStringLiteral("pure-comment")));
+    }
+
+    void testRewriteCanonicalUboToleratesTrailingCommentOnCloseBrace()
+    {
+        // `}; // close UBO` would break a naive `trimmed == "};"` check.
+        // The rewriter strips line comments before that check.
+        const QString src = QStringLiteral(
+            "layout(std140, binding = 0) uniform AnimationUniforms {\n"
+            "    float iTime;\n"
+            "}; // close UBO\n"
+            "void main() {}\n");
+        const QString out = QString::fromUtf8(AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src));
+        QVERIFY(out.contains(QStringLiteral("uniform float iTime;")));
+        QVERIFY(!out.contains(QStringLiteral("};"))); // close-brace dropped despite the comment
+        QVERIFY(out.contains(QStringLiteral("void main()")));
+    }
+
+    void testRewriteCanonicalUboIdempotentOnSourceWithoutBlock()
+    {
+        // A shader without the canonical block (e.g. an author wrote
+        // their own classic-GL `uniform float iTime;` directly) passes
+        // through unchanged.
+        const QString src = QStringLiteral(
+            "#version 450\n"
+            "uniform float iTime;\n"
+            "void main() {}\n");
+        const QByteArray rewritten = AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src);
+        QCOMPARE(QString::fromUtf8(rewritten).trimmed(), src.trimmed());
     }
 };
 

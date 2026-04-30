@@ -56,13 +56,19 @@ namespace PhosphorAnimation {
  *     │   ├── panel.slideOut
  *     │   └── panel.popup
  *     │       ├── panel.popup.zoneSelector
+ *     │       │   ├── panel.popup.zoneSelector.show
+ *     │       │   └── panel.popup.zoneSelector.hide
  *     │       ├── panel.popup.layoutPicker
+ *     │       │   ├── panel.popup.layoutPicker.show
+ *     │       │   └── panel.popup.layoutPicker.hide
  *     │       └── panel.popup.snapAssist
+ *     │           └── panel.popup.snapAssist.show   (no .hide — destroy-on-hide)
  *     │
  *     ├── cursor             ┐ pointer / input feedback
  *     │   ├── cursor.hover
  *     │   ├── cursor.click
- *     │   └── cursor.drag
+ *     │   └── cursor.drag    (reserved — no built-in renderer wires this today;
+ *     │                       see header notes on CursorDrag)
  *     │
  *     └── shader             ┐ shader-driven composite transitions
  *         ├── shader.open
@@ -129,11 +135,33 @@ PHOSPHORANIMATION_EXPORT extern const QString PanelPopup;
 // panel.popup as a baseline. Setting `panel.popup` covers all three; overriding
 // e.g. `panel.popup.layoutPicker` lets the picker diverge while siblings stay
 // on the baseline. Walk-up inheritance handles this automatically.
+//
+// Per-leg `.show` / `.hide` leaves let users diverge the show- and hide-leg
+// shader effects (e.g. dissolve in, slide out). Both legs walk up to the
+// surface path (`panel.popup.layoutPicker`) and on to `panel.popup`, so a
+// user who only wants symmetric show/hide treatment can override at the
+// surface path and ignore the leaves entirely. SnapAssist exposes `.show`
+// only because the surface destroys-on-hide and the hide animation never
+// paints a frame.
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupZoneSelector;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupZoneSelectorShow;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupZoneSelectorHide;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPicker;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerShow;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerHide;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssist;
+PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssistShow;
 
 // cursor.*
+//
+// `CursorDrag` is reserved in the taxonomy but currently has no built-in
+// renderer. The kwin-effect's `OffscreenEffect` pipeline operates on
+// **window content** — applying a shader at drag start through that path
+// just shadows `window.move`'s shader (last-event-wins on the same trigger),
+// not "the cursor." A future cursor-decoration / drag-shadow surface would
+// give this path real semantics; until then it sits unused. Don't wire it
+// to a window-content shader transition — that creates the appearance of a
+// configurable feature that just collides with `window.move`.
 PHOSPHORANIMATION_EXPORT extern const QString Cursor;
 PHOSPHORANIMATION_EXPORT extern const QString CursorHover;
 PHOSPHORANIMATION_EXPORT extern const QString CursorClick;

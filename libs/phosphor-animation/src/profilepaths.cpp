@@ -48,8 +48,13 @@ const QString PanelSlideIn = QStringLiteral("panel.slideIn");
 const QString PanelSlideOut = QStringLiteral("panel.slideOut");
 const QString PanelPopup = QStringLiteral("panel.popup");
 const QString PanelPopupZoneSelector = QStringLiteral("panel.popup.zoneSelector");
+const QString PanelPopupZoneSelectorShow = QStringLiteral("panel.popup.zoneSelector.show");
+const QString PanelPopupZoneSelectorHide = QStringLiteral("panel.popup.zoneSelector.hide");
 const QString PanelPopupLayoutPicker = QStringLiteral("panel.popup.layoutPicker");
+const QString PanelPopupLayoutPickerShow = QStringLiteral("panel.popup.layoutPicker.show");
+const QString PanelPopupLayoutPickerHide = QStringLiteral("panel.popup.layoutPicker.hide");
 const QString PanelPopupSnapAssist = QStringLiteral("panel.popup.snapAssist");
+const QString PanelPopupSnapAssistShow = QStringLiteral("panel.popup.snapAssist.show");
 
 // cursor.*
 const QString Cursor = QStringLiteral("cursor");
@@ -112,8 +117,13 @@ QStringList allBuiltInPaths()
         PanelSlideOut,
         PanelPopup,
         PanelPopupZoneSelector,
+        PanelPopupZoneSelectorShow,
+        PanelPopupZoneSelectorHide,
         PanelPopupLayoutPicker,
+        PanelPopupLayoutPickerShow,
+        PanelPopupLayoutPickerHide,
         PanelPopupSnapAssist,
+        PanelPopupSnapAssistShow,
         Cursor,
         CursorHover,
         CursorClick,

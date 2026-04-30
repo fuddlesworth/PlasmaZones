@@ -252,15 +252,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
 
-                // cursor.drag shader transition: fires once at drag start.
-                // Conceptually a *cursor* event but applied per-window since
-                // OffscreenEffect operates per-window. The shader runs for
-                // animationDurationMs() (the user's global motion-duration
-                // setting) and then tears down via the timer scheduled inside
-                // tryBeginShaderForEvent. windowDeleted / effectsChanged
-                // cleanup handles teardown earlier on either side if the
-                // window or registry changes mid-drag.
-                tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::CursorDrag, animationDurationMs());
+                // Note: `cursor.drag` is intentionally NOT wired here. The
+                // OffscreenEffect pipeline operates on window content; firing
+                // a shader at drag start through it is indistinguishable from
+                // `window.move`, and synchronously colliding with the
+                // `windowStartUserMovedResized` lambda's `window.move` install
+                // means whichever fires second wins (it would be `window.move`
+                // here). See `ProfilePaths::CursorDrag` doc comment — the path
+                // is reserved for a future cursor-decoration / drag-shadow
+                // surface.
 
                 // Fire beginDrag async to get a daemon-authoritative policy.
                 // While the reply is pending, we
@@ -4205,8 +4205,8 @@ void PlasmaZonesEffect::postPaintScreen()
 {
     // Schedule targeted repaints for active animations instead of full-screen
     m_windowAnimator->scheduleRepaints();
-    // Lifecycle-event shader transitions (window.*, cursor.drag) ride a
-    // monotonic steady-clock timer rather than m_windowAnimator. The animator-driven
+    // Lifecycle-event shader transitions (window.*) ride a monotonic
+    // steady-clock timer rather than m_windowAnimator. The animator-driven
     // scheduleRepaints above won't request frames for them, so paintWindow
     // would only fire on actual window damage — leaving iTime stuck. Walk
     // the transition map and schedule a repaint for each window with an
@@ -4252,7 +4252,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     if (sit != m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
         const auto& transition = sit->second;
         // Two progress sources, picked by the transition's mode (see
-        // ShaderTransition's docstring). Lifecycle events (window.*, cursor.drag)
+        // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
         // progress from monotonic steady-clock elapsed; zone.* events flowed
         // through applySnapGeometry leave durationMs = 0 and ride the
@@ -4306,85 +4306,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Animation shader source pipeline (kwin-effect side)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// Animation shaders ship as `#version 450` GLSL with a canonical
-// `layout(std140, binding = 0) uniform AnimationUniforms { ... };` block
-// so the daemon's Qt-RHI / SPIR-V baker accepts them. KWin's
-// `KWin::GLShader` runs classic GL — its `setUniform(loc, val)` API
-// addresses default-block uniforms only, not UBO members, and there is
-// no compositor-side equivalent of the daemon's `m_ubo` upload. Without
-// rewriting the source, every shader's uniforms would compile fine but
-// read uninitialised memory at runtime.
-//
-// The rewriter turns the canonical UBO declaration into default-block
-// uniform lines KWin's pipeline can bind. It is intentionally line-based
-// and relies on the canonical layout in
-// `data/animations/_shared/animation_uniforms.glsl` — not a general
-// GLSL parser. If an author writes a divergent UBO declaration the
-// rewriter will silently leave it intact (and the shader won't read its
-// values on this path). The bake-check test in `tests/unit/animation/`
-// guards the canonical case.
-namespace {
-
-QByteArray rewriteAnimationShaderForKwin(const QString& expandedSource)
-{
-    QStringList output;
-    const QStringList lines = expandedSource.split(QLatin1Char('\n'));
-    bool inUboBlock = false;
-    for (const QString& line : lines) {
-        const QString trimmed = line.trimmed();
-        if (!inUboBlock) {
-            // Detect `layout(std140, binding = N) uniform NAME {` (any
-            // whitespace tolerated). Open-brace may sit on the same line
-            // or the next; the canonical animation_uniforms.glsl puts
-            // it on the same line so we only handle that case.
-            const bool isUboOpen = trimmed.startsWith(QLatin1String("layout(std140"))
-                && trimmed.contains(QLatin1String("uniform")) && trimmed.endsWith(QLatin1Char('{'));
-            if (isUboOpen) {
-                inUboBlock = true;
-                continue; // drop the opening line
-            }
-            output.append(line);
-            continue;
-        }
-        // Inside the UBO block.
-        if (trimmed == QLatin1String("};")) {
-            inUboBlock = false;
-            continue; // drop the closing line
-        }
-        // Strip trailing line comment and surrounding whitespace, then
-        // require a terminating semicolon. Skip lines that are pure
-        // comments / blank — they have no field declaration.
-        QString decl = line;
-        const int commentIdx = decl.indexOf(QLatin1String("//"));
-        if (commentIdx >= 0) {
-            decl = decl.left(commentIdx);
-        }
-        decl = decl.trimmed();
-        if (decl.isEmpty() || !decl.endsWith(QLatin1Char(';'))) {
-            continue;
-        }
-        decl.chop(1); // remove trailing ';'
-
-        // Drop fields that are not part of the animation contract on
-        // this path. KWin manages its own scene-graph transform / opacity;
-        // _appField0 / _appField1 are pure padding that exists only to
-        // keep the std140 alignment in sync with the daemon's BaseUniforms.
-        if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
-            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))) {
-            continue;
-        }
-
-        output.append(QStringLiteral("uniform %1;").arg(decl));
-    }
-    return output.join(QLatin1Char('\n')).toUtf8();
-}
-
-} // namespace
-
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs)
 {
@@ -4422,8 +4343,12 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
 
         // Convert the canonical UBO declaration to default-block
-        // uniforms KWin's classic-GL pipeline can bind.
-        const QByteArray rewritten = rewriteAnimationShaderForKwin(expanded);
+        // uniforms KWin's classic-GL pipeline can bind. Lives in the
+        // animation-shaders library (alongside the contract) so the
+        // rewriter can be unit-tested without a compositor session;
+        // see `tests/test_animationshaderregistry.cpp`.
+        const QByteArray rewritten =
+            PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(expanded);
 
         auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
                                                                             rewritten);
@@ -4471,8 +4396,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, profile.effectiveParameters());
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
         auto pull = [&](char component) -> float {
-            const QString key =
-                QStringLiteral("customParams") + QString::number(slot + 1) + QLatin1Char('_') + QLatin1Char(component);
+            const QString key = PhosphorAnimationShaders::AnimationShaderContract::slotKey(slot, component);
             const auto it = translated.constFind(key);
             if (it == translated.constEnd())
                 return 0.0f;
