@@ -1144,6 +1144,38 @@ private Q_SLOTS:
         }
     }
 
+    /// Multi-cycle round-trip: set, read, set different, read.
+    /// Mimics the AnimationEventCard combo flow where each combo
+    /// activation calls the controller and a refresh re-reads.
+    /// If a write disappears between cycles, this catches it.
+    void testShaderProfileTree_repeatedSetReadCycle()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        const QString path = QStringLiteral("osd.show");
+
+        for (int i = 0; i < 3; ++i) {
+            const QString effectId = (i == 0) ? QStringLiteral("pixelate")
+                : (i == 1)                    ? QStringLiteral("dissolve")
+                                              : QStringLiteral("glitch");
+
+            // Simulate AnimationsPageController::setShaderOverride flow
+            PhosphorAnimationShaders::ShaderProfileTree tree = settings.shaderProfileTree();
+            PhosphorAnimationShaders::ShaderProfile profile;
+            profile.effectId = effectId;
+            tree.setOverride(path, profile);
+            settings.setShaderProfileTree(tree);
+
+            // Simulate refreshShaderFromTree: re-read and resolve
+            const auto reread = settings.shaderProfileTree();
+            const auto resolved = reread.resolve(path);
+            QVERIFY2(resolved.effectId.has_value(),
+                     qPrintable(QStringLiteral("cycle %1: effectId not engaged").arg(i)));
+            QCOMPARE(*resolved.effectId, effectId);
+        }
+    }
+
     void testAutoAssignAllLayouts_defaultSetterRoundtrip()
     {
         IsolatedConfigGuard guard;

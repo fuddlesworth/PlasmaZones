@@ -6,6 +6,8 @@
 #include "../core/isettings.h"
 #include "dbusutils.h"
 
+#include <QLoggingCategory>
+
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -29,6 +31,8 @@
 #include <algorithm>
 
 namespace PlasmaZones {
+
+Q_LOGGING_CATEGORY(lcAnimShader, "plasmazones.animations.shader")
 
 namespace {
 
@@ -735,7 +739,12 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
     if (!m_settings || path.isEmpty())
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
-    return shaderProfileToMap(tree.resolve(path));
+    const auto profile = tree.resolve(path);
+    const auto map = shaderProfileToMap(profile);
+    qCInfo(lcAnimShader).nospace() << "resolvedShaderProfile path=" << path << " hasOverride=" << tree.hasOverride(path)
+                                   << " resolved=" << profile.effectId.value_or(QStringLiteral("(unset)"))
+                                   << " mapEffectId=" << map.value(QStringLiteral("effectId")).toString();
+    return map;
 }
 
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
@@ -760,8 +769,15 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         profile.parameters = parameters;
 
     ShaderProfileTree tree = m_settings->shaderProfileTree();
+    qCInfo(lcAnimShader).nospace() << "setShaderOverride path=" << path << " effectId=" << effectId
+                                   << " preWriteHasOverride=" << tree.hasOverride(path);
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
+
+    // Verify the write landed before notifyReload runs.
+    const auto verify = m_settings->shaderProfileTree();
+    qCInfo(lcAnimShader).nospace() << "  postWrite hasOverride=" << verify.hasOverride(path)
+                                   << " resolved=" << verify.resolve(path).effectId.value_or(QStringLiteral("(unset)"));
 
     // Cross-process push: the daemon's Settings doesn't auto-reread
     // its config file, and the local setShaderProfileTree call above
@@ -771,6 +787,11 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // shaderProfileTreeChanged → applyShaderProfilesToAnimator runs
     // and the next animation tick uses the new shader.
     DaemonDBus::notifyReload();
+
+    // Verify the write SURVIVED the boomerang.
+    const auto postBoomerang = m_settings->shaderProfileTree();
+    qCInfo(lcAnimShader).nospace() << "  postReload hasOverride=" << postBoomerang.hasOverride(path) << " resolved="
+                                   << postBoomerang.resolve(path).effectId.value_or(QStringLiteral("(unset)"));
 
     Q_EMIT shaderProfileChanged(path);
     Q_EMIT pendingChangesChanged();
