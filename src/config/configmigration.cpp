@@ -793,10 +793,10 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
     }
     if (!profile.isEmpty()) {
-        // Stored as a JSON-encoded string under the animation-profile
-        // key — matches the schema's QMetaType::QString declaration.
-        animations[ConfigDefaults::animationProfileKey()] =
-            QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
+        // Persist as a nested JSON object — matches the current schema's
+        // QMetaType::QVariantMap declaration. Older Settings::Store reads
+        // tolerate both shapes via the legacy-string fallback.
+        animations[ConfigDefaults::animationProfileKey()] = profile;
     }
     if (!animations.isEmpty())
         root[ConfigDefaults::animationsGroup()] = animations;

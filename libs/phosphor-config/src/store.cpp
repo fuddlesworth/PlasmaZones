@@ -511,6 +511,37 @@ QColor readTyped<QColor>(IGroup& g, const KeyDef& def)
 {
     return g.readColor(def.key, def.defaultValue.value<QColor>());
 }
+template<>
+QVariantMap readTyped<QVariantMap>(IGroup& g, const KeyDef& def)
+{
+    // Absent key → schema default. Mirrors the per-type readBool/readInt/...
+    // contract where the default kicks in only when the key isn't on disk.
+    if (!g.hasKey(def.key)) {
+        return def.defaultValue.toMap();
+    }
+    // Native-JSON read first; fall back to parsing a legacy stringified
+    // JSON value (the old QString-backed storage shape) so existing configs
+    // keep working without an explicit migration step.
+    const QJsonValue v = g.readJson(def.key);
+    if (v.isObject()) {
+        return v.toObject().toVariantMap();
+    }
+    const QString raw = g.readString(def.key);
+    if (!raw.isEmpty()) {
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+        if (err.error == QJsonParseError::NoError && doc.isObject()) {
+            return doc.object().toVariantMap();
+        }
+    }
+    // Key is present but unreadable as a map (malformed legacy string,
+    // wrong JSON type, etc.). Return an empty map rather than the schema
+    // default — the caller can then decide whether to substitute project
+    // defaults or library defaults, matching the pre-QVariantMap-storage
+    // behaviour where an unreadable QString blob propagated as an empty
+    // parse result.
+    return QVariantMap{};
+}
 
 template<typename T>
 T readDeclared(const Schema& schema, IBackend* backend, const QString& group, const QString& key, T fallback)
@@ -557,6 +588,12 @@ template<>
 QColor Store::read<QColor>(const QString& group, const QString& key) const
 {
     return readDeclared<QColor>(d->schema, d->backend, group, key, QColor());
+}
+
+template<>
+QVariantMap Store::read<QVariantMap>(const QString& group, const QString& key) const
+{
+    return readDeclared<QVariantMap>(d->schema, d->backend, group, key, QVariantMap{});
 }
 
 // The explicit specializations above ARE the definitions — no separate

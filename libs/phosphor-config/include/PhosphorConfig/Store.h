@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariant>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -68,8 +69,8 @@ public:
     T read(const QString& group, const QString& key) const
     {
         static_assert(sizeof(T) == 0,
-                      "PhosphorConfig::Store::read<T> is only implemented for QString, int, bool, double, QColor — "
-                      "extend store.cpp with a new specialization to add another type.");
+                      "PhosphorConfig::Store::read<T> is only implemented for QString, int, bool, double, "
+                      "QColor, QVariantMap — extend store.cpp with a new specialization to add another type.");
         return T();
     }
 
@@ -153,5 +154,7 @@ template<>
 PHOSPHORCONFIG_EXPORT double Store::read<double>(const QString&, const QString&) const;
 template<>
 PHOSPHORCONFIG_EXPORT QColor Store::read<QColor>(const QString&, const QString&) const;
+template<>
+PHOSPHORCONFIG_EXPORT QVariantMap Store::read<QVariantMap>(const QString&, const QString&) const;
 
 } // namespace PhosphorConfig
