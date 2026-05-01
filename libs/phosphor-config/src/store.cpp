@@ -184,6 +184,12 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
                 return QVariant(doc.array().toVariantList());
             }
         }
+        // Absent or malformed → schema default. Some consumers
+        // (settings/validation tests) explicitly assert default-on-corrupt
+        // for trigger lists, so this stays default-eager. The typed
+        // `Store::read<QVariantMap>` path uses a stricter
+        // absent-vs-malformed distinction for the Settings layer's own
+        // needs.
         return defaultValue;
     }
     case QMetaType::QVariantMap: {

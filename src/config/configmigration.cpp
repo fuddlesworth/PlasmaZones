@@ -793,10 +793,18 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
     }
     if (!profile.isEmpty()) {
-        // Persist as a nested JSON object — matches the current schema's
-        // QMetaType::QVariantMap declaration. Older Settings::Store reads
-        // tolerate both shapes via the legacy-string fallback.
-        animations[ConfigDefaults::animationProfileKey()] = profile;
+        // v1→v2 writes a stringified JSON blob even though the live schema
+        // now stores AnimationProfile as a nested QVariantMap. Stringifying
+        // here keeps the migrated value as a single scalar leaf so the
+        // schema/migration cross-check
+        // (`testSchemaCoversEveryMigrationDestinationKey`) sees one
+        // declared key (`Animations/AnimationProfile`) instead of treating
+        // the nested object as a sub-group of synthetic per-field keys.
+        // The Settings layer's `Store::read<QVariantMap>` legacy-string
+        // fallback parses this on first load and the next save normalises
+        // it to a nested object.
+        animations[ConfigDefaults::animationProfileKey()] =
+            QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
     }
     if (!animations.isEmpty())
         root[ConfigDefaults::animationsGroup()] = animations;

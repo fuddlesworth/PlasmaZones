@@ -742,7 +742,8 @@ PhosphorAnimation::Profile Settings::animationProfile() const
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
-    // Equality is a BYTE comparison against the current disk blob, not a
+    // Change detection compares the merged QJsonObject against the
+    // current stored blob via QJsonObject::operator==, NOT through a
     // semantic `Profile::operator==` check. The semantic comparison hits
     // two traps in practice:
     //
@@ -755,12 +756,12 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     //   2. Inversely, when the blob round-trips cleanly the new Profile
     //      may differ slightly (e.g. `effective*` defaults vs unset
     //      optionals) and the semantic `operator==` returns `false` even
-    //      though the on-disk bytes would be unchanged — firing a
-    //      signal storm every call.
+    //      though the stored blob would be unchanged — firing a signal
+    //      storm every call.
     //
-    // Comparing canonical compact-JSON serialisations of the merged blob
-    // sidesteps both: the only thing that fires signals is a real change
-    // to what gets written to disk.
+    // QJsonObject equality at the blob level sidesteps both: the only
+    // thing that fires signals is a real change to what gets written
+    // to disk.
     //
     // Per-field signal emission still goes through the parsed prev /
     // new Profiles because each `xxxChanged` signal describes an
@@ -791,8 +792,8 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 
     if (merged == current) {
         // Nothing to write — skip both the store write and every signal.
-        // Guards the slider-drag-at-30-Hz signal-storm case: a value
-        // that serialises to the same blob must not wake any observer.
+        // Guards the slider-drag-at-30-Hz signal-storm case: a merge that
+        // produces a structurally identical object must not wake observers.
         return;
     }
 
