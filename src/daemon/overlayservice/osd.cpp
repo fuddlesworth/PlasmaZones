@@ -139,6 +139,13 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
         qCWarning(lcOverlay) << "Failed to get notification window for layout OSD";
         return false;
     }
+
+    // Force-hide any zone selector on this screen so a fading-out selector
+    // doesn't stack translucently behind the incoming OSD.
+    if (state->zoneSelectorSurface && state->zoneSelectorSurface->isLogicallyShown()) {
+        state->zoneSelectorSurface->hide();
+    }
+
     window = state->notificationWindow;
     outSurface = state->notificationSurface;
 
@@ -558,6 +565,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         qCDebug(lcOverlay) << "No notification window for navigation OSD on screen=" << effectiveId;
         return;
     }
+
+    if (navState->zoneSelectorSurface && navState->zoneSelectorSurface->isLogicallyShown()) {
+        navState->zoneSelectorSurface->hide();
+    }
+
     auto* window = navState->notificationWindow;
     auto* navSurface = navState->notificationSurface;
 

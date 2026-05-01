@@ -637,19 +637,14 @@ private Q_SLOTS:
             500));
 
         // Manually pin the target opacity to a mid-fade value to simulate
-        // a hide caught mid-flight. We're not running a real hide (timing
-        // would race the test); the contract is "beginShow reads live
-        // opacity, doesn't slam to 0".
+        // a hide caught mid-flight. beginShow always starts from 0.0 to
+        // prevent ghost frames when geometry changes between hide and show
+        // (the compositor would paint stale content at partial opacity).
         target->setOpacity(0.5);
 
-        // The show path's runLeg sets the target opacity to the computed
-        // fromOpacity synchronously before the first tick — so right after
-        // surface->show(), opacity must NOT be 0 (the pre-fix bug). Since
-        // 0.5 < 1.0, the supersession-aware path should keep it at 0.5
-        // and fade up.
         surface->show();
         const qreal opacityAfterShow = target->opacity();
-        QVERIFY2(opacityAfterShow > 0.001, "beginShow superseding a partial state must not slam opacity to 0");
+        QCOMPARE(opacityAfterShow, 0.0);
 
         // And it should still finish at 1.0.
         QVERIFY(waitFor(

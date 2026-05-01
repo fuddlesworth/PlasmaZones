@@ -428,16 +428,18 @@ public:
 
         PhosphorAnimation::IMotionClock* clock = &m_clock;
 
-        const bool hasScaleLeg = !scaleProfilePath.isEmpty();
-
-        // Resolve up front so `legCount` counts only legs that will
-        // actually start — a typo'd shaderEffectId that doesn't reach
-        // start() would otherwise leave pendingLegs hanging mid-show.
+        // Resolve shader up front so legCount is accurate.
         PhosphorAnimationShaders::AnimationShaderEffect resolvedShaderEff;
         if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
             resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
         }
         const bool hasShaderLeg = resolvedShaderEff.isValid();
+
+        // When a shader leg is active, it IS the transition — suppress
+        // the scale leg so the built-in popin motion doesn't fight the
+        // shader's own visual. Matches the Niri model where custom
+        // shaders replace the default animation, not layer on top.
+        const bool hasScaleLeg = !scaleProfilePath.isEmpty() && !hasShaderLeg;
         const int legCount = 1 + (hasScaleLeg ? 1 : 0) + (hasShaderLeg ? 1 : 0);
 
         // Install the bookkeeping slot BEFORE the synchronous pre-
@@ -793,16 +795,13 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
     }
     const Config cfg = d->configFor(surface->config().role);
 
-    // Supersession-aware starting state. If the previous animation
-    // left the target mid-fade, pick up from there for a continuous
-    // visual; otherwise (fresh first show / past terminal state) fall
-    // back to the configured "from" so we actually run an animation
-    // rather than a no-op fade-from-1-to-1. Scale supersession is
-    // one-sided: liveScale > 1.0 (e.g. an external overshoot) falls
-    // back to cfg.showScaleFrom — surfaces that need overshoot-from-
-    // above must drive scale themselves and skip cfg.showScaleProfile.
-    const qreal liveOpacity = rootItem ? rootItem->opacity() : 1.0;
-    const qreal fromOpacity = (liveOpacity < 1.0) ? liveOpacity : 0.0;
+    // Always start from fully transparent. Picking up from a mid-hide
+    // opacity value causes a ghost frame: the surface is visible at
+    // partial opacity with stale geometry while the compositor processes
+    // the new layer-shell configure. Starting from 0.0 is visually
+    // indistinguishable for the typical 150ms animation and eliminates
+    // the flash on rapid re-show (e.g. layout switch during OSD fade-out).
+    const qreal fromOpacity = 0.0;
 
     const qreal toScale = 1.0;
     qreal fromScale = 1.0;
