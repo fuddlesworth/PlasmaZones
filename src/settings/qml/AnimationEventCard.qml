@@ -83,6 +83,15 @@ Item {
         _inheritRev;
         return settingsController.animationsPage.resolvedProfile(root.eventPath);
     }
+    // True only for event paths the daemon's overlay service actually
+    // consumes as a shader-leg surface. Gates the shader picker, the
+    // inline param editor, and the inheritance "Shader: X" banner so
+    // a user can't pick a shader on an unsupported path (e.g. the
+    // "All Panel Events" parent or `panel.slideIn`) and silently
+    // persist a dead override that the daemon resolver would shadow
+    // any user-intended setting with via deeper-leaf-wins overlay.
+    // Source-of-truth list: `src/core/animationshadersupportedpaths.h`.
+    readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
@@ -218,6 +227,16 @@ Item {
     }
 
     SettingsCard {
+        // ── Shader effect picker (independent of timing override) ─
+        // Independent of timing override — users can drop a shader on
+        // an event without touching its timing. The visibility gate
+        // `root._shaderLegSupported` is declared on the card root so
+        // it's reachable from every nested binding below; declaring
+        // it here would scope it to this ColumnLayout and the outer
+        // `root.<id>` references would silently resolve to undefined
+        // (defaulting `visible:` to true and showing the picker on
+        // every event regardless of daemon support).
+
         id: card
 
         anchors.fill: parent
@@ -233,17 +252,6 @@ Item {
         }
 
         contentItem: ColumnLayout {
-            // ── Shader effect picker (independent of timing override) ─
-            // Independent of timing override — users can drop a shader on
-            // an event without touching its timing. Gated on the daemon
-            // actually consuming this event path as a shader leg: paths
-            // outside the supported set (see
-            // `src/core/animationshadersupportedpaths.h`) would persist
-            // a shader assignment that never produces a visible effect,
-            // which previously read as "all shaders look the same" to
-            // users testing on `window.*` / `zone.*` / `widget.*` events.
-            readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
-
             spacing: Kirigami.Units.smallSpacing
 
             // ── Inheritance info ──────────────────────────────────────
