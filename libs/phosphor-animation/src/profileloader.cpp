@@ -5,18 +5,23 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/detail/BatchedSink.h>
+#include <PhosphorAnimation/Profile.h>
 
 #include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 #include <PhosphorFsLoader/JsonEnvelopeValidator.h>
 #include <PhosphorFsLoader/ParsedEntry.h>
 
 #include <QDir>
+#include <QHash>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QPair>
 #include <QUuid>
 
 #include <algorithm>
+#include <any>
+#include <utility>
 
 namespace PhosphorAnimation {
 
@@ -24,19 +29,30 @@ namespace {
 Q_LOGGING_CATEGORY(lcProfileLoader, "phosphoranimation.profileloader")
 } // namespace
 
-class ProfileLoader::Sink : public detail::BatchedSink<Profile>
+class ProfileLoader::Sink : public PhosphorFsLoader::IDirectoryLoaderSink
 {
 public:
     Sink(PhosphorProfileRegistry& reg, CurveRegistry& curveReg, QString owner)
-        : detail::BatchedSink<Profile>(lcProfileLoader(), std::move(owner))
-        , registry(&reg)
+        : registry(&reg)
         , curveRegistry(&curveReg)
+        , m_ownerTag(std::move(owner))
     {
     }
 
     PhosphorProfileRegistry* registry; ///< pinned at ctor
     CurveRegistry* curveRegistry; ///< pinned at ctor — used by parseFile
-    QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
+    QHash<QString, ProfileLoader::Entry> entries; ///< path -> entry
+
+    /// Parent-loader-visible flag — read by the lambda bound to
+    /// `DirectoryLoader::entriesChanged` to decide whether the consumer
+    /// signal (`profilesChanged`) fires. Reset to false at the start of
+    /// every `commitBatch`; flipped to true on any tracked-state change.
+    bool lastBatchChanged = false;
+
+    const QString& ownerTag() const
+    {
+        return m_ownerTag;
+    }
 
     std::optional<PhosphorFsLoader::ParsedEntry> parseFile(const QString& filePath) override
     {
@@ -61,51 +77,81 @@ public:
         return parsed;
     }
 
-protected:
-    /// Profile equality is the schema-level value comparison defined
-    /// by `Profile::operator==`. The diff suppresses no-op rescans
-    /// (re-parse of files whose contents didn't change) so the
-    /// consumer-facing `profilesChanged` signal mirrors actual change.
-    bool payloadEqual(const Profile& a, const Profile& b) const override
+    void commitBatch(const QStringList& removedKeys,
+                     const QList<PhosphorFsLoader::ParsedEntry>& currentEntries) override
     {
-        return a == b;
-    }
+        lastBatchChanged = false;
 
-    void commitToRegistry(const QStringList& removedKeys, const QHash<QString, Profile>& currentMap,
-                          const QStringList& changedOrAddedKeys) override
-    {
+        // Walk removals first so a re-add of the same key on the same
+        // pass sees a clean snapshot and registers fresh.
+        for (const QString& key : removedKeys) {
+            const bool hadPayload = m_lastCommittedPayloads.remove(key) > 0;
+            const bool hadSources = m_lastCommittedSources.remove(key) > 0;
+            if (hadPayload || hadSources) {
+                lastBatchChanged = true;
+            }
+            entries.remove(key);
+        }
+
+        // Build the post-rescan profile map for the bulk registry call,
+        // diffing each entry against the snapshot to set lastBatchChanged.
+        QHash<QString, Profile> currentMap;
+        currentMap.reserve(currentEntries.size());
+
+        for (const auto& parsed : currentEntries) {
+            const auto* payload = std::any_cast<Profile>(&parsed.payload);
+            if (!payload) {
+                qCWarning(lcProfileLoader) << "commitBatch: payload type-mismatch for" << parsed.key;
+                continue;
+            }
+
+            // Payload diff: Profile::operator== value comparison.
+            const auto snapshotIt = m_lastCommittedPayloads.constFind(parsed.key);
+            const bool payloadChanged = snapshotIt == m_lastCommittedPayloads.constEnd() || !(*snapshotIt == *payload);
+
+            // Source-metadata diff: when the user copy is deleted and the
+            // system file re-emerges with byte-identical content, the
+            // payload stays equal but source paths shift — the consumer
+            // signal must still fire so settings UIs update.
+            const QPair<QString, QString> currentSources{parsed.sourcePath, parsed.systemSourcePath};
+            const auto sourcesIt = m_lastCommittedSources.constFind(parsed.key);
+            const bool sourcesChanged = sourcesIt == m_lastCommittedSources.constEnd() || *sourcesIt != currentSources;
+
+            if (payloadChanged) {
+                m_lastCommittedPayloads.insert(parsed.key, *payload);
+                lastBatchChanged = true;
+            }
+            if (sourcesChanged) {
+                m_lastCommittedSources.insert(parsed.key, currentSources);
+                lastBatchChanged = true;
+            }
+
+            // Mirror the parsed entry into the tracked entries map.
+            ProfileLoader::Entry e;
+            e.path = parsed.key;
+            e.sourcePath = parsed.sourcePath;
+            e.systemSourcePath = parsed.systemSourcePath;
+            entries.insert(parsed.key, std::move(e));
+
+            currentMap.insert(parsed.key, *payload);
+        }
+
+        // Single reloadFromOwner -> one profilesReloaded signal regardless
+        // of how many files changed (decision W: coalesce). The partitioning
+        // ensures daemon-direct entries at other paths survive this rescan.
         Q_ASSERT(registry);
-        Q_UNUSED(removedKeys);
-        Q_UNUSED(changedOrAddedKeys);
-
-        // Single reloadFromOwner → one profilesReloaded signal regardless
-        // of how many files changed (decision W: coalesce multiple
-        // filesystem events into one consumer-visible batch). The
-        // partitioning ensures daemon-direct entries at other paths
-        // survive this rescan — `reloadFromOwner` only touches keys in
-        // this loader's owner partition, so the daemon's settings-fanned
-        // profiles, another loader's entries, etc. are left alone.
-        // Bulk-replace handles additions and removals atomically; the
-        // base's `removedKeys` and `changedOrAddedKeys` are redundant
-        // here and intentionally unused.
-        registry->reloadFromOwner(ownerTag(), currentMap);
+        registry->reloadFromOwner(m_ownerTag, currentMap);
     }
 
-    void onTrackEntry(const QString& key, const Profile& payload, const QString& sourcePath,
-                      const QString& systemSourcePath) override
-    {
-        Q_UNUSED(payload);
-        ProfileLoader::Entry e;
-        e.path = key;
-        e.sourcePath = sourcePath;
-        e.systemSourcePath = systemSourcePath;
-        entries.insert(key, std::move(e));
-    }
+private:
+    QString m_ownerTag;
 
-    void onUntrackEntry(const QString& key) override
-    {
-        entries.remove(key);
-    }
+    /// Snapshot of the last-committed payload per key, used for diffing.
+    QHash<QString, Profile> m_lastCommittedPayloads;
+
+    /// Snapshot of (sourcePath, systemSourcePath) per key, used for
+    /// the source-metadata diff (Phase 1c+1d fix).
+    QHash<QString, QPair<QString, QString>> m_lastCommittedSources;
 };
 
 namespace {

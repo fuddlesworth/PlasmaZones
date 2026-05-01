@@ -212,7 +212,7 @@ QStringList DirectoryLoader::JsonScanStrategy::performScan(const QStringList& di
         // count, not on dir boundary). For surviving entries that
         // previously recorded a system shadow, carry the prior
         // `systemSourcePath` forward instead of clearing it — clearing
-        // would surface in `BatchedSink` as a metadata-only diff and
+        // would surface in the sink as a metadata-only diff and
         // cause the consumer signal to fan out spuriously every time
         // the cap trips with no actual content change. The next un-
         // tripped scan re-derives the path correctly; until then, the

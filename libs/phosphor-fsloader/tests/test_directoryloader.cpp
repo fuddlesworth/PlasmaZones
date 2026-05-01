@@ -615,7 +615,7 @@ private Q_SLOTS:
     /// When the entry-count cap trips during the user-dir pass, the
     /// system dirs aren't fully scanned and surviving entries that
     /// previously had a `systemSourcePath` recorded must NOT have it
-    /// cleared — clearing surfaces in `BatchedSink` as a metadata-only
+    /// cleared — clearing surfaces in the sink as a metadata-only
     /// diff and produces spurious consumer-signal fan-out for entries
     /// whose payloads are actually unchanged. The fix is to carry the
     /// prior `systemSourcePath` forward on cap-trip; the next un-tripped
