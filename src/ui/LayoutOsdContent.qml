@@ -131,6 +131,14 @@ Item {
     Rectangle {
         id: container
 
+        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
+        // walks the visual tree for a `shaderAnchor: true` property tag
+        // and parents the transition shader (sized to this item, layer-
+        // enabled here) so pixelate / dissolve / glitch / etc. operate
+        // on this card's pixels rather than the fullscreen wayland
+        // surface backing the OSD host.
+        property bool shaderAnchor: true
+
         anchors.centerIn: parent
         width: previewContainer.width + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3

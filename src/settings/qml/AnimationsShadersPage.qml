@@ -17,12 +17,17 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Loaded from a Q_INVOKABLE; the Connections block below manually
+    // refreshes it on shaderEffectsChanged. See AnimationEventCard.qml's
+    // shaderCombo for the same pattern (Q_INVOKABLE results aren't
+    // reactive across the QML binding boundary).
     property var effectList: settingsController.animationsPage.availableShaderEffects()
     // Cached at component creation so the binding doesn't re-invoke
-    // userShaderDirectory() on every paint — the Q_INVOKABLE runs
-    // QStandardPaths::writableLocation + mkpath, which is wasteful to
-    // hit per-frame. The directory is stable for the process lifetime.
-    readonly property string _userShaderDir: settingsController.animationsPage.userShaderDirectory()
+    // userShaderDirectoryPath() on every paint. Pure path accessor (no
+    // mkpath side effect; see ensureUserShaderDirectory() / the Open
+    // Directory button below for the create-if-missing path). The
+    // directory is stable for the process lifetime.
+    readonly property string _userShaderDir: settingsController.animationsPage.userShaderDirectoryPath()
 
     contentHeight: content.implicitHeight
     clip: true

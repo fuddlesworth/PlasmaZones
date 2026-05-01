@@ -239,19 +239,28 @@ Window {
         // Conditional anchors with undefined don't reliably unset in QML
         QFZCommon.PopupFrame {
             // Scroll fade indicators — show gradient edges when content overflows
+            // Shader-anchor opt-in: SurfaceAnimator's shader leg walks
+            // its target's visual children for a `shaderAnchor: true`
+            // property tag and parents the transition shader to whatever
+            // it finds (sized after it). Without this, the wayland
+            // surface is fullscreen and the shader (pixelate / glitch /
+            // dissolve / …) renders across the whole screen instead of
+            // the visible selector card. The tag is a *property* rather
+            // than an objectName so distinct surfaces (LayoutPicker / OSDs /
+            // ZoneSelector) can each carry their own anchor without
+            // collision under any shared QObject traversal — the
+            // animator narrows lookup to the surface's own contentItem
+            // subtree but the property keeps the boolean nature of the
+            // tag explicit.
 
             id: container
 
-            // Shader-anchor opt-in: SurfaceAnimator's shader leg looks up
-            // an `objectName: "shaderAnchor"` child of the animator target
-            // and parents the transition shader to it (sized after it).
-            // Without this, the wayland surface is fullscreen and the
-            // shader (pixelate / glitch / dissolve / …) renders across
-            // the whole screen instead of the visible selector card.
-            // Original objectName was `zoneSelectorContainer` — see
-            // selector_update.cpp which polish()s this item by name. The
-            // rename is matched in lockstep there; both consumers use
-            // the new canonical animator-hook name.
+            property bool shaderAnchor: true
+
+            // The `shaderAnchor` objectName remains for selector_update.cpp's
+            // independent `findQmlItemByName` polish() pass — that pass
+            // walks the same item by name and is unrelated to the
+            // animator's property-based lookup.
             objectName: "shaderAnchor"
             width: root.containerWidth
             height: root.containerHeight

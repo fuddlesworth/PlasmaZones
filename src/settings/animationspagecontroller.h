@@ -19,7 +19,9 @@ class AnimationShaderRegistry;
 
 namespace PlasmaZones {
 
+class AnimationPresetLibrary;
 class ISettings;
+class MotionSetStore;
 
 /// Q_PROPERTY surface for the "Animations" settings page.
 ///
@@ -46,6 +48,14 @@ class ISettings;
 /// shipped + user overrides) with library-default fill-in. When the
 /// registry isn't published (unit tests without bootstrap), it falls
 /// back to walking the user dir directly.
+///
+/// ## Composition
+///
+/// The controller delegates persistence-heavy concerns to two child
+/// QObjects: `AnimationPresetLibrary` (preset CRUD) and `MotionSetStore`
+/// (motion-set CRUD). Their signals are forwarded to the controller's
+/// own signals via `connect()` so QML rebinds without poking at the
+/// sub-services directly.
 class AnimationsPageController : public QObject
 {
     Q_OBJECT
@@ -63,6 +73,7 @@ public:
     /// @param settings Optional — when null, shader-tree CRUD is a no-op.
     explicit AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry = nullptr,
                                       ISettings* settings = nullptr, QObject* parent = nullptr);
+    ~AnimationsPageController() override;
 
     qreal springOmegaMin() const
     {
@@ -109,7 +120,9 @@ public:
     /// root. Useful for "snap → zone → global" breadcrumbs.
     Q_INVOKABLE QStringList parentChain(const QString& path) const;
 
-    /// True iff a user override file exists for @p path.
+    /// True iff a user override file exists for @p path. Returns false
+    /// for any @p path that is not a built-in event path (rejecting
+    /// traversal attempts).
     Q_INVOKABLE bool hasOverride(const QString& path) const;
 
     /// Per-path override file content as a QVariantMap. Empty map when
@@ -127,13 +140,15 @@ public:
     /// follows `Profile::toJson()` shape (curve / duration / minDistance /
     /// sequenceMode / staggerInterval / presetName); a top-level `name`
     /// field is added automatically. Emits `overrideChanged(path)` on
-    /// success.
+    /// success. Rejects any @p path that isn't a built-in event path —
+    /// path traversal (`../etc/passwd`) and arbitrary names cannot reach
+    /// the disk.
     /// @return true on a successful disk write.
     Q_INVOKABLE bool setOverride(const QString& path, const QVariantMap& profileJson);
 
     /// Delete the override file at @p path. Emits `overrideChanged(path)`
-    /// when a file actually existed and was removed. @return true when a
-    /// file was removed.
+    /// when a file actually existed and was removed. Same path validation
+    /// as `setOverride`. @return true when a file was removed.
     Q_INVOKABLE bool clearOverride(const QString& path);
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
@@ -149,9 +164,37 @@ public:
     /// on a successful disk write. Emits `userPresetsChanged()`.
     Q_INVOKABLE bool addUserPreset(const QString& name, const QVariantMap& profileJson);
 
-    /// Delete the user preset whose `name` field matches @p name.
-    /// @return true on a successful delete. Emits `userPresetsChanged()`.
+    /// Delete the user preset whose `name` field matches @p name. Will
+    /// never delete an override file even when its `name` field happens
+    /// to match. @return true on a successful delete. Emits
+    /// `userPresetsChanged()`.
     Q_INVOKABLE bool removeUserPreset(const QString& name);
+
+    // ── Motion sets (Phase 7) ────────────────────────────────────────
+
+    /// Lists the user's saved motion-set files. Each row:
+    ///   { name, description, overrideCount, slug }
+    Q_INVOKABLE QVariantList availableMotionSets() const;
+
+    /// Reads the motion-set file at @p name and writes one per-path
+    /// override file for every entry. Atomic: validates every entry
+    /// up-front; rejects the whole set on any malformed entry rather
+    /// than committing partial state. "Merge" semantics: existing
+    /// overrides at paths NOT in the set are preserved. Emits
+    /// `overrideChanged()` for each path written and a single
+    /// `pendingChangesChanged()` at the end. @return true on
+    /// successful read + per-path writes.
+    Q_INVOKABLE bool applyMotionSet(const QString& name);
+
+    /// Snapshots the current set of per-path override files into a
+    /// motion-set JSON under
+    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. @p
+    /// description is freeform metadata for the UI; pass an empty
+    /// string to omit.
+    Q_INVOKABLE bool saveCurrentAsMotionSet(const QString& name, const QString& description);
+
+    /// Delete a saved motion-set file.
+    Q_INVOKABLE bool removeMotionSet(const QString& name);
 
     // ── Shader effects (Phase 6) ─────────────────────────────────────
 
@@ -167,11 +210,18 @@ public:
     /// per-event shader-param editor.
     Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
 
-    /// XDG-writable user shader directory; create if missing.
-    Q_INVOKABLE QString userShaderDirectory() const;
+    /// XDG-writable user shader directory path (no side effects). Use
+    /// `ensureUserShaderDirectory()` if you also need it created on disk.
+    Q_INVOKABLE QString userShaderDirectoryPath() const;
 
-    /// Open the user shader directory in the system file manager.
-    Q_INVOKABLE void openUserShaderDirectory() const;
+    /// Ensure the user shader directory exists; create it if missing.
+    /// @return true when the directory exists (newly created or already
+    /// present).
+    Q_INVOKABLE bool ensureUserShaderDirectory();
+
+    /// Open the user shader directory in the system file manager,
+    /// creating it first if missing.
+    Q_INVOKABLE void openUserShaderDirectory();
 
     /// Per-event shader override read.
     /// @return `{ effectId: QString, parameters: QVariantMap }` or empty
@@ -184,11 +234,15 @@ public:
 
     /// Assign @p effectId (with optional @p parameters) to @p path.
     /// An empty @p effectId clears the assignment at this path,
-    /// equivalent to `clearShaderOverride(path)`.
+    /// equivalent to `clearShaderOverride(path)`. Emits
+    /// `pendingChangesChanged()` whenever the call actually changed
+    /// state.
     Q_INVOKABLE bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
 
     /// Remove the shader override at @p path; ancestors take over via
-    /// `ShaderProfileTree::resolve` walk-up.
+    /// `ShaderProfileTree::resolve` walk-up. Emits
+    /// `pendingChangesChanged()` whenever the call actually changed
+    /// state.
     Q_INVOKABLE bool clearShaderOverride(const QString& path);
 
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
@@ -204,7 +258,11 @@ Q_SIGNALS:
     /// Emitted on any successful add/removeUserPreset.
     void userPresetsChanged();
 
-    /// Emitted on any successful set/clearShaderOverride.
+    /// Emitted on set/clearShaderOverride AND on any full settings
+    /// reload (`ISettings::shaderProfileTreeChanged`). The path-agnostic
+    /// emission on reload is the cheapest way to refresh every visible
+    /// event card after Discard / Settings::load() — diffing the tree
+    /// would be more expensive than just rebinding.
     void shaderProfileChanged(const QString& path);
 
     /// Re-emit of `AnimationShaderRegistry::effectsChanged` so QML can
@@ -221,36 +279,14 @@ Q_SIGNALS:
     void pendingChangesChanged();
 
 public:
-    // ── Motion sets (Phase 7) ────────────────────────────────────────
-
-    /// Lists the user's saved motion-set files. Each row:
-    ///   { name, description, overrideCount, slug }
-    Q_INVOKABLE QVariantList availableMotionSets() const;
-
-    /// Reads the motion-set file at @p name and writes one per-path
-    /// override file for every entry. "Merge" semantics: existing
-    /// overrides at paths NOT in the set are preserved. Emits
-    /// `overrideChanged()` for each path written. @return true on
-    /// successful read + per-path writes.
-    Q_INVOKABLE bool applyMotionSet(const QString& name);
-
-    /// Snapshots the current set of per-path override files into a
-    /// motion-set JSON under
-    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. @p
-    /// description is freeform metadata for the UI; pass an empty
-    /// string to omit.
-    Q_INVOKABLE bool saveCurrentAsMotionSet(const QString& name, const QString& description);
-
-    /// Delete a saved motion-set file.
-    Q_INVOKABLE bool removeMotionSet(const QString& name);
-
     // ── Save / Discard integration (Phase 8) ─────────────────────────
     //
     // Animation edits write to disk immediately for live preview, but we
     // still want the standard "Discard" button to revert this session's
     // changes. The controller keeps a per-file snapshot of pre-edit
     // content (or "did not exist" sentinel); commit clears it, revert
-    // restores files from it.
+    // restores files from it. Kept in its own block as the dedicated
+    // SettingsController integration surface.
 
     /// True iff there are unsaved changes the user could still discard.
     bool hasPendingChanges() const;
@@ -263,14 +299,20 @@ public:
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
     /// `motionSetsChanged`/`shaderProfileChanged` so QML refreshes.
+    /// Failures (e.g. permission errors during file restore) are
+    /// retained in the snapshot so a subsequent revert can retry.
     void revertPending();
 
 private:
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;
     QString profileFilePath(const QString& path) const;
-    QString presetFilePath(const QString& presetName) const;
-    QString motionSetFilePath(const QString& setName) const;
+
+    /// True iff @p path is a member of `ProfilePaths::allBuiltInPaths()`.
+    /// All filesystem-touching methods reject non-member paths so a
+    /// crafted `path` (e.g. `"../etc/passwd"`) cannot escape the
+    /// profiles directory.
+    bool isValidEventPath(const QString& path) const;
 
     /// Capture @p filePath's current content into the snapshot if not
     /// already snapshotted. Called by every file-mutating method just
@@ -280,6 +322,9 @@ private:
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
+
+    AnimationPresetLibrary* m_presets = nullptr;
+    MotionSetStore* m_motionSets = nullptr;
 
     /// Pre-edit file contents keyed by absolute path. `std::nullopt`
     /// means "the file did not exist before this session." Mutated only

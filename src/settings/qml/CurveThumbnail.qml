@@ -37,7 +37,7 @@ Rectangle {
     radius: Kirigami.Units.smallSpacing
     color: Kirigami.Theme.backgroundColor
     border.color: hoverArea.containsMouse ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor ?? Kirigami.Theme.disabledTextColor)
-    border.width: 1
+    border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
     Accessible.name: i18n("Curve preview")
     Accessible.role: Accessible.Button
     // Repaint when inputs change or when component is ready (theme available)

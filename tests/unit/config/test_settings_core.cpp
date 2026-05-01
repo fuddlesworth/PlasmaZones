@@ -1099,13 +1099,12 @@ private Q_SLOTS:
      * the specific NOTIFY signal once per real change, and the value
      * round-trips through save/reload via the WindowHandling group.
      */
-    /// PR #390 + Phase 6: setShaderProfileTree must actually persist.
+    /// Regression: setShaderProfileTree must actually persist.
     /// The Animations schema in settingsschema.cpp must declare
     /// `shaderProfileTreeKey`, otherwise PhosphorConfig::Store::write
-    /// rejects the JSON blob and the override silently disappears.
-    /// Symptom from the field: shader picker resets to "None"
-    /// immediately after every selection because the next read returns
-    /// the unchanged on-disk value.
+    /// rejects the JSON blob and the override silently disappears
+    /// (shader picker resets to "None" immediately after each selection
+    /// because the next read returns the unchanged on-disk value).
     void testShaderProfileTree_setRoundTripsThroughDisk()
     {
         IsolatedConfigGuard guard;
@@ -1144,37 +1143,46 @@ private Q_SLOTS:
         }
     }
 
-    /// Multi-cycle round-trip: set, read, set different, read.
-    /// Mimics the AnimationEventCard combo flow where each combo
-    /// activation calls the controller and a refresh re-reads.
-    /// If a write disappears between cycles, this catches it.
-    /// Smoking-gun test for the field bug: if the schema doesn't declare
-    /// ShaderProfileTree, Settings::save() — and specifically its
-    /// purgeStaleKeys phase — wipes the override from disk. A daemon
-    /// running an old binary without the schema entry from commit 94712511
-    /// will hit this.
-    void testShaderProfileTree_survivesSaveCycle()
+    /// Regression: purgeStaleKeys must NOT delete the shaderProfileTree
+    /// key when it's present on disk but was not written through the
+    /// Store schema gate (e.g. an external tool or migration wrote it
+    /// directly via the backend). The earlier survivesSaveCycle test
+    /// only covered the "Store wrote it" path which is already exercised
+    /// by setRoundTripsThroughDisk. This variant writes directly to the
+    /// backend, then triggers Settings::save() and asserts the key
+    /// survives the purgeStaleKeys phase.
+    void testShaderProfileTree_purgeStaleKeysPreservesDirectBackendWrite()
     {
         IsolatedConfigGuard guard;
 
+        // Step 1: write the shader-tree JSON directly via the backend,
+        // bypassing PhosphorConfig::Store::write entirely. This mimics a
+        // migration-time or out-of-band write the Store loop never sees.
         {
-            Settings a;
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
             PhosphorAnimationShaders::ShaderProfileTree tree;
             PhosphorAnimationShaders::ShaderProfile profile;
             profile.effectId = QStringLiteral("pixelate");
             tree.setOverride(QStringLiteral("panel"), profile);
-            a.setShaderProfileTree(tree);
-            // save() runs purgeStaleKeys + the schema flush loop.
-            // Without the schema entry, the override gets purged here.
+            const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+            animations->writeString(ConfigDefaults::shaderProfileTreeKey(), json);
+        }
+
+        // Step 2: open Settings, run save() — purgeStaleKeys runs and
+        // must keep the schema-declared key, even though the value
+        // wasn't written via the Store.
+        {
+            Settings a;
             a.save();
         }
 
-        // Re-open and confirm the override survived the save.
+        // Step 3: re-read and confirm the override survived the purge.
         {
             Settings b;
             const auto reread = b.shaderProfileTree();
             QVERIFY2(reread.hasOverride(QStringLiteral("panel")),
-                     "ShaderProfileTree override must survive Settings::save() — schema entry missing?");
+                     "purgeStaleKeys must preserve shaderProfileTree when written directly to backend");
             const auto entry = reread.directOverride(QStringLiteral("panel"));
             QVERIFY(entry.effectId.has_value());
             QCOMPARE(*entry.effectId, QStringLiteral("pixelate"));

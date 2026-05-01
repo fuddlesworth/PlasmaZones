@@ -8,11 +8,6 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 ApplicationWindow {
-    // Animations drilldown — Phase 3 lands the Zone sub-page; the
-    // remaining ProfilePaths sections (Window / Workspace / OSD /
-    // Panel / Cursor / Widget / Presets / Motion Sets / Shaders)
-    // join in Phases 4-7.
-
     id: window
 
     // Expose the layout context menu so Loader-loaded pages can connect to its signals

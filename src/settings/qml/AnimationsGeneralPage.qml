@@ -25,6 +25,10 @@ AnimationSubPage {
     // contract — the embedded component reads these via its `constants` prop).
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
+    // Resolve via settingsController.settings rather than the bare
+    // `appSettings` context property — see EasingSettings.qml's header
+    // comment for the qmlcachegen timing-window the indirection sidesteps.
+    readonly property var appSettings: settingsController.settings
 
     Kirigami.InlineMessage {
         Layout.fillWidth: true
@@ -39,10 +43,10 @@ AnimationSubPage {
         Layout.fillWidth: true
         headerText: i18n("Global animation defaults")
         showToggle: true
-        toggleChecked: appSettings.animationsEnabled
+        toggleChecked: page.appSettings.animationsEnabled
         collapsible: true
         onToggleClicked: function(checked) {
-            appSettings.animationsEnabled = checked;
+            page.appSettings.animationsEnabled = checked;
         }
 
         contentItem: ColumnLayout {
@@ -56,12 +60,12 @@ AnimationSubPage {
                 Layout.fillWidth: true
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 28
                 Layout.alignment: Qt.AlignHCenter
-                curve: appSettings.animationEasingCurve
-                animationDuration: appSettings.animationDuration
+                curve: page.appSettings.animationEasingCurve
+                animationDuration: page.appSettings.animationDuration
                 previewEnabled: animationsCard.toggleChecked
                 opacity: animationsCard.toggleChecked ? 1 : 0.4
                 onCurveEdited: function(newCurve) {
-                    appSettings.animationEasingCurve = newCurve;
+                    page.appSettings.animationEasingCurve = newCurve;
                 }
             }
 

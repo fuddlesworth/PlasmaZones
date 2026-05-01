@@ -1370,6 +1370,27 @@ public:
         return QStringLiteral("Meta+Ctrl+R");
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // XDG Data Sub-directories
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // Sub-paths under `QStandardPaths::GenericDataLocation` (typically
+    // `~/.local/share`) for assets the settings app and daemon write at
+    // runtime. Centralised here so a directory rename is a one-line edit.
+
+    static QString userProfilesSubdir()
+    {
+        return QStringLiteral("/plasmazones/profiles");
+    }
+    static QString userAnimationsSubdir()
+    {
+        return QStringLiteral("/plasmazones/animations");
+    }
+    static QString userMotionSetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/motionsets");
+    }
+
 private:
     // Non-instantiable
     ConfigDefaults() = delete;

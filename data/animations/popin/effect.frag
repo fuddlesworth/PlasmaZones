@@ -22,11 +22,12 @@ void main()
 {
     vec2 uv = gl_FragCoord.xy / iResolution;
 
-    // Visibility drives both scale and alpha. qt_Opacity tracks the
-    // leg's animated visibility on both show and hide so the same
-    // shader produces "pops in" and "pops out" without leg-sign
-    // inspection.
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // Visibility drives the scale curve. iTime is the per-leg [0,1]
+    // progress driven by SurfaceAnimator's shaderTime AnimatedValue;
+    // the same scale curve runs on both show and hide because the
+    // parent surface's opacity leg supplies the direction-aware fade
+    // — the shader contributes the bouncy zoom on top.
+    float visibility = clamp(iTime, 0.0, 1.0);
 
     // Two-phase scale curve: 0.0 → 0.7 ramps from scaleFrom up to
     // (1 + overshoot); 0.7 → 1.0 settles overshoot back to 1.0.

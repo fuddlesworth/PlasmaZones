@@ -17,10 +17,13 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -669,6 +672,228 @@ private Q_SLOTS:
         QCOMPARE(resolved.value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.0,0.6"));
         // Library default for the unspecified field:
         QCOMPARE(resolved.value(QStringLiteral("minDistance")).toInt(), PhosphorAnimation::Profile::DefaultMinDistance);
+    }
+
+    // ─── Path traversal hardening (security) ──────────────────────────────
+
+    /// `setOverride` MUST reject any path that isn't a built-in event
+    /// path. A crafted `"../etc/passwd"` would otherwise let a hostile
+    /// QML caller write outside `userProfilesDir()`.
+    void setOverride_rejectsTraversalPaths()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
+
+        QVERIFY(!c.setOverride(QStringLiteral("../etc/passwd"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(!c.setOverride(QStringLiteral("../../bad"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(!c.setOverride(QStringLiteral("..\\windows-path"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(!c.setOverride(QStringLiteral("zone/../../etc"), {{QStringLiteral("duration"), 100}}));
+        // Plausible-looking but unknown paths are also rejected
+        // (membership in allBuiltInPaths is the gate, not just lexical
+        // shape).
+        QVERIFY(!c.setOverride(QStringLiteral("not.a.real.path"), {{QStringLiteral("duration"), 100}}));
+
+        QCOMPARE(spy.count(), 0);
+
+        // No file landed anywhere under the tmp dir.
+        QDir scan(tmp.path());
+        const auto entries = scan.entryList(QDir::Files | QDir::NoDotAndDotDot);
+        QVERIFY2(entries.isEmpty(),
+                 qPrintable(QStringLiteral("traversal write leaked: ") + entries.join(QLatin1Char(','))));
+    }
+
+    /// `clearOverride` and `hasOverride` MUST also reject non-event paths
+    /// — they share the same path → file-path mapping as setOverride.
+    void clearAndHasOverride_rejectTraversalPaths()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(!c.hasOverride(QStringLiteral("../etc/passwd")));
+        QVERIFY(!c.clearOverride(QStringLiteral("../etc/passwd")));
+        QVERIFY(!c.hasOverride(QStringLiteral("not.a.real.path")));
+        QVERIFY(!c.clearOverride(QStringLiteral("not.a.real.path")));
+    }
+
+    /// `removeUserPreset` MUST not delete an override file even when its
+    /// embedded `name` field happens to match the supplied preset name.
+    /// Pre-fix, the directory-scan fallback walked every JSON file in
+    /// the profiles dir and matched by `name`; an override file whose
+    /// `name` matched the searched preset would be deleted.
+    void removeUserPreset_doesNotTouchOverrideFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Write an override file. Its on-disk `name` field is "zone.snapIn"
+        // (per setOverride's stamping rule).
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), {{QStringLiteral("duration"), 250}}));
+        const QString overrideFilePath = tmp.path() + QStringLiteral("/zone.snapIn.json");
+        QVERIFY(QFileInfo::exists(overrideFilePath));
+
+        // Hand-craft a hostile preset on disk: `name` field = "zone.snapIn"
+        // but the FILE is not at the canonical override slot. The library
+        // skips it on userPresets() (collision filter) but a naive
+        // remove-by-name walk would still delete it. We're asserting the
+        // override file in the canonical slot remains intact regardless.
+        QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
+        QVERIFY(!c.removeUserPreset(QStringLiteral("zone.snapIn")));
+        QCOMPARE(spy.count(), 0);
+
+        // The override file MUST still exist — this is the load-bearing
+        // assertion: removeUserPreset cannot collateral-damage overrides.
+        QVERIFY2(QFileInfo::exists(overrideFilePath),
+                 "override file was deleted by removeUserPreset(\"zone.snapIn\") — preset CRUD MUST NOT touch override "
+                 "slots");
+        QCOMPARE(c.rawProfile(QStringLiteral("zone.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+    }
+
+    // ─── Atomic motion-set application ────────────────────────────────────
+
+    /// Manually plant a malformed motion-set file (mixing valid and
+    /// invalid entries) and verify applyMotionSet() rejects the whole
+    /// thing rather than partially writing. Pre-fix, the loop wrote
+    /// each valid entry and skipped invalid ones, leaving inconsistent
+    /// state.
+    void applyMotionSet_malformedEntryRejectsWholeSet()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Make the motion-sets directory and write a hand-crafted file
+        // with one VALID entry and one INVALID entry (unknown path).
+        const QString setsDir = tmp.path() + QStringLiteral("/motionsets");
+        QDir().mkpath(setsDir);
+        const QString setPath = setsDir + QStringLiteral("/bad-set.json");
+
+        QJsonObject validEntry;
+        validEntry.insert(QStringLiteral("path"), QStringLiteral("zone.snapIn"));
+        QJsonObject validProfile;
+        validProfile.insert(QStringLiteral("duration"), 222);
+        validEntry.insert(QStringLiteral("profile"), validProfile);
+
+        QJsonObject invalidEntry;
+        invalidEntry.insert(QStringLiteral("path"), QStringLiteral("../etc/passwd"));
+        invalidEntry.insert(QStringLiteral("profile"), QJsonObject{});
+
+        QJsonArray overrides;
+        overrides.append(validEntry);
+        overrides.append(invalidEntry);
+
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("bad-set"));
+        root.insert(QStringLiteral("overrides"), overrides);
+        root.insert(QStringLiteral("version"), 1);
+
+        QFile f(setPath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QJsonDocument(root).toJson());
+        f.close();
+
+        // No prior override at zone.snapIn.
+        QVERIFY(!c.hasOverride(QStringLiteral("zone.snapIn")));
+
+        QVERIFY(!c.applyMotionSet(QStringLiteral("bad-set")));
+
+        // Critical: the valid entry MUST NOT have been written. Atomic
+        // semantics — all-or-nothing. Pre-fix this would be true.
+        QVERIFY2(!c.hasOverride(QStringLiteral("zone.snapIn")),
+                 "applyMotionSet wrote partial state from a malformed set — should have rejected atomically");
+    }
+
+    // ─── Shader override pendingChangesChanged emission ───────────────────
+
+    /// Pre-fix, setShaderOverride and clearShaderOverride mutated
+    /// settings but never emitted pendingChangesChanged, so the Save
+    /// button never lit up for shader edits.
+    void setShaderOverride_emitsPendingChangesChanged()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY2(spy.count() >= 1, "setShaderOverride MUST emit pendingChangesChanged");
+    }
+
+    /// `setShaderOverride(path, "")` — the empty-effectId clear shorthand
+    /// — MUST also emit pendingChangesChanged. Pre-fix it routed to
+    /// clearShaderOverride which silently mutated.
+    void setShaderOverride_emptyEffectClearsAndEmits()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // First write something so there's state to clear.
+        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QString(), {}));
+        QVERIFY2(spy.count() >= 1, "setShaderOverride('','') MUST emit pendingChangesChanged on clear");
+        QVERIFY(c.rawShaderProfile(QStringLiteral("osd.show")).isEmpty());
+    }
+
+    /// Set then explicit clear → both calls fire pendingChangesChanged.
+    void setShaderOverride_thenClear_emitsTwice()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.clearShaderOverride(QStringLiteral("osd.show")));
+        QVERIFY2(spy.count() >= 2,
+                 qPrintable(QStringLiteral("expected ≥2 emissions, got ") + QString::number(spy.count())));
+    }
+
+    // ─── Logging on malformed JSON ────────────────────────────────────────
+
+    /// Plant an unparseable JSON file in the profiles dir; userPresets()
+    /// should skip it AND log a warning at the qCWarning level. The
+    /// emission is the load-bearing piece — pre-fix the parse error was
+    /// silently swallowed.
+    void userPresets_malformedJsonLogsAndSkips()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Write a known-good preset so the iteration has at least one
+        // success result.
+        QVERIFY(c.addUserPreset(QStringLiteral("Good"), {{QStringLiteral("duration"), 100}}));
+
+        // Plant a malformed file directly.
+        QFile bad(tmp.path() + QStringLiteral("/garbage.json"));
+        QVERIFY(bad.open(QIODevice::WriteOnly));
+        bad.write("{ this is not valid json");
+        bad.close();
+
+        // Expect a warning to be logged for the malformed file. The
+        // exact message is "AnimationPresetLibrary: failed to parse <path> : <error>".
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("AnimationPresetLibrary: failed to parse.*garbage")));
+
+        const QVariantList presets = c.userPresets();
+        // The good preset still surfaces; the malformed one is skipped.
+        QCOMPARE(presets.size(), 1);
+        QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Good"));
     }
 };
 

@@ -56,6 +56,11 @@ constexpr int kMaxConsumerBinding = 31;
 constexpr int kReservedBindingRangeStart = 2; ///< First library-managed binding above 0
 constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
 
+/// First SRB binding for the user-texture slots (slot 0 → binding 7).
+/// Both `setSourceTextureProvider`'s slot-0 override and the
+/// QImage-uploaded user textures key off this base.
+static constexpr int kUserTextureBaseBinding = 7;
+
 /// @return true if @p binding is usable by consumers via setExtraBinding().
 constexpr bool isConsumerBinding(int binding) noexcept
 {
@@ -279,6 +284,8 @@ private:
     /// invalidateItem() to wait until the in-flight call returns, so the flag
     /// is observed atomically with respect to subsequent dereferences.
     /// `mutable` so the const accessors (rect/safeRhi) can lock.
+    // Lock-ordering invariant: MUST NOT block on the GUI thread while holding
+    // m_itemMutex (avoids deadlock during ~ShaderEffect → invalidateItem path).
     mutable std::mutex m_itemMutex;
 
     // ── Uniform Extension ──────────────────────────────────────────────
@@ -384,6 +391,14 @@ private:
     float m_timeHi = 0.0f; // Cached iTimeHi for wrap-offset change detection
     float m_width = 0.0f;
     float m_height = 0.0f;
+    /// Lock-free snapshot of the most recently observed item geometry, written
+    /// from prepare() under m_itemMutex and read from rect() without locking.
+    /// rect() is invoked once per cull pass on every node in the scene; locking
+    /// m_itemMutex there fights with prepare()/render() for the same mutex
+    /// every frame. The atomics carry "best-effort, last-known" geometry —
+    /// stale by at most one frame, which the cull pass tolerates.
+    std::atomic<float> m_cachedWidth{0.0f};
+    std::atomic<float> m_cachedHeight{0.0f};
     QPointF m_mousePosition;
 
     // ── Custom Parameters (indexed) ────────────────────────────────────
@@ -433,6 +448,24 @@ private:
     QPointer<QSGTextureProvider> m_sourceTextureProvider;
     std::unique_ptr<QRhiSampler> m_sourceSampler;
     QRhiTexture* m_lastSourceRhiTexture = nullptr;
+    /// Latch — once we've created a sampler-creation failure for the source
+    /// provider we stop retrying every paint pass (avoids per-frame
+    /// rhi->newSampler() churn when the backend is unhappy). Cleared in
+    /// releaseRhiResources() so a device reset re-attempts.
+    bool m_sourceSamplerFailed = false;
+    /// Single-shot warning latch: emitted once per node when we detect that
+    /// the source provider's QRhiTexture comes from a different QRhi than our
+    /// own (cross-window provider). Prevents log spam.
+    bool m_warnedForeignRhi = false;
+    /// 1×1 transparent fallback texture used when a source provider is set
+    /// but has not yet produced a usable QRhiTexture (or its texture lives
+    /// on a foreign QRhi). Bound at slot 0 instead of falling through to
+    /// the QImage user-texture path — the documented contract for
+    /// setSourceTextureProvider is "supersedes whatever QImage was uploaded
+    /// at slot 0", so a transient null must not unmask the QImage. Allocated
+    /// lazily on first use; released in releaseRhiResources().
+    std::unique_ptr<QRhiTexture> m_transparentFallbackTexture;
+    bool m_transparentFallbackTextureNeedsUpload = false;
 
     // ── Depth buffer (binding 12) ──────────────────────────────────────
     bool m_useDepthBuffer = false;

@@ -24,8 +24,15 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    // Refresh hook bound to the controller signal below.
+    // Refresh hook bound to the controller signal below. The list is loaded
+    // from a Q_INVOKABLE — QML can't observe the controller's internal state
+    // through that boundary, so the Connections block below manually
+    // reassigns `userPresetsList` whenever the controller emits a change
+    // signal. The cached `_easingUserPresets` / `_springUserPresets`
+    // bindings re-evaluate from the new list automatically.
     property var userPresetsList: settingsController.animationsPage.userPresets()
+    readonly property var _easingUserPresets: filterUserPresets(false)
+    readonly property var _springUserPresets: filterUserPresets(true)
     property bool _deletingPreset: false
 
     function isSpringEntry(curveStr) {
@@ -131,11 +138,11 @@ Flickable {
 
                 // User presets
                 SettingsSeparator {
-                    visible: root.filterUserPresets(false).length > 0
+                    visible: root._easingUserPresets.length > 0
                 }
 
                 Repeater {
-                    model: root.filterUserPresets(false)
+                    model: root._easingUserPresets
 
                     delegate: RowLayout {
                         required property var modelData
@@ -194,7 +201,7 @@ Flickable {
                 }
 
                 Label {
-                    visible: root.filterUserPresets(false).length === 0
+                    visible: root._easingUserPresets.length === 0
                     text: i18n("No custom easing presets yet. Use \"Save as Preset…\" in the curve editor to create one.")
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
@@ -257,13 +264,15 @@ Flickable {
 
                 // User presets
                 SettingsSeparator {
-                    visible: root.filterUserPresets(true).length > 0
+                    visible: root._springUserPresets.length > 0
                 }
 
                 Repeater {
-                    model: root.filterUserPresets(true)
+                    model: root._springUserPresets
 
                     delegate: RowLayout {
+                        id: row
+
                         required property var modelData
                         readonly property var _spring: root.parseSpring(modelData.curve)
 
@@ -274,8 +283,8 @@ Flickable {
                             implicitHeight: Kirigami.Units.gridUnit * 3
                             timingMode: CurvePresets.timingModeSpring
                             curve: ""
-                            omega: parent._spring.omega
-                            zeta: parent._spring.zeta
+                            omega: row._spring.omega
+                            zeta: row._spring.zeta
                             Accessible.name: i18n("Spring preview for %1", modelData.name)
                         }
 
@@ -286,7 +295,7 @@ Flickable {
                         }
 
                         Label {
-                            text: i18n("ω=%1 · ζ=%2", parent._spring.omega.toFixed(1), parent._spring.zeta.toFixed(2))
+                            text: i18n("ω=%1 · ζ=%2", row._spring.omega.toFixed(1), row._spring.zeta.toFixed(2))
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
@@ -319,7 +328,7 @@ Flickable {
                 }
 
                 Label {
-                    visible: root.filterUserPresets(true).length === 0
+                    visible: root._springUserPresets.length === 0
                     text: i18n("No custom spring presets yet. Use \"Save as Preset…\" in the curve editor to create one.")
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap

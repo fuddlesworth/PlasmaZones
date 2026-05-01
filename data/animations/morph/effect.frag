@@ -8,7 +8,8 @@
 // anything, which is the "weird gradient that shows then QML
 // renders" report. Now: sample iChannel0 at the warped UV so the
 // surface ITSELF deforms during the transition, then settles back
-// to its un-warped self as `qt_Opacity` reaches 1.
+// to its un-warped self as `iTime` reaches the leg endpoints
+// (sin envelope peaks at iTime==0.5).
 
 #version 450
 
@@ -26,11 +27,12 @@ void main()
 {
     vec2 uv = gl_FragCoord.xy / iResolution;
 
-    // Envelope peaks at qt_Opacity == 0.5 (mid-transition) and
-    // returns to 0 at the endpoints — same shape as glitch, gives
-    // both show and hide a "warp peak then settle" feel without
-    // needing the leg sign.
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // Envelope peaks at iTime == 0.5 (mid-transition) and returns to
+    // 0 at the endpoints — same shape as glitch, gives both show and
+    // hide a "warp peak then settle" feel without needing the leg
+    // sign. iTime is the per-leg [0,1] progress driven by
+    // SurfaceAnimator's shaderTime AnimatedValue.
+    float visibility = clamp(iTime, 0.0, 1.0);
     float envelope = sin(visibility * 3.14159);
     float strength = warpStrength * envelope;
     float freq = max(warpFrequency, 1.0);

@@ -22,6 +22,10 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Loaded from a Q_INVOKABLE; the Connections block below manually
+    // refreshes it on motionSetsChanged. See AnimationEventCard.qml's
+    // shaderCombo for the same pattern (Q_INVOKABLE results aren't
+    // reactive across the QML binding boundary).
     property var motionSetsList: settingsController.animationsPage.availableMotionSets()
     property bool _saving: false
 

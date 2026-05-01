@@ -462,6 +462,8 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 add_executable(test_animations_page_controller
     settings/test_animations_page_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE

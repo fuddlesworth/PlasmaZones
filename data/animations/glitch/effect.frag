@@ -7,7 +7,10 @@
 // `r/g/b` from `smoothstep(0, 1, uv)` (a centred radial mask) —
 // visually a dim white circle, not a glitch. This version reads the
 // surface directly and produces the displaced-channel chromatic
-// aberration the metadata advertises.
+// aberration the metadata advertises. `iTime` is the per-leg [0,1]
+// progress driven by SurfaceAnimator's shaderTime AnimatedValue —
+// `sin(iTime*pi)` peaks the glitch mid-transition and settles at
+// both endpoints regardless of direction.
 
 #version 450
 
@@ -34,16 +37,17 @@ void main()
     // Glitch peaks mid-leg (sin shape) regardless of direction so both
     // show and hide get the same "rip apart, then settle / settle, then
     // rip apart" feel without the shader needing to know the leg sign.
-    // qt_Opacity 0 → strength 0 (settled, fully hidden), qt_Opacity
-    // 1 → strength 0 (settled, fully visible), qt_Opacity 0.5 → peak.
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // iTime is the per-leg [0,1] progress: iTime 0 → strength 0
+    // (start of leg), iTime 1 → strength 0 (end of leg), iTime 0.5 →
+    // peak.
+    float visibility = clamp(iTime, 0.0, 1.0);
     float strength = intensity * sin(visibility * 3.14159);
 
     float bs = max(blockSize, 0.01);
     vec2 block = floor(uv / bs);
-    // iTime is still useful here for the per-frame noise advance —
-    // without it every block would pick the same displacement and
-    // the glitch would freeze instead of jitter.
+    // Per-frame noise advance — same iTime drives the block jitter so
+    // every block picks a fresh displacement each frame instead of
+    // freezing to a static pattern.
     float blockNoise = hash(block + floor(iTime * 10.0));
 
     float displacement = 0.0;

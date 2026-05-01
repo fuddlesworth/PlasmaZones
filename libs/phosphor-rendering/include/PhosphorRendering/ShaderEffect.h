@@ -61,7 +61,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
-    Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged)
+    Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
 
     // ── Multipass ────────────────────────────────────────────────────
     Q_PROPERTY(

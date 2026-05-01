@@ -42,10 +42,13 @@ Item {
     property real curveAmplitude: 1
     property real elasticPeriod: 0.3
     property int bouncesCount: 3
-    property bool _initializing: true
     // Known named curve types for validation
     readonly property var _knownCurveTypes: ["elastic-in", "elastic-out", "elastic-in-out", "bounce-in", "bounce-out", "bounce-in-out"]
     readonly property bool isBezier: curveType === "bezier"
+    // Replay/animation cadence — hoisted so the magic numbers live with
+    // their semantic name instead of inline on the Timer bindings below.
+    readonly property int _replayDelayMs: 80
+    readonly property int _animTickMs: 16 // ~60fps
 
     signal curveEdited(string newCurve)
 
@@ -143,8 +146,12 @@ Item {
             cp2x = parseFloat(def[2]);
             cp2y = parseFloat(def[3]);
         }
-        if (!root._initializing)
-            root.curveEdited(root.formatCurve());
+        // Only signal upstream when the formatted curve string actually
+        // diverges from the inbound `curve` — silences the parse-on-load
+        // path that used to feed back its own input.
+        var formatted = root.formatCurve();
+        if (formatted !== root.curve)
+            root.curveEdited(formatted);
 
     }
 
@@ -267,7 +274,6 @@ Item {
     }
     Component.onCompleted: {
         parseCurve();
-        root._initializing = false;
         curveCanvas.requestPaint();
         Qt.callLater(replay);
     }
@@ -275,7 +281,7 @@ Item {
     Timer {
         id: replayDelay
 
-        interval: 80
+        interval: root._replayDelayMs
         onTriggered: {
             animTimer.elapsed = 0;
             animTimer.lastTime = Date.now();
@@ -289,7 +295,7 @@ Item {
         property real elapsed: 0
         property real lastTime: 0
 
-        interval: 16 // ~60fps
+        interval: root._animTickMs
         repeat: true
         onTriggered: {
             var now = Date.now();

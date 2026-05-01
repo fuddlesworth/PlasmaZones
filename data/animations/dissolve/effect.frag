@@ -6,10 +6,11 @@
 // live `QSGTextureProvider` through `ShaderEffect::setSourceItem`,
 // so the shader sees the current rendered pixels rather than a
 // pre-leg snapshot. Per-cell noise gates the surface's alpha against
-// `qt_Opacity` so the visual is direction-agnostic: on show the
-// cells fade in in pseudo-random order, on hide they fade out the
-// same way. `grain` controls the cell size, `softness` the per-cell
-// edge transition.
+// `iTime` (per-leg [0,1] progress) so the cells reveal in pseudo-
+// random order. The parent surface's own opacity leg drives the
+// scene-graph fade, so on hide the dissolve composes with the
+// outer fade-out for a coherent direction-aware visual. `grain`
+// controls the cell size, `softness` the per-cell edge transition.
 
 #version 450
 
@@ -39,11 +40,11 @@ void main()
     vec2 cell = floor(uv / cellSize);
     float noise = hash(cell);
 
-    // qt_Opacity tracks the leg's animated visibility on both show and
-    // hide. Compare per-cell noise against it with a soft window so
-    // each cell flips from "hidden" to "shown" at a different
-    // qt_Opacity threshold — that's the dissolve effect.
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's
+    // shaderTime AnimatedValue. Compare per-cell noise against it with
+    // a soft window so each cell flips from "hidden" to "shown" at a
+    // different threshold — that's the dissolve effect.
+    float visibility = clamp(iTime, 0.0, 1.0);
     float soft = max(softness, 0.001);
     float gate = smoothstep(visibility - soft, visibility + soft, noise);
 

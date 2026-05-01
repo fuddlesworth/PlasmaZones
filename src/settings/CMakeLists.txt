@@ -13,6 +13,13 @@ set(plasmazones_settings_SRCS
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h
     animationspagecontroller.cpp
+    # Sub-services hosted by AnimationsPageController as child QObjects:
+    # preset library + motion-set store. Split out to keep
+    # animationspagecontroller.cpp under the project's 800-line cap.
+    animationpresetlibrary.h
+    animationpresetlibrary.cpp
+    motionsetstore.h
+    motionsetstore.cpp
     editorpagecontroller.h
     editorpagecontroller.cpp
     generalpagecontroller.h
@@ -152,7 +159,6 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationEventCard.qml
         qml/AnimationShaderParamEditor.qml
         qml/AnimationSubPage.qml
-        qml/AnimationSubPageHeader.qml
         qml/AnimationsCursorPage.qml
         qml/AnimationsGeneralPage.qml
         qml/AnimationsMotionSetsPage.qml

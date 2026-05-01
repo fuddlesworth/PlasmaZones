@@ -3,13 +3,17 @@
 //
 // Pixelate transition — operates on the rendered surface (sampled
 // through iChannel0 at user-texture binding 7). Block size is driven
-// by qt_Opacity rather than iTime so the shader reads as
-// "pixelated → clear" on show (qt_Opacity 0→1) and the symmetric
-// "clear → pixelated" on hide (qt_Opacity 1→0) without the shader
-// having to know the leg direction.
+// by `iTime` (per-leg [0,1] progress driven by SurfaceAnimator's
+// shaderTime AnimatedValue) so the shader composes with the parent
+// surface's opacity leg: as iTime grows, blockPx shrinks and the
+// surface unpixelates while the parent fade brings the card up.
+// On hide the parent fade takes the surface to invisible; the
+// shader simultaneously runs its own iTime 0→1 progression — the
+// scene-graph compose of (parent opacity * shader output) gives a
+// coherent direction-aware visual.
 //
-// SurfaceAnimator binds the visible card (the `objectName:
-// "shaderAnchor"` item) as a live texture provider via
+// SurfaceAnimator binds the visible card (the `shaderAnchor: true`
+// property-tagged item) as a live texture provider via
 // `ShaderEffect::setSourceItem` — the anchor's `layer.enabled` is
 // flipped to true so `QQuickItem::textureProvider()` returns a
 // per-frame FBO that the shader samples through `iChannel0` (SRB
@@ -42,14 +46,14 @@ void main()
 {
     vec2 uv = gl_FragCoord.xy / iResolution;
 
-    // qt_Opacity threads through Qt's scene-graph opacity multiply for
-    // the parent chain. SurfaceAnimator animates `target.opacity` on
-    // both show and hide, so qt_Opacity tracks "current visibility":
-    //   show: 0 → 1 over the leg
-    //   hide: 1 → 0 over the leg
-    // Block size = (1 - qt_Opacity) * maxBlockSize gives the same
-    // visual contract regardless of direction.
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's
+    // shaderTime AnimatedValue (`shaderTime->start(0.0, 1.0, …)` for
+    // both show and hide legs). Block size = (1 - iTime) * maxBlockSize
+    // pixelates strongly at iTime=0 and clears at iTime=1; combined
+    // with the parent surface's opacity leg the visual reads as
+    // "pixelated → clear" on show and "clear → invisible (with
+    // pixelate dissipating)" on hide.
+    float visibility = clamp(iTime, 0.0, 1.0);
     float blockPx = (1.0 - visibility) * max(maxBlockSize, 0.0);
 
     // Floor sub-pixel sizes to the per-pixel grid so the shader doesn't
@@ -62,8 +66,9 @@ void main()
 
     vec4 sampled = texture(iChannel0, cell);
 
-    // The captured surface already encodes its own alpha; we don't
-    // double-multiply by qt_Opacity here because the parent-chain
-    // opacity is also applied at scene-graph blend time.
+    // The captured surface already encodes its own alpha; the parent-
+    // chain scene-graph opacity is applied at blend time, so the
+    // shader emits the sampled colour directly without a manual
+    // visibility multiply.
     fragColor = sampled;
 }

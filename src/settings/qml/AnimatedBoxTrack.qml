@@ -40,7 +40,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(1, Math.round(Kirigami.Units.smallSpacing * 0.4))
         height: Kirigami.Units.gridUnit
-        radius: 1
+        radius: Kirigami.Units.smallSpacing / 2
         color: Kirigami.Theme.disabledTextColor
         opacity: 0.4
     }
@@ -51,7 +51,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(1, Math.round(Kirigami.Units.smallSpacing * 0.4))
         height: Kirigami.Units.gridUnit
-        radius: 1
+        radius: Kirigami.Units.smallSpacing / 2
         color: Kirigami.Theme.disabledTextColor
         opacity: 0.4
     }

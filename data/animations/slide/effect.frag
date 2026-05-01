@@ -25,11 +25,12 @@ void main()
 {
     vec2 uv = gl_FragCoord.xy / iResolution;
 
-    // Visibility = how revealed the surface is. qt_Opacity tracks the
-    // leg's fade direction (0→1 on show, 1→0 on hide), so the same
-    // shader produces "slides in" and "slides out" without inspecting
-    // the leg sign.
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // Visibility = how revealed the surface is. iTime is the per-leg
+    // [0,1] progress driven by SurfaceAnimator's shaderTime
+    // AnimatedValue; the same reveal mask runs on both show and hide
+    // and the parent surface's opacity leg supplies the direction-
+    // aware fade so the slide composes coherently in both directions.
+    float visibility = clamp(iTime, 0.0, 1.0);
 
     int dir = int(clamp(direction, 0.0, 3.0));
     float coord;

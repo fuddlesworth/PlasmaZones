@@ -226,14 +226,18 @@ Item {
     QFZCommon.PopupFrame {
         id: container
 
-        // Shader-anchor opt-in: SurfaceAnimator's shader leg looks up
-        // an `objectName: "shaderAnchor"` child of the animator target
-        // and parents the transition shader to it (sized after it). The
-        // backdrop above fills the entire wayland surface; without this
-        // tag the shader would render its pixelate / glitch / dissolve
-        // effect across the whole screen instead of confining it to the
-        // visible popup card the user actually reads as "the picker".
-        objectName: "shaderAnchor"
+        // Shader-anchor opt-in: SurfaceAnimator's shader leg walks the
+        // animator target's visual children for a `shaderAnchor: true`
+        // property tag and parents the transition shader to whatever it
+        // finds (sized after it). The backdrop above fills the entire
+        // wayland surface; without this tag the shader would render its
+        // pixelate / glitch / dissolve effect across the whole screen
+        // instead of confining it to the visible popup card the user
+        // actually reads as "the picker". Property-based tag (vs
+        // objectName) keeps distinct surfaces' anchors independently
+        // identifiable under any shared traversal.
+        property bool shaderAnchor: true
+
         anchors.centerIn: parent
         width: gridView.width + metrics.containerPadding
         // top padding + title + gap below title + grid + bottom padding

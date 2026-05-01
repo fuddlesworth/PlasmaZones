@@ -161,18 +161,16 @@ Window {
     Loader {
         id: loader
 
-        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
-        // walks the visual tree for `objectName: "shaderAnchor"` and
-        // (only when found) enables `layer.enabled` on it so the shader
-        // can sample the OSD's actual rendered pixels via iChannel0.
-        // Without this tag the leg falls back to the QQuickRootItem
-        // target, where layer-enable would break the scene-graph render
-        // (already gated off in surfaceanimator.cpp), leaving
-        // pixelate / dissolve / glitch as visible-only-on-LayoutPicker.
-        // The Loader is the natural mount point — its bounds match the
-        // visible OSD content area, and it stays valid across mode
-        // flips even when its child is rebuilt.
-        objectName: "shaderAnchor"
+        // The Loader itself is anchors.fill: parent (the fullscreen
+        // wayland surface), so it is NOT a viable shaderAnchor — a
+        // shader scoped to the Loader would render across the entire
+        // screen rather than just the visible OSD card. The actual
+        // anchor opt-in lives on the inner `container` Rectangle inside
+        // each loaded content (LayoutOsdContent / NavigationOsdContent),
+        // tagged there via `property bool shaderAnchor: true`. The
+        // animator's recursive lookup walks the visual tree from the
+        // surface's contentItem and finds whichever inner card is
+        // currently loaded.
         anchors.fill: parent
         sourceComponent: {
             switch (root.mode) {

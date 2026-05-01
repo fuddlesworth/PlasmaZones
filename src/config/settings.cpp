@@ -157,12 +157,6 @@ void Settings::load()
     const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
     const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
 
-    // shaderProfileTree is now a Q_PROPERTY (shaderProfileTreeJson)
-    // declared in settings.h, so the reflective Q_PROPERTY loop below
-    // re-emits its NOTIFY (shaderProfileTreeChanged) automatically when
-    // the value changes during reparseConfiguration — no custom
-    // snapshot/diff path needed.
-
     m_configBackend->reparseConfiguration();
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -1004,11 +998,21 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
-    const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
-    const QString prev =
+    // Value-equality compare instead of byte-exact JSON: byte compare is
+    // brittle to JSON key ordering / whitespace differences that produce
+    // semantically identical trees but mismatching strings, which would
+    // emit spurious shaderProfileTreeChanged signals on round-trip writes.
+    const QString prevJson =
         m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    if (json == prev)
+    PhosphorAnimationShaders::ShaderProfileTree prevTree;
+    if (!prevJson.isEmpty()) {
+        const QJsonDocument prevDoc = QJsonDocument::fromJson(prevJson.toUtf8());
+        if (prevDoc.isObject())
+            prevTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(prevDoc.object());
+    }
+    if (tree == prevTree)
         return;
+    const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(), json);
     Q_EMIT shaderProfileTreeChanged();
     Q_EMIT settingsChanged();
@@ -1026,8 +1030,10 @@ void Settings::setShaderProfileTreeJson(const QString& json)
         return;
     }
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (!doc.isObject())
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setShaderProfileTreeJson: malformed JSON, ignoring";
         return;
+    }
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 

@@ -335,25 +335,72 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     // the underlying FBO can be re-allocated on resize / device-loss
     // and the SRB must be rebuilt against the fresh pointer or
     // sampling crashes inside the RHI.
+    //
+    // The resolved QRhiTexture* is cached into m_lastSourceRhiTexture and
+    // becomes the SINGLE source of truth: appendUserTextureBindings() reads
+    // m_lastSourceRhiTexture directly rather than re-querying the provider.
+    // That closes the second TOCTOU window where the cached identity check
+    // here picked one pointer but the SRB build below picked another after
+    // an in-between FBO recreation.
     if (m_sourceTextureProvider) {
-        if (!m_sourceSampler) {
+        if (!m_sourceSampler && !m_sourceSamplerFailed) {
             m_sourceSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                   QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_sourceSampler->create()) {
+                // Don't churn: log once, latch the failure, and stop
+                // re-attempting per-frame. releaseRhiResources() clears
+                // the latch so a device reset can retry.
+                qCWarning(lcShaderNode) << "Failed to create source-provider sampler — slot 0 will use the "
+                                           "transparent fallback until the next device reset";
                 m_sourceSampler.reset();
+                m_sourceSamplerFailed = true;
             } else {
                 resetAllBindingsAndPipelines();
             }
         }
+        QRhiTexture* resolved = nullptr;
         if (QSGTexture* sgTex = m_sourceTextureProvider->texture()) {
-            QRhiTexture* rhiTex = sgTex->rhiTexture();
-            if (rhiTex != m_lastSourceRhiTexture) {
-                m_lastSourceRhiTexture = rhiTex;
-                resetAllBindingsAndPipelines();
+            resolved = sgTex->rhiTexture();
+            // Cross-window/cross-context guard: the provider may belong to a
+            // QQuickItem in a different render context. Binding a QRhiTexture
+            // from a foreign QRhi will crash inside the backend at draw time.
+            if (resolved && resolved->rhi() != rhi) {
+                if (!m_warnedForeignRhi) {
+                    m_warnedForeignRhi = true;
+                    qCWarning(lcShaderNode)
+                        << "Source provider's QRhiTexture belongs to a foreign QRhi — slot 0 will use the "
+                           "transparent fallback. (Logged once per node.)";
+                }
+                resolved = nullptr;
             }
-        } else if (m_lastSourceRhiTexture) {
-            m_lastSourceRhiTexture = nullptr;
+        }
+        if (resolved != m_lastSourceRhiTexture) {
+            m_lastSourceRhiTexture = resolved;
             resetAllBindingsAndPipelines();
+        }
+    }
+
+    // Lazy 1×1 transparent fallback texture for slot 0 when a provider is
+    // set but its underlying QRhiTexture is not yet ready (or rejected by
+    // the foreign-rhi guard above). The contract for setSourceTextureProvider
+    // is that it SUPERSEDES whatever QImage was uploaded at slot 0 — falling
+    // back to m_userTextures[0] would unmask a stale snapshot. Instead, bind
+    // a dedicated all-zero texture so the shader samples transparent and the
+    // QImage path stays inert.
+    if (m_sourceTextureProvider && !m_lastSourceRhiTexture && !m_transparentFallbackTexture) {
+        m_transparentFallbackTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        if (m_transparentFallbackTexture->create()) {
+            m_transparentFallbackTextureNeedsUpload = true;
+        } else {
+            m_transparentFallbackTexture.reset();
+        }
+    }
+    if (m_transparentFallbackTextureNeedsUpload && m_transparentFallbackTexture) {
+        QRhiResourceUpdateBatch* fbatch = rhi->nextResourceUpdateBatch();
+        if (fbatch) {
+            fbatch->uploadTexture(m_transparentFallbackTexture.get(), m_transparentFallbackImage);
+            cb->resourceUpdate(fbatch);
+            m_transparentFallbackTextureNeedsUpload = false;
         }
     }
 
@@ -432,6 +479,10 @@ void ShaderNodeRhi::releaseRhiResources()
     // rebuild detection in uploadDirtyTextures will pick it up.
     m_sourceSampler.reset();
     m_lastSourceRhiTexture = nullptr;
+    m_sourceSamplerFailed = false; // re-attempt sampler creation on next prepare()
+    m_warnedForeignRhi = false; // re-warn (once) after device reset
+    m_transparentFallbackTexture.reset();
+    m_transparentFallbackTextureNeedsUpload = false;
 
     m_wallpaperTexture.reset();
     m_wallpaperSampler.reset();

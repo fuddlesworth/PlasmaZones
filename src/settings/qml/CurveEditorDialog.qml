@@ -22,13 +22,16 @@ Kirigami.Dialog {
     // (omega, zeta) — rad/s and damping ratio, per Spring.h
     property real springOmega: 12
     property real springZeta: 1
-    property string _workingCurve: easingCurve
-    property real _workingOmega: springOmega
-    property real _workingZeta: springZeta
+    // Working state — seeded onOpened, cleared onClosed. Apply only
+    // commits when `_dirty` flipped (i.e. the working state diverged
+    // from the seed values). Without that check, a parent re-binding
+    // `easingCurve` while the dialog is open would otherwise see Apply
+    // write the now-stale `_workingCurve` back through.
+    property string _workingCurve: ""
+    property real _workingOmega: 0
+    property real _workingZeta: 0
+    property bool _dirty: false
     property bool _savingPreset: false
-    // Phase 5 wires AnimationsPageController.addUserPreset; the
-    // "Save as Preset…" footer is functional now.
-    readonly property bool _userPresetsAvailable: true
 
     signal curveApplied(string curve)
     signal springApplied(real omega, real zeta)
@@ -38,18 +41,30 @@ Kirigami.Dialog {
     preferredHeight: Math.min(Kirigami.Units.gridUnit * 32, parent ? parent.height * 0.8 : Kirigami.Units.gridUnit * 32)
     standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
     onApplied: {
-        if (timingMode === CurvePresets.timingModeEasing)
-            root.curveApplied(root._workingCurve);
-        else
-            root.springApplied(_workingOmega, _workingZeta);
+        if (root._dirty) {
+            if (timingMode === CurvePresets.timingModeEasing)
+                root.curveApplied(root._workingCurve);
+            else
+                root.springApplied(_workingOmega, _workingZeta);
+        }
         close();
     }
     onRejected: close()
+    onClosed: {
+        // Clear working state so the next open() re-seeds from the
+        // (possibly updated) parent bindings rather than reusing stale
+        // values from this session.
+        root._workingCurve = "";
+        root._workingOmega = 0;
+        root._workingZeta = 0;
+        root._dirty = false;
+    }
     onOpened: {
         root._savingPreset = false;
         _workingCurve = easingCurve;
         _workingOmega = springOmega;
         _workingZeta = springZeta;
+        root._dirty = false;
         if (timingMode === CurvePresets.timingModeEasing) {
             easingPreviewInDialog.curve = easingCurve;
             easingPreviewInDialog.replay();
@@ -70,6 +85,7 @@ Kirigami.Dialog {
             previewEnabled: root.visible && root.timingMode === CurvePresets.timingModeEasing
             onCurveEdited: function(newCurve) {
                 root._workingCurve = newCurve;
+                root._dirty = true;
             }
         }
 
@@ -96,6 +112,7 @@ Kirigami.Dialog {
                     var curve = CurvePresets.curveForSelection(index, dirIdx);
                     if (curve) {
                         root._workingCurve = curve;
+                        root._dirty = true;
                         easingPreviewInDialog.curve = curve;
                     }
                 }
@@ -126,6 +143,7 @@ Kirigami.Dialog {
                         var curve = CurvePresets.curveForSelection(styleIdx, index);
                         if (curve) {
                             root._workingCurve = curve;
+                            root._dirty = true;
                             easingPreviewInDialog.curve = curve;
                         }
                     }
@@ -160,10 +178,12 @@ Kirigami.Dialog {
                         var per = easingPreviewInDialog.elasticPeriod.toFixed(2);
                         var newCurve = ct + ":" + amp + "," + per;
                         root._workingCurve = newCurve;
+                        root._dirty = true;
                         easingPreviewInDialog.curve = newCurve;
                     } else {
                         var newCurve2 = ct + ":" + amp + "," + easingPreviewInDialog.bouncesCount;
                         root._workingCurve = newCurve2;
+                        root._dirty = true;
                         easingPreviewInDialog.curve = newCurve2;
                     }
                 }
@@ -191,6 +211,7 @@ Kirigami.Dialog {
                     var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
                     var newCurve = ct + ":" + amp + "," + value.toFixed(2);
                     root._workingCurve = newCurve;
+                    root._dirty = true;
                     easingPreviewInDialog.curve = newCurve;
                 }
             }
@@ -215,6 +236,7 @@ Kirigami.Dialog {
                     var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
                     var newCurve = ct + ":" + amp + "," + Math.round(value);
                     root._workingCurve = newCurve;
+                    root._dirty = true;
                     easingPreviewInDialog.curve = newCurve;
                 }
             }
@@ -253,6 +275,7 @@ Kirigami.Dialog {
                         var p = CurvePresets.springPresets[index];
                         root._workingOmega = p.omega;
                         root._workingZeta = p.zeta;
+                        root._dirty = true;
                     }
                 }
             }
@@ -279,6 +302,7 @@ Kirigami.Dialog {
                 }
                 onMoved: (value) => {
                     root._workingOmega = value;
+                    root._dirty = true;
                 }
             }
 
@@ -304,6 +328,7 @@ Kirigami.Dialog {
                 }
                 onMoved: (value) => {
                     root._workingZeta = value;
+                    root._dirty = true;
                 }
             }
 
@@ -311,14 +336,10 @@ Kirigami.Dialog {
 
     }
 
-    // Save-as-preset footer — wired in Phase 5 (the
-    // AnimationsPageController gains preset CRUD then). Until then the
-    // entire row stays hidden via `_userPresetsAvailable` so the
-    // affordance never points at a missing controller method.
+    // Save-as-preset footer.
     footerLeadingComponent: Component {
         RowLayout {
             spacing: Kirigami.Units.smallSpacing
-            visible: root._userPresetsAvailable
 
             ToolButton {
                 text: i18n("Save as Preset…")

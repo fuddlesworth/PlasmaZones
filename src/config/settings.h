@@ -256,10 +256,8 @@ public:
                    animationStaggerIntervalChanged)
     // JSON string facade so the shader tree participates in the standard
     // Q_PROPERTY → SettingsController meta-object loop → setNeedsSave
-    // wiring used by every other settings page. Without this entry the
-    // animation-shader picker had to invent custom dirty-tracking and
-    // notifyReload plumbing — see PR review feedback that flagged the
-    // divergence.
+    // wiring used by every other settings page (avoids per-feature
+    // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
 

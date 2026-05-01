@@ -37,7 +37,12 @@ namespace PhosphorRendering {
 // the UBO here: SRB binding 0 is registered for both stages in the
 // pipeline, but glslang strips the unused declaration during SPIR-V bake,
 // keeping the default stage independent of any consumer-side UBO layout.
-constexpr QLatin1String kDefaultVertexShaderSource{R"(#version 450
+//
+// Stored as `static const QString` (not QLatin1String) so the conversion
+// to QString happens once at static-init. Previously a per-paint
+// `QString(QLatin1String(...))` allocated a fresh QString every frame
+// just to feed `setVertexShaderSource`, which short-circuits via equality.
+static const QString kDefaultVertexShaderSource = QStringLiteral(R"(#version 450
 
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texcoord;
@@ -47,7 +52,7 @@ void main() {
     vTexCoord = texcoord;
     gl_Position = vec4(position, 0.0, 1.0);
 }
-)"};
+)");
 
 // ============================================================================
 // DRY helpers
@@ -281,11 +286,12 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
             }
         }
     }
-    // Mark the SRB dirty so prepare() rebuilds with the new texture
-    // binding on the next render cycle. Without this, a sourceItem
-    // change after the SRB is already created leaves the old (or
-    // null) source bound until something else dirties the pipeline.
-    m_shaderDirty = true;
+    // No m_shaderDirty here. The SRB rebind is already covered:
+    // updatePaintNode() pushes the new provider via
+    // setSourceTextureProvider() which calls resetAllBindingsAndPipelines()
+    // when the pointer changes. Forcing a full shader recompile every
+    // sourceItem swap (the previous behaviour) was wasted work — the
+    // baked QShader doesn't depend on which texture is bound.
     Q_EMIT sourceItemChanged();
     update();
 }
@@ -867,7 +873,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 // vertex stages (e.g. ZoneShaderItem with its zone.vert)
                 // override updatePaintNode() entirely and bypass this
                 // base implementation.
-                node->setVertexShaderSource(QString(kDefaultVertexShaderSource));
+                node->setVertexShaderSource(kDefaultVertexShaderSource);
                 if (node->loadFragmentShader(fragPath)) {
                     node->invalidateShader();
                     setStatus(Status::Ready);

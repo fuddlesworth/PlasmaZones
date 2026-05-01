@@ -3,9 +3,14 @@
 
 #include "animationspagecontroller.h"
 
+#include "../config/configdefaults.h"
 #include "../core/isettings.h"
+#include "../core/logging.h"
+#include "animationpresetlibrary.h"
 #include "dbusutils.h"
+#include "motionsetstore.h"
 
+#include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -21,6 +26,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
@@ -30,20 +36,20 @@
 
 namespace PlasmaZones {
 
-namespace {
+namespace animations_controller_detail {
 
 // ProfileLoader's envelope helper reads the top-level `name` field to
 // assign the registry path (and strips it from the returned root). We
-// add it on write so the file is recognised.
-QString jsonNameKey()
-{
-    return QStringLiteral("name");
-}
+// add it on write so the file is recognised. JSON keys are
+// QLatin1String per the project's Qt6 string-literal rule. `static`
+// (internal linkage) keeps unity-build merging safe even though sibling
+// TUs declare the same symbol name in their own detail namespaces.
+static constexpr QLatin1String JsonNameKey{"name"};
 
 /// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
 /// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
 /// for single-word segments.
-QString humanizeSegment(const QString& segment)
+static QString humanizeSegment(const QString& segment)
 {
     if (segment.isEmpty())
         return segment;
@@ -63,32 +69,39 @@ QString humanizeSegment(const QString& segment)
 
 /// Convert a `Profile` value to its `toJson()` shape as a QVariantMap.
 /// Sparse — only engaged fields appear, matching the wire format.
-QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile)
+static QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile)
 {
     return profile.toJson().toVariantMap();
 }
 
 /// Read the JSON object at @p path. Returns an empty object on missing
 /// file / parse error / non-object root. The `name` field is stripped so
-/// the returned map matches the QML-facing Profile shape.
-QJsonObject readProfileJson(const QString& path)
+/// the returned map matches the QML-facing Profile shape. Parse errors
+/// are logged so silent corruption surfaces in journalctl.
+static QJsonObject readProfileJson(const QString& path)
 {
     QFile file(path);
-    if (!file.exists() || !file.open(QIODevice::ReadOnly))
+    if (!file.exists())
         return {};
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(lcConfig) << "AnimationsPageController: cannot open profile" << path;
+        return {};
+    }
     QJsonParseError err{};
     const auto doc = QJsonDocument::fromJson(file.readAll(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject())
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qCWarning(lcConfig) << "AnimationsPageController: failed to parse" << path << ":" << err.errorString();
         return {};
+    }
     QJsonObject obj = doc.object();
-    obj.remove(jsonNameKey());
+    obj.remove(JsonNameKey);
     return obj;
 }
 
 /// Merge fields from @p source into @p target without overwriting keys
 /// already present in @p target. Implements ProfileTree-style "deeper
 /// path wins" inheritance when called from leaf to root.
-void mergeMissingFields(QVariantMap& target, const QVariantMap& source)
+static void mergeMissingFields(QVariantMap& target, const QVariantMap& source)
 {
     for (auto it = source.cbegin(); it != source.cend(); ++it) {
         if (!target.contains(it.key())) {
@@ -97,36 +110,9 @@ void mergeMissingFields(QVariantMap& target, const QVariantMap& source)
     }
 }
 
-/// Filesystem-safe slug for a user-supplied preset name. Lowercase
-/// alphanumerics keep their identity; everything else collapses to a
-/// hyphen. Preserves dots so display-style identifiers ("my.curve")
-/// round-trip naturally; rejects empty results so an all-symbol name
-/// fails the write rather than silently writing to ".json".
-QString slugifyPresetName(const QString& name)
-{
-    QString out;
-    out.reserve(name.size());
-    bool lastWasDash = false;
-    for (QChar c : name) {
-        const QChar lower = c.toLower();
-        if (lower.isLetterOrNumber() || lower == QLatin1Char('.')) {
-            out.append(lower);
-            lastWasDash = false;
-        } else if (!lastWasDash) {
-            out.append(QLatin1Char('-'));
-            lastWasDash = true;
-        }
-    }
-    while (out.startsWith(QLatin1Char('-')))
-        out.remove(0, 1);
-    while (out.endsWith(QLatin1Char('-')))
-        out.chop(1);
-    return out;
-}
-
 /// Fill any unset fields in @p profile with the `Profile::Default*`
 /// library constants so the QML side always reads a populated map.
-void fillLibraryDefaults(QVariantMap& profile)
+static void fillLibraryDefaults(QVariantMap& profile)
 {
     using P = PhosphorAnimation::Profile;
     if (!profile.contains(QLatin1String(P::JsonFieldDuration))) {
@@ -141,12 +127,19 @@ void fillLibraryDefaults(QVariantMap& profile)
     if (!profile.contains(QLatin1String(P::JsonFieldStaggerInterval))) {
         profile.insert(QLatin1String(P::JsonFieldStaggerInterval), P::DefaultStaggerInterval);
     }
-    // `curve` intentionally left unset when missing — QML treats absence
-    // as "use library-default cubic-bezier" rather than fabricating a
-    // string here that would round-trip unequal.
+    // `curve` left unset → fill with the canonical library default
+    // (default-constructed `Easing` is OutCubic, matching
+    // `Profile::withDefaults()` and `AnimatedValue::defaultFallbackCurve()`).
+    // Without this, QML cards crashed with "Cannot read property of
+    // undefined" when no parent supplied a curve.
+    if (!profile.contains(QLatin1String(P::JsonFieldCurve))) {
+        profile.insert(QLatin1String(P::JsonFieldCurve), PhosphorAnimation::Easing().toString());
+    }
 }
 
-} // namespace
+} // namespace animations_controller_detail
+
+using namespace animations_controller_detail;
 
 // ─── Construction ──────────────────────────────────────────────────────
 
@@ -156,6 +149,37 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
 {
+    // Forward the snapshot helper as a callable so the sub-services can
+    // capture pre-edit content without coupling to the controller's
+    // m_pendingFileSnapshots layout.
+    auto snapshotFn = [this](const QString& filePath) {
+        snapshotFileIfFirst(filePath);
+    };
+    auto profilesDirFn = [this]() {
+        return userProfilesDir();
+    };
+    auto motionSetsDirFn = [this]() {
+        return userMotionSetsDir();
+    };
+    auto writeOverrideFn = [this](const QString& path, const QVariantMap& profile) {
+        return setOverride(path, profile);
+    };
+
+    m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, this);
+    m_motionSets = new MotionSetStore(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, this);
+
+    connect(m_presets, &AnimationPresetLibrary::userPresetsChanged, this,
+            &AnimationsPageController::userPresetsChanged);
+    connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
+            &AnimationsPageController::pendingChangesChanged);
+    connect(m_motionSets, &MotionSetStore::motionSetsChanged, this, &AnimationsPageController::motionSetsChanged);
+    connect(m_motionSets, &MotionSetStore::pendingChangesChanged, this,
+            &AnimationsPageController::pendingChangesChanged);
+    // applyMotionSet's overrideChanged emissions ride through the
+    // controller's existing setOverride callback path (each setOverride
+    // already emits overrideChanged), so we don't connect MotionSetStore's
+    // overrideChanged to avoid double-firing.
+
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
                 &AnimationsPageController::shaderEffectsChanged);
@@ -170,9 +194,27 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     }
 }
 
+AnimationsPageController::~AnimationsPageController() = default;
+
 void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
 {
     m_userProfilesDirOverride = dir;
+}
+
+bool AnimationsPageController::isValidEventPath(const QString& path) const
+{
+    if (path.isEmpty())
+        return false;
+    // Defensive prefilter — `allBuiltInPaths()` doesn't contain any of
+    // these characters so membership alone would be enough, but the
+    // explicit check keeps the security intent visible at the call site.
+    if (path.contains(QLatin1Char('/')) || path.contains(QLatin1Char('\\')) || path.contains(QLatin1String("..")))
+        return false;
+    static const QSet<QString> kKnownPathSet = []() {
+        const QStringList paths = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
+        return QSet<QString>(paths.cbegin(), paths.cend());
+    }();
+    return kKnownPathSet.contains(path);
 }
 
 // ─── Pending-changes snapshot machinery ────────────────────────────────
@@ -212,10 +254,6 @@ void AnimationsPageController::revertPending()
     if (!hasPendingChanges())
         return;
 
-    // Categorize affected paths so the right "data changed" signals
-    // fire at the end. Filenames in profilesDir map to either an event
-    // override (path matches ProfilePaths::) or a user preset
-    // (everything else); files in motionSetsDir map to motion sets.
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
     const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
@@ -225,22 +263,35 @@ void AnimationsPageController::revertPending()
     bool anyPreset = false;
     bool anyMotionSet = false;
 
+    // Failed restores are kept in the snapshot map so a follow-up revert
+    // can retry. Successful restores are removed below.
+    QHash<QString, std::optional<QByteArray>> retained;
+
     for (auto it = m_pendingFileSnapshots.cbegin(); it != m_pendingFileSnapshots.cend(); ++it) {
         const QString& filePath = it.key();
         const auto& content = it.value();
 
-        // Restore: write back content, or delete if didn't exist.
+        bool restored = false;
         if (!content.has_value()) {
-            QFile::remove(filePath);
+            // File didn't exist before this session — remove if present.
+            if (!QFile::exists(filePath) || QFile::remove(filePath))
+                restored = true;
         } else {
             QSaveFile f(filePath);
             if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
                 f.write(*content);
-                f.commit();
+                if (f.commit())
+                    restored = true;
             }
         }
 
-        // Classify so the right signal goes out.
+        if (!restored) {
+            qCWarning(lcConfig) << "AnimationsPageController::revertPending: failed to restore" << filePath;
+            retained.insert(filePath, content);
+            continue;
+        }
+
+        // Classify so the right signal goes out for the restored file.
         const QFileInfo info(filePath);
         const QString absDir = info.absolutePath();
         const QString stem = info.completeBaseName();
@@ -253,13 +304,7 @@ void AnimationsPageController::revertPending()
                 anyPreset = true;
         }
     }
-    m_pendingFileSnapshots.clear();
-
-    // Shader tree no longer needs custom revert plumbing — it's now a
-    // standard Q_PROPERTY (Settings::shaderProfileTreeJson) and
-    // SettingsController::load() reads it back automatically via
-    // Settings::load() → reparseConfiguration → meta-object NOTIFY loop,
-    // identical to every other page.
+    m_pendingFileSnapshots = std::move(retained);
 
     // Bulk emit so QML sub-pages refresh exactly the rows that moved.
     for (const QString& path : overrideEvents)
@@ -356,24 +401,15 @@ QString AnimationsPageController::userProfilesDir() const
     if (!m_userProfilesDirOverride.isEmpty())
         return m_userProfilesDirOverride;
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return base + QStringLiteral("/plasmazones/profiles");
+    return base + ConfigDefaults::userProfilesSubdir();
 }
 
 QString AnimationsPageController::profileFilePath(const QString& path) const
 {
     // Filenames mirror the path (e.g. `zone.snapIn.json`) — same
-    // convention as the daemon's shipped defaults under
-    // `${KDE_INSTALL_DATADIR}/plasmazones/profiles/`. ProfileLoader's
-    // envelope check requires `name` field to match filename stem.
+    // convention as the daemon's shipped defaults. Validation on @p
+    // path happens at every call site so this helper trusts its input.
     return userProfilesDir() + QLatin1Char('/') + path + QStringLiteral(".json");
-}
-
-QString AnimationsPageController::presetFilePath(const QString& presetName) const
-{
-    const QString slug = slugifyPresetName(presetName);
-    if (slug.isEmpty())
-        return {};
-    return userProfilesDir() + QLatin1Char('/') + slug + QStringLiteral(".json");
 }
 
 QString AnimationsPageController::userMotionSetsDir() const
@@ -381,27 +417,19 @@ QString AnimationsPageController::userMotionSetsDir() const
     if (!m_userProfilesDirOverride.isEmpty())
         return m_userProfilesDirOverride + QStringLiteral("/motionsets");
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return base + QStringLiteral("/plasmazones/motionsets");
-}
-
-QString AnimationsPageController::motionSetFilePath(const QString& setName) const
-{
-    const QString slug = slugifyPresetName(setName);
-    if (slug.isEmpty())
-        return {};
-    return userMotionSetsDir() + QLatin1Char('/') + slug + QStringLiteral(".json");
+    return base + ConfigDefaults::userMotionSetsSubdir();
 }
 
 bool AnimationsPageController::hasOverride(const QString& path) const
 {
-    if (path.isEmpty())
+    if (!isValidEventPath(path))
         return false;
     return QFileInfo::exists(profileFilePath(path));
 }
 
 QVariantMap AnimationsPageController::rawProfile(const QString& path) const
 {
-    if (path.isEmpty())
+    if (!isValidEventPath(path))
         return {};
     return readProfileJson(profileFilePath(path)).toVariantMap();
 }
@@ -424,11 +452,13 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
                 source = profileToVariantMap(*entry);
             }
         }
-        if (source.isEmpty()) {
+        if (source.isEmpty() && isValidEventPath(cur)) {
             // Registry not published, or no entry at this path. Fall
             // back to a direct user-dir read so unit tests (which never
             // bootstrap a registry) still get walk-up resolution over
-            // their own override files.
+            // their own override files. Skip the read for non-event
+            // paths so a crafted parent like "../" can't cause a stray
+            // file open.
             source = readProfileJson(profileFilePath(cur)).toVariantMap();
         }
         mergeMissingFields(merged, source);
@@ -441,7 +471,7 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
 
 bool AnimationsPageController::setOverride(const QString& path, const QVariantMap& profileJson)
 {
-    if (path.isEmpty())
+    if (!isValidEventPath(path))
         return false;
 
     const QString dir = userProfilesDir();
@@ -453,9 +483,9 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
 
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     // The `name` field is what ProfileLoader's envelope helper reads to
-    // assign the registry path (per ProfileLoader.h schema docs). Always
-    // overwrite — the QML map shouldn't carry a stale name.
-    obj.insert(jsonNameKey(), path);
+    // assign the registry path. Always overwrite — the QML map shouldn't
+    // carry a stale name.
+    obj.insert(JsonNameKey, path);
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -471,7 +501,7 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
 
 bool AnimationsPageController::clearOverride(const QString& path)
 {
-    if (path.isEmpty())
+    if (!isValidEventPath(path))
         return false;
     const QString filePath = profileFilePath(path);
     QFile file(filePath);
@@ -485,155 +515,50 @@ bool AnimationsPageController::clearOverride(const QString& path)
     return true;
 }
 
-// ─── Preset library ────────────────────────────────────────────────────
+// ─── Preset library — delegated ────────────────────────────────────────
 
 QVariantList AnimationsPageController::userPresets() const
 {
-    using namespace PhosphorAnimation;
-
-    QVariantList result;
-    QDir dir(userProfilesDir());
-    if (!dir.exists())
-        return result;
-
-    // Convert to QSet for O(1) membership checks; allBuiltInPaths() is
-    // already filtered for reserved entries but we double-check
-    // isReservedPath() so a future schema bump that loosens the
-    // taxonomy doesn't quietly start surfacing reserved-path files as
-    // "presets."
-    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
-
-    const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-    for (const QFileInfo& info : entries) {
-        // Single open + parse: extract the `name` field (used both for
-        // the override-slot filter and for the QML row identity), then
-        // strip it to recover the Profile shape readProfileJson would
-        // have returned. Avoids a second open+parse per file that the
-        // earlier read-then-re-read approach incurred.
-        QFile f(info.absoluteFilePath());
-        if (!f.open(QIODevice::ReadOnly))
-            continue;
-        QJsonParseError err{};
-        const auto doc = QJsonDocument::fromJson(f.readAll(), &err);
-        if (err.error != QJsonParseError::NoError || !doc.isObject())
-            continue;
-        QJsonObject obj = doc.object();
-        const QString name = obj.value(jsonNameKey()).toString();
-        if (name.isEmpty() || knownPathSet.contains(name) || ProfilePaths::isReservedPath(name))
-            continue;
-        obj.remove(jsonNameKey());
-        if (obj.isEmpty())
-            continue;
-
-        QVariantMap entry = obj.toVariantMap();
-        entry.insert(QStringLiteral("name"), name);
-        result.append(entry);
-    }
-    return result;
+    return m_presets ? m_presets->userPresets() : QVariantList{};
 }
 
 bool AnimationsPageController::addUserPreset(const QString& name, const QVariantMap& profileJson)
 {
-    using namespace PhosphorAnimation;
-
-    if (name.isEmpty())
-        return false;
-
-    // Reject names that match a built-in event path — the file would
-    // collide with an override slot and the daemon would treat the
-    // preset as a path-bound profile. Check both the original name
-    // and the slug because slugify lowercases everything: without the
-    // slug check, addUserPreset("Window", …) would slugify to "window"
-    // and write the SAME file as the override for path "window",
-    // silently destroying the user's existing override and producing a
-    // file whose `name` field ("Window") no longer matches the filename
-    // stem ("window") — ProfileLoader's envelope check then rejects or
-    // misroutes the load.
-    const QString slug = slugifyPresetName(name);
-    if (slug.isEmpty())
-        return false;
-    const QStringList builtInPaths = ProfilePaths::allBuiltInPaths();
-    if (builtInPaths.contains(name) || ProfilePaths::isReservedPath(name) || builtInPaths.contains(slug)
-        || ProfilePaths::isReservedPath(slug))
-        return false;
-
-    const QString filePath = presetFilePath(name);
-    if (filePath.isEmpty())
-        return false;
-
-    const QString dir = userProfilesDir();
-    if (!QDir().mkpath(dir))
-        return false;
-
-    snapshotFileIfFirst(filePath);
-
-    QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
-    obj.insert(jsonNameKey(), name);
-
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return false;
-    file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
-    if (!file.commit())
-        return false;
-
-    Q_EMIT userPresetsChanged();
-    Q_EMIT pendingChangesChanged();
-    return true;
+    return m_presets && m_presets->addUserPreset(name, profileJson);
 }
 
 bool AnimationsPageController::removeUserPreset(const QString& name)
 {
-    if (name.isEmpty())
-        return false;
+    return m_presets && m_presets->removeUserPreset(name);
+}
 
-    // Try the slug-derived path first; fall back to a directory scan
-    // for the file whose `name` field matches. The fallback covers the
-    // edge case where the slug rule changes between writes (e.g. the
-    // user upgraded across a slugify revision and an old file's name
-    // no longer round-trips through the new slug).
-    QString filePath = presetFilePath(name);
-    if (!filePath.isEmpty() && !QFileInfo::exists(filePath))
-        filePath.clear();
+// ─── Motion sets — delegated ───────────────────────────────────────────
 
-    if (filePath.isEmpty()) {
-        QDir dir(userProfilesDir());
-        const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files);
-        for (const QFileInfo& info : entries) {
-            QFile raw(info.absoluteFilePath());
-            if (!raw.open(QIODevice::ReadOnly))
-                continue;
-            const auto doc = QJsonDocument::fromJson(raw.readAll());
-            if (!doc.isObject())
-                continue;
-            if (doc.object().value(jsonNameKey()).toString() == name) {
-                filePath = info.absoluteFilePath();
-                break;
-            }
-        }
-    }
+QVariantList AnimationsPageController::availableMotionSets() const
+{
+    return m_motionSets ? m_motionSets->availableMotionSets() : QVariantList{};
+}
 
-    if (filePath.isEmpty())
-        return false;
+bool AnimationsPageController::applyMotionSet(const QString& name)
+{
+    return m_motionSets && m_motionSets->applyMotionSet(name);
+}
 
-    QFile file(filePath);
-    if (!file.exists())
-        return false;
-    snapshotFileIfFirst(filePath);
-    if (!file.remove())
-        return false;
+bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const QString& description)
+{
+    return m_motionSets && m_motionSets->saveCurrentAsMotionSet(name, description);
+}
 
-    Q_EMIT userPresetsChanged();
-    Q_EMIT pendingChangesChanged();
-    return true;
+bool AnimationsPageController::removeMotionSet(const QString& name)
+{
+    return m_motionSets && m_motionSets->removeMotionSet(name);
 }
 
 // ─── Shader effects ────────────────────────────────────────────────────
 
-namespace {
+namespace animations_controller_detail {
 
-QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo& p)
+static QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo& p)
 {
     QVariantMap m;
     m.insert(QStringLiteral("id"), p.id);
@@ -645,7 +570,7 @@ QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEf
     return m;
 }
 
-QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEffect& effect)
+static QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEffect& effect)
 {
     QVariantMap m;
     m.insert(QStringLiteral("id"), effect.id);
@@ -664,7 +589,7 @@ QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEffect& e
     return m;
 }
 
-QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& profile)
+static QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& profile)
 {
     QVariantMap m;
     if (profile.effectId)
@@ -674,7 +599,7 @@ QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProfile& pr
     return m;
 }
 
-} // namespace
+} // namespace animations_controller_detail
 
 QVariantList AnimationsPageController::availableShaderEffects() const
 {
@@ -707,17 +632,21 @@ QVariantList AnimationsPageController::shaderParameters(const QString& effectId)
     return result;
 }
 
-QString AnimationsPageController::userShaderDirectory() const
+QString AnimationsPageController::userShaderDirectoryPath() const
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    const QString dir = base + QStringLiteral("/plasmazones/animations");
-    QDir().mkpath(dir);
-    return dir;
+    return base + ConfigDefaults::userAnimationsSubdir();
 }
 
-void AnimationsPageController::openUserShaderDirectory() const
+bool AnimationsPageController::ensureUserShaderDirectory()
 {
-    QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectory()));
+    return QDir().mkpath(userShaderDirectoryPath());
+}
+
+void AnimationsPageController::openUserShaderDirectory()
+{
+    ensureUserShaderDirectory();
+    QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectoryPath()));
 }
 
 QVariantMap AnimationsPageController::rawShaderProfile(const QString& path) const
@@ -748,19 +677,16 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         return false;
 
     // Empty effectId == clear assignment at this exact path. Mirrors
-    // ShaderProfile's "engaged-empty means no effect" semantics in a
-    // clean QML idiom — callers don't have to construct a partial map
-    // to clear.
+    // ShaderProfile's "engaged-empty means no effect" semantics.
+    // clearShaderOverride emits pendingChangesChanged itself when the
+    // call actually changed state.
     if (effectId.isEmpty())
         return clearShaderOverride(path);
 
-    // Standard pattern (matches every other settings page): write
-    // through Settings::setShaderProfileTree. The shaderProfileTreeJson
-    // Q_PROPERTY emits NOTIFY, the SettingsController meta-object loop
-    // catches it and calls setNeedsSave automatically. Daemon sync
-    // happens at Save time via SettingsController::save() →
-    // DaemonDBus::notifyReload — no per-edit notify here, no snapshot,
-    // no custom dirty plumbing.
+    // Standard pattern: write through Settings::setShaderProfileTree.
+    // The shaderProfileTreeJson Q_PROPERTY emits NOTIFY, the
+    // SettingsController meta-object loop catches it. No per-edit
+    // notify here, no snapshot, no custom dirty plumbing.
     ShaderProfile profile;
     profile.effectId = effectId;
     if (!parameters.isEmpty())
@@ -769,10 +695,11 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
-    // No explicit shaderProfileChanged emit — setShaderProfileTree fires
-    // shaderProfileTreeChanged, which the constructor's lambda translates
-    // into a path-agnostic shaderProfileChanged broadcast. Emitting here
-    // would double-fire the signal.
+    // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
+    // Emit pendingChangesChanged so SettingsController treats this as a
+    // user-visible edit (without it the Save button never lit up for
+    // shader edits).
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -787,159 +714,8 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
     // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
-    // No double emit.
-    return true;
-}
-
-// ─── Motion sets ───────────────────────────────────────────────────────
-
-QVariantList AnimationsPageController::availableMotionSets() const
-{
-    QVariantList result;
-    QDir dir(userMotionSetsDir());
-    if (!dir.exists())
-        return result;
-
-    const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-    for (const QFileInfo& info : files) {
-        QFile f(info.absoluteFilePath());
-        if (!f.open(QIODevice::ReadOnly))
-            continue;
-        const auto doc = QJsonDocument::fromJson(f.readAll());
-        if (!doc.isObject())
-            continue;
-        const QJsonObject obj = doc.object();
-
-        QVariantMap row;
-        row.insert(QStringLiteral("name"), obj.value(QStringLiteral("name")).toString());
-        row.insert(QStringLiteral("description"), obj.value(QStringLiteral("description")).toString());
-        row.insert(QStringLiteral("slug"), info.completeBaseName());
-        row.insert(QStringLiteral("overrideCount"), obj.value(QStringLiteral("overrides")).toArray().size());
-        result.append(row);
-    }
-    return result;
-}
-
-bool AnimationsPageController::applyMotionSet(const QString& name)
-{
-    using namespace PhosphorAnimation;
-    if (name.isEmpty())
-        return false;
-
-    const QString filePath = motionSetFilePath(name);
-    if (filePath.isEmpty())
-        return false;
-
-    QFile f(filePath);
-    if (!f.exists() || !f.open(QIODevice::ReadOnly))
-        return false;
-    const auto doc = QJsonDocument::fromJson(f.readAll());
-    if (!doc.isObject())
-        return false;
-
-    const QJsonArray overrides = doc.object().value(QStringLiteral("overrides")).toArray();
-    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
-
-    bool wroteAny = false;
-    for (const QJsonValue& v : overrides) {
-        const QJsonObject entry = v.toObject();
-        const QString path = entry.value(QStringLiteral("path")).toString();
-        // Only honor known event paths — a hand-edited set with a
-        // path-typo shouldn't write a stray non-path override file.
-        if (path.isEmpty() || !knownPathSet.contains(path))
-            continue;
-        const QJsonObject profile = entry.value(QStringLiteral("profile")).toObject();
-        if (setOverride(path, profile.toVariantMap()))
-            wroteAny = true;
-    }
-    // Don't emit motionSetsChanged here — the saved-set list is
-    // unchanged; only per-path overrides moved (setOverride already
-    // emitted overrideChanged + pendingChangesChanged for each).
-    // Emitting motionSetsChanged would mislead QML pages that listen
-    // for set-list mutations into refreshing the list and clearing
-    // their _saving flag mid-flow.
-    return wroteAny;
-}
-
-bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const QString& description)
-{
-    using namespace PhosphorAnimation;
-    if (name.isEmpty())
-        return false;
-
-    const QString filePath = motionSetFilePath(name);
-    if (filePath.isEmpty())
-        return false;
-
-    if (!QDir().mkpath(userMotionSetsDir()))
-        return false;
-
-    // Walk the profiles dir, pick out files whose `name` matches a
-    // known event path. Build a sparse `overrides` array; non-path
-    // names (presets) are skipped.
-    QJsonArray overrides;
-    QDir profilesDir(userProfilesDir());
-    if (profilesDir.exists()) {
-        const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-        const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
-        const auto files = profilesDir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-        for (const QFileInfo& info : files) {
-            QFile f(info.absoluteFilePath());
-            if (!f.open(QIODevice::ReadOnly))
-                continue;
-            const auto doc = QJsonDocument::fromJson(f.readAll());
-            if (!doc.isObject())
-                continue;
-            const QJsonObject obj = doc.object();
-            const QString entryName = obj.value(jsonNameKey()).toString();
-            if (!knownPathSet.contains(entryName))
-                continue;
-
-            QJsonObject profile = obj;
-            profile.remove(jsonNameKey());
-            QJsonObject entry;
-            entry.insert(QStringLiteral("path"), entryName);
-            entry.insert(QStringLiteral("profile"), profile);
-            overrides.append(entry);
-        }
-    }
-
-    snapshotFileIfFirst(filePath);
-
-    QJsonObject root;
-    root.insert(QStringLiteral("name"), name);
-    if (!description.isEmpty())
-        root.insert(QStringLiteral("description"), description);
-    root.insert(QStringLiteral("version"), 1);
-    root.insert(QStringLiteral("overrides"), overrides);
-
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return false;
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    if (!file.commit())
-        return false;
-
-    Q_EMIT motionSetsChanged();
-    Q_EMIT pendingChangesChanged();
-    return true;
-}
-
-bool AnimationsPageController::removeMotionSet(const QString& name)
-{
-    if (name.isEmpty())
-        return false;
-    const QString filePath = motionSetFilePath(name);
-    if (filePath.isEmpty())
-        return false;
-    QFile file(filePath);
-    if (!file.exists())
-        return false;
-    snapshotFileIfFirst(filePath);
-    if (!file.remove())
-        return false;
-    Q_EMIT motionSetsChanged();
+    // Emit pendingChangesChanged so the SettingsController slot re-evaluates
+    // hasPendingChanges and lights the Save button.
     Q_EMIT pendingChangesChanged();
     return true;
 }

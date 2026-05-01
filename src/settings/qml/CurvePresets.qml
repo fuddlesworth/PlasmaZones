@@ -33,6 +33,14 @@ QtObject {
     // ── Timing mode constants ─────────────────────────────────────
     readonly property int timingModeEasing: 0
     readonly property int timingModeSpring: 1
+    // ── Per-event default knobs ───────────────────────────────────
+    // Authoritative defaults referenced by every per-event card so
+    // updating one constant here propagates everywhere a fresh
+    // override is materialized. The easing string matches `cubic-out`.
+    readonly property int defaultDurationMs: 150
+    readonly property string defaultEasingCurve: "0.33,1.00,0.68,1.00"
+    readonly property real defaultSpringOmega: 12
+    readonly property real defaultSpringZeta: 1
     // ── Easing curve presets (style + direction matrix) ─────────────
     readonly property var easingStyles: [{
         "label": i18n("Linear"),

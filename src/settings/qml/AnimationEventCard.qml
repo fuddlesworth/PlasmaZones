@@ -48,17 +48,19 @@ Item {
     // lose their easing curve when previewing spring physics.
     property bool overrideEnabled: false
     property int currentTimingMode: CurvePresets.timingModeEasing
-    property int currentDuration: 150
-    property string currentEasingCurve: "0.33,1.00,0.68,1.00"
-    property real currentSpringOmega: 12
-    property real currentSpringZeta: 1
-    // ── Shader assignment (Phase 6) ──────────────────────────────────
+    property int currentDuration: CurvePresets.defaultDurationMs
+    property string currentEasingCurve: CurvePresets.defaultEasingCurve
+    property real currentSpringOmega: CurvePresets.defaultSpringOmega
+    property real currentSpringZeta: CurvePresets.defaultSpringZeta
+    // ── Shader assignment (independent of timing override) ──────────
     // Per-event shader override is independent of the motion override
     // toggle: a user can pick a shader for an event without overriding
     // its timing. Persistence routes through Settings::shaderProfile-
     // Tree (NOT the Profile-loader pipeline), so signal handling for
     // refreshes is separate.
     property string currentShaderEffectId: ""
+    // Initialized from Q_INVOKABLE resolvedShaderProfile() — refresh on
+    // shaderProfileChanged via the Connections block at the bottom.
     property var currentShaderParams: ({
     })
     readonly property string currentCurveString: {
@@ -71,8 +73,8 @@ Item {
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
         var r = settingsController.animationsPage.resolvedProfile(root.eventPath);
-        var curve = r.curve || "0.33,1.00,0.68,1.00";
-        var dur = r.duration !== undefined ? r.duration : 150;
+        var curve = r.curve || CurvePresets.defaultEasingCurve;
+        var dur = r.duration !== undefined ? r.duration : CurvePresets.defaultDurationMs;
         if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
             var parts = curve.substring(7).split(",");
             var w = parseFloat(parts[0]);
@@ -159,7 +161,7 @@ Item {
                 root.currentEasingCurve = curve;
 
         }
-        root.currentDuration = effective.duration !== undefined ? effective.duration : 150;
+        root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
     }
 
     // Build the on-disk profile object from the working state and
@@ -406,18 +408,6 @@ Item {
                         var labels = [i18n("None")];
                         for (var i = 0; i < _effects.length; i++) labels.push(_effects[i].name || _effects[i].id)
                         return labels;
-                    }
-
-                    function _indexOf(effectId) {
-                        if (!effectId || effectId.length === 0)
-                            return 0;
-
-                        for (var i = 0; i < _effects.length; i++) {
-                            if (_effects[i].id === effectId)
-                                return i + 1;
-
-                        }
-                        return 0;
                     }
 
                     Accessible.name: i18n("Shader effect")

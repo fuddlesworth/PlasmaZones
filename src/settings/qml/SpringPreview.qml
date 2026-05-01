@@ -35,6 +35,15 @@ Item {
     // Settle threshold for the visual settle-time estimate (controls how much
     // of the curve we draw). Not user-tunable — see class doc.
     readonly property real _settleEpsilon: 0.005
+    // Replay/animation cadence — hoisted so the magic numbers live with
+    // their semantic name instead of inline on the Timer bindings below.
+    readonly property int _replayDelayMs: 80
+    readonly property int _animTickMs: 16 // ~60fps
+    // Y-axis range for the oscillation graph: [-yOffset, yRange-yOffset].
+    // Reserves headroom above 1.0 / below 0.0 for underdamped overshoot
+    // so the curve and reference lines remain visible.
+    readonly property real _yRange: 1.4
+    readonly property real _yOffset: 0.1
 
     function evaluateSpring(t) {
         return Spring.evaluate(t, root.omega * root.omega, root.zeta, 0);
@@ -115,9 +124,9 @@ Item {
                     var gw = w - 2 * pad;
                     var gh = h - 2 * pad;
                     // Y mapping: 0.0 at bottom, 1.0 near top (leave room for overshoot)
-                    var yRange = 1.4;
+                    var yRange = root._yRange;
                     // show -0.1 to 1.3
-                    var yOffset = 0.1;
+                    var yOffset = root._yOffset;
                     // Grid lines
                     ctx.strokeStyle = gridStr;
                     ctx.lineWidth = 0.5;
@@ -269,7 +278,7 @@ Item {
     Timer {
         id: springReplayDelay
 
-        interval: 80
+        interval: root._replayDelayMs
         onTriggered: {
             springAnimTimer.elapsed = 0;
             springAnimTimer.lastTime = Date.now();
@@ -286,7 +295,7 @@ Item {
         property real lastTime: 0
         property real settleMs: 2000
 
-        interval: 16
+        interval: root._animTickMs
         repeat: true
         onTriggered: {
             var now = Date.now();

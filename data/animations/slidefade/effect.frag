@@ -21,7 +21,10 @@ layout(location = 0) out vec4 fragColor;
 void main()
 {
     vec2 uv = gl_FragCoord.xy / iResolution;
-    float visibility = clamp(qt_Opacity, 0.0, 1.0);
+    // iTime is the per-leg [0,1] progress driven by SurfaceAnimator's
+    // shaderTime AnimatedValue; the parent surface's opacity leg
+    // supplies the direction-aware outer fade.
+    float visibility = clamp(iTime, 0.0, 1.0);
 
     int dir = int(clamp(direction, 0.0, 3.0));
     float coord;

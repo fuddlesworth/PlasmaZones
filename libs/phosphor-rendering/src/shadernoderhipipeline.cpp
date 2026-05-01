@@ -514,35 +514,57 @@ bool ShaderNodeRhi::ensurePipeline()
 
 void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
 {
-    // Slot 0 (binding 7) override: a `setSourceTextureProvider`-supplied
-    // live texture takes precedence over any QImage-uploaded user
-    // texture at the same slot. The provider's QRhiTexture is fetched
-    // here (not cached as a member because we want every SRB rebuild
-    // to see the freshest pointer — the cache lives in m_lastSourceRhiTexture
-    // for change-detection only). m_sourceSampler is created lazily in
-    // uploadDirtyTextures; if it hasn't materialised yet (first frame
-    // before prepare() ran the upload pass) we fall through to the
-    // QImage user-texture path so the binding still resolves to
-    // *something* and the SRB build doesn't omit binding 7 entirely.
-    bool sourceBound = false;
-    if (m_sourceTextureProvider && m_sourceSampler) {
-        if (QSGTexture* sgTex = m_sourceTextureProvider->texture()) {
-            if (QRhiTexture* rhiTex = sgTex->rhiTexture()) {
-                bindings.append(QRhiShaderResourceBinding::sampledTexture(7, QRhiShaderResourceBinding::FragmentStage,
-                                                                          rhiTex, m_sourceSampler.get()));
-                sourceBound = true;
-            }
+    // Slot 0 (binding kUserTextureBaseBinding) override: a
+    // `setSourceTextureProvider`-supplied live texture takes precedence over
+    // any QImage-uploaded user texture at the same slot. We read the
+    // pre-resolved m_lastSourceRhiTexture (snapshot taken under the same
+    // sampler/identity check in uploadDirtyTextures()) rather than querying
+    // the provider again — calling provider->texture()->rhiTexture() here
+    // would re-open the TOCTOU window between the change-detection step in
+    // uploadDirtyTextures and this SRB build, where an FBO recreation could
+    // hand back a different QRhiTexture* than the cache observed.
+    //
+    // When slot 0 is overridden but the resolved texture is null (provider
+    // not yet ready, foreign-RHI guard fired, or sampler create failed) we
+    // bind the dedicated 1×1 transparent fallback rather than fall through
+    // to the QImage path — the documented contract is that
+    // setSourceTextureProvider SUPERSEDES the QImage at slot 0, and a
+    // transient null must not unmask a stale snapshot.
+    if (m_sourceTextureProvider) {
+        QRhiTexture* slot0Tex = nullptr;
+        QRhiSampler* slot0Sam = nullptr;
+        if (m_lastSourceRhiTexture && m_sourceSampler) {
+            slot0Tex = m_lastSourceRhiTexture;
+            slot0Sam = m_sourceSampler.get();
+        } else if (m_transparentFallbackTexture && m_userTextureSamplers[0]) {
+            slot0Tex = m_transparentFallbackTexture.get();
+            slot0Sam = m_userTextureSamplers[0].get();
+        } else if (m_userTextures[0] && m_userTextureSamplers[0]) {
+            // Last resort: provider set but no fallback yet (sampler create
+            // failed and fallback texture create also failed) — keep slot 0
+            // bound so the SRB build doesn't omit binding 7 entirely. This
+            // path should only be hit on a degraded RHI.
+            slot0Tex = m_userTextures[0].get();
+            slot0Sam = m_userTextureSamplers[0].get();
         }
+        if (slot0Tex && slot0Sam) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage, slot0Tex, slot0Sam));
+        }
+    } else if (m_userTextures[0] && m_userTextureSamplers[0]) {
+        // No override: standard QImage user-texture path.
+        bindings.append(
+            QRhiShaderResourceBinding::sampledTexture(kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage,
+                                                      m_userTextures[0].get(), m_userTextureSamplers[0].get()));
     }
 
-    for (int t = 0; t < kMaxUserTextures; ++t) {
-        if (sourceBound && t == 0) {
-            continue; // skip the QImage path for slot 0; already overridden
-        }
+    // Slots 1-3 always come from the QImage path; the source-provider
+    // override is slot-0-only by design.
+    for (int t = 1; t < kMaxUserTextures; ++t) {
         if (m_userTextures[t] && m_userTextureSamplers[t]) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(7 + t, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_userTextures[t].get(),
-                                                                      m_userTextureSamplers[t].get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                kUserTextureBaseBinding + t, QRhiShaderResourceBinding::FragmentStage, m_userTextures[t].get(),
+                m_userTextureSamplers[t].get()));
         }
     }
 }

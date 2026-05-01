@@ -18,11 +18,6 @@ Flickable {
 
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
-
-        AnimationSubPageHeader {
-            Layout.fillWidth: true
-        }
-
     }
 
 }

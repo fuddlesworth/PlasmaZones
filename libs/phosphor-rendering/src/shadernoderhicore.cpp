@@ -155,11 +155,18 @@ QSGRenderNode::RenderingFlags ShaderNodeRhi::flags() const
 
 QRectF ShaderNodeRhi::rect() const
 {
-    std::lock_guard<std::mutex> guard(m_itemMutex);
-    if (m_itemValid.load(std::memory_order_acquire) && m_item) {
-        return QRectF(0, 0, m_item->width(), m_item->height());
+    // Lock-free fast path: serve cached geometry written by prepare() under
+    // m_itemMutex. The cull pass calls rect() on every node every frame; if
+    // we locked here we'd contend with prepare()/render() (which do real
+    // work) for the same mutex. The atomics drift by at most one frame, which
+    // the cull pass tolerates — and once the item is invalidated both fall
+    // back to 0 because invalidateItem() callers stop submitting frames.
+    if (!m_itemValid.load(std::memory_order_acquire)) {
+        return QRectF();
     }
-    return QRectF();
+    const float w = m_cachedWidth.load(std::memory_order_acquire);
+    const float h = m_cachedHeight.load(std::memory_order_acquire);
+    return QRectF(0, 0, w, h);
 }
 
 // ============================================================================
@@ -191,6 +198,11 @@ void ShaderNodeRhi::prepare()
         itemHeight = m_item->height();
         itemDpr = win->devicePixelRatio();
     }
+    // Publish the latest geometry to the lock-free rect() reader. Writing
+    // outside the lock is safe — these atomics are independent of the
+    // m_item pointer and rect() never touches m_item.
+    m_cachedWidth.store(static_cast<float>(itemWidth), std::memory_order_release);
+    m_cachedHeight.store(static_cast<float>(itemHeight), std::memory_order_release);
     if (!rhi) {
         qCDebug(lcShaderNode) << "prepare(): bail — rhi is null";
         return;
@@ -336,7 +348,7 @@ void ShaderNodeRhi::prepare()
                 // the only sign of a broken shader is the per-frame
                 // "render(): bail — shaderReady: false" debug message,
                 // which buries the actual GLSL diagnostic.
-                qCWarning(lcShaderNode) << "Shader compile failed (" << m_vertexPath << "):" << m_shaderError;
+                qCWarning(lcShaderNode) << "Shader compile failed for" << m_vertexPath << ":" << m_shaderError;
                 return;
             }
             auto fragResult = ShaderCompiler::compile(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
@@ -345,7 +357,7 @@ void ShaderNodeRhi::prepare()
                 m_shaderError = QStringLiteral("Fragment shader: ")
                     + (fragResult.error.isEmpty() ? QStringLiteral("compilation failed (no details)")
                                                   : fragResult.error);
-                qCWarning(lcShaderNode) << "Shader compile failed (" << m_fragmentPath << "):" << m_shaderError;
+                qCWarning(lcShaderNode) << "Shader compile failed for" << m_fragmentPath << ":" << m_shaderError;
                 return;
             }
             m_shaderReady = true;
@@ -512,10 +524,11 @@ void ShaderNodeRhi::prepare()
 void ShaderNodeRhi::render(const RenderState* state)
 {
     Q_UNUSED(state)
-    if (!m_itemValid.load(std::memory_order_acquire)) {
-        qCDebug(lcShaderNode) << "render(): bail — item invalid";
-        return;
-    }
+    // Single authoritative gating point lives inside the locked viewport
+    // block below — see the m_itemMutex guard around the m_item dereference.
+    // The previous unlocked early-return here was redundant and gave a
+    // false sense of safety: a stale `true` could still slip through to the
+    // locked block, which (correctly) re-checks. One obvious gate, no two.
     if (!m_shaderReady || !m_pipeline || !m_srb) {
         qCDebug(lcShaderNode) << "render(): bail — shaderReady:" << m_shaderReady
                               << "pipeline:" << (m_pipeline != nullptr) << "srb:" << (m_srb != nullptr);
