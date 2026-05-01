@@ -45,9 +45,11 @@ void main()
 
     float bs = max(blockSize, 0.01);
     vec2 block = floor(uv / bs);
-    // Per-frame noise advance — same iTime drives the block jitter so
-    // every block picks a fresh displacement each frame instead of
-    // freezing to a static pattern.
+    // floor(iTime * 10.0) quantises the jitter to ~10 buckets across the
+    // [0,1] leg — at 60Hz playback that's a fresh displacement every ~6
+    // frames, giving a step-frame "glitch" feel rather than continuous
+    // smooth noise. Replace `floor(iTime * 10.0)` with `iTime * 10.0` for
+    // continuous noise if a smoother variant is wanted.
     float blockNoise = hash(block + floor(iTime * 10.0));
 
     float displacement = 0.0;

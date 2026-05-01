@@ -255,6 +255,22 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
     if (m_sourceItem.data() == item) {
         return;
     }
+    // Reject self/ancestor references: sampling our own output (or any
+    // ancestor in the visual tree we belong to) creates a layer→shader→layer
+    // recursion that crashes inside Qt's layer system. The header documents
+    // this constraint at the API level; enforce it at the boundary.
+    if (item) {
+        for (QQuickItem* probe = this; probe; probe = probe->parentItem()) {
+            if (probe == item) {
+                qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this` or an ancestor; sampling self "
+                                           "produces a feedback recursion. Source item left cleared.";
+                m_sourceItem = nullptr;
+                Q_EMIT sourceItemChanged();
+                update();
+                return;
+            }
+        }
+    }
     m_sourceItem = item;
     if (item) {
         // Force `layer.enabled = true` so the QQuickItem becomes a
@@ -822,11 +838,13 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     }
 
     auto* node = static_cast<ShaderNodeRhi*>(oldNode);
+    bool freshNode = false;
     if (!node) {
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
         m_renderNode = nullptr;
         node = createShaderNode();
         m_renderNode = node;
+        freshNode = true;
     }
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
@@ -852,8 +870,15 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     // Uniform extension is synced inside syncBasePropertiesToNode() above.
 
     // ── Sync shader source (must compile before rendering) ───────────
+    // freshNode covers SG-deletion + first-call: a brand-new node has no
+    // shader baked, so trigger a load regardless of m_shaderDirty.
+    // Do NOT retry on `!node->isShaderReady()` alone — a permanent load
+    // failure (missing file, bad GLSL) would otherwise re-attempt every
+    // frame and spam the journal at 60Hz. Real device-loss is handled by
+    // sceneGraphAboutToStop, which sets m_shaderDirty=true; transient
+    // errors retry on the next shaderSource change.
     const bool wasDirty = m_shaderDirty.exchange(false);
-    const bool needLoad = wasDirty || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    const bool needLoad = wasDirty || freshNode;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             QString fragPath = m_shaderSource.toLocalFile();

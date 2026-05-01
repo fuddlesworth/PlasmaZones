@@ -93,8 +93,18 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
             if (!firstMatch) {
                 firstMatch = item;
             } else if (!warnedDuplicate) {
-                qCWarning(lcSurfaceAnimator) << "multiple shaderAnchor tags found under" << root
-                                             << "— using first match" << firstMatch << "ignoring" << item;
+                // Latch a flag on the root so this warning fires at most once
+                // per scene over the lifetime of the animator — runLeg is
+                // invoked on every show/hide and would otherwise spam an
+                // identical message into the journal at each leg.
+                static const char* kDupeWarnedProperty = "_phosphorShaderAnchorDupeWarned";
+                if (!root->property(kDupeWarnedProperty).toBool()) {
+                    qCWarning(lcSurfaceAnimator).nospace()
+                        << "multiple shaderAnchor tags found under " << root << " — using first match " << firstMatch
+                        << " (objectName='" << firstMatch->objectName() << "') ignoring " << item << " (objectName='"
+                        << item->objectName() << "')";
+                    root->setProperty(kDupeWarnedProperty, true);
+                }
                 warnedDuplicate = true;
             }
         }
@@ -168,15 +178,6 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
         foundExplicitAnchor = true;
     }
 
-    if (foundExplicitAnchor) {
-        // Two-step "layer" access — single-step setProperty(
-        // "layer.enabled", true) creates a dynamic QObject property
-        // that never reaches QQuickItemLayer.
-        if (QObject* layer = shaderAnchor->property("layer").value<QObject*>()) {
-            layer->setProperty("enabled", true);
-        }
-    }
-
     qCDebug(lcSurfaceAnimator).nospace() << "shader leg: effect=" << shaderEffectId
                                          << " path=" << effect.fragmentShaderPath << " anchor=" << shaderAnchor
                                          << " explicit=" << foundExplicitAnchor << " size=" << shaderAnchor->width()
@@ -184,15 +185,15 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
 
     auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderAnchor);
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
-    shaderItem->setWidth(shaderAnchor->width());
-    shaderItem->setHeight(shaderAnchor->height());
     shaderItem->setITime(0.0);
-    shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
 
     // setSourceItem (binds anchor's layer texture as iChannel0) only
     // when we explicitly enabled layer — on the fallback path
     // setSourceItem would try to enable layer on the QQuickRootItem
-    // and re-introduce the OSD-doesn't-render bug.
+    // and re-introduce the OSD-doesn't-render bug. setSourceItem itself
+    // owns the two-step layer.enabled=true on the source item, so the
+    // animator does not duplicate that toggle here; teardownShaderLeg
+    // counters it via the same two-step (gated identically).
     if (foundExplicitAnchor) {
         shaderItem->setSourceItem(shaderAnchor);
     }
@@ -216,13 +217,25 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // configure pass. QPointer-capture the anchor so a Loader rebuild
     // that reparents-out-then-destroys doesn't fire widthChanged
     // against a tombstoned raw pointer before Qt's auto-disconnect.
+    //
+    // Skip zero-dim anchors: every transition shader divides by
+    // iResolution (vec2 uv = gl_FragCoord.xy / iResolution), so an
+    // initial (0,0) — or worse, the asymmetric mid-update (w,0) /
+    // (0,h) where width and height arrive in separate signals —
+    // produces NaN that propagates to fragColor. Wait until both
+    // dimensions are non-zero before pushing geometry.
     auto syncGeometry = [shaderItem, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
         if (!anchorPtr) {
             return;
         }
-        shaderItem->setWidth(anchorPtr->width());
-        shaderItem->setHeight(anchorPtr->height());
-        shaderItem->setIResolution(QSizeF(anchorPtr->width(), anchorPtr->height()));
+        const qreal w = anchorPtr->width();
+        const qreal h = anchorPtr->height();
+        if (w <= 0.0 || h <= 0.0) {
+            return;
+        }
+        shaderItem->setWidth(w);
+        shaderItem->setHeight(h);
+        shaderItem->setIResolution(QSizeF(w, h));
     };
     QObject::connect(shaderAnchor, &QQuickItem::widthChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
@@ -291,6 +304,16 @@ public:
             m_pendingDestroy.push_back(std::move(track.shaderTime));
         }
         if (track.shaderItem) {
+            // Disconnect the anchor→shaderItem signal connections BEFORE
+            // queueing the shaderItem for delete. Qt's
+            // receiver-destroyed auto-disconnect runs only when the
+            // shaderItem is actually destroyed by the event loop — the
+            // window between deleteLater() and dispatch is wide enough
+            // for layer.enabled=false (below) to fire widthChanged
+            // synchronously against a queued-for-delete receiver.
+            if (track.shaderAnchor) {
+                QObject::disconnect(track.shaderAnchor.data(), nullptr, track.shaderItem.data(), nullptr);
+            }
             track.shaderItem->deleteLater();
             track.shaderItem = nullptr;
         }
@@ -510,30 +533,35 @@ public:
             if (it == m_tracks.end() || !it->second.shaderTime || !it->second.shaderItem) {
                 return;
             }
-            it->second.shaderTime->start(
-                0.0, 1.0,
-                buildSpec(
-                    resolveProfile(m_registry, shaderProfilePath.isEmpty() ? opacityProfilePath : shaderProfilePath),
-                    clock,
-                    /*onValueChanged=*/
-                    [this, surface](const qreal& v) {
-                        auto sit = m_tracks.find(surface);
-                        // shaderItem QPointer auto-nulls if the
-                        // ShaderEffect's parent (the anchor) was torn
-                        // down between ticks — bail rather than UAF.
-                        if (sit == m_tracks.end() || !sit->second.shaderItem) {
-                            return;
-                        }
-                        // Geometry sync runs off the anchor's
-                        // widthChanged/heightChanged signals (see
-                        // syncGeometry); the per-tick callback only
-                        // threads the time value through.
-                        sit->second.shaderItem->setITime(v);
-                    },
-                    /*onComplete=*/
-                    [this, surface]() {
-                        legCompleted(surface);
-                    }));
+            const QString shaderLegProfilePath = shaderProfilePath.isEmpty() ? opacityProfilePath : shaderProfilePath;
+            if (shaderLegProfilePath.isEmpty()) {
+                qCDebug(lcSurfaceAnimator)
+                    << "shader leg falling back to library defaults (150ms OutCubic) — both shader and opacity "
+                       "profile paths are empty for surface"
+                    << surface;
+            }
+            it->second.shaderTime->start(0.0, 1.0,
+                                         buildSpec(
+                                             resolveProfile(m_registry, shaderLegProfilePath), clock,
+                                             /*onValueChanged=*/
+                                             [this, surface](const qreal& v) {
+                                                 auto sit = m_tracks.find(surface);
+                                                 // shaderItem QPointer auto-nulls if the
+                                                 // ShaderEffect's parent (the anchor) was torn
+                                                 // down between ticks — bail rather than UAF.
+                                                 if (sit == m_tracks.end() || !sit->second.shaderItem) {
+                                                     return;
+                                                 }
+                                                 // Geometry sync runs off the anchor's
+                                                 // widthChanged/heightChanged signals (see
+                                                 // syncGeometry); the per-tick callback only
+                                                 // threads the time value through.
+                                                 sit->second.shaderItem->setITime(v);
+                                             },
+                                             /*onComplete=*/
+                                             [this, surface]() {
+                                                 legCompleted(surface);
+                                             }));
         }
 
         // Kick the driver — ensureDriving is idempotent. Skip if a

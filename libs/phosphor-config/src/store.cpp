@@ -336,6 +336,11 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         // flush loop overwrite a non-canonical disk value (e.g. " a , b "
         // re-written as "a,b") instead of being short-circuited by the
         // validator on both sides agreeing on the same canonical form.
+        //
+        // Unlike reset() / resetGroup(), this path does NOT skip writing on
+        // (absent && coerced == default) — Settings::save() relies on
+        // write() materialising every declared key onto disk so the
+        // stale-key purge can run from a fully-populated baseline.
         if (g->hasKey(key)) {
             const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
             if (current == coerced) {

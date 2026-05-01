@@ -311,12 +311,15 @@ SettingsController::SettingsController(QObject* parent)
     // registration so the watcher attaches a direct watch).
     m_animationShaderRegistry = new PhosphorAnimationShaders::AnimationShaderRegistry(this);
     {
-        QStringList animDirs =
-            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
-                                      QStandardPaths::LocateDirectory);
+        // Centralised subdir constant (with leading "/") — strip the slash for
+        // locateAll's relative-path arg, keep it as-is for the writable-base
+        // join. This matches AnimationsPageController::userShaderDirectoryPath
+        // so the two settings-side consumers can never drift apart.
+        const QString subdir = ConfigDefaults::userAnimationsSubdir();
+        QStringList animDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1),
+                                                         QStandardPaths::LocateDirectory);
         std::reverse(animDirs.begin(), animDirs.end());
-        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-            + QStringLiteral("/plasmazones/animations");
+        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
         if (!animDirs.contains(userAnimDir))
             animDirs.append(userAnimDir);
         QDir().mkpath(userAnimDir);

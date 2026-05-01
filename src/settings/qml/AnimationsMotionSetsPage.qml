@@ -153,7 +153,7 @@ Flickable {
                             }
 
                             Label {
-                                text: i18n("%1 override(s)", modelData.overrideCount)
+                                text: i18np("%1 override", "%1 overrides", modelData.overrideCount)
                                 color: Kirigami.Theme.disabledTextColor
                                 font: Kirigami.Theme.smallFont
                             }

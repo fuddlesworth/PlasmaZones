@@ -133,7 +133,12 @@ static void fillLibraryDefaults(QVariantMap& profile)
     // Without this, QML cards crashed with "Cannot read property of
     // undefined" when no parent supplied a curve.
     if (!profile.contains(QLatin1String(P::JsonFieldCurve))) {
-        profile.insert(QLatin1String(P::JsonFieldCurve), PhosphorAnimation::Easing().toString());
+        // Cache the canonical default curve string. Constructing a fresh
+        // PhosphorAnimation::Easing() per call just to read its toString()
+        // is wasteful — the function-local static is initialised once,
+        // thread-safely under C++11.
+        static const QString kDefaultCurve = PhosphorAnimation::Easing().toString();
+        profile.insert(QLatin1String(P::JsonFieldCurve), kDefaultCurve);
     }
 }
 
@@ -175,10 +180,11 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     connect(m_motionSets, &MotionSetStore::motionSetsChanged, this, &AnimationsPageController::motionSetsChanged);
     connect(m_motionSets, &MotionSetStore::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    // applyMotionSet's overrideChanged emissions ride through the
-    // controller's existing setOverride callback path (each setOverride
-    // already emits overrideChanged), so we don't connect MotionSetStore's
-    // overrideChanged to avoid double-firing.
+    // applyMotionSet's per-path overrideChanged emissions ride through
+    // the m_writeOverride callback (which the controller wires to its
+    // own setOverride). MotionSetStore therefore exposes no
+    // overrideChanged signal — the controller is the single source of
+    // truth for that signal.
 
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
@@ -356,6 +362,19 @@ QVariantList AnimationsPageController::eventSections() const
     using namespace PhosphorAnimation;
     const QStringList paths = ProfilePaths::allBuiltInPaths();
 
+    // Pre-compute the set of paths that are some other path's parent —
+    // any path X with a child Y such that parentPath(Y) == X. Drives the
+    // isCategory flag below in O(1) per row instead of an O(n) scan
+    // (which made eventSections O(n²) overall and lit up profiler runs
+    // on the first drilldown evaluation).
+    QSet<QString> parentPaths;
+    parentPaths.reserve(paths.size());
+    for (const QString& path : paths) {
+        const QString parent = ProfilePaths::parentPath(path);
+        if (!parent.isEmpty())
+            parentPaths.insert(parent);
+    }
+
     // Track section insertion order via a parallel list; QHash would lose
     // taxonomy ordering and the QML drilldown should mirror header order.
     QStringList sectionOrder;
@@ -372,13 +391,8 @@ QVariantList AnimationsPageController::eventSections() const
         entry.insert(QStringLiteral("parent"), ProfilePaths::parentPath(path));
         // A "category" path is one whose label sits at a section/sub-
         // section root (e.g. "window", "panel.popup") rather than a leaf
-        // event. Detect by checking whether any other built-in path uses
-        // it as a parent prefix.
-        const QString prefix = path + QLatin1Char('.');
-        const bool isCategory = std::any_of(paths.cbegin(), paths.cend(), [&](const QString& other) {
-            return other.startsWith(prefix);
-        });
-        entry.insert(QStringLiteral("isCategory"), isCategory);
+        // event — i.e. another built-in path uses it as parent.
+        entry.insert(QStringLiteral("isCategory"), parentPaths.contains(path));
         sectionPaths[section].append(entry);
     }
 
@@ -408,7 +422,10 @@ QString AnimationsPageController::profileFilePath(const QString& path) const
 {
     // Filenames mirror the path (e.g. `zone.snapIn.json`) — same
     // convention as the daemon's shipped defaults. Validation on @p
-    // path happens at every call site so this helper trusts its input.
+    // path happens at every call site so this helper trusts its input;
+    // assert in debug builds so a future caller that forgets the gate
+    // crashes fast rather than producing a path-traversal file open.
+    Q_ASSERT(isValidEventPath(path));
     return userProfilesDir() + QLatin1Char('/') + path + QStringLiteral(".json");
 }
 
@@ -479,20 +496,39 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
         return false;
 
     const QString filePath = profileFilePath(path);
-    snapshotFileIfFirst(filePath);
 
+    // Strip the name field for the equality compare against on-disk content
+    // (`readProfileJson` strips it too). Same `obj` is later given the name
+    // back for the write — the canonical name is always the path.
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
-    // The `name` field is what ProfileLoader's envelope helper reads to
-    // assign the registry path. Always overwrite — the QML map shouldn't
-    // carry a stale name.
+    obj.remove(JsonNameKey);
+    const QJsonObject existing = readProfileJson(filePath);
+    if (existing == obj) {
+        // Round-trip with no real change — bail early so a QML two-way
+        // binding cycle doesn't dirty the page or fire spurious
+        // overrideChanged / pendingChangesChanged emissions.
+        return true;
+    }
     obj.insert(JsonNameKey, path);
 
+    // Snapshot ONLY if this is the first edit to this path; remove the
+    // snapshot if the write below fails so hasPendingChanges() doesn't
+    // report a phantom pending edit pointing at content we never touched.
+    const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
+    snapshotFileIfFirst(filePath);
+
     QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (firstSnapshot)
+            m_pendingFileSnapshots.remove(filePath);
         return false;
+    }
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
-    if (!file.commit())
+    if (!file.commit()) {
+        if (firstSnapshot)
+            m_pendingFileSnapshots.remove(filePath);
         return false;
+    }
 
     Q_EMIT overrideChanged(path);
     Q_EMIT pendingChangesChanged();
@@ -683,6 +719,21 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (effectId.isEmpty())
         return clearShaderOverride(path);
 
+    // Reject unknown effect ids at the boundary — without this, a typo
+    // from QML silently writes garbage into the shader-profile tree, and
+    // the daemon's lookup at runtime returns nothing with no settings-side
+    // diagnostic (the failure mode is "no shader applied, no error").
+    //
+    // The `effectIds().isEmpty()` guard avoids tripping the gate when the
+    // registry hasn't yet scanned XDG dirs (asynchronous on some setups,
+    // and unit tests construct an empty registry on purpose) — we can't
+    // distinguish "id is unknown" from "registry not yet populated"
+    // without a separate readiness signal.
+    if (m_shaderRegistry && !m_shaderRegistry->effectIds().isEmpty() && !m_shaderRegistry->hasEffect(effectId)) {
+        qCWarning(lcConfig) << "setShaderOverride: unknown effectId" << effectId << "— ignoring assignment for" << path;
+        return false;
+    }
+
     // Standard pattern: write through Settings::setShaderProfileTree.
     // The shaderProfileTreeJson Q_PROPERTY emits NOTIFY, the
     // SettingsController meta-object loop catches it. No per-edit
@@ -693,6 +744,11 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         profile.parameters = parameters;
 
     ShaderProfileTree tree = m_settings->shaderProfileTree();
+    // Short-circuit when the tree is already at the requested state — avoids
+    // a same-tree write that would cycle through Settings + the boomerang
+    // and fire a spurious pendingChangesChanged.
+    if (tree.directOverride(path) == profile)
+        return true;
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
     // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.

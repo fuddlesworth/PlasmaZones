@@ -202,10 +202,10 @@ bool MotionSetStore::applyMotionSet(const QString& name)
         return false;
     }
 
-    // ── Stage 4: success path. Emit per-path overrideChanged plus a
-    //    single pendingChangesChanged so QML refresh is one tick, not N.
-    for (const QString& p : committedPaths)
-        Q_EMIT overrideChanged(p);
+    // ── Stage 4: success path. The per-path overrideChanged signal is
+    //    already fired by AnimationsPageController::setOverride() inside
+    //    each m_writeOverride call above; emitting it again here would
+    //    double-tick QML observers. Only emit pendingChangesChanged once.
     Q_EMIT pendingChangesChanged();
     return true;
 }

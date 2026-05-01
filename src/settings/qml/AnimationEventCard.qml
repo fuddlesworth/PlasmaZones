@@ -69,10 +69,24 @@ Item {
 
         return currentEasingCurve;
     }
+    // Cached resolved-profile lookup. The C++ Q_INVOKABLE walks the
+    // parent chain on every call; before this cache, the inheritance-
+    // banner Label re-evaluated `inheritSummaryText()` on every
+    // `currentTimingMode` / `currentDuration` / `currentEasingCurve`
+    // change (each binding dependency), so a single keystroke on the
+    // duration slider drove N round-trips into C++ where N is the
+    // number of cards on the page. The revision tick (_inheritRev)
+    // invalidates only when the profile chain actually changes — see
+    // the Connections block below that bumps it on overrideChanged.
+    property int _inheritRev: 0
+    readonly property var _inheritResolved: {
+        _inheritRev;
+        return settingsController.animationsPage.resolvedProfile(root.eventPath);
+    }
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
-        var r = settingsController.animationsPage.resolvedProfile(root.eventPath);
+        var r = root._inheritResolved;
         var curve = r.curve || CurvePresets.defaultEasingCurve;
         var dur = r.duration !== undefined ? r.duration : CurvePresets.defaultDurationMs;
         if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
@@ -189,6 +203,11 @@ Item {
     Connections {
         function onOverrideChanged(path) {
             root.refreshFromTree();
+            // The signal is per-path but the resolved profile depends on
+            // the entire ancestor chain, so any change anywhere can shift
+            // the inheritance banner. Bump the revision tick to invalidate
+            // _inheritResolved.
+            root._inheritRev++;
         }
 
         function onShaderProfileChanged(path) {

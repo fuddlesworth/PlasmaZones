@@ -316,6 +316,13 @@ void ShaderNodeRhi::prepare()
         m_shaderError.clear();
         if (m_vertexShaderSource.isEmpty() || m_fragmentShaderSource.isEmpty()) {
             m_shaderError = QStringLiteral("Vertex or fragment shader source is empty");
+            // Match the warning level used by the compile-failure paths below
+            // (lines further down). Without this, a fragment-only consumer
+            // that lands here loops at "render(): bail — shaderReady: false"
+            // forever with no diagnostic indicating which stage is missing.
+            qCWarning(lcShaderNode) << "Shader bake aborted:" << m_shaderError
+                                    << "vertSrcEmpty=" << m_vertexShaderSource.isEmpty()
+                                    << "fragSrcEmpty=" << m_fragmentShaderSource.isEmpty();
             return;
         }
 
@@ -330,6 +337,10 @@ void ShaderNodeRhi::prepare()
                 m_shaderReady = true;
                 m_pipeline.reset();
                 m_srb.reset();
+                // Reset the feedback-pair SRB too: leaving it pointing at the
+                // previous pipeline format risks a stale binding when feedback
+                // toggles concurrently with a shader swap.
+                m_srbB.reset();
             }
         }
 
@@ -363,6 +374,7 @@ void ShaderNodeRhi::prepare()
             m_shaderReady = true;
             m_pipeline.reset();
             m_srb.reset();
+            m_srbB.reset();
             if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
                 QMutexLocker lock(&filenameShaderCacheMutex());
                 auto& cache = filenameShaderCache();
@@ -599,6 +611,12 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         result.errorMessage = QStringLiteral("Vertex or fragment path is empty");
         return result;
     }
+    // Capture mtimes BEFORE the reads so the cache key reflects the file
+    // version we actually loaded (not whatever the file is at after the
+    // open). Reading mtime after loadAndExpand opens a TOCTOU window where
+    // a concurrent edit lands new mtime against old content in the cache.
+    const qint64 vertMtime = QFileInfo(vertexPath).lastModified().toMSecsSinceEpoch();
+    const qint64 fragMtime = QFileInfo(fragmentPath).lastModified().toMSecsSinceEpoch();
     QString err;
     const QString vertSource = ShaderCompiler::loadAndExpand(vertexPath, includePaths, &err);
     if (vertSource.isEmpty()) {
@@ -610,8 +628,6 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load fragment shader") : err;
         return result;
     }
-    const qint64 vertMtime = QFileInfo(vertexPath).lastModified().toMSecsSinceEpoch();
-    const qint64 fragMtime = QFileInfo(fragmentPath).lastModified().toMSecsSinceEpoch();
 
     auto vertResult = ShaderCompiler::compile(vertSource.toUtf8(), QShader::VertexStage);
     if (!vertResult.shader.isValid()) {

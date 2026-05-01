@@ -3,24 +3,45 @@
 .pragma library
 
 /**
- * @brief Shared spring physics evaluation matching C++ SpringAnimation::evaluate().
+ * @brief Shared spring physics evaluation matching C++ Spring::evaluate().
  *
  * Single source of truth for all QML spring calculations (SpringPreview,
  * CurveThumbnail, etc.) — keeps the damped harmonic oscillator formula
  * in one place instead of duplicated across components.
+ *
+ * The C++ implementation is `Spring::evaluate()` in
+ * `libs/phosphor-animation/src/spring.cpp`. Note the time-domain
+ * difference: this JS treats `t` as REAL SECONDS (Date.now()-driven
+ * preview timer), whereas the C++ side treats `t` as a normalised
+ * [0,1] progress that it scales onto seconds via `settleTime()`. The
+ * step-response math (the body of `evaluate` below) is identical for a
+ * given `(omega, zeta)`; only the parameterisation of `t` differs.
  */
 
 /**
  * Evaluate spring position at time t (seconds). Returns 0→1 (may overshoot).
- * Matches C++ SpringAnimation::evaluate() in windowanimator.cpp.
+ *
+ * @param t real seconds since the spring was released
+ * @param stiffness omega² — the C++ side stores `omega` directly; pass
+ *        `omega * omega` here for parity
+ * @param dampingRatio zeta ∈ [0, 10]; 0 = undamped, 1 = critical, >1 = over
+ * @param initialVelocity optional v0; defaults to 0
  */
 function evaluate(t, stiffness, dampingRatio, initialVelocity) {
     if (t <= 0)
         return 0;
 
-    var omega = Math.sqrt(Math.max(1, stiffness));
-    var zeta = dampingRatio;
-    zeta = Math.max(0.01, zeta);
+    // Floor stiffness with a tiny epsilon (not 1) so omega = sqrt(stiffness)
+    // can express the full C++ allowed range (omega ≥ 0.1, i.e.
+    // stiffness ≥ 0.01). The earlier `Math.max(1, stiffness)` silently
+    // pinned omega to a 1 rad/s floor, giving incorrect shapes for
+    // low-stiffness presets.
+    var omega = Math.sqrt(Math.max(1e-6, stiffness));
+    // Mirror the C++ Spring's allowed zeta range [0, 10] verbatim. zeta=0
+    // (truly undamped) is supported by the underdamped branch below
+    // (sqrt(1 - 0) = 1, finite cosine/sine), so no additional clamp is
+    // needed.
+    var zeta = Math.max(0, Math.min(10, dampingRatio));
     var v0 = initialVelocity || 0;
 
     if (zeta < 1) {
@@ -52,7 +73,7 @@ function evaluate(t, stiffness, dampingRatio, initialVelocity) {
 
 /**
  * Check if the spring has settled within epsilon at time t (seconds).
- * Matches C++ SpringAnimation::isSettled().
+ * Matches C++ Spring::isSettled() in libs/phosphor-animation/src/spring.cpp.
  */
 function isSettled(t, stiffness, dampingRatio, epsilon) {
     if (t <= 0)
@@ -64,22 +85,46 @@ function isSettled(t, stiffness, dampingRatio, epsilon) {
 }
 
 /**
- * Estimate settle time via sampling — requires 3 consecutive settled samples
- * to avoid false positives from underdamped springs briefly crossing epsilon.
- * Matches C++ SpringAnimation::estimatedDuration().
+ * Settle-time estimate, matching C++ `Spring::settleTime()` in
+ * `libs/phosphor-animation/src/spring.cpp` analytically rather than by
+ * sampling. The previous sampling-based implementation walked the spring
+ * at 0.005s steps for up to 10s — ~2000 evaluate() calls per request,
+ * with isSettled() invoking evaluate() twice per step (~4000 calls).
+ * Each repaint of CurveThumbnail / SpringPreview triggered this, and the
+ * C++ side already exposes the closed-form solution: switch to it.
+ *
+ * Underdamped (ζ < 1):     T = -ln(eps) / (ζ · ω)
+ * Critically damped (ζ=1): T ≈ 5.834 / ω    (-W₋₁(-eps · e⁻¹) · 1/ω)
+ * Overdamped (ζ > 1):      T = -ln(eps) / (ω · (ζ - √(ζ²-1)))
+ *
+ * `epsilon` defaults to 0.02 — same threshold the C++ side uses.
  */
 function estimateSettleTime(stiffness, dampingRatio, epsilon) {
+    var omega = Math.sqrt(Math.max(1e-6, stiffness));
+    var zeta = Math.max(0, Math.min(10, dampingRatio));
+    var eps = (epsilon !== undefined && epsilon > 0) ? epsilon : 0.02;
     var maxT = 10;
-    var dt = 0.005;
-    var requiredConsecutive = 3;
-    var consecutive = 0;
-    for (var t = dt; t <= maxT; t += dt) {
-        if (isSettled(t, stiffness, dampingRatio, epsilon)) {
-            if (++consecutive >= requiredConsecutive)
-                return t - (requiredConsecutive - 1) * dt;
-        } else {
-            consecutive = 0;
-        }
+
+    var t;
+    var critBand = 0.05; // blend zone around ζ=1 to avoid the singularity
+    if (zeta < 1 - critBand) {
+        t = -Math.log(eps) / (zeta * omega);
+    } else if (zeta > 1 + critBand) {
+        t = -Math.log(eps) / (omega * (zeta - Math.sqrt(zeta * zeta - 1)));
+    } else if (Math.abs(zeta - 1) < 1e-9) {
+        t = 5.834 / omega;
+    } else {
+        // Linear blend across the critical-damping band so the curve is
+        // continuous as ζ sweeps through 1. Mirrors the C++ Spring's
+        // blending logic.
+        var critT = 5.834 / omega;
+        var sideT = (zeta < 1)
+            ? -Math.log(eps) / (zeta * omega)
+            : -Math.log(eps) / (omega * (zeta - Math.sqrt(zeta * zeta - 1)));
+        var w = Math.abs(zeta - 1) / critBand;
+        t = critT * (1 - w) + sideT * w;
     }
-    return maxT;
+    if (!isFinite(t) || t < 0)
+        t = maxT;
+    return Math.min(t, maxT);
 }

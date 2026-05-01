@@ -17,8 +17,8 @@ Kirigami.Dialog {
     id: root
 
     property string eventLabel: ""
-    property int timingMode: 0
-    property string easingCurve: "0.33,1.00,0.68,1.00"
+    property int timingMode: CurvePresets.timingModeEasing
+    property string easingCurve: CurvePresets.defaultEasingCurve
     // (omega, zeta) — rad/s and damping ratio, per Spring.h
     property real springOmega: 12
     property real springZeta: 1
@@ -61,14 +61,16 @@ Kirigami.Dialog {
     }
     onOpened: {
         root._savingPreset = false;
+        // Setting `_workingCurve` flows into easingPreviewInDialog.curve via
+        // the declarative binding `curve: root._workingCurve` below. The
+        // EasingPreview's onCurveChanged handler then drives parseCurve +
+        // replay automatically — no imperative assignment needed (and
+        // assigning easingPreviewInDialog.curve directly would SEVER the
+        // declarative binding from _workingCurve).
         _workingCurve = easingCurve;
         _workingOmega = springOmega;
         _workingZeta = springZeta;
         root._dirty = false;
-        if (timingMode === CurvePresets.timingModeEasing) {
-            easingPreviewInDialog.curve = easingCurve;
-            easingPreviewInDialog.replay();
-        }
     }
 
     ColumnLayout {
@@ -113,7 +115,6 @@ Kirigami.Dialog {
                     if (curve) {
                         root._workingCurve = curve;
                         root._dirty = true;
-                        easingPreviewInDialog.curve = curve;
                     }
                 }
             }
@@ -144,7 +145,6 @@ Kirigami.Dialog {
                         if (curve) {
                             root._workingCurve = curve;
                             root._dirty = true;
-                            easingPreviewInDialog.curve = curve;
                         }
                     }
                 }
@@ -176,16 +176,11 @@ Kirigami.Dialog {
                     var amp = value.toFixed(2);
                     if (ct.indexOf("elastic") >= 0) {
                         var per = easingPreviewInDialog.elasticPeriod.toFixed(2);
-                        var newCurve = ct + ":" + amp + "," + per;
-                        root._workingCurve = newCurve;
-                        root._dirty = true;
-                        easingPreviewInDialog.curve = newCurve;
+                        root._workingCurve = ct + ":" + amp + "," + per;
                     } else {
-                        var newCurve2 = ct + ":" + amp + "," + easingPreviewInDialog.bouncesCount;
-                        root._workingCurve = newCurve2;
-                        root._dirty = true;
-                        easingPreviewInDialog.curve = newCurve2;
+                        root._workingCurve = ct + ":" + amp + "," + easingPreviewInDialog.bouncesCount;
                     }
+                    root._dirty = true;
                 }
             }
 
@@ -209,10 +204,8 @@ Kirigami.Dialog {
                 onMoved: (value) => {
                     var ct = easingPreviewInDialog.curveType;
                     var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
-                    var newCurve = ct + ":" + amp + "," + value.toFixed(2);
-                    root._workingCurve = newCurve;
+                    root._workingCurve = ct + ":" + amp + "," + value.toFixed(2);
                     root._dirty = true;
-                    easingPreviewInDialog.curve = newCurve;
                 }
             }
 
@@ -234,10 +227,8 @@ Kirigami.Dialog {
                 onMoved: (value) => {
                     var ct = easingPreviewInDialog.curveType;
                     var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
-                    var newCurve = ct + ":" + amp + "," + Math.round(value);
-                    root._workingCurve = newCurve;
+                    root._workingCurve = ct + ":" + amp + "," + Math.round(value);
                     root._dirty = true;
-                    easingPreviewInDialog.curve = newCurve;
                 }
             }
 

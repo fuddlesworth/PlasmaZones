@@ -15,7 +15,6 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 
-#include <QJsonDocument>
 #include <QGuiApplication>
 #include <QMetaMethod>
 #include <QMetaProperty>
@@ -1002,16 +1001,14 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
 {
     const QVariantMap map =
         m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    if (map.isEmpty())
-        return {};
     return PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map));
 }
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
-    // Value-equality compare: brittle byte-level JSON differences (key
-    // ordering, whitespace) would otherwise emit spurious
-    // shaderProfileTreeChanged signals on round-trip writes.
+    // Value-equality compare so a same-tree write doesn't fire a spurious
+    // changed signal (e.g. discard-changes path that calls
+    // setShaderProfileTree(currentTree)).
     const QVariantMap prevMap =
         m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
     PhosphorAnimationShaders::ShaderProfileTree prevTree;

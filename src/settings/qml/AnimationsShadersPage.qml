@@ -160,7 +160,7 @@ Flickable {
                                         }
 
                                         Label {
-                                            text: i18n("%1 param(s)", (shaderRow.modelData.parameters || []).length)
+                                            text: i18np("%1 parameter", "%1 parameters", (shaderRow.modelData.parameters || []).length)
                                             font: Kirigami.Theme.smallFont
                                             color: Kirigami.Theme.disabledTextColor
                                         }
@@ -217,9 +217,15 @@ Flickable {
 
                                         Label {
                                             text: {
-                                                if (modelData.minValue !== undefined && modelData.maxValue !== undefined)
-                                                    return i18n("[%1 .. %2]", modelData.minValue, modelData.maxValue);
-
+                                                if (modelData.minValue !== undefined && modelData.maxValue !== undefined) {
+                                                    // Format floats to 2 decimals so a default like
+                                                    // 0.123456789 doesn't render with 9 digits in
+                                                    // the per-shader range display.
+                                                    const fmt = (v) => {
+                                                        return Number.isInteger(v) ? String(v) : Number(v).toFixed(2);
+                                                    };
+                                                    return i18n("[%1 .. %2]", fmt(modelData.minValue), fmt(modelData.maxValue));
+                                                }
                                                 return "";
                                             }
                                             color: Kirigami.Theme.disabledTextColor

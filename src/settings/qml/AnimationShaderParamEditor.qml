@@ -117,6 +117,8 @@ ColumnLayout {
         model: root._paramSchema
 
         delegate: Loader {
+            id: paramLoader
+
             required property var modelData
 
             Layout.fillWidth: true
@@ -131,17 +133,32 @@ ColumnLayout {
                 case "color":
                     return colorRow;
                 default:
-                    return null;
+                    // Unknown type: render a labelled placeholder so a
+                    // shader pack shipping a `vec2` (or any unsupported
+                    // type) is visible instead of silently absent.
+                    return unsupportedRow;
                 }
             }
-            // Pass parameter info through Loader.item via property binding
-            // — simpler than dynamic component creation for typed delegates.
+            // paramInfo is set imperatively (Loader.item only exists after
+            // sourceComponent resolves). `value` is bound DECLARATIVELY
+            // below so a mid-life update to `currentParams` (e.g. a Reset
+            // to defaults emit, or another sub-page mutating the same
+            // shader profile) actually propagates into the loaded row —
+            // an imperative `item.value = ...` once at onLoaded never
+            // rebinds.
             onLoaded: {
-                if (item) {
+                if (item)
                     item.paramInfo = modelData;
-                    item.value = root.paramInitialValue(modelData);
-                }
+
             }
+
+            Binding {
+                target: paramLoader.item
+                property: "value"
+                value: root.paramInitialValue(paramLoader.modelData)
+                when: paramLoader.item !== null
+            }
+
         }
 
     }
@@ -165,14 +182,24 @@ ColumnLayout {
             property var paramInfo: ({
             })
             property real value: 0
+            // Validate min/max against NaN/Infinity from malformed metadata.
+            // A NaN bound silently propagates into Qt's slider where it
+            // produces undefined behaviour; pinning to a sane fallback is
+            // the correct boundary-input handling.
+            readonly property real _from: (paramInfo.minValue !== undefined && isFinite(paramInfo.minValue)) ? paramInfo.minValue : 0
+            readonly property real _to: (paramInfo.maxValue !== undefined && isFinite(paramInfo.maxValue) && paramInfo.maxValue > _from) ? paramInfo.maxValue : (_from + 1)
 
             title: paramInfo.name || ""
 
             SettingsSlider {
                 Accessible.name: row.paramInfo.name || ""
-                from: row.paramInfo.minValue !== undefined ? row.paramInfo.minValue : 0
-                to: row.paramInfo.maxValue !== undefined ? row.paramInfo.maxValue : 1
-                stepSize: 0.01
+                from: row._from
+                to: row._to
+                // Honour a metadata-declared `step` if present, otherwise
+                // derive a useful default from the range (200 ticks across
+                // the full sweep), capped at 0.001 so very narrow ranges
+                // still produce non-zero stepSize.
+                stepSize: (row.paramInfo.step !== undefined && isFinite(row.paramInfo.step) && row.paramInfo.step > 0) ? row.paramInfo.step : Math.max(0.001, (row._to - row._from) / 200)
                 value: row.value
                 formatValue: function(v) {
                     return v.toFixed(2);
@@ -195,13 +222,15 @@ ColumnLayout {
             property var paramInfo: ({
             })
             property int value: 0
+            readonly property int _from: (paramInfo.minValue !== undefined && isFinite(paramInfo.minValue)) ? Math.round(paramInfo.minValue) : 0
+            readonly property int _to: (paramInfo.maxValue !== undefined && isFinite(paramInfo.maxValue) && paramInfo.maxValue > _from) ? Math.round(paramInfo.maxValue) : (_from + 100)
 
             title: paramInfo.name || ""
 
             SettingsSlider {
                 Accessible.name: row.paramInfo.name || ""
-                from: row.paramInfo.minValue !== undefined ? row.paramInfo.minValue : 0
-                to: row.paramInfo.maxValue !== undefined ? row.paramInfo.maxValue : 100
+                from: row._from
+                to: row._to
                 stepSize: 1
                 value: row.value
                 onMoved: function(v) {
@@ -265,6 +294,35 @@ ColumnLayout {
                     row.value = selectedColor;
                     root.commit(row.paramInfo.id, selectedColor.toString());
                 }
+            }
+
+        }
+
+    }
+
+    Component {
+        // Rendered when a shader pack declares an unsupported uniform type
+        // (e.g. `vec2`). Gives the user visibility that the parameter
+        // exists rather than silently dropping it from the editor — the
+        // value cannot be edited here but the daemon still reads the
+        // metadata-declared default.
+        id: unsupportedRow
+
+        SettingsRow {
+            id: row
+
+            property var paramInfo: ({
+            })
+            // Loader sets `value` via Binding above; declared so the
+            // assignment doesn't trip a "no such property" warning.
+            property var value
+
+            title: paramInfo.name || ""
+
+            Label {
+                text: i18n("(unsupported type: %1)", row.paramInfo.type || "?")
+                color: Kirigami.Theme.disabledTextColor
+                font: Kirigami.Theme.smallFont
             }
 
         }

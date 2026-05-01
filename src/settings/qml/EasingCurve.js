@@ -130,7 +130,11 @@ function evaluate(t, curveStr) {
     var x2 = parseFloat(parts[2]); if (!isFinite(x2)) x2 = 0.68;
     var y2 = parseFloat(parts[3]); if (!isFinite(y2)) y2 = 1;
 
-    // Newton's method to solve bezier x(p) = t
+    // Newton's method to solve bezier x(p) = t. Clamping is deferred to
+    // AFTER the iteration: clamping inside the loop would freeze p at a
+    // boundary on the first divergent step (a degenerate bezier with
+    // x1>1 or x2<0 can produce a step that overshoots [0,1]) and the
+    // gradient updates afterwards have no effect.
     var p = t;
     for (var i = 0; i < 8; i++) {
         var mt = 1 - p;
@@ -139,8 +143,8 @@ function evaluate(t, curveStr) {
         if (Math.abs(dbx) < 1e-12)
             break;
         p -= bx / dbx;
-        p = Math.max(0, Math.min(1, p));
     }
+    p = Math.max(0, Math.min(1, p));
     var mt2 = 1 - p;
     return 3 * mt2 * mt2 * p * y1 + 3 * mt2 * p * p * y2 + p * p * p;
 }

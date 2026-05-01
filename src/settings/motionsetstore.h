@@ -61,7 +61,6 @@ public:
 
 Q_SIGNALS:
     void motionSetsChanged();
-    void overrideChanged(const QString& path);
     void pendingChangesChanged();
 
 private:

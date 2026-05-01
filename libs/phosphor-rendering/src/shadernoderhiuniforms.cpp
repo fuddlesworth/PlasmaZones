@@ -94,7 +94,7 @@ void ShaderNodeRhi::syncBaseUniforms()
         m_baseUniforms.iChannelResolution[i][2] = 0.0f;
         m_baseUniforms.iChannelResolution[i][3] = 0.0f;
     }
-    m_baseUniforms.iAudioSpectrumSize = m_audioSpectrum.size();
+    m_baseUniforms.iAudioSpectrumSize = static_cast<int>(m_audioSpectrum.size());
 
     // iFlipBufferY set in uploadDirtyTextures() where rhi is available
     m_baseUniforms._pad_after_audioSpectrum[0] = 0;
@@ -537,18 +537,22 @@ void ShaderNodeRhi::bakeBufferShaders()
         bool allOk = true;
         for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses; ++i) {
             const QString& path = m_bufferPaths.at(i);
-            if (!QFileInfo::exists(path)) {
-                allOk = false;
-                break;
-            }
+            // Capture mtime BEFORE the read so the cache key reflects the
+            // version of the file we actually loaded. Reading mtime after
+            // loadAndExpand opens a TOCTOU window where a concurrent edit
+            // would associate new mtime with old content in the bake cache.
+            const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
             QString err;
             QString src = loadAndExpandShader(path, &err);
             if (src.isEmpty()) {
+                // loadAndExpand already returns empty on missing/unreadable;
+                // no separate exists() check needed (and the prior check was
+                // itself a TOCTOU race).
                 allOk = false;
                 break;
             }
             m_multiBufferFragmentShaderSources[i] = src;
-            m_multiBufferMtimes[i] = QFileInfo(path).lastModified().toMSecsSinceEpoch();
+            m_multiBufferMtimes[i] = mtime;
             auto result = ShaderCompiler::compile(src.toUtf8(), QShader::FragmentStage);
             m_multiBufferFragmentShaders[i] = result.shader;
             if (!m_multiBufferFragmentShaders[i].isValid()) {
@@ -580,12 +584,14 @@ void ShaderNodeRhi::bakeBufferShaders()
         m_bufferShaderDirty = false;
         m_bufferShaderReady = false;
         if (m_bufferFragmentShaderSource.isEmpty()) {
-            if (QFileInfo::exists(m_bufferPath)) {
-                QString err;
-                m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
-                if (!m_bufferFragmentShaderSource.isEmpty()) {
-                    m_bufferMtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
-                }
+            // Capture mtime BEFORE the read (TOCTOU-safe cache key) and skip
+            // the redundant exists() check — loadAndExpandShader returns an
+            // empty string on missing/unreadable, which is the gate we need.
+            const qint64 mtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
+            QString err;
+            m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
+            if (!m_bufferFragmentShaderSource.isEmpty()) {
+                m_bufferMtime = mtime;
             }
         }
         if (!m_bufferFragmentShaderSource.isEmpty()) {

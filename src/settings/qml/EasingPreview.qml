@@ -18,7 +18,7 @@ Item {
     id: root
 
     property string curve: root.defaultCurve
-    property int animationDuration: 150
+    property int animationDuration: CurvePresets.defaultDurationMs
     property bool previewEnabled: true
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
@@ -29,8 +29,9 @@ Item {
     // Y range: [-1, 2] mapped to canvas, allowing overshoot
     readonly property real yMin: -1
     readonly property real yMax: 2
-    // Default curve string (Ease Out Cubic) — matches ConfigDefaults
-    readonly property string defaultCurve: "0.33,1.00,0.68,1.00"
+    // Default curve string (Ease Out Cubic) — matches ConfigDefaults via
+    // CurvePresets singleton (single-source-of-truth for the QML side).
+    readonly property string defaultCurve: CurvePresets.defaultEasingCurve
     // Parsed control point values (internal state, bezier only)
     property real cp1x: 0.33
     property real cp1y: 1
@@ -166,7 +167,10 @@ Item {
         return 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t;
     }
 
-    // Newton's method: find parameter t where Bx(t) = x
+    // Newton's method: find parameter t where Bx(t) = x. Clamping is
+    // deferred until AFTER the loop — clamping inside on every step
+    // freezes a divergent iteration at the boundary forever (the
+    // gradient terms after a clamped step do nothing).
     function solveBezierX(x1, x2, x) {
         var t = x;
         for (var i = 0; i < 8; i++) {
@@ -177,9 +181,8 @@ Item {
                 break;
 
             t -= bx / dbx;
-            t = Math.max(0, Math.min(1, t));
         }
-        return t;
+        return Math.max(0, Math.min(1, t));
     }
 
     // Evaluate the easing for a given progress x in [0,1].
