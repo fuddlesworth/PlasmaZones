@@ -862,6 +862,49 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("expected ≥2 emissions, got ") + QString::number(spy.count())));
     }
 
+    // ─── Shader-leg support gate ──────────────────────────────────────────
+
+    /// Pin the shader-leg-support predicate against the daemon-side list.
+    /// `supportsShaderLeg` is the predicate the QML shader-picker visibility
+    /// is bound to; if the surface set in
+    /// `src/core/animationshadersupportedpaths.h` drifts away from the
+    /// `resolveShaderEffect` call sites in
+    /// `src/daemon/overlayservice.cpp`, the QML would either expose
+    /// pickers that do nothing (drift in one direction) or hide pickers
+    /// for events that DO produce shader legs (drift in the other).
+    void supportsShaderLeg_matchesDaemonOverlayConsumers()
+    {
+        AnimationsPageController c;
+
+        // Genuine OSDs.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.hide")));
+
+        // Popup family — leg-leaf paths.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.hide")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.hide")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.show")));
+
+        // Paths the daemon overlay does NOT consume — must NOT be advertised
+        // as supported, otherwise users pick a shader and see nothing.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.open")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone.snapIn")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fade")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace.switchIn")));
+        // Parent paths are not directly consumed (children resolve via
+        // the tree walk-up), so the picker hides on parent rows too.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup")));
+        // SnapAssist hide is intentionally absent — surface destroys
+        // before any hide frame paints.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.hide")));
+        // Empty path / nonsense path.
+        QVERIFY(!c.supportsShaderLeg(QString()));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("../etc/passwd")));
+    }
+
     // ─── Pass-1 behaviour pins ────────────────────────────────────────────
 
     /// `setOverride` compare-and-skip: writing the same Profile twice

@@ -233,6 +233,17 @@ Item {
         }
 
         contentItem: ColumnLayout {
+            // ── Shader effect picker (independent of timing override) ─
+            // Independent of timing override — users can drop a shader on
+            // an event without touching its timing. Gated on the daemon
+            // actually consuming this event path as a shader leg: paths
+            // outside the supported set (see
+            // `src/core/animationshadersupportedpaths.h`) would persist
+            // a shader assignment that never produces a visible effect,
+            // which previously read as "all shaders look the same" to
+            // users testing on `window.*` / `zone.*` / `widget.*` events.
+            readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
+
             spacing: Kirigami.Units.smallSpacing
 
             // ── Inheritance info ──────────────────────────────────────
@@ -263,7 +274,7 @@ Item {
             // override state since the two persist independently.
             RowLayout {
                 Layout.fillWidth: true
-                visible: root.shaderSummary().length > 0
+                visible: root._shaderLegSupported && root.shaderSummary().length > 0
                 spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
@@ -382,13 +393,12 @@ Item {
 
             }
 
-            // ── Shader effect picker (independent of timing override) ─
-            // Visible always (when card is enabled) — users can drop a
-            // shader on an event without touching its timing.
             SettingsSeparator {
+                visible: root._shaderLegSupported
             }
 
             SettingsRow {
+                visible: root._shaderLegSupported
                 title: i18n("Shader effect")
                 description: i18n("Apply a shader transition to this event")
 
@@ -491,6 +501,7 @@ Item {
             // assigned and that effect declares parameters.
             AnimationShaderParamEditor {
                 Layout.fillWidth: true
+                visible: root._shaderLegSupported && effectId.length > 0
                 effectId: root.currentShaderEffectId
                 currentParams: root.currentShaderParams
                 onParamsChanged: function(next) {

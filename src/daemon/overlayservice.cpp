@@ -167,6 +167,13 @@ namespace PAS = PhosphorAnimationShaders;
 /// effect id, equivalent to "no shader leg" — motion runs alone, identical
 /// to the pre-shader-wireup behaviour. The setSettings() handler later
 /// re-registers configs with the live tree once settings exist.
+///
+/// **Source-of-truth note.** The settings UI gates its shader picker on
+/// `src/core/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
+/// which enumerates exactly the paths consumed by `resolveShaderEffect`
+/// in the build*Config functions below. When a new shader-leg surface
+/// lands here, append its leg paths to that list in lockstep so the
+/// settings UI starts surfacing the picker on the new path.
 QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)
 {
     return tree.resolve(path).effectiveEffectId();

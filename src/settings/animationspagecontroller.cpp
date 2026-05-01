@@ -4,6 +4,7 @@
 #include "animationspagecontroller.h"
 
 #include "../config/configdefaults.h"
+#include "../core/animationshadersupportedpaths.h"
 #include "../core/isettings.h"
 #include "../core/logging.h"
 #include "animationpresetlibrary.h"
@@ -636,6 +637,11 @@ static QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 }
 
 } // namespace animations_controller_detail
+
+bool AnimationsPageController::supportsShaderLeg(const QString& path) const
+{
+    return eventPathSupportsShaderLeg(path);
+}
 
 QVariantList AnimationsPageController::availableShaderEffects() const
 {

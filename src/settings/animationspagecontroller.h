@@ -198,6 +198,18 @@ public:
 
     // ── Shader effects (Phase 6) ─────────────────────────────────────
 
+    /// True when @p path is one of the event paths the daemon's overlay
+    /// service actually consumes as a shader-leg surface (osd.show /
+    /// .hide and the `panel.popup.<surface>.<show|hide>` family). Other
+    /// paths persist a shader assignment but never produce a visible
+    /// shader leg — the QML picker hides itself on those rows so the
+    /// user gets clear "this control does nothing here" feedback rather
+    /// than picking a shader and seeing no change. Single source of
+    /// truth lives in @c src/core/animationshadersupportedpaths.h —
+    /// adding a new shader-leg surface in the daemon means appending
+    /// its leg paths there in lockstep.
+    Q_INVOKABLE bool supportsShaderLeg(const QString& path) const;
+
     /// Installed `AnimationShaderEffect`s flattened to a QML-friendly list.
     /// Each row: id / name / description / author / version / category /
     /// isUserEffect / parameters (QVariantList of ParameterInfo maps).
