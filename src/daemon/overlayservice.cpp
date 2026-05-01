@@ -435,7 +435,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // setSnapAssistThumbnail call would silently drop because the engine
     // hasn't materialised yet.
     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
-    m_thumbnailProvider = m_thumbnailProviderOwned.get();
+    m_thumbnailProvider.store(m_thumbnailProviderOwned.get(), std::memory_order_release);
 
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
@@ -470,12 +470,12 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // invariant ever changes.
                 if (!m_thumbnailProviderOwned) {
                     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
-                    m_thumbnailProvider = m_thumbnailProviderOwned.get();
+                    m_thumbnailProvider.store(m_thumbnailProviderOwned.get(), std::memory_order_release);
                 }
                 engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
                                         m_thumbnailProviderOwned.release());
                 QObject::connect(&engine, &QObject::destroyed, this, [this]() {
-                    m_thumbnailProvider = nullptr;
+                    m_thumbnailProvider.store(nullptr, std::memory_order_release);
                 });
             },
         .pipelineCachePath = pipelineCachePath,

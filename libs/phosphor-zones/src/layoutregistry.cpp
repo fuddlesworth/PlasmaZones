@@ -333,8 +333,9 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         m_activeLayout = nullptr;
     }
 
-    Q_EMIT layoutRemoved(layout);
+    disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
     layout->deleteLater();
+    Q_EMIT layoutRemoved(layout);
 
     // If this was a user override of a system layout, restore the system original.
     // Uses the stored system path — no filesystem scanning needed.

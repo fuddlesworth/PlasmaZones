@@ -106,6 +106,7 @@ Flickable {
                         Layout.alignment: Qt.AlignRight
                         text: i18n("Save")
                         icon.name: "document-save"
+                        Accessible.name: i18n("Save motion set")
                         enabled: nameField.text.trim().length > 0 && !root._saving
                         onClicked: {
                             root._saving = true;
@@ -124,11 +125,8 @@ Flickable {
                             root._saving = false;
                         }
                     }
-
                 }
-
             }
-
         }
 
         SettingsCard {
@@ -178,7 +176,6 @@ Flickable {
                                 color: Kirigami.Theme.disabledTextColor
                                 font: Kirigami.Theme.smallFont
                             }
-
                         }
 
                         Button {
@@ -225,15 +222,9 @@ Flickable {
                                 deleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

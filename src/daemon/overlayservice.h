@@ -527,7 +527,7 @@ private:
     // post-Phase-2 unification — no separate per-mode window pointers.
 
     // Shader preview overlay (editor dialog)
-    PhosphorLayer::Surface* m_shaderPreviewSurface = nullptr;
+    QPointer<PhosphorLayer::Surface> m_shaderPreviewSurface;
     QQuickWindow* m_shaderPreviewWindow = nullptr;
     QPointer<QScreen> m_shaderPreviewScreen;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
@@ -572,14 +572,12 @@ private:
     //     the engine teardown that destroys the providers, so no
     //     worker-thread reader is in flight either.
     //
-    // If the teardown invariant ever changes — SurfaceManager teardown
-    // moving to a worker thread, an engine-recreation path, or anything
-    // that pumps the event loop inside ~QQmlEngine — replace
-    // m_thumbnailProvider with std::atomic and serialise the lambda
-    // null-out against readers. The current safety is contract-level,
-    // not structural.
+    // m_thumbnailProvider is std::atomic so the null-out in the
+    // ~QQmlEngine destroyed lambda is visible to any concurrent reader
+    // (image-loader worker threads). This makes the safety structural
+    // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
-    SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
+    std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
     // PhosphorZones::Layout Picker overlay (interactive layout browser)
     PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;

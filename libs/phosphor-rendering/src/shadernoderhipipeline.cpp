@@ -611,10 +611,10 @@ void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindi
 void ShaderNodeRhi::appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const
 {
     for (const auto& [binding, extra] : m_extraBindings) {
-        if (extra.texture && extra.sampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(binding, QRhiShaderResourceBinding::FragmentStage,
-                                                                      extra.texture, extra.sampler));
-        }
+        if (!extra.texture || !extra.sampler)
+            continue;
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(binding, QRhiShaderResourceBinding::FragmentStage,
+                                                                  extra.texture, extra.sampler));
     }
 }
 

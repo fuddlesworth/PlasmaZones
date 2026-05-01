@@ -174,17 +174,18 @@ void Settings::load()
     }
 
     qCInfo(lcConfig) << "Settings loaded";
-    Q_EMIT settingsChanged();
 
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
+    bool anyChanged = false;
     for (int i = firstOwnProp; i < propCount; ++i) {
         const QMetaProperty prop = mo->property(i);
         if (!prop.hasNotifySignal() || !prop.isReadable())
             continue;
         const QVariant newValue = prop.read(this);
         if (newValue != snapshot[i]) {
+            anyChanged = true;
             const QMetaMethod notify = prop.notifySignal();
             notify.invoke(this, Qt::DirectConnection);
         }
@@ -205,6 +206,9 @@ void Settings::load()
         Q_EMIT disabledActivitiesChanged(Mode::Snapping);
     if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
         Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+
+    if (anyChanged)
+        Q_EMIT settingsChanged();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -1033,7 +1037,8 @@ void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfil
     PhosphorAnimationShaders::ShaderProfileTree prevTree;
     if (!prevMap.isEmpty())
         prevTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(prevMap));
-    if (pruned == prevTree)
+    const auto prevPruned = pruneShaderProfileTreeToSupportedPaths(prevTree);
+    if (pruned == prevPruned)
         return;
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),
                    pruned.toJson().toVariantMap());

@@ -184,8 +184,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     for (int i = 0; i < candidatesList.size(); ++i) {
         QVariantMap cand = candidatesList[i].toMap();
         const QString compositorHandle = cand.value(QStringLiteral("compositorHandle")).toString();
-        if (!compositorHandle.isEmpty() && m_thumbnailProvider) {
-            const QString cachedUrl = m_thumbnailProvider->urlFor(compositorHandle);
+        auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
+        if (!compositorHandle.isEmpty() && thumbProvider) {
+            const QString cachedUrl = thumbProvider->urlFor(compositorHandle);
             if (!cachedUrl.isEmpty()) {
                 cand[QStringLiteral("thumbnail")] = cachedUrl;
                 ++cachedCount;
@@ -291,10 +292,11 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
 
 bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
 {
-    if (image.isNull() || !m_thumbnailProvider) {
+    auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
+    if (image.isNull() || !thumbProvider) {
         return false;
     }
-    const QString providerUrl = m_thumbnailProvider->insert(compositorHandle, std::move(image));
+    const QString providerUrl = thumbProvider->insert(compositorHandle, std::move(image));
     if (providerUrl.isEmpty()) {
         return false;
     }

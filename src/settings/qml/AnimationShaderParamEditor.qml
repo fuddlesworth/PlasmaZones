@@ -89,16 +89,13 @@ ColumnLayout {
     }
 
     function commit(paramId, value) {
-        var next = Object.assign({
-        }, currentParams || {
-        });
+        var next = Object.assign({}, currentParams || {});
         next[paramId] = value;
         root.paramsChanged(next);
     }
 
     function resetToDefaults() {
-        var next = {
-        };
+        var next = {};
         for (var i = 0; i < _paramSchema.length; i++) {
             var p = _paramSchema[i];
             // Use the same type-aware fallback the load path uses so
@@ -118,7 +115,6 @@ ColumnLayout {
             var loader = paramRepeater.itemAt(j);
             if (loader && loader.item)
                 loader.item.value = next[loader.modelData.id];
-
         }
         root.paramsChanged(next);
     }
@@ -169,16 +165,15 @@ ColumnLayout {
                 }
             }
         }
-
     }
 
-    SettingsSeparator {
-    }
+    SettingsSeparator {}
 
     Button {
         Layout.alignment: Qt.AlignRight
         text: i18n("Reset to defaults")
         icon.name: "edit-undo"
+        Accessible.name: i18n("Reset shader parameters to defaults")
         onClicked: root.resetToDefaults()
     }
 
@@ -188,8 +183,7 @@ ColumnLayout {
         SettingsRow {
             id: row
 
-            property var paramInfo: ({
-            })
+            property var paramInfo: ({})
             property real value: 0
             // Validate min/max against NaN/Infinity from malformed metadata.
             // A NaN bound silently propagates into Qt's slider where it
@@ -210,16 +204,14 @@ ColumnLayout {
                 // still produce non-zero stepSize.
                 stepSize: (row.paramInfo.step !== undefined && isFinite(row.paramInfo.step) && row.paramInfo.step > 0) ? row.paramInfo.step : Math.max(0.001, (row._to - row._from) / 200)
                 value: row.value
-                formatValue: function(v) {
+                formatValue: function (v) {
                     return v.toFixed(2);
                 }
-                onMoved: function(v) {
+                onMoved: function (v) {
                     root.commit(row.paramInfo.id, v);
                 }
             }
-
         }
-
     }
 
     Component {
@@ -228,8 +220,7 @@ ColumnLayout {
         SettingsRow {
             id: row
 
-            property var paramInfo: ({
-            })
+            property var paramInfo: ({})
             property int value: 0
             readonly property int _from: (paramInfo.minValue !== undefined && isFinite(paramInfo.minValue)) ? Math.round(paramInfo.minValue) : 0
             readonly property int _to: (paramInfo.maxValue !== undefined && isFinite(paramInfo.maxValue) && paramInfo.maxValue > _from) ? Math.round(paramInfo.maxValue) : (_from + 100)
@@ -242,13 +233,11 @@ ColumnLayout {
                 to: row._to
                 stepSize: 1
                 value: row.value
-                onMoved: function(v) {
+                onMoved: function (v) {
                     root.commit(row.paramInfo.id, Math.round(v));
                 }
             }
-
         }
-
     }
 
     Component {
@@ -257,8 +246,7 @@ ColumnLayout {
         SettingsRow {
             id: row
 
-            property var paramInfo: ({
-            })
+            property var paramInfo: ({})
             property bool value: false
 
             title: paramInfo.name || ""
@@ -266,13 +254,11 @@ ColumnLayout {
             SettingsSwitch {
                 checked: row.value
                 accessibleName: row.paramInfo.name || ""
-                onToggled: function(v) {
+                onToggled: function (v) {
                     root.commit(row.paramInfo.id, v);
                 }
             }
-
         }
-
     }
 
     Component {
@@ -281,13 +267,13 @@ ColumnLayout {
         SettingsRow {
             id: row
 
-            property var paramInfo: ({
-            })
-            property var value: "#ffffffff"
+            property var paramInfo: ({})
+            property color value: "#ffffffff"
 
             title: paramInfo.name || ""
 
             ColorButton {
+                Accessible.name: i18n("Pick color for %1", row.paramInfo.name || i18n("parameter"))
                 color: row.value
                 onClicked: {
                     colorDialog.selectedColor = row.value;
@@ -304,9 +290,7 @@ ColumnLayout {
                     root.commit(row.paramInfo.id, selectedColor.toString());
                 }
             }
-
         }
-
     }
 
     Component {
@@ -320,8 +304,7 @@ ColumnLayout {
         SettingsRow {
             id: row
 
-            property var paramInfo: ({
-            })
+            property var paramInfo: ({})
             // Loader sets `value` via Binding above; declared so the
             // assignment doesn't trip a "no such property" warning.
             property var value
@@ -333,9 +316,6 @@ ColumnLayout {
                 color: Kirigami.Theme.disabledTextColor
                 font: Kirigami.Theme.smallFont
             }
-
         }
-
     }
-
 }

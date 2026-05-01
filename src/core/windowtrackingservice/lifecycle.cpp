@@ -459,6 +459,9 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
 
 void WindowTrackingService::windowClosed(const QString& windowId)
 {
+    if (!m_snapState)
+        return;
+
     // Query the registry-aware helper so a window that renamed mid-session
     // (Electron/CEF) lands in the restore queue under its CURRENT class,
     // not the first-seen one.
@@ -547,6 +550,9 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 
 void WindowTrackingService::onLayoutChanged()
 {
+    if (!m_snapState || !m_layoutManager)
+        return;
+
     // Validate zone assignments against new layout.
     // NOTE: Do NOT early-return when the global activeLayout() is null. With virtual
     // screens, individual screens may have per-screen layouts via resolveLayoutForScreen().

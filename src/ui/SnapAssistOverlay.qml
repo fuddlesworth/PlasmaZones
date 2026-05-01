@@ -75,7 +75,7 @@ Window {
         // Backdrop - semi-transparent dim, click outside to close
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.25)
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.25)
 
             MouseArea {
                 anchors.fill: parent
@@ -83,7 +83,6 @@ Window {
                 Accessible.name: i18n("Dismiss snap assist overlay")
                 Accessible.role: Accessible.Button
             }
-
         }
 
         // Each zone shows all candidates; user picks any window to snap to any zone
@@ -177,14 +176,13 @@ Window {
                                 radius: Math.max(2, candidateFlow.zoneSize * 0.01)
                                 color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
                                 border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                                border.width: candidateCard.hovered ? 2 : 1
+                                border.width: candidateCard.hovered ? Kirigami.Units.smallSpacing : Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
 
                                 Behavior on color {
                                     PhosphorMotionAnimation {
                                         profile: "zone.snapIn"
                                         durationOverride: 150
                                     }
-
                                 }
 
                                 Behavior on border.color {
@@ -192,9 +190,7 @@ Window {
                                         profile: "zone.snapIn"
                                         durationOverride: 150
                                     }
-
                                 }
-
                             }
 
                             Row {
@@ -235,7 +231,6 @@ Window {
                                         visible: !(candidate && candidate.thumbnail)
                                         source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
                                     }
-
                                 }
 
                                 Label {
@@ -250,7 +245,6 @@ Window {
                                     font.pixelSize: candidateFlow.fontPixelSize
                                     color: Kirigami.Theme.textColor
                                 }
-
                             }
 
                             MouseArea {
@@ -272,7 +266,7 @@ Window {
                                     const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : "";
                                     if (!zoneContainer.zone || !wId || !zoneId) {
                                         root.close();
-                                        return ;
+                                        return;
                                     }
                                     const z = zoneContainer.zone;
                                     const geo = z && z.x !== undefined && z.y !== undefined ? JSON.stringify({
@@ -284,17 +278,10 @@ Window {
                                     root.windowSelected(wId, zoneId, geo);
                                 }
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }
