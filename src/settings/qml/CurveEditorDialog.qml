@@ -20,8 +20,8 @@ Kirigami.Dialog {
     property int timingMode: CurvePresets.timingModeEasing
     property string easingCurve: CurvePresets.defaultEasingCurve
     // (omega, zeta) — rad/s and damping ratio, per Spring.h
-    property real springOmega: 12
-    property real springZeta: 1
+    property real springOmega: CurvePresets.defaultSpringOmega
+    property real springZeta: CurvePresets.defaultSpringZeta
     // Working state — seeded onOpened, cleared onClosed. Apply only
     // commits when `_dirty` flipped (i.e. the working state diverged
     // from the seed values). Without that check, a parent re-binding

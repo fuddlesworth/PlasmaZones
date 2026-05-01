@@ -100,29 +100,31 @@ function isSettled(t, stiffness, dampingRatio, epsilon) {
  * `epsilon` defaults to 0.02 — same threshold the C++ side uses.
  */
 function estimateSettleTime(stiffness, dampingRatio, epsilon) {
+    // The critical-damped factor 5.834 is the analytical solution to
+    // (1+ωt)·exp(-ωt) = 0.02 — it is BAKED to eps=0.02. The other
+    // branches scale with -ln(eps), so a non-default eps would mix
+    // inconsistent regimes at the critical-band blend. Hardcode 0.02
+    // to match C++ Spring::settleTime() (libs/phosphor-animation/src/
+    // spring.cpp:38) and document that the parameter is reserved.
+    void epsilon; // currently unused; kept in the signature for future use.
     var omega = Math.sqrt(Math.max(1e-6, stiffness));
     var zeta = Math.max(0, Math.min(10, dampingRatio));
-    var eps = (epsilon !== undefined && epsilon > 0) ? epsilon : 0.02;
+    var eps = 0.02;
     var maxT = 10;
 
+    // Critical-damping epsilon — match C++ Spring::CriticalDampingEpsilon
+    // (libs/phosphor-animation/src/spring.cpp:38). A wider band here would
+    // produce a settle time on a different ζ partition than evaluate()
+    // does, causing visible canvas-width stutter in SpringPreview.
+    var critBand = 1e-3;
+
     var t;
-    var critBand = 0.05; // blend zone around ζ=1 to avoid the singularity
-    if (zeta < 1 - critBand) {
-        t = -Math.log(eps) / (zeta * omega);
-    } else if (zeta > 1 + critBand) {
-        t = -Math.log(eps) / (omega * (zeta - Math.sqrt(zeta * zeta - 1)));
-    } else if (Math.abs(zeta - 1) < 1e-9) {
+    if (Math.abs(zeta - 1) < critBand) {
         t = 5.834 / omega;
+    } else if (zeta < 1) {
+        t = -Math.log(eps) / (zeta * omega);
     } else {
-        // Linear blend across the critical-damping band so the curve is
-        // continuous as ζ sweeps through 1. Mirrors the C++ Spring's
-        // blending logic.
-        var critT = 5.834 / omega;
-        var sideT = (zeta < 1)
-            ? -Math.log(eps) / (zeta * omega)
-            : -Math.log(eps) / (omega * (zeta - Math.sqrt(zeta * zeta - 1)));
-        var w = Math.abs(zeta - 1) / critBand;
-        t = critT * (1 - w) + sideT * w;
+        t = -Math.log(eps) / (omega * (zeta - Math.sqrt(zeta * zeta - 1)));
     }
     if (!isFinite(t) || t < 0)
         t = maxT;
