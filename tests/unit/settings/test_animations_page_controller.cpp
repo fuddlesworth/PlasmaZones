@@ -876,29 +876,53 @@ private Q_SLOTS:
     {
         AnimationsPageController c;
 
-        // Genuine OSDs.
+        // Genuine OSDs (consumed leaves).
         QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.hide")));
 
-        // Popup family — leg-leaf paths.
+        // Popup family — leg-leaf paths (consumed leaves).
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.hide")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.hide")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.show")));
 
-        // Paths the daemon overlay does NOT consume — must NOT be advertised
-        // as supported, otherwise users pick a shader and see nothing.
+        // Ancestors of consumed leaves — supported because the
+        // daemon's resolver walks them on the way to the leaf, so a
+        // shader override here cascades to every descendant. Without
+        // this, the user would have to set the same shader on every
+        // popup leaf individually instead of once at the parent.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("global")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("osd")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist")));
+
+        // Paths the daemon's resolver never walks through — any
+        // assignment would be runtime-dead and silently shadow what
+        // the user thought they set on a sibling. Must stay unsupported.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.open")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone.snapIn")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fade")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace.switchIn")));
-        // Parent paths are not directly consumed (children resolve via
-        // the tree walk-up), so the picker hides on parent rows too.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("cursor")));
+        // Sibling paths under `panel` and `osd` that aren't ancestors
+        // of any consumed leaf.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideIn")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideOut")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.pop")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.dim")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.popIn")));
         // SnapAssist hide is intentionally absent — surface destroys
-        // before any hide frame paints.
+        // before any hide frame paints. (Note: it would still be a
+        // "consumable ancestor" if added, so this asserts it's NOT a
+        // consumed leaf.)
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.hide")));
         // Empty path / nonsense path.
         QVERIFY(!c.supportsShaderLeg(QString()));

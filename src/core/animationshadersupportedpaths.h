@@ -12,24 +12,13 @@
 
 namespace PlasmaZones {
 
-/// Single source of truth for "which event paths actually run a per-event
-/// transition shader". Both the daemon (overlay service consumes these
-/// paths via @c OverlayService::applyShaderProfilesToAnimator) and the
-/// settings UI (animation event cards gate the shader picker on this
-/// list) read from this function so the two cannot drift.
-///
-/// A path appears here ONLY when there is a registered
-/// @c PhosphorAnimationLayer::SurfaceAnimator::Config that propagates
-/// @c showShaderEffectId / @c hideShaderEffectId to a real surface. See
-/// @c src/daemon/overlayservice.cpp's @c buildOsdConfig /
+/// Leaf event paths the daemon's overlay service actually resolves a
+/// shader effect for. Each appears as a @c resolveShaderEffect(tree, ...)
+/// call inside one of @c OverlayService::buildOsdConfig /
 /// @c buildLayoutPickerConfig / @c buildZoneSelectorConfig /
-/// @c buildSnapAssistConfig for the canonical wiring.
-///
-/// When a future surface adds a shader leg, append its leg paths here AND
-/// add the corresponding @c resolveShaderEffect call site in
-/// overlayservice.cpp. The settings UI will start showing the shader
-/// picker on the new path automatically.
-inline QStringList shaderSupportedEventPaths()
+/// @c buildSnapAssistConfig — when a future surface adds a shader leg,
+/// append its leg paths here in lockstep.
+inline QStringList shaderConsumedLeafEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     return QStringList{
@@ -46,6 +35,43 @@ inline QStringList shaderSupportedEventPaths()
         // is destroy-on-hide and never paints a hide frame, so a shader
         // assignment there would be runtime no-op.
     };
+}
+
+/// Single source of truth for "which event paths can run a per-event
+/// transition shader". Includes every consumed leaf AND every ancestor
+/// of a consumed leaf — setting the shader on an ancestor cascades to
+/// its descendants via @c ShaderProfileTree::resolve's chain walk
+/// (deeper-leaf-wins overlay merge), so users get the cascading
+/// inheritance the tree is designed for: e.g. `panel = slide` applies
+/// to every popup show/hide, `panel.popup = slide` is identical, and
+/// `panel.popup.layoutPicker.show = pixelate` overrides only that one
+/// leg.
+///
+/// Paths that are NOT ancestors of any consumed leaf (e.g.
+/// `panel.slideIn`, `osd.pop`, `widget.fade`, `window.minimize`) are
+/// excluded — there is no resolver path that walks through them, so
+/// any assignment would be runtime-dead and silently shadow what the
+/// user thought they set on a sibling. The settings UI hides the
+/// shader picker on those rows; @c Settings::shaderProfileTree's prune
+/// drops any persisted entry on those paths to self-heal configs from
+/// earlier app revisions.
+inline QStringList shaderSupportedEventPaths()
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    QStringList out;
+    QSet<QString> seen;
+    const QStringList leaves = shaderConsumedLeafEventPaths();
+    for (const QString& leaf : leaves) {
+        QString cursor = leaf;
+        while (!cursor.isEmpty()) {
+            if (!seen.contains(cursor)) {
+                seen.insert(cursor);
+                out.append(cursor);
+            }
+            cursor = PP::parentPath(cursor);
+        }
+    }
+    return out;
 }
 
 /// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)

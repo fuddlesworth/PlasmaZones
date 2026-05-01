@@ -1243,17 +1243,13 @@ private Q_SLOTS:
         QCOMPARE(b.shaderProfileTree().directOverride(kPath).effectId.value(), QStringLiteral("dissolve"));
     }
 
-    /// Regression for the user-reported "set Panel = slide, daemon plays
-    /// pixelate/glitch" bug. Earlier UI revisions exposed shader pickers
-    /// on every event row including descendants like
-    /// `panel.popup.zoneSelector.show`; the resolver's deeper-leaf-wins
-    /// overlay merge meant a stale leaf entry would shadow the parent
-    /// override the user just made. The current UI hides the leaf
-    /// pickers but couldn't clean stale on-disk state. Settings now
-    /// prunes any override whose path is NOT in
-    /// `shaderSupportedEventPaths()` on both the read and write sides,
-    /// so an affected config self-heals on the next save and the
-    /// resolver only ever sees entries the daemon actually consumes.
+    /// Persistence prune drops only paths that are NOT ancestors of a
+    /// consumed leaf. Parents like `panel` and `panel.popup` ARE valid
+    /// — the resolver walks them on the way to consumed leaves, so a
+    /// shader override at a parent cascades to its descendants. Paths
+    /// like `widget.fade` / `osd.pop` / `panel.slideIn` are dead at
+    /// runtime (the daemon never resolves through them) and must be
+    /// pruned so they can't shadow user-intended siblings.
     void testShaderProfileTree_prunesUnsupportedPathsOnPersistence()
     {
         IsolatedConfigGuard guard;
@@ -1262,13 +1258,20 @@ private Q_SLOTS:
         PhosphorAnimationShaders::ShaderProfileTree dirty;
         PhosphorAnimationShaders::ShaderProfile slide;
         slide.effectId = QStringLiteral("slide");
-        // Supported (osd.show is in the daemon's overlay-config set).
+        // Consumed leaf — must survive.
         dirty.setOverride(QStringLiteral("osd.show"), slide);
-        // Unsupported parent — left over from earlier UI revisions.
+        // Ancestor of every popup-family consumed leaf — must survive
+        // (cascading inheritance is the whole point of a tree).
+        PhosphorAnimationShaders::ShaderProfile dissolve;
+        dissolve.effectId = QStringLiteral("dissolve");
+        dirty.setOverride(QStringLiteral("panel"), dissolve);
+        // Sibling under `panel` that is NOT an ancestor of any consumed
+        // leaf — must be pruned (the daemon's resolver never walks
+        // through `panel.slideIn`, so an entry here is runtime-dead).
         PhosphorAnimationShaders::ShaderProfile pixelate;
         pixelate.effectId = QStringLiteral("pixelate");
-        dirty.setOverride(QStringLiteral("panel"), pixelate);
-        // Unsupported leaf.
+        dirty.setOverride(QStringLiteral("panel.slideIn"), pixelate);
+        // Unsupported subtree (no consumed leaf below).
         dirty.setOverride(QStringLiteral("widget.fade"), pixelate);
 
         // Write through Settings (write-side prune).
@@ -1278,14 +1281,18 @@ private Q_SLOTS:
             a.save();
         }
 
-        // Read back; pruned tree must contain ONLY the supported path.
+        // Read back; ancestors-of-consumed-leaves must survive,
+        // unrelated paths must be dropped.
         Settings b;
         const auto loaded = b.shaderProfileTree();
-        QVERIFY2(loaded.hasOverride(QStringLiteral("osd.show")), "supported path must survive the prune");
-        QVERIFY2(!loaded.hasOverride(QStringLiteral("panel")),
-                 "unsupported parent path must be pruned (otherwise it would shadow the daemon's resolver)");
-        QVERIFY2(!loaded.hasOverride(QStringLiteral("widget.fade")), "unsupported leaf path must be pruned");
+        QVERIFY2(loaded.hasOverride(QStringLiteral("osd.show")), "consumed leaf must survive the prune");
+        QVERIFY2(loaded.hasOverride(QStringLiteral("panel")),
+                 "ancestor of consumed leaves must survive (cascading inheritance is by design)");
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("panel.slideIn")),
+                 "sibling that is not an ancestor of any consumed leaf must be pruned");
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("widget.fade")), "unsupported subtree path must be pruned");
         QCOMPARE(loaded.directOverride(QStringLiteral("osd.show")).effectId.value(), QStringLiteral("slide"));
+        QCOMPARE(loaded.directOverride(QStringLiteral("panel")).effectId.value(), QStringLiteral("dissolve"));
     }
 
     /// Self-healing read prune: a config written by an earlier app
@@ -1305,9 +1312,9 @@ private Q_SLOTS:
             PhosphorAnimationShaders::ShaderProfileTree tree;
             PhosphorAnimationShaders::ShaderProfile pixelate;
             pixelate.effectId = QStringLiteral("pixelate");
-            // Stale leaf at an unsupported path.
+            // Stale leaf at an unsupported subtree.
             tree.setOverride(QStringLiteral("zone.snapIn"), pixelate);
-            // Supported parent the user has set since.
+            // Supported leaf the user has set since.
             PhosphorAnimationShaders::ShaderProfile slide;
             slide.effectId = QStringLiteral("slide");
             tree.setOverride(QStringLiteral("osd.show"), slide);
