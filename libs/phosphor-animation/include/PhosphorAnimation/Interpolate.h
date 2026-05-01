@@ -11,6 +11,7 @@
 #include <QRectF>
 #include <QSizeF>
 #include <QTransform>
+
 #include <QtGlobal>
 #include <QtMath>
 

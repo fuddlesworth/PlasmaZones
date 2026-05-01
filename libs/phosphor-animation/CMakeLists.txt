@@ -19,8 +19,7 @@
 #     polar-decomposed) with MotionSpec<T> runtime bundle and
 #     RetargetPolicy for velocity-preserving redirects.
 #   • AnimationController<Handle> compositor-agnostic state machine
-#     built on AnimatedValue<QRectF>; SnapPolicy gate;
-#     StaggerTimer orchestration.
+#     built on AnimatedValue<QRectF>; SnapPolicy gate.
 #
 # Depends on Qt6 Core + Gui only. Qt6 Quick becomes a transitive
 # dependency when the opt-in PHOSPHOR_ANIMATION_QUICK flag is ON
@@ -90,6 +89,7 @@ set(phosphoranimation_SRCS
     src/animatedvalue.cpp
     src/snappolicy.cpp
     src/staggertimer.cpp
+
     src/phosphorprofileregistry.cpp
     src/curveloader.cpp
     src/profileloader.cpp
@@ -112,8 +112,9 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/ProfilePaths.h
     include/PhosphorAnimation/ProfileTree.h
     include/PhosphorAnimation/SnapPolicy.h
-    include/PhosphorAnimation/AnimationController.h
     include/PhosphorAnimation/StaggerTimer.h
+    include/PhosphorAnimation/AnimationController.h
+
     include/PhosphorAnimation/PhosphorProfileRegistry.h
     include/PhosphorAnimation/CurveLoader.h
     include/PhosphorAnimation/ProfileLoader.h

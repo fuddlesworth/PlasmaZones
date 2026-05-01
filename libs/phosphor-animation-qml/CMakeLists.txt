@@ -6,9 +6,8 @@
 #
 # Sibling library to phosphor-animation. Owns the Q_GADGET / Q_OBJECT
 # wrappers (PhosphorEasing, PhosphorSpring, PhosphorCurve, PhosphorProfile,
-# QtQuickClockManager singleton, per-T PhosphorAnimatedValue<T> wrappers,
-# PhosphorMotionAnimation Behavior driver) plus the org.phosphor.animation
-# QML module declaration.
+# QtQuickClockManager singleton, PhosphorMotionAnimation Behavior driver)
+# plus the org.phosphor.animation QML module declaration.
 #
 # Phase A1 of docs/phosphor-architecture-refactor-plan.md — promoted
 # out of a sub-directory of phosphor-animation into a top-level sibling
@@ -116,19 +115,9 @@ set(phosphoranimationqml_public_HDRS
     include/PhosphorAnimationQml/PhosphorCurve.h
     include/PhosphorAnimationQml/PhosphorProfile.h
     include/PhosphorAnimationQml/QtQuickClockManager.h
-    include/PhosphorAnimationQml/PhosphorAnimatedValueBase.h
-    include/PhosphorAnimationQml/PhosphorAnimatedReal.h
-    include/PhosphorAnimationQml/PhosphorAnimatedPoint.h
-    include/PhosphorAnimationQml/PhosphorAnimatedSize.h
-    include/PhosphorAnimationQml/PhosphorAnimatedRect.h
-    include/PhosphorAnimationQml/PhosphorAnimatedColor.h
     include/PhosphorAnimationQml/PhosphorMotionAnimation.h
 )
 
-set(phosphoranimationqml_detail_HDRS
-    include/PhosphorAnimationQml/detail/PhosphorAnimatedValueImpl.h
-    include/PhosphorAnimationQml/detail/PhosphorAnimatedTypeMacro.h
-)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared sources — listed once, used by both STATIC and SHARED modules
@@ -138,15 +127,8 @@ set(_phosphor_animation_qml_sources
     src/phosphoranimation_qml_plugin.cpp
     src/phosphorcurve.cpp
     src/qtquickclockmanager.cpp
-    src/phosphoranimatedvaluebase.cpp
-    src/phosphoranimatedreal.cpp
-    src/phosphoranimatedpoint.cpp
-    src/phosphoranimatedsize.cpp
-    src/phosphoranimatedrect.cpp
-    src/phosphoranimatedcolor.cpp
     src/phosphormotionanimation.cpp
     ${phosphoranimationqml_public_HDRS}
-    ${phosphoranimationqml_detail_HDRS}
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -359,9 +341,6 @@ endif()
 
 install(FILES ${phosphoranimationqml_public_HDRS}
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimationQml
-)
-install(FILES ${phosphoranimationqml_detail_HDRS}
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimationQml/detail
 )
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorAnimationQml/phosphoranimationqml_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimationQml

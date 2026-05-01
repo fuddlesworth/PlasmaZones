@@ -35,11 +35,8 @@ paq_add_test(paq_test_phosphorspring test_phosphorspring.cpp)
 paq_add_test(paq_test_phosphorcurve test_phosphorcurve.cpp)
 paq_add_test(paq_test_phosphorprofile test_phosphorprofile.cpp)
 paq_add_test(paq_test_qtquickclockmanager test_qtquickclockmanager.cpp)
-paq_add_test(paq_test_phosphoranimatedreal test_phosphoranimatedreal.cpp)
-paq_add_test(paq_test_phosphoranimatedtyped test_phosphoranimatedtyped.cpp)
 paq_add_test(paq_test_phosphorprofileregistry test_phosphorprofileregistry.cpp)
 paq_add_test(paq_test_phosphormotionanimation test_phosphormotionanimation.cpp)
-paq_add_test(paq_test_animatedvalue_realwindow test_animatedvalue_realwindow.cpp)
 paq_add_test(paq_test_motionanimation_behavior test_motionanimation_behavior.cpp)
 # The Behavior-site test loads `import org.phosphor.animation` from
 # QML, which requires the static QML module to be linked into the test
