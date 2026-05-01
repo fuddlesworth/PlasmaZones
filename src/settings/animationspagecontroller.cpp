@@ -718,6 +718,19 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (!m_settings || path.isEmpty())
         return false;
 
+    // Reject writes on paths the daemon's overlay service doesn't
+    // consume as a shader-leg surface. Defence in depth: the QML UI
+    // gates the picker via `supportsShaderLeg`, but a Q_INVOKABLE is
+    // callable from anywhere (future scripts, tests, deserialisation
+    // shims) and a stale tree entry on an unsupported path silently
+    // shadows the user-intended parent override at runtime via the
+    // resolver's deeper-leaf-wins overlay merge.
+    if (!eventPathSupportsShaderLeg(path)) {
+        qCWarning(lcConfig) << "setShaderOverride: path" << path
+                            << "is not in shaderSupportedEventPaths() — ignoring (no daemon-side surface consumes it)";
+        return false;
+    }
+
     // Empty effectId == clear assignment at this exact path. Mirrors
     // ShaderProfile's "engaged-empty means no effect" semantics.
     // clearShaderOverride emits pendingChangesChanged itself when the

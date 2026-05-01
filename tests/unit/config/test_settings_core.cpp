@@ -1155,6 +1155,12 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
+        // Use a path the daemon overlay service actually consumes —
+        // `Settings::shaderProfileTree()` prunes overrides on
+        // unsupported paths to prevent stale leaf entries from
+        // shadowing user-intended parent overrides at runtime.
+        const QString kPath = QStringLiteral("osd.show");
+
         // Step 1: write the shader-tree JSON directly via the backend,
         // bypassing PhosphorConfig::Store::write entirely. This mimics a
         // migration-time or out-of-band write the Store loop never sees.
@@ -1164,7 +1170,7 @@ private Q_SLOTS:
             PhosphorAnimationShaders::ShaderProfileTree tree;
             PhosphorAnimationShaders::ShaderProfile profile;
             profile.effectId = QStringLiteral("pixelate");
-            tree.setOverride(QStringLiteral("panel"), profile);
+            tree.setOverride(kPath, profile);
             const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
             animations->writeString(ConfigDefaults::shaderProfileTreeKey(), json);
         }
@@ -1181,9 +1187,9 @@ private Q_SLOTS:
         {
             Settings b;
             const auto reread = b.shaderProfileTree();
-            QVERIFY2(reread.hasOverride(QStringLiteral("panel")),
+            QVERIFY2(reread.hasOverride(kPath),
                      "purgeStaleKeys must preserve shaderProfileTree when written directly to backend");
-            const auto entry = reread.directOverride(QStringLiteral("panel"));
+            const auto entry = reread.directOverride(kPath);
             QVERIFY(entry.effectId.has_value());
             QCOMPARE(*entry.effectId, QStringLiteral("pixelate"));
         }
@@ -1198,6 +1204,10 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
+        // Use a daemon-consumed path; see purgeStaleKeysPreservesDirectBackendWrite
+        // for why "panel" would be pruned.
+        const QString kPath = QStringLiteral("osd.show");
+
         // Seed disk with one tree, then mutate via a separate Settings
         // instance writing the file out.
         {
@@ -1205,7 +1215,7 @@ private Q_SLOTS:
             PhosphorAnimationShaders::ShaderProfileTree tree;
             PhosphorAnimationShaders::ShaderProfile profile;
             profile.effectId = QStringLiteral("pixelate");
-            tree.setOverride(QStringLiteral("panel"), profile);
+            tree.setOverride(kPath, profile);
             a.setShaderProfileTree(tree);
             a.save();
         }
@@ -1222,7 +1232,7 @@ private Q_SLOTS:
             PhosphorAnimationShaders::ShaderProfileTree tree;
             PhosphorAnimationShaders::ShaderProfile profile;
             profile.effectId = QStringLiteral("dissolve");
-            tree.setOverride(QStringLiteral("panel"), profile);
+            tree.setOverride(kPath, profile);
             c.setShaderProfileTree(tree);
             c.save();
         }
@@ -1230,8 +1240,87 @@ private Q_SLOTS:
         b.load();
         QVERIFY2(spy.count() >= 1,
                  "Settings::load() must re-emit shaderProfileTreeChanged when the on-disk value differs");
-        QCOMPARE(b.shaderProfileTree().directOverride(QStringLiteral("panel")).effectId.value(),
-                 QStringLiteral("dissolve"));
+        QCOMPARE(b.shaderProfileTree().directOverride(kPath).effectId.value(), QStringLiteral("dissolve"));
+    }
+
+    /// Regression for the user-reported "set Panel = slide, daemon plays
+    /// pixelate/glitch" bug. Earlier UI revisions exposed shader pickers
+    /// on every event row including descendants like
+    /// `panel.popup.zoneSelector.show`; the resolver's deeper-leaf-wins
+    /// overlay merge meant a stale leaf entry would shadow the parent
+    /// override the user just made. The current UI hides the leaf
+    /// pickers but couldn't clean stale on-disk state. Settings now
+    /// prunes any override whose path is NOT in
+    /// `shaderSupportedEventPaths()` on both the read and write sides,
+    /// so an affected config self-heals on the next save and the
+    /// resolver only ever sees entries the daemon actually consumes.
+    void testShaderProfileTree_prunesUnsupportedPathsOnPersistence()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed a tree mixing supported and unsupported paths.
+        PhosphorAnimationShaders::ShaderProfileTree dirty;
+        PhosphorAnimationShaders::ShaderProfile slide;
+        slide.effectId = QStringLiteral("slide");
+        // Supported (osd.show is in the daemon's overlay-config set).
+        dirty.setOverride(QStringLiteral("osd.show"), slide);
+        // Unsupported parent — left over from earlier UI revisions.
+        PhosphorAnimationShaders::ShaderProfile pixelate;
+        pixelate.effectId = QStringLiteral("pixelate");
+        dirty.setOverride(QStringLiteral("panel"), pixelate);
+        // Unsupported leaf.
+        dirty.setOverride(QStringLiteral("widget.fade"), pixelate);
+
+        // Write through Settings (write-side prune).
+        {
+            Settings a;
+            a.setShaderProfileTree(dirty);
+            a.save();
+        }
+
+        // Read back; pruned tree must contain ONLY the supported path.
+        Settings b;
+        const auto loaded = b.shaderProfileTree();
+        QVERIFY2(loaded.hasOverride(QStringLiteral("osd.show")), "supported path must survive the prune");
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("panel")),
+                 "unsupported parent path must be pruned (otherwise it would shadow the daemon's resolver)");
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("widget.fade")), "unsupported leaf path must be pruned");
+        QCOMPARE(loaded.directOverride(QStringLiteral("osd.show")).effectId.value(), QStringLiteral("slide"));
+    }
+
+    /// Self-healing read prune: a config written by an earlier app
+    /// version (without the prune at write) must still surface as
+    /// pruned to consumers, so the daemon's resolver can't see stale
+    /// shadow entries even before the user triggers a save.
+    void testShaderProfileTree_readPruneSelfHealsLegacyConfig()
+    {
+        IsolatedConfigGuard guard;
+
+        // Bypass Settings::setShaderProfileTree (which prunes) by writing
+        // a tree directly to the backend — mimics a config produced by
+        // a pre-prune app version.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            PhosphorAnimationShaders::ShaderProfileTree tree;
+            PhosphorAnimationShaders::ShaderProfile pixelate;
+            pixelate.effectId = QStringLiteral("pixelate");
+            // Stale leaf at an unsupported path.
+            tree.setOverride(QStringLiteral("zone.snapIn"), pixelate);
+            // Supported parent the user has set since.
+            PhosphorAnimationShaders::ShaderProfile slide;
+            slide.effectId = QStringLiteral("slide");
+            tree.setOverride(QStringLiteral("osd.show"), slide);
+            const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
+            animations->writeString(ConfigDefaults::shaderProfileTreeKey(), json);
+        }
+
+        // Settings::shaderProfileTree() must return the pruned view.
+        Settings s;
+        const auto loaded = s.shaderProfileTree();
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("zone.snapIn")),
+                 "read-side prune must drop overrides on unsupported paths even before the next save");
+        QVERIFY2(loaded.hasOverride(QStringLiteral("osd.show")), "supported path must survive read-side prune");
     }
 
     void testShaderProfileTree_repeatedSetReadCycle()

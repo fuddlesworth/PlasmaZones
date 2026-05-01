@@ -9,6 +9,7 @@
 #include "perscreenresolver.h"
 #include "settingsschema.h"
 
+#include "../core/animationshadersupportedpaths.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -1001,23 +1002,41 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
 {
     const QVariantMap map =
         m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    return PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+    // Prune on read so a config that contains stale overrides on paths
+    // the daemon's overlay service doesn't consume (left over from an
+    // earlier UI revision that exposed the picker on every event row)
+    // can never shadow a user-intended parent override at runtime. The
+    // resolver walks deeper-leaf-wins, so an unsupported leaf entry
+    // would otherwise silently beat the supported parent entry the user
+    // can actually edit. See `src/core/animationshadersupportedpaths.h`
+    // for the rationale + the full SSOT.
+    return pruneShaderProfileTreeToSupportedPaths(
+        PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));
 }
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
+    // Prune incoming tree at the persistence boundary — same rationale
+    // as the read-side prune in shaderProfileTree(). Belt-and-braces:
+    // the QML UI gates the picker via supportsShaderLeg(), but a
+    // Q_INVOKABLE write coming from elsewhere (future scripting hooks,
+    // tests) cannot stamp unsupported-path entries onto disk.
+    const auto pruned = pruneShaderProfileTreeToSupportedPaths(tree);
+
     // Value-equality compare so a same-tree write doesn't fire a spurious
     // changed signal (e.g. discard-changes path that calls
-    // setShaderProfileTree(currentTree)).
+    // setShaderProfileTree(currentTree)). Compare AFTER pruning so the
+    // first save against a stale-on-disk config still produces a write
+    // that drops the unsupported entries.
     const QVariantMap prevMap =
         m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
     PhosphorAnimationShaders::ShaderProfileTree prevTree;
     if (!prevMap.isEmpty())
         prevTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(prevMap));
-    if (tree == prevTree)
+    if (pruned == prevTree)
         return;
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),
-                   tree.toJson().toVariantMap());
+                   pruned.toJson().toVariantMap());
     Q_EMIT shaderProfileTreeChanged();
     Q_EMIT settingsChanged();
 }
