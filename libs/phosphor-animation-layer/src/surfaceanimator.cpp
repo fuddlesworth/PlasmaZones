@@ -291,6 +291,8 @@ public:
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> shaderTime;
         QPointer<PhosphorRendering::ShaderEffect> shaderItem; ///< Transient child, torn down on completion
         int pendingLegs = 0;
+        bool shaderExclusive = false; ///< Shader replaces motion legs
+        qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
         ISurfaceAnimator::CompletionCallback onComplete;
     };
 
@@ -464,11 +466,22 @@ public:
             slot.target = target;
             slot.onComplete = std::move(onComplete);
             slot.pendingLegs = legCount;
+            slot.shaderExclusive = hasShaderLeg;
+            slot.targetOpacity = toOpacity;
         }
 
-        // Initial frame synchronously — no stale opacity between
-        // beginShow returning and the first AV tick.
-        target->setOpacity(fromOpacity);
+        // When a shader leg is active, the shader IS the entire
+        // visual transition (Niri model). The surface must be fully
+        // visible while the shader runs — show snaps to 1.0 so the
+        // shader's first frames aren't invisible; hide keeps the
+        // current opacity (shader drives perceived fade-out), then
+        // snaps to 0.0 on shader completion (see legCompleted below).
+        if (hasShaderLeg) {
+            const bool isShow = (toOpacity > fromOpacity);
+            target->setOpacity(isShow ? toOpacity : fromOpacity);
+        } else {
+            target->setOpacity(fromOpacity);
+        }
         if (hasScaleLeg) {
             target->setScale(fromScale);
         }
@@ -483,7 +496,9 @@ public:
             if (it == m_tracks.end()) {
                 return;
             }
-            it->second.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            if (!hasShaderLeg) {
+                it->second.opacity = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+            }
             if (hasScaleLeg) {
                 it->second.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
@@ -504,10 +519,14 @@ public:
         // owns both, dtor ordering enforces it) are safe inside the
         // callbacks. Re-find on every access between start()s so a
         // re-entrant cancel mid-flight is honoured.
-        {
+        if (hasShaderLeg) {
+            // Shader-exclusive mode: opacity was snapped to toOpacity
+            // above. The opacity "leg" completes immediately — the
+            // shader's iTime 0→1 drives the entire visual transition.
+            legCompleted(surface);
+        } else {
             auto it = m_tracks.find(surface);
             if (it == m_tracks.end() || !it->second.opacity) {
-                // Nothing to start — runLeg races against re-entry; no-op.
                 return;
             }
             it->second.opacity->start(fromOpacity, toOpacity,
@@ -610,6 +629,13 @@ public:
         if (it->second.pendingLegs > 0) {
             return;
         }
+        // Shader-exclusive hide: the surface stayed at full opacity while
+        // the shader ran. Now snap to the terminal opacity (0.0 for hide)
+        // so the surface actually disappears.
+        if (it->second.shaderExclusive && it->second.target) {
+            it->second.target->setOpacity(it->second.targetOpacity);
+        }
+
         // Move the callback + AnimatedValues out before erase so:
         //   1. m_tracks.erase doesn't drop the std::function we're
         //      about to invoke;
