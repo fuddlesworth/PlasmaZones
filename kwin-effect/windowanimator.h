@@ -4,9 +4,21 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimatedValue.h>
-#include <PhosphorAnimation/AnimationController.h>
+#include <PhosphorAnimation/IMotionClock.h>
+#include <PhosphorAnimation/Interpolate.h>
+#include <PhosphorAnimation/MotionSpec.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/RetargetPolicy.h>
+#include <PhosphorAnimation/SnapPolicy.h>
 
+#include <QMarginsF>
+#include <QRectF>
+#include <QVarLengthArray>
+
+#include <cmath>
 #include <functional>
+#include <memory>
+#include <unordered_map>
 
 namespace KWin {
 class EffectWindow;
@@ -15,78 +27,159 @@ class WindowPaintData;
 }
 
 namespace PhosphorAnimation {
-class IMotionClock;
+class Curve;
 }
+
+// ─────── Enums formerly in AnimationController.h ───────
+// Kept in PhosphorAnimation namespace so PlasmaZonesEffect call sites
+// (e.g. PhosphorAnimation::RetargetResult::DegenerateReap) compile
+// unchanged without modifying plasmazoneseffect.cpp.
+
+namespace PhosphorAnimation {
+
+enum class StartResult {
+    Accepted,
+    AcceptedThenRemoved,
+    Disabled,
+    NoClock,
+    HandleInvalid,
+    PolicyRejected,
+    NoMotion,
+};
+
+enum class RetargetResult {
+    Accepted,
+    UnknownHandle,
+    Disabled,
+    HandleInvalid,
+    DegenerateReap,
+    InternalError,
+};
+
+} // namespace PhosphorAnimation
 
 namespace PlasmaZones {
 
 /**
- * @brief KWin adapter on top of `PhosphorAnimation::AnimationController`.
+ * @brief KWin window snap-animation controller.
  *
- * The compositor-agnostic state machine (lifecycle, progression via
- * `AnimatedValue<QRectF>`, clock integration, bounds computation,
- * completion + repaint hooks) lives in the library base. This subclass
- * binds the handle type to `KWin::EffectWindow*`, routes the five
- * virtual hooks into KWin's effect pipeline, and adds
- * `applyTransform` — the only KWin-coupled call still needed.
+ * Self-contained controller that owns per-window AnimatedValue<QRectF>
+ * state, drives it via per-output IMotionClock instances, and splices
+ * the results into KWin's paint pipeline via applyTransform().
  *
- * When a window is snapped to a zone, the caller applies moveResize()
- * immediately to set the final geometry. The animator provides visual
- * translation and scale transforms in paintWindow() that morph the
- * window from its old position/size to the new one. This follows the
- * standard KDE effect pattern — effects are purely visual overlays on
- * the compositing pipeline and never call moveResize() per-frame.
- *
- * Timing is driven by per-output `CompositorClock` instances resolved
- * via the `OutputClockResolver` callback — mixed-refresh-rate displays
- * phase-lock independently instead of beating against a shared process-
- * wide clock. The resolver is injected by the effect at construction
- * time; the animator's `clockForHandle` override calls back into it
- * with each window's current `LogicalOutput`.
+ * Formerly split across the library-side AnimationController<Handle>
+ * template and this KWin-specific subclass. The template had exactly
+ * one instantiation (Handle = KWin::EffectWindow*), so the two layers
+ * are now merged here for locality and to eliminate the virtual-dispatch
+ * overhead on the per-tick hooks.
  */
-class WindowAnimator : public PhosphorAnimation::AnimationController<KWin::EffectWindow*>
+class WindowAnimator
 {
 public:
-    /// Callback resolving an output to the matching IMotionClock. The
-    /// effect owns the clock instances; the animator just routes via
-    /// this resolver at `startAnimation` time. May return nullptr for
-    /// an unknown output — in that case the controller's default
-    /// clock (set via setClock) is used.
-    using OutputClockResolver = std::function<PhosphorAnimation::IMotionClock*(KWin::LogicalOutput*)>;
+    WindowAnimator() = default;
+    ~WindowAnimator() = default;
 
+    WindowAnimator(const WindowAnimator&) = delete;
+    WindowAnimator& operator=(const WindowAnimator&) = delete;
+
+    // ─── Clock resolver callback ───
+
+    using OutputClockResolver = std::function<PhosphorAnimation::IMotionClock*(KWin::LogicalOutput*)>;
     using AnimationCompleteCallback = std::function<void(KWin::EffectWindow*)>;
 
-    /// Install the per-output clock resolver. Safe to call at any time;
-    /// takes effect for subsequent `startAnimation` calls. In-flight
-    /// animations keep the clock captured at their own start time.
     void setOutputClockResolver(OutputClockResolver resolver);
-
     void setOnAnimationCompleteCallback(AnimationCompleteCallback callback);
 
-    /// Apply translate offset + scale transform to @p data so the window
-    /// renders at the current interpolated visual position/size. No-op
-    /// when @p window has no active animation or the motion is still
-    /// pending (startTime not latched — one frame between
-    /// startAnimation and the first advanceAnimations tick).
+    // ─── Configuration ───
+
+    void setClock(PhosphorAnimation::IMotionClock* clock);
+    PhosphorAnimation::IMotionClock* clock() const;
+
+    void setEnabled(bool enabled);
+    bool isEnabled() const;
+
+    void setProfile(const PhosphorAnimation::Profile& profile);
+    const PhosphorAnimation::Profile& profile() const;
+
+    void setCurve(std::shared_ptr<const PhosphorAnimation::Curve> curve);
+    std::shared_ptr<const PhosphorAnimation::Curve> curve() const;
+
+    static constexpr qreal kMaxDurationMs = 10000.0;
+    static constexpr int kMaxMinDistancePx = 10000;
+
+    void setDuration(qreal ms);
+    qreal duration() const;
+
+    void setMinDistance(int pixels);
+    int minDistance() const;
+
+    void setRetargetPolicy(PhosphorAnimation::RetargetPolicy policy);
+    PhosphorAnimation::RetargetPolicy retargetPolicy() const;
+
+    // ─── Lifecycle ───
+
+    bool hasActiveAnimations() const;
+    bool hasAnimation(KWin::EffectWindow* handle) const;
+
+    bool startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame);
+    PhosphorAnimation::StartResult startAnimationWithResult(KWin::EffectWindow* handle, const QRectF& oldFrame,
+                                                            const QRectF& newFrame);
+
+    bool retarget(KWin::EffectWindow* handle, const QRectF& newFrame, PhosphorAnimation::RetargetPolicy policy);
+    bool retarget(KWin::EffectWindow* handle, const QRectF& newFrame);
+
+    PhosphorAnimation::RetargetResult retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame,
+                                                         PhosphorAnimation::RetargetPolicy policy);
+    PhosphorAnimation::RetargetResult retargetWithResult(KWin::EffectWindow* handle, const QRectF& newFrame);
+
+    void removeAnimation(KWin::EffectWindow* handle);
+    void clear();
+    int reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock);
+
+    // ─── State queries ───
+
+    bool isAnimatingToTarget(KWin::EffectWindow* handle, const QRectF& target) const;
+    QRectF currentValue(KWin::EffectWindow* handle, const QRectF& fallback) const;
+    const PhosphorAnimation::AnimatedValue<QRectF>* animationFor(KWin::EffectWindow* handle) const;
+    QRectF animationBounds(KWin::EffectWindow* handle) const;
+
+    // ─── Per-frame ───
+
+    void advanceAnimations();
+    void scheduleRepaints() const;
+
+    // ─── KWin-specific ───
+
     void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 
-protected:
-    void onAnimationStarted(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
-    void onAnimationComplete(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
-    void onAnimationReplaced(KWin::EffectWindow* window,
-                             const PhosphorAnimation::AnimatedValue<QRectF>& displaced) override;
-    void onAnimationRetargeted(KWin::EffectWindow* window,
-                               const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
-    void onAnimationReaped(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
-    void onAnimationAbandoned(KWin::EffectWindow* window,
-                              const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
-    void onRepaintNeeded(KWin::EffectWindow* window, const QRectF& bounds) const override;
-    bool isHandleValid(KWin::EffectWindow* window) const override;
-    QMarginsF expandedPadding(KWin::EffectWindow* window,
-                              const PhosphorAnimation::AnimatedValue<QRectF>& anim) const override;
-    PhosphorAnimation::IMotionClock* clockForHandle(KWin::EffectWindow* window) const override;
-
 private:
+    // ─── Hook methods (formerly virtual overrides) ───
+
+    void onAnimationStarted(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim);
+    void onAnimationComplete(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim);
+    void onAnimationReplaced(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& displaced);
+    void onAnimationRetargeted(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim);
+    void onAnimationReaped(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim);
+    void onAnimationAbandoned(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim);
+    void onRepaintNeeded(KWin::EffectWindow* window, const QRectF& bounds) const;
+    bool isHandleValid(KWin::EffectWindow* window) const;
+    QMarginsF expandedPadding(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) const;
+    PhosphorAnimation::IMotionClock* clockForHandle(KWin::EffectWindow* window) const;
+
+    // ─── Helpers ───
+
+    static void clampProfile(PhosphorAnimation::Profile& profile);
+
+    // ─── Data ───
+
+    static constexpr int kMaxInlineHandlesPerTick = 64;
+
+    std::unordered_map<KWin::EffectWindow*, PhosphorAnimation::AnimatedValue<QRectF>> m_animations;
+    PhosphorAnimation::IMotionClock* m_clock = nullptr;
+    PhosphorAnimation::Profile m_profile;
+    PhosphorAnimation::RetargetPolicy m_retargetPolicy = PhosphorAnimation::RetargetPolicy::PreserveVelocity;
+    bool m_enabled = true;
+
     OutputClockResolver m_outputClockResolver;
     AnimationCompleteCallback m_onAnimationCompleteCallback;
 };

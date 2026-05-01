@@ -18,8 +18,7 @@
 #     (qreal, QPointF, QSizeF, QRectF, QColor linear/OkLab, QTransform
 #     polar-decomposed) with MotionSpec<T> runtime bundle and
 #     RetargetPolicy for velocity-preserving redirects.
-#   • AnimationController<Handle> compositor-agnostic state machine
-#     built on AnimatedValue<QRectF>; SnapPolicy gate.
+#   • SnapPolicy gate for animation-start threshold filtering.
 #
 # Depends on Qt6 Core + Gui only. Qt6 Quick becomes a transitive
 # dependency when the opt-in PHOSPHOR_ANIMATION_QUICK flag is ON
@@ -27,7 +26,7 @@
 # the sibling phosphor-animation-qml lib's QtQuickClockManager).
 #
 # Phase status:
-#   Phase 2  AnimationController base + WindowAnimator split      ✓ landed
+#   Phase 2  WindowAnimator (inlined from AnimationController)    ✓ landed
 #   Phase 3  IMotionClock + AnimatedValue<T> unified runtime       ✓ landed
 #   Phase 4  QML module + loaders + settings migration             ✓ landed
 #            (Phase A1: QML module promoted to libs/phosphor-animation-qml/)
@@ -113,7 +112,6 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/ProfileTree.h
     include/PhosphorAnimation/SnapPolicy.h
     include/PhosphorAnimation/StaggerTimer.h
-    include/PhosphorAnimation/AnimationController.h
 
     include/PhosphorAnimation/PhosphorProfileRegistry.h
     include/PhosphorAnimation/CurveLoader.h
