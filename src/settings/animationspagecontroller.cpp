@@ -506,21 +506,24 @@ QVariantList AnimationsPageController::userPresets() const
 
     const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
     for (const QFileInfo& info : entries) {
-        const QJsonObject obj = readProfileJson(info.absoluteFilePath());
-        if (obj.isEmpty())
+        // Single open + parse: extract the `name` field (used both for
+        // the override-slot filter and for the QML row identity), then
+        // strip it to recover the Profile shape readProfileJson would
+        // have returned. Avoids a second open+parse per file that the
+        // earlier read-then-re-read approach incurred.
+        QFile f(info.absoluteFilePath());
+        if (!f.open(QIODevice::ReadOnly))
             continue;
-
-        // readProfileJson strips the `name` field; re-read it here
-        // because we need it both for the filter and for the QML row
-        // identity.
-        QFile raw(info.absoluteFilePath());
-        if (!raw.open(QIODevice::ReadOnly))
+        QJsonParseError err{};
+        const auto doc = QJsonDocument::fromJson(f.readAll(), &err);
+        if (err.error != QJsonParseError::NoError || !doc.isObject())
             continue;
-        const auto rawDoc = QJsonDocument::fromJson(raw.readAll());
-        if (!rawDoc.isObject())
-            continue;
-        const QString name = rawDoc.object().value(jsonNameKey()).toString();
+        QJsonObject obj = doc.object();
+        const QString name = obj.value(jsonNameKey()).toString();
         if (name.isEmpty() || knownPathSet.contains(name) || ProfilePaths::isReservedPath(name))
+            continue;
+        obj.remove(jsonNameKey());
+        if (obj.isEmpty())
             continue;
 
         QVariantMap entry = obj.toVariantMap();
@@ -550,8 +553,9 @@ bool AnimationsPageController::addUserPreset(const QString& name, const QVariant
     const QString slug = slugifyPresetName(name);
     if (slug.isEmpty())
         return false;
-    if (ProfilePaths::allBuiltInPaths().contains(name) || ProfilePaths::isReservedPath(name)
-        || ProfilePaths::allBuiltInPaths().contains(slug) || ProfilePaths::isReservedPath(slug))
+    const QStringList builtInPaths = ProfilePaths::allBuiltInPaths();
+    if (builtInPaths.contains(name) || ProfilePaths::isReservedPath(name) || builtInPaths.contains(slug)
+        || ProfilePaths::isReservedPath(slug))
         return false;
 
     const QString filePath = presetFilePath(name);

@@ -449,8 +449,20 @@ Item {
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
                         } else {
                             var effect = _effects[index - 1];
-                            settingsController.animationsPage.setShaderOverride(root.eventPath, effect.id, root.currentShaderParams || ({
-                            }));
+                            // Switching to a DIFFERENT effect: drop the
+                            // previous effect's parameter map. The new
+                            // effect's parameter schema is unrelated, so
+                            // carrying the old keys persists dead values
+                            // on disk (and the param editor's
+                            // paramInitialValue path falls through to
+                            // type-defaults anyway because the keys
+                            // don't match the new schema). Same effect:
+                            // pass through the current map so a no-op
+                            // re-pick doesn't wipe in-progress edits.
+                            var newParams = (effect.id === root.currentShaderEffectId) ? (root.currentShaderParams || ({
+                            })) : ({
+                            });
+                            settingsController.animationsPage.setShaderOverride(root.eventPath, effect.id, newParams);
                         }
                     }
 

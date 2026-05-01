@@ -50,6 +50,26 @@ ColumnLayout {
         return fallback;
     }
 
+    /// Type-appropriate default when a pack omits `defaultValue`. Shared
+    /// between the load path (`paramInitialValue`) and the explicit
+    /// "Reset to defaults" button — without the shared fallback,
+    /// resetToDefaults would emit `{paramId: undefined}` and persist a
+    /// stringified-undefined into the on-disk profile (the animation
+    /// runtime tolerates the missing key at read time, but the wire
+    /// format gets stale entries that never resolve cleanly).
+    function _typeDefault(paramInfo) {
+        switch (paramInfo.type) {
+        case "bool":
+            return false;
+        case "color":
+            return "#ffffffff";
+        case "int":
+        case "float":
+        default:
+            return 0;
+        }
+    }
+
     /// Type-safe default for a parameter row. Animation packs frequently
     /// declare parameters without an explicit `default` value in
     /// metadata.json, which left `paramValue` returning undefined and
@@ -65,16 +85,7 @@ ColumnLayout {
         if (v !== undefined)
             return v;
 
-        switch (modelData.type) {
-        case "bool":
-            return false;
-        case "color":
-            return "#ffffffff";
-        case "int":
-        case "float":
-        default:
-            return 0;
-        }
+        return _typeDefault(modelData);
     }
 
     function commit(paramId, value) {
@@ -88,7 +99,14 @@ ColumnLayout {
     function resetToDefaults() {
         var next = {
         };
-        for (var i = 0; i < _paramSchema.length; i++) next[_paramSchema[i].id] = _paramSchema[i].defaultValue
+        for (var i = 0; i < _paramSchema.length; i++) {
+            var p = _paramSchema[i];
+            // Use the same type-aware fallback the load path uses so
+            // packs that omit `defaultValue` round-trip cleanly through
+            // a reset (instead of writing `undefined` into the QVariantMap
+            // that flows through to the on-disk profile).
+            next[p.id] = (p.defaultValue !== undefined) ? p.defaultValue : _typeDefault(p);
+        }
         root.paramsChanged(next);
     }
 

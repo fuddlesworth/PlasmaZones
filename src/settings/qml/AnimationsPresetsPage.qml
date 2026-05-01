@@ -176,8 +176,16 @@ Flickable {
                             ToolTip.visible: hovered
                             enabled: !root._deletingPreset
                             onClicked: {
+                                // Block the button until userPresetsChanged
+                                // confirms the removal. removeUserPreset
+                                // returns false on rare disk failures (file
+                                // race / permissions) and emits no signal in
+                                // that case — without restoring the flag
+                                // here the button would lock forever.
                                 root._deletingPreset = true;
-                                settingsController.animationsPage.removeUserPreset(modelData.name);
+                                if (!settingsController.animationsPage.removeUserPreset(modelData.name))
+                                    root._deletingPreset = false;
+
                             }
                         }
 
@@ -297,8 +305,12 @@ Flickable {
                             ToolTip.visible: hovered
                             enabled: !root._deletingPreset
                             onClicked: {
+                                // See easing-preset delete above for the
+                                // failure-restoration rationale.
                                 root._deletingPreset = true;
-                                settingsController.animationsPage.removeUserPreset(modelData.name);
+                                if (!settingsController.animationsPage.removeUserPreset(modelData.name))
+                                    root._deletingPreset = false;
+
                             }
                         }
 

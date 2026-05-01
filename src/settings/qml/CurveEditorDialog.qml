@@ -357,8 +357,16 @@ Kirigami.Dialog {
                         profile.curve = root._workingCurve;
                     else
                         profile.curve = "spring:" + root._workingOmega.toFixed(2) + "," + root._workingZeta.toFixed(2);
-                    settingsController.animationsPage.addUserPreset(trimmed, profile);
-                    root._savingPreset = false;
+                    // addUserPreset rejects names that collide with a
+                    // built-in event path (would shadow an override
+                    // slot on disk). On rejection, leave the entry
+                    // field open so the user can rename instead of
+                    // silently dismissing — the input text stays in
+                    // place because we only flip _savingPreset on
+                    // success.
+                    if (settingsController.animationsPage.addUserPreset(trimmed, profile))
+                        root._savingPreset = false;
+
                 }
                 Keys.onEscapePressed: root._savingPreset = false
             }
