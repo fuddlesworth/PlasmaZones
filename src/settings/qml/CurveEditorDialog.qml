@@ -133,6 +133,12 @@ Kirigami.Dialog {
             WideComboBox {
                 id: dialogDirection
 
+                // Linear's three directions are byte-identical (the curve
+                // is the identity bezier 0,0,1,1 in every direction); the
+                // combo would otherwise appear interactive while being a
+                // no-op. Disable when the style picker is on Linear so the
+                // dead control is visually grey rather than misleading.
+                enabled: dialogCurvePreset.currentIndex !== 0
                 Accessible.name: i18n("Easing direction")
                 model: CurvePresets.easingDirections.map((d) => {
                     return d.label;

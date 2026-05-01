@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-// `pragma Singleton` MUST appear before any `import` — Qt silently ignores
-// it when placed below the imports, which leaves the qmldir entry as a
-// plain `CurvePresets 1.0 …` line instead of `singleton CurvePresets 1.0
-// …`. Consumers then access the QML *type* rather than its singleton
-// instance, so `CurvePresets.curveDisplayName(...)` resolves to undefined
-// and every page that touches presets crashes at startup with
-// "TypeError: Property 'X' of object CurvePresets is not a function".
+// Singleton registration is driven by the `QT_QML_SINGLETON_TYPE TRUE`
+// source-file property in src/settings/CMakeLists.txt, which forces
+// qt_add_qml_module to emit the `singleton` keyword in qmldir. This
+// `pragma Singleton` line is informational — Qt 6.11's auto-detection
+// is unreliable in our generator setup; the CMake property is the
+// load-bearing piece. Without it the qmldir entry comes out as a
+// plain `CurvePresets 1.0 …` and consumers access the QML *type*
+// instead of the singleton instance ("TypeError: Property 'X' of
+// object CurvePresets is not a function" at AnimationEventCard load).
 pragma Singleton
 
 /**

@@ -183,7 +183,16 @@ Flickable {
                             ToolTip.text: i18n("Delete preset")
                             ToolTip.visible: hovered
                             enabled: !root._deletingPreset
-                            onClicked: {
+                            onClicked: easingDeleteConfirm.open()
+                        }
+
+                        Kirigami.PromptDialog {
+                            id: easingDeleteConfirm
+
+                            title: i18n("Delete preset?")
+                            subtitle: i18n("\"%1\" will be permanently removed.", modelData.name)
+                            standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+                            onDiscarded: {
                                 // Block the button until userPresetsChanged
                                 // confirms the removal. removeUserPreset
                                 // returns false on rare disk failures (file
@@ -194,6 +203,7 @@ Flickable {
                                 if (!settingsController.animationsPage.removeUserPreset(modelData.name))
                                     root._deletingPreset = false;
 
+                                easingDeleteConfirm.close();
                             }
                         }
 
@@ -315,13 +325,23 @@ Flickable {
                             ToolTip.text: i18n("Delete preset")
                             ToolTip.visible: hovered
                             enabled: !root._deletingPreset
-                            onClicked: {
+                            onClicked: springDeleteConfirm.open()
+                        }
+
+                        Kirigami.PromptDialog {
+                            id: springDeleteConfirm
+
+                            title: i18n("Delete preset?")
+                            subtitle: i18n("\"%1\" will be permanently removed.", modelData.name)
+                            standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+                            onDiscarded: {
                                 // See easing-preset delete above for the
                                 // failure-restoration rationale.
                                 root._deletingPreset = true;
                                 if (!settingsController.animationsPage.removeUserPreset(modelData.name))
                                     root._deletingPreset = false;
 
+                                springDeleteConfirm.close();
                             }
                         }
 

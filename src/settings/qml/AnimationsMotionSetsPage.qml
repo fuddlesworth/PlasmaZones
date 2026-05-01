@@ -68,7 +68,13 @@ Flickable {
                     wrapMode: Text.WordWrap
                 }
 
-                RowLayout {
+                // Stack the name + description fields vertically; a
+                // side-by-side RowLayout split them 50/50 at every window
+                // width which made the description column unreadably narrow
+                // on the typical settings pane (~600 px). The Save button
+                // sits at the bottom-right of the stack so the focus order
+                // matches typeflow (name → description → save).
+                ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
 
@@ -88,19 +94,34 @@ Flickable {
                         Accessible.name: i18n("Motion set description")
                     }
 
+                    Kirigami.InlineMessage {
+                        id: saveStatus
+
+                        Layout.fillWidth: true
+                        type: Kirigami.MessageType.Error
+                        showCloseButton: true
+                    }
+
                     Button {
+                        Layout.alignment: Qt.AlignRight
                         text: i18n("Save")
                         icon.name: "document-save"
                         enabled: nameField.text.trim().length > 0 && !root._saving
                         onClicked: {
                             root._saving = true;
+                            saveStatus.visible = false;
                             var ok = settingsController.animationsPage.saveCurrentAsMotionSet(nameField.text.trim(), descField.text.trim());
                             if (ok) {
                                 nameField.text = "";
                                 descField.text = "";
                             } else {
-                                root._saving = false;
+                                // The C++ side logs the reason via qCWarning; surface
+                                // a generic banner so the user sees that something
+                                // went wrong instead of staring at an inert form.
+                                saveStatus.text = i18n("Could not save motion set. Check that the name is unique and that ~/.local/share/plasmazones is writable.");
+                                saveStatus.visible = true;
                             }
+                            root._saving = false;
                         }
                     }
 
@@ -164,7 +185,7 @@ Flickable {
                             text: i18n("Apply")
                             icon.name: "dialog-ok-apply"
                             Accessible.name: i18n("Apply motion set %1", modelData.name)
-                            onClicked: settingsController.animationsPage.applyMotionSet(modelData.name)
+                            onClicked: applyConfirm.open()
                         }
 
                         Button {
@@ -173,7 +194,36 @@ Flickable {
                             ToolTip.text: i18n("Delete set")
                             ToolTip.visible: hovered
                             Accessible.name: i18n("Delete motion set %1", modelData.name)
-                            onClicked: settingsController.animationsPage.removeMotionSet(modelData.name)
+                            onClicked: deleteConfirm.open()
+                        }
+
+                        // Apply overwrites every per-event override file at
+                        // once — the user wouldn't know which paths were
+                        // touched after a misclick. Confirm before the
+                        // batch write; the controller's snapshot store
+                        // backs Discard if they then change their mind.
+                        Kirigami.PromptDialog {
+                            id: applyConfirm
+
+                            title: i18n("Apply motion set?")
+                            subtitle: i18n("\"%1\" will overwrite every per-event override matching its %2.", modelData.name, i18np("entry", "entries", modelData.overrideCount))
+                            standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
+                            onApplied: settingsController.animationsPage.applyMotionSet(modelData.name)
+                        }
+
+                        // Delete is permanent — the JSON file under
+                        // motionsets/ is removed and only ~/.local backups
+                        // would let the user recover.
+                        Kirigami.PromptDialog {
+                            id: deleteConfirm
+
+                            title: i18n("Delete motion set?")
+                            subtitle: i18n("\"%1\" will be permanently removed.", modelData.name)
+                            standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+                            onDiscarded: {
+                                settingsController.animationsPage.removeMotionSet(modelData.name);
+                                deleteConfirm.close();
+                            }
                         }
 
                     }

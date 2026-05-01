@@ -862,6 +862,53 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("expected ≥2 emissions, got ") + QString::number(spy.count())));
     }
 
+    // ─── Pass-1 behaviour pins ────────────────────────────────────────────
+
+    /// `setOverride` compare-and-skip: writing the same Profile twice
+    /// must not fire a second `overrideChanged` / `pendingChangesChanged`.
+    /// Pre-fix the second write rewrote an identical file and lit Save.
+    void setOverride_repeatedWriteIsNoOp()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const auto profile = QVariantMap{{QStringLiteral("duration"), 250},
+                                         {QStringLiteral("curve"), QStringLiteral("0.33,1.00,0.68,1.00")}};
+
+        QSignalSpy overrideSpy(&c, &AnimationsPageController::overrideChanged);
+        QSignalSpy pendingSpy(&c, &AnimationsPageController::pendingChangesChanged);
+
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), profile));
+        QCOMPARE(overrideSpy.count(), 1);
+        QCOMPARE(pendingSpy.count(), 1);
+
+        // Second identical write — must short-circuit, no extra signals.
+        QVERIFY(c.setOverride(QStringLiteral("zone.snapIn"), profile));
+        QCOMPARE(overrideSpy.count(), 1);
+        QCOMPARE(pendingSpy.count(), 1);
+    }
+
+    /// `setShaderOverride` short-circuits when the request matches the
+    /// existing tree state. Without this, the QML two-way binding round-
+    /// trip (combo activation → controller → settings → tree → QML
+    /// refresh → re-emit) would dirty the page on every reload.
+    void setShaderOverride_noOpWhenTreeAlreadyMatches()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+
+        QSignalSpy pendingSpy(&c, &AnimationsPageController::pendingChangesChanged);
+        // Same effectId + same (empty) parameters — must early-return.
+        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+        QCOMPARE(pendingSpy.count(), 0);
+    }
+
     // ─── Logging on malformed JSON ────────────────────────────────────────
 
     /// Plant an unparseable JSON file in the profiles dir; userPresets()

@@ -112,6 +112,8 @@ Item {
                 anchors.fill: parent
                 Component.onCompleted: requestPaint()
                 onPaint: {
+                    // Envelope for underdamped (zeta < 1).
+
                     var ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     // Resolve colors fresh each paint so theme context is always current
@@ -179,16 +181,23 @@ Item {
                             ctx.lineTo(cpx, cpy);
                     }
                     ctx.stroke();
-                    // Envelope for underdamped (zeta < 1). Decay rate is ζ·ω.
+                    // The true step response is
+                    //   y(t) = 1 − e^(−ζω t)·(cos(ω_d t) + (ζ/√(1−ζ²))·sin(ω_d t))
+                    // whose oscillation extrema reach 1 ± e^(−ζω t)/√(1−ζ²),
+                    // NOT 1 ± e^(−ζω t). The simpler-looking envelope
+                    // underestimates the bound by a factor of 1/√(1−ζ²) and
+                    // the rendered curve visibly pokes outside the dashed
+                    // lines at low ζ — defeating the lines' purpose.
                     if (root.zeta < 1) {
                         ctx.strokeStyle = accentDimStr;
                         ctx.lineWidth = 0.5;
                         ctx.setLineDash([3, 3]);
+                        const envScale = 1 / Math.sqrt(1 - root.zeta * root.zeta);
                         // Upper envelope
                         ctx.beginPath();
                         for (var j = 0; j <= steps; j++) {
                             var te = (j / steps) * maxTime;
-                            var env = Math.exp(-root.zeta * root.omega * te);
+                            var env = Math.exp(-root.zeta * root.omega * te) * envScale;
                             var pxe = pad + (j / steps) * gw;
                             var pye = yToPixel(1 + env, pad, gh, yOffset, yRange);
                             if (j === 0)
@@ -201,7 +210,7 @@ Item {
                         ctx.beginPath();
                         for (var k = 0; k <= steps; k++) {
                             var te2 = (k / steps) * maxTime;
-                            var env2 = Math.exp(-root.zeta * root.omega * te2);
+                            var env2 = Math.exp(-root.zeta * root.omega * te2) * envScale;
                             var pxe2 = pad + (k / steps) * gw;
                             var pye2 = yToPixel(1 - env2, pad, gh, yOffset, yRange);
                             if (k === 0)

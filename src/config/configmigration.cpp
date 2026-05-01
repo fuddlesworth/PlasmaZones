@@ -1024,6 +1024,17 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
 void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 {
+    // Defense-in-depth idempotency guard, mirroring migrateV1ToV2. The
+    // PhosphorConfig::MigrationRunner gates this on version == 2 and
+    // `ensureJsonConfig` bails early when version >= ConfigSchemaVersion,
+    // but a direct caller that hands us an already-v3 doc would otherwise
+    // re-read v3-named groups as if they were v2 candidates. The v2→v3
+    // step is largely empty-tolerant (each takeKey returns empty for
+    // absent keys), but the asymmetry vs v1→v2's guard is a foot-gun.
+    if (root.value(ConfigKeys::versionKey()).toInt(0) >= 3) {
+        return;
+    }
+
     // Walk the canonical v2 dot-path Snapping.Behavior.Display by splitting
     // the group accessor on '.' — this keeps the migration in lockstep with
     // the schema instead of duplicating segment names as bare literals.

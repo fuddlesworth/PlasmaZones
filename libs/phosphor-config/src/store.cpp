@@ -415,7 +415,7 @@ QJsonObject Store::exportToJson() const
     return out;
 }
 
-void Store::importFromJson(const QJsonObject& snapshot)
+bool Store::importFromJson(const QJsonObject& snapshot)
 {
     // Reject snapshots stamped with a different schema version. Callers
     // with an older snapshot must run MigrationRunner on it first —
@@ -433,7 +433,7 @@ void Store::importFromJson(const QJsonObject& snapshot)
                 "PhosphorConfig::Store::importFromJson: snapshot '%s' is not a JSON number — refusing import "
                 "(malformed snapshot).",
                 qPrintable(d->schema.versionKey));
-            return;
+            return false;
         }
         const int snapshotVersion = versionValue.toInt();
         if (snapshotVersion != d->schema.version) {
@@ -441,7 +441,7 @@ void Store::importFromJson(const QJsonObject& snapshot)
                 "PhosphorConfig::Store::importFromJson: snapshot version %d does not match schema version %d — "
                 "refusing import. Run MigrationRunner on the snapshot first.",
                 snapshotVersion, d->schema.version);
-            return;
+            return false;
         }
     }
 
@@ -470,6 +470,7 @@ void Store::importFromJson(const QJsonObject& snapshot)
             write(git.key(), def.key, value);
         }
     }
+    return true;
 }
 
 // ─── Templated read<T> ───────────────────────────────────────────────────────
