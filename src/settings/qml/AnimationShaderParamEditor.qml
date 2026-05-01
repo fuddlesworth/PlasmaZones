@@ -107,6 +107,19 @@ ColumnLayout {
             // that flows through to the on-disk profile).
             next[p.id] = (p.defaultValue !== undefined) ? p.defaultValue : _typeDefault(p);
         }
+        // Push the defaults into every loaded row imperatively BEFORE
+        // emitting paramsChanged so the visible UI snaps to the defaults
+        // immediately. We can't rely on a declarative Binding to row.value
+        // tracking currentParams: that would re-evaluate during a slider
+        // drag (the row's own commit() round-trips through the host and
+        // back into currentParams synchronously) and snap the slider's
+        // thumb to the previous tick's value.
+        for (var j = 0; j < paramRepeater.count; ++j) {
+            var loader = paramRepeater.itemAt(j);
+            if (loader && loader.item)
+                loader.item.value = next[loader.modelData.id];
+
+        }
         root.paramsChanged(next);
     }
 
@@ -114,6 +127,8 @@ ColumnLayout {
     visible: effectId.length > 0 && _paramSchema.length > 0
 
     Repeater {
+        id: paramRepeater
+
         model: root._paramSchema
 
         delegate: Loader {
@@ -139,26 +154,20 @@ ColumnLayout {
                     return unsupportedRow;
                 }
             }
-            // paramInfo is set imperatively (Loader.item only exists after
-            // sourceComponent resolves). `value` is bound DECLARATIVELY
-            // below so a mid-life update to `currentParams` (e.g. a Reset
-            // to defaults emit, or another sub-page mutating the same
-            // shader profile) actually propagates into the loaded row —
-            // an imperative `item.value = ...` once at onLoaded never
-            // rebinds.
+            // Imperative seed: onLoaded fires once when the Loader's
+            // sourceComponent resolves; modelData/currentParams updates do
+            // NOT re-fire it. That's intentional — we want the row to keep
+            // the user's in-flight value during a slider drag (commit()
+            // round-trips through the host and back into currentParams
+            // synchronously, so a declarative Binding here would overwrite
+            // the cursor mid-stroke). Reset-to-defaults uses an explicit
+            // imperative re-drive in resetToDefaults() above.
             onLoaded: {
-                if (item)
+                if (item) {
                     item.paramInfo = modelData;
-
+                    item.value = root.paramInitialValue(modelData);
+                }
             }
-
-            Binding {
-                target: paramLoader.item
-                property: "value"
-                value: root.paramInitialValue(paramLoader.modelData)
-                when: paramLoader.item !== null
-            }
-
         }
 
     }

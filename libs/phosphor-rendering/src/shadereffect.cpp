@@ -255,21 +255,16 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
     if (m_sourceItem.data() == item) {
         return;
     }
-    // Reject self/ancestor references: sampling our own output (or any
-    // ancestor in the visual tree we belong to) creates a layer→shader→layer
-    // recursion that crashes inside Qt's layer system. The header documents
-    // this constraint at the API level; enforce it at the boundary.
-    if (item) {
-        for (QQuickItem* probe = this; probe; probe = probe->parentItem()) {
-            if (probe == item) {
-                qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this` or an ancestor; sampling self "
-                                           "produces a feedback recursion. Source item left cleared.";
-                m_sourceItem = nullptr;
-                Q_EMIT sourceItemChanged();
-                update();
-                return;
-            }
-        }
+    // Self-reference (sampling literally `this`) is rejected; ANCESTOR
+    // sampling is supported and load-bearing (SurfaceAnimator parents
+    // shaderItem under shaderAnchor for coord-system mapping, then calls
+    // setSourceItem(shaderAnchor) so the anchor's layer texture binds to
+    // iChannel0). Qt's layer system uses a back-buffer so sampling an
+    // ancestor reads last-frame's content — no infinite recursion. An
+    // earlier ancestor-walk guard here silently broke every shader leg.
+    if (item == this) {
+        qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this`; cannot sample own output.";
+        return;
     }
     m_sourceItem = item;
     if (item) {

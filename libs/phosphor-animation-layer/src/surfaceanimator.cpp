@@ -160,6 +160,12 @@ struct ShaderAttachResult
     PhosphorRendering::ShaderEffect* shaderItem = nullptr;
     QQuickItem* shaderAnchor = nullptr;
     bool foundExplicitAnchor = false;
+    /// True when `attachShaderToAnchor` flipped layer.enabled from off
+    /// to on (i.e. the anchor wasn't already a texture provider). The
+    /// teardown reset is gated on this so a third-party that had
+    /// layer.enabled set independently isn't disabled out from under
+    /// itself when the leg ends.
+    bool weEnabledLayer = false;
 };
 
 /// Build the per-leg ShaderEffect: anchor resolution + layer-enable +
@@ -187,14 +193,17 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
     shaderItem->setITime(0.0);
 
-    // setSourceItem (binds anchor's layer texture as iChannel0) only
-    // when we explicitly enabled layer — on the fallback path
-    // setSourceItem would try to enable layer on the QQuickRootItem
-    // and re-introduce the OSD-doesn't-render bug. setSourceItem itself
-    // owns the two-step layer.enabled=true on the source item, so the
-    // animator does not duplicate that toggle here; teardownShaderLeg
-    // counters it via the same two-step (gated identically).
+    // setSourceItem on an explicit anchor binds the anchor's layer
+    // texture as iChannel0 AND auto-enables layer.enabled when the
+    // anchor isn't yet a texture provider. We bypass it on the
+    // fallback path because layer-enabling QQuickRootItem reintroduces
+    // the OSD-doesn't-render regression. Capture whether THIS animator
+    // is the one that enabled the layer so teardown can symmetrically
+    // disable only what we turned on (a third party may have already
+    // had layer.enabled=true for unrelated reasons).
+    bool weEnabledLayer = false;
     if (foundExplicitAnchor) {
+        weEnabledLayer = !shaderAnchor->isTextureProvider();
         shaderItem->setSourceItem(shaderAnchor);
     }
 
@@ -244,6 +253,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     out.shaderItem = shaderItem;
     out.shaderAnchor = shaderAnchor;
     out.foundExplicitAnchor = foundExplicitAnchor;
+    out.weEnabledLayer = weEnabledLayer;
     return out;
 }
 
@@ -267,10 +277,15 @@ public:
         /// true` was found by attachShaderToAnchor.
         QPointer<QQuickItem> shaderAnchor;
         /// True iff the anchor came from an explicit property tag.
-        /// Gates `teardownShaderLeg`'s layer.enabled reset — fallback
-        /// targets (QQuickRootItem) deliberately never had their layer
-        /// enabled and must not have it touched at teardown either.
+        /// Fallback targets (QQuickRootItem) deliberately never had
+        /// their layer enabled and must not have it touched at
+        /// teardown either.
         bool foundExplicitAnchor = false;
+        /// True iff `attachShaderToAnchor` flipped layer.enabled on at
+        /// the start of the leg. Gates teardownShaderLeg's symmetric
+        /// disable so a third party who already had layer.enabled set
+        /// for unrelated reasons isn't disabled out from under itself.
+        bool weEnabledLayer = false;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> opacity;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> scale;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> shaderTime;
@@ -295,8 +310,11 @@ public:
     }
 
     /// Tear down the per-leg ShaderEffect. layer.enabled is restored
-    /// only on explicit anchors — restoring on a fallback
-    /// QQuickRootItem would re-introduce the OSD-doesn't-render bug.
+    /// only on explicit anchors AND only when THIS animator was the
+    /// one that flipped it on — restoring on a fallback QQuickRootItem
+    /// re-introduces the OSD-doesn't-render bug, and disabling a layer
+    /// a third party had already enabled for unrelated reasons would
+    /// silently break that third party.
     void teardownShaderLeg(Track& track)
     {
         if (track.shaderTime) {
@@ -317,13 +335,14 @@ public:
             track.shaderItem->deleteLater();
             track.shaderItem = nullptr;
         }
-        if (track.foundExplicitAnchor && track.shaderAnchor) {
+        if (track.foundExplicitAnchor && track.weEnabledLayer && track.shaderAnchor) {
             if (QObject* layer = track.shaderAnchor->property("layer").value<QObject*>()) {
                 layer->setProperty("enabled", false);
             }
         }
         track.shaderAnchor.clear();
         track.foundExplicitAnchor = false;
+        track.weEnabledLayer = false;
     }
 
     /// Cancel any in-flight legs for a surface. Called directly and
@@ -439,6 +458,7 @@ public:
             slot.shaderAnchor.clear();
             slot.shaderItem = nullptr;
             slot.foundExplicitAnchor = false;
+            slot.weEnabledLayer = false;
             slot.target = target;
             slot.onComplete = std::move(onComplete);
             slot.pendingLegs = legCount;
@@ -472,6 +492,7 @@ public:
                 it->second.shaderItem = attached.shaderItem;
                 it->second.shaderAnchor = attached.shaderAnchor;
                 it->second.foundExplicitAnchor = attached.foundExplicitAnchor;
+                it->second.weEnabledLayer = attached.weEnabledLayer;
                 it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
         }

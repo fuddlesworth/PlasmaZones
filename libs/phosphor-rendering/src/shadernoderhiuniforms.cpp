@@ -592,6 +592,19 @@ void ShaderNodeRhi::bakeBufferShaders()
             m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
             if (!m_bufferFragmentShaderSource.isEmpty()) {
                 m_bufferMtime = mtime;
+            } else {
+                // The eager load in setBufferShaderPaths used to surface
+                // load errors at setter time; deferring the load to here
+                // means a silent empty-source loop unless we log + retry.
+                qCWarning(lcShaderNode) << "Buffer shader load failed:" << m_bufferPath
+                                        << "error=" << (err.isEmpty() ? QStringLiteral("(no detail)") : err);
+                if (++m_bufferShaderRetries < 3) {
+                    m_bufferShaderDirty = true;
+                } else {
+                    qCWarning(lcShaderNode)
+                        << "Buffer shader load failed after 3 attempts; giving up until shader path changes";
+                }
+                return;
             }
         }
         if (!m_bufferFragmentShaderSource.isEmpty()) {

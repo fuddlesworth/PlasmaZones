@@ -237,21 +237,17 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     if (m_sourceTextureProvider.data() == provider) {
         return;
     }
-    const bool wasSet = m_sourceTextureProvider.data() != nullptr;
     m_sourceTextureProvider = provider;
     // Clear the cached binding-7 texture pointer so the SRB build sees
     // a "different texture" on the next prepare() and rebuilds bindings.
+    // The asymmetric "only on provider→null" reset that lived here briefly
+    // missed the null→provider-A→null→provider-B sequence: B's m_sourceSampler
+    // is inherited from A (never reset on provider→null), so the
+    // sampler-create branch in uploadDirtyTextures doesn't fire either, and
+    // the SRB ends up bound to the post-A null fallback. Always reset is
+    // correct; the double-rebuild concern is one frame of extra pipeline work.
     m_lastSourceRhiTexture = nullptr;
-    // For provider→null transitions, uploadDirtyTextures' compare-and-rebuild
-    // path (which gates on m_sourceTextureProvider being non-null) will not
-    // run, so the SRB would keep referencing the old provider's texture. For
-    // every other transition (null→provider, provider→provider), that same
-    // path detects the texture-identity change and rebuilds itself — calling
-    // resetAllBindingsAndPipelines here would double-rebuild on the next
-    // frame.
-    if (wasSet && !provider) {
-        resetAllBindingsAndPipelines();
-    }
+    resetAllBindingsAndPipelines();
 }
 
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
