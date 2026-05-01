@@ -8,14 +8,16 @@
 // "clear → pixelated" on hide (qt_Opacity 1→0) without the shader
 // having to know the leg direction.
 //
-// SurfaceAnimator pre-grabs the visible card (the `objectName:
-// "shaderAnchor"` item) to a QImage at leg start and uploads it via
-// `setUserTexture(0, ...)` so this shader has the surface to sample
-// through `iChannel0`. While the grab is in flight (one frame on
-// average) the texture is the all-transparent fallback the
-// PhosphorRendering::ShaderEffect ships with — the shader still
-// produces a sensible output (transparent blocks) instead of the
-// rainbow placeholder the previous stub emitted.
+// SurfaceAnimator binds the visible card (the `objectName:
+// "shaderAnchor"` item) as a live texture provider via
+// `ShaderEffect::setSourceItem` — the anchor's `layer.enabled` is
+// flipped to true so `QQuickItem::textureProvider()` returns a
+// per-frame FBO that the shader samples through `iChannel0` (SRB
+// binding 7). Re-rendered every frame the consumer dirties, so the
+// shader always sees the current rendered pixels rather than a
+// frozen snapshot. When no explicit `shaderAnchor` is found the leg
+// falls back to user-texture-0 (transparent fallback) and the
+// shader is a visual no-op.
 
 #version 450
 
@@ -27,10 +29,11 @@
 #define maxBlockSize customParams[0].x
 
 // User texture slot 0 → SRB binding 7. SurfaceAnimator binds the
-// rendered-surface QImage here. The sampler defaults to
-// `clampToEdge / linear` per ShaderNodeRhi::ensureUserTextureSampler;
-// nearest-neighbour would give crisper blocks but linear hides the
-// async-grab fallback frame more gracefully.
+// shaderAnchor's live `QSGTextureProvider` here (FBO from the layer-
+// enabled anchor). The sampler defaults to `clampToEdge / linear`
+// per ShaderNodeRhi::ensureUserTextureSampler; nearest-neighbour
+// would give crisper blocks but linear smooths over the layer-FBO
+// boundary on sub-pixel block sizes.
 layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) out vec4 fragColor;

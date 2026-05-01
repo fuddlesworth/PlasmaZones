@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Dissolve transition — operates on the rendered surface sampled via
-// iChannel0 (user-texture binding 7, populated by SurfaceAnimator
-// from `shaderAnchor->grabToImage()`). Per-cell noise gates the
-// surface's alpha against `qt_Opacity` so the visual is direction-
-// agnostic: on show the cells fade in in pseudo-random order, on
-// hide they fade out the same way. `grain` controls the cell size,
-// `softness` the per-cell edge transition.
+// iChannel0 (SRB binding 7). SurfaceAnimator binds the shaderAnchor's
+// live `QSGTextureProvider` through `ShaderEffect::setSourceItem`,
+// so the shader sees the current rendered pixels rather than a
+// pre-leg snapshot. Per-cell noise gates the surface's alpha against
+// `qt_Opacity` so the visual is direction-agnostic: on show the
+// cells fade in in pseudo-random order, on hide they fade out the
+// same way. `grain` controls the cell size, `softness` the per-cell
+// edge transition.
 
 #version 450
 
@@ -17,8 +19,10 @@
 #define grain    customParams[0].x  // noise cell size in normalised UV units
 #define softness customParams[0].y  // edge softness
 
-// Surface texture slot — see pixelate/effect.frag for the binding-7
-// rationale. SurfaceAnimator uploads via setUserTexture(0, ...).
+// Surface texture slot — SurfaceAnimator binds the shaderAnchor's
+// `QSGTextureProvider` here (live FBO from layer.enabled=true on
+// the anchor). See pixelate/effect.frag for the full binding-7
+// rationale.
 layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) out vec4 fragColor;
