@@ -7,10 +7,12 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Easing curve controls for the Animations card.
+ * @brief Easing-curve-specific controls for the Animations card.
  *
  * Contains the easing style/direction combo boxes, amplitude/period/bounce
- * sliders, duration, sequence mode, stagger interval, and minimum distance.
+ * sliders, and duration. Mode-agnostic rows (sequence mode, stagger
+ * interval, minimum distance) live on the parent page so they remain
+ * visible when the user flips the timing-mode combo to Spring.
  *
  * Required properties:
  *   - constants: root object providing sliderPreferredWidth, sliderValueLabelWidth
@@ -340,68 +342,6 @@ ColumnLayout {
             labelWidth: Kirigami.Units.gridUnit * 4
             onMoved: (value) => {
                 return easingRoot.appSettings.animationDuration = Math.round(value);
-            }
-        }
-
-    }
-
-    SettingsSeparator {
-    }
-
-    // ── Multiple windows ────────────────────────────────────────────────────
-    SettingsRow {
-        title: i18n("Multiple windows")
-        description: i18n("How to animate when moving several windows at once")
-
-        WideComboBox {
-            Accessible.name: i18n("Multiple windows")
-            enabled: easingRoot.animationsEnabled
-            model: [i18n("All at once"), i18n("One by one")]
-            currentIndex: easingRoot.appSettings.animationSequenceMode
-            onActivated: (index) => {
-                return easingRoot.appSettings.animationSequenceMode = index;
-            }
-        }
-
-    }
-
-    // ── Stagger interval (one by one only) ──────────────────────────────────
-    SettingsRow {
-        visible: easingRoot.appSettings.animationSequenceMode === 1
-        title: i18n("Stagger delay")
-        description: i18n("Pause between each window's animation start")
-
-        SettingsSlider {
-            enabled: easingRoot.animationsEnabled
-            from: settingsController.generalPage.animationStaggerIntervalMin
-            to: settingsController.generalPage.animationStaggerIntervalMax
-            stepSize: 10
-            value: easingRoot.appSettings.animationStaggerInterval
-            valueSuffix: " ms"
-            labelWidth: Kirigami.Units.gridUnit * 4
-            onMoved: (value) => {
-                return easingRoot.appSettings.animationStaggerInterval = Math.round(value);
-            }
-        }
-
-    }
-
-    SettingsSeparator {
-    }
-
-    // ── Minimum distance ────────────────────────────────────────────────────
-    SettingsRow {
-        title: i18n("Minimum distance")
-        description: easingRoot.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
-
-        SettingsSpinBox {
-            enabled: easingRoot.animationsEnabled
-            from: settingsController.generalPage.animationMinDistanceMin
-            to: settingsController.generalPage.animationMinDistanceMax
-            stepSize: 5
-            value: easingRoot.appSettings.animationMinDistance
-            onValueModified: (value) => {
-                return easingRoot.appSettings.animationMinDistance = value;
             }
         }
 

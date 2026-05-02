@@ -149,6 +149,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
+        qml/SpringSettings.qml
         # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in
         # later phases. Phase 2 widgets (CurveThumbnail, SpringPreview,
