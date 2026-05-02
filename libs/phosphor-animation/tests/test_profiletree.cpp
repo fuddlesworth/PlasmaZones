@@ -43,43 +43,6 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::ZoneSnapIn));
     }
 
-    /// Reserved paths (taxonomy slots with no current consumer) MUST be
-    /// excluded from `allBuiltInPaths()` so settings UIs that enumerate
-    /// it don't surface assignable slots that silently no-op. Pin both
-    /// the exclusion and the `isReservedPath()` predicate that backs it.
-    void testReservedPathsAreExcluded()
-    {
-        const QStringList paths = PP::allBuiltInPaths();
-
-        // Reserved-but-defined paths exist as constants...
-        QVERIFY(!PP::CursorDrag.isEmpty());
-        QVERIFY(!PP::ZoneLayoutSwitchOut.isEmpty());
-
-        // ...are flagged by the predicate...
-        QVERIFY(PP::isReservedPath(PP::CursorDrag));
-        QVERIFY(PP::isReservedPath(PP::ZoneLayoutSwitchOut));
-
-        // ...and are NOT included in the enumeration.
-        QVERIFY2(!paths.contains(PP::CursorDrag),
-                 "cursor.drag is reserved (no built-in renderer wires it) — "
-                 "must not appear in allBuiltInPaths()");
-        QVERIFY2(!paths.contains(PP::ZoneLayoutSwitchOut),
-                 "zone.layoutSwitchOut is reserved (no built-in producer fires it) — "
-                 "must not appear in allBuiltInPaths()");
-
-        // Live paths (with active consumers) are NOT reserved.
-        QVERIFY(!PP::isReservedPath(PP::WindowOpen));
-        QVERIFY(!PP::isReservedPath(PP::ZoneSnapIn));
-        QVERIFY(!PP::isReservedPath(PP::ZoneLayoutSwitchIn));
-        QVERIFY(!PP::isReservedPath(PP::Global));
-
-        // Empty / unknown paths are not reserved (they'd resolve to
-        // library defaults via parentPath; the predicate is for
-        // taxonomy-defined-but-unwired only).
-        QVERIFY(!PP::isReservedPath(QString()));
-        QVERIFY(!PP::isReservedPath(QStringLiteral("plugin.custom.path")));
-    }
-
     // ─── Resolve walk-up ───
 
     void testResolveEmptyTreeReturnsLibraryDefaults()

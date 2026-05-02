@@ -37,7 +37,6 @@ PHOSPHORANIMATION_EXPORT extern const QString ZoneSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString ZoneSnapResize;
 PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlight;
 PHOSPHORANIMATION_EXPORT extern const QString ZoneLayoutSwitchIn;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneLayoutSwitchOut;
 
 // workspace.*
 PHOSPHORANIMATION_EXPORT extern const QString Workspace;
@@ -71,13 +70,9 @@ PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssistShow;
 
 // cursor.*
-// CursorDrag is reserved — no built-in renderer. A window-content shader at
-// drag start just shadows window.move (last-event-wins on the same trigger).
-// Reserved for a future cursor-decoration / drag-shadow surface.
 PHOSPHORANIMATION_EXPORT extern const QString Cursor;
 PHOSPHORANIMATION_EXPORT extern const QString CursorHover;
 PHOSPHORANIMATION_EXPORT extern const QString CursorClick;
-PHOSPHORANIMATION_EXPORT extern const QString CursorDrag;
 
 // shader.*
 PHOSPHORANIMATION_EXPORT extern const QString Shader;
@@ -98,12 +93,8 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 200 ms OutCubi
 PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordion; ///< 250 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCubic
 
-/// Full list of built-in paths in taxonomy order (excludes reserved paths).
+/// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
-
-/// True when @p path is in the taxonomy but has no built-in producer.
-/// Currently reserved: cursor.drag, zone.layoutSwitchOut.
-PHOSPHORANIMATION_EXPORT bool isReservedPath(const QString& path);
 
 /// Walk @p path up one level ("window.open" -> "window" -> "global" -> "").
 PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);

@@ -330,7 +330,17 @@ QString AnimationsPageController::sectionForPath(const QString& path) const
     if (path.isEmpty())
         return {};
     const int dot = path.indexOf(QLatin1Char('.'));
-    return dot < 0 ? path : path.left(dot);
+    const QString topLevel = dot < 0 ? path : path.left(dot);
+
+    // Merge osd.* and panel.* into the "overlays" UI section.
+    if (topLevel == QLatin1String("osd") || topLevel == QLatin1String("panel"))
+        return QStringLiteral("overlays");
+
+    // Merge cursor.* into the "widget" UI section.
+    if (topLevel == QLatin1String("cursor"))
+        return QStringLiteral("widget");
+
+    return topLevel;
 }
 
 QString AnimationsPageController::eventLabel(const QString& path) const

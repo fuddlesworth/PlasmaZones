@@ -77,7 +77,7 @@ private Q_SLOTS:
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
         QCOMPARE(c.sectionForPath(QStringLiteral("zone")), QStringLiteral("zone"));
         QCOMPARE(c.sectionForPath(QStringLiteral("zone.snapIn")), QStringLiteral("zone"));
-        QCOMPARE(c.sectionForPath(QStringLiteral("panel.popup.layoutPicker.show")), QStringLiteral("panel"));
+        QCOMPARE(c.sectionForPath(QStringLiteral("panel.popup.layoutPicker.show")), QStringLiteral("overlays"));
         QCOMPARE(c.sectionForPath(QString()), QString());
     }
 
@@ -123,11 +123,10 @@ private Q_SLOTS:
         }
         QCOMPARE(totalListed, paths.size());
 
-        // No reserved path leaks through (allBuiltInPaths excludes them,
-        // but pin the contract here).
+        // Every listed path is a built-in path.
+        const QStringList builtIn = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
         for (const QString& p : allListed) {
-            QVERIFY2(!PhosphorAnimation::ProfilePaths::isReservedPath(p),
-                     qPrintable(QStringLiteral("reserved path leaked into UI: ") + p));
+            QVERIFY2(builtIn.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
         }
     }
 

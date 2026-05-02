@@ -100,7 +100,7 @@ public:
     ///              { "path": "window.open", "label": "Open",
     ///                "parent": "window", "isCategory": false }, ... ] }
     /// ```
-    /// Reserved paths (`ProfilePaths::isReservedPath`) are excluded.
+    /// All built-in paths from `ProfilePaths::allBuiltInPaths()` are included.
     Q_INVOKABLE QVariantList eventSections() const;
 
     /// First dotted segment of @p path, or `"global"` when @p path is the

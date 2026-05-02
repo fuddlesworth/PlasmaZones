@@ -28,7 +28,6 @@ const QString ZoneSnapOut = QStringLiteral("zone.snapOut");
 const QString ZoneSnapResize = QStringLiteral("zone.snapResize");
 const QString ZoneHighlight = QStringLiteral("zone.highlight");
 const QString ZoneLayoutSwitchIn = QStringLiteral("zone.layoutSwitchIn");
-const QString ZoneLayoutSwitchOut = QStringLiteral("zone.layoutSwitchOut");
 
 // workspace.*
 const QString Workspace = QStringLiteral("workspace");
@@ -62,7 +61,6 @@ const QString PanelPopupSnapAssistShow = QStringLiteral("panel.popup.snapAssist.
 const QString Cursor = QStringLiteral("cursor");
 const QString CursorHover = QStringLiteral("cursor.hover");
 const QString CursorClick = QStringLiteral("cursor.click");
-const QString CursorDrag = QStringLiteral("cursor.drag");
 
 // shader.*
 const QString Shader = QStringLiteral("shader");
@@ -87,13 +85,6 @@ QStringList allBuiltInPaths()
 {
     // Ordered to match taxonomy tree walk — category root, then leaves.
     // Useful as-is for settings UI that renders an indented list.
-    //
-    // Reserved paths (CursorDrag, ZoneLayoutSwitchOut) are intentionally
-    // omitted — they're defined in the taxonomy as named slots but have
-    // no consumer firing them, so a settings UI surfacing them would
-    // create an assignable slot that silently never plays. Callers that
-    // need the full taxonomy (including reserved slots) can append from
-    // `isReservedPath()`-aware enumeration.
     return {
         Global,
         Window,
@@ -153,13 +144,6 @@ QStringList allBuiltInPaths()
         WidgetAccordion,
         WidgetProgress,
     };
-}
-
-bool isReservedPath(const QString& path)
-{
-    // Single source of truth for "in the taxonomy but unwired" paths.
-    // Mirrored in ProfilePaths.h docstring for `allBuiltInPaths()`.
-    return path == CursorDrag || path == ZoneLayoutSwitchOut;
 }
 
 QString parentPath(const QString& path)

@@ -93,7 +93,7 @@ QVariantList AnimationPresetLibrary::userPresets() const
         }
         QJsonObject obj = doc.object();
         const QString name = obj.value(presetlib_detail::JsonNameKey).toString();
-        if (name.isEmpty() || knownPathSet.contains(name) || ProfilePaths::isReservedPath(name))
+        if (name.isEmpty() || knownPathSet.contains(name))
             continue;
         obj.remove(presetlib_detail::JsonNameKey);
         if (obj.isEmpty())
@@ -120,8 +120,7 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     if (slug.isEmpty())
         return false;
     const QStringList builtInPaths = ProfilePaths::allBuiltInPaths();
-    if (builtInPaths.contains(name) || ProfilePaths::isReservedPath(name) || builtInPaths.contains(slug)
-        || ProfilePaths::isReservedPath(slug))
+    if (builtInPaths.contains(name) || builtInPaths.contains(slug))
         return false;
 
     const QString dir = m_profilesDir();

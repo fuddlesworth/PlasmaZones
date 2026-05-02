@@ -1,0 +1,5 @@
+{
+  "name": "window.unminimize",
+  "duration": 200,
+  "curve": "cubic-out"
+}
