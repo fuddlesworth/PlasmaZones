@@ -1095,7 +1095,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // KWin emits windowMaximizedStateChanged once per axis flip — a
     // user-driven left-half-snap → fully-maximize sequence fires twice
     // (vertical-only first, then fully-maximized). Without an edge filter
-    // we'd start the WindowUnmaximize shader for the intermediate state,
+    // we'd start the WindowMaximize shader for the intermediate state,
     // then immediately install WindowMaximize on the next emission, with
     // the timer-driven teardown of the first racing the install of the
     // second. Track the last fully-maximized state per window and only
@@ -1111,10 +1111,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return; // intermediate axis-only flip, no shader
                 }
                 m_lastFullyMaximized.insert(window, fullyMaximized);
-                tryBeginShaderForEvent(window,
-                                       fullyMaximized ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                      : PhosphorAnimation::ProfilePaths::WindowUnmaximize,
-                                       animationDurationMs());
+                tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs());
             });
 
     // Track when a monocle-maximized window goes fullscreen
@@ -3067,10 +3064,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // motion (the minimize-to-taskbar zoom is a separate stock effect chain),
     // we layer the shader effect on top via redirect. Gated on the live
     // minimized state so each direction can have its own profile.
-    tryBeginShaderForEvent(w,
-                           minimized ? PhosphorAnimation::ProfilePaths::WindowMinimize
-                                     : PhosphorAnimation::ProfilePaths::WindowUnminimize,
-                           animationDurationMs());
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs());
 
     if (minimized) {
         if (isWindowFloating(windowId)) {

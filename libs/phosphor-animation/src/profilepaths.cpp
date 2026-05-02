@@ -14,9 +14,7 @@ const QString Window = QStringLiteral("window");
 const QString WindowOpen = QStringLiteral("window.open");
 const QString WindowClose = QStringLiteral("window.close");
 const QString WindowMinimize = QStringLiteral("window.minimize");
-const QString WindowUnminimize = QStringLiteral("window.unminimize");
 const QString WindowMaximize = QStringLiteral("window.maximize");
-const QString WindowUnmaximize = QStringLiteral("window.unmaximize");
 const QString WindowMove = QStringLiteral("window.move");
 const QString WindowResize = QStringLiteral("window.resize");
 const QString WindowFocus = QStringLiteral("window.focus");
@@ -87,9 +85,7 @@ QStringList allBuiltInPaths()
         WindowOpen,
         WindowClose,
         WindowMinimize,
-        WindowUnminimize,
         WindowMaximize,
-        WindowUnmaximize,
         WindowMove,
         WindowResize,
         WindowFocus,

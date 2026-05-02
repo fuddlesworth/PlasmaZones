@@ -34,18 +34,8 @@ Flickable {
         }
         AnimationEventCard {
             Layout.fillWidth: true
-            eventPath: "window.unminimize"
-            eventLabel: i18n("Unminimize")
-        }
-        AnimationEventCard {
-            Layout.fillWidth: true
             eventPath: "window.maximize"
             eventLabel: i18n("Maximize")
-        }
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.unmaximize"
-            eventLabel: i18n("Unmaximize")
         }
         AnimationEventCard {
             Layout.fillWidth: true
