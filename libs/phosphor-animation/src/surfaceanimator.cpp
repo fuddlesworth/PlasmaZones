@@ -22,6 +22,7 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <private/qquickshadereffectsource_p.h>
 #include <QStack>
 #include <QTimer>
 #include <QUrl>
@@ -158,14 +159,9 @@ PhosphorAnimation::MotionSpec<qreal> buildSpec(const PhosphorAnimation::Profile&
 struct ShaderAttachResult
 {
     PhosphorRendering::ShaderEffect* shaderItem = nullptr;
+    QQuickShaderEffectSource* shaderSource = nullptr;
     QQuickItem* shaderAnchor = nullptr;
     bool foundExplicitAnchor = false;
-    /// True when `attachShaderToAnchor` flipped layer.enabled from off
-    /// to on (i.e. the anchor wasn't already a texture provider). The
-    /// teardown reset is gated on this so a third-party that had
-    /// layer.enabled set independently isn't disabled out from under
-    /// itself when the leg ends.
-    bool weEnabledLayer = false;
 };
 
 /// Build the per-leg ShaderEffect: anchor resolution + layer-enable +
@@ -189,51 +185,52 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
                                          << " explicit=" << foundExplicitAnchor << " size=" << shaderAnchor->width()
                                          << "x" << shaderAnchor->height();
 
-    auto* shaderItem = new PhosphorRendering::ShaderEffect(shaderAnchor);
+    // Snapshot the anchor's content to a separate texture, then hide the
+    // original. The shader reads the snapshot — no simultaneous read+write
+    // on the same texture (Vulkan validation: "Texture used with different
+    // accesses within the same pass").
+    //
+    // QQuickShaderEffectSource with live=false takes ONE snapshot.
+    // hideSource=true suppresses the anchor's own render while active.
+    // The ShaderEffect reads the snapshot texture via setSourceItem.
+    // On teardown, destroying the source restores the anchor's visibility.
+    QQuickShaderEffectSource* shaderSource = nullptr;
+    if (foundExplicitAnchor) {
+        shaderSource =
+            new QQuickShaderEffectSource(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
+        shaderSource->setSourceItem(shaderAnchor);
+        shaderSource->setLive(false);
+        shaderSource->setHideSource(true);
+        shaderSource->setOpacity(0.0);
+    }
+
+    // Parent the ShaderEffect to the anchor's parent (sibling) so it
+    // renders independently. It reads the snapshot texture, not the
+    // live layer — no same-pass conflict.
+    auto* shaderItem =
+        new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
     shaderItem->setITime(0.0);
 
-    // setSourceItem on an explicit anchor binds the anchor's layer
-    // texture as iChannel0 AND auto-enables layer.enabled when the
-    // anchor isn't yet a texture provider. We bypass it on the
-    // fallback path because layer-enabling QQuickRootItem reintroduces
-    // the OSD-doesn't-render regression. Capture whether THIS animator
-    // is the one that enabled the layer so teardown can symmetrically
-    // disable only what we turned on (a third party may have already
-    // had layer.enabled=true for unrelated reasons).
-    bool weEnabledLayer = false;
-    if (foundExplicitAnchor) {
-        weEnabledLayer = !shaderAnchor->isTextureProvider();
-        shaderItem->setSourceItem(shaderAnchor);
+    if (shaderSource) {
+        shaderItem->setSourceItem(shaderSource);
     }
 
-    // Translate friendly parameter ids to customParams<N>_<x|y|z|w>
-    // slot keys. Always called so declared defaults populate the
-    // slots — otherwise customParams reads the (-1,-1,-1,-1) sentinel.
     const QVariantMap translated =
         PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(effect, shaderParameters);
     if (!translated.isEmpty()) {
         shaderItem->setShaderParams(translated);
     }
 
-    // Z above the anchor's blit (layer.enabled doesn't suppress the
-    // anchor's render — both are drawn, shader has to win depth).
-    static constexpr qreal kShaderOverlayZ = 1000;
-    shaderItem->setZ(kShaderOverlayZ);
+    // Size + position the shader to match the anchor.
+    shaderItem->setWidth(shaderAnchor->width());
+    shaderItem->setHeight(shaderAnchor->height());
+    shaderItem->setX(shaderAnchor->x());
+    shaderItem->setY(shaderAnchor->y());
+    shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
 
-    // Live geometry sync — the wayland surface may be 0x0 at
-    // construction (anchor unresolved); the signal picks up the post-
-    // configure pass. QPointer-capture the anchor so a Loader rebuild
-    // that reparents-out-then-destroys doesn't fire widthChanged
-    // against a tombstoned raw pointer before Qt's auto-disconnect.
-    //
-    // Skip zero-dim anchors: every transition shader divides by
-    // iResolution (vec2 uv = gl_FragCoord.xy / iResolution), so an
-    // initial (0,0) — or worse, the asymmetric mid-update (w,0) /
-    // (0,h) where width and height arrive in separate signals —
-    // produces NaN that propagates to fragColor. Wait until both
-    // dimensions are non-zero before pushing geometry.
-    auto syncGeometry = [shaderItem, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
+    // Sync geometry if anchor resizes mid-transition.
+    auto syncGeometry = [shaderItem, shaderSource, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
         if (!anchorPtr) {
             return;
         }
@@ -244,16 +241,23 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
         }
         shaderItem->setWidth(w);
         shaderItem->setHeight(h);
+        shaderItem->setX(anchorPtr->x());
+        shaderItem->setY(anchorPtr->y());
         shaderItem->setIResolution(QSizeF(w, h));
+        if (shaderSource) {
+            shaderSource->setWidth(w);
+            shaderSource->setHeight(h);
+            shaderSource->setX(anchorPtr->x());
+            shaderSource->setY(anchorPtr->y());
+        }
     };
     QObject::connect(shaderAnchor, &QQuickItem::widthChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
-    syncGeometry();
 
     out.shaderItem = shaderItem;
+    out.shaderSource = shaderSource;
     out.shaderAnchor = shaderAnchor;
     out.foundExplicitAnchor = foundExplicitAnchor;
-    out.weEnabledLayer = weEnabledLayer;
     return out;
 }
 
@@ -276,20 +280,12 @@ public:
         /// `target` unless an explicit `property bool shaderAnchor:
         /// true` was found by attachShaderToAnchor.
         QPointer<QQuickItem> shaderAnchor;
-        /// True iff the anchor came from an explicit property tag.
-        /// Fallback targets (QQuickRootItem) deliberately never had
-        /// their layer enabled and must not have it touched at
-        /// teardown either.
         bool foundExplicitAnchor = false;
-        /// True iff `attachShaderToAnchor` flipped layer.enabled on at
-        /// the start of the leg. Gates teardownShaderLeg's symmetric
-        /// disable so a third party who already had layer.enabled set
-        /// for unrelated reasons isn't disabled out from under itself.
-        bool weEnabledLayer = false;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> opacity;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> scale;
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> shaderTime;
-        QPointer<PhosphorRendering::ShaderEffect> shaderItem; ///< Transient child, torn down on completion
+        QPointer<PhosphorRendering::ShaderEffect> shaderItem;
+        QPointer<QQuickShaderEffectSource> shaderSource;
         int pendingLegs = 0;
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
@@ -337,14 +333,12 @@ public:
             track.shaderItem->deleteLater();
             track.shaderItem = nullptr;
         }
-        if (track.foundExplicitAnchor && track.weEnabledLayer && track.shaderAnchor) {
-            if (QObject* layer = track.shaderAnchor->property("layer").value<QObject*>()) {
-                layer->setProperty("enabled", false);
-            }
+        if (track.shaderSource) {
+            track.shaderSource->deleteLater();
+            track.shaderSource = nullptr;
         }
         track.shaderAnchor.clear();
         track.foundExplicitAnchor = false;
-        track.weEnabledLayer = false;
     }
 
     /// Cancel any in-flight legs for a surface. Called directly and
@@ -461,8 +455,8 @@ public:
             // prior leg had hasShaderLeg.
             slot.shaderAnchor.clear();
             slot.shaderItem = nullptr;
+            slot.shaderSource = nullptr;
             slot.foundExplicitAnchor = false;
-            slot.weEnabledLayer = false;
             slot.target = target;
             slot.onComplete = std::move(onComplete);
             slot.pendingLegs = legCount;
@@ -507,9 +501,9 @@ public:
                 ShaderAttachResult attached =
                     attachShaderToAnchor(target, resolvedShaderEff, shaderEffectId, shaderParameters);
                 it->second.shaderItem = attached.shaderItem;
+                it->second.shaderSource = attached.shaderSource;
                 it->second.shaderAnchor = attached.shaderAnchor;
                 it->second.foundExplicitAnchor = attached.foundExplicitAnchor;
-                it->second.weEnabledLayer = attached.weEnabledLayer;
                 it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
         }
