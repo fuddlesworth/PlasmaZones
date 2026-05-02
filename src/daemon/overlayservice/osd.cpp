@@ -149,12 +149,12 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     window = state->notificationWindow;
     outSurface = state->notificationSurface;
 
-    // Switch the unified host's Loader to LayoutOsdContent. Subsequent
-    // writeQmlProperty calls flow root → Component-bound binding →
-    // loader.item, so the layout-specific properties land on the freshly
-    // loaded content. The mode write is idempotent — repeated calls with
-    // the same mode are no-ops thanks to QML property equality guards.
-    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
+    // Mode is NOT written here — callers write data properties first, then
+    // set mode. This ensures the Loader's freshly instantiated content
+    // component picks up the correct root property values via its bindings
+    // on the very first frame, instead of briefly seeing defaults/stale
+    // values from the previous show (or from QML property initialisers on
+    // the first-ever show).
 
     assertWindowOnScreen(window, physScreen, screenGeom);
 
@@ -208,9 +208,10 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
     pushLayoutOsdContent(window, p);
+    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
-    // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
+    // Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
     // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
     surface->show();
@@ -285,6 +286,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     p.zoneNumberDisplay = zoneNumberDisplay;
     p.masterCount = masterCount;
     pushLayoutOsdContent(window, p);
+    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     surface->show();
@@ -351,17 +353,18 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     //
     // Cross-mode property note: the host's `success` / `action` /
     // `reason` (NavigationOsd-only) are NOT reset here. NavigationOsdContent
-    // is unloaded the moment we wrote `mode = "layout-osd"` in
-    // prepareLayoutOsdWindow, so its bindings to those properties are
-    // gone too. Keep this in mind if a future LayoutOsdContent ever
-    // grows a binding that touches navigation-mode properties — see the
-    // matching note in NotificationOverlay.qml's caveat block.
+    // is unloaded the moment the mode write below switches to "layout-osd",
+    // so its bindings to those properties are gone too. Keep this in mind
+    // if a future LayoutOsdContent ever grows a binding that touches
+    // navigation-mode properties — see the matching note in
+    // NotificationOverlay.qml's caveat block.
     LayoutOsdContentParams p;
     p.name = reason; // shown in nameLabel when disabled
     p.screenAspectRatio = aspectRatio;
     pushLayoutOsdContent(window, p);
     writeQmlProperty(window, QStringLiteral("disabled"), true);
     writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
+    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     surface->show();
@@ -573,11 +576,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     auto* window = navState->notificationWindow;
     auto* navSurface = navState->notificationSurface;
 
-    // Switch the unified host's Loader to NavigationOsdContent before the
-    // per-show property writes — see the matching write in
-    // prepareLayoutOsdWindow for the layout-OSD path.
-    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("navigation-osd"));
-
     // Process reason field - for rotation/resnap, extract window count
     // Format: "clockwise:N" or "counterclockwise:N" or "resnap:N" where N is window count
     int windowCount = 1;
@@ -618,6 +616,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     QVariantList zonesList =
         PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
+
+    // Write mode AFTER data properties so the Loader-instantiated
+    // NavigationOsdContent picks up correct values on first binding pass.
+    writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("navigation-osd"));
 
     // Ensure the window is on the correct Wayland output (must come before sizing —
     // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight).
