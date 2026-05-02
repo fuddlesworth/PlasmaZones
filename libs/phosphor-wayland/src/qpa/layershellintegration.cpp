@@ -28,6 +28,15 @@ LayerShellIntegration::LayerShellIntegration() = default;
 
 LayerShellIntegration::~LayerShellIntegration()
 {
+    if (m_toplevelDragManager) {
+        xdg_toplevel_drag_manager_v1_destroy(m_toplevelDragManager);
+    }
+    if (m_idleNotifier) {
+        ext_idle_notifier_v1_destroy(m_idleNotifier);
+    }
+    if (m_singlePixelBufferManager) {
+        wp_single_pixel_buffer_manager_v1_destroy(m_singlePixelBufferManager);
+    }
     if (m_layerShell) {
         if (m_boundVersion >= 3) {
             // Protocol-level destroy request (added in v3)
@@ -127,11 +136,9 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         //   v1: base protocol
         //   v2: set_layer (runtime layer changes)
         //   v3: destroy request
-        //   v4: on_demand keyboard interactivity — we use this
-        //   v5: set_exclusive_edge — we do NOT use this
-        // Capping at v4 avoids negotiation issues with older compositors
-        // while supporting all features PhosphorWayland needs.
-        static constexpr uint32_t kMaxBindVersion = 4;
+        //   v4: on_demand keyboard interactivity
+        //   v5: set_exclusive_edge
+        static constexpr uint32_t kMaxBindVersion = 5;
         uint32_t bindVersion = qMin(version, kMaxBindVersion);
         self->m_layerShell = static_cast<struct zwlr_layer_shell_v1*>(
             wl_registry_bind(registry, id, &zwlr_layer_shell_v1_interface, bindVersion));
@@ -139,6 +146,36 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_boundVersion = bindVersion;
         self->m_globalAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound zwlr_layer_shell_v1 v" << bindVersion;
+    } else if (strcmp(interface, wp_single_pixel_buffer_manager_v1_interface.name) == 0) {
+        if (self->m_singlePixelBufferManager)
+            return;
+        static constexpr uint32_t kMaxVersion = 1;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
+        self->m_singlePixelBufferManager = static_cast<struct wp_single_pixel_buffer_manager_v1*>(
+            wl_registry_bind(registry, id, &wp_single_pixel_buffer_manager_v1_interface, bindVersion));
+        self->m_singlePixelBufferManagerId = id;
+        self->m_singlePixelBufferAvailable = true;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound wp_single_pixel_buffer_manager_v1 v" << bindVersion;
+    } else if (strcmp(interface, ext_idle_notifier_v1_interface.name) == 0) {
+        if (self->m_idleNotifier)
+            return;
+        static constexpr uint32_t kMaxVersion = 1;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
+        self->m_idleNotifier = static_cast<struct ext_idle_notifier_v1*>(
+            wl_registry_bind(registry, id, &ext_idle_notifier_v1_interface, bindVersion));
+        self->m_idleNotifierId = id;
+        self->m_idleNotifierAvailable = true;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound ext_idle_notifier_v1 v" << bindVersion;
+    } else if (strcmp(interface, xdg_toplevel_drag_manager_v1_interface.name) == 0) {
+        if (self->m_toplevelDragManager)
+            return;
+        static constexpr uint32_t kMaxVersion = 1;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
+        self->m_toplevelDragManager = static_cast<struct xdg_toplevel_drag_manager_v1*>(
+            wl_registry_bind(registry, id, &xdg_toplevel_drag_manager_v1_interface, bindVersion));
+        self->m_toplevelDragManagerId = id;
+        self->m_toplevelDragManagerAvailable = true;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound xdg_toplevel_drag_manager_v1 v" << bindVersion;
     }
 }
 
@@ -146,7 +183,19 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
 {
     Q_UNUSED(registry)
     auto* self = static_cast<LayerShellIntegration*>(data);
-    if (id == self->m_layerShellId) {
+    if (id == self->m_singlePixelBufferManagerId) {
+        self->m_singlePixelBufferAvailable = false;
+        self->m_singlePixelBufferManagerId = 0;
+        qCDebug(lcLayerShellIntegration) << "wp_single_pixel_buffer_manager_v1 global removed";
+    } else if (id == self->m_idleNotifierId) {
+        self->m_idleNotifierAvailable = false;
+        self->m_idleNotifierId = 0;
+        qCDebug(lcLayerShellIntegration) << "ext_idle_notifier_v1 global removed";
+    } else if (id == self->m_toplevelDragManagerId) {
+        self->m_toplevelDragManagerAvailable = false;
+        self->m_toplevelDragManagerId = 0;
+        qCDebug(lcLayerShellIntegration) << "xdg_toplevel_drag_manager_v1 global removed";
+    } else if (id == self->m_layerShellId) {
         qCWarning(lcLayerShellIntegration) << "zwlr_layer_shell_v1 global removed (id" << id << ") —"
                                            << "new layer surface creation will fail."
                                            << "Existing layer surfaces may become invalid."

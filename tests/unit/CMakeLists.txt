@@ -311,6 +311,27 @@ target_include_directories(test_layersurface PRIVATE
 add_test(NAME test_layersurface COMMAND test_layersurface)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — SinglePixelBuffer Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_singlepixelbuffer core/test_singlepixelbuffer.cpp)
+target_link_libraries(test_singlepixelbuffer PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_singlepixelbuffer COMMAND test_singlepixelbuffer)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ — IdleNotifier Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_idlenotifier core/test_idlenotifier.cpp)
+target_link_libraries(test_idlenotifier PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_idlenotifier COMMAND test_idlenotifier)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ — ToplevelDrag Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_topleveldrag core/test_topleveldrag.cpp)
+target_link_libraries(test_topleveldrag PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_topleveldrag COMMAND test_topleveldrag)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Support Report Tests (redaction, generation)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_support_report core/test_support_report.cpp)

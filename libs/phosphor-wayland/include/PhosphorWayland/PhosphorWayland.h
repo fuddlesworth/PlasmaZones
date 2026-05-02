@@ -14,4 +14,7 @@
 
 #pragma once
 
+#include <PhosphorWayland/IdleNotifier>
 #include <PhosphorWayland/LayerSurface>
+#include <PhosphorWayland/SinglePixelBuffer>
+#include <PhosphorWayland/ToplevelDrag>

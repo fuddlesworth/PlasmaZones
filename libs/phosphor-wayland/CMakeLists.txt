@@ -71,10 +71,53 @@ add_custom_command(
     COMMENT "PhosphorWayland: generating wlr-layer-shell protocol code"
 )
 
+add_custom_command(
+    OUTPUT ${_ps_gen_dir}/single-pixel-buffer-v1-client-protocol.h
+           ${_ps_gen_dir}/single-pixel-buffer-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header
+            ${_ps_proto_dir}/single-pixel-buffer-v1.xml
+            ${_ps_gen_dir}/single-pixel-buffer-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code
+            ${_ps_proto_dir}/single-pixel-buffer-v1.xml
+            ${_ps_gen_dir}/single-pixel-buffer-v1-protocol.c
+    DEPENDS ${_ps_proto_dir}/single-pixel-buffer-v1.xml
+    COMMENT "PhosphorWayland: generating single-pixel-buffer protocol code"
+)
+
+add_custom_command(
+    OUTPUT ${_ps_gen_dir}/ext-idle-notify-v1-client-protocol.h
+           ${_ps_gen_dir}/ext-idle-notify-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header
+            ${_ps_proto_dir}/ext-idle-notify-v1.xml
+            ${_ps_gen_dir}/ext-idle-notify-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code
+            ${_ps_proto_dir}/ext-idle-notify-v1.xml
+            ${_ps_gen_dir}/ext-idle-notify-v1-protocol.c
+    DEPENDS ${_ps_proto_dir}/ext-idle-notify-v1.xml
+    COMMENT "PhosphorWayland: generating ext-idle-notify protocol code"
+)
+
+add_custom_command(
+    OUTPUT ${_ps_gen_dir}/xdg-toplevel-drag-v1-client-protocol.h
+           ${_ps_gen_dir}/xdg-toplevel-drag-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header
+            ${_ps_proto_dir}/xdg-toplevel-drag-v1.xml
+            ${_ps_gen_dir}/xdg-toplevel-drag-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code
+            ${_ps_proto_dir}/xdg-toplevel-drag-v1.xml
+            ${_ps_gen_dir}/xdg-toplevel-drag-v1-protocol.c
+    DEPENDS ${_ps_proto_dir}/xdg-toplevel-drag-v1.xml
+    COMMENT "PhosphorWayland: generating xdg-toplevel-drag protocol code"
+)
+
 # Generated C code: skip PCH and unity build
 set_source_files_properties(
     ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
+    ${_ps_gen_dir}/single-pixel-buffer-v1-protocol.c
+    ${_ps_gen_dir}/ext-idle-notify-v1-protocol.c
+    ${_ps_gen_dir}/xdg-toplevel-drag-v1-protocol.c
     src/qpa/xdg_popup_stub.c
+    src/qpa/xdg_toplevel_stub.c
     PROPERTIES
         SKIP_PRECOMPILE_HEADERS ON
         SKIP_UNITY_BUILD_INCLUSION ON
@@ -87,17 +130,27 @@ set_source_files_properties(
 # --- Public headers with Q_OBJECT (must be listed for AUTOMOC) ---
 set(phosphorwayland_public_HDRS
     include/PhosphorWayland/LayerSurface.h
+    include/PhosphorWayland/SinglePixelBuffer.h
+    include/PhosphorWayland/IdleNotifier.h
+    include/PhosphorWayland/ToplevelDrag.h
 )
 
 # --- Layer-shell sources ---
 set(phosphorwayland_layershell_SRCS
     src/layersurface.cpp
+    src/singlepixelbuffer.cpp
+    src/idlenotifier.cpp
+    src/topleveldrag.cpp
     src/qpa/layershellintegration.cpp
     src/qpa/layershellintegration.h
     src/qpa/layershellwindow.cpp
     src/qpa/layershellwindow.h
     src/qpa/xdg_popup_stub.c
+    src/qpa/xdg_toplevel_stub.c
     ${_ps_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
+    ${_ps_gen_dir}/single-pixel-buffer-v1-protocol.c
+    ${_ps_gen_dir}/ext-idle-notify-v1-protocol.c
+    ${_ps_gen_dir}/xdg-toplevel-drag-v1-protocol.c
 )
 
 add_library(PhosphorWayland SHARED
