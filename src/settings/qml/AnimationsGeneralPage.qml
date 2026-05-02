@@ -18,77 +18,80 @@ import org.kde.kirigami as Kirigami
  * `Settings::animationProfile` Q_PROPERTYs the legacy General > Animations
  * card has always used.
  */
-AnimationSubPage {
+Flickable {
     id: page
+
+    contentHeight: content.implicitHeight
+    clip: true
 
     // Slider sizing constants needed by EasingSettings (mirrors GeneralPage's
     // contract — the embedded component reads these via its `constants` prop).
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
-    // Resolve via settingsController.settings rather than the bare
-    // `appSettings` context property — see EasingSettings.qml's header
-    // comment for the qmlcachegen timing-window the indirection sidesteps.
     readonly property var appSettings: settingsController.settings
 
-    Kirigami.InlineMessage {
-        Layout.fillWidth: true
-        type: Kirigami.MessageType.Information
-        visible: true
-        text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
-    }
+    ColumnLayout {
+        id: content
 
-    SettingsCard {
-        id: animationsCard
+        width: parent.width
+        spacing: Kirigami.Units.largeSpacing
 
-        Layout.fillWidth: true
-        headerText: i18n("Global animation defaults")
-        showToggle: true
-        toggleChecked: page.appSettings.animationsEnabled
-        collapsible: true
-        onToggleClicked: function(checked) {
-            page.appSettings.animationsEnabled = checked;
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            visible: true
+            text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
         }
 
-        contentItem: ColumnLayout {
-            spacing: Kirigami.Units.largeSpacing
+        SettingsCard {
+            id: animationsCard
 
-            // Drag-handle bezier preview — same component the legacy
-            // General page hosts. Edits flip the global easing curve.
-            EasingPreview {
-                id: easingPreview
+            Layout.fillWidth: true
+            headerText: i18n("Global animation defaults")
+            showToggle: true
+            toggleChecked: page.appSettings.animationsEnabled
+            collapsible: true
+            onToggleClicked: function (checked) {
+                page.appSettings.animationsEnabled = checked;
+            }
 
-                Layout.fillWidth: true
-                Layout.maximumWidth: Kirigami.Units.gridUnit * 28
-                Layout.alignment: Qt.AlignHCenter
-                curve: page.appSettings.animationEasingCurve
-                animationDuration: page.appSettings.animationDuration
-                previewEnabled: animationsCard.toggleChecked
-                opacity: animationsCard.toggleChecked ? 1 : 0.4
-                onCurveEdited: function(newCurve) {
-                    page.appSettings.animationEasingCurve = newCurve;
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.largeSpacing
+
+                // Drag-handle bezier preview — same component the legacy
+                // General page hosts. Edits flip the global easing curve.
+                EasingPreview {
+                    id: easingPreview
+
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 28
+                    Layout.alignment: Qt.AlignHCenter
+                    curve: page.appSettings.animationEasingCurve
+                    animationDuration: page.appSettings.animationDuration
+                    previewEnabled: animationsCard.toggleChecked
+                    opacity: animationsCard.toggleChecked ? 1 : 0.4
+                    onCurveEdited: function (newCurve) {
+                        page.appSettings.animationEasingCurve = newCurve;
+                    }
+                }
+
+                SettingsSeparator {}
+
+                // Existing global-profile controls (preset / style / direction /
+                // amplitude / period / bounces / duration / sequence mode /
+                // stagger / min distance). Reused verbatim — refactoring into
+                // a per-event-card shape is a future cleanup phase.
+                EasingSettings {
+                    Layout.fillWidth: true
+                    // `appSettings` is resolved internally via
+                    // settingsController.settings — see EasingSettings.qml's
+                    // header comment for the qmlcachegen timing-window
+                    // explanation.
+                    constants: page
+                    animationsEnabled: animationsCard.toggleChecked
+                    easingPreview: easingPreview
                 }
             }
-
-            SettingsSeparator {
-            }
-
-            // Existing global-profile controls (preset / style / direction /
-            // amplitude / period / bounces / duration / sequence mode /
-            // stagger / min distance). Reused verbatim — refactoring into
-            // a per-event-card shape is a future cleanup phase.
-            EasingSettings {
-                Layout.fillWidth: true
-                // `appSettings` is resolved internally via
-                // settingsController.settings — see EasingSettings.qml's
-                // header comment for the qmlcachegen timing-window
-                // explanation.
-                constants: page
-                animationsEnabled: animationsCard.toggleChecked
-                easingPreview: easingPreview
-            }
-
         }
-
     }
-
 }
