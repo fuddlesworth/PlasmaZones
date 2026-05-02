@@ -154,9 +154,25 @@ ApplicationWindow {
             "iconName": "configure",
             "hasDividerAfter": true
         }, {
-            "name": "animations-events",
-            "label": i18n("Events"),
-            "iconName": "timeline-use",
+            "name": "animations-windows",
+            "label": i18n("Windows"),
+            "iconName": "window-new"
+        }, {
+            "name": "animations-zones",
+            "label": i18n("Zones"),
+            "iconName": "view-grid"
+        }, {
+            "name": "animations-overlays",
+            "label": i18n("Overlays"),
+            "iconName": "dialog-information"
+        }, {
+            "name": "animations-workspaces",
+            "label": i18n("Workspaces"),
+            "iconName": "virtual-desktops"
+        }, {
+            "name": "animations-widgets",
+            "label": i18n("Widgets"),
+            "iconName": "preferences-desktop-theme",
             "hasDividerAfter": true
         }, {
             "name": "animations-presets",
@@ -196,7 +212,11 @@ ApplicationWindow {
         "general": "GeneralPage.qml",
         "about": "AboutPage.qml",
         "animations-general": "AnimationsGeneralPage.qml",
-        "animations-events": "AnimationsEventsPage.qml",
+        "animations-windows": "AnimationsWindowsPage.qml",
+        "animations-zones": "AnimationsZonesPage.qml",
+        "animations-overlays": "AnimationsOverlaysPage.qml",
+        "animations-workspaces": "AnimationsWorkspacesPage.qml",
+        "animations-widgets": "AnimationsWidgetsPage.qml",
         "animations-presets": "AnimationsPresetsPage.qml",
         "animations-motionsets": "AnimationsMotionSetsPage.qml",
         "animations-shaders": "AnimationsShadersPage.qml"
