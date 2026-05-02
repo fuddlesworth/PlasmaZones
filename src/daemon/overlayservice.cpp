@@ -37,9 +37,9 @@
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimationLayer/SurfaceAnimator.h>
-#include <PhosphorAnimationShaders/ShaderProfile.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>

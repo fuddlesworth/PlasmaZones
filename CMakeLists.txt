@@ -104,11 +104,11 @@ endif()
 if(NOT TARGET Qt6::ShaderToolsPrivate)
     find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 endif()
-# QuickPrivate is required by libs/phosphor-animation-qml — must be
+# QuickPrivate is required by phosphor-animation's QML module — must be
 # discovered at top-level so the IMPORTED target is global and visible to
-# every consumer of `PhosphorAnimation::PhosphorAnimationQml`. Without
-# this, Qt's static-QML-plugin dependency walker emits "QuickPrivate
-# target is mentioned as a dependency … but not declared" when collecting
+# every consumer of `PhosphorAnimation::PhosphorAnimation`. Without this,
+# Qt's static-QML-plugin dependency walker emits "QuickPrivate target is
+# mentioned as a dependency ... but not declared" when collecting
 # transitive deps from the `src/shared` static-plugin consumer.
 if(NOT TARGET Qt6::QuickPrivate)
     find_package(Qt6QuickPrivate CONFIG REQUIRED)
@@ -339,16 +339,10 @@ add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
 # PlasmaZones consumes the org.phosphor.animation QML module for shell
-# UI animations. The QML wrappers live in the sibling
-# phosphor-animation-qml lib (Phase A1); the core motion runtime needs
-# Qt Quick because phosphor-animation-qml's QtQuickClockManager wraps
-# QtQuickClock, so PHOSPHOR_ANIMATION_QUICK is enabled here before
-# add_subdirectory picks up the option() default.
-set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by phosphor-animation-qml)")
-add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
-add_subdirectory(libs/phosphor-animation-qml) # Qt Quick wrappers + org.phosphor.animation QML module (Phase A1)
-add_subdirectory(libs/phosphor-animation-shaders) # shader-backed animation pipeline (Phase 6)
-add_subdirectory(libs/phosphor-animation-layer) # ISurfaceAnimator backed by phosphor-animation (Phase 5 + Phase 6 shader leg)
+# UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
+# add_subdirectory picks up the option() default so QtQuickClock builds.
+set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)")
+add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants

@@ -41,19 +41,16 @@ QString makeCurveLoaderOwnerTag()
     return QStringLiteral("curveloader-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-/// Per-key payload shipped through the `ParsedEntry::payload` std::any.
+} // namespace
+
+namespace internal {
 struct CurvePayload
 {
     QString displayName;
     std::shared_ptr<const Curve> curve;
-    /// Captured wire-format string used to build `curve`. Persisted
-    /// so the sink can diff against the previous commit and skip
-    /// re-registering unchanged entries. `Curve::toString()` is the
-    /// canonical serialization — two parses of the same JSON file
-    /// produce the same wire string.
     QString wireFormat;
 };
-} // namespace
+} // namespace internal
 
 /**
  * The curve-specific sink — knows the curve JSON schema, knows how to
@@ -139,7 +136,8 @@ public:
 
         const QString wireFormat = curve->toString();
 
-        CurvePayload payload{obj.value(QLatin1String("displayName")).toString(), std::move(curve), wireFormat};
+        internal::CurvePayload payload{obj.value(QLatin1String("displayName")).toString(), std::move(curve),
+                                       wireFormat};
 
         PhosphorFsLoader::ParsedEntry parsed;
         parsed.key = name;
@@ -170,7 +168,7 @@ public:
         changedOrAddedKeys.reserve(currentEntries.size());
 
         for (const auto& parsed : currentEntries) {
-            const auto* payload = std::any_cast<CurvePayload>(&parsed.payload);
+            const auto* payload = std::any_cast<internal::CurvePayload>(&parsed.payload);
             if (!payload) {
                 qCWarning(lcCurveLoader) << "commitBatch: payload type-mismatch for" << parsed.key;
                 continue;
@@ -237,7 +235,7 @@ private:
     QString m_ownerTag;
 
     /// Snapshot of the last-committed payload per key, used for diffing.
-    QHash<QString, CurvePayload> m_lastCommittedPayloads;
+    QHash<QString, internal::CurvePayload> m_lastCommittedPayloads;
 
     /// Snapshot of (sourcePath, systemSourcePath) per key, used for
     /// the source-metadata diff (Phase 1c+1d fix).

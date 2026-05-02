@@ -12,8 +12,8 @@
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 
-#include <PhosphorAnimationShaders/AnimationShaderContract.h>
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 
 #include <algorithm>

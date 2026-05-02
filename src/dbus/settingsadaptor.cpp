@@ -5,7 +5,7 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <QJsonArray>

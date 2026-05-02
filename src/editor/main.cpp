@@ -6,8 +6,8 @@
 #include "../core/animationbootstrap.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include <PhosphorAnimationQml/PhosphorCurve.h>
-#include <PhosphorAnimationQml/QtQuickClockManager.h>
+#include <PhosphorAnimation/PhosphorCurve.h>
+#include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
 #include <PhosphorWayland/LayerSurface.h>
 #include <PhosphorScreens/Resolver.h>

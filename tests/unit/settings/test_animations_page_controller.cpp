@@ -31,7 +31,7 @@
 #include "config/settings.h"
 #include "settings/animationspagecontroller.h"
 #include "../helpers/IsolatedConfigGuard.h"
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

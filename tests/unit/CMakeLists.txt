@@ -251,7 +251,7 @@ add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_
 add_executable(test_overlay_scope_prefixes daemon/test_overlay_scope_prefixes.cpp)
 target_link_libraries(test_overlay_scope_prefixes
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorLayer::PhosphorLayer
-            PhosphorAnimationLayer::PhosphorAnimationLayer)
+            PhosphorAnimation::PhosphorAnimation)
 add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
 
 # Snap-assist thumbnail provider: bounded LRU cache, monotonic URL
@@ -470,7 +470,6 @@ target_link_libraries(test_animations_page_controller
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
-        PhosphorAnimationShaders::PhosphorAnimationShaders
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)

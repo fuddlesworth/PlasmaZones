@@ -4,7 +4,7 @@
 #pragma once
 
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QSet>
 #include <QString>

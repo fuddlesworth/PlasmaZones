@@ -29,7 +29,7 @@
 #include "dbusutils.h"
 #include "version.h"
 
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>

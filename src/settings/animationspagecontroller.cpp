@@ -15,10 +15,10 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimationShaders/AnimationShaderEffect.h>
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
-#include <PhosphorAnimationShaders/ShaderProfile.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QDesktopServices>
 #include <QDir>

@@ -18,8 +18,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimationShaders/ShaderProfile.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include "config/configbackends.h"
 
 #include "../../../src/config/settings.h"
