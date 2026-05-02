@@ -352,7 +352,8 @@ private:
      * @brief Show per-screen OSD for all effective screens
      *
      * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
-     * and calls showAlgorithmOsdDeferred or showLayoutOsdDeferred per screen.
+     * and calls showLayoutOsdForAlgorithm or showLayoutOsd per screen inside
+     * a single deferred event-loop pass so all surfaces show simultaneously.
      * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
      */
     void showOsdForAllScreens(int desktop, const QString& activity);

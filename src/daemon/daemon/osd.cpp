@@ -444,34 +444,36 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     if (!m_layoutManager || !m_screenManager) {
         return;
     }
-    // Show OSD on ALL effective screens — each screen may have a different
-    // per-desktop assignment (autotile vs snapping, different layouts/algorithms).
-    // Uses effectiveScreenIds() so virtual screens each get their own OSD
-    // showing the correct per-VS layout/algorithm assignment.
-    // Screens where PlasmaZones is disabled show a "disabled" OSD instead.
-    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-    for (const QString& screenId : effectiveIds) {
-        // Each screen's OSD describes whatever mode is currently active there.
-        const auto mode =
-            m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-        const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
-        if (why != DisabledReason::NotDisabled) {
-            showContextDisabledOsd(screenId, desktop, activity, why);
-            continue;
+    // Batch all per-screen OSD shows into one deferred call so every
+    // screen's surface->show() fires in the same event loop pass and the
+    // compositor renders them simultaneously.
+    QTimer::singleShot(0, this, [this, desktop, activity]() {
+        if (!m_layoutManager || !m_screenManager) {
+            return;
         }
-        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-            auto* algo = m_algorithmRegistry.get()->algorithm(algoId);
-            const QString displayName = algo ? algo->name() : algoId;
-            showAlgorithmOsdDeferred(algoId, displayName, screenId);
-        } else {
-            PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
-            if (layout) {
-                showLayoutOsdDeferred(layout->id(), screenId);
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+        for (const QString& screenId : effectiveIds) {
+            const auto mode =
+                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+            const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
+            if (why != DisabledReason::NotDisabled) {
+                showContextDisabledOsd(screenId, desktop, activity, why);
+                continue;
+            }
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+                const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+                auto* algo = m_algorithmRegistry.get()->algorithm(algoId);
+                const QString displayName = algo ? algo->name() : algoId;
+                showLayoutOsdForAlgorithm(algoId, displayName, screenId);
+            } else {
+                PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+                if (layout) {
+                    showLayoutOsd(layout, screenId);
+                }
             }
         }
-    }
+    });
 }
 
 int Daemon::currentDesktop() const
