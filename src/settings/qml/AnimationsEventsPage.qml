@@ -121,12 +121,6 @@ Flickable {
 
                 AnimationEventCard {
                     Layout.fillWidth: true
-                    eventPath: "zone.snapOut"
-                    eventLabel: i18n("Snap Out")
-                }
-
-                AnimationEventCard {
-                    Layout.fillWidth: true
                     eventPath: "zone.snapResize"
                     eventLabel: i18n("Snap Resize")
                 }
@@ -175,18 +169,6 @@ Flickable {
 
                 AnimationEventCard {
                     Layout.fillWidth: true
-                    eventPath: "osd.pop"
-                    eventLabel: i18n("Pop (scale-in)")
-                }
-
-                AnimationEventCard {
-                    Layout.fillWidth: true
-                    eventPath: "osd.dim"
-                    eventLabel: i18n("Dim")
-                }
-
-                AnimationEventCard {
-                    Layout.fillWidth: true
                     eventPath: "panel.popup.zoneSelector.show"
                     eventLabel: i18n("Zone Selector — Show")
                 }
@@ -211,12 +193,6 @@ Flickable {
 
                 AnimationEventCard {
                     Layout.fillWidth: true
-                    eventPath: "panel.popup.layoutPicker.popIn"
-                    eventLabel: i18n("Layout Picker — Pop In (scale)")
-                }
-
-                AnimationEventCard {
-                    Layout.fillWidth: true
                     eventPath: "panel.popup.snapAssist.show"
                     eventLabel: i18n("Snap Assist — Show")
                 }
@@ -225,12 +201,6 @@ Flickable {
                     Layout.fillWidth: true
                     eventPath: "panel.slideIn"
                     eventLabel: i18n("Slide In")
-                }
-
-                AnimationEventCard {
-                    Layout.fillWidth: true
-                    eventPath: "panel.slideOut"
-                    eventLabel: i18n("Slide Out")
                 }
             }
         }

@@ -210,11 +210,7 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
     namespace PP = PhosphorAnimation::ProfilePaths;
     return PAL::SurfaceAnimator::Config{.showProfile = PP::OsdShow,
                                         .hideProfile = PP::OsdHide,
-                                        .showScaleProfile = PP::OsdPop,
-                                        // Within-family scale-leg coupling: `osd.hide` drives both the
-                                        // opacity and scale hide legs. Editing `osd.hide` affects both
-                                        // — see the file-level comment for the rationale and
-                                        // future-decouple recipe.
+                                        .showScaleProfile = PP::OsdShow,
                                         .hideScaleProfile = PP::OsdHide,
                                         .showScaleFrom = 0.8,
                                         .hideScaleTo = 0.9,
@@ -249,11 +245,7 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
     return PAL::SurfaceAnimator::Config{
         .showProfile = PP::PanelPopupLayoutPickerShow,
         .hideProfile = PP::PanelPopupLayoutPickerHide,
-        .showScaleProfile = PP::PanelPopupLayoutPickerPopIn,
-        // Within-family hide-leg coupling: scale reuses the opacity-hide
-        // path, same pattern OSD uses with `osd.hide`. Decouple by
-        // adding a `panel.popup.layoutPicker.popOut` constant + JSON if
-        // a future design needs independent timing here.
+        .showScaleProfile = PP::PanelPopupLayoutPickerShow,
         .hideScaleProfile = PP::PanelPopupLayoutPickerHide,
         .showScaleFrom = 0.9,
         .hideScaleTo = 0.95,

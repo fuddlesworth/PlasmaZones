@@ -39,13 +39,10 @@ const QString WorkspaceOverview = QStringLiteral("workspace.overview");
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
 const QString OsdHide = QStringLiteral("osd.hide");
-const QString OsdPop = QStringLiteral("osd.pop");
-const QString OsdDim = QStringLiteral("osd.dim");
 
 // panel.*
 const QString Panel = QStringLiteral("panel");
 const QString PanelSlideIn = QStringLiteral("panel.slideIn");
-const QString PanelSlideOut = QStringLiteral("panel.slideOut");
 const QString PanelPopup = QStringLiteral("panel.popup");
 const QString PanelPopupZoneSelector = QStringLiteral("panel.popup.zoneSelector");
 const QString PanelPopupZoneSelectorShow = QStringLiteral("panel.popup.zoneSelector.show");
@@ -53,7 +50,6 @@ const QString PanelPopupZoneSelectorHide = QStringLiteral("panel.popup.zoneSelec
 const QString PanelPopupLayoutPicker = QStringLiteral("panel.popup.layoutPicker");
 const QString PanelPopupLayoutPickerShow = QStringLiteral("panel.popup.layoutPicker.show");
 const QString PanelPopupLayoutPickerHide = QStringLiteral("panel.popup.layoutPicker.hide");
-const QString PanelPopupLayoutPickerPopIn = QStringLiteral("panel.popup.layoutPicker.popIn");
 const QString PanelPopupSnapAssist = QStringLiteral("panel.popup.snapAssist");
 const QString PanelPopupSnapAssistShow = QStringLiteral("panel.popup.snapAssist.show");
 
@@ -99,7 +95,6 @@ QStringList allBuiltInPaths()
         WindowFocus,
         Zone,
         ZoneSnapIn,
-        ZoneSnapOut,
         ZoneSnapResize,
         ZoneHighlight,
         ZoneLayoutSwitchIn,
@@ -110,11 +105,8 @@ QStringList allBuiltInPaths()
         Osd,
         OsdShow,
         OsdHide,
-        OsdPop,
-        OsdDim,
         Panel,
         PanelSlideIn,
-        PanelSlideOut,
         PanelPopup,
         PanelPopupZoneSelector,
         PanelPopupZoneSelectorShow,
@@ -122,7 +114,6 @@ QStringList allBuiltInPaths()
         PanelPopupLayoutPicker,
         PanelPopupLayoutPickerShow,
         PanelPopupLayoutPickerHide,
-        PanelPopupLayoutPickerPopIn,
         PanelPopupSnapAssist,
         PanelPopupSnapAssistShow,
         Cursor,

@@ -48,13 +48,10 @@ PHOSPHORANIMATION_EXPORT extern const QString WorkspaceOverview;
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
 PHOSPHORANIMATION_EXPORT extern const QString OsdShow;
 PHOSPHORANIMATION_EXPORT extern const QString OsdHide;
-PHOSPHORANIMATION_EXPORT extern const QString OsdPop;
-PHOSPHORANIMATION_EXPORT extern const QString OsdDim;
 
 // panel.*
 PHOSPHORANIMATION_EXPORT extern const QString Panel;
 PHOSPHORANIMATION_EXPORT extern const QString PanelSlideIn;
-PHOSPHORANIMATION_EXPORT extern const QString PanelSlideOut;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopup;
 // Per-leg .show/.hide leaves let show/hide shader effects diverge.
 // SnapAssist has .show only because the surface destroys-on-hide.
@@ -64,8 +61,6 @@ PHOSPHORANIMATION_EXPORT extern const QString PanelPopupZoneSelectorHide;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPicker;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerShow;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerHide;
-/// Scale-leg show for LayoutPicker — the only non-OSD surface with a scale envelope.
-PHOSPHORANIMATION_EXPORT extern const QString PanelPopupLayoutPickerPopIn;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PanelPopupSnapAssistShow;
 
