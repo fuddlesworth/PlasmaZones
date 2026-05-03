@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QCoreApplication>
 #include <QEasingCurve>
@@ -269,16 +270,15 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
         return;
     }
 
-    // Resolve now (may return nullopt if the path isn't registered yet
-    // — startup race where the loader hasn't scanned XDG dirs).
-    if (auto resolved = registry->resolve(path)) {
-        applyResolvedProfile(*resolved);
-    } else {
-        // Keep the animation running at library-default profile until
-        // a later registerProfile fires profileChanged(path). The
-        // registry-connected lambda below will pick it up.
-        applyResolvedProfile(Profile{});
-    }
+    // Inheritance-aware resolution: a parent-node override at e.g.
+    // `panel.popup` MUST flow down to every leaf under it
+    // (`panel.popup.layoutPicker.show`, etc.). Exact-match `resolve()`
+    // would silently drop the parent edit on the floor, which is the
+    // bug the registry's `resolveWithInheritance` walk fixes —
+    // unconfigured leaves now read their family parent (or the
+    // shell's family seeds, or the library default) without
+    // requiring per-leaf JSON shadows.
+    applyResolvedProfile(registry->resolveWithInheritance(path));
 
     // Live-rebind: per-path change signal handles every targeted
     // update (settings UI edits, ProfileLoader rescans — both go
@@ -307,12 +307,19 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
     m_registryChangedConnection = connect(
         registry, &PhosphorProfileRegistry::profileChanged, this,
         [this](const QString& changedPath) {
-            if (changedPath != m_boundPath) {
+            // An edit at any ancestor of `m_boundPath` (including
+            // `m_boundPath` itself) must flow down — the bound path's
+            // resolved Profile is the inheritance-walked overlay of
+            // every registered ancestor, so a Settings edit at
+            // `panel.popup` MUST refresh every leaf bound under it.
+            // Exact-match check would lose the parent-overlay rebind,
+            // reproducing the silent-drop bug `resolveWithInheritance`
+            // exists to fix.
+            if (!isAncestorOrSelf(changedPath, m_boundPath)) {
                 return;
             }
             auto* current = PhosphorProfileRegistry::defaultRegistry();
-            auto resolved = current ? current->resolve(m_boundPath) : std::optional<Profile>{};
-            applyResolvedProfile(resolved.value_or(Profile{}));
+            applyResolvedProfile(current ? current->resolveWithInheritance(m_boundPath) : Profile{});
             // Match the direct-setter semantics at setProfile() — a
             // QML author with `onProfileChanged: …` expects to see the
             // signal fire when the bound profile is reloaded live.
@@ -326,8 +333,7 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
         registry, &PhosphorProfileRegistry::profilesReloaded, this,
         [this]() {
             auto* current = PhosphorProfileRegistry::defaultRegistry();
-            auto resolved = current ? current->resolve(m_boundPath) : std::optional<Profile>{};
-            applyResolvedProfile(resolved.value_or(Profile{}));
+            applyResolvedProfile(current ? current->resolveWithInheritance(m_boundPath) : Profile{});
             // Same rationale as above — reloadAll / clear must surface
             // as a profileChanged to QML observers, otherwise a wholesale
             // registry wipe silently rebinds animations to library
@@ -335,6 +341,27 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
             Q_EMIT profileChanged();
         },
         Qt::QueuedConnection);
+}
+
+bool PhosphorMotionAnimation::isAncestorOrSelf(const QString& candidate, const QString& descendant)
+{
+    // Exact match is the trivial ancestor-or-self case.
+    if (candidate == descendant) {
+        return true;
+    }
+    // The Global root is the implicit ancestor of every non-empty path;
+    // an edit at `Global` must invalidate every bound profile.
+    if (candidate == ProfilePaths::Global) {
+        return !descendant.isEmpty();
+    }
+    // Strict-ancestor check: `candidate` must be a dot-bounded prefix
+    // of `descendant`. Without the dot terminator, `panel.pop` would
+    // be flagged an ancestor of `panel.popup` (substring rather than
+    // path-segment match), which is wrong.
+    if (descendant.size() <= candidate.size() + 1) {
+        return false;
+    }
+    return descendant.startsWith(candidate) && descendant.at(candidate.size()) == QLatin1Char('.');
 }
 
 void PhosphorMotionAnimation::disconnectRegistrySignal()

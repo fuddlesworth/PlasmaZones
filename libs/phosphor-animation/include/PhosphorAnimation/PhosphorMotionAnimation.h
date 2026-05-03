@@ -178,6 +178,14 @@ private:
     void disconnectRegistrySignal();
     void applyResolvedProfile(const Profile& p);
 
+    /// True when @p candidate is an ancestor of (or equal to)
+    /// @p descendant under the dot-segmented ProfilePaths convention.
+    /// `Global` is the implicit ancestor of every non-empty path.
+    /// Used to gate the live-rebind: a registry edit at any ancestor
+    /// of the bound path must trigger a re-resolve so a parent
+    /// override flows down to every leaf bound under it.
+    static bool isAncestorOrSelf(const QString& candidate, const QString& descendant);
+
     /// Convert the resolved Profile's curve + duration into
     /// QQuickPropertyAnimation's native `easing` and `duration`
     /// properties. Plain cubic-bezier `Easing` profiles install as a
