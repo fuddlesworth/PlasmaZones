@@ -1,0 +1,79 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: LGPL-2.1-or-later -->
+
+# phosphor-identity
+
+> Stable, cross-process string formats for the IDs that flow through the
+> Phosphor stack: window IDs, screen IDs, and virtual-screen IDs.
+
+## Responsibility
+
+Wayland doesn't expose a reliable numeric window ID the way X11 does, and
+each compositor surfaces a slightly different shape for "which window."
+KWin scripts refer to windows by their `internalId`; the daemon's
+compositor-bridge D-Bus interface carries string IDs over the wire;
+application QObjects own `QWindow` pointers with their own lifetimes.
+
+`phosphor-identity` is the **single source of truth** for the wire
+formats every layer of the stack uses to spell those identities. It is
+an INTERFACE library — every helper is `inline` and lives in the public
+header — so the daemon, the KWin effect, the KCM, and any future
+compositor plugin all link the same definitions without anyone shipping
+an extra `.so`.
+
+The three identity formats it owns:
+
+- **`WindowId`** — composite `"appId|instanceId"` strings. Helpers to
+  build, parse, and pattern-match against the canonical form.
+- **`ScreenId`** — EDID-derived stable identifier with connector-name
+  fallback when no EDID is available. Compositor-portable.
+- **`VirtualScreenId`** — `"<physicalId>/vs:<index>"` for the
+  user-defined sub-regions of a physical monitor.
+
+## Key types
+
+| Type | Purpose |
+|------|---------|
+| `PhosphorIdentity::WindowId`        | Helpers for the canonical `appId|instanceId` window-id format |
+| `PhosphorIdentity::ScreenId`        | EDID parsing + screen-id construction; cached across TUs |
+| `PhosphorIdentity::VirtualScreenId` | `<physicalId>/vs:<index>` build / parse / detect helpers |
+
+## Typical use
+
+```cpp
+#include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+
+using namespace PhosphorIdentity;
+
+// Build the wire format from its parts
+QString id = WindowId::build(QStringLiteral("firefox"),
+                             QStringLiteral("Navigator"));
+
+// Parse back out
+QString app  = WindowId::extractAppId(id);       // "firefox"
+QString inst = WindowId::extractInstanceId(id);  // "Navigator"
+
+// Virtual screens
+QString vs = VirtualScreenId::build(physicalId, /*index*/ 1);
+if (VirtualScreenId::isVirtual(screenId)) {
+    QString phys = VirtualScreenId::extractPhysicalId(screenId);
+}
+```
+
+## Design notes
+
+- **INTERFACE library.** No `.so` shipped — every function is `inline`
+  in the public header. Cross-process consumers all share one definition
+  by language rule; nobody links a third copy.
+- **Header-only by design.** The function-local static caches in
+  `ScreenId.h` are guaranteed unique across translation units by the
+  C++17 inline-function-static rule.
+- **Wire format owns the spelling.** Daemon, KWin effect, and any future
+  compositor plugin all use these helpers rather than hand-rolling the
+  format. To change the format, change it here once.
+
+## Dependencies
+
+- `QtCore` only. Zero Phosphor dependencies; this is the foundation
+  layer everything else builds on.

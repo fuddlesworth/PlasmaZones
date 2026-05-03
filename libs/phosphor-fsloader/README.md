@@ -1,0 +1,136 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: LGPL-2.1-or-later -->
+
+# phosphor-fsloader
+
+> Generic filesystem-backed registry skeleton: directory walking, file
+> watching, debounced rescans, user-wins-over-system layering, and a
+> pluggable scan strategy. The single owner of "live-reload a directory
+> tree of user-editable JSON" across the suite.
+
+## Responsibility
+
+Several Phosphor libraries need the same pattern: walk a set of
+directories, parse each file (flat `*.json`, or a metadata-pack
+subdirectory) into a typed record, watch the directories for live edits,
+debounce rescans, apply user files that shadow bundled ones with the
+same ID, and emit one bulk-update signal per scan. Every consumer that
+implemented this independently ended up with subtly different
+debouncing and parent-watch logic. `phosphor-fsloader` owns the
+mechanism once.
+
+The library factors the work into:
+
+- **`WatchedDirectorySet`** — the base mechanism. Owns the
+  `QFileSystemWatcher`, debounces rescan triggers (50 ms), promotes
+  watches to a parent directory when the target doesn't exist yet,
+  guards against rescan-during-rescan races, and re-arms individual
+  file watches after a scan.
+- **`IScanStrategy`** — pluggable policy: how to enumerate the
+  registered directories, parse each entry, and commit results to the
+  consumer's registry. The base owns *when* to scan; the strategy owns
+  *what scanning means*.
+- **`DirectoryLoader`** — flat `*.json` specialisation that pairs with
+  an `IDirectoryLoaderSink` (the schema-specific parse + commit
+  strategy). Used by curve and profile loaders.
+- **`MetadataPackScanStrategy<Payload>` + `MetadataPackRegistryBase`** —
+  templated specialisation for "subdirectory-with-metadata-json" packs:
+  one pack per top-level subfolder, validated by a `metadata.json`,
+  payload type chosen by the registry. Used by
+  [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`
+  and [`phosphor-animation`](../phosphor-animation/README.md)'s
+  `AnimationShaderRegistry`.
+- **`JsonEnvelopeValidator`** — shared envelope validation: parses the
+  file, checks the `"name"` field is non-empty and matches the
+  filename, returns the rest of the JSON object for the sink's
+  schema-specific `fromJson`.
+
+`MetadataPackRegistryBase` is the QObject base every metadata-pack
+registry inherits from; it owns the `WatchedDirectorySet` plus the
+strategy and provides the search-path management surface
+(`addSearchPath`, `setUserPath`, `refresh`) that every consumer was
+hand-rolling identically.
+
+## Key types
+
+| Type | Purpose |
+|------|---------|
+| `PhosphorFsLoader::WatchedDirectorySet`           | Base mechanism: watcher, debounce, parent-watch, race guard |
+| `PhosphorFsLoader::IScanStrategy`                 | Pluggable enumerate / parse / commit policy |
+| `PhosphorFsLoader::DirectoryLoader`               | Flat `*.json` specialisation (sink-driven) |
+| `PhosphorFsLoader::IDirectoryLoaderSink`          | Per-schema strategy: `parseFile()` + `commitBatch()` |
+| `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata; `std::any` payload |
+| `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
+| `PhosphorFsLoader::MetadataPackRegistryBase`      | QObject base that owns the strategy + watcher; provides the search-path surface |
+| `PhosphorFsLoader::JsonEnvelopeValidator`         | Shared `"name"`-field envelope validator |
+
+## Typical use
+
+A profile loader sink (flat `*.json` mode):
+
+```cpp
+#include <PhosphorFsLoader/DirectoryLoader.h>
+#include <PhosphorFsLoader/IDirectoryLoaderSink.h>
+
+using namespace PhosphorFsLoader;
+
+class CurveLoaderSink : public IDirectoryLoaderSink {
+    std::optional<ParsedEntry> parseFile(const QString& path) override {
+        // parse one curve file; nothing registry-side here.
+    }
+    void commitBatch(const QList<ParsedEntry>& all,
+                     const QStringList& removed) override {
+        // single mutation point; emit one reloadAll() signal here.
+    }
+};
+
+DirectoryLoader loader({systemDir, userDir}, DirectoryWatchPolicy::On);
+loader.setSink(new CurveLoaderSink{...});
+loader.rescan();
+```
+
+A metadata-pack registry (used by shader / animation-shader registries):
+
+```cpp
+class MyPackRegistry : public PhosphorFsLoader::MetadataPackRegistryBase {
+public:
+    MyPackRegistry()
+        : MetadataPackRegistryBase(makeStrategy()) {}
+    // … expose payload-typed lookups
+};
+// Composition root then wires:
+registry.addSearchPath(systemDir);
+registry.setUserPath(userDir);
+registry.refresh();
+```
+
+## Design notes
+
+- **Watcher is opt-in.** `DirectoryWatchPolicy::On` installs a
+  `QFileSystemWatcher` on every scanned directory (or its parent, if
+  the target doesn't exist yet, so fresh installs that create the
+  user-data dir later still pick up edits without a restart). `Off`
+  disables it for tests.
+- **`commitBatch` is the one mutation point.** The sink only touches
+  its target registry inside `commitBatch`, so bulk signals (e.g. a
+  QML `reloadAll`) coalesce to one emit per scan.
+- **User wins on collision.** When a system file and a user file share
+  an ID, the user file commits. Search-path order is consumer-chosen;
+  the loader honours it.
+- **Type-erased payloads.** `ParsedEntry::payload` is `std::any` so the
+  loader stays schema-agnostic. The sink produces it, the sink
+  consumes it, nobody in between peeks. The metadata-pack variant adds
+  a typed `Payload` template parameter for registries that don't need
+  the erasure.
+- **Renamed from `phosphor-jsonloader`.** The earlier name no longer
+  fit once the metadata-pack scan strategy and the shared filesystem
+  primitives moved in.
+
+## Dependencies
+
+- `QtCore`
+
+## See also
+
+- [`phosphor-animation`](../phosphor-animation/README.md) — `ProfileLoader`, `CurveLoader`, and `AnimationShaderRegistry` are clients.
+- [`phosphor-shaders`](../phosphor-shaders/README.md) — `ShaderRegistry` inherits `MetadataPackRegistryBase`.
