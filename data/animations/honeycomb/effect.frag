@@ -152,12 +152,32 @@ void main()
     float maxRevealRadius = length(normalizedCenter) * 1.25;
     float waveRadius = progress * (maxRevealRadius + softEdgeWidth);
 
+    // Per-cell "wave arrival" mask: 0 deep inside, 1 outside,
+    // smooth transition at the wave front. Each hex shares one
+    // hexDist value (per-cell flat shading), so adjacent cells get
+    // different mask values within the smoothstep band — that's the
+    // visible cellular boundary at the wave front.
     float mask = smoothstep(waveRadius - softEdgeWidth, waveRadius, hexDist);
+
+    // Quantize the mask to discrete opacity steps. Niri's reference
+    // doesn't fade each hex through a continuous gradient — hexes
+    // increment through a small number of visible levels (the
+    // "popping in" cadence the user expects). Combined with per-cell
+    // flat shading, the result is hexes that each visibly STEP from
+    // transparent → partial → more-partial → solid as the wave
+    // sweeps across them, instead of melting smoothly.
+    //
+    // 5 steps (0, 0.25, 0.5, 0.75, 1.0) is enough to read as discrete
+    // increments at popup scale without making the transition feel
+    // jerky on a 2 s show animation. `floor(x * N + 0.5) / N` is the
+    // canonical "round to nearest of N+1 levels" snap.
+    const float kOpacitySteps = 4.0;
+    float steppedMask = floor(mask * kOpacitySteps + 0.5) / kOpacitySteps;
 
     // Sample the live anchor FBO and gate it on the radial mask.
     // Premult-alpha invariant: multiplying both colour and alpha by
     // the same scalar keeps the daemon's blend pipeline composing
     // correctly with the parent chain's opacity.
     vec4 sampled = texture(iChannel0, vTexCoord);
-    fragColor = sampled * (1.0 - mask);
+    fragColor = sampled * (1.0 - steppedMask);
 }
