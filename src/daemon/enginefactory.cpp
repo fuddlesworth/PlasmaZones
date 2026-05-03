@@ -16,6 +16,7 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrac
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                         WindowRegistry* windowRegistry, QObject* parent)
 {
+    Q_UNUSED(parent)
     // --- AutotileEngine ---
     auto autotile = std::make_unique<PhosphorTileEngine::AutotileEngine>(layoutManager, windowTracker, screenManager,
                                                                          algorithmRegistry, nullptr);

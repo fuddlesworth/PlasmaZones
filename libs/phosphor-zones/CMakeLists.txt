@@ -58,6 +58,14 @@ if(NOT TARGET PhosphorScreens::PhosphorScreens)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
+if(NOT TARGET PhosphorGeometry::PhosphorGeometry)
+    find_package(PhosphorGeometry CONFIG REQUIRED)
+endif()
+
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
