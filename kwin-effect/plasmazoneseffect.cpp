@@ -42,6 +42,7 @@
 #include <QTimer>
 #include <QtMath>
 #include <QPointer>
+#include <QVarLengthArray>
 #include <window.h>
 #include <workspace.h>
 #include <core/output.h> // For Output::name() for multi-monitor support
@@ -223,11 +224,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     });
     connect(&m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
             [this]() {
-                for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end();) {
-                    KWin::EffectWindow* w = it->first;
-                    ++it;
+                QVarLengthArray<KWin::EffectWindow*, 8> windows;
+                for (auto& [w, _] : m_shaderTransitions)
+                    windows.push_back(w);
+                for (auto* w : windows)
                     endShaderTransition(w);
-                }
                 Q_ASSERT(m_shaderTransitions.empty());
                 m_shaderCache.clear();
             });
@@ -1128,23 +1129,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // geometry without round-tripping. Debounced at ~50ms per window via
     // m_frameGeometryFlushTimer so rapid move/resize sequences collapse
     // into at most one D-Bus push.
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, w]() {
-        if (!w || !shouldHandleWindow(w)) {
-            return;
-        }
-        const QString windowId = getWindowId(w);
-        if (windowId.isEmpty()) {
-            return;
-        }
-        const QRect geo = w->frameGeometry().toRect();
-        if (geo.width() <= 0 || geo.height() <= 0) {
-            return;
-        }
-        m_pendingFrameGeometry[windowId] = geo;
-        if (!m_frameGeometryFlushTimer->isActive()) {
-            m_frameGeometryFlushTimer->start();
-        }
-    });
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+            [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+                if (!safeW || !shouldHandleWindow(safeW)) {
+                    return;
+                }
+                const QString windowId = getWindowId(safeW);
+                if (windowId.isEmpty()) {
+                    return;
+                }
+                const QRect geo = safeW->frameGeometry().toRect();
+                if (geo.width() <= 0 || geo.height() <= 0) {
+                    return;
+                }
+                m_pendingFrameGeometry[windowId] = geo;
+                if (!m_frameGeometryFlushTimer->isActive()) {
+                    m_frameGeometryFlushTimer->start();
+                }
+            });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),

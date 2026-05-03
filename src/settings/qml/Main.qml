@@ -1136,6 +1136,7 @@ ApplicationWindow {
                         flat: true
                         icon.name: "internet-web-browser"
                         visible: settingsController.updateChecker.releaseUrl.length > 0
+                        Accessible.name: i18n("View release notes")
                         onClicked: Qt.openUrlExternally(settingsController.updateChecker.releaseUrl)
                     }
 
@@ -1143,6 +1144,7 @@ ApplicationWindow {
                         icon.name: "dialog-close"
                         display: ToolButton.IconOnly
                         onClicked: settingsController.dismissUpdate()
+                        Accessible.name: i18n("Dismiss update notification")
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
@@ -1195,6 +1197,7 @@ ApplicationWindow {
                         icon.name: "dialog-close"
                         display: ToolButton.IconOnly
                         onClicked: settingsController.markWhatsNewSeen()
+                        Accessible.name: i18n("Dismiss")
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
@@ -1673,6 +1676,7 @@ ApplicationWindow {
                             text: i18n("Discard")
                             icon.name: "edit-undo"
                             flat: true
+                            Accessible.name: i18n("Discard changes")
                             onClicked: resetConfirmDialog.open()
                         }
 
@@ -1680,6 +1684,7 @@ ApplicationWindow {
                             text: i18n("Save")
                             icon.name: "document-save"
                             highlighted: true
+                            Accessible.name: i18n("Save settings")
                             onClicked: {
                                 settingsController.save();
                                 toast.show(i18n("Settings saved"));

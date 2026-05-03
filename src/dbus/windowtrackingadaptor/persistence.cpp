@@ -261,8 +261,7 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
     // Check if panel geometry is ready, or if Phosphor::Screens::ScreenManager doesn't exist (fallback)
     // If Phosphor::Screens::ScreenManager instance is null, we proceed anyway with a warning - this is
     // better than blocking window restoration indefinitely
-    if (m_service->screenManager()
-        && !(m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
+    if (m_service->screenManager() && !m_service->screenManager()->isPanelGeometryReady()) {
         qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
         return;
     }

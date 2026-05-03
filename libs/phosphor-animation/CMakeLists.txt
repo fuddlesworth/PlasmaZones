@@ -92,6 +92,7 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 
 set(phosphoranimation_public_HDRS
     # Core motion runtime
+    include/PhosphorAnimation/AnimationLimits.h
     include/PhosphorAnimation/PhosphorAnimation.h
     include/PhosphorAnimation/AnimationLimits.h
     include/PhosphorAnimation/Curve.h

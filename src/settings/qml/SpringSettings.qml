@@ -76,6 +76,7 @@ ColumnLayout {
             from: settingsController.animationsPage.springOmegaMin
             to: settingsController.animationsPage.springOmegaMax
             stepSize: 0.5
+            Accessible.name: i18n("Speed")
             value: springRoot.omega
             formatValue: function(v) {
                 return v.toFixed(1);
@@ -100,6 +101,7 @@ ColumnLayout {
             from: settingsController.animationsPage.springZetaMin
             to: settingsController.animationsPage.springZetaMax
             stepSize: 0.05
+            Accessible.name: i18n("Damping ratio")
             value: springRoot.zeta
             formatValue: function(v) {
                 return v.toFixed(2);

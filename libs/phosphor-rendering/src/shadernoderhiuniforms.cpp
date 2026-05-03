@@ -233,20 +233,23 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_uniformsDirty = false;
         }
     } else {
+        QRhiResourceUpdateBatch* batch = nullptr;
         // Check extension dirty independently of base uniforms
         if (extensionHasData && m_uniformExtension->isDirty()) {
-            QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-            if (batch) {
+            batch = rhi->nextResourceUpdateBatch();
+            if (batch)
                 uploadExtensionToUbo(batch);
-                cb->resourceUpdate(batch);
+        }
+        if (!m_vboUploaded) {
+            if (!batch)
+                batch = rhi->nextResourceUpdateBatch();
+            if (batch) {
+                batch->uploadStaticBuffer(m_vbo.get(), RhiConstants::QuadVertices);
+                m_vboUploaded = true;
             }
         }
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-        if (batch && !m_vboUploaded) {
-            batch->uploadStaticBuffer(m_vbo.get(), RhiConstants::QuadVertices);
-            m_vboUploaded = true;
+        if (batch)
             cb->resourceUpdate(batch);
-        }
     }
 
     if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {

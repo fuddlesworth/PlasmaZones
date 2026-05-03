@@ -53,12 +53,12 @@ void QtQuickClockManager::setDefaultManager(QtQuickClockManager* manager)
     // load-and-use sequence is a single pointer dereference that needs
     // no happens-before with any other memory. Matches the
     // PhosphorCurve::setDefaultRegistry contract.
-    s_defaultManager.store(manager, std::memory_order_relaxed);
+    s_defaultManager.store(manager, std::memory_order_release);
 }
 
 QtQuickClockManager* QtQuickClockManager::defaultManager()
 {
-    return s_defaultManager.load(std::memory_order_relaxed);
+    return s_defaultManager.load(std::memory_order_acquire);
 }
 
 IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)

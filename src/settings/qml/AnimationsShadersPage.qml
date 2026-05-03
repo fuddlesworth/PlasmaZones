@@ -160,7 +160,7 @@ Flickable {
                                         }
 
                                         Label {
-                                            text: i18np("%1 parameter", "%1 parameters", (shaderRow.modelData.parameters || []).length)
+                                            text: i18np("%n parameter", "%n parameters", (shaderRow.modelData.parameters || []).length)
                                             font: Kirigami.Theme.smallFont
                                             color: Kirigami.Theme.disabledTextColor
                                         }

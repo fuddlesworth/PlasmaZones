@@ -123,6 +123,8 @@ void Daemon::initializeAutotile()
                                                   << windowScreen << "(not in released set)";
                                 continue;
                             }
+                            if (!m_autotileEngine || !m_snapEngine)
+                                continue;
                             // Clear autotile-originated floats (they don't persist into snap mode)
                             bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
                             if (wasAutotileFloated) {

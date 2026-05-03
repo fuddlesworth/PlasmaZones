@@ -421,9 +421,10 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // on the next anchor geometry signal. Capturing by value would
     // freeze the lambda on the original metadata.
     auto requestedPadPtr = std::make_shared<qreal>(qIsNaN(effect.boundsPadding) ? qreal(0.0) : effect.boundsPadding);
-    auto syncGeometry = [shaderItem, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource),
+    QPointer<PhosphorRendering::ShaderEffect> shaderItemPtr{shaderItem};
+    auto syncGeometry = [shaderItemPtr, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource),
                          requestedPadPtr, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
-        if (!anchorPtr) {
+        if (!anchorPtr || !shaderItemPtr) {
             return;
         }
         const qreal w = anchorPtr->width();
@@ -434,14 +435,14 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
         const qreal pad = clampPaddingToParent(anchorPtr.data(), *requestedPadPtr);
         const qreal padW = w * pad;
         const qreal padH = h * pad;
-        shaderItem->setWidth(w + 2.0 * padW);
-        shaderItem->setHeight(h + 2.0 * padH);
-        shaderItem->setX(anchorPtr->x() - padW);
-        shaderItem->setY(anchorPtr->y() - padH);
-        shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
-        QVector4D structural = shaderItem->customParamAt(7);
+        shaderItemPtr->setWidth(w + 2.0 * padW);
+        shaderItemPtr->setHeight(h + 2.0 * padH);
+        shaderItemPtr->setX(anchorPtr->x() - padW);
+        shaderItemPtr->setY(anchorPtr->y() - padH);
+        shaderItemPtr->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+        QVector4D structural = shaderItemPtr->customParamAt(7);
         structural.setX(static_cast<float>(pad));
-        shaderItem->setCustomParamAt(7, structural);
+        shaderItemPtr->setCustomParamAt(7, structural);
         if (shaderSourcePtr) {
             shaderSourcePtr->setWidth(w);
             shaderSourcePtr->setHeight(h);

@@ -302,6 +302,8 @@ QString WindowTrackingAdaptor::resolveScreenForSnap(const QString& callerScreen,
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
 {
+    if (!m_service)
+        return;
     if (!validateWindowId(windowId, QStringLiteral("screen changed"))) {
         return;
     }
