@@ -7,6 +7,7 @@ import org.kde.kirigami as Kirigami
 Flickable {
     contentHeight: col.implicitHeight
     clip: true
+    Accessible.name: i18n("Workspace animation events")
     ColumnLayout {
         id: col
         width: parent.width

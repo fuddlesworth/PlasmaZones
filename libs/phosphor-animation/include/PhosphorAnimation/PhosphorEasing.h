@@ -67,7 +67,7 @@ public:
     PhosphorEasing() = default;
     /// Implicit-conversion ctor so core-library code can hand a bare
     /// `Easing` value into the QML boundary without a wrapping call.
-    PhosphorEasing(const Easing& value)
+    explicit PhosphorEasing(const Easing& value)
         : m_value(value)
     {
     }

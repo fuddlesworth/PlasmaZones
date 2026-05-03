@@ -20,7 +20,7 @@ void PhosphorCurve::setDefaultRegistry(CurveRegistry* registry)
     // load-and-use sequence below is a single pointer dereference that
     // needs no happens-before with any other memory. Matches the
     // process-lifetime-singleton contract documented on setDefaultRegistry.
-    s_registry.store(registry, std::memory_order_relaxed);
+    s_registry.store(registry, std::memory_order_release);
 }
 
 PhosphorCurve PhosphorCurve::fromString(const QString& str)
@@ -30,7 +30,7 @@ PhosphorCurve PhosphorCurve::fromString(const QString& str)
     // CurveLoader (Phase 4 decision U). Returning a null handle on
     // parse failure (rather than a default-constructed Easing) gives
     // QML callers an `isNull()` signal they can check.
-    CurveRegistry* registry = s_registry.load(std::memory_order_relaxed);
+    CurveRegistry* registry = s_registry.load(std::memory_order_acquire);
     if (!registry) {
         return PhosphorCurve();
     }

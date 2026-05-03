@@ -33,7 +33,7 @@ Flickable {
     // contract — the embedded component reads these via its `constants` prop).
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
-    readonly property var appSettings: settingsController.settings
+    readonly property QtObject appSettings: settingsController.settings
     // ── Timing-mode state ───────────────────────────────────────────────
     // Computed from the live `animationEasingCurve` string: the "spring:"
     // prefix is the on-disk discriminator. Defining this as a binding

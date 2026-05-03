@@ -157,18 +157,10 @@ bool MotionSetStore::applyMotionSet(const QString& name)
     }
 
     if (!success) {
-        // Roll back: re-running setOverride with the snapshotted content
-        // isn't reachable from here without leaking snapshot internals,
-        // so instead: ask the snapshot infra to revert. The controller
-        // uses the snapshot store as the rollback source — it already
-        // captured pre-edit state for every committed entry via the
-        // setOverride call. Surfacing that requires the controller to
-        // expose a per-path revert; rather than doing that, we leave the
-        // partial state in place but signal pendingChangesChanged so the
-        // user can hit Discard. This is consistent with the project's
-        // "no temporary workarounds" rule because a caller who hits this
-        // path already has dirty in-memory snapshots for every committed
-        // peer — Discard restores them atomically.
+        if (!committedPaths.isEmpty()) {
+            qCWarning(lcConfig) << "MotionSetStore::applyMotionSet: partial apply committed" << committedPaths.size()
+                                << "paths before failure:" << committedPaths;
+        }
         Q_EMIT pendingChangesChanged();
         return false;
     }

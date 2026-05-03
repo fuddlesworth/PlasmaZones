@@ -242,13 +242,14 @@ void AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
 
 bool AnimationsPageController::hasPendingChanges() const
 {
-    return !m_pendingFileSnapshots.isEmpty();
+    return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty;
 }
 
 void AnimationsPageController::commitPending()
 {
     const bool had = hasPendingChanges();
     m_pendingFileSnapshots.clear();
+    m_shaderTreeDirty = false;
     if (had)
         Q_EMIT pendingChangesChanged();
 }
@@ -263,6 +264,8 @@ void AnimationsPageController::revertPending()
 
     if (!hasPendingChanges())
         return;
+
+    m_shaderTreeDirty = false;
 
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
@@ -616,31 +619,31 @@ namespace animations_controller_detail {
 static QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo& p)
 {
     QVariantMap m;
-    m.insert(QStringLiteral("id"), p.id);
-    m.insert(QStringLiteral("name"), p.name);
-    m.insert(QStringLiteral("type"), p.type);
-    m.insert(QStringLiteral("defaultValue"), p.defaultValue);
-    m.insert(QStringLiteral("minValue"), p.minValue);
-    m.insert(QStringLiteral("maxValue"), p.maxValue);
+    m.insert(QLatin1String("id"), p.id);
+    m.insert(QLatin1String("name"), p.name);
+    m.insert(QLatin1String("type"), p.type);
+    m.insert(QLatin1String("defaultValue"), p.defaultValue);
+    m.insert(QLatin1String("minValue"), p.minValue);
+    m.insert(QLatin1String("maxValue"), p.maxValue);
     return m;
 }
 
 static QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEffect& effect)
 {
     QVariantMap m;
-    m.insert(QStringLiteral("id"), effect.id);
-    m.insert(QStringLiteral("name"), effect.name);
-    m.insert(QStringLiteral("description"), effect.description);
-    m.insert(QStringLiteral("author"), effect.author);
-    m.insert(QStringLiteral("version"), effect.version);
-    m.insert(QStringLiteral("category"), effect.category);
-    m.insert(QStringLiteral("isUserEffect"), effect.isUserEffect);
+    m.insert(QLatin1String("id"), effect.id);
+    m.insert(QLatin1String("name"), effect.name);
+    m.insert(QLatin1String("description"), effect.description);
+    m.insert(QLatin1String("author"), effect.author);
+    m.insert(QLatin1String("version"), effect.version);
+    m.insert(QLatin1String("category"), effect.category);
+    m.insert(QLatin1String("isUserEffect"), effect.isUserEffect);
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters) {
         params.append(parameterInfoToMap(p));
     }
-    m.insert(QStringLiteral("parameters"), params);
+    m.insert(QLatin1String("parameters"), params);
     return m;
 }
 
@@ -648,9 +651,9 @@ static QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 {
     QVariantMap m;
     if (profile.effectId)
-        m.insert(QStringLiteral("effectId"), *profile.effectId);
+        m.insert(QLatin1String("effectId"), *profile.effectId);
     if (profile.parameters)
-        m.insert(QStringLiteral("parameters"), *profile.parameters);
+        m.insert(QLatin1String("parameters"), *profile.parameters);
     return m;
 }
 
@@ -788,14 +791,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         return true;
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
-    // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
-    // Always emit pendingChangesChanged: shader overrides write through
-    // Settings::setShaderProfileTree (which persists to disk
-    // immediately), bypassing the file-snapshot tracker that
-    // hasPendingChanges() reads. A `wasPending != hasPendingChanges()`
-    // guard like setOverride uses would always be `false != false` for
-    // shader edits and never fire the signal — Save button never lights
-    // up, tests fail to detect the emission.
+    m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -810,8 +806,7 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
         return false;
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
-    // Always emit — see setShaderOverride for the rationale (shader
-    // edits bypass the file-snapshot tracker hasPendingChanges reads).
+    m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -850,7 +845,6 @@ int AnimationsPageController::shaderOverrideDescendantCount(const QString& path)
 
 int AnimationsPageController::clearShaderOverrideDescendants(const QString& path)
 {
-    const bool wasPending = hasPendingChanges();
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
@@ -861,13 +855,8 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     for (const QString& p : toClear)
         tree.clearOverride(p);
     m_settings->setShaderProfileTree(tree);
-    // setShaderProfileTree fires shaderProfileTreeChanged exactly once
-    // for the whole tree; the constructor's broadcast lambda then
-    // emits a single path-agnostic shaderProfileChanged() (NOT one per
-    // cleared path — QML consumers re-resolve every dependent binding
-    // on any tree-edit anyway, so a path-keyed signal would be wasted
-    if (wasPending != hasPendingChanges())
-        Q_EMIT pendingChangesChanged();
+    m_shaderTreeDirty = true;
+    Q_EMIT pendingChangesChanged();
     return toClear.size();
 }
 

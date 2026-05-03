@@ -102,10 +102,10 @@ private Q_SLOTS:
     /// Implicit conversion ctor from a core-library Easing value lets
     /// C++ adapter code hand an Easing across the QML boundary without
     /// writing an explicit wrap call.
-    void testImplicitConversionFromCoreValue()
+    void testExplicitConversionFromCoreValue()
     {
         Easing core = Easing::fromString(QStringLiteral("elastic-in:2.0,0.4"));
-        PhosphorEasing wrapped = core;
+        PhosphorEasing wrapped(core);
         QCOMPARE(wrapped.type(), PhosphorEasing::Type::ElasticIn);
         QCOMPARE(wrapped.amplitude(), core.amplitude);
     }

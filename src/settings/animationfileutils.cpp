@@ -15,7 +15,7 @@ QString slugify(const QString& name)
     bool lastWasDash = false;
     for (QChar c : name) {
         const QChar lower = c.toLower();
-        if (lower.isLetterOrNumber() || lower == QLatin1Char('.')) {
+        if (lower.isLetterOrNumber()) {
             out.append(lower);
             lastWasDash = false;
         } else if (!lastWasDash) {

@@ -305,6 +305,7 @@ Item {
         property real settleMs: 2000
 
         interval: root._animTickMs
+        running: root.visible
         repeat: true
         onTriggered: {
             var now = Date.now();

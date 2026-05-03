@@ -1798,7 +1798,7 @@ ApplicationWindow {
         id: shortcutOverlay
 
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.6)
+        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
         visible: opacity > 0
         opacity: window._showShortcuts ? 1 : 0
         z: 200

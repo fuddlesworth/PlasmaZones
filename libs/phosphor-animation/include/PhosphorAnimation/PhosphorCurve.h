@@ -105,7 +105,7 @@ public:
     /// fail to resolve.
     static CurveRegistry* defaultRegistry()
     {
-        return s_registry.load(std::memory_order_relaxed);
+        return s_registry.load(std::memory_order_acquire);
     }
 
     // ─── Factory helpers ───

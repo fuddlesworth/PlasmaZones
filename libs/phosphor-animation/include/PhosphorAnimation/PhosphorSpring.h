@@ -36,7 +36,7 @@ class PHOSPHORANIMATION_EXPORT PhosphorSpring
 public:
     PhosphorSpring() = default;
     /// Implicit-conversion ctor for core-library code.
-    PhosphorSpring(const Spring& value)
+    explicit PhosphorSpring(const Spring& value)
         : m_value(value)
     {
     }

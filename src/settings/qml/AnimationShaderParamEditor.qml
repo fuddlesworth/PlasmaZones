@@ -39,7 +39,10 @@ ColumnLayout {
 
     required property string effectId
     required property var currentParams
+    property string _loadedEffectId: ""
     readonly property var _paramSchema: effectId.length > 0 ? settingsController.animationsPage.shaderParameters(effectId) : []
+
+    onEffectIdChanged: _loadedEffectId = effectId
 
     signal paramsChanged(var newParams)
 
@@ -95,6 +98,8 @@ ColumnLayout {
     }
 
     function resetToDefaults() {
+        if (effectId !== _loadedEffectId)
+            return;
         var next = {};
         for (var i = 0; i < _paramSchema.length; i++) {
             var p = _paramSchema[i];

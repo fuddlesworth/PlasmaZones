@@ -261,6 +261,9 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
+    if (m_dummyChannelTextureNeedsUpload)
+        return;
+
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
         m_audioSpectrumDirty = false;

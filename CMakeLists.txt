@@ -430,44 +430,13 @@ install(CODE "
     endif()
 ")
 
-# Install path for shell-opinionated animation profile JSONs. The
-# shipped tree carries zero per-leaf JSONs by design — animation
+# The data/profiles/ directory no longer ships per-leaf JSONs — animation
 # timings/curves are driven entirely from the Settings UI via
-# `PhosphorProfileRegistry::registerProfile`, with parent-chain
-# inheritance filling in unset leaves. This install rule is kept as
-# the system-wide pickup path for distros / packagers that want to
-# ship their own opinionated defaults; `ProfileLoader` scans
-# `${XDG_DATA_DIRS}/plasmazones/profiles` and user overrides at
-# `~/.local/share/plasmazones/profiles` always win.
-install(DIRECTORY data/profiles/
-    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/profiles
-    FILES_MATCHING PATTERN "*.json"
-)
-
-# Build-time check: every `"curve": "..."` reference in a shipped
-# profile JSON must resolve to either a built-in curve typeId or a
-# data/curves/<name>.json file. QML profile-name references are NOT
-# validated here — animation profiles are driven entirely from the
-# Settings UI via PhosphorProfileRegistry, with parent-chain
-# inheritance filling in any unset leaf path, so the shipped tree
-# legitimately carries zero per-leaf JSONs. Falls back to a no-op if
-# python3 is missing so the check stays advisory for distros that
-# build without a python interpreter (the daemon itself does not
-# require one).
-find_package(Python3 COMPONENTS Interpreter QUIET)
-if(Python3_Interpreter_FOUND)
-    file(GLOB _pz_profile_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/profiles/*.json")
-    file(GLOB _pz_curve_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/curves/*.json")
-    add_custom_target(check-animation-profiles ALL
-        COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
-                ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${_pz_profile_jsons} ${_pz_curve_jsons}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
-        COMMENT "Verifying curve refs in shipped PhosphorAnimation profile JSONs"
-        VERBATIM
-    )
-endif()
+# PhosphorProfileRegistry, with parent-chain inheritance filling in
+# unset leaves. The install(DIRECTORY) rule and the build-time
+# check-animation-profiles target were removed because there are no
+# profile JSONs to install or validate. The install(CODE) stale-cleanup
+# block above is intentionally kept for upgrades from older builds.
 
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed)
 install(DIRECTORY data/shaders/

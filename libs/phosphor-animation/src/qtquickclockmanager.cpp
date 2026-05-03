@@ -39,11 +39,16 @@ QtQuickClockManager::~QtQuickClockManager()
     // they catch the non-standard teardown paths (embedded shells,
     // test harnesses manipulating the QApp lifetime directly) where
     // the invariant does not hold.
-    std::lock_guard<std::mutex> lock(m_mutex);
-    for (auto& [_, entry] : m_entries) {
-        QObject::disconnect(entry.destroyedConnection);
+    std::vector<std::unique_ptr<QtQuickClock>> toDestroy;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        toDestroy.reserve(m_entries.size());
+        for (auto& [_, entry] : m_entries) {
+            QObject::disconnect(entry.destroyedConnection);
+            toDestroy.push_back(std::move(entry.clock));
+        }
+        m_entries.clear();
     }
-    m_entries.clear();
 }
 
 void QtQuickClockManager::setDefaultManager(QtQuickClockManager* manager)
@@ -268,15 +273,16 @@ int QtQuickClockManager::entryCount() const
 
 void QtQuickClockManager::clearForTest()
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    // Disconnect every entry's destroyed hook before erasing — a
-    // live connection outliving the entry would later fire into a
-    // releaseClockFor on an already-empty map. That's safe (no-op
-    // after lookup miss), but noisy and wrong-looking.
-    for (auto& [_, entry] : m_entries) {
-        QObject::disconnect(entry.destroyedConnection);
+    std::vector<std::unique_ptr<QtQuickClock>> toDestroy;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        toDestroy.reserve(m_entries.size());
+        for (auto& [_, entry] : m_entries) {
+            QObject::disconnect(entry.destroyedConnection);
+            toDestroy.push_back(std::move(entry.clock));
+        }
+        m_entries.clear();
     }
-    m_entries.clear();
 }
 
 } // namespace PhosphorAnimation

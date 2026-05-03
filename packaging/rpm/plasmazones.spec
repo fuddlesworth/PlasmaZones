@@ -230,6 +230,7 @@ echo ""
 # PhosphorAnimation development headers, CMake config, and QML module
 %{_includedir}/PhosphorAnimation/
 %{_libdir}/cmake/PhosphorAnimation/
+%{_libdir}/qt6/qml/org/phosphor/animation/
 
 # PhosphorAudio development headers and CMake config
 %{_includedir}/PhosphorAudio/

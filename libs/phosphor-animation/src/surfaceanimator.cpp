@@ -303,6 +303,10 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     constexpr qreal kOffscreenCoord = -1.0e6;
     QQuickShaderEffectSource* shaderSource = nullptr;
     if (foundExplicitAnchor) {
+        if (!shaderAnchor->parentItem()) {
+            qCWarning(lcSurfaceAnimator) << "Explicit shader anchor" << shaderAnchor
+                                         << "has no parent item; shader effect will sample its own ancestor";
+        }
         shaderSource =
             new QQuickShaderEffectSource(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
         shaderSource->setSourceItem(shaderAnchor);
@@ -790,6 +794,8 @@ public:
         // use `this` as the receiver.
         QMetaObject::Connection conn =
             QObject::connect(surface, &QObject::destroyed, &m_driverTimer, [this](QObject* dying) {
+                // Address-only cast — dying object is partially destroyed;
+                // we only use the pointer value as a map key.
                 auto* surf = static_cast<PhosphorLayer::Surface*>(dying);
                 // Mutating m_destroyedConnections at the end of this
                 // slot is safe because destroyPendingReuseFor's only

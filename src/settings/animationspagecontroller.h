@@ -364,6 +364,7 @@ private:
     /// snapshot — they ride the standard Settings::load() Q_PROPERTY
     /// re-emit path like every other settings page.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
+    bool m_shaderTreeDirty = false;
 };
 
 } // namespace PlasmaZones

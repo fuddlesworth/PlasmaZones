@@ -72,7 +72,7 @@ public:
 
     PhosphorProfile() = default;
     /// Implicit-conversion ctor from core-library value.
-    PhosphorProfile(const Profile& value)
+    explicit PhosphorProfile(const Profile& value)
         : m_value(value)
     {
     }

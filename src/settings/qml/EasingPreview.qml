@@ -300,6 +300,7 @@ Item {
 
         interval: root._animTickMs
         repeat: true
+        running: root.visible
         onTriggered: {
             var now = Date.now();
             elapsed += (now - lastTime);
