@@ -24,6 +24,12 @@ class ProfileLoader;
 
 namespace PlasmaZones {
 
+/// Owner-tag partition used by `seedShellAnimationFamilies`. Exposed
+/// so daemon teardown / reconfigure paths can `clearOwner(tag)` to
+/// wipe just the family-seed partition without touching settings-driven
+/// or user-JSON entries.
+extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwnerTag;
+
 /// XDG-discovered curve and profile directories — `plasmazones/curves`
 /// and `plasmazones/profiles` resolved against `XDG_DATA_DIRS` (lowest-
 /// priority first), with the user-writable dir appended last so
@@ -84,6 +90,38 @@ PLASMAZONES_EXPORT AnimationLoaderHandles constructAnimationLoaders(
 PLASMAZONES_EXPORT void runInitialAnimationLoad(PhosphorAnimation::CurveLoader& curveLoader,
                                                 PhosphorAnimation::ProfileLoader& profileLoader,
                                                 const AnimationLoaderDirs& dirs);
+
+/// Curve half of the initial load — exposed so callers that want to
+/// interleave logic between curves and profiles (e.g.
+/// `seedShellAnimationFamilies` between them) can drive the two
+/// phases explicitly. Internally calls `loadLibraryBuiltins` then
+/// `loadFromDirectories` with LiveReload::On.
+PLASMAZONES_EXPORT void runInitialCurveLoad(PhosphorAnimation::CurveLoader& curveLoader,
+                                            const AnimationLoaderDirs& dirs);
+
+/// Profile half of the initial load — see `runInitialCurveLoad` for
+/// the rationale on splitting.
+PLASMAZONES_EXPORT void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader,
+                                              const AnimationLoaderDirs& dirs);
+
+/// Register the shell's family-level Profile defaults (the parent
+/// paths every QML profile binding eventually walks up to) so an
+/// unconfigured leaf inherits a sensible curve/duration shape rather
+/// than the library default of 150 ms OutCubic. Reproduces the
+/// per-family character of the prior bundled per-leaf JSONs (popups
+/// feel different from windows feel different from workspace
+/// transitions) without reintroducing the per-leaf shadowing problem
+/// that motivated their deletion: every entry is registered under the
+/// `kShellAnimationFamilySeedsOwnerTag` partition, so a Settings-UI
+/// edit (direct-owner) or a user-authored JSON (loader-tagged owner)
+/// at any leaf or at the family parent itself silently wins.
+///
+/// MUST be called AFTER curves are loaded (so curve names like
+/// `widget-out` resolve via `CurveRegistry::tryCreate`) and BEFORE
+/// the profile loader's initial scan (so a user JSON at a seeded
+/// path can correctly overwrite the seed).
+PLASMAZONES_EXPORT void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                                                   const PhosphorAnimation::CurveRegistry& curves);
 
 /// Owns the per-process CurveRegistry, PhosphorProfileRegistry, and the
 /// loaders that populate them from shipped + user JSONs. The

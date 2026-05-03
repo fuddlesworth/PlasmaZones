@@ -266,6 +266,7 @@ void Daemon::setupAnimationProfiles()
     // in future multi-publisher configurations.
     PhosphorProfileRegistry& registry = m_profileRegistry;
     registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
+    registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
     for (const QString* path : kSettingsDrivenProfilePaths) {
         registry.unregisterProfile(*path);
     }
@@ -367,10 +368,15 @@ void Daemon::setupAnimationProfiles()
     // Cleared in `stop()` before the manager destructs.
     QtQuickClockManager::setDefaultManager(m_clockManager.get());
 
-    // Initial scans — curves-before-profiles ordering and library-builtins-
-    // before-disk-dirs are encoded in the helper so secondary composition
-    // roots get the same shape.
-    runInitialAnimationLoad(*m_curveLoader, *m_profileLoader, loaderDirs);
+    // Three-phase initial load — curves first so the family-seed step
+    // can resolve named curves like `widget-out`; family seeds next so
+    // the profile loader's reloadFromOwner correctly overwrites a seed
+    // when the user authored a JSON at the same path; profiles last.
+    // The split mirrors AnimationBootstrap so secondary composition
+    // roots get the same seeding shape.
+    runInitialCurveLoad(*m_curveLoader, loaderDirs);
+    seedShellAnimationFamilies(m_profileRegistry, m_curveRegistry);
+    runInitialProfileLoad(*m_profileLoader, loaderDirs);
 
     // Final explicit publish covers the case where neither the Settings
     // nor the ProfileLoader emitted during the loads above (e.g. fresh
