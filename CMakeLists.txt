@@ -404,6 +404,32 @@ install(DIRECTORY data/curves/
     FILES_MATCHING PATTERN "*.json"
 )
 
+# Defensive cleanup: an upgrade from a build that shipped per-leaf JSONs
+# (every commit before the family-seed migration) leaves stale files in
+# the install dir that `cmake --install` does NOT remove on its own —
+# install only adds/updates, never deletes orphans. Those stale leaves
+# silently shadow the user's parent-node Settings edits via the
+# deeper-leaf-wins overlay walk in PhosphorProfileRegistry::resolveWithInheritance,
+# making "All Popups → 2000 ms" appear to do nothing. Wipe the install
+# dir BEFORE the install(DIRECTORY) below copies new content so the
+# post-install state always matches the source tree.
+#
+# SCRIPT runs at install time (`cmake --install`), not configure time,
+# and runs in the install prefix the user actually invoked install with
+# (DESTDIR-aware via $ENV{DESTDIR}). The wipe is bounded to our own
+# `plasmazones/profiles` subdirectory — never to a directory we don't
+# own — so an accidental wide install prefix can't cascade.
+install(CODE "
+    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_DATADIR}/plasmazones/profiles\")
+    if(EXISTS \"\${_pz_profiles_install_dir}\")
+        file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
+        if(_pz_stale_profile_jsons)
+            message(STATUS \"Removing stale animation profile JSONs from \${_pz_profiles_install_dir}\")
+            file(REMOVE \${_pz_stale_profile_jsons})
+        endif()
+    endif()
+")
+
 # Install path for shell-opinionated animation profile JSONs. The
 # shipped tree carries zero per-leaf JSONs by design — animation
 # timings/curves are driven entirely from the Settings UI via
