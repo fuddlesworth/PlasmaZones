@@ -16,15 +16,16 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrac
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                         WindowRegistry* windowRegistry, QObject* parent)
 {
+    Q_UNUSED(parent)
     // --- AutotileEngine ---
     auto autotile = std::make_unique<PhosphorTileEngine::AutotileEngine>(layoutManager, windowTracker, screenManager,
-                                                                         algorithmRegistry, parent);
+                                                                         algorithmRegistry, nullptr);
     autotile->setWindowRegistry(windowRegistry);
     autotile->setEngineSettings(settings);
 
     // --- SnapEngine ---
     auto snap =
-        std::make_unique<PhosphorSnapEngine::SnapEngine>(layoutManager, windowTracker, zoneDetector, vdm, parent);
+        std::make_unique<PhosphorSnapEngine::SnapEngine>(layoutManager, windowTracker, zoneDetector, vdm, nullptr);
     snap->setEngineSettings(settings);
 
     // Cross-wire: SnapEngine needs a reference to AutotileEngine for

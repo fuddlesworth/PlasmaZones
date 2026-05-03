@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariant>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -55,9 +56,20 @@ public:
 
     ~Store() override;
 
-    /// Read a declared key. If the value is absent or unparseable, returns
-    /// the schema default. Undeclared keys also return the schema default
-    /// (which is @c QVariant() — effectively @c T{}).
+    /// Read a declared key.
+    ///
+    /// - If the key is ABSENT, returns the schema default.
+    /// - If the key is PRESENT but unparseable as @c T:
+    ///     - For scalar types (@c QString, @c int, @c bool, @c double,
+    ///       @c QColor) returns the schema default.
+    ///     - For @c QVariantMap, returns an EMPTY map (not the schema
+    ///       default). This intentional asymmetry lets the Settings
+    ///       layer distinguish "user has never written this blob"
+    ///       (returns the schema default — populated map) from
+    ///       "blob is corrupt" (returns empty — caller substitutes
+    ///       library/project defaults instead of stamping the schema
+    ///       default back over corrupt user data).
+    /// - Undeclared keys always return @c QVariant() — effectively @c T{}.
     ///
     /// The primary template is intentionally a static_assert trap:
     /// @c Store::read<T> is only fully specialized for the types listed
@@ -68,8 +80,8 @@ public:
     T read(const QString& group, const QString& key) const
     {
         static_assert(sizeof(T) == 0,
-                      "PhosphorConfig::Store::read<T> is only implemented for QString, int, bool, double, QColor — "
-                      "extend store.cpp with a new specialization to add another type.");
+                      "PhosphorConfig::Store::read<T> is only implemented for QString, int, bool, double, "
+                      "QColor, QVariantMap — extend store.cpp with a new specialization to add another type.");
         return T();
     }
 
@@ -114,7 +126,13 @@ public:
     /// never subtractive. For a full "restore defaults from snapshot"
     /// workflow, call @c resetAll() before @c importFromJson so absent
     /// keys land at their schema defaults.
-    void importFromJson(const QJsonObject& snapshot);
+    ///
+    /// @return @c true on a successful import; @c false when the snapshot
+    /// is rejected (version mismatch, malformed version key). On a @c false
+    /// return no keys are written. Callers should propagate the result so
+    /// settings-panel UIs can distinguish "import succeeded" from "import
+    /// refused" instead of relying on log scraping.
+    bool importFromJson(const QJsonObject& snapshot);
 
     /// Flush the underlying backend. Returns the backend's sync() result —
     /// @c true on success (or nothing to flush), @c false on an I/O error.
@@ -153,5 +171,7 @@ template<>
 PHOSPHORCONFIG_EXPORT double Store::read<double>(const QString&, const QString&) const;
 template<>
 PHOSPHORCONFIG_EXPORT QColor Store::read<QColor>(const QString&, const QString&) const;
+template<>
+PHOSPHORCONFIG_EXPORT QVariantMap Store::read<QVariantMap>(const QString&, const QString&) const;
 
 } // namespace PhosphorConfig

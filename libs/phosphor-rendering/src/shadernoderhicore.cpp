@@ -12,6 +12,7 @@
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QStandardPaths>
+#include <QtMath>
 #include <cstring>
 
 #include <rhi/qshaderbaker.h>
@@ -90,6 +91,11 @@ QString ShaderNodeRhi::loadAndExpandShader(const QString& path, QString* outErro
 
 QRhi* ShaderNodeRhi::safeRhi() const
 {
+    // Hold m_itemMutex across the dereference so a concurrent invalidateItem()
+    // can't slip in between the m_item->window() call and m_item being
+    // destroyed. Without the lock, a TOCTOU window between the m_itemValid
+    // check and the deref crashes inside QQuickItem::window().
+    std::lock_guard<std::mutex> guard(m_itemMutex);
     return (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi()
                                                                                        : nullptr;
 }
@@ -124,7 +130,17 @@ ShaderNodeRhi::~ShaderNodeRhi()
 
 void ShaderNodeRhi::invalidateItem()
 {
+    // Acquire m_itemMutex first — this blocks until any in-flight
+    // prepare()/render()/rect()/safeRhi() call on the render thread releases
+    // it. Only THEN do we set the flag and null the pointer. After
+    // invalidateItem() returns the GUI-thread caller can safely destroy the
+    // QQuickItem, knowing no dereference can race against the destruction.
+    // We also null m_item itself so any future dereference (against a missed
+    // flag check) is a clean nullptr crash rather than a dangling-pointer
+    // UB read.
+    std::lock_guard<std::mutex> guard(m_itemMutex);
     m_itemValid.store(false, std::memory_order_release);
+    m_item = nullptr;
 }
 
 QSGRenderNode::StateFlags ShaderNodeRhi::changedStates() const
@@ -140,10 +156,18 @@ QSGRenderNode::RenderingFlags ShaderNodeRhi::flags() const
 
 QRectF ShaderNodeRhi::rect() const
 {
-    if (m_itemValid.load(std::memory_order_acquire) && m_item) {
-        return QRectF(0, 0, m_item->width(), m_item->height());
+    // Lock-free fast path: serve cached geometry written by prepare() under
+    // m_itemMutex. The cull pass calls rect() on every node every frame; if
+    // we locked here we'd contend with prepare()/render() (which do real
+    // work) for the same mutex. The atomics drift by at most one frame, which
+    // the cull pass tolerates — and once the item is invalidated both fall
+    // back to 0 because invalidateItem() callers stop submitting frames.
+    if (!m_itemValid.load(std::memory_order_acquire)) {
+        return QRectF();
     }
-    return QRectF();
+    const float w = m_cachedWidth.load(std::memory_order_acquire);
+    const float h = m_cachedHeight.load(std::memory_order_acquire);
+    return QRectF(0, 0, w, h);
 }
 
 // ============================================================================
@@ -152,12 +176,34 @@ QRectF ShaderNodeRhi::rect() const
 
 void ShaderNodeRhi::prepare()
 {
-    if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
-        qCDebug(lcShaderNode) << "prepare(): bail — itemValid:" << m_itemValid.load() << "item:" << (m_item != nullptr)
-                              << "window:" << (m_item && m_item->window());
-        return;
+    // Snapshot every m_item-derived value we need under the lock, then drop
+    // the lock for the long resource-creation/upload body below. Holding the
+    // lock for the entire prepare() would needlessly block GUI-thread item
+    // destruction; holding it only across the deref window is enough — once
+    // we have local copies of the window/size/dpr, the item can disappear
+    // safely (we never touch m_item again in this call).
+    QRhi* rhi = nullptr;
+    qreal itemWidth = 0.0;
+    qreal itemHeight = 0.0;
+    qreal itemDpr = -1.0;
+    {
+        std::lock_guard<std::mutex> guard(m_itemMutex);
+        if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
+            qCDebug(lcShaderNode) << "prepare(): bail — itemValid:" << m_itemValid.load()
+                                  << "item:" << (m_item != nullptr) << "window:" << (m_item && m_item->window());
+            return;
+        }
+        QQuickWindow* win = m_item->window();
+        rhi = win->rhi();
+        itemWidth = m_item->width();
+        itemHeight = m_item->height();
+        itemDpr = win->devicePixelRatio();
     }
-    QRhi* rhi = m_item->window()->rhi();
+    // Publish the latest geometry to the lock-free rect() reader. Writing
+    // outside the lock is safe — these atomics are independent of the
+    // m_item pointer and rect() never touches m_item.
+    m_cachedWidth.store(static_cast<float>(itemWidth), std::memory_order_release);
+    m_cachedHeight.store(static_cast<float>(itemHeight), std::memory_order_release);
     if (!rhi) {
         qCDebug(lcShaderNode) << "prepare(): bail — rhi is null";
         return;
@@ -181,8 +227,7 @@ void ShaderNodeRhi::prepare()
         qCInfo(lcShaderNode) << "ShaderNodeRhi INIT — backend:" << rhi->backendName()
                              << "driver:" << rhi->driverInfo().deviceName
                              << "Y-up framebuffer:" << rhi->isYUpInFramebuffer() << "RT pixelSize:" << rt->pixelSize()
-                             << "item size:" << m_item->width() << "x" << m_item->height()
-                             << "DPR:" << (m_item->window() ? m_item->window()->devicePixelRatio() : -1)
+                             << "item size:" << itemWidth << "x" << itemHeight << "DPR:" << itemDpr
                              << "iResolution:" << m_width << "x" << m_height << "UBO size:" << uboSize;
         // Create VBO (fullscreen quad)
         m_vbo.reset(
@@ -272,6 +317,13 @@ void ShaderNodeRhi::prepare()
         m_shaderError.clear();
         if (m_vertexShaderSource.isEmpty() || m_fragmentShaderSource.isEmpty()) {
             m_shaderError = QStringLiteral("Vertex or fragment shader source is empty");
+            // Match the warning level used by the compile-failure paths below
+            // (lines further down). Without this, a fragment-only consumer
+            // that lands here loops at "render(): bail — shaderReady: false"
+            // forever with no diagnostic indicating which stage is missing.
+            qCWarning(lcShaderNode) << "Shader bake aborted:" << m_shaderError
+                                    << "vertSrcEmpty=" << m_vertexShaderSource.isEmpty()
+                                    << "fragSrcEmpty=" << m_fragmentShaderSource.isEmpty();
             return;
         }
 
@@ -286,6 +338,10 @@ void ShaderNodeRhi::prepare()
                 m_shaderReady = true;
                 m_pipeline.reset();
                 m_srb.reset();
+                // Reset the feedback-pair SRB too: leaving it pointing at the
+                // previous pipeline format risks a stale binding when feedback
+                // toggles concurrently with a shader swap.
+                m_srbB.reset();
             }
         }
 
@@ -300,6 +356,11 @@ void ShaderNodeRhi::prepare()
                 m_shaderError = QStringLiteral("Vertex shader: ")
                     + (vertResult.error.isEmpty() ? QStringLiteral("compilation failed (no details)")
                                                   : vertResult.error);
+                // Surface compile errors at warning level — without this,
+                // the only sign of a broken shader is the per-frame
+                // "render(): bail — shaderReady: false" debug message,
+                // which buries the actual GLSL diagnostic.
+                qCWarning(lcShaderNode) << "Shader compile failed for" << m_vertexPath << ":" << m_shaderError;
                 return;
             }
             auto fragResult = ShaderCompiler::compile(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
@@ -308,11 +369,13 @@ void ShaderNodeRhi::prepare()
                 m_shaderError = QStringLiteral("Fragment shader: ")
                     + (fragResult.error.isEmpty() ? QStringLiteral("compilation failed (no details)")
                                                   : fragResult.error);
+                qCWarning(lcShaderNode) << "Shader compile failed for" << m_fragmentPath << ":" << m_shaderError;
                 return;
             }
             m_shaderReady = true;
             m_pipeline.reset();
             m_srb.reset();
+            m_srbB.reset();
             if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
                 QMutexLocker lock(&filenameShaderCacheMutex());
                 auto& cache = filenameShaderCache();
@@ -474,10 +537,11 @@ void ShaderNodeRhi::prepare()
 void ShaderNodeRhi::render(const RenderState* state)
 {
     Q_UNUSED(state)
-    if (!m_itemValid.load(std::memory_order_acquire)) {
-        qCDebug(lcShaderNode) << "render(): bail — item invalid";
-        return;
-    }
+    // Single authoritative gating point lives inside the locked viewport
+    // block below — see the m_itemMutex guard around the m_item dereference.
+    // The previous unlocked early-return here was redundant and gave a
+    // false sense of safety: a stale `true` could still slip through to the
+    // locked block, which (correctly) re-checks. One obvious gate, no two.
     if (!m_shaderReady || !m_pipeline || !m_srb) {
         qCDebug(lcShaderNode) << "render(): bail — shaderReady:" << m_shaderReady
                               << "pipeline:" << (m_pipeline != nullptr) << "srb:" << (m_srb != nullptr);
@@ -494,22 +558,86 @@ void ShaderNodeRhi::render(const RenderState* state)
     int vpY = 0;
     int vpW = outputSize.width();
     int vpH = outputSize.height();
-    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0
-        && m_item->height() > 0) {
-        QQuickWindow* win = m_item->window();
-        const qreal dpr = win->devicePixelRatio();
-        const int itemPxW = qRound(m_item->width() * dpr);
-        const int itemPxH = qRound(m_item->height() * dpr);
-        const bool isLayerFbo = qAbs(outputSize.width() - itemPxW) <= 1 && qAbs(outputSize.height() - itemPxH) <= 1;
-        if (!isLayerFbo) {
-            const QPointF topLeft = m_item->mapToItem(win->contentItem(), QPointF(0, 0));
-            vpX = qRound(topLeft.x() * dpr);
-            vpY = qRound(topLeft.y() * dpr);
-            vpX = qBound(0, vpX, outputSize.width() - 1);
-            vpY = qBound(0, vpY, outputSize.height() - 1);
+    bool offScreen = false;
+    // Compute viewport/scissor from item geometry under the lock — every
+    // m_item dereference (width, height, mapToItem, window) needs to happen
+    // atomically with respect to invalidateItem(). After this block we use
+    // only the local viewport ints, which are immune to item destruction.
+    //
+    // CRITICAL: an invalidated or zero-sized item must skip the draw
+    // entirely. The previous logic fell through to the default
+    // outputSize-sized viewport and issued a full-framebuffer draw with
+    // the last-bound shader — visible as a stray full-screen paint
+    // covering the window after the QML item was destroyed but before
+    // the next sync removes the QSGRenderNode. Force offScreen on any
+    // bail condition so the early-return below skips the draw.
+    {
+        std::lock_guard<std::mutex> guard(m_itemMutex);
+        if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window() || m_item->width() <= 0
+            || m_item->height() <= 0) {
+            offScreen = true;
+        } else {
+            QQuickWindow* win = m_item->window();
+            const qreal dpr = win->devicePixelRatio();
+            const int itemPxW = qRound(m_item->width() * dpr);
+            const int itemPxH = qRound(m_item->height() * dpr);
+            // Tolerance is `qCeil(dpr) + 1` so 3× DPR + sub-pixel item
+            // sizes don't push qRound noise past the heuristic and
+            // misclassify a layer FBO as a direct-to-window draw (which
+            // would route through the Y-flip path and mount the viewport
+            // at the wrong framebuffer offset). The original `<= 1` was
+            // tight enough to break at DPR≥2 with item sizes that
+            // happen to round near framebuffer edges.
+            const int isLayerTolerance = qCeil(dpr) + 1;
+            const bool isLayerFbo = qAbs(outputSize.width() - itemPxW) <= isLayerTolerance
+                && qAbs(outputSize.height() - itemPxH) <= isLayerTolerance;
+            if (!isLayerFbo) {
+                // Convert Qt scene-graph coords (top-left origin, Y-down) to
+                // QRhiViewport coords (bottom-left origin, Y-up). Without this
+                // flip, an item at scene-graph y=10 (near top of window)
+                // would mount its viewport at y=10 from the BOTTOM of the
+                // framebuffer — the shader would render at the bottom of the
+                // screen even though its item is anchored at the top. The bug
+                // is invisible for `isLayerFbo` consumers (zone-shader items
+                // with layer.enabled=true render to a per-item FBO whose size
+                // matches the item, so vp{X,Y}=0 is always correct) but
+                // visible for direct-to-window shader items — which is
+                // exactly the SurfaceAnimator's animation-shader case
+                // (attachShaderToAnchor doesn't enable layer on shaderItem).
+                //
+                // Compute the unclamped item rect in framebuffer pixels (Y-up),
+                // then intersect with the framebuffer; if the intersection is
+                // empty the item is fully off-screen and we skip the draw
+                // (qBound-only would have collapsed the rect to a 1px strip
+                // glued to the nearest framebuffer edge).
+                const QPointF topLeft = m_item->mapToItem(win->contentItem(), QPointF(0, 0));
+                const int rawVpX = qRound(topLeft.x() * dpr);
+                const int rawVpY = outputSize.height() - qRound(topLeft.y() * dpr) - itemPxH;
+                const int leftPx = qMax(0, rawVpX);
+                const int bottomPx = qMax(0, rawVpY);
+                const int rightPx = qMin(outputSize.width(), rawVpX + itemPxW);
+                const int topPx = qMin(outputSize.height(), rawVpY + itemPxH);
+                if (leftPx >= rightPx || bottomPx >= topPx) {
+                    offScreen = true;
+                } else {
+                    vpX = leftPx;
+                    vpY = bottomPx;
+                    vpW = rightPx - leftPx;
+                    vpH = topPx - bottomPx;
+                }
+            } else {
+                vpW = itemPxW;
+                vpH = itemPxH;
+            }
         }
-        vpW = qBound(1, itemPxW, outputSize.width() - vpX);
-        vpH = qBound(1, itemPxH, outputSize.height() - vpY);
+    }
+    if (offScreen) {
+        // Item is fully outside the framebuffer — issuing a draw with a
+        // 1×1 sliver clamped to the nearest edge would still cost a draw
+        // call AND paint a stray pixel (Vulkan accepts but waste and
+        // potential visual glitch). Skip rendering entirely; the next
+        // sync that brings the item back on-screen will re-issue.
+        return;
     }
     cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
     cb->setScissor(QRhiScissor(vpX, vpY, vpW, vpH));
@@ -541,6 +669,12 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         result.errorMessage = QStringLiteral("Vertex or fragment path is empty");
         return result;
     }
+    // Capture mtimes BEFORE the reads so the cache key reflects the file
+    // version we actually loaded (not whatever the file is at after the
+    // open). Reading mtime after loadAndExpand opens a TOCTOU window where
+    // a concurrent edit lands new mtime against old content in the cache.
+    const qint64 vertMtime = QFileInfo(vertexPath).lastModified().toMSecsSinceEpoch();
+    const qint64 fragMtime = QFileInfo(fragmentPath).lastModified().toMSecsSinceEpoch();
     QString err;
     const QString vertSource = ShaderCompiler::loadAndExpand(vertexPath, includePaths, &err);
     if (vertSource.isEmpty()) {
@@ -552,8 +686,6 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load fragment shader") : err;
         return result;
     }
-    const qint64 vertMtime = QFileInfo(vertexPath).lastModified().toMSecsSinceEpoch();
-    const qint64 fragMtime = QFileInfo(fragmentPath).lastModified().toMSecsSinceEpoch();
 
     auto vertResult = ShaderCompiler::compile(vertSource.toUtf8(), QShader::VertexStage);
     if (!vertResult.shader.isValid()) {

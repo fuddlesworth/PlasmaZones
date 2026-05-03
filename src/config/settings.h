@@ -7,7 +7,7 @@
 #include "../core/constants.h"
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -254,6 +254,12 @@ public:
                    animationSequenceModeChanged)
     Q_PROPERTY(int animationStaggerInterval READ animationStaggerInterval WRITE setAnimationStaggerInterval NOTIFY
                    animationStaggerIntervalChanged)
+    // JSON string facade so the shader tree participates in the standard
+    // Q_PROPERTY → SettingsController meta-object loop → setNeedsSave
+    // wiring used by every other settings page (avoids per-feature
+    // dirty-tracking / notifyReload plumbing).
+    Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
+                   shaderProfileTreeChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -751,6 +757,13 @@ public:
 
     PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
+
+    /// String facade for the shaderProfileTreeJson Q_PROPERTY. Routes
+    /// through the existing tree accessors so persistence is identical;
+    /// the Q_PROPERTY entry is purely so the meta-object dirty-tracking
+    /// loop in SettingsController catches it.
+    QString shaderProfileTreeJson() const;
+    void setShaderProfileTreeJson(const QString& json);
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

@@ -255,14 +255,10 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         // (keyed by appId for session restore), so a stale entry from a
         // prior session would otherwise block the fresh capture and leave
         // float-restore teleporting the window to ancient coordinates.
-        // Re-resolve screen ID (EDID-based) for daemon tracking D-Bus calls;
-        // the screenId parameter may already be correct from callers that use
-        // getWindowScreenId(), but re-resolve to be safe.
-        QString resolvedScreenId = m_effect->getWindowScreenId(m_effect->findWindowById(windowId));
         PhosphorProtocol::ClientHelpers::fireAndForget(
             m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
             {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()), static_cast<int>(frame.width()),
-             static_cast<int>(frame.height()), resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, true},
+             static_cast<int>(frame.height()), screenId, true},
             QStringLiteral("storePreTileGeometry"));
     }
     return true;

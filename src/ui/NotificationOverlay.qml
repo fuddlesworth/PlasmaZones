@@ -94,16 +94,25 @@ Window {
     property string sourceZoneId: ""
     property int windowCount: 1
     property color errorColor: Kirigami.Theme.negativeTextColor
+    // Per-side padding (fraction of container size) reserved by the daemon
+    // for shader transition silhouettes that extend outside the inner card
+    // (morph, etc.). Daemon writes this property before reading
+    // contentDesiredWidth/Height so the surface is sized large enough; the
+    // value is forwarded into the loaded content type so its inflated
+    // contentDesired* drives this re-export.
+    property real shaderBoundsPadding: 0
     // Re-export the loaded content's contentDesiredWidth/Height — the C++
     // OSD show paths read these via window->property("contentDesiredWidth")
     // to size the layer surface (and to compute matching layer-shell margins).
     // Fallback values cover the warm-up window where mode="" → no content
     // loaded; the surface is invisible at that point so the exact value
     // doesn't matter, but they MUST match osd.cpp's readOsdContentSize
-    // fallbacks so a missed property read doesn't size the surface to one
-    // value while QML measures another.
-    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : 240
-    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : 70
+    // fallbacks (kFallbackWidth / kFallbackHeight) so a missed property
+    // read doesn't size the surface to one value while QML measures another.
+    readonly property int kFallbackContentWidth: Kirigami.Units.gridUnit * 15
+    readonly property int kFallbackContentHeight: Kirigami.Units.gridUnit * 4
+    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : kFallbackContentWidth
+    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : kFallbackContentHeight
 
     /// Auto-dismiss request forwarded from the loaded content. C++ side
     /// connects this to Surface::hide() in OverlayService::createWarmedOsdSurface
@@ -142,8 +151,8 @@ Window {
     // ambiguous "binding sometimes drives size, sometimes doesn't" model.
     // Keep these as plain literal initializers; surface is visible=false
     // during warm-up so the value is cosmetic.
-    width: 240
-    height: 70
+    width: Kirigami.Units.gridUnit * 15
+    height: Kirigami.Units.gridUnit * 4
     // Start hidden; first Surface::show() flips visible=true. Subsequent
     // hides keep the layer surface mapped (keepMappedOnHide=true) so the
     // warmed Vulkan swapchain survives across show cycles.
@@ -161,6 +170,16 @@ Window {
     Loader {
         id: loader
 
+        // The Loader itself is anchors.fill: parent (the fullscreen
+        // wayland surface), so it is NOT a viable shaderAnchor — a
+        // shader scoped to the Loader would render across the entire
+        // screen rather than just the visible OSD card. The actual
+        // anchor opt-in lives on the inner `container` Rectangle inside
+        // each loaded content (LayoutOsdContent / NavigationOsdContent),
+        // tagged there via `property bool shaderAnchor: true`. The
+        // animator's recursive lookup walks the visual tree from the
+        // surface's contentItem and finds whichever inner card is
+        // currently loaded.
         anchors.fill: parent
         sourceComponent: {
             switch (root.mode) {
@@ -203,6 +222,7 @@ Window {
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
+            shaderBoundsPadding: root.shaderBoundsPadding
             // LayoutOsd-specific
             layoutId: root.layoutId
             layoutName: root.layoutName
@@ -237,6 +257,7 @@ Window {
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
+            shaderBoundsPadding: root.shaderBoundsPadding
             // NavigationOsd-specific
             success: root.success
             action: root.action

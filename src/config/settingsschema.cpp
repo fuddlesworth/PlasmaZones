@@ -269,7 +269,12 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
     static PhosphorAnimation::CurveRegistry sSchemaRegistry;
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
-        {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QString},
+        // Profile and ShaderProfileTree persist as nested JSON objects
+        // (QVariantMap) so the on-disk config shows their structure
+        // directly. Existing string-blob configs are migrated transparently
+        // by Store::read's legacy-string fallback on first load.
+        {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap},
+        {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap},
     };
 }
 

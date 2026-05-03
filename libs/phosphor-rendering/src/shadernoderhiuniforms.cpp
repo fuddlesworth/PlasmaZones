@@ -94,7 +94,7 @@ void ShaderNodeRhi::syncBaseUniforms()
         m_baseUniforms.iChannelResolution[i][2] = 0.0f;
         m_baseUniforms.iChannelResolution[i][3] = 0.0f;
     }
-    m_baseUniforms.iAudioSpectrumSize = m_audioSpectrum.size();
+    m_baseUniforms.iAudioSpectrumSize = static_cast<int>(m_audioSpectrum.size());
 
     // iFlipBufferY set in uploadDirtyTextures() where rhi is available
     m_baseUniforms._pad_after_audioSpectrum[0] = 0;
@@ -233,20 +233,23 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_uniformsDirty = false;
         }
     } else {
+        QRhiResourceUpdateBatch* batch = nullptr;
         // Check extension dirty independently of base uniforms
         if (extensionHasData && m_uniformExtension->isDirty()) {
-            QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-            if (batch) {
+            batch = rhi->nextResourceUpdateBatch();
+            if (batch)
                 uploadExtensionToUbo(batch);
-                cb->resourceUpdate(batch);
+        }
+        if (!m_vboUploaded) {
+            if (!batch)
+                batch = rhi->nextResourceUpdateBatch();
+            if (batch) {
+                batch->uploadStaticBuffer(m_vbo.get(), RhiConstants::QuadVertices);
+                m_vboUploaded = true;
             }
         }
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-        if (batch && !m_vboUploaded) {
-            batch->uploadStaticBuffer(m_vbo.get(), RhiConstants::QuadVertices);
-            m_vboUploaded = true;
+        if (batch)
             cb->resourceUpdate(batch);
-        }
     }
 
     if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {
@@ -257,6 +260,9 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_dummyChannelTextureNeedsUpload = false;
         }
     }
+
+    if (m_dummyChannelTextureNeedsUpload)
+        return;
 
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
@@ -328,6 +334,82 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
+    // Source-texture-provider plumbing for slot 0 / binding 7. When a
+    // provider is set we own a dedicated sampler (separate from the
+    // user-texture-0 sampler so callers that mix the two paths don't
+    // step on each other) and detect QRhiTexture identity changes —
+    // the underlying FBO can be re-allocated on resize / device-loss
+    // and the SRB must be rebuilt against the fresh pointer or
+    // sampling crashes inside the RHI.
+    //
+    // The resolved QRhiTexture* is cached into m_lastSourceRhiTexture and
+    // becomes the SINGLE source of truth: appendUserTextureBindings() reads
+    // m_lastSourceRhiTexture directly rather than re-querying the provider.
+    // That closes the second TOCTOU window where the cached identity check
+    // here picked one pointer but the SRB build below picked another after
+    // an in-between FBO recreation.
+    if (m_sourceTextureProvider) {
+        if (!m_sourceSampler && !m_sourceSamplerFailed) {
+            m_sourceSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            if (!m_sourceSampler->create()) {
+                // Don't churn: log once, latch the failure, and stop
+                // re-attempting per-frame. releaseRhiResources() clears
+                // the latch so a device reset can retry.
+                qCWarning(lcShaderNode) << "Failed to create source-provider sampler — slot 0 will use the "
+                                           "transparent fallback until the next device reset";
+                m_sourceSampler.reset();
+                m_sourceSamplerFailed = true;
+            } else {
+                resetAllBindingsAndPipelines();
+            }
+        }
+        QRhiTexture* resolved = nullptr;
+        if (QSGTexture* sgTex = m_sourceTextureProvider->texture()) {
+            resolved = sgTex->rhiTexture();
+            // Cross-window/cross-context guard: the provider may belong to a
+            // QQuickItem in a different render context. Binding a QRhiTexture
+            // from a foreign QRhi will crash inside the backend at draw time.
+            if (resolved && resolved->rhi() != rhi) {
+                if (!m_warnedForeignRhi) {
+                    m_warnedForeignRhi = true;
+                    qCWarning(lcShaderNode)
+                        << "Source provider's QRhiTexture belongs to a foreign QRhi — slot 0 will use the "
+                           "transparent fallback. (Logged once per node.)";
+                }
+                resolved = nullptr;
+            }
+        }
+        if (resolved != m_lastSourceRhiTexture) {
+            m_lastSourceRhiTexture = resolved;
+            resetAllBindingsAndPipelines();
+        }
+    }
+
+    // Lazy 1×1 transparent fallback texture for slot 0 when a provider is
+    // set but its underlying QRhiTexture is not yet ready (or rejected by
+    // the foreign-rhi guard above). The contract for setSourceTextureProvider
+    // is that it SUPERSEDES whatever QImage was uploaded at slot 0 — falling
+    // back to m_userTextures[0] would unmask a stale snapshot. Instead, bind
+    // a dedicated all-zero texture so the shader samples transparent and the
+    // QImage path stays inert.
+    if (m_sourceTextureProvider && !m_lastSourceRhiTexture && !m_transparentFallbackTexture) {
+        m_transparentFallbackTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        if (m_transparentFallbackTexture->create()) {
+            m_transparentFallbackTextureNeedsUpload = true;
+        } else {
+            m_transparentFallbackTexture.reset();
+        }
+    }
+    if (m_transparentFallbackTextureNeedsUpload && m_transparentFallbackTexture) {
+        QRhiResourceUpdateBatch* fbatch = rhi->nextResourceUpdateBatch();
+        if (fbatch) {
+            fbatch->uploadTexture(m_transparentFallbackTexture.get(), m_transparentFallbackImage);
+            cb->resourceUpdate(fbatch);
+            m_transparentFallbackTextureNeedsUpload = false;
+        }
+    }
+
     // Desktop wallpaper texture upload (binding 11)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
         m_wallpaperDirty = false;
@@ -396,6 +478,18 @@ void ShaderNodeRhi::releaseRhiResources()
         m_userTextureSamplers[i].reset();
         m_userTextureDirty[i] = true;
     }
+    // Source-texture sampler is RHI-owned and must be reset on
+    // device-loss. The QPointer<QSGTextureProvider> survives — its
+    // QRhiTexture pointer will simply differ on the next prepare()
+    // (because Qt's layer system rebuilt the FBO too) and the SRB
+    // rebuild detection in uploadDirtyTextures will pick it up.
+    m_sourceSampler.reset();
+    m_lastSourceRhiTexture = nullptr;
+    m_sourceSamplerFailed = false; // re-attempt sampler creation on next prepare()
+    m_warnedForeignRhi = false; // re-warn (once) after device reset
+    m_transparentFallbackTexture.reset();
+    m_transparentFallbackTextureNeedsUpload = false;
+
     m_wallpaperTexture.reset();
     m_wallpaperSampler.reset();
     m_wallpaperDirty = true;
@@ -449,18 +543,22 @@ void ShaderNodeRhi::bakeBufferShaders()
         bool allOk = true;
         for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses; ++i) {
             const QString& path = m_bufferPaths.at(i);
-            if (!QFileInfo::exists(path)) {
-                allOk = false;
-                break;
-            }
+            // Capture mtime BEFORE the read so the cache key reflects the
+            // version of the file we actually loaded. Reading mtime after
+            // loadAndExpand opens a TOCTOU window where a concurrent edit
+            // would associate new mtime with old content in the bake cache.
+            const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
             QString err;
             QString src = loadAndExpandShader(path, &err);
             if (src.isEmpty()) {
+                // loadAndExpand already returns empty on missing/unreadable;
+                // no separate exists() check needed (and the prior check was
+                // itself a TOCTOU race).
                 allOk = false;
                 break;
             }
             m_multiBufferFragmentShaderSources[i] = src;
-            m_multiBufferMtimes[i] = QFileInfo(path).lastModified().toMSecsSinceEpoch();
+            m_multiBufferMtimes[i] = mtime;
             auto result = ShaderCompiler::compile(src.toUtf8(), QShader::FragmentStage);
             m_multiBufferFragmentShaders[i] = result.shader;
             if (!m_multiBufferFragmentShaders[i].isValid()) {
@@ -492,12 +590,27 @@ void ShaderNodeRhi::bakeBufferShaders()
         m_bufferShaderDirty = false;
         m_bufferShaderReady = false;
         if (m_bufferFragmentShaderSource.isEmpty()) {
-            if (QFileInfo::exists(m_bufferPath)) {
-                QString err;
-                m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
-                if (!m_bufferFragmentShaderSource.isEmpty()) {
-                    m_bufferMtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
+            // Capture mtime BEFORE the read (TOCTOU-safe cache key) and skip
+            // the redundant exists() check — loadAndExpandShader returns an
+            // empty string on missing/unreadable, which is the gate we need.
+            const qint64 mtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
+            QString err;
+            m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
+            if (!m_bufferFragmentShaderSource.isEmpty()) {
+                m_bufferMtime = mtime;
+            } else {
+                // The eager load in setBufferShaderPaths used to surface
+                // load errors at setter time; deferring the load to here
+                // means a silent empty-source loop unless we log + retry.
+                qCWarning(lcShaderNode) << "Buffer shader load failed:" << m_bufferPath
+                                        << "error=" << (err.isEmpty() ? QStringLiteral("(no detail)") : err);
+                if (++m_bufferShaderRetries < 3) {
+                    m_bufferShaderDirty = true;
+                } else {
+                    qCWarning(lcShaderNode)
+                        << "Buffer shader load failed after 3 attempts; giving up until shader path changes";
                 }
+                return;
             }
         }
         if (!m_bufferFragmentShaderSource.isEmpty()) {

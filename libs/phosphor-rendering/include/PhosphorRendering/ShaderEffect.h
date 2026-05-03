@@ -61,6 +61,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
+    Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
 
     // ── Multipass ────────────────────────────────────────────────────
     Q_PROPERTY(
@@ -188,6 +189,34 @@ public:
         return m_shaderParams;
     }
     virtual void setShaderParams(const QVariantMap& params);
+
+    /// @brief Live texture-provider source bound to SRB binding 7
+    ///        (`iChannel0`).
+    ///
+    /// When set to a non-null QQuickItem, the shader samples that item's
+    /// rendered visual every frame instead of whatever QImage was uploaded
+    /// via `setUserTexture(0, ...)`. This is what the SurfaceAnimator
+    /// transition shaders (pixelate / dissolve / glitch) use to operate
+    /// on the rendered surface — no async grab, no first-show gap, no
+    /// stale snapshot.
+    ///
+    /// The item is forced to `layer.enabled = true` on the QML side so
+    /// `QQuickItem::textureProvider()` returns the layer's provider; the
+    /// scene graph allocates an FBO and re-renders the item each frame
+    /// the consumer dirties it. The shader effect's parent must NOT be
+    /// the source item (or any of its descendants) — sampling within the
+    /// same layer creates a feedback loop where the shader's own output
+    /// is captured into the next frame's texture. Park the shader effect
+    /// as a sibling of the source item instead.
+    ///
+    /// Setting the property to nullptr unbinds the texture; subsequent
+    /// frames fall back to the user-texture-0 QImage path (or the
+    /// transparent fallback if neither has been set).
+    QQuickItem* sourceItem() const
+    {
+        return m_sourceItem.data();
+    }
+    void setSourceItem(QQuickItem* item);
 
     // ── Multipass ────────────────────────────────────────────────────
 
@@ -451,6 +480,7 @@ Q_SIGNALS:
     void iMouseChanged();
     void shaderSourceChanged();
     void shaderParamsChanged();
+    void sourceItemChanged();
     void bufferShaderPathChanged();
     void bufferShaderPathsChanged();
     void bufferFeedbackChanged();
@@ -526,6 +556,12 @@ private:
     QUrl m_shaderSource;
     QVariantMap m_shaderParams;
     QStringList m_shaderIncludePaths;
+
+    // QPointer because the source item is owned by the QML scene, not
+    // the ShaderEffect — a torn-down source must auto-null rather than
+    // leave a dangling pointer that the per-frame textureProvider()
+    // lookup would dereference.
+    QPointer<QQuickItem> m_sourceItem;
 
     // ── Multipass ────────────────────────────────────────────────────
     QString m_bufferShaderPath;

@@ -54,6 +54,12 @@ ApplicationWindow {
         "hasChildren": true,
         "hasDividerAfter": true
     }, {
+        "name": "animations",
+        "label": i18n("Animations"),
+        "iconName": "media-playback-start",
+        "hasChildren": true,
+        "hasDividerAfter": true
+    }, {
         "name": "exclusions",
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
@@ -141,6 +147,49 @@ ApplicationWindow {
             "name": "tiling-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
+        }],
+        "animations": [{
+            "name": "animations-general",
+            "label": i18n("General"),
+            "iconName": "configure",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-windows",
+            "label": i18n("Windows"),
+            "iconName": "window-new"
+        }, {
+            "name": "animations-zones",
+            "label": i18n("Zones"),
+            "iconName": "view-grid"
+        }, {
+            "name": "animations-notifications",
+            "label": i18n("Notifications"),
+            "iconName": "dialog-information"
+        }, {
+            "name": "animations-popups",
+            "label": i18n("Popups"),
+            "iconName": "view-presentation"
+        }, {
+            "name": "animations-workspaces",
+            "label": i18n("Workspaces"),
+            "iconName": "virtual-desktops"
+        }, {
+            "name": "animations-widgets",
+            "label": i18n("Widgets"),
+            "iconName": "preferences-desktop-theme",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-presets",
+            "label": i18n("Presets"),
+            "iconName": "bookmarks"
+        }, {
+            "name": "animations-motionsets",
+            "label": i18n("Motion Sets"),
+            "iconName": "color-palette"
+        }, {
+            "name": "animations-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-display"
         }]
     })
     // Page component map -- loaded on demand by Loader
@@ -165,7 +214,17 @@ ApplicationWindow {
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
-        "about": "AboutPage.qml"
+        "about": "AboutPage.qml",
+        "animations-general": "AnimationsGeneralPage.qml",
+        "animations-windows": "AnimationsWindowsPage.qml",
+        "animations-zones": "AnimationsZonesPage.qml",
+        "animations-notifications": "AnimationsNotificationsPage.qml",
+        "animations-popups": "AnimationsPopupsPage.qml",
+        "animations-workspaces": "AnimationsWorkspacesPage.qml",
+        "animations-widgets": "AnimationsWidgetsPage.qml",
+        "animations-presets": "AnimationsPresetsPage.qml",
+        "animations-motionsets": "AnimationsMotionSetsPage.qml",
+        "animations-shaders": "AnimationsShadersPage.qml"
     })
     // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
     readonly property var aspectRatioLabels: ({
@@ -537,6 +596,7 @@ ApplicationWindow {
 
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.smallSpacing
+                    Accessible.name: i18n("Search settings pages")
                     placeholderText: i18n("Search...")
                     visible: !window.sidebarCompact
                     leftPadding: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
@@ -1077,6 +1137,7 @@ ApplicationWindow {
                         flat: true
                         icon.name: "internet-web-browser"
                         visible: settingsController.updateChecker.releaseUrl.length > 0
+                        Accessible.name: i18n("View release notes")
                         onClicked: Qt.openUrlExternally(settingsController.updateChecker.releaseUrl)
                     }
 
@@ -1084,6 +1145,7 @@ ApplicationWindow {
                         icon.name: "dialog-close"
                         display: ToolButton.IconOnly
                         onClicked: settingsController.dismissUpdate()
+                        Accessible.name: i18n("Dismiss update notification")
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
@@ -1129,6 +1191,7 @@ ApplicationWindow {
                         text: i18n("What's New")
                         flat: true
                         icon.name: "go-next"
+                        Accessible.name: i18n("View what's new")
                         onClicked: whatsNewDialog.open()
                     }
 
@@ -1136,6 +1199,7 @@ ApplicationWindow {
                         icon.name: "dialog-close"
                         display: ToolButton.IconOnly
                         onClicked: settingsController.markWhatsNewSeen()
+                        Accessible.name: i18n("Dismiss")
                         ToolTip.text: i18n("Dismiss")
                         ToolTip.visible: hovered
                     }
@@ -1614,6 +1678,7 @@ ApplicationWindow {
                             text: i18n("Discard")
                             icon.name: "edit-undo"
                             flat: true
+                            Accessible.name: i18n("Discard changes")
                             onClicked: resetConfirmDialog.open()
                         }
 
@@ -1621,6 +1686,7 @@ ApplicationWindow {
                             text: i18n("Save")
                             icon.name: "document-save"
                             highlighted: true
+                            Accessible.name: i18n("Save settings")
                             onClicked: {
                                 settingsController.save();
                                 toast.show(i18n("Settings saved"));
@@ -1732,7 +1798,7 @@ ApplicationWindow {
         id: shortcutOverlay
 
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.6)
+        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
         visible: opacity > 0
         opacity: window._showShortcuts ? 1 : 0
         z: 200

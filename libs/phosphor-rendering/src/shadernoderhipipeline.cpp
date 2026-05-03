@@ -514,11 +514,57 @@ bool ShaderNodeRhi::ensurePipeline()
 
 void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
 {
-    for (int t = 0; t < kMaxUserTextures; ++t) {
+    // Slot 0 (binding kUserTextureBaseBinding) override: a
+    // `setSourceTextureProvider`-supplied live texture takes precedence over
+    // any QImage-uploaded user texture at the same slot. We read the
+    // pre-resolved m_lastSourceRhiTexture (snapshot taken under the same
+    // sampler/identity check in uploadDirtyTextures()) rather than querying
+    // the provider again — calling provider->texture()->rhiTexture() here
+    // would re-open the TOCTOU window between the change-detection step in
+    // uploadDirtyTextures and this SRB build, where an FBO recreation could
+    // hand back a different QRhiTexture* than the cache observed.
+    //
+    // When slot 0 is overridden but the resolved texture is null (provider
+    // not yet ready, foreign-RHI guard fired, or sampler create failed) we
+    // bind the dedicated 1×1 transparent fallback rather than fall through
+    // to the QImage path — the documented contract is that
+    // setSourceTextureProvider SUPERSEDES the QImage at slot 0, and a
+    // transient null must not unmask a stale snapshot.
+    if (m_sourceTextureProvider) {
+        QRhiTexture* slot0Tex = nullptr;
+        QRhiSampler* slot0Sam = nullptr;
+        if (m_lastSourceRhiTexture && m_sourceSampler) {
+            slot0Tex = m_lastSourceRhiTexture;
+            slot0Sam = m_sourceSampler.get();
+        } else if (m_transparentFallbackTexture && m_userTextureSamplers[0]) {
+            slot0Tex = m_transparentFallbackTexture.get();
+            slot0Sam = m_userTextureSamplers[0].get();
+        } else if (m_userTextures[0] && m_userTextureSamplers[0]) {
+            // Last resort: provider set but no fallback yet (sampler create
+            // failed and fallback texture create also failed) — keep slot 0
+            // bound so the SRB build doesn't omit binding 7 entirely. This
+            // path should only be hit on a degraded RHI.
+            slot0Tex = m_userTextures[0].get();
+            slot0Sam = m_userTextureSamplers[0].get();
+        }
+        if (slot0Tex && slot0Sam) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage, slot0Tex, slot0Sam));
+        }
+    } else if (m_userTextures[0] && m_userTextureSamplers[0]) {
+        // No override: standard QImage user-texture path.
+        bindings.append(
+            QRhiShaderResourceBinding::sampledTexture(kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage,
+                                                      m_userTextures[0].get(), m_userTextureSamplers[0].get()));
+    }
+
+    // Slots 1-3 always come from the QImage path; the source-provider
+    // override is slot-0-only by design.
+    for (int t = 1; t < kMaxUserTextures; ++t) {
         if (m_userTextures[t] && m_userTextureSamplers[t]) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(7 + t, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_userTextures[t].get(),
-                                                                      m_userTextureSamplers[t].get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                kUserTextureBaseBinding + t, QRhiShaderResourceBinding::FragmentStage, m_userTextures[t].get(),
+                m_userTextureSamplers[t].get()));
         }
     }
 }
@@ -565,10 +611,10 @@ void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindi
 void ShaderNodeRhi::appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const
 {
     for (const auto& [binding, extra] : m_extraBindings) {
-        if (extra.texture && extra.sampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(binding, QRhiShaderResourceBinding::FragmentStage,
-                                                                      extra.texture, extra.sampler));
-        }
+        if (!extra.texture || !extra.sampler)
+            continue;
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(binding, QRhiShaderResourceBinding::FragmentStage,
+                                                                  extra.texture, extra.sampler));
     }
 }
 

@@ -3,7 +3,27 @@
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
+#include <PhosphorAnimation/ProfilePaths.h>
+
+#include <QMetaObject>
+#include <QStringList>
+#include <QThread>
+
 namespace PhosphorAnimation {
+
+namespace {
+
+template<typename Func>
+void emitThreadSafe(QObject* obj, Func&& fn)
+{
+    if (QThread::currentThread() == obj->thread()) {
+        fn();
+    } else {
+        QMetaObject::invokeMethod(obj, std::forward<Func>(fn), Qt::QueuedConnection);
+    }
+}
+
+} // namespace
 
 std::atomic<PhosphorProfileRegistry*> PhosphorProfileRegistry::s_defaultRegistry{nullptr};
 
@@ -21,12 +41,12 @@ void PhosphorProfileRegistry::setDefaultRegistry(PhosphorProfileRegistry* regist
     // load-and-use sequence is a single pointer dereference that needs
     // no happens-before with any other memory. Matches the
     // PhosphorCurve::setDefaultRegistry contract.
-    s_defaultRegistry.store(registry, std::memory_order_relaxed);
+    s_defaultRegistry.store(registry, std::memory_order_release);
 }
 
 PhosphorProfileRegistry* PhosphorProfileRegistry::defaultRegistry()
 {
-    return s_defaultRegistry.load(std::memory_order_relaxed);
+    return s_defaultRegistry.load(std::memory_order_acquire);
 }
 
 std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) const
@@ -37,6 +57,107 @@ std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) con
         return std::nullopt;
     }
     return *it;
+}
+
+Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path) const
+{
+    // Read the low-precedence tag under the lock so a concurrent
+    // setLowPrecedenceOwnerTag can't tear; copy out before delegating
+    // so the inner overload doesn't double-lock.
+    QString tag;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        tag = m_lowPrecedenceOwnerTag;
+    }
+    return resolveWithInheritance(path, tag);
+}
+
+Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path, const QString& lowPrecedenceOwnerTag) const
+{
+    // Build the chain root-first so the overlay walk runs shallow →
+    // deep, with each engaged optional in a deeper entry replacing
+    // the shallower one. Mirrors ProfileTree::resolve and
+    // ShaderProfileTree::resolve so consumers see consistent
+    // inheritance semantics regardless of which container holds the
+    // overrides.
+    QStringList chain;
+    QString cursor = path;
+    while (!cursor.isEmpty()) {
+        chain.prepend(cursor);
+        cursor = ProfilePaths::parentPath(cursor);
+    }
+
+    // Same overlay rule as ProfileTree::overlay — every engaged
+    // optional in src wins; unset (nullopt) fields in src leave dst
+    // alone (the inheritance mechanism). Curve / duration /
+    // minDistance / sequenceMode / staggerInterval / presetName are
+    // independent — a child that only set `duration` still inherits
+    // the parent's `curve`.
+    const auto overlay = [](Profile& dst, const Profile& src) {
+        if (src.curve) {
+            dst.curve = src.curve;
+        }
+        if (src.duration) {
+            dst.duration = src.duration;
+        }
+        if (src.minDistance) {
+            dst.minDistance = src.minDistance;
+        }
+        if (src.sequenceMode) {
+            dst.sequenceMode = src.sequenceMode;
+        }
+        if (src.staggerInterval) {
+            dst.staggerInterval = src.staggerInterval;
+        }
+        if (src.presetName) {
+            dst.presetName = src.presetName;
+        }
+    };
+
+    Profile effective; // default-constructed: every optional nullopt
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        // Pass 1: low-precedence (seed) layer — only entries owned
+        // by the configured tag. Skipped entirely when the tag is
+        // empty, in which case pass 2 below sees every entry and we
+        // degrade to single-pass deeper-wins (the original
+        // semantics).
+        if (!lowPrecedenceOwnerTag.isEmpty()) {
+            for (const QString& step : chain) {
+                const auto it = m_profiles.constFind(step);
+                if (it == m_profiles.constEnd()) {
+                    continue;
+                }
+                if (m_owners.value(step) != lowPrecedenceOwnerTag) {
+                    continue;
+                }
+                overlay(effective, *it);
+            }
+        }
+
+        // Pass 2: everything NOT in the low-precedence layer. These
+        // are Settings publishes (direct/empty owner) and user JSONs
+        // (loader-tagged owner). Always overlays after pass 1, so a
+        // user edit at any depth wins over any seed at any depth.
+        for (const QString& step : chain) {
+            const auto it = m_profiles.constFind(step);
+            if (it == m_profiles.constEnd()) {
+                continue;
+            }
+            if (!lowPrecedenceOwnerTag.isEmpty() && m_owners.value(step) == lowPrecedenceOwnerTag) {
+                continue;
+            }
+            overlay(effective, *it);
+        }
+    }
+    return effective.withDefaults();
+}
+
+void PhosphorProfileRegistry::setLowPrecedenceOwnerTag(const QString& tag)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_lowPrecedenceOwnerTag = tag;
 }
 
 void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile& profile)
@@ -74,10 +195,9 @@ void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile
     if (!changed) {
         return;
     }
-    // Emit outside the lock so slot handlers that re-enter (e.g. a
-    // consumer's onProfileChanged calling resolve for another path)
-    // do not self-deadlock.
-    Q_EMIT profileChanged(path);
+    emitThreadSafe(this, [this, path] {
+        Q_EMIT profileChanged(path);
+    });
 }
 
 void PhosphorProfileRegistry::unregisterProfile(const QString& path)
@@ -89,7 +209,9 @@ void PhosphorProfileRegistry::unregisterProfile(const QString& path)
         m_owners.remove(path);
     }
     if (existed) {
-        Q_EMIT profileChanged(path);
+        emitThreadSafe(this, [this, path] {
+            Q_EMIT profileChanged(path);
+        });
     }
 }
 
@@ -172,17 +294,18 @@ void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHa
     // path changed. Per-path covers every change a bound
     // PhosphorMotionAnimation needs to see.
     for (const QString& path : std::as_const(pathsRemoved)) {
-        Q_EMIT profileChanged(path);
+        emitThreadSafe(this, [this, path] {
+            Q_EMIT profileChanged(path);
+        });
     }
     for (const QString& path : std::as_const(pathsChanged)) {
-        Q_EMIT profileChanged(path);
+        emitThreadSafe(this, [this, path] {
+            Q_EMIT profileChanged(path);
+        });
     }
-    // Batch-boundary signal for consumers that prefer to coalesce UI
-    // updates across a rescan (settings list views rendering tens of
-    // paths). Fires exactly once AFTER the per-path storm, only when
-    // the call produced changes — the early-return above covers the
-    // no-op case.
-    Q_EMIT ownerReloaded(ownerTag);
+    emitThreadSafe(this, [this, ownerTag] {
+        Q_EMIT ownerReloaded(ownerTag);
+    });
 }
 
 void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
@@ -219,12 +342,13 @@ void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
     // is reserved for wholesale ops (`clear`, `reloadAll`) where the
     // registry cannot enumerate which paths changed.
     for (const QString& path : std::as_const(removed)) {
-        Q_EMIT profileChanged(path);
+        emitThreadSafe(this, [this, path] {
+            Q_EMIT profileChanged(path);
+        });
     }
-    // Match reloadFromOwner's batch-boundary shape so a consumer
-    // listening to `ownerReloaded(tag)` also sees the clear-owner
-    // case as a batch boundary.
-    Q_EMIT ownerReloaded(ownerTag);
+    emitThreadSafe(this, [this, ownerTag] {
+        Q_EMIT ownerReloaded(ownerTag);
+    });
 }
 
 void PhosphorProfileRegistry::reloadAll(const QHash<QString, Profile>& profiles)
@@ -241,7 +365,9 @@ void PhosphorProfileRegistry::reloadAll(const QHash<QString, Profile>& profiles)
         m_profiles = profiles;
         m_owners.clear();
     }
-    Q_EMIT profilesReloaded();
+    emitThreadSafe(this, [this] {
+        Q_EMIT profilesReloaded();
+    });
 }
 
 void PhosphorProfileRegistry::clear()
@@ -251,7 +377,9 @@ void PhosphorProfileRegistry::clear()
         m_profiles.clear();
         m_owners.clear();
     }
-    Q_EMIT profilesReloaded();
+    emitThreadSafe(this, [this] {
+        Q_EMIT profilesReloaded();
+    });
 }
 
 QString PhosphorProfileRegistry::ownerOf(const QString& path) const

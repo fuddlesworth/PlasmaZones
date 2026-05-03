@@ -7,135 +7,53 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Easing curve controls for the Animations card.
+ * @brief Easing-curve-specific controls for the Animations card.
  *
  * Contains the easing style/direction combo boxes, amplitude/period/bounce
- * sliders, duration, sequence mode, stagger interval, and minimum distance.
+ * sliders, and duration. Mode-agnostic rows (sequence mode, stagger
+ * interval, minimum distance) live on the parent page so they remain
+ * visible when the user flips the timing-mode combo to Spring.
  *
  * Required properties:
- *   - appSettings: the settings backend object
  *   - constants: root object providing sliderPreferredWidth, sliderValueLabelWidth
  *   - animationsEnabled: whether animations are currently enabled
- *   - easingPreview: the EasingPreview component (for curveType, elasticAmplitude, etc.)
+ *   - easingPreview: the EasingPreview component (for curveType, curveAmplitude, etc.)
+ *
+ * `appSettings` is resolved internally via `settingsController.settings`
+ * rather than passed as a required property — that pattern was breaking
+ * inside `qmlcachegen`'s AOT-compiled bindings when the parent wrote
+ * `appSettings: appSettings`. The right-hand `appSettings` was
+ * occasionally evaluated before context-property propagation settled,
+ * leaving `easingRoot.appSettings` undefined and every subsequent
+ * `animation*` access throwing "Cannot read property 'X' of undefined".
+ * Going through `settingsController.settings` skirts that timing
+ * window — the controller is also a context property but it's a
+ * stable object reference whose `settings` accessor is non-null by
+ * SettingsController contract.
  */
 ColumnLayout {
     id: easingRoot
 
-    required property var appSettings
+    readonly property var appSettings: settingsController.settings
     required property var constants
     required property bool animationsEnabled
     required property var easingPreview
 
     spacing: Kirigami.Units.smallSpacing
 
-    // Curve lookup table: styles x directions -> bezier/named curve strings
+    // Curve lookup table: styles x directions -> bezier/named curve strings.
+    // Pulls authoritative entries from the CurvePresets singleton; this
+    // legacy "Custom" placeholder at index 0 is preserved because the
+    // existing combo's `currentIndex > 0` gating relies on it.
     QtObject {
         id: easingData
 
         readonly property var styles: [{
             "label": i18n("Custom"),
             "key": "custom"
-        }, {
-            "label": i18n("Linear"),
-            "key": "linear"
-        }, {
-            "label": i18n("Gentle (Sine)"),
-            "key": "sine"
-        }, {
-            "label": i18n("Smooth (Quad)"),
-            "key": "quad"
-        }, {
-            "label": i18n("Standard (Cubic)"),
-            "key": "cubic"
-        }, {
-            "label": i18n("Snappy (Quart)"),
-            "key": "quart"
-        }, {
-            "label": i18n("Sharp (Quint)"),
-            "key": "quint"
-        }, {
-            "label": i18n("Aggressive (Expo)"),
-            "key": "expo"
-        }, {
-            "label": i18n("Circular (Circ)"),
-            "key": "circ"
-        }, {
-            "label": i18n("Overshoot (Back)"),
-            "key": "back"
-        }, {
-            "label": i18n("Elastic"),
-            "key": "elastic"
-        }, {
-            "label": i18n("Bounce"),
-            "key": "bounce"
-        }]
-        readonly property var directions: [{
-            "label": i18n("Ease In"),
-            "key": "in"
-        }, {
-            "label": i18n("Ease Out"),
-            "key": "out"
-        }, {
-            "label": i18n("Ease In-Out"),
-            "key": "in-out"
-        }]
-        readonly property var curves: ({
-            "linear": {
-                "in": "0.00,0.00,1.00,1.00",
-                "out": "0.00,0.00,1.00,1.00",
-                "in-out": "0.00,0.00,1.00,1.00"
-            },
-            "sine": {
-                "in": "0.12,0.00,0.39,0.00",
-                "out": "0.61,1.00,0.88,1.00",
-                "in-out": "0.37,0.00,0.63,1.00"
-            },
-            "quad": {
-                "in": "0.11,0.00,0.50,0.00",
-                "out": "0.50,1.00,0.89,1.00",
-                "in-out": "0.45,0.00,0.55,1.00"
-            },
-            "cubic": {
-                "in": "0.32,0.00,0.67,0.00",
-                "out": "0.33,1.00,0.68,1.00",
-                "in-out": "0.65,0.00,0.35,1.00"
-            },
-            "quart": {
-                "in": "0.50,0.00,0.75,0.00",
-                "out": "0.25,1.00,0.50,1.00",
-                "in-out": "0.76,0.00,0.24,1.00"
-            },
-            "quint": {
-                "in": "0.64,0.00,0.78,0.00",
-                "out": "0.23,1.00,0.32,1.00",
-                "in-out": "0.83,0.00,0.17,1.00"
-            },
-            "expo": {
-                "in": "0.70,0.00,0.84,0.00",
-                "out": "0.16,1.00,0.30,1.00",
-                "in-out": "0.87,0.00,0.13,1.00"
-            },
-            "circ": {
-                "in": "0.55,0.00,1.00,0.45",
-                "out": "0.00,0.55,0.45,1.00",
-                "in-out": "0.85,0.00,0.15,1.00"
-            },
-            "back": {
-                "in": "0.36,0.00,0.66,-0.56",
-                "out": "0.18,0.89,0.32,1.28",
-                "in-out": "0.68,-0.55,0.27,1.55"
-            },
-            "elastic": {
-                "in": "elastic-in:1.0,0.30",
-                "out": "elastic-out:1.0,0.30",
-                "in-out": "elastic-in-out:1.0,0.30"
-            },
-            "bounce": {
-                "in": "bounce-in:1.0,3",
-                "out": "bounce-out:1.0,3",
-                "in-out": "bounce-in-out:1.0,3"
-            }
-        })
+        }].concat(CurvePresets.easingStyles)
+        readonly property var directions: CurvePresets.easingDirections
+        readonly property var curves: CurvePresets.easingCurves
 
         function normalizeCurve(curve) {
             if (!curve || curve === "")
@@ -256,6 +174,7 @@ ColumnLayout {
 
             property bool updating: false
 
+            Accessible.name: i18n("Easing style")
             enabled: easingRoot.animationsEnabled
             model: easingData.styles.map((s) => {
                 return s.label;
@@ -299,6 +218,7 @@ ColumnLayout {
 
             property bool updating: false
 
+            Accessible.name: i18n("Easing direction")
             enabled: easingRoot.animationsEnabled && easingStyleCombo.currentIndex > 0
             model: easingData.directions.map((d) => {
                 return d.label;
@@ -339,11 +259,12 @@ ColumnLayout {
         description: curveInfo.isElastic ? i18n("Strength of elastic overshoot") : i18n("Height of bounce peaks")
 
         SettingsSlider {
+            Accessible.name: i18n("Amplitude")
             enabled: easingRoot.animationsEnabled
             from: curveInfo.isElastic ? 1 : 0.5
             to: 3
             stepSize: 0.1
-            value: easingRoot.easingPreview.elasticAmplitude
+            value: easingRoot.easingPreview.curveAmplitude
             formatValue: function(v) {
                 return v.toFixed(1);
             }
@@ -368,6 +289,7 @@ ColumnLayout {
         description: i18n("Number of bounce repetitions")
 
         SettingsSlider {
+            Accessible.name: i18n("Bounces")
             enabled: easingRoot.animationsEnabled
             from: 1
             to: 8
@@ -375,7 +297,7 @@ ColumnLayout {
             valueSuffix: ""
             onMoved: (value) => {
                 var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+                var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
             }
         }
@@ -389,6 +311,7 @@ ColumnLayout {
         description: i18n("Oscillation speed — lower is faster wobble")
 
         SettingsSlider {
+            Accessible.name: i18n("Period")
             enabled: easingRoot.animationsEnabled
             from: 0.1
             to: 1
@@ -399,7 +322,7 @@ ColumnLayout {
             }
             onMoved: (value) => {
                 var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+                var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + value.toFixed(2);
             }
         }
@@ -415,77 +338,16 @@ ColumnLayout {
         description: i18n("Total animation time in milliseconds")
 
         SettingsSlider {
+            Accessible.name: i18n("Duration")
             enabled: easingRoot.animationsEnabled
             from: settingsController.generalPage.animationDurationMin
             to: settingsController.generalPage.animationDurationMax
             stepSize: 10
             value: easingRoot.appSettings.animationDuration
             valueSuffix: " ms"
-            labelWidth: 55
+            labelWidth: Kirigami.Units.gridUnit * 4
             onMoved: (value) => {
                 return easingRoot.appSettings.animationDuration = Math.round(value);
-            }
-        }
-
-    }
-
-    SettingsSeparator {
-    }
-
-    // ── Multiple windows ────────────────────────────────────────────────────
-    SettingsRow {
-        title: i18n("Multiple windows")
-        description: i18n("How to animate when moving several windows at once")
-
-        WideComboBox {
-            Accessible.name: i18n("Multiple windows")
-            enabled: easingRoot.animationsEnabled
-            model: [i18n("All at once"), i18n("One by one")]
-            currentIndex: easingRoot.appSettings.animationSequenceMode
-            onActivated: (index) => {
-                return easingRoot.appSettings.animationSequenceMode = index;
-            }
-        }
-
-    }
-
-    // ── Stagger interval (one by one only) ──────────────────────────────────
-    SettingsRow {
-        visible: easingRoot.appSettings.animationSequenceMode === 1
-        title: i18n("Stagger delay")
-        description: i18n("Pause between each window's animation start")
-
-        SettingsSlider {
-            enabled: easingRoot.animationsEnabled
-            from: settingsController.generalPage.animationStaggerIntervalMin
-            to: settingsController.generalPage.animationStaggerIntervalMax
-            stepSize: 10
-            value: easingRoot.appSettings.animationStaggerInterval
-            valueSuffix: " ms"
-            labelWidth: 55
-            onMoved: (value) => {
-                return easingRoot.appSettings.animationStaggerInterval = Math.round(value);
-            }
-        }
-
-    }
-
-    SettingsSeparator {
-    }
-
-    // ── Minimum distance ────────────────────────────────────────────────────
-    SettingsRow {
-        title: i18n("Minimum distance")
-        description: easingRoot.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
-
-        SettingsSpinBox {
-            enabled: easingRoot.animationsEnabled
-            from: settingsController.generalPage.animationMinDistanceMin
-            to: settingsController.generalPage.animationMinDistanceMax
-            stepSize: 5
-            value: easingRoot.appSettings.animationMinDistance
-            onValueModified: (value) => {
-                return easingRoot.appSettings.animationMinDistance = value;
             }
         }
 

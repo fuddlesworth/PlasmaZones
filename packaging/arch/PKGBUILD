@@ -70,10 +70,11 @@ package() {
     install -Dm644 "PlasmaZones-$pkgver/COPYING.LESSER" \
         "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
 
-    # Package ships libPhosphorLayoutApi.so*, libPhosphorZones.so*, libPhosphorIdentity.so*,
-    # libPhosphorTiles.so*, libPhosphorConfig.so*, libPhosphorWayland.so*,
-    # libPhosphorRendering.so*, and libPhosphorLayer.so* plus their CMake
-    # config and headers for downstream consumers. No separate -devel
-    # package is produced; these are installed by `cmake --install` above
-    # into /usr/lib and /usr/include and bundled with the main package.
+    # Package ships 20 Phosphor shared libraries plus their CMake config and
+    # headers: Animation, Audio, Config, EngineApi, FsLoader, Geometry,
+    # Identity, Layer, LayoutApi, Protocol, Rendering, Screens, Shaders,
+    # Shortcuts, SnapEngine, Surfaces, TileEngine, Tiles, Wayland, Zones.
+    # No separate -devel package is produced; these are installed by
+    # `cmake --install` above into /usr/lib and /usr/include and bundled
+    # with the main package.
 }

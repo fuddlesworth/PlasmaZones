@@ -104,7 +104,6 @@ Item {
         for (var i = 0; i < layouts.length; i++) {
             if (layouts[i].id === activeLayoutId)
                 return i;
-
         }
         return 0;
     }
@@ -125,12 +124,12 @@ Item {
     /// race). C++ event filter and OverlayService::hideLayoutPicker
     /// translate this into Surface::hide() — which then drives the library
     /// animator. Same shape as LayoutOsd / NavigationOsd for consistency.
-    signal dismissRequested()
+    signal dismissRequested
 
     /// Internal: emit dismissRequested at most once per show cycle.
     function _requestDismiss() {
         if (_dismissed)
-            return ;
+            return;
 
         _dismissed = true;
         root.dismissRequested();
@@ -138,7 +137,7 @@ Item {
 
     function moveSelection(dx, dy) {
         if (layoutCount === 0 || root.locked)
-            return ;
+            return;
 
         var col = selectedIndex % gridColumns;
         var row = Math.floor(selectedIndex / gridColumns);
@@ -155,7 +154,7 @@ Item {
 
     function confirmSelection() {
         if (root.locked)
-            return ;
+            return;
 
         if (selectedIndex >= 0 && selectedIndex < layoutCount) {
             var layout = layouts[selectedIndex];
@@ -173,7 +172,7 @@ Item {
         readonly property int containerRadius: Kirigami.Units.largeSpacing * 2
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
-        readonly property int previewWidth: 160
+        readonly property int previewWidth: Kirigami.Units.gridUnit * 10
     }
 
     Shortcut {
@@ -226,6 +225,18 @@ Item {
     QFZCommon.PopupFrame {
         id: container
 
+        // Shader-anchor opt-in: SurfaceAnimator's shader leg walks the
+        // animator target's visual children for a `shaderAnchor: true`
+        // property tag and parents the transition shader to whatever it
+        // finds (sized after it). The backdrop above fills the entire
+        // wayland surface; without this tag the shader would render its
+        // pixelate / glitch / dissolve effect across the whole screen
+        // instead of confining it to the visible popup card the user
+        // actually reads as "the picker". Property-based tag (vs
+        // objectName) keeps distinct surfaces' anchors independently
+        // identifiable under any shared traversal.
+        property bool shaderAnchor: true
+
         anchors.centerIn: parent
         width: gridView.width + metrics.containerPadding
         // top padding + title + gap below title + grid + bottom padding
@@ -237,7 +248,7 @@ Item {
         // Absorb clicks inside container to prevent backdrop dismiss
         MouseArea {
             anchors.fill: parent
-            onClicked: function(mouse) {
+            onClicked: function (mouse) {
                 mouse.accepted = true;
             }
         }
@@ -325,7 +336,7 @@ Item {
                         anchors.fill: parent
                         visible: root.locked && !layoutCard.isActive
                         z: 100
-                        color: Qt.rgba(0, 0, 0, 0.5)
+                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
                         radius: Kirigami.Units.largeSpacing
 
                         Kirigami.Icon {
@@ -333,21 +344,20 @@ Item {
                             source: "object-locked"
                             width: Math.min(parent.width, parent.height) * 0.3
                             height: width
-                            color: "white"
+                            color: Kirigami.Theme.highlightedTextColor
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.ForbiddenCursor
-                            onClicked: function(mouse) {
+                            onClicked: function (mouse) {
                                 mouse.accepted = true;
                             }
-                            onPressed: function(mouse) {
+                            onPressed: function (mouse) {
                                 mouse.accepted = true;
                             }
                         }
-
                     }
 
                     MouseArea {
@@ -359,25 +369,20 @@ Item {
                         cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
                         onClicked: {
                             if (root.locked)
-                                return ;
+                                return;
 
                             root.selectedIndex = index;
                             root.confirmSelection();
                         }
                         onEntered: {
                             if (root.locked && !layoutCard.isActive)
-                                return ;
+                                return;
 
                             root.selectedIndex = index;
                         }
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

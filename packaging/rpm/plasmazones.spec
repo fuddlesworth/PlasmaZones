@@ -164,14 +164,26 @@ echo ""
 %{_bindir}/plasmazones-report
 
 # Libraries
-%{_libdir}/libPhosphorLayoutApi.so*
-%{_libdir}/libPhosphorZones.so*
-%{_libdir}/libPhosphorIdentity.so*
-%{_libdir}/libPhosphorTiles.so*
+%{_libdir}/libPhosphorAnimation.so*
+%{_libdir}/libPhosphorAudio.so*
 %{_libdir}/libPhosphorConfig.so*
-%{_libdir}/libPhosphorWayland.so*
-%{_libdir}/libPhosphorRendering.so*
+%{_libdir}/libPhosphorEngineApi.so*
+%{_libdir}/libPhosphorFsLoader.so*
+%{_libdir}/libPhosphorGeometry.so*
+%{_libdir}/libPhosphorIdentity.so*
 %{_libdir}/libPhosphorLayer.so*
+%{_libdir}/libPhosphorLayoutApi.so*
+%{_libdir}/libPhosphorProtocol.so*
+%{_libdir}/libPhosphorRendering.so*
+%{_libdir}/libPhosphorScreens.so*
+%{_libdir}/libPhosphorShaders.so*
+%{_libdir}/libPhosphorShortcuts.so*
+%{_libdir}/libPhosphorSnapEngine.so*
+%{_libdir}/libPhosphorSurfaces.so*
+%{_libdir}/libPhosphorTileEngine.so*
+%{_libdir}/libPhosphorTiles.so*
+%{_libdir}/libPhosphorWayland.so*
+%{_libdir}/libPhosphorZones.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
@@ -215,6 +227,56 @@ echo ""
 %{_includedir}/PhosphorLayer/
 %{_libdir}/cmake/PhosphorLayer/
 
+# PhosphorAnimation development headers, CMake config, and QML module
+%{_includedir}/PhosphorAnimation/
+%{_libdir}/cmake/PhosphorAnimation/
+%{_libdir}/qt6/qml/org/phosphor/animation/
+
+# PhosphorAudio development headers and CMake config
+%{_includedir}/PhosphorAudio/
+%{_libdir}/cmake/PhosphorAudio/
+
+# PhosphorEngineApi development headers and CMake config
+%{_includedir}/PhosphorEngineApi/
+%{_libdir}/cmake/PhosphorEngineApi/
+
+# PhosphorFsLoader development headers and CMake config
+%{_includedir}/PhosphorFsLoader/
+%{_libdir}/cmake/PhosphorFsLoader/
+
+# PhosphorGeometry development headers and CMake config
+%{_includedir}/PhosphorGeometry/
+%{_libdir}/cmake/PhosphorGeometry/
+
+# PhosphorProtocol development headers and CMake config
+%{_includedir}/PhosphorProtocol/
+%{_libdir}/cmake/PhosphorProtocol/
+
+# PhosphorScreens development headers and CMake config
+%{_includedir}/PhosphorScreens/
+%{_libdir}/cmake/PhosphorScreens/
+
+# PhosphorShaders development headers, CMake config, and GLSL data
+%{_includedir}/PhosphorShaders/
+%{_libdir}/cmake/PhosphorShaders/
+%{_datadir}/phosphorshaders/
+
+# PhosphorShortcuts development headers and CMake config
+%{_includedir}/PhosphorShortcuts/
+%{_libdir}/cmake/PhosphorShortcuts/
+
+# PhosphorSnapEngine development headers and CMake config
+%{_includedir}/PhosphorSnapEngine/
+%{_libdir}/cmake/PhosphorSnapEngine/
+
+# PhosphorSurfaces development headers and CMake config
+%{_includedir}/PhosphorSurfaces/
+%{_libdir}/cmake/PhosphorSurfaces/
+
+# PhosphorTileEngine development headers and CMake config
+%{_includedir}/PhosphorTileEngine/
+%{_libdir}/cmake/PhosphorTileEngine/
+
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so
 
@@ -248,8 +310,6 @@ echo ""
 # Systemd user service
 %{_userunitdir}/plasmazones.service
 
-# Snap Assist: env.d config for KWin screenshot auth (system installs use .desktop; this is fallback)
-%{_libdir}/environment.d/99-plasmazones-screenshot.conf
 
 %changelog
 # Generated from CHANGELOG.md by packaging/generate-changelog.sh during CI.

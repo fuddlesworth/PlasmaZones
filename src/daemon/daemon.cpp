@@ -22,10 +22,10 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimationQml/PhosphorCurve.h>
-#include <PhosphorAnimationQml/QtQuickClockManager.h>
+#include <PhosphorAnimation/PhosphorCurve.h>
+#include <PhosphorAnimation/QtQuickClockManager.h>
 
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 
 #include <array>
 
@@ -266,9 +266,17 @@ void Daemon::setupAnimationProfiles()
     // in future multi-publisher configurations.
     PhosphorProfileRegistry& registry = m_profileRegistry;
     registry.clearOwner(kPlasmaZonesUserProfilesOwnerTag);
+    registry.clearOwner(QString(kShellAnimationFamilySeedsOwnerTag));
     for (const QString* path : kSettingsDrivenProfilePaths) {
         registry.unregisterProfile(*path);
     }
+
+    // Configure the registry's two-layer resolveWithInheritance — seed
+    // entries form the lowest-precedence layer so a user edit at any
+    // depth still wins over any leaf seed. Idempotent across reload
+    // paths; setting the same tag is a cheap no-op under the registry's
+    // internal lock.
+    registry.setLowPrecedenceOwnerTag(QString(kShellAnimationFamilySeedsOwnerTag));
 
     // Discover XDG `plasmazones/{curves,profiles}` dirs, materialise the
     // user-writable dirs, construct the loaders, and wire the
@@ -367,10 +375,15 @@ void Daemon::setupAnimationProfiles()
     // Cleared in `stop()` before the manager destructs.
     QtQuickClockManager::setDefaultManager(m_clockManager.get());
 
-    // Initial scans — curves-before-profiles ordering and library-builtins-
-    // before-disk-dirs are encoded in the helper so secondary composition
-    // roots get the same shape.
-    runInitialAnimationLoad(*m_curveLoader, *m_profileLoader, loaderDirs);
+    // Three-phase initial load — curves first so the family-seed step
+    // can resolve named curves like `widget-out`; family seeds next so
+    // the profile loader's reloadFromOwner correctly overwrites a seed
+    // when the user authored a JSON at the same path; profiles last.
+    // The split mirrors AnimationBootstrap so secondary composition
+    // roots get the same seeding shape.
+    runInitialCurveLoad(*m_curveLoader, loaderDirs);
+    seedShellAnimationFamilies(m_profileRegistry, m_curveRegistry);
+    runInitialProfileLoad(*m_profileLoader, loaderDirs);
 
     // Final explicit publish covers the case where neither the Settings
     // nor the ProfileLoader emitted during the loads above (e.g. fresh
@@ -562,6 +575,16 @@ bool Daemon::init()
             return QString();
         }
         return m_settings->defaultAutotileAlgorithm();
+    });
+    // Snapping-preferred provider — separate from defaultLayoutIdProvider
+    // because the user can have snapping enabled WITHOUT a global default
+    // snap layout id (per-screen assignments cover everything). Without
+    // this signal the cascade would fall through to autotile when both
+    // (snappingEnabled && defaultLayoutId == "") and (autotileEnabled &&
+    // defaultAutotileAlgorithm != ""), surfacing "Tiling: Binary Split"
+    // OSD content to a user who never enabled autotile globally.
+    m_layoutManager->setSnappingPreferredProvider([this]() {
+        return m_settings && m_settings->snappingEnabled();
     });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
@@ -1165,6 +1188,26 @@ void Daemon::start()
 
 void Daemon::stop()
 {
+    // Drop the layout-manager provider lambdas FIRST, before the m_running
+    // gate. They capture `this` and dereference m_settings; m_settings is
+    // declared after m_layoutManager, so reverse-order member destruction
+    // tears m_settings down BEFORE m_layoutManager. Any cascade query
+    // during ~LayoutRegistry that hits a still-installed lambda would
+    // dereference freed memory.
+    //
+    // The m_running gate skips the rest of stop() on init-without-start
+    // paths (test fixtures, early-fail constructors, double-stop). The
+    // providers, however, are installed in init() — which runs before
+    // m_running is set in start(). Clearing them must therefore not be
+    // gated, otherwise the dangling-lambda UAF still reaches the
+    // member-destruction window. clearing is null-safe and idempotent
+    // (an already-cleared std::function clears to itself).
+    if (m_layoutManager) {
+        m_layoutManager->setDefaultLayoutIdProvider({});
+        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
+        m_layoutManager->setSnappingPreferredProvider({});
+    }
+
     if (!m_running) {
         return;
     }
@@ -1224,6 +1267,8 @@ void Daemon::stop()
     // process-global PhosphorProfileRegistry shed those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
+    m_shaderBakePool.clear();
+    m_shaderBakePool.waitForDone(500);
     if (m_overlayService) {
         m_overlayService->setAnimationShaderRegistry(nullptr);
     }
@@ -1338,18 +1383,8 @@ void Daemon::stop()
         m_controlAdaptor->detach();
     }
 
-    // Drop the default-layout-id provider before member destruction. The
-    // lambda installed in init() captures `this` and reads m_settings,
-    // which is declared AFTER m_layoutManager and therefore destroyed
-    // FIRST in reverse-order member teardown. No normal destruction path
-    // calls defaultLayout() today, but clearing the capture makes that
-    // latent ordering invariant unnecessary — future refactors that
-    // trigger defaultLayout() from inside ~LayoutRegistry (e.g. signal
-    // fan-out during qDeleteAll(m_layouts)) stay safe.
-    if (m_layoutManager) {
-        m_layoutManager->setDefaultLayoutIdProvider({});
-        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
-    }
+    // Provider lambdas already cleared at the top of stop() (before the
+    // m_running gate) so this point requires no further teardown.
 
     m_running = false;
 }

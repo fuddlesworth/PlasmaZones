@@ -54,6 +54,17 @@ target_include_directories(PhosphorTileEngine
 
 target_compile_features(PhosphorTileEngine PUBLIC cxx_std_20)
 
+# Same Qt6 / GCC 14 -Wsfinae-incomplete interaction as the
+# PhosphorZones target: this engine includes Layout.h after a
+# forward decl elsewhere in the include graph, tripping the
+# SFINAE-incomplete diagnostic on Layout's full definition. See
+# libs/phosphor-zones/CMakeLists.txt for the full rationale.
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wno-sfinae-incomplete" PTE_HAS_NO_SFINAE_INCOMPLETE)
+if(PTE_HAS_NO_SFINAE_INCOMPLETE)
+    target_compile_options(PhosphorTileEngine PRIVATE -Wno-sfinae-incomplete)
+endif()
+
 target_link_libraries(PhosphorTileEngine
     PUBLIC
         Qt6::Core

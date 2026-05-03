@@ -104,11 +104,11 @@ endif()
 if(NOT TARGET Qt6::ShaderToolsPrivate)
     find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 endif()
-# QuickPrivate is required by libs/phosphor-animation-qml — must be
+# QuickPrivate is required by phosphor-animation's QML module — must be
 # discovered at top-level so the IMPORTED target is global and visible to
-# every consumer of `PhosphorAnimation::PhosphorAnimationQml`. Without
-# this, Qt's static-QML-plugin dependency walker emits "QuickPrivate
-# target is mentioned as a dependency … but not declared" when collecting
+# every consumer of `PhosphorAnimation::PhosphorAnimation`. Without this,
+# Qt's static-QML-plugin dependency walker emits "QuickPrivate target is
+# mentioned as a dependency ... but not declared" when collecting
 # transitive deps from the `src/shared` static-plugin consumer.
 if(NOT TARGET Qt6::QuickPrivate)
     find_package(Qt6QuickPrivate CONFIG REQUIRED)
@@ -234,7 +234,6 @@ set(PLASMAZONESD_I18N_SOURCES
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager/handlers.cpp
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
 )
@@ -339,16 +338,10 @@ add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
 # PlasmaZones consumes the org.phosphor.animation QML module for shell
-# UI animations. The QML wrappers live in the sibling
-# phosphor-animation-qml lib (Phase A1); the core motion runtime needs
-# Qt Quick because phosphor-animation-qml's QtQuickClockManager wraps
-# QtQuickClock, so PHOSPHOR_ANIMATION_QUICK is enabled here before
-# add_subdirectory picks up the option() default.
-set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by phosphor-animation-qml)")
-add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
-add_subdirectory(libs/phosphor-animation-qml) # Qt Quick wrappers + org.phosphor.animation QML module (Phase A1)
-add_subdirectory(libs/phosphor-animation-shaders) # shader-backed animation pipeline (Phase 6)
-add_subdirectory(libs/phosphor-animation-layer) # ISurfaceAnimator backed by phosphor-animation (Phase 5 + Phase 6 shader leg)
+# UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
+# add_subdirectory picks up the option() default so QtQuickClock builds.
+set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)")
+add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants
@@ -411,43 +404,39 @@ install(DIRECTORY data/curves/
     FILES_MATCHING PATTERN "*.json"
 )
 
-# Install shell-opinionated animation profile defaults (per-path
-# PhosphorAnimation Profile blobs). The daemon's ProfileLoader scans
-# ${XDG_DATA_DIRS}/plasmazones/profiles at startup; user overrides at
-# ~/.local/share/plasmazones/profiles win over these.
-install(DIRECTORY data/profiles/
-    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/profiles
-    FILES_MATCHING PATTERN "*.json"
-)
+# Defensive cleanup: an upgrade from a build that shipped per-leaf JSONs
+# (every commit before the family-seed migration) leaves stale files in
+# the install dir that `cmake --install` does NOT remove on its own —
+# install only adds/updates, never deletes orphans. Those stale leaves
+# silently shadow the user's parent-node Settings edits via the
+# deeper-leaf-wins overlay walk in PhosphorProfileRegistry::resolveWithInheritance,
+# making "All Popups → 2000 ms" appear to do nothing. Wipe the install
+# dir BEFORE the install(DIRECTORY) below copies new content so the
+# post-install state always matches the source tree.
+#
+# SCRIPT runs at install time (`cmake --install`), not configure time,
+# and runs in the install prefix the user actually invoked install with
+# (DESTDIR-aware via $ENV{DESTDIR}). The wipe is bounded to our own
+# `plasmazones/profiles` subdirectory — never to a directory we don't
+# own — so an accidental wide install prefix can't cascade.
+install(CODE "
+    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_DATADIR}/plasmazones/profiles\")
+    if(EXISTS \"\${_pz_profiles_install_dir}\")
+        file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
+        if(_pz_stale_profile_jsons)
+            message(STATUS \"Removing stale animation profile JSONs from \${_pz_profiles_install_dir}\")
+            file(REMOVE \${_pz_stale_profile_jsons})
+        endif()
+    endif()
+")
 
-# Build-time check: every `profile: "..."` string in the shipped QML
-# must correspond to a data/profiles/<name>.json file — otherwise the
-# registry silently falls back to library defaults at runtime and the
-# typo only surfaces via UX review. The custom target depends on every
-# shipped profile JSON + every QML file we scan, so it re-runs when
-# either side changes. Falls back to a no-op echo if python3 is
-# missing, so the check is advisory for distros that build without a
-# python interpreter (the daemon itself does not require one).
-find_package(Python3 COMPONENTS Interpreter QUIET)
-if(Python3_Interpreter_FOUND)
-    file(GLOB _pz_profile_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/profiles/*.json")
-    file(GLOB _pz_curve_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/curves/*.json")
-    file(GLOB_RECURSE _pz_profile_qmls
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/editor/qml/*.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/settings/qml/*.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.qml"
-    )
-    add_custom_target(check-animation-profiles ALL
-        COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
-                ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${_pz_profile_jsons} ${_pz_curve_jsons} ${_pz_profile_qmls}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
-        COMMENT "Verifying PhosphorAnimation profile names referenced in QML and curve refs in profiles"
-        VERBATIM
-    )
-endif()
+# The data/profiles/ directory no longer ships per-leaf JSONs — animation
+# timings/curves are driven entirely from the Settings UI via
+# PhosphorProfileRegistry, with parent-chain inheritance filling in
+# unset leaves. The install(DIRECTORY) rule and the build-time
+# check-animation-profiles target were removed because there are no
+# profile JSONs to install or validate. The install(CODE) stale-cleanup
+# block above is intentionally kept for upgrades from older builds.
 
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed)
 install(DIRECTORY data/shaders/

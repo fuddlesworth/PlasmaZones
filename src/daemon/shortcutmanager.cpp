@@ -509,8 +509,8 @@ void ShortcutManager::unregisterAdhocShortcut(const QString& id)
     // same id — register-then-unregister before the batch drains is just a
     // no-op.
     if (m_registrationInProgress) {
-        const auto wasRegister =
-            std::find_if(m_pendingAdhocOps.cbegin(), m_pendingAdhocOps.cend(), [&id](const PendingAdhocOp& op) {
+        const bool hadPendingRegister =
+            std::any_of(m_pendingAdhocOps.cbegin(), m_pendingAdhocOps.cend(), [&id](const PendingAdhocOp& op) {
                 return op.id == id && op.kind == PendingAdhocOp::Register;
             });
         m_pendingAdhocOps.erase(std::remove_if(m_pendingAdhocOps.begin(), m_pendingAdhocOps.end(),
@@ -522,7 +522,7 @@ void ShortcutManager::unregisterAdhocShortcut(const QString& id)
         // pending Register — cancelling a never-sent register is a no-op and
         // queuing Unregister for it would send a spurious release to the
         // backend for an id it never heard of.
-        if (wasRegister == m_pendingAdhocOps.cend()) {
+        if (!hadPendingRegister) {
             m_pendingAdhocOps.push_back({PendingAdhocOp::Unregister, id, {}, {}, {}});
         }
         return;

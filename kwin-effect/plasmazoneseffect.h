@@ -11,9 +11,9 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
-#include <PhosphorAnimationShaders/ShaderProfile.h>
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

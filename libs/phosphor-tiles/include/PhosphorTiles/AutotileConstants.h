@@ -72,10 +72,12 @@ constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
-constexpr int MinAnimationDuration = 50;
-constexpr int MaxAnimationDuration = 500;
-constexpr int MinAnimationStaggerIntervalMs = 10;
-constexpr int MaxAnimationStaggerIntervalMs = 200;
+// Animation duration + stagger limits previously lived here for
+// historical reasons but are NOT autotile-specific — they bound every
+// animation in the system. Moved to
+// libs/phosphor-animation/include/PhosphorAnimation/AnimationLimits.h
+// (PhosphorAnimation::Limits namespace). Consumers that need them
+// should include that header directly; ConfigDefaults already does.
 /// Watchdog deadline for a single JS evaluation guarded by
 /// ScriptedAlgorithm::guardedCall(). Generous enough for ARM / slow
 /// systems where JS startup and first-call JIT warmup can take tens of

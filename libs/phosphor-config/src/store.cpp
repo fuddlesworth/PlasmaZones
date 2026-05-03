@@ -184,6 +184,12 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
                 return QVariant(doc.array().toVariantList());
             }
         }
+        // Absent or malformed → schema default. Some consumers
+        // (settings/validation tests) explicitly assert default-on-corrupt
+        // for trigger lists, so this stays default-eager. The typed
+        // `Store::read<QVariantMap>` path uses a stricter
+        // absent-vs-malformed distinction for the Settings layer's own
+        // needs.
         return defaultValue;
     }
     case QMetaType::QVariantMap: {
@@ -330,6 +336,11 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         // flush loop overwrite a non-canonical disk value (e.g. " a , b "
         // re-written as "a,b") instead of being short-circuited by the
         // validator on both sides agreeing on the same canonical form.
+        //
+        // Unlike reset() / resetGroup(), this path does NOT skip writing on
+        // (absent && coerced == default) — Settings::save() relies on
+        // write() materialising every declared key onto disk so the
+        // stale-key purge can run from a fully-populated baseline.
         if (g->hasKey(key)) {
             const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
             if (current == coerced) {
@@ -404,7 +415,7 @@ QJsonObject Store::exportToJson() const
     return out;
 }
 
-void Store::importFromJson(const QJsonObject& snapshot)
+bool Store::importFromJson(const QJsonObject& snapshot)
 {
     // Reject snapshots stamped with a different schema version. Callers
     // with an older snapshot must run MigrationRunner on it first —
@@ -422,7 +433,7 @@ void Store::importFromJson(const QJsonObject& snapshot)
                 "PhosphorConfig::Store::importFromJson: snapshot '%s' is not a JSON number — refusing import "
                 "(malformed snapshot).",
                 qPrintable(d->schema.versionKey));
-            return;
+            return false;
         }
         const int snapshotVersion = versionValue.toInt();
         if (snapshotVersion != d->schema.version) {
@@ -430,7 +441,7 @@ void Store::importFromJson(const QJsonObject& snapshot)
                 "PhosphorConfig::Store::importFromJson: snapshot version %d does not match schema version %d — "
                 "refusing import. Run MigrationRunner on the snapshot first.",
                 snapshotVersion, d->schema.version);
-            return;
+            return false;
         }
     }
 
@@ -459,6 +470,7 @@ void Store::importFromJson(const QJsonObject& snapshot)
             write(git.key(), def.key, value);
         }
     }
+    return true;
 }
 
 // ─── Templated read<T> ───────────────────────────────────────────────────────
@@ -511,6 +523,37 @@ QColor readTyped<QColor>(IGroup& g, const KeyDef& def)
 {
     return g.readColor(def.key, def.defaultValue.value<QColor>());
 }
+template<>
+QVariantMap readTyped<QVariantMap>(IGroup& g, const KeyDef& def)
+{
+    // Absent key → schema default. Mirrors the per-type readBool/readInt/...
+    // contract where the default kicks in only when the key isn't on disk.
+    if (!g.hasKey(def.key)) {
+        return def.defaultValue.toMap();
+    }
+    // Native-JSON read first; fall back to parsing a legacy stringified
+    // JSON value (the old QString-backed storage shape) so existing configs
+    // keep working without an explicit migration step.
+    const QJsonValue v = g.readJson(def.key);
+    if (v.isObject()) {
+        return v.toObject().toVariantMap();
+    }
+    const QString raw = g.readString(def.key);
+    if (!raw.isEmpty()) {
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+        if (err.error == QJsonParseError::NoError && doc.isObject()) {
+            return doc.object().toVariantMap();
+        }
+    }
+    // Key is present but unreadable as a map (malformed legacy string,
+    // wrong JSON type, etc.). Return an empty map rather than the schema
+    // default — the caller can then decide whether to substitute project
+    // defaults or library defaults, matching the pre-QVariantMap-storage
+    // behaviour where an unreadable QString blob propagated as an empty
+    // parse result.
+    return QVariantMap{};
+}
 
 template<typename T>
 T readDeclared(const Schema& schema, IBackend* backend, const QString& group, const QString& key, T fallback)
@@ -557,6 +600,12 @@ template<>
 QColor Store::read<QColor>(const QString& group, const QString& key) const
 {
     return readDeclared<QColor>(d->schema, d->backend, group, key, QColor());
+}
+
+template<>
+QVariantMap Store::read<QVariantMap>(const QString& group, const QString& key) const
+{
+    return readDeclared<QVariantMap>(d->schema, d->backend, group, key, QVariantMap{});
 }
 
 // The explicit specializations above ARE the definitions — no separate

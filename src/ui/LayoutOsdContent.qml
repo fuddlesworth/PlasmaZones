@@ -86,11 +86,19 @@ Item {
     property bool locked: false
     property bool disabled: false
     property string disabledReason: ""
+    // Per-side padding (fraction of container width/height) reserved for
+    // shader transition effects whose silhouette extends outside the
+    // container's rectangle. Set by the daemon to the active SurfaceAnimator
+    // shader's metadata `boundsPadding` (max of show + hide so the surface
+    // accommodates whichever leg is currently running). 0.0 = no padding.
+    property real shaderBoundsPadding: 0
     // Content-driven desired size, exposed for the unified host (which binds
     // its Window width/height to these readonly properties; C++ also reads
     // them after every property write to compute matching layer-shell margins).
-    readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
-    readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
+    // Inflated by `2 * shaderBoundsPadding` on each axis so the wayland surface
+    // has room for shader silhouettes that ripple outside the container.
+    readonly property int contentDesiredWidth: Math.round(container.width * (1 + 2 * shaderBoundsPadding)) + Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int contentDesiredHeight: Math.round(container.height * (1 + 2 * shaderBoundsPadding)) + Math.round(Kirigami.Units.gridUnit * 2.5)
 
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified NotificationOverlay host re-emits this as its own
@@ -121,7 +129,7 @@ Item {
         source: container
         anchors.fill: container
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.5)
+        shadowColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
         shadowBlur: 1
         shadowVerticalOffset: 4
         shadowHorizontalOffset: 0
@@ -131,13 +139,21 @@ Item {
     Rectangle {
         id: container
 
+        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
+        // walks the visual tree for a `shaderAnchor: true` property tag
+        // and parents the transition shader (sized to this item, layer-
+        // enabled here) so pixelate / dissolve / glitch / etc. operate
+        // on this card's pixels rather than the fullscreen wayland
+        // surface backing the OSD host.
+        property bool shaderAnchor: true
+
         anchors.centerIn: parent
         width: previewContainer.width + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
         color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
-        border.width: 1
+        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
 
         // Layout preview
         Item {
@@ -161,12 +177,12 @@ Item {
                 id: zonePreview
 
                 anchors.fill: parent
-                anchors.margins: 4
+                anchors.margins: Kirigami.Units.smallSpacing
                 zones: root.zones
                 isHovered: false
                 isActive: true
-                zonePadding: 2
-                edgeGap: 2
+                zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
+                edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
                 minZoneSize: 12
                 showZoneNumbers: true
                 producesOverlappingZones: root.producesOverlappingZones
@@ -181,7 +197,7 @@ Item {
                 showMasterDot: root.showMasterDot
                 masterCount: root.masterCount
                 fontStrikeout: root.fontStrikeout
-                animationDuration: 150
+                animationDuration: Kirigami.Units.shortDuration
             }
 
         }
@@ -190,7 +206,7 @@ Item {
         Rectangle {
             anchors.fill: previewContainer
             visible: root.locked && !root.disabled
-            color: Qt.rgba(0, 0, 0, 0.5)
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
             radius: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
@@ -207,7 +223,7 @@ Item {
         Rectangle {
             anchors.fill: previewContainer
             visible: root.disabled
-            color: Qt.rgba(0, 0, 0, 0.5)
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
             radius: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
@@ -261,6 +277,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: dismiss.fire()
+        Accessible.name: i18n("Dismiss notification")
     }
 
 }

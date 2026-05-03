@@ -226,7 +226,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // by this branch) and the post-Phase-1B validator would drop
                     // the ApplySnap outcome for an empty zoneId.
                     resolvedZoneIdOut = zoneUuid;
-                    m_windowTracking->snapEngine()->commitSnap(windowId, zoneUuid, releaseScreenId);
+                    auto* snapEng = m_windowTracking->snapEngine();
+                    if (snapEng)
+                        snapEng->commitSnap(windowId, zoneUuid, releaseScreenId);
                     // Record user-initiated snap (not auto-snap)
                     // This prevents auto-snapping windows that were never manually snapped by user
                     m_windowTracking->service()->recordSnapIntent(windowId, true);
@@ -292,7 +294,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 if (allZoneIds.isEmpty()) {
                     allZoneIds.append(capturedZoneId);
                 }
-                m_windowTracking->snapEngine()->commitMultiZoneSnap(windowId, allZoneIds, releaseScreenId);
+                auto* snapMulti = m_windowTracking->snapEngine();
+                if (snapMulti)
+                    snapMulti->commitMultiZoneSnap(windowId, allZoneIds, releaseScreenId);
                 // Record user-initiated snap (not auto-snap)
                 m_windowTracking->service()->recordSnapIntent(windowId, true);
             }
@@ -305,7 +309,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             resolvedZoneIdOut = capturedZoneId;
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
-                m_windowTracking->snapEngine()->commitSnap(windowId, capturedZoneId, releaseScreenId);
+                auto* snapSingle = m_windowTracking->snapEngine();
+                if (snapSingle)
+                    snapSingle->commitSnap(windowId, capturedZoneId, releaseScreenId);
                 // Record user-initiated snap (not auto-snap)
                 m_windowTracking->service()->recordSnapIntent(windowId, true);
             }

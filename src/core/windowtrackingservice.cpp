@@ -95,7 +95,7 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
                                                 const QString& screenId, int virtualDesktop)
 {
     Q_ASSERT(m_snapState);
-    if (windowId.isEmpty() || zoneIds.isEmpty()) {
+    if (!m_snapState || windowId.isEmpty() || zoneIds.isEmpty()) {
         return;
     }
 
@@ -128,6 +128,8 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
 void WindowTrackingService::unassignWindow(const QString& windowId)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return;
     auto result = m_snapState->unassignWindow(windowId);
     if (!result.wasAssigned) {
         return;
@@ -139,26 +141,41 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return {};
     return m_snapState->zoneForWindow(windowId);
 }
 
 QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return {};
     return m_snapState->zonesForWindow(windowId);
 }
 
 QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return {};
     return m_snapState->windowsInZone(zoneId);
 }
 
 QStringList WindowTrackingService::snappedWindows() const
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return {};
     return m_snapState->snappedWindows();
 }
 
 int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return 0;
     int pruned = m_snapState->pruneStaleAssignments(aliveWindowIds);
 
     int wtsCleaned = 0;
@@ -199,6 +216,9 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
 
 bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return false;
     return m_snapState->isWindowSnapped(windowId);
 }
 

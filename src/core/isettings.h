@@ -15,7 +15,7 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
-#include <PhosphorAnimationShaders/ShaderProfileTree.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QColor>
 #include <QObject>

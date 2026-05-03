@@ -232,6 +232,24 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     resetAllBindingsAndPipelines();
 }
 
+void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
+{
+    if (m_sourceTextureProvider.data() == provider) {
+        return;
+    }
+    m_sourceTextureProvider = provider;
+    // Clear the cached binding-7 texture pointer so the SRB build sees
+    // a "different texture" on the next prepare() and rebuilds bindings.
+    // The asymmetric "only on provider→null" reset that lived here briefly
+    // missed the null→provider-A→null→provider-B sequence: B's m_sourceSampler
+    // is inherited from A (never reset on provider→null), so the
+    // sampler-create branch in uploadDirtyTextures doesn't fire either, and
+    // the SRB ends up bound to the post-A null fallback. Always reset is
+    // correct; the double-rebuild concern is one frame of extra pipeline work.
+    m_lastSourceRhiTexture = nullptr;
+    resetAllBindingsAndPipelines();
+}
+
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
 {
     if (m_wallpaperImage.cacheKey() == image.cacheKey()) {
@@ -296,6 +314,10 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     m_bufferShaderRetries = 0;
     m_bufferFragmentShaderSource.clear();
     m_bufferMtime = 0;
+    // (m_bufferMtime is reset both here and in the multi-buffer branch
+    // below — keeping the single-buffer state consistent with the
+    // multi-buffer counterpart at lines below; cache-key TOCTOU is
+    // closed by capture-before-read in bakeBufferShaders.)
     m_multiBufferShadersReady = false;
     m_multiBufferShaderDirty = true;
     m_multiBufferShaderRetries = 0;
@@ -304,17 +326,13 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
         m_multiBufferFragmentShaders[i] = QShader();
         m_multiBufferMtimes[i] = 0;
     }
-    if (m_bufferPaths.size() == 1) {
-        const QString& path = m_bufferPaths.constFirst();
-        if (QFileInfo::exists(path)) {
-            QString err;
-            m_bufferFragmentShaderSource = loadAndExpandShader(path, &err);
-            if (!m_bufferFragmentShaderSource.isEmpty()) {
-                m_bufferMtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
-            }
-        }
-        m_bufferShaderDirty = true;
-    }
+    // Single-buffer mode is loaded lazily inside bakeBufferShaders() during
+    // prepare(); the multi-buffer branch already does so. Loading shader
+    // source synchronously from this setter would do disk I/O on whatever
+    // thread called us (typically the GUI thread via updatePaintNode sync),
+    // and the work is duplicated by bakeBufferShaders' single-path branch
+    // anyway. m_bufferShaderDirty=true above is enough to trigger the
+    // deferred load on the next prepare().
 
     m_bufferPipeline.reset();
     m_bufferSrb.reset();
@@ -454,6 +472,11 @@ void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
 
 bool ShaderNodeRhi::loadVertexShader(const QString& path)
 {
+    // Capture mtime BEFORE the read so the cache key reflects the file
+    // version we actually loaded — reading mtime after loadAndExpand opens
+    // a TOCTOU window where a concurrent edit lands new mtime against old
+    // content in the bake cache.
+    const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     QString err;
     m_vertexShaderSource = loadAndExpandShader(path, &err);
     if (m_vertexShaderSource.isEmpty()) {
@@ -463,13 +486,15 @@ bool ShaderNodeRhi::loadVertexShader(const QString& path)
         return false;
     }
     m_vertexPath = path;
-    m_vertexMtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
+    m_vertexMtime = mtime;
     m_shaderDirty = true;
     return true;
 }
 
 bool ShaderNodeRhi::loadFragmentShader(const QString& path)
 {
+    // Capture mtime BEFORE the read (TOCTOU-safe cache key); see loadVertexShader.
+    const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     QString err;
     m_fragmentShaderSource = loadAndExpandShader(path, &err);
     if (m_fragmentShaderSource.isEmpty()) {
@@ -479,7 +504,7 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
         return false;
     }
     m_fragmentPath = path;
-    m_fragmentMtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
+    m_fragmentMtime = mtime;
     m_shaderDirty = true;
     return true;
 }

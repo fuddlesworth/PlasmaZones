@@ -26,6 +26,9 @@ namespace PlasmaZones {
 void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens,
                                                               const QSet<QString>& includeScreens)
 {
+    if (!m_snapState || !m_layoutManager)
+        return;
+
     QVector<ResnapEntry> newBuffer;
     QSet<QString> addedIds;
 

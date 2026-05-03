@@ -20,6 +20,13 @@
 #include "pz_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
+
+#include "../../core/isettings.h"
+
 namespace PlasmaZones {
 
 namespace {
@@ -88,16 +95,49 @@ OsdContentSize readOsdContentSize(QQuickWindow* window)
     return {width, height};
 }
 
+// Resolve the per-side padding (fraction of container size) the active
+// SurfaceAnimator shader leg needs reserved around the OSD's inner card,
+// so the wayland surface accommodates shader silhouettes (morph etc.) that
+// extend outside the card's rectangle. Returns max(show.boundsPadding,
+// hide.boundsPadding) — the surface size is fixed for the surface's
+// lifetime, so it must satisfy whichever leg is currently animating.
+//
+// Returns 0.0 when no shader is selected for either leg, when the shader
+// id doesn't resolve in the registry, or when settings/registry are not
+// yet wired (pre-construction races). The QML side defaults shaderBounds-
+// Padding to 0.0 too — written to confirm intent each show, not to rely on
+// stale prior writes.
+qreal resolveOsdShaderPadding(ISettings* settings, PhosphorAnimationShaders::AnimationShaderRegistry* registry,
+                              const QString& showPath, const QString& hidePath)
+{
+    if (!settings || !registry) {
+        return 0.0;
+    }
+    const auto tree = settings->shaderProfileTree();
+    qreal pad = 0.0;
+    const QString showId = tree.resolve(showPath).effectiveEffectId();
+    if (!showId.isEmpty()) {
+        pad = qMax(pad, registry->effect(showId).boundsPadding);
+    }
+    const QString hideId = tree.resolve(hidePath).effectiveEffectId();
+    if (!hideId.isEmpty()) {
+        pad = qMax(pad, registry->effect(hideId).boundsPadding);
+    }
+    return pad;
+}
+
 // Size the OSD window to its content-driven desired size and pin it via the
 // layer-shell transport. `surface` resolves the transport handle; callers
 // pass the state's notificationSurface (post-Phase-2 unification of the
 // layout-OSD and navigation-OSD surfaces onto NotificationOverlay.qml).
 //
 // Caller contract: every property the QML content type uses to compute its
-// own size MUST be written before this function runs. QQuickText measures
-// synchronously when its text property changes, and Item width / height
-// bindings re-evaluate eagerly on dependency change, so by the time we read
-// contentDesiredWidth / Height the QML side has settled.
+// own size MUST be written before this function runs (including
+// `shaderBoundsPadding` — see the writeQmlProperty calls preceding each
+// invocation). QQuickText measures synchronously when its text property
+// changes, and Item width / height bindings re-evaluate eagerly on
+// dependency change, so by the time we read contentDesiredWidth / Height
+// the QML side has settled.
 void sizeAndCenterOsd(QQuickWindow* window, PhosphorLayer::Surface* surface, QScreen* physScreen,
                       const QRect& targetGeom)
 {
@@ -139,6 +179,13 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
         qCWarning(lcOverlay) << "Failed to get notification window for layout OSD";
         return false;
     }
+
+    // Force-hide any zone selector on this screen so a fading-out selector
+    // doesn't stack translucently behind the incoming OSD.
+    if (state->zoneSelectorSurface && state->zoneSelectorSurface->isLogicallyShown()) {
+        state->zoneSelectorSurface->hide();
+    }
+
     window = state->notificationWindow;
     outSurface = state->notificationSurface;
 
@@ -201,12 +248,28 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
     pushLayoutOsdContent(window, p);
+    // shaderBoundsPadding MUST be written BEFORE the mode flip — the
+    // Loader instantiates LayoutOsdContent on `mode = "layout-osd"`,
+    // and contentDesiredWidth/Height are computed from
+    // shaderBoundsPadding at instantiation time. Writing the property
+    // after mode means the first contentDesired* read (the
+    // sizeAndCenterOsd that follows immediately) sees the default
+    // 0.0, sizing the wayland surface too small, before the binding
+    // re-evaluates.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        writeQmlProperty(window, QStringLiteral("shaderBoundsPadding"),
+                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
+    }
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
     // Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
     // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
+    // Disarm the render-pipeline prime first so its queued hide doesn't
+    // race this real show — see primeSurfaceRenderPipeline.
+    cancelSurfacePrime(surface);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
@@ -279,9 +342,17 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     p.zoneNumberDisplay = zoneNumberDisplay;
     p.masterCount = masterCount;
     pushLayoutOsdContent(window, p);
+    // shaderBoundsPadding before mode — see the matching note in
+    // showLayoutOsdImpl above.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        writeQmlProperty(window, QStringLiteral("shaderBoundsPadding"),
+                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
+    }
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
+    cancelSurfacePrime(surface);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
@@ -357,9 +428,16 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     pushLayoutOsdContent(window, p);
     writeQmlProperty(window, QStringLiteral("disabled"), true);
     writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
+    // shaderBoundsPadding before mode — see showLayoutOsdImpl note.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        writeQmlProperty(window, QStringLiteral("shaderBoundsPadding"),
+                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
+    }
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom);
+    cancelSurfacePrime(surface);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
@@ -468,6 +546,12 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
     state.notificationSurface = surface;
     state.notificationWindow = surface->window();
     state.notificationPhysScreen = physScreen;
+
+    // Prime the wl_surface map + Vulkan swapchain init + QSGLayer first-
+    // frame render so the very first user-triggered OSD show doesn't
+    // race the FBO capture used by shader-exclusive transitions. See
+    // OverlayService::primeSurfaceRenderPipeline for the full rationale.
+    primeSurfaceRenderPipeline(surface);
 }
 
 void OverlayService::destroyNotificationWindow(const QString& screenId)
@@ -561,6 +645,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         qCDebug(lcOverlay) << "No notification window for navigation OSD on screen=" << effectiveId;
         return;
     }
+
+    if (navState->zoneSelectorSurface && navState->zoneSelectorSurface->isLogicallyShown()) {
+        navState->zoneSelectorSurface->hide();
+    }
+
     auto* window = navState->notificationWindow;
     auto* navSurface = navState->notificationSurface;
 
@@ -605,6 +694,16 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
+    // shaderBoundsPadding before mode — the Loader instantiates
+    // NavigationOsdContent on the mode flip, and contentDesiredWidth/
+    // Height read shaderBoundsPadding at instantiation time. Writing
+    // after mode means sizeAndCenterOsd's first contentDesired* read
+    // sees the default 0.0 before the binding re-evaluates.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        writeQmlProperty(window, QStringLiteral("shaderBoundsPadding"),
+                         resolveOsdShaderPadding(m_settings, m_animShaderRegistry, PP::OsdShow, PP::OsdHide));
+    }
     // Write mode AFTER data properties so the Loader-instantiated
     // NavigationOsdContent picks up correct values on first binding pass.
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("navigation-osd"));
@@ -625,6 +724,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
     // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
+    cancelSurfacePrime(navSurface);
     navSurface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
 

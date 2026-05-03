@@ -56,8 +56,8 @@ namespace PhosphorFsLoader {
  * change-only emit semantics MUST diff inside `performScan` and gate
  * their own consumer-facing signal on the result (see
  * `ScriptedAlgorithmLoader`'s SHA-1 signature for the canonical
- * pattern, and the `BatchedSink<T>::lastBatchChanged` flag used by
- * CurveLoader / ProfileLoader).
+ * pattern, and the `lastBatchChanged` flag maintained by the
+ * CurveLoader / ProfileLoader sinks).
  */
 class IScanStrategy
 {

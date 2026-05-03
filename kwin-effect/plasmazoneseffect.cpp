@@ -12,8 +12,8 @@
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 
-#include <PhosphorAnimationShaders/AnimationShaderContract.h>
-#include <PhosphorAnimationShaders/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 
 #include <algorithm>
@@ -42,6 +42,7 @@
 #include <QTimer>
 #include <QtMath>
 #include <QPointer>
+#include <QVarLengthArray>
 #include <window.h>
 #include <workspace.h>
 #include <core/output.h> // For Output::name() for multi-monitor support
@@ -223,11 +224,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     });
     connect(&m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
             [this]() {
-                for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end();) {
-                    KWin::EffectWindow* w = it->first;
-                    ++it;
+                QVarLengthArray<KWin::EffectWindow*, 8> windows;
+                for (auto& [w, _] : m_shaderTransitions)
+                    windows.push_back(w);
+                for (auto* w : windows)
                     endShaderTransition(w);
-                }
+                Q_ASSERT(m_shaderTransitions.empty());
                 m_shaderCache.clear();
             });
 
@@ -1095,7 +1097,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // KWin emits windowMaximizedStateChanged once per axis flip — a
     // user-driven left-half-snap → fully-maximize sequence fires twice
     // (vertical-only first, then fully-maximized). Without an edge filter
-    // we'd start the WindowUnmaximize shader for the intermediate state,
+    // we'd start the WindowMaximize shader for the intermediate state,
     // then immediately install WindowMaximize on the next emission, with
     // the timer-driven teardown of the first racing the install of the
     // second. Track the last fully-maximized state per window and only
@@ -1111,10 +1113,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return; // intermediate axis-only flip, no shader
                 }
                 m_lastFullyMaximized.insert(window, fullyMaximized);
-                tryBeginShaderForEvent(window,
-                                       fullyMaximized ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                      : PhosphorAnimation::ProfilePaths::WindowUnmaximize,
-                                       animationDurationMs());
+                tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs());
             });
 
     // Track when a monocle-maximized window goes fullscreen
@@ -1130,23 +1129,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // geometry without round-tripping. Debounced at ~50ms per window via
     // m_frameGeometryFlushTimer so rapid move/resize sequences collapse
     // into at most one D-Bus push.
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, w]() {
-        if (!w || !shouldHandleWindow(w)) {
-            return;
-        }
-        const QString windowId = getWindowId(w);
-        if (windowId.isEmpty()) {
-            return;
-        }
-        const QRect geo = w->frameGeometry().toRect();
-        if (geo.width() <= 0 || geo.height() <= 0) {
-            return;
-        }
-        m_pendingFrameGeometry[windowId] = geo;
-        if (!m_frameGeometryFlushTimer->isActive()) {
-            m_frameGeometryFlushTimer->start();
-        }
-    });
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+            [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+                if (!safeW || !shouldHandleWindow(safeW)) {
+                    return;
+                }
+                const QString windowId = getWindowId(safeW);
+                if (windowId.isEmpty()) {
+                    return;
+                }
+                const QRect geo = safeW->frameGeometry().toRect();
+                if (geo.width() <= 0 || geo.height() <= 0) {
+                    return;
+                }
+                m_pendingFrameGeometry[windowId] = geo;
+                if (!m_frameGeometryFlushTimer->isActive()) {
+                    m_frameGeometryFlushTimer->start();
+                }
+            });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
@@ -3067,10 +3067,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // motion (the minimize-to-taskbar zoom is a separate stock effect chain),
     // we layer the shader effect on top via redirect. Gated on the live
     // minimized state so each direction can have its own profile.
-    tryBeginShaderForEvent(w,
-                           minimized ? PhosphorAnimation::ProfilePaths::WindowMinimize
-                                     : PhosphorAnimation::ProfilePaths::WindowUnminimize,
-                           animationDurationMs());
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs());
 
     if (minimized) {
         if (isWindowFloating(windowId)) {
@@ -4499,6 +4496,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     const quint64 myGeneration = it->second.generation;
     QPointer<KWin::EffectWindow> safeWindow(window);
     QTimer::singleShot(durationMs, this, [this, safeWindow, myGeneration]() {
+        // Two-tier guard: QPointer catches QObject destruction,
+        // endShaderTransition's isDeleted() catches KWin's deletion-animation phase
         if (!safeWindow) {
             return;
         }

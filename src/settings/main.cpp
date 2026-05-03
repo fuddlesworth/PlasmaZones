@@ -14,8 +14,8 @@
 
 #include "../core/constants.h"
 
-#include <PhosphorAnimationQml/PhosphorCurve.h>
-#include <PhosphorAnimationQml/QtQuickClockManager.h>
+#include <PhosphorAnimation/PhosphorCurve.h>
+#include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <QGuiApplication>
 #include <QCommandLineParser>
@@ -106,11 +106,13 @@ int main(int argc, char* argv[])
     PlasmaZones::ConfigMigration::ensureJsonConfig();
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML
-    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve against the
-    // shipped data/profiles JSONs. Without this the registry stays empty in
-    // the settings process and every animation falls back to the library
-    // default 150 ms — see AnimationBootstrap docs for the full rationale.
-    // Must outlive the QML engine (Behavior bindings keep registry handles).
+    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve. The
+    // shipped tree carries no bundled profile JSONs (timings are driven
+    // entirely by the Settings UI's per-node overrides); the bootstrap
+    // loader stays wired so user-authored JSONs at
+    // `~/.local/share/plasmazones/profiles/<path>.json` are still
+    // picked up. Must outlive the QML engine (Behavior bindings keep
+    // registry handles).
     PlasmaZones::AnimationBootstrap animationBootstrap;
 
     // Publish the bootstrap-owned registries + a fresh clock manager as

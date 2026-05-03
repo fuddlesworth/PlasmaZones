@@ -1,0 +1,27 @@
+{
+    "id": "honeycomb",
+    "name": "Honeycomb",
+    "description": "Hexagonal-grid radial wipe — cells reveal/hide from the centre outward",
+    "author": "arch-disciple, ported by PlasmaZones",
+    "version": "1.0",
+    "category": "Geometric",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "hexSize",
+            "name": "Hex Size",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.04,
+            "max": 0.3
+        },
+        {
+            "id": "softEdge",
+            "name": "Soft Edge",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.4
+        }
+    ]
+}

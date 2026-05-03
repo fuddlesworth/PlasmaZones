@@ -35,7 +35,7 @@
 
 #include <QTest>
 
-#include <PhosphorAnimationLayer/SurfaceAnimator.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorLayer/Role.h>
 

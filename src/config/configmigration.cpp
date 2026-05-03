@@ -793,8 +793,16 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
     }
     if (!profile.isEmpty()) {
-        // Stored as a JSON-encoded string under the animation-profile
-        // key — matches the schema's QMetaType::QString declaration.
+        // v1→v2 writes a stringified JSON blob even though the live schema
+        // now stores AnimationProfile as a nested QVariantMap. Stringifying
+        // here keeps the migrated value as a single scalar leaf so the
+        // schema/migration cross-check
+        // (`testSchemaCoversEveryMigrationDestinationKey`) sees one
+        // declared key (`Animations/AnimationProfile`) instead of treating
+        // the nested object as a sub-group of synthetic per-field keys.
+        // The Settings layer's `Store::read<QVariantMap>` legacy-string
+        // fallback parses this on first load and the next save normalises
+        // it to a nested object.
         animations[ConfigDefaults::animationProfileKey()] =
             QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
     }
@@ -1016,6 +1024,17 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
 void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 {
+    // Defense-in-depth idempotency guard, mirroring migrateV1ToV2. The
+    // PhosphorConfig::MigrationRunner gates this on version == 2 and
+    // `ensureJsonConfig` bails early when version >= ConfigSchemaVersion,
+    // but a direct caller that hands us an already-v3 doc would otherwise
+    // re-read v3-named groups as if they were v2 candidates. The v2→v3
+    // step is largely empty-tolerant (each takeKey returns empty for
+    // absent keys), but the asymmetry vs v1→v2's guard is a foot-gun.
+    if (root.value(ConfigKeys::versionKey()).toInt(0) >= 3) {
+        return;
+    }
+
     // Walk the canonical v2 dot-path Snapping.Behavior.Display by splitting
     // the group accessor on '.' — this keeps the migration in lockstep with
     // the schema instead of duplicating segment names as bare literals.

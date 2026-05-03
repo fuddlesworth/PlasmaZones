@@ -9,13 +9,13 @@
 #include "perscreenresolver.h"
 #include "settingsschema.h"
 
+#include "../core/animationshadersupportedpaths.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
 
-#include <QJsonDocument>
 #include <QGuiApplication>
 #include <QMetaMethod>
 #include <QMetaProperty>
@@ -174,17 +174,18 @@ void Settings::load()
     }
 
     qCInfo(lcConfig) << "Settings loaded";
-    Q_EMIT settingsChanged();
 
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
+    bool anyChanged = false;
     for (int i = firstOwnProp; i < propCount; ++i) {
         const QMetaProperty prop = mo->property(i);
         if (!prop.hasNotifySignal() || !prop.isReadable())
             continue;
         const QVariant newValue = prop.read(this);
         if (newValue != snapshot[i]) {
+            anyChanged = true;
             const QMetaMethod notify = prop.notifySignal();
             notify.invoke(this, Qt::DirectConnection);
         }
@@ -205,6 +206,9 @@ void Settings::load()
         Q_EMIT disabledActivitiesChanged(Mode::Snapping);
     if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
         Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+
+    if (anyChanged)
+        Q_EMIT settingsChanged();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -270,9 +274,16 @@ void Settings::purgeStaleKeys()
     // values and no subsequent save*Config call will rewrite them. Their
     // ancestor paths ("Snapping" for "Snapping.Appearance.Colors") must also
     // survive as intermediate JSON nodes.
+    //
+    // `storeKeyPathPrefixes` covers schema keys that hold OBJECT values
+    // (e.g. AnimationProfile / ShaderProfileTree under Animations).
+    // JsonBackend's groupList() reports any nested object as a dot-path
+    // group, so without this set pass 2 would treat the declared object
+    // value as a stale group and wipe it on save.
     const auto& schema = m_store->schema();
     QSet<QString> storeGroups;
     QSet<QString> storeAncestors;
+    QStringList storeKeyPathPrefixes;
     for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
         const QString& groupName = it.key();
         storeGroups.insert(groupName);
@@ -282,10 +293,21 @@ void Settings::purgeStaleKeys()
             ancestor = ancestor.isEmpty() ? segments[i] : (ancestor + QLatin1Char('.') + segments[i]);
             storeAncestors.insert(ancestor);
         }
+        for (const auto& def : it.value()) {
+            storeKeyPathPrefixes.append(groupName + QLatin1Char('.') + def.key);
+        }
     }
 
     auto isStoreClaimed = [&](const QString& group) {
-        return storeGroups.contains(group) || storeAncestors.contains(group);
+        if (storeGroups.contains(group) || storeAncestors.contains(group)) {
+            return true;
+        }
+        for (const QString& prefix : storeKeyPathPrefixes) {
+            if (group == prefix || group.startsWith(prefix + QLatin1Char('.'))) {
+                return true;
+            }
+        }
+        return false;
     };
 
     // Pass 1: per-key scalar purging inside Store-claimed paths.
@@ -690,44 +712,42 @@ static PhosphorAnimation::CurveRegistry& fallbackCurveRegistry()
 }
 
 namespace {
-/// Read the Profile JSON blob and return it as a mutable object.
-/// Malformed / absent blob returns an empty object — callers that then
-/// write back produce a minimal blob containing only the patched field.
+/// Read the Profile blob as a mutable QJsonObject. Stored as a nested
+/// QVariantMap; an absent / malformed entry returns an empty object so
+/// callers that then write back produce a minimal blob containing only
+/// the patched field.
 QJsonObject readProfileObject(const PhosphorConfig::Store& store)
 {
-    const QString json = store.read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    return doc.isObject() ? doc.object() : QJsonObject{};
+    const QVariantMap map =
+        store.read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    return QJsonObject::fromVariantMap(map);
 }
 
-/// Serialise @p obj and write it to the Profile blob key.
+/// Write @p obj as the Profile blob (stored as a nested QVariantMap).
 void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
 {
-    const QString after = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    store.write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
+    store.write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), obj.toVariantMap());
 }
 } // namespace
 
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
-    // Parse the stored JSON string through Profile::fromJson. Malformed
-    // blobs fall back to a default-constructed Profile (unset-optional
-    // fields) — Profile::effective* methods then substitute library
-    // defaults, matching the "garbage in disk → sensible defaults"
-    // invariant.
-    const QString json =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (!doc.isObject()) {
+    // An absent / malformed blob returns an empty object, which yields a
+    // default-constructed Profile (unset-optional fields). Profile::effective*
+    // methods then substitute library defaults — "garbage in disk → sensible
+    // defaults".
+    const QJsonObject obj = readProfileObject(*m_store);
+    if (obj.isEmpty()) {
         return PhosphorAnimation::Profile{};
     }
     const PhosphorAnimation::CurveRegistry& reg = m_curveRegistry ? *m_curveRegistry : fallbackCurveRegistry();
-    return PhosphorAnimation::Profile::fromJson(doc.object(), reg);
+    return PhosphorAnimation::Profile::fromJson(obj, reg);
 }
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
-    // Equality is a BYTE comparison against the current disk blob, not a
+    // Change detection compares the merged QJsonObject against the
+    // current stored blob via QJsonObject::operator==, NOT through a
     // semantic `Profile::operator==` check. The semantic comparison hits
     // two traps in practice:
     //
@@ -740,12 +760,12 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     //   2. Inversely, when the blob round-trips cleanly the new Profile
     //      may differ slightly (e.g. `effective*` defaults vs unset
     //      optionals) and the semantic `operator==` returns `false` even
-    //      though the on-disk bytes would be unchanged — firing a
-    //      signal storm every call.
+    //      though the stored blob would be unchanged — firing a signal
+    //      storm every call.
     //
-    // Byte-comparing the serialised form of the merged blob sidesteps
-    // both: the only thing that fires signals is a real change to what
-    // gets written to disk.
+    // QJsonObject equality at the blob level sidesteps both: the only
+    // thing that fires signals is a real change to what gets written
+    // to disk.
     //
     // Per-field signal emission still goes through the parsed prev /
     // new Profiles because each `xxxChanged` signal describes an
@@ -753,8 +773,6 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // change with identical effective fields (e.g. curve precision
     // canonicalisation) correctly fires `animationProfileChanged`
     // without fanning out to the per-field signals.
-    const QString currentBytes =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
 
     // Merge: start from the stored blob and overlay every field the
     // incoming Profile emitted. `Profile::toJson` only emits set-optional
@@ -769,17 +787,17 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // future schema extensions, third-party plugin fields — survive
     // intact. Asymmetric removal would wipe them on the first aggregate
     // setter call, and contradict the per-field setters' merge semantics.
-    QJsonObject merged = readProfileObject(*m_store);
+    const QJsonObject current = readProfileObject(*m_store);
+    QJsonObject merged = current;
     const QJsonObject incoming = profile.toJson();
     for (auto it = incoming.constBegin(); it != incoming.constEnd(); ++it) {
         merged.insert(it.key(), it.value());
     }
 
-    const QString newBytes = QString::fromUtf8(QJsonDocument(merged).toJson(QJsonDocument::Compact));
-    if (newBytes == currentBytes) {
+    if (merged == current) {
         // Nothing to write — skip both the store write and every signal.
-        // Guards the slider-drag-at-30-Hz signal-storm case: a value
-        // that serialises to the same bytes must not wake any observer.
+        // Guards the slider-drag-at-30-Hz signal-storm case: a merge that
+        // produces a structurally identical object must not wake observers.
         return;
     }
 
@@ -986,26 +1004,65 @@ void Settings::setAnimationStaggerInterval(int ms)
 
 PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
 {
-    const QString json =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    if (json.isEmpty())
-        return {};
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (!doc.isObject())
-        return {};
-    return PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+    const QVariantMap map =
+        m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    // Prune on read so a config that contains stale overrides on paths
+    // the daemon's overlay service doesn't consume (left over from an
+    // earlier UI revision that exposed the picker on every event row)
+    // can never shadow a user-intended parent override at runtime. The
+    // resolver walks deeper-leaf-wins, so an unsupported leaf entry
+    // would otherwise silently beat the supported parent entry the user
+    // can actually edit. See `src/core/animationshadersupportedpaths.h`
+    // for the rationale + the full SSOT.
+    return pruneShaderProfileTreeToSupportedPaths(
+        PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));
 }
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
-    const QString json = QString::fromUtf8(QJsonDocument(tree.toJson()).toJson(QJsonDocument::Compact));
-    const QString prev =
-        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
-    if (json == prev)
+    // Prune incoming tree at the persistence boundary — same rationale
+    // as the read-side prune in shaderProfileTree(). Belt-and-braces:
+    // the QML UI gates the picker via supportsShaderLeg(), but a
+    // Q_INVOKABLE write coming from elsewhere (future scripting hooks,
+    // tests) cannot stamp unsupported-path entries onto disk.
+    const auto pruned = pruneShaderProfileTreeToSupportedPaths(tree);
+
+    // Value-equality compare so a same-tree write doesn't fire a spurious
+    // changed signal (e.g. discard-changes path that calls
+    // setShaderProfileTree(currentTree)). Compare AFTER pruning so the
+    // first save against a stale-on-disk config still produces a write
+    // that drops the unsupported entries.
+    const QVariantMap prevMap =
+        m_store->read<QVariantMap>(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey());
+    PhosphorAnimationShaders::ShaderProfileTree prevTree;
+    if (!prevMap.isEmpty())
+        prevTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(prevMap));
+    const auto prevPruned = pruneShaderProfileTreeToSupportedPaths(prevTree);
+    if (pruned == prevPruned)
         return;
-    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(), json);
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::shaderProfileTreeKey(),
+                   pruned.toJson().toVariantMap());
     Q_EMIT shaderProfileTreeChanged();
     Q_EMIT settingsChanged();
+}
+
+QString Settings::shaderProfileTreeJson() const
+{
+    return QString::fromUtf8(QJsonDocument(shaderProfileTree().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setShaderProfileTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setShaderProfileTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────

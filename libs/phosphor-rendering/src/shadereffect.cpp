@@ -17,6 +17,44 @@
 namespace PhosphorRendering {
 
 // ============================================================================
+// Default identity vertex shader
+// ============================================================================
+//
+// Pushed to the node whenever a fragment-only consumer (e.g. SurfaceAnimator
+// transition shaders, generic ShaderEffect QML usage) sets a fragmentShader
+// without supplying its own vertex stage. The pipeline requires both stages
+// to compile — without this fallback the bake bails with "Vertex or fragment
+// shader source is empty" and m_shaderReady stays false forever, which the
+// render path surfaces as a silent "render(): bail — shaderReady: false".
+//
+// Geometry-aware effects (slide/popin/morph/etc.) that need to translate or
+// scale the quad must override this by calling node->setVertexShaderSource()
+// or node->loadVertexShader() through a subclass — ZoneShaderItem is the
+// in-tree example of that pattern.
+//
+// The QuadVertices buffer (see internal.h) emits positions in clip space
+// (-1..1) so a pass-through is sufficient. We deliberately avoid binding
+// the UBO here: SRB binding 0 is registered for both stages in the
+// pipeline, but glslang strips the unused declaration during SPIR-V bake,
+// keeping the default stage independent of any consumer-side UBO layout.
+//
+// Stored as `static const QString` (not QLatin1String) so the conversion
+// to QString happens once at static-init. Previously a per-paint
+// `QString(QLatin1String(...))` allocated a fresh QString every frame
+// just to feed `setVertexShaderSource`, which short-circuits via equality.
+static const QString kDefaultVertexShaderSource = QStringLiteral(R"(#version 450
+
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 texcoord;
+layout(location = 0) out vec2 vTexCoord;
+
+void main() {
+    vTexCoord = texcoord;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+)");
+
+// ============================================================================
 // DRY helpers
 // ============================================================================
 
@@ -209,6 +247,63 @@ void ShaderEffect::setShaderSource(const QUrl& source)
     m_shaderDirty = true;
     setStatus(Status::Loading);
     Q_EMIT shaderSourceChanged();
+    update();
+}
+
+void ShaderEffect::setSourceItem(QQuickItem* item)
+{
+    if (m_sourceItem.data() == item) {
+        return;
+    }
+    // Self-reference (sampling literally `this`) is rejected; ANCESTOR
+    // sampling is supported and load-bearing (SurfaceAnimator parents
+    // shaderItem under shaderAnchor for coord-system mapping, then calls
+    // setSourceItem(shaderAnchor) so the anchor's layer texture binds to
+    // iChannel0). Qt's layer system uses a back-buffer so sampling an
+    // ancestor reads last-frame's content — no infinite recursion. An
+    // earlier ancestor-walk guard here silently broke every shader leg.
+    if (item == this) {
+        qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this`; cannot sample own output.";
+        return;
+    }
+    m_sourceItem = item;
+    if (item) {
+        // Force `layer.enabled = true` so the QQuickItem becomes a
+        // texture provider. The naive single-step
+        // `item->setProperty("layer.enabled", true)` doesn't work —
+        // Qt's meta-object system doesn't auto-resolve nested property
+        // paths; the call sets a brand new dynamic property called
+        // "layer.enabled" on the item without ever touching
+        // QQuickItemLayer. Diagnostic logging confirmed this:
+        // `isTextureProvider()` stayed false immediately after a
+        // setProperty call that "succeeded".
+        //
+        // The two-step access via `item->property("layer")` resolves
+        // the QQuickItemLayer sub-object (a QObject in its own right)
+        // and `layer->setProperty("enabled", true)` flips the real
+        // backing flag, which synchronously triggers QSGLayer creation
+        // and makes `isTextureProvider()` return true. Already-true is
+        // idempotent — Qt's layer property setter early-returns on
+        // unchanged values.
+        //
+        // We don't restore the previous value on unset because we
+        // can't know whether the consumer wanted layer for other
+        // reasons; callers that need symmetric teardown should track
+        // and reset `layer.enabled` themselves.
+        if (!item->isTextureProvider()) {
+            QObject* layer = item->property("layer").value<QObject*>();
+            if (layer) {
+                layer->setProperty("enabled", true);
+            }
+        }
+    }
+    // No m_shaderDirty here. The SRB rebind is already covered:
+    // updatePaintNode() pushes the new provider via
+    // setSourceTextureProvider() which calls resetAllBindingsAndPipelines()
+    // when the pointer changes. Forcing a full shader recompile every
+    // sourceItem swap (the previous behaviour) was wasted work — the
+    // baked QShader doesn't depend on which texture is bound.
+    Q_EMIT sourceItemChanged();
     update();
 }
 
@@ -738,11 +833,13 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     }
 
     auto* node = static_cast<ShaderNodeRhi*>(oldNode);
+    bool freshNode = false;
     if (!node) {
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
         m_renderNode = nullptr;
         node = createShaderNode();
         m_renderNode = node;
+        freshNode = true;
     }
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
@@ -754,11 +851,29 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
     }
 
+    // ── Sync source texture provider (slot 0 / binding 7 override) ───
+    // Pushed every paint pass so a setSourceItem(...) call after the
+    // node already exists picks up immediately, and so a torn-down
+    // source (QPointer auto-nulls) clears the binding instead of
+    // leaving a dangling provider in the node.
+    if (m_sourceItem && m_sourceItem->isTextureProvider()) {
+        node->setSourceTextureProvider(m_sourceItem->textureProvider());
+    } else {
+        node->setSourceTextureProvider(nullptr);
+    }
+
     // Uniform extension is synced inside syncBasePropertiesToNode() above.
 
     // ── Sync shader source (must compile before rendering) ───────────
+    // freshNode covers SG-deletion + first-call: a brand-new node has no
+    // shader baked, so trigger a load regardless of m_shaderDirty.
+    // Do NOT retry on `!node->isShaderReady()` alone — a permanent load
+    // failure (missing file, bad GLSL) would otherwise re-attempt every
+    // frame and spam the journal at 60Hz. Real device-loss is handled by
+    // sceneGraphAboutToStop, which sets m_shaderDirty=true; transient
+    // errors retry on the next shaderSource change.
     const bool wasDirty = m_shaderDirty.exchange(false);
-    const bool needLoad = wasDirty || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    const bool needLoad = wasDirty || freshNode;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             QString fragPath = m_shaderSource.toLocalFile();
@@ -768,6 +883,17 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
             if (!fragPath.isEmpty()) {
                 node->setShaderIncludePaths(m_shaderIncludePaths);
+                // Push the default identity vertex shader before loading
+                // the fragment stage. The pipeline requires both stages
+                // to compile — without this, fragment-only consumers
+                // (SurfaceAnimator's transition effects, plain QML
+                // ShaderEffect users) leave m_vertexShaderSource empty
+                // and the bake aborts with "Vertex or fragment shader
+                // source is empty". Subclasses that need geometry-aware
+                // vertex stages (e.g. ZoneShaderItem with its zone.vert)
+                // override updatePaintNode() entirely and bypass this
+                // base implementation.
+                node->setVertexShaderSource(kDefaultVertexShaderSource);
                 if (node->loadFragmentShader(fragPath)) {
                     node->invalidateShader();
                     setStatus(Status::Ready);
@@ -776,6 +902,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     if (errorMsg.isEmpty()) {
                         errorMsg = QStringLiteral("Shader loading failed");
                     }
+                    qCWarning(lcShaderNode) << "Fragment shader load failed:" << fragPath << "—" << errorMsg;
                     setError(errorMsg);
                 }
             }

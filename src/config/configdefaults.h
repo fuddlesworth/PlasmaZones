@@ -19,6 +19,8 @@
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
 #include <PhosphorTiles/AutotileConstants.h>
+// Animation duration / stagger UI bounds — generic policy, not autotile-specific.
+#include <PhosphorAnimation/AnimationLimits.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -866,11 +868,11 @@ public:
     }
     static constexpr int animationDurationMin()
     {
-        return PhosphorTiles::AutotileDefaults::MinAnimationDuration;
+        return PhosphorAnimation::Limits::MinAnimationDurationMs;
     }
     static constexpr int animationDurationMax()
     {
-        return PhosphorTiles::AutotileDefaults::MaxAnimationDuration;
+        return PhosphorAnimation::Limits::MaxAnimationDurationMs;
     }
     static int animationSequenceMode()
     {
@@ -890,11 +892,11 @@ public:
     }
     static constexpr int animationStaggerIntervalMin()
     {
-        return PhosphorTiles::AutotileDefaults::MinAnimationStaggerIntervalMs;
+        return PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs;
     }
     static constexpr int animationStaggerIntervalMax()
     {
-        return PhosphorTiles::AutotileDefaults::MaxAnimationStaggerIntervalMs;
+        return PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs;
     }
     static QString animationEasingCurve()
     {
@@ -912,22 +914,17 @@ public:
     {
         return 200;
     }
-    /// Default Profile JSON blob — the new Phase-4 storage format for
-    /// animation settings (decision S). Assembled from the per-field
-    /// defaults above so the library-default feel is unchanged from
-    /// the pre-migration surface. Serialized via `Profile::toJson` in
-    /// `settings.cpp`; stored as a string under
-    /// `animationsGroup/animationProfileKey`.
-    ///
-    /// This lives as a method (not a const) because `Profile::toJson`
-    /// is not constexpr and the ConfigDefaults convention for
-    /// composite defaults (e.g., `autotileDragInsertTriggers`) is a
-    /// function returning the composite value.
-    static QString animationProfile(const PhosphorAnimation::CurveRegistry& registry);
+    /// Default Profile blob — animation settings live as a single
+    /// nested-JSON entry under `animationsGroup/animationProfileKey`.
+    /// Persisted as a `QVariantMap` so the on-disk JSON file shows the
+    /// nested object structure directly (no escaped string-in-string).
+    /// Assembled from the per-field defaults above so the library-default
+    /// feel matches `Profile::toJson` shape.
+    static QVariantMap animationProfile(const PhosphorAnimation::CurveRegistry& registry);
 
-    static QString shaderProfileTree()
+    static QVariantMap shaderProfileTree()
     {
-        return QString();
+        return {};
     }
 
     static bool autotileFocusFollowsMouse()
@@ -1368,6 +1365,27 @@ public:
     static QString autotileRetileShortcut()
     {
         return QStringLiteral("Meta+Ctrl+R");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // XDG Data Sub-directories
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // Sub-paths under `QStandardPaths::GenericDataLocation` (typically
+    // `~/.local/share`) for assets the settings app and daemon write at
+    // runtime. Centralised here so a directory rename is a one-line edit.
+
+    static QString userProfilesSubdir()
+    {
+        return QStringLiteral("/plasmazones/profiles");
+    }
+    static QString userAnimationsSubdir()
+    {
+        return QStringLiteral("/plasmazones/animations");
+    }
+    static QString userMotionSetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/motionsets");
     }
 
 private:

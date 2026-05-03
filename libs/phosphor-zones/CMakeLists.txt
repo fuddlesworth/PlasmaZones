@@ -58,12 +58,21 @@ if(NOT TARGET PhosphorScreens::PhosphorScreens)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
+if(NOT TARGET PhosphorGeometry::PhosphorGeometry)
+    find_package(PhosphorGeometry CONFIG REQUIRED)
+endif()
+
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorzones_public_HDRS
     include/PhosphorZones/PhosphorZones.h
+    include/PhosphorZones/GeometryUtils.h
     include/PhosphorZones/Zone.h
     include/PhosphorZones/ZoneDefaults.h
     include/PhosphorZones/ZoneJsonKeys.h
@@ -123,6 +132,21 @@ target_include_directories(PhosphorZones
 )
 
 target_compile_features(PhosphorZones PUBLIC cxx_std_20)
+
+# Suppress GCC 14's `-Wsfinae-incomplete` for moc-generated TUs in this
+# library. Qt6's MOC emits boilerplate that probes Q_OBJECT subclasses
+# in SFINAE expressions before their full definition is visible
+# (forward decls in cross-cutting headers like IZoneDetector.h /
+# GeometryUtils.h followed by the full class in Zone.h / Layout.h),
+# which trips the new GCC 14 diagnostic. The pattern is technically
+# non-portable per [class.mem]/27 but is the de-facto Qt6 build shape
+# and works correctly on every supported compiler. Scoped PRIVATE so
+# downstream consumers still see the diagnostic on their own code.
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wno-sfinae-incomplete" PZ_HAS_NO_SFINAE_INCOMPLETE)
+if(PZ_HAS_NO_SFINAE_INCOMPLETE)
+    target_compile_options(PhosphorZones PRIVATE -Wno-sfinae-incomplete)
+endif()
 
 target_link_libraries(PhosphorZones
     PUBLIC

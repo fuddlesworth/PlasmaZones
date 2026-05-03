@@ -105,6 +105,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                                << "windowSizeAfterSet=" << window->width() << "x" << window->height();
             // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup)
             // and clears Qt.WindowTransparentForInput so input routes again.
+            cancelSurfacePrime(surface);
             surface->show();
         }
     } else {
@@ -139,6 +140,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             window->setWidth(geom.width());
             window->setHeight(geom.height());
             // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup).
+            cancelSurfacePrime(surface);
             surface->show();
         }
     }
@@ -604,6 +606,15 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     state.zoneSelectorSurface = surface;
     state.zoneSelectorWindow = window;
     state.zoneSelectorPhysScreen = physScreen;
+
+    // Prime the wl_surface map + Vulkan swapchain init + QSGLayer first
+    // render. The user-show that follows immediately (showZoneSelector
+    // calls createZoneSelectorWindow then surface->show()) will
+    // cancelSurfacePrime to disarm the queued hide; the prime's own
+    // surface->show() leaves the wl_surface mapped, so the user's
+    // beginShow runs against a hot rendering pipeline. See
+    // OverlayService::primeSurfaceRenderPipeline.
+    primeSurfaceRenderPipeline(surface);
 }
 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)

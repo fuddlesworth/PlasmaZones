@@ -170,11 +170,18 @@ Item {
             return i18n("Action completed");
         }
     }
+    // Per-side padding (fraction of container width/height) reserved for
+    // shader transition effects whose silhouette extends outside the
+    // container's rectangle. Set by the daemon based on the active shader's
+    // metadata.
+    property real shaderBoundsPadding: 0
     // Content-driven desired size, exposed for the unified host (which binds
     // its Window width/height to these readonly properties; C++ also reads
     // them after every property write to compute matching layer-shell margins).
-    readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
-    readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
+    // Inflated by `2 * shaderBoundsPadding` on each axis so the wayland surface
+    // has room for shader silhouettes that ripple outside the container.
+    readonly property int contentDesiredWidth: Math.round(container.width * (1 + 2 * shaderBoundsPadding)) + Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int contentDesiredHeight: Math.round(container.height * (1 + 2 * shaderBoundsPadding)) + Math.round(Kirigami.Units.gridUnit * 2.5)
 
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified NotificationOverlay host re-emits this as its own
@@ -253,7 +260,7 @@ Item {
         source: container
         anchors.fill: container
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.5)
+        shadowColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
         shadowBlur: 1
         shadowVerticalOffset: 4
         shadowHorizontalOffset: 0
@@ -268,14 +275,22 @@ Item {
     Rectangle {
         id: container
 
+        // Shader-anchor opt-in: SurfaceAnimator's transition shader leg
+        // walks the visual tree for a `shaderAnchor: true` property tag
+        // and parents the transition shader (sized to this item, layer-
+        // enabled here) so pixelate / dissolve / glitch / etc. operate
+        // on this card's pixels rather than the fullscreen wayland
+        // surface backing the OSD host.
+        property bool shaderAnchor: true
+
         anchors.centerIn: parent
         // Text-only: size based on message content
-        width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, 160)
+        width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10)
         height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
         color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
-        border.width: 1
+        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
 
         // Message label - informative text-based feedback
         Label {
@@ -300,6 +315,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: dismiss.fire()
+        Accessible.name: i18n("Dismiss notification")
     }
 
 }

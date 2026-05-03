@@ -290,6 +290,44 @@ private:
      */
     void ensureOsdScreenAddedConnected();
 
+    /**
+     * @brief Prime a freshly-created Surface's render pipeline.
+     *
+     * Surface::warmUp() pre-loads the QML scene graph but DOES NOT map the
+     * wl_surface or initialise the Vulkan swapchain — those happen on the
+     * first Surface::show(). For surfaces that drive shader-exclusive
+     * transitions through SurfaceAnimator, the first show racing the
+     * map+swapchain init also races the QSGLayer's first capture for the
+     * shader's iChannel0: the layer's source-item hasn't rendered yet, so
+     * the shader's first frame samples an empty/stale FBO and visibly
+     * flashes for shaders whose iTime=0 frame is opaque (popin/morph/
+     * pixelate/glitch).
+     *
+     * This helper does a sacrificial show+hide on the surface so the
+     * compositor maps the wl_surface, Vulkan initialises the swapchain,
+     * the QSGLayer renders at least one frame, and the surface lands
+     * back in State::Hidden with the QQuickWindow still mapped (every
+     * surface that uses this helper has SurfaceConfig::keepMappedOnHide
+     * = true, so the wl_surface stays alive across the hide).
+     *
+     * Surfaces are tracked in m_primingSurfaces so a user-triggered show
+     * landing during the prime window can cancel the queued hide via
+     * cancelSurfacePrime() and avoid a race that would visibly hide the
+     * user's freshly-shown content. The QML during prime has mode="" /
+     * no content (loader.sourceComponent==null), so the user sees
+     * nothing during the cycle even if the prime show animation fires.
+     */
+    void primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface);
+
+    /**
+     * @brief Cancel a queued prime hide for @p surface.
+     *
+     * Call right BEFORE a user-triggered Surface::show() to disarm the
+     * frameSwapped one-shot connection installed by primeSurface-
+     * RenderPipeline. No-op for surfaces that aren't currently priming.
+     */
+    void cancelSurfacePrime(PhosphorLayer::Surface* surface);
+
 public:
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
@@ -527,7 +565,7 @@ private:
     // post-Phase-2 unification — no separate per-mode window pointers.
 
     // Shader preview overlay (editor dialog)
-    PhosphorLayer::Surface* m_shaderPreviewSurface = nullptr;
+    QPointer<PhosphorLayer::Surface> m_shaderPreviewSurface;
     QQuickWindow* m_shaderPreviewWindow = nullptr;
     QPointer<QScreen> m_shaderPreviewScreen;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
@@ -572,21 +610,54 @@ private:
     //     the engine teardown that destroys the providers, so no
     //     worker-thread reader is in flight either.
     //
-    // If the teardown invariant ever changes — SurfaceManager teardown
-    // moving to a worker thread, an engine-recreation path, or anything
-    // that pumps the event loop inside ~QQmlEngine — replace
-    // m_thumbnailProvider with std::atomic and serialise the lambda
-    // null-out against readers. The current safety is contract-level,
-    // not structural.
+    // m_thumbnailProvider is std::atomic so the null-out in the
+    // ~QQmlEngine destroyed lambda is visible to any concurrent reader
+    // (image-loader worker threads). This makes the safety structural
+    // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
-    SnapAssistThumbnailProvider* m_thumbnailProvider = nullptr;
+    std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
     // PhosphorZones::Layout Picker overlay (interactive layout browser)
     PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;
     QPointer<QScreen> m_layoutPickerScreen;
     QString m_layoutPickerScreenId;
+    /// Guards hideLayoutPicker against re-entrant calls during the
+    /// SurfaceAnimator's hide leg. The picker is destroy-on-hide
+    /// (KWin re-evaluates keyboard_interactivity at initial-map only),
+    /// so hideLayoutPicker drives Surface::hide() — runs the shader/
+    /// motion hide animation — then destroys the wl_surface in the
+    /// stateChanged → Hidden handler. A second hideLayoutPicker call
+    /// before that handler fires would otherwise double-arm the
+    /// listener and double-emit layoutPickerDismissed. Reset by the
+    /// handler on Hidden, by a Shown transition (show cancelled the
+    /// hide), and by destroyLayoutPickerWindow (external destruction
+    /// path — screen lost, etc.).
+    bool m_layoutPickerHiding = false;
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
+    /// Surfaces currently in the prime cycle (between primeSurfaceRender-
+    /// Pipeline's show and its frameSwapped-driven hide). User-triggered
+    /// show paths must call cancelSurfacePrime before their own
+    /// Surface::show() so the queued prime-hide doesn't race the user's
+    /// content off the screen.
+    QSet<PhosphorLayer::Surface*> m_primingSurfaces;
+    /// Per-surface frameSwapped Connection (only for the window-armed
+    /// stage of priming; the warm-pending stage doesn't use it).
+    /// cancelSurfacePrime explicitly disconnects the entry here so the
+    /// queued hide-on-first-paint lambda doesn't fire after a user-show
+    /// — without this, the connection lives until next paint and leaks
+    /// one slot per prime cycle for the surface's lifetime under rapid
+    /// show/hide toggling.
+    QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingFrameConnections;
+    /// Per-surface destroyed-signal Connection. Replaces the earlier
+    /// `pz_primingDestroyedConnected` Qt dynamic property gate which
+    /// leaked across OverlayService instances (test fixtures, daemon
+    /// hot-restart) — a fresh service that re-encountered the same
+    /// Surface* would skip wiring its own cleanup. Per-instance
+    /// tracking ensures each service installs exactly one slot per
+    /// surface; the surface's own destruction auto-disconnects via
+    /// `this`-receiver-context, and we drop the entry from the slot.
+    QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingDestroyedConnections;
     // "Notifications have been pre-warmed" flag. With LayoutOsd and
     // NavigationOsd unified onto a single per-screen NotificationOverlay
     // surface, this single flag gates whether the screenAdded hot-plug

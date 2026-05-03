@@ -145,14 +145,22 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
 constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 
-// Scene header: iResolution through end of iTextureResolution
-// (everything between time block and iTimeHi — excludes extension zone arrays)
+// Scene header: iResolution through end of iTextureResolution.
+// Excludes iTimeHi (has its own region below) and extension zone arrays.
+// WARNING: if a new field is added between iTextureResolution and iTimeHi,
+// it must be explicitly included in either this region or K_TIME_HI — a
+// field that lands in the gap between K_SCENE_HEADER end and K_TIME_HI
+// start will never be uploaded. Add a static_assert for any new field.
 constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(BaseUniforms, iResolution);
 constexpr size_t K_SCENE_HEADER_SIZE = offsetof(BaseUniforms, iTimeHi) - K_SCENE_HEADER_OFFSET;
 
 // iTimeHi block: uploaded when the wrap offset advances (rare)
 constexpr size_t K_TIME_HI_OFFSET = offsetof(BaseUniforms, iTimeHi);
 constexpr size_t K_TIME_HI_SIZE = sizeof(float);
+
+// Verify the scene-header and iTimeHi regions are contiguous (no gap).
+static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == K_TIME_HI_OFFSET,
+              "Scene-header and iTimeHi regions must be contiguous — no un-uploaded gap");
 
 // Total base size (for extension offset calculation)
 constexpr size_t K_BASE_SIZE = sizeof(BaseUniforms);

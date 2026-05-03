@@ -29,6 +29,7 @@
 #include "dbusutils.h"
 #include "version.h"
 
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -303,6 +304,44 @@ SettingsController::SettingsController(QObject* parent)
     // is guaranteed since m_settings is the first member declared).
     m_generalPage = new GeneralPageController(&m_settings, this);
 
+    // Animation shader registry — settings-side mirror of the daemon's.
+    // Both processes scan the same XDG dirs independently; FS watching
+    // keeps each in sync without IPC. Mirrors daemon.cpp:setupAnimation
+    // ShaderEffects (XDG search paths + user dir, materialised before
+    // registration so the watcher attaches a direct watch).
+    m_animationShaderRegistry = new PhosphorAnimationShaders::AnimationShaderRegistry(this);
+    {
+        // Centralised subdir constant (with leading "/") — strip the slash for
+        // locateAll's relative-path arg, keep it as-is for the writable-base
+        // join. This matches AnimationsPageController::userShaderDirectoryPath
+        // so the two settings-side consumers can never drift apart.
+        const QString subdir = ConfigDefaults::userAnimationsSubdir();
+        QStringList animDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1),
+                                                         QStandardPaths::LocateDirectory);
+        std::reverse(animDirs.begin(), animDirs.end());
+        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
+        if (!animDirs.contains(userAnimDir))
+            animDirs.append(userAnimDir);
+        QDir().mkpath(userAnimDir);
+        m_animationShaderRegistry->setUserPath(userAnimDir);
+        m_animationShaderRegistry->addSearchPaths(animDirs);
+    }
+
+    // Animations page sub-controller — Q_PROPERTY surface for the new
+    // animation-event drilldown. Per-event motion overrides persist as
+    // JSON files under `~/.local/share/plasmazones/profiles/`, picked up
+    // by the daemon's existing `PhosphorAnimation::ProfileLoader` watch;
+    // shader assignments persist via Settings::shaderProfileTree.
+    m_animationsPage = new AnimationsPageController(m_animationShaderRegistry, &m_settings, this);
+    // Mark dirty whenever the user has unsaved animation changes the
+    // Discard button could revert. We don't auto-clear when pending
+    // becomes false (commit/revert do that explicitly) — that would
+    // race with `setNeedsSave(false)` in load()/save().
+    connect(m_animationsPage, &AnimationsPageController::pendingChangesChanged, this, [this]() {
+        if (!m_loading && !m_saving && m_animationsPage->hasPendingChanges())
+            setNeedsSave(true);
+    });
+
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
     m_screenHelper.refreshScreens();
@@ -507,6 +546,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     static const QHash<QString, QString> redirects{
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
+        {QStringLiteral("animations"), QStringLiteral("animations-general")},
     };
     return redirects;
 }
@@ -537,6 +577,16 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
+        QStringLiteral("animations-general"),
+        QStringLiteral("animations-windows"),
+        QStringLiteral("animations-zones"),
+        QStringLiteral("animations-notifications"),
+        QStringLiteral("animations-popups"),
+        QStringLiteral("animations-workspaces"),
+        QStringLiteral("animations-widgets"),
+        QStringLiteral("animations-presets"),
+        QStringLiteral("animations-motionsets"),
+        QStringLiteral("animations-shaders"),
     };
     return pages;
 }
@@ -564,6 +614,14 @@ void SettingsController::setActivePage(const QString& page)
 void SettingsController::load()
 {
     m_loading = true;
+    // Animation pages persist per-event motion overrides as separate
+    // files (file-per-path under ~/.local/share/plasmazones/profiles/);
+    // m_settings.load() alone wouldn't restore them on Discard. The
+    // page controller's pre-edit snapshot rewinds those files. Shader
+    // overrides don't need this — they ride Settings::load()'s
+    // Q_PROPERTY re-emit like every other page setting.
+    if (m_animationsPage)
+        m_animationsPage->revertPending();
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
@@ -597,6 +655,13 @@ void SettingsController::save()
 
     // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
+
+    // Animations write to disk immediately, so commit just clears the
+    // session snapshot — there's nothing left to flush. After this the
+    // user can no longer Discard back to the pre-session state for any
+    // animation edits made so far.
+    if (m_animationsPage)
+        m_animationsPage->commitPending();
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.

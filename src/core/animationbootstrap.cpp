@@ -3,8 +3,10 @@
 
 #include "animationbootstrap.h"
 
+#include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 
 #include <QDir>
@@ -13,8 +15,11 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <array>
 
 namespace PlasmaZones {
+
+constexpr QLatin1StringView kShellAnimationFamilySeedsOwnerTag{"plasmazones-shell-family-seeds"};
 
 namespace {
 // Owner-tag partition used by secondary processes' ProfileLoader. Distinct
@@ -110,22 +115,136 @@ AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistr
     return handles;
 }
 
-void runInitialAnimationLoad(PhosphorAnimation::CurveLoader& curveLoader,
-                             PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
+void runInitialCurveLoad(PhosphorAnimation::CurveLoader& curveLoader, const AnimationLoaderDirs& dirs)
 {
     using namespace PhosphorAnimation;
 
-    // Curves first so any profile JSON referencing a user-authored curve
-    // resolves on first parse rather than waiting for the curveLoader→
-    // profileLoader rescan wire to fire on the second pass.
-    //
     // Library-level pack first (today a no-op — the library ships no
-    // bundled curves/profiles — but kept for future curve-pack additions).
+    // bundled curves — but kept for future curve-pack additions).
     curveLoader.loadLibraryBuiltins();
     curveLoader.loadFromDirectories(dirs.curveDirs, LiveReload::On);
+}
+
+void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
+{
+    using namespace PhosphorAnimation;
 
     profileLoader.loadLibraryBuiltins();
     profileLoader.loadFromDirectories(dirs.profileDirs, LiveReload::On);
+}
+
+void runInitialAnimationLoad(PhosphorAnimation::CurveLoader& curveLoader,
+                             PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
+{
+    // Curves first so any profile JSON referencing a user-authored curve
+    // resolves on first parse rather than waiting for the curveLoader→
+    // profileLoader rescan wire to fire on the second pass.
+    runInitialCurveLoad(curveLoader, dirs);
+    runInitialProfileLoad(profileLoader, dirs);
+}
+
+void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,
+                                const PhosphorAnimation::CurveRegistry& curves)
+{
+    using namespace PhosphorAnimation;
+
+    // Family-level defaults — one entry per top-level surface family
+    // (plus the asymmetric show/hide leaves where the prior tuning
+    // mattered enough to preserve). These re-create the prior bundled-
+    // JSON character WITHOUT shadowing leaf-level Settings overrides:
+    // PhosphorProfileRegistry::resolveWithInheritance walks up from each
+    // leaf, so a Settings edit at the leaf wins, an unset leaf
+    // inherits from its family parent here, and an unseeded family
+    // falls through to library defaults (150 ms OutCubic).
+    //
+    // Registered under the "shell-family-seeds" owner tag so the
+    // ProfileLoader's reloadFromOwner correctly overwrites a seed when
+    // the user authors `~/.local/share/plasmazones/profiles/<path>.json`
+    // for the same path (loader's "direct-owner-wins" check only
+    // protects empty-owner entries, not other tagged ones). Settings
+    // publishes via direct-owner registerProfile, which always wins
+    // because it overwrites unconditionally and direct-owner is
+    // protected from the loader on subsequent rescans.
+    //
+    // MUST be called AFTER curves are loaded (so `curves.tryCreate`
+    // can resolve curve names like "widget-out") and BEFORE the
+    // profile loader's initial scan (so a user JSON at a seeded path
+    // can overwrite the seed in the same setup pass).
+    struct FamilySeed
+    {
+        QLatin1StringView path;
+        QLatin1StringView curveSpec;
+        qreal durationMs;
+    };
+    constexpr std::array<FamilySeed, 23> seeds{{
+        // ── Popups ────────────────────────────────────────────────
+        // Family parent — leaves (panel.popup.layoutPicker.*,
+        // panel.popup.zoneSelector.*, panel.popup.snapAssist.*)
+        // inherit from this.
+        {QLatin1StringView{"panel.popup"}, QLatin1StringView{"widget-out"}, 150.0},
+        // Single-leaf path — no real "panel" family above it.
+        {QLatin1StringView{"panel.slideIn"}, QLatin1StringView{"widget-out"}, 200.0},
+
+        // ── OSDs ──────────────────────────────────────────────────
+        // Asymmetric show / hide curves — seeded individually
+        // because the family parent can carry only one curve.
+        {QLatin1StringView{"osd.show"}, QLatin1StringView{"cubic-out"}, 150.0},
+        {QLatin1StringView{"osd.hide"}, QLatin1StringView{"cubic-in"}, 200.0},
+
+        // ── Widgets ───────────────────────────────────────────────
+        // Family parent — covers fade, hover, reorder, progress,
+        // toggle-color etc. that share the 150 ms ease-out shape.
+        {QLatin1StringView{"widget"}, QLatin1StringView{"widget-out"}, 150.0},
+        // Distinctive leaves whose prior tuning materially differed
+        // from the family default. Two-layer resolveWithInheritance
+        // means a user edit at `widget` still cascades to these
+        // leaves — the seeds form the lowest precedence layer.
+        {QLatin1StringView{"widget.press"}, QLatin1StringView{"widget-out"}, 100.0},
+        {QLatin1StringView{"widget.dim"}, QLatin1StringView{"widget-out"}, 200.0},
+        {QLatin1StringView{"widget.tint"}, QLatin1StringView{"widget-out"}, 300.0},
+        {QLatin1StringView{"widget.tint-fast"}, QLatin1StringView{"widget-out"}, 120.0},
+        {QLatin1StringView{"widget.toggle"}, QLatin1StringView{"widget-pop"}, 250.0},
+        {QLatin1StringView{"widget.badge"}, QLatin1StringView{"widget-pop"}, 200.0},
+        {QLatin1StringView{"widget.accordion"}, QLatin1StringView{"widget-out"}, 250.0},
+        // Pulse cluster — sinusoidal ease for the looped pulse feel.
+        {QLatin1StringView{"widget.pulse"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1000.0},
+        {QLatin1StringView{"widget.pulse-fast"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 500.0},
+        {QLatin1StringView{"widget.pulse-slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
+        // Asymmetric fade-out — ease-in over a longer envelope.
+        {QLatin1StringView{"widget.fadeOut"}, QLatin1StringView{"cubic-in"}, 400.0},
+
+        // ── Sidebars ──────────────────────────────────────────────
+        // Bespoke bezier curves — neither maps cleanly to a family.
+        {QLatin1StringView{"sidebar.fadeIn"}, QLatin1StringView{"cubic-bezier:0.25,0.46,0.45,0.94"}, 120.0},
+        {QLatin1StringView{"sidebar.fadeOut"}, QLatin1StringView{"cubic-bezier:0.55,0.085,0.68,0.53"}, 80.0},
+
+        // ── Windows ───────────────────────────────────────────────
+        // Family ease-out for open/move/resize/focus/maximize;
+        // close is the notable ease-in exception.
+        {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
+        {QLatin1StringView{"window.close"}, QLatin1StringView{"cubic-in"}, 150.0},
+
+        // ── Zones ─────────────────────────────────────────────────
+        // Snap in/out/resize, layout switch, and highlight all
+        // hover around 200 ms ease-out.
+        {QLatin1StringView{"zone"}, QLatin1StringView{"widget-out"}, 200.0},
+
+        // ── Workspaces ────────────────────────────────────────────
+        // Asymmetric switch in / out — ease-out then ease-in.
+        {QLatin1StringView{"workspace.switchIn"}, QLatin1StringView{"cubic-out"}, 250.0},
+        {QLatin1StringView{"workspace.switchOut"}, QLatin1StringView{"cubic-in"}, 250.0},
+    }};
+
+    for (const auto& seed : seeds) {
+        Profile profile;
+        profile.curve = curves.tryCreate(QString(seed.curveSpec));
+        profile.duration = seed.durationMs;
+        // Curve `nullptr` is acceptable — the consumer falls through
+        // to the library default (outCubic). That's the expected
+        // outcome when a curve JSON is missing on a portable build,
+        // and emits no warning on the daemon's hot path.
+        registry.registerProfile(QString(seed.path), profile, QString(kShellAnimationFamilySeedsOwnerTag));
+    }
 }
 
 AnimationBootstrap::AnimationBootstrap()
@@ -136,7 +255,20 @@ AnimationBootstrap::AnimationBootstrap()
     m_curveLoader = std::move(handles.curveLoader);
     m_profileLoader = std::move(handles.profileLoader);
 
-    runInitialAnimationLoad(*m_curveLoader, *m_profileLoader, handles.dirs);
+    // Configure the registry's two-layer resolveWithInheritance so
+    // seed entries form the lowest-precedence layer — a user edit at
+    // any depth still cascades past leaf seeds. MUST be set before
+    // any QML binding evaluates resolveWithInheritance, hence here in
+    // the bootstrap ctor.
+    m_profileRegistry.setLowPrecedenceOwnerTag(QString(kShellAnimationFamilySeedsOwnerTag));
+
+    // Three-step load: curves first (so seedShellAnimationFamilies can
+    // resolve named curves like "widget-out"), then seeds (so the
+    // profile loader's reloadFromOwner correctly overwrites a seed
+    // when the user authored a JSON at the same path), then profiles.
+    runInitialCurveLoad(*m_curveLoader, handles.dirs);
+    seedShellAnimationFamilies(m_profileRegistry, *m_curveRegistry);
+    runInitialProfileLoad(*m_profileLoader, handles.dirs);
 }
 
 AnimationBootstrap::~AnimationBootstrap() = default;
