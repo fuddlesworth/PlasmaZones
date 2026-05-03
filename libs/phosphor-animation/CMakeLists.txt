@@ -93,6 +93,7 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 set(phosphoranimation_public_HDRS
     # Core motion runtime
     include/PhosphorAnimation/PhosphorAnimation.h
+    include/PhosphorAnimation/AnimationLimits.h
     include/PhosphorAnimation/Curve.h
     include/PhosphorAnimation/Easing.h
     include/PhosphorAnimation/Spring.h
@@ -113,14 +114,6 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/CurveLoader.h
     include/PhosphorAnimation/ProfileLoader.h
 
-    # QML wrappers (ex phosphor-animation-qml)
-    include/PhosphorAnimation/PhosphorEasing.h
-    include/PhosphorAnimation/PhosphorSpring.h
-    include/PhosphorAnimation/PhosphorCurve.h
-    include/PhosphorAnimation/PhosphorProfile.h
-    include/PhosphorAnimation/QtQuickClockManager.h
-    include/PhosphorAnimation/PhosphorMotionAnimation.h
-
     # Shader pipeline (ex phosphor-animation-shaders)
     include/PhosphorAnimation/PhosphorAnimationShaders.h
     include/PhosphorAnimation/AnimationShaderContract.h
@@ -132,6 +125,23 @@ set(phosphoranimation_public_HDRS
     # Layer animator (ex phosphor-animation-layer)
     include/PhosphorAnimation/PhosphorAnimationLayer.h
     include/PhosphorAnimation/SurfaceAnimator.h
+)
+
+# QML wrapper headers — installed alongside the public headers but
+# NOT compiled into the main PhosphorAnimation target, because their
+# implementations (phosphorcurve.cpp, phosphormotionanimation.cpp,
+# qtquickclockmanager.cpp) only live in PhosphorAnimationQml. Listing
+# them in the main target's source set caused AUTOMOC to generate
+# moc references against absent implementations, producing the
+# "undefined reference to ~PhosphorMotionAnimation()" link errors
+# after the QML SRCS were extracted to the QML target.
+set(phosphoranimation_qml_HDRS
+    include/PhosphorAnimation/PhosphorEasing.h
+    include/PhosphorAnimation/PhosphorSpring.h
+    include/PhosphorAnimation/PhosphorCurve.h
+    include/PhosphorAnimation/PhosphorProfile.h
+    include/PhosphorAnimation/QtQuickClockManager.h
+    include/PhosphorAnimation/PhosphorMotionAnimation.h
 )
 
 # ===============================================================================
@@ -371,7 +381,7 @@ install(TARGETS PhosphorAnimation
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-install(FILES ${phosphoranimation_public_HDRS}
+install(FILES ${phosphoranimation_public_HDRS} ${phosphoranimation_qml_HDRS}
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation
 )
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorAnimation/phosphoranimation_export.h

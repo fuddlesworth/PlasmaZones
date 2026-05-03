@@ -732,7 +732,6 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
                                                  const QVariantMap& parameters)
 {
-    const bool wasPending = hasPendingChanges();
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
@@ -790,14 +789,19 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
     // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
-    if (wasPending != hasPendingChanges())
-        Q_EMIT pendingChangesChanged();
+    // Always emit pendingChangesChanged: shader overrides write through
+    // Settings::setShaderProfileTree (which persists to disk
+    // immediately), bypassing the file-snapshot tracker that
+    // hasPendingChanges() reads. A `wasPending != hasPendingChanges()`
+    // guard like setOverride uses would always be `false != false` for
+    // shader edits and never fire the signal — Save button never lights
+    // up, tests fail to detect the emission.
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 
 bool AnimationsPageController::clearShaderOverride(const QString& path)
 {
-    const bool wasPending = hasPendingChanges();
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
@@ -806,8 +810,9 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
         return false;
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
-    if (wasPending != hasPendingChanges())
-        Q_EMIT pendingChangesChanged();
+    // Always emit — see setShaderOverride for the rationale (shader
+    // edits bypass the file-snapshot tracker hasPendingChanges reads).
+    Q_EMIT pendingChangesChanged();
     return true;
 }
 

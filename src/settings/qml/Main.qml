@@ -52,7 +52,7 @@ ApplicationWindow {
         "label": i18n("Tiling"),
         "iconName": "window-duplicate",
         "hasChildren": true,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "animations",
         "label": i18n("Animations"),

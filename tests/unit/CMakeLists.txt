@@ -464,6 +464,7 @@ add_executable(test_animations_page_controller
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE
