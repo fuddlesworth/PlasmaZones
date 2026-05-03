@@ -83,7 +83,7 @@ Kirigami.Dialog {
             visible: root.timingMode === CurvePresets.timingModeEasing
             Layout.fillWidth: true
             curve: root._workingCurve
-            animationDuration: appSettings.animationDuration
+            animationDuration: settingsController.settings.animationDuration
             previewEnabled: root.visible && root.timingMode === CurvePresets.timingModeEasing
             onCurveEdited: function(newCurve) {
                 root._workingCurve = newCurve;
@@ -369,7 +369,7 @@ Kirigami.Dialog {
                     // "spring:omega,zeta") plus duration. The controller
                     // stamps `name` automatically.
                     var profile = {
-                        "duration": appSettings.animationDuration
+                        "duration": settingsController.settings.animationDuration
                     };
                     if (root.timingMode === CurvePresets.timingModeEasing)
                         profile.curve = root._workingCurve;

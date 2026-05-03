@@ -170,7 +170,6 @@ bool MotionSetStore::applyMotionSet(const QString& name)
         // path already has dirty in-memory snapshots for every committed
         // peer — Discard restores them atomically.
         Q_EMIT pendingChangesChanged();
-        Q_EMIT motionSetsChanged();
         return false;
     }
 
