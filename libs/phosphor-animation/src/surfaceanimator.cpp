@@ -594,12 +594,25 @@ public:
         // connections before the maps it accesses tear down). Without
         // this assertion a future maintainer reordering members for
         // readability could silently introduce a UAF on shutdown.
+        //
+        // `Private` is non-standard-layout (QObject-derived members,
+        // std::function callbacks, mixed access specifiers) which makes
+        // `offsetof` "conditionally-supported" per [class.mem]/27, so
+        // GCC raises -Winvalid-offsetof. Every mainstream compiler
+        // (GCC, Clang, MSVC) actually computes the right value here —
+        // the warning is a portability hint, not a correctness bug.
+        // Suppress locally; the static_assert is what we want, and any
+        // compiler that DIDN'T support offsetof on this type would
+        // simply fail to compile rather than miscompare.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
         static_assert(offsetof(Private, m_driverTimer) > offsetof(Private, m_pendingReuse),
                       "m_driverTimer must be declared AFTER m_pendingReuse so connectSurfaceCleanup's "
                       "destroyed-lambda is auto-disconnected before the map it touches dies.");
         static_assert(offsetof(Private, m_driverTimer) > offsetof(Private, m_tracks),
                       "m_driverTimer must be declared AFTER m_tracks so connectSurfaceCleanup's "
                       "destroyed-lambda is auto-disconnected before the map it touches dies.");
+#pragma GCC diagnostic pop
 
         // Driver fires kTickIntervalMs cadence while any track is in
         // flight; tickAll stops the timer when m_tracks empties.

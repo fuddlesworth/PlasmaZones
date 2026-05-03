@@ -63,6 +63,15 @@ Profile makeProfile(int durationMs)
 /// Spin the event loop until @p predicate returns true or @p timeoutMs elapses.
 /// Wraps the QtQuickClock + AnimatedValue tick path so tests can wait for
 /// async completion without arbitrary fixed sleeps.
+//
+// `chrono::time_point::operator<` in libstdc++ is implemented via a
+// `<=>` constraint that, on some libstdc++ versions, falls through a
+// `std::common_comparison_category` SFINAE expression containing a
+// literal `0`, tripping `-Wzero-as-null-pointer-constant` at every
+// instantiation. Suppress locally — the comparison itself is correct,
+// the warning is a libstdc++ template-expansion artefact.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
 template<typename Predicate>
 bool waitFor(Predicate p, int timeoutMs = 1000)
 {
@@ -75,6 +84,7 @@ bool waitFor(Predicate p, int timeoutMs = 1000)
     }
     return p();
 }
+#pragma GCC diagnostic pop
 
 SurfaceAnimator::Config defaultsForTesting()
 {

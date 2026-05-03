@@ -70,15 +70,6 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     return QString();
 }
 
-// Convert shader name to deterministic UUID (v5)
-static QString shaderNameToUuid(const QString& name)
-{
-    if (name.isEmpty()) {
-        return QString();
-    }
-    return QUuid::createUuidV5(ShaderNamespaceUuid, name).toString();
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Construction / Destruction
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -501,7 +501,7 @@ private Q_SLOTS:
 
         int commits = 0;
         MetadataPackScanStrategy<FakePayload> strategy(
-            [](const QString& subdirPath, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
+            [](const QString& /*subdirPath*/, const QJsonObject& root, bool isUser) -> std::optional<FakePayload> {
                 FakePayload p;
                 p.id = root.value(QStringLiteral("id")).toString();
                 p.score = root.value(QStringLiteral("score")).toInt(0);
