@@ -27,6 +27,8 @@ Item {
     required property real omega
     required property real zeta
     required property bool previewEnabled
+
+    onVisibleChanged: if (!visible) { springAnimTimer.stop(); springReplayDelay.stop(); }
     // Match EasingPreview dimensions exactly
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
@@ -305,7 +307,6 @@ Item {
         property real settleMs: 2000
 
         interval: root._animTickMs
-        running: root.visible
         repeat: true
         onTriggered: {
             var now = Date.now();

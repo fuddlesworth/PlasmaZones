@@ -20,6 +20,8 @@ Item {
     property string curve: root.defaultCurve
     property int animationDuration: CurvePresets.defaultDurationMs
     property bool previewEnabled: true
+
+    onVisibleChanged: if (!visible) { animTimer.stop(); replayDelay.stop(); }
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
     readonly property int boxSize: Math.round(Kirigami.Units.gridUnit * 1.5)
@@ -300,7 +302,6 @@ Item {
 
         interval: root._animTickMs
         repeat: true
-        running: root.visible
         onTriggered: {
             var now = Date.now();
             elapsed += (now - lastTime);
