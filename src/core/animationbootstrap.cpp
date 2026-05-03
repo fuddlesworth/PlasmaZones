@@ -176,35 +176,61 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 11> seeds{{
-        // Popups: parent-level baseline; leaves
-        // (panel.popup.layoutPicker.*, panel.popup.zoneSelector.*,
-        // panel.popup.snapAssist.*) inherit from this.
+    constexpr std::array<FamilySeed, 23> seeds{{
+        // ── Popups ────────────────────────────────────────────────
+        // Family parent — leaves (panel.popup.layoutPicker.*,
+        // panel.popup.zoneSelector.*, panel.popup.snapAssist.*)
+        // inherit from this.
         {QLatin1StringView{"panel.popup"}, QLatin1StringView{"widget-out"}, 150.0},
         // Single-leaf path — no real "panel" family above it.
         {QLatin1StringView{"panel.slideIn"}, QLatin1StringView{"widget-out"}, 200.0},
-        // OSD show/hide are intentionally asymmetric (ease-out vs
-        // ease-in). Seeded individually because the family parent
-        // can't carry both curves.
+
+        // ── OSDs ──────────────────────────────────────────────────
+        // Asymmetric show / hide curves — seeded individually
+        // because the family parent can carry only one curve.
         {QLatin1StringView{"osd.show"}, QLatin1StringView{"cubic-out"}, 150.0},
         {QLatin1StringView{"osd.hide"}, QLatin1StringView{"cubic-in"}, 200.0},
-        // Widget family — covers fade, hover, press, accordion,
-        // toggle, badge, dim, tint, pulse, etc. The pulse leaves
-        // intentionally lose their prior 1000–1500 ms cadence under
-        // the family-level seed model — the user can dial those in
-        // via Settings if pulses matter for their UI.
+
+        // ── Widgets ───────────────────────────────────────────────
+        // Family parent — covers fade, hover, reorder, progress,
+        // toggle-color etc. that share the 150 ms ease-out shape.
         {QLatin1StringView{"widget"}, QLatin1StringView{"widget-out"}, 150.0},
-        // Asymmetric hide leaf — fadeOut wants ease-in vs the family's
-        // ease-out, and lasted twice as long.
+        // Distinctive leaves whose prior tuning materially differed
+        // from the family default. Two-layer resolveWithInheritance
+        // means a user edit at `widget` still cascades to these
+        // leaves — the seeds form the lowest precedence layer.
+        {QLatin1StringView{"widget.press"}, QLatin1StringView{"widget-out"}, 100.0},
+        {QLatin1StringView{"widget.dim"}, QLatin1StringView{"widget-out"}, 200.0},
+        {QLatin1StringView{"widget.tint"}, QLatin1StringView{"widget-out"}, 300.0},
+        {QLatin1StringView{"widget.tint-fast"}, QLatin1StringView{"widget-out"}, 120.0},
+        {QLatin1StringView{"widget.toggle"}, QLatin1StringView{"widget-pop"}, 250.0},
+        {QLatin1StringView{"widget.badge"}, QLatin1StringView{"widget-pop"}, 200.0},
+        {QLatin1StringView{"widget.accordion"}, QLatin1StringView{"widget-out"}, 250.0},
+        // Pulse cluster — sinusoidal ease for the looped pulse feel.
+        {QLatin1StringView{"widget.pulse"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1000.0},
+        {QLatin1StringView{"widget.pulse-fast"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 500.0},
+        {QLatin1StringView{"widget.pulse-slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
+        // Asymmetric fade-out — ease-in over a longer envelope.
         {QLatin1StringView{"widget.fadeOut"}, QLatin1StringView{"cubic-in"}, 400.0},
-        // Window family — most leaves use ease-out; close is the
-        // notable ease-in exception.
+
+        // ── Sidebars ──────────────────────────────────────────────
+        // Bespoke bezier curves — neither maps cleanly to a family.
+        {QLatin1StringView{"sidebar.fadeIn"}, QLatin1StringView{"cubic-bezier:0.25,0.46,0.45,0.94"}, 120.0},
+        {QLatin1StringView{"sidebar.fadeOut"}, QLatin1StringView{"cubic-bezier:0.55,0.085,0.68,0.53"}, 80.0},
+
+        // ── Windows ───────────────────────────────────────────────
+        // Family ease-out for open/move/resize/focus/maximize;
+        // close is the notable ease-in exception.
         {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
         {QLatin1StringView{"window.close"}, QLatin1StringView{"cubic-in"}, 150.0},
-        // Zone family — snap in/out/resize, layout switch, and
-        // highlight all hover around 200 ms ease-out.
+
+        // ── Zones ─────────────────────────────────────────────────
+        // Snap in/out/resize, layout switch, and highlight all
+        // hover around 200 ms ease-out.
         {QLatin1StringView{"zone"}, QLatin1StringView{"widget-out"}, 200.0},
-        // Workspace switching is intentionally asymmetric.
+
+        // ── Workspaces ────────────────────────────────────────────
+        // Asymmetric switch in / out — ease-out then ease-in.
         {QLatin1StringView{"workspace.switchIn"}, QLatin1StringView{"cubic-out"}, 250.0},
         {QLatin1StringView{"workspace.switchOut"}, QLatin1StringView{"cubic-in"}, 250.0},
     }};
@@ -228,6 +254,13 @@ AnimationBootstrap::AnimationBootstrap()
         constructAnimationLoaders(*m_curveRegistry, m_profileRegistry, kSecondaryProfilesOwnerTag, /*parent=*/nullptr);
     m_curveLoader = std::move(handles.curveLoader);
     m_profileLoader = std::move(handles.profileLoader);
+
+    // Configure the registry's two-layer resolveWithInheritance so
+    // seed entries form the lowest-precedence layer — a user edit at
+    // any depth still cascades past leaf seeds. MUST be set before
+    // any QML binding evaluates resolveWithInheritance, hence here in
+    // the bootstrap ctor.
+    m_profileRegistry.setLowPrecedenceOwnerTag(QString(kShellAnimationFamilySeedsOwnerTag));
 
     // Three-step load: curves first (so seedShellAnimationFamilies can
     // resolve named curves like "widget-out"), then seeds (so the

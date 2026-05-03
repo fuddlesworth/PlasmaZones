@@ -271,6 +271,13 @@ void Daemon::setupAnimationProfiles()
         registry.unregisterProfile(*path);
     }
 
+    // Configure the registry's two-layer resolveWithInheritance — seed
+    // entries form the lowest-precedence layer so a user edit at any
+    // depth still wins over any leaf seed. Idempotent across reload
+    // paths; setting the same tag is a cheap no-op under the registry's
+    // internal lock.
+    registry.setLowPrecedenceOwnerTag(QString(kShellAnimationFamilySeedsOwnerTag));
+
     // Discover XDG `plasmazones/{curves,profiles}` dirs, materialise the
     // user-writable dirs, construct the loaders, and wire the
     // curveLoader→profileLoader rescan. Shared with the secondary

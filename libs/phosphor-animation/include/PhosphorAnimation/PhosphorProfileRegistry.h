@@ -54,14 +54,31 @@ public:
     /// the library defaults via `Profile::withDefaults()` so the
     /// returned value is always fully populated.
     ///
-    /// This is the registry-level mirror of `ProfileTree::resolve` /
-    /// `ShaderProfileTree::resolve`. Without it, a parent-node card
-    /// edit (e.g. "All Popups → 2000 ms" written to `panel.popup`)
-    /// is silently shadowed by any deeper bundled JSON
-    /// (`panel.popup.layoutPicker.show.json` with hardcoded 150 ms),
-    /// because `resolve()` only checks the exact leaf and never sees
-    /// the parent's override.
+    /// **Two-layer overlay (when `lowPrecedenceOwnerTag` is set).**
+    /// The walk runs in TWO passes: pass 1 overlays only entries
+    /// owned by the low-precedence tag (seed-style defaults); pass 2
+    /// overlays everything else (Settings publishes, user JSONs).
+    /// Pass 2 always wins over pass 1, regardless of depth — so a
+    /// user edit at the parent path `widget` (duration=800 ms) still
+    /// cascades to a leaf like `widget.pulse-fast` even when the
+    /// leaf has a seed entry (500 ms cubic-bezier). Without the
+    /// two-layer model, leaf seeds would silently shadow parent
+    /// user-overrides via the deeper-wins rule — exactly the bug
+    /// the bundled-JSON deletion fixed.
+    ///
+    /// When @p lowPrecedenceOwnerTag is empty, the walk degrades to
+    /// a single-pass deeper-wins overlay (the original semantics,
+    /// kept for tests and consumers that don't use seed tagging).
     Profile resolveWithInheritance(const QString& path) const;
+    Profile resolveWithInheritance(const QString& path, const QString& lowPrecedenceOwnerTag) const;
+
+    /// Configure the owner tag whose entries should be treated as
+    /// the lowest-precedence layer in `resolveWithInheritance`. Set
+    /// once per registry from the composition root (daemon /
+    /// settings / editor) right after the registry is constructed,
+    /// using the conventional `kShellAnimationFamilySeedsOwnerTag`.
+    /// Empty (default) preserves single-pass walk semantics.
+    void setLowPrecedenceOwnerTag(const QString& tag);
 
     /// Register or replace the profile at @p path (direct/untagged owner).
     void registerProfile(const QString& path, const Profile& profile);
@@ -110,6 +127,7 @@ private:
     mutable std::mutex m_mutex;
     QHash<QString, Profile> m_profiles;
     QHash<QString, QString> m_owners;
+    QString m_lowPrecedenceOwnerTag; ///< Layer-2 seed tag; see setLowPrecedenceOwnerTag.
 };
 
 } // namespace PhosphorAnimation

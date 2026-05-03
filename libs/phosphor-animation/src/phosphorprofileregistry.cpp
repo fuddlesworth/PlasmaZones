@@ -45,6 +45,19 @@ std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) con
 
 Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path) const
 {
+    // Read the low-precedence tag under the lock so a concurrent
+    // setLowPrecedenceOwnerTag can't tear; copy out before delegating
+    // so the inner overload doesn't double-lock.
+    QString tag;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        tag = m_lowPrecedenceOwnerTag;
+    }
+    return resolveWithInheritance(path, tag);
+}
+
+Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path, const QString& lowPrecedenceOwnerTag) const
+{
     // Build the chain root-first so the overlay walk runs shallow →
     // deep, with each engaged optional in a deeper entry replacing
     // the shallower one. Mirrors ProfileTree::resolve and
@@ -58,43 +71,77 @@ Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path) con
         cursor = ProfilePaths::parentPath(cursor);
     }
 
+    // Same overlay rule as ProfileTree::overlay — every engaged
+    // optional in src wins; unset (nullopt) fields in src leave dst
+    // alone (the inheritance mechanism). Curve / duration /
+    // minDistance / sequenceMode / staggerInterval / presetName are
+    // independent — a child that only set `duration` still inherits
+    // the parent's `curve`.
+    const auto overlay = [](Profile& dst, const Profile& src) {
+        if (src.curve) {
+            dst.curve = src.curve;
+        }
+        if (src.duration) {
+            dst.duration = src.duration;
+        }
+        if (src.minDistance) {
+            dst.minDistance = src.minDistance;
+        }
+        if (src.sequenceMode) {
+            dst.sequenceMode = src.sequenceMode;
+        }
+        if (src.staggerInterval) {
+            dst.staggerInterval = src.staggerInterval;
+        }
+        if (src.presetName) {
+            dst.presetName = src.presetName;
+        }
+    };
+
     Profile effective; // default-constructed: every optional nullopt
     {
         std::lock_guard<std::mutex> lock(m_mutex);
+
+        // Pass 1: low-precedence (seed) layer — only entries owned
+        // by the configured tag. Skipped entirely when the tag is
+        // empty, in which case pass 2 below sees every entry and we
+        // degrade to single-pass deeper-wins (the original
+        // semantics).
+        if (!lowPrecedenceOwnerTag.isEmpty()) {
+            for (const QString& step : chain) {
+                const auto it = m_profiles.constFind(step);
+                if (it == m_profiles.constEnd()) {
+                    continue;
+                }
+                if (m_owners.value(step) != lowPrecedenceOwnerTag) {
+                    continue;
+                }
+                overlay(effective, *it);
+            }
+        }
+
+        // Pass 2: everything NOT in the low-precedence layer. These
+        // are Settings publishes (direct/empty owner) and user JSONs
+        // (loader-tagged owner). Always overlays after pass 1, so a
+        // user edit at any depth wins over any seed at any depth.
         for (const QString& step : chain) {
             const auto it = m_profiles.constFind(step);
             if (it == m_profiles.constEnd()) {
                 continue;
             }
-            const Profile& src = *it;
-            // Same overlay rule as ProfileTree::overlay — every
-            // engaged optional in src wins; unset (nullopt) fields
-            // in src leave effective alone (the inheritance
-            // mechanism). Curve / duration / minDistance /
-            // sequenceMode / staggerInterval / presetName are
-            // independent — a child that only set `duration` still
-            // inherits the parent's `curve`.
-            if (src.curve) {
-                effective.curve = src.curve;
+            if (!lowPrecedenceOwnerTag.isEmpty() && m_owners.value(step) == lowPrecedenceOwnerTag) {
+                continue;
             }
-            if (src.duration) {
-                effective.duration = src.duration;
-            }
-            if (src.minDistance) {
-                effective.minDistance = src.minDistance;
-            }
-            if (src.sequenceMode) {
-                effective.sequenceMode = src.sequenceMode;
-            }
-            if (src.staggerInterval) {
-                effective.staggerInterval = src.staggerInterval;
-            }
-            if (src.presetName) {
-                effective.presetName = src.presetName;
-            }
+            overlay(effective, *it);
         }
     }
     return effective.withDefaults();
+}
+
+void PhosphorProfileRegistry::setLowPrecedenceOwnerTag(const QString& tag)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_lowPrecedenceOwnerTag = tag;
 }
 
 void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile& profile)
