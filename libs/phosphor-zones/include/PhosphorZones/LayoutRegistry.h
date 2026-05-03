@@ -181,6 +181,34 @@ public:
      */
     void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
+    /**
+     * @brief Inject a callback that returns true when Snapping is the
+     * user's preferred default mode (regardless of whether a default
+     * snapping layout id is configured).
+     *
+     * Without this provider, @ref resolveDefaultAssignmentEntry can only
+     * tell whether snap has a non-empty default *layout id*. When a user
+     * has snapping enabled but never configured a global default layout
+     * (a common, valid state — the user expects per-screen assignments
+     * to drive everything), the @ref m_defaultLayoutIdProvider returns
+     * empty and the cascade silently falls through to the autotile
+     * branch — surfacing autotile content (e.g. "Tiling: Binary Split")
+     * to a user who never wanted autotile.
+     *
+     * This provider lets the composition root express "snap mode is
+     * preferred" independently of "snap has a default layout". When it
+     * returns true, the resolver returns a Snapping entry with the
+     * (possibly empty) snappingLayout from
+     * @ref m_defaultLayoutIdProvider — `activeLayoutId()` then yields
+     * empty, callers see "no assignment", and the OSD path correctly
+     * suppresses rather than falling back to autotile.
+     *
+     * Optional. When unset, the resolver behaves as before
+     * (snap-id-non-empty → snap; else autotile if available; else empty).
+     * Same threading rules as the other two providers.
+     */
+    void setSnappingPreferredProvider(std::function<bool()> provider);
+
     // ─── Assignments (per-context routing) ────────────────────────────────
 
     /// Get the previous active layout (before the most recent
@@ -356,11 +384,15 @@ private:
     Layout* resolveConfiguredDefault() const;
 
     /// Resolve the level-1 global default into an AssignmentEntry on
-    /// cascade-miss. Snap provider takes precedence — autotile only
-    /// wins when the snap provider returns empty (which composition
-    /// roots typically do by gating on @c snappingEnabled). Returns a
-    /// default-constructed (invalid) entry when neither provider has
-    /// a value.
+    /// cascade-miss. Three-tier precedence:
+    ///   1. snapping-preferred provider (true → return Snapping with
+    ///      possibly-empty layout, suppressing the autotile fallthrough
+    ///      so users in snapping mode don't see autotile OSD content);
+    ///   2. snap-id provider (non-empty → return Snapping with that id);
+    ///   3. autotile provider (non-empty → return AutoTile with that
+    ///      algorithm).
+    /// Returns a default-constructed (invalid) entry when no provider
+    /// has a value.
     AssignmentEntry resolveDefaultAssignmentEntry() const;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
@@ -370,6 +402,11 @@ private:
     /// Symmetric to @c m_defaultLayoutIdProvider; together they form
     /// the level-1 cascade tier.
     std::function<QString()> m_defaultAutotileAlgorithmProvider;
+    /// Empty = provider unset (legacy behaviour). Returns true when
+    /// the user has snapping mode enabled in settings, regardless of
+    /// whether a global default snap layout id is configured. See
+    /// @ref setSnappingPreferredProvider for the rationale.
+    std::function<bool()> m_snappingPreferredProvider;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of m_ownedBackend.get(); always non-null
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") — drives locateAll discovery

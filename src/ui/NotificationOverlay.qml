@@ -94,16 +94,25 @@ Window {
     property string sourceZoneId: ""
     property int windowCount: 1
     property color errorColor: Kirigami.Theme.negativeTextColor
+    // Per-side padding (fraction of container size) reserved by the daemon
+    // for shader transition silhouettes that extend outside the inner card
+    // (morph, etc.). Daemon writes this property before reading
+    // contentDesiredWidth/Height so the surface is sized large enough; the
+    // value is forwarded into the loaded content type so its inflated
+    // contentDesired* drives this re-export.
+    property real shaderBoundsPadding: 0
     // Re-export the loaded content's contentDesiredWidth/Height — the C++
     // OSD show paths read these via window->property("contentDesiredWidth")
     // to size the layer surface (and to compute matching layer-shell margins).
     // Fallback values cover the warm-up window where mode="" → no content
     // loaded; the surface is invisible at that point so the exact value
     // doesn't matter, but they MUST match osd.cpp's readOsdContentSize
-    // fallbacks so a missed property read doesn't size the surface to one
-    // value while QML measures another.
-    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : 240
-    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : 70
+    // fallbacks (kFallbackWidth / kFallbackHeight) so a missed property
+    // read doesn't size the surface to one value while QML measures another.
+    readonly property int kFallbackContentWidth: 240
+    readonly property int kFallbackContentHeight: 70
+    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : kFallbackContentWidth
+    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : kFallbackContentHeight
 
     /// Auto-dismiss request forwarded from the loaded content. C++ side
     /// connects this to Surface::hide() in OverlayService::createWarmedOsdSurface
@@ -213,6 +222,7 @@ Window {
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
+            shaderBoundsPadding: root.shaderBoundsPadding
             // LayoutOsd-specific
             layoutId: root.layoutId
             layoutName: root.layoutName
@@ -247,6 +257,7 @@ Window {
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             highlightColor: root.highlightColor
+            shaderBoundsPadding: root.shaderBoundsPadding
             // NavigationOsd-specific
             success: root.success
             action: root.action

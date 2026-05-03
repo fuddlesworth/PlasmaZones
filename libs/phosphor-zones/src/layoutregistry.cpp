@@ -61,14 +61,32 @@ void LayoutRegistry::setDefaultAutotileAlgorithmProvider(std::function<QString()
     m_defaultAutotileAlgorithmProvider = std::move(provider);
 }
 
+void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider)
+{
+    m_snappingPreferredProvider = std::move(provider);
+}
+
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
 {
-    // Level-1 global default: snap takes precedence, autotile follows.
-    // Each provider is expected to return empty when its mode is not
-    // the user's active default (composition roots gate on
-    // snappingEnabled / autotileEnabled), so "snap disabled +
-    // autotile enabled" naturally resolves to autotile here without
-    // any mode-priority logic in the daemon.
+    // Level-1 global default. Resolution order:
+    //
+    //   (a) If the explicit "snapping is preferred" provider says yes,
+    //       return Snapping with whatever the snap default-id provider
+    //       has (possibly empty). This stops the cascade from silently
+    //       falling through to autotile when the user has snapping
+    //       enabled but no global default snap layout configured —
+    //       a common state where the user expects per-screen snap
+    //       assignments to drive everything.
+    //
+    //   (b) Else if the snap-id provider has a non-empty default,
+    //       return Snapping with that id. Legacy behaviour for
+    //       composition roots that haven't wired the snapping-
+    //       preferred provider.
+    //
+    //   (c) Else if the autotile-algorithm provider has a non-empty
+    //       value, return Autotile with that algorithm.
+    //
+    //   (d) Else return a default-constructed (invalid) entry.
     //
     // Provider returns are surfaced raw — neither the snap UUID nor
     // the autotile algorithm id is validated against the registry /
@@ -78,6 +96,16 @@ AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
     // the KCM/UI is expected to surface "stale default" UX. Adding
     // membership validation here would silently swallow that signal —
     // see testLevel1Default_snapWithUnknownUuid_layoutForScreenFallsThrough.
+    if (m_snappingPreferredProvider && m_snappingPreferredProvider()) {
+        AssignmentEntry e;
+        e.mode = AssignmentEntry::Snapping;
+        if (m_defaultLayoutIdProvider) {
+            e.snappingLayout = m_defaultLayoutIdProvider();
+        }
+        qCDebug(lcZonesLib) << "resolveDefaultAssignmentEntry: snapping-preferred branch — snap id ="
+                            << (e.snappingLayout.isEmpty() ? QStringLiteral("(empty)") : e.snappingLayout);
+        return e;
+    }
     if (m_defaultLayoutIdProvider) {
         const QString id = m_defaultLayoutIdProvider();
         if (!id.isEmpty()) {
@@ -531,6 +559,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
     saveAssignments();
     qCInfo(lcZonesLib) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
 }
+
 void LayoutRegistry::cycleToPreviousLayout(const QString& screenId)
 {
     cycleLayoutImpl(screenId, -1);

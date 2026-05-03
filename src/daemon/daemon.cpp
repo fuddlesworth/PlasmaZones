@@ -563,6 +563,16 @@ bool Daemon::init()
         }
         return m_settings->defaultAutotileAlgorithm();
     });
+    // Snapping-preferred provider — separate from defaultLayoutIdProvider
+    // because the user can have snapping enabled WITHOUT a global default
+    // snap layout id (per-screen assignments cover everything). Without
+    // this signal the cascade would fall through to autotile when both
+    // (snappingEnabled && defaultLayoutId == "") and (autotileEnabled &&
+    // defaultAutotileAlgorithm != ""), surfacing "Tiling: Binary Split"
+    // OSD content to a user who never enabled autotile globally.
+    m_layoutManager->setSnappingPreferredProvider([this]() {
+        return m_settings && m_settings->snappingEnabled();
+    });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
@@ -1165,6 +1175,26 @@ void Daemon::start()
 
 void Daemon::stop()
 {
+    // Drop the layout-manager provider lambdas FIRST, before the m_running
+    // gate. They capture `this` and dereference m_settings; m_settings is
+    // declared after m_layoutManager, so reverse-order member destruction
+    // tears m_settings down BEFORE m_layoutManager. Any cascade query
+    // during ~LayoutRegistry that hits a still-installed lambda would
+    // dereference freed memory.
+    //
+    // The m_running gate skips the rest of stop() on init-without-start
+    // paths (test fixtures, early-fail constructors, double-stop). The
+    // providers, however, are installed in init() — which runs before
+    // m_running is set in start(). Clearing them must therefore not be
+    // gated, otherwise the dangling-lambda UAF still reaches the
+    // member-destruction window. clearing is null-safe and idempotent
+    // (an already-cleared std::function clears to itself).
+    if (m_layoutManager) {
+        m_layoutManager->setDefaultLayoutIdProvider({});
+        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
+        m_layoutManager->setSnappingPreferredProvider({});
+    }
+
     if (!m_running) {
         return;
     }
@@ -1338,18 +1368,8 @@ void Daemon::stop()
         m_controlAdaptor->detach();
     }
 
-    // Drop the default-layout-id provider before member destruction. The
-    // lambda installed in init() captures `this` and reads m_settings,
-    // which is declared AFTER m_layoutManager and therefore destroyed
-    // FIRST in reverse-order member teardown. No normal destruction path
-    // calls defaultLayout() today, but clearing the capture makes that
-    // latent ordering invariant unnecessary — future refactors that
-    // trigger defaultLayout() from inside ~LayoutRegistry (e.g. signal
-    // fan-out during qDeleteAll(m_layouts)) stay safe.
-    if (m_layoutManager) {
-        m_layoutManager->setDefaultLayoutIdProvider({});
-        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
-    }
+    // Provider lambdas already cleared at the top of stop() (before the
+    // m_running gate) so this point requires no further teardown.
 
     m_running = false;
 }

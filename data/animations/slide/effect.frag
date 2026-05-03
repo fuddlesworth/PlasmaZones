@@ -19,17 +19,19 @@
 
 layout(binding = 7) uniform sampler2D iChannel0;
 
+layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    vec2 uv = gl_FragCoord.xy / iResolution;
+    // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
+    // by DPR on high-DPI displays.
+    vec2 uv = vTexCoord;
 
-    // Visibility = how revealed the surface is. iTime is the per-leg
-    // [0,1] progress driven by SurfaceAnimator's shaderTime
-    // AnimatedValue; the same reveal mask runs on both show and hide
-    // and the parent surface's opacity leg supplies the direction-
-    // aware fade so the slide composes coherently in both directions.
+    // Visibility = how revealed the surface is. iTime is per-leg
+    // progress: SurfaceAnimator runs iTime 0→1 on show and 1→0 on
+    // hide, so the reveal mask grows on show ("slide in") and
+    // recedes on hide ("slide out") through the same code path.
     float visibility = clamp(iTime, 0.0, 1.0);
 
     int dir = int(clamp(direction, 0.0, 3.0));

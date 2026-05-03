@@ -12,6 +12,7 @@
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QStandardPaths>
+#include <QtMath>
 #include <cstring>
 
 #include <rhi/qshaderbaker.h>
@@ -557,29 +558,86 @@ void ShaderNodeRhi::render(const RenderState* state)
     int vpY = 0;
     int vpW = outputSize.width();
     int vpH = outputSize.height();
+    bool offScreen = false;
     // Compute viewport/scissor from item geometry under the lock — every
     // m_item dereference (width, height, mapToItem, window) needs to happen
     // atomically with respect to invalidateItem(). After this block we use
     // only the local viewport ints, which are immune to item destruction.
+    //
+    // CRITICAL: an invalidated or zero-sized item must skip the draw
+    // entirely. The previous logic fell through to the default
+    // outputSize-sized viewport and issued a full-framebuffer draw with
+    // the last-bound shader — visible as a stray full-screen paint
+    // covering the window after the QML item was destroyed but before
+    // the next sync removes the QSGRenderNode. Force offScreen on any
+    // bail condition so the early-return below skips the draw.
     {
         std::lock_guard<std::mutex> guard(m_itemMutex);
-        if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0
-            && m_item->height() > 0) {
+        if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window() || m_item->width() <= 0
+            || m_item->height() <= 0) {
+            offScreen = true;
+        } else {
             QQuickWindow* win = m_item->window();
             const qreal dpr = win->devicePixelRatio();
             const int itemPxW = qRound(m_item->width() * dpr);
             const int itemPxH = qRound(m_item->height() * dpr);
-            const bool isLayerFbo = qAbs(outputSize.width() - itemPxW) <= 1 && qAbs(outputSize.height() - itemPxH) <= 1;
+            // Tolerance is `qCeil(dpr) + 1` so 3× DPR + sub-pixel item
+            // sizes don't push qRound noise past the heuristic and
+            // misclassify a layer FBO as a direct-to-window draw (which
+            // would route through the Y-flip path and mount the viewport
+            // at the wrong framebuffer offset). The original `<= 1` was
+            // tight enough to break at DPR≥2 with item sizes that
+            // happen to round near framebuffer edges.
+            const int isLayerTolerance = qCeil(dpr) + 1;
+            const bool isLayerFbo = qAbs(outputSize.width() - itemPxW) <= isLayerTolerance
+                && qAbs(outputSize.height() - itemPxH) <= isLayerTolerance;
             if (!isLayerFbo) {
+                // Convert Qt scene-graph coords (top-left origin, Y-down) to
+                // QRhiViewport coords (bottom-left origin, Y-up). Without this
+                // flip, an item at scene-graph y=10 (near top of window)
+                // would mount its viewport at y=10 from the BOTTOM of the
+                // framebuffer — the shader would render at the bottom of the
+                // screen even though its item is anchored at the top. The bug
+                // is invisible for `isLayerFbo` consumers (zone-shader items
+                // with layer.enabled=true render to a per-item FBO whose size
+                // matches the item, so vp{X,Y}=0 is always correct) but
+                // visible for direct-to-window shader items — which is
+                // exactly the SurfaceAnimator's animation-shader case
+                // (attachShaderToAnchor doesn't enable layer on shaderItem).
+                //
+                // Compute the unclamped item rect in framebuffer pixels (Y-up),
+                // then intersect with the framebuffer; if the intersection is
+                // empty the item is fully off-screen and we skip the draw
+                // (qBound-only would have collapsed the rect to a 1px strip
+                // glued to the nearest framebuffer edge).
                 const QPointF topLeft = m_item->mapToItem(win->contentItem(), QPointF(0, 0));
-                vpX = qRound(topLeft.x() * dpr);
-                vpY = qRound(topLeft.y() * dpr);
-                vpX = qBound(0, vpX, outputSize.width() - 1);
-                vpY = qBound(0, vpY, outputSize.height() - 1);
+                const int rawVpX = qRound(topLeft.x() * dpr);
+                const int rawVpY = outputSize.height() - qRound(topLeft.y() * dpr) - itemPxH;
+                const int leftPx = qMax(0, rawVpX);
+                const int bottomPx = qMax(0, rawVpY);
+                const int rightPx = qMin(outputSize.width(), rawVpX + itemPxW);
+                const int topPx = qMin(outputSize.height(), rawVpY + itemPxH);
+                if (leftPx >= rightPx || bottomPx >= topPx) {
+                    offScreen = true;
+                } else {
+                    vpX = leftPx;
+                    vpY = bottomPx;
+                    vpW = rightPx - leftPx;
+                    vpH = topPx - bottomPx;
+                }
+            } else {
+                vpW = itemPxW;
+                vpH = itemPxH;
             }
-            vpW = qBound(1, itemPxW, outputSize.width() - vpX);
-            vpH = qBound(1, itemPxH, outputSize.height() - vpY);
         }
+    }
+    if (offScreen) {
+        // Item is fully outside the framebuffer — issuing a draw with a
+        // 1×1 sliver clamped to the nearest edge would still cost a draw
+        // call AND paint a stray pixel (Vulkan accepts but waste and
+        // potential visual glitch). Skip rendering entirely; the next
+        // sync that brings the item back on-screen will re-issue.
+        return;
     }
     cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
     cb->setScissor(QRhiScissor(vpX, vpY, vpW, vpH));

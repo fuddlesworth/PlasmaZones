@@ -78,6 +78,19 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// Preview image path (relative to the effect dir). For settings UI.
     QString previewPath;
 
+    /// How much to enlarge the shader effect's bounding box beyond the
+    /// anchor's logical size, expressed as a fraction of the anchor's
+    /// width/height. The shader effect is positioned so the anchor sits
+    /// in the centre and the padding extends symmetrically outward;
+    /// shaders that distort their silhouette outside the original
+    /// rectangle (e.g. morph's UV warp) need padding > 0 so the rippled
+    /// silhouette has room to render before being clipped by the
+    /// shader effect's own bounding box. Default 0.0 — shader effect
+    /// matches the anchor exactly. Shaders that opt in must remap
+    /// vTexCoord through this padding to recover the anchor-space UV
+    /// (see data/animations/morph/effect.frag for the canonical pattern).
+    qreal boundsPadding = 0.0;
+
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.
     struct ParameterInfo

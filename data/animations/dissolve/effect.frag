@@ -26,6 +26,7 @@
 // rationale.
 layout(binding = 7) uniform sampler2D iChannel0;
 
+layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 float hash(vec2 p)
@@ -35,7 +36,9 @@ float hash(vec2 p)
 
 void main()
 {
-    vec2 uv = gl_FragCoord.xy / iResolution;
+    // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
+    // by DPR on high-DPI displays.
+    vec2 uv = vTexCoord;
     float cellSize = max(grain, 0.01);
     vec2 cell = floor(uv / cellSize);
     float noise = hash(cell);

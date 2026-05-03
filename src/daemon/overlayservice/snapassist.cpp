@@ -236,6 +236,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // First-show on a freshly-created surface (reuseWindow=false) and
     // re-show on a previously-hidden surface both still dispatch normally.
     if (m_snapAssistSurface && (!reuseWindow || !m_snapAssistSurface->isLogicallyShown())) {
+        cancelSurfacePrime(m_snapAssistSurface);
         m_snapAssistSurface->show();
     }
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
@@ -373,6 +374,14 @@ void OverlayService::hideSnapAssist()
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
         if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
             if (!selectorSurface->isLogicallyShown()) {
+                // cancelSurfacePrime: every other user-show path in this
+                // service disarms the prime queue before show() so the
+                // queued frameSwapped-driven hide doesn't race the user's
+                // content off the screen. Missing it here would let a
+                // selector that's still in its initial prime cycle (rare —
+                // requires snap-assist to dismiss within the first painted
+                // frame of the selector) flicker visible-then-hidden.
+                cancelSurfacePrime(selectorSurface);
                 selectorSurface->show();
             }
         }
@@ -447,6 +456,11 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
             m_snapAssistScreenId.clear();
         }
     });
+
+    // Prime the render pipeline (see OverlayService::primeSurfaceRenderPipeline).
+    // The user-show that follows immediately calls cancelSurfacePrime to
+    // disarm the queued hide.
+    primeSurfaceRenderPipeline(surface);
 
     // Emit snapAssistDismissed when the window is closed by QML (backdrop click, Escape)
     connect(m_snapAssistWindow, &QWindow::visibleChanged, this, [this](bool visible) {
@@ -653,6 +667,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // QWindow, which together with the layer-shell focus grant lands
     // input on the QQuickWindow so QML Shortcuts (Escape, arrows,
     // Enter) fire.
+    cancelSurfacePrime(m_layoutPickerSurface);
     m_layoutPickerSurface->show();
     m_layoutPickerWindow->requestActivate();
 
@@ -670,27 +685,89 @@ void OverlayService::hideLayoutPicker()
         return;
     }
 
-    // Capture screenId before destroy clears m_layoutPickerScreenId.
+    // Re-entrant call while the SurfaceAnimator's hide leg is still
+    // running — let the timer scheduled below tear down the surface
+    // when the animation finishes.
+    if (m_layoutPickerHiding) {
+        return;
+    }
+    m_layoutPickerHiding = true;
+
+    // Capture screenId before the post-animation destroy clears
+    // m_layoutPickerScreenId. surface is captured as QPointer so that
+    // a re-show + dismiss cycle that destroys-and-recreates the picker
+    // before the original 600ms timer fires doesn't leave a dangling
+    // raw pointer in the lambda — the post-recreate `m_layoutPicker-
+    // Surface == surface` check then reads freed memory.
     const QString screenId = m_layoutPickerScreenId;
+    QPointer<PhosphorLayer::Surface> surface(m_layoutPickerSurface);
 
-    // Destroy the layer surface. Each show must remap a fresh
-    // wl_surface so KWin re-evaluates keyboard_interactivity at
-    // initial-map time — see createLayoutPickerWindowFor's
-    // destroy-on-hide comment for the rationale and trade-offs.
-    destroyLayoutPickerWindow();
+    // Drive the hide leg through SurfaceAnimator (configured at
+    // applyShaderProfilesToAnimator → buildLayoutPickerConfig with
+    // panel.popup.layoutPicker.hide as the shader+motion paths).
+    // Surface::hide() with keepMappedOnHide=true sets the window
+    // transparent-for-input AND dispatches animator.beginHide() — the
+    // animation runs on the still-mapped wl_surface so the user sees
+    // the configured shader fade out.
+    //
+    // Surface::Impl transitions State to Hidden SYNCHRONOUSLY (see
+    // libs/phosphor-layer/src/surface.cpp:360 — `transitionTo(Hidden)`
+    // immediately after the no-op-callbacked beginHide). That means
+    // Surface::stateChanged is NOT a usable signal for "animation
+    // completed"; listening to it fires before any hide frame paints.
+    // The animator's onComplete callback is captured inside the
+    // library and not exposed.
+    //
+    // Pragmatic fix: schedule the wl_surface teardown via QTimer at
+    // the configured hide duration. 600ms is comfortably above the
+    // default panel.popup.layoutPicker.hide profile (200ms). If a
+    // user customises the profile beyond that, increase here too.
+    constexpr int kDestroyDelayMs = 600;
+    surface->hide();
+    QTimer::singleShot(kDestroyDelayMs, this, [this, surface, screenId]() {
+        m_layoutPickerHiding = false;
 
-    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            if (!selectorSurface->isLogicallyShown()) {
-                selectorSurface->show();
+        // Supersession check: if showLayoutPicker ran during the 600 ms
+        // window it called destroyLayoutPickerWindow + createLayoutPicker-
+        // WindowFor, replacing m_layoutPickerSurface with a fresh address.
+        // Any post-hide work below — destroying the captured surface,
+        // restoring the selector, releasing the shared cancel-overlay
+        // Escape registration — is wrong when a new picker is the live
+        // one: the selector restore would target the OLD picker's
+        // screenId (potentially the wrong monitor); the dismissed signal
+        // would unregister Escape mid-legitimate-show, breaking the new
+        // picker's keyboard cancel. Skip the whole body when supplanted.
+        // m_layoutPickerSurface == nullptr means an external destroy
+        // (screen lost, daemon shutdown) ran first — still emit dismissed
+        // so listeners learn the picker is gone.
+        const bool supplanted = m_layoutPickerSurface != nullptr && m_layoutPickerSurface != surface.data();
+        if (supplanted) {
+            return;
+        }
+
+        if (surface && m_layoutPickerSurface == surface.data()) {
+            destroyLayoutPickerWindow();
+        }
+
+        if (m_zoneSelectorVisible && !screenId.isEmpty()) {
+            if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
+                if (!selectorSurface->isLogicallyShown()) {
+                    // cancelSurfacePrime: matches every other user-show
+                    // path. Without it the selector's queued prime-hide
+                    // (if still in flight on the very first show) races
+                    // this user-driven re-show.
+                    cancelSurfacePrime(selectorSurface);
+                    selectorSurface->show();
+                }
             }
         }
-    }
 
-    // Release the shared cancel-overlay Escape registration. cancelSnap()
-    // dismisses the picker when visible — see WindowDragAdaptor::cancelSnap
-    // and ensureCancelOverlayShortcutRegistered for the rationale.
-    Q_EMIT layoutPickerDismissed();
+        // Release the shared cancel-overlay Escape registration.
+        // cancelSnap() dismisses the picker when visible — see
+        // WindowDragAdaptor::cancelSnap and
+        // ensureCancelOverlayShortcutRegistered for the rationale.
+        Q_EMIT layoutPickerDismissed();
+    });
 }
 
 void OverlayService::warmUpLayoutPicker()
@@ -769,12 +846,23 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // calling thread (devtalk 319139 / 195793 / 366254). Picker is
     // user-triggered and infrequent in typical use, so the stall is
     // amortised; SnapAssist uses the same pattern.
+    //
+    // keepMappedOnHide=true is REQUIRED here for the SurfaceAnimator's
+    // hide leg (motion + shader) to actually paint. With the default
+    // false, Surface::hide() calls beginHide and then immediately
+    // hides the QQuickWindow — the animation frames never render
+    // (libs/phosphor-layer/src/surface.cpp warns about this exact
+    // mismatch). To preserve the destroy-on-hide invariant the
+    // hideLayoutPicker handler listens for State::Hidden and tears
+    // down the wl_surface on its own once the animation completes —
+    // see overlayservice/snapassist.cpp::hideLayoutPicker.
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")),
                                         .screen = screen,
                                         .role = role,
                                         .windowType = "layout picker",
                                         .anchorsOverride = anchorsOverride,
-                                        .marginsOverride = marginsOverride});
+                                        .marginsOverride = marginsOverride,
+                                        .keepMappedOnHide = true});
     if (!surface) {
         return;
     }
@@ -789,6 +877,13 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
             m_layoutPickerScreenId.clear();
         }
     });
+
+    // Prime the render pipeline so the user-show that follows races against
+    // an already-mapped surface and a hot Vulkan swapchain — disarms the
+    // shader's stale-FBO race. The user-show in showLayoutPicker will
+    // cancelSurfacePrime before calling Surface::show() so the queued hide
+    // doesn't fire on top of the user's content.
+    primeSurfaceRenderPipeline(surface);
 
     // Connect layoutSelected and dismissRequested signals from QML.
     // dismissRequested() is the QML-visible "user dismissed" event — fired
@@ -834,6 +929,11 @@ void OverlayService::destroyLayoutPickerWindow()
     }
     m_layoutPickerScreen = nullptr;
     m_layoutPickerScreenId.clear();
+    // External destroy paths (screen lost, daemon teardown, layout
+    // change) skip the hide animation entirely. Clear the hiding flag
+    // here so a future show + hide cycle isn't stranded with the
+    // re-entrancy guard latched.
+    m_layoutPickerHiding = false;
 }
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)

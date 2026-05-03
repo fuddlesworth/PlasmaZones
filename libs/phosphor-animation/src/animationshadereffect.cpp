@@ -28,6 +28,8 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("vertexShader"), vertexShaderPath);
     if (!previewPath.isEmpty())
         obj.insert(QLatin1String("preview"), previewPath);
+    if (boundsPadding > 0.0)
+        obj.insert(QLatin1String("boundsPadding"), boundsPadding);
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -64,6 +66,19 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.fragmentShaderPath = obj.value(QLatin1String("fragmentShader")).toString();
     e.vertexShaderPath = obj.value(QLatin1String("vertexShader")).toString();
     e.previewPath = obj.value(QLatin1String("preview")).toString();
+    // Clamp negatives at the input boundary — a negative boundsPadding
+    // would silently propagate into surfaceanimator.cpp's geometry math
+    // (negative-area shader bounds) and into the shader's uv→anchorUv
+    // remap (sample outside [0,1] always → fully transparent leg).
+    //
+    // Upper cap of 2.0 keeps the FBO area sane: at pad=2.0 the shader
+    // effect is 5× the anchor on each axis (k=1+2*pad=5) → 25× area.
+    // A 1080p anchor at RGBA8 then needs ~200 MB of FBO, already at the
+    // edge of what Vulkan validation will pass on integrated GPUs.
+    // No shipping shader needs >1.0 padding (morph uses 0.5); 2.0
+    // accommodates plugin authors with extreme silhouette warps without
+    // permitting the prior 4.0-cap excess (9× axis = 81× area).
+    e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), 2.0);
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
@@ -96,6 +111,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (sourceDir != other.sourceDir || isUserEffect != other.isUserEffect)
         return false;
     if (previewPath != other.previewPath)
+        return false;
+    if (!qFuzzyCompare(boundsPadding + 1.0, other.boundsPadding + 1.0))
         return false;
     if (parameters.size() != other.parameters.size())
         return false;

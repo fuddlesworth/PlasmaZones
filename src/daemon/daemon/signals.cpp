@@ -695,8 +695,88 @@ void Daemon::finalizeStartup()
     // Gated on the desktop-switch OSD toggle (not the layout-switch toggle): startup is
     // a passive context change like a desktop switch, not an explicit user-driven layout
     // change, so users who disable desktop-switch OSDs expect quiet startup too.
+    //
+    // The welcome OSD reads the (screen, desktop, activity) cascade via
+    // LayoutRegistry::assignmentIdForScreen. At finalizeStartup time the
+    // activity may not yet have arrived from KActivities — currentActivity()
+    // returns "", and the cascade misses the user's stored entries (which
+    // are keyed on the actual activity UUID). The cascade then falls
+    // through to the level-1 default, which may legitimately resolve to
+    // autotile (e.g. user has snapping enabled with empty default layout
+    // and autotile enabled with a default algorithm) and the OSD shows
+    // "Tiling: Binary Split" even though the user is in snapping mode for
+    // every configured screen.
+    //
+    // Defer the show until BOTH (a) the activity is known and (b) we've
+    // observed at least one currentDesktopChanged from VirtualDesktop-
+    // Manager (or its initial sync read has populated). If activity is
+    // already non-empty by the time finalizeStartup runs (KActivities
+    // synchronous-init path), fire immediately; otherwise queue on the
+    // first activityChanged emission. A short timeout fallback prevents
+    // the welcome OSD from being permanently suppressed on systems where
+    // KActivities is unavailable (still emits an empty-activity OSD —
+    // existing behaviour for activity-less environments).
     if (m_settings && m_settings->showOsdOnDesktopSwitch()) {
-        showOsdForAllScreens(currentDesktop(), currentActivity());
+        const QString activity = currentActivity();
+        // activityReady: either we already have a non-empty activity, or
+        // KActivities is unavailable on this system (no point waiting).
+        const bool activityReady = !activity.isEmpty() || !ActivityManager::isAvailable();
+        if (activityReady) {
+            showOsdForAllScreens(currentDesktop(), activity);
+        } else if (m_activityManager) {
+            // Defer the welcome OSD until the activity arrives from
+            // KActivities, otherwise the cascade walks with empty
+            // activity and misses the user's stored entries (which are
+            // keyed on the actual activity UUID), silently surfacing
+            // the level-1 fallback (e.g. autotile-bsp) on a system
+            // configured for snapping. Two arms:
+            //
+            //   (a) signal — currentActivityChanged fires non-empty;
+            //   (b) fallback timer — KActivities never reports.
+            //
+            // `fired` is the canonical "already shown" flag —
+            // QMetaObject::Connection's `operator bool()` reports
+            // "the connection was successfully made," NOT "still
+            // active," so checking `*conn` after `disconnect(*conn)`
+            // does NOT distinguish "still queued" from "already
+            // fired and disconnected." A shared_ptr<bool> captured
+            // by both arms lets each compare-and-set before doing
+            // any work. 5000ms timeout — KActivities autostart on
+            // cold boot can take 2-3s on slower systems; 2s
+            // observed false-fallback regressions.
+            auto conn = std::make_shared<QMetaObject::Connection>();
+            auto fired = std::make_shared<bool>(false);
+            *conn = connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
+                            [this, conn, fired](const QString& a) {
+                                if (a.isEmpty() || *fired) {
+                                    return;
+                                }
+                                *fired = true;
+                                QObject::disconnect(*conn);
+                                showOsdForAllScreens(currentDesktop(), a);
+                            });
+            QTimer::singleShot(5000, this, [this, conn, fired]() {
+                if (*fired) {
+                    return;
+                }
+                *fired = true;
+                QObject::disconnect(*conn);
+                // Only fall back to firing the OSD if the activity has now
+                // become available. If we land here while currentActivity()
+                // is still empty AND KActivities is supposed to be
+                // available, firing would replay the very wrong-cascade
+                // OSD (autotile-bsp on a snapping-mode user) the deferral
+                // was added to avoid — just delayed by 5 s instead of
+                // immediate. Suppressing the welcome OSD entirely is the
+                // lesser harm: the user gets no welcome banner, but never
+                // sees content keyed to the wrong activity.
+                const QString activity = currentActivity();
+                if (activity.isEmpty() && ActivityManager::isAvailable()) {
+                    return;
+                }
+                showOsdForAllScreens(currentDesktop(), activity);
+            });
+        }
     }
 }
 

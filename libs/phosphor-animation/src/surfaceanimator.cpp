@@ -162,6 +162,21 @@ struct ShaderAttachResult
     QQuickShaderEffectSource* shaderSource = nullptr;
     QQuickItem* shaderAnchor = nullptr;
     bool foundExplicitAnchor = false;
+    /// Anchor siblings whose `visible` we flipped to false for the leg.
+    /// Restored on teardown. QPointer guards against the consumer's
+    /// QML scene tearing down a sibling mid-flight.
+    ///
+    /// Decorator siblings (e.g. `MultiEffect { source: container }`)
+    /// sample the anchor's layer FBO and render `source + shadow` in
+    /// parallel with the shader leg — without hiding them the user
+    /// sees a full-size copy of the anchor stacked behind the shader.
+    /// We tried redirecting MultiEffect.source→shaderItem (so the
+    /// decorator follows the shader's output and keeps drawing the
+    /// shadow), but Qt 6's MultiEffect crashes inside its private
+    /// QQuickShaderEffect's event handler when the source is a
+    /// non-stock QQuickItem subclass. Hide for now; the
+    /// shadow-pop-in at teardown is the lesser evil.
+    QList<QPointer<QQuickItem>> hiddenSiblings;
 };
 
 /// Build the per-leg ShaderEffect: anchor resolution + layer-enable +
@@ -170,7 +185,8 @@ struct ShaderAttachResult
 /// translation + live geometry sync.
 ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
                                         const PhosphorAnimationShaders::AnimationShaderEffect& effect,
-                                        const QString& shaderEffectId, const QVariantMap& shaderParameters)
+                                        const QString& shaderEffectId, const QVariantMap& shaderParameters,
+                                        bool isShowLeg)
 {
     ShaderAttachResult out;
     QQuickItem* shaderAnchor = target;
@@ -185,23 +201,47 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
                                          << " explicit=" << foundExplicitAnchor << " size=" << shaderAnchor->width()
                                          << "x" << shaderAnchor->height();
 
-    // Snapshot the anchor's content to a separate texture, then hide the
-    // original. The shader reads the snapshot — no simultaneous read+write
-    // on the same texture (Vulkan validation: "Texture used with different
-    // accesses within the same pass").
+    // Render the anchor into a separate FBO via QQuickShaderEffectSource;
+    // the ShaderEffect samples that FBO as iChannel0. The separate FBO
+    // is what sidesteps the "Texture used with different accesses within
+    // the same pass" Vulkan validation: the source FBO render and the
+    // shader effect's read are different render passes.
     //
-    // QQuickShaderEffectSource with live=false takes ONE snapshot.
-    // hideSource=true suppresses the anchor's own render while active.
-    // The ShaderEffect reads the snapshot texture via setSourceItem.
-    // On teardown, destroying the source restores the anchor's visibility.
+    // live=true: open animations have no prior frame to snapshot. A
+    // one-shot grab (live=false) races the source's first layout/paint
+    // and captures an empty FBO, leaving iChannel0 transparent for the
+    // whole animation. Re-rendering each frame also lets the shader
+    // pick up content that moves during the leg.
+    //
+    // hideSource=true keeps the anchor out of the regular scene render
+    // path while still feeding its content to the FBO.
+    //
+    // Width/Height MUST be non-zero — Qt's QQuickShaderEffectSource
+    // skips updatePaintNode (and the FBO render along with it) at 0×0,
+    // leaving iChannel0 unpopulated even with hideSource set.
+    //
+    // Position is parked far off-screen. QQuickShaderEffectSource is
+    // itself a renderable item: its updatePaintNode returns a node that
+    // composites the FBO at the source's geometry. If we placed it at
+    // the anchor's coordinates, that composite would render the FBO
+    // contents on top of the anchor's spot — a second full-size copy
+    // alongside the shaderItem's effected output. visible=false is not
+    // an option (it suppresses updatePaintNode and therefore the FBO
+    // render); opacity=0 has the same culling effect. Off-screen
+    // positioning leaves Qt's processing intact while the composite
+    // node draws somewhere the user can't see.
+    constexpr qreal kOffscreenCoord = -1.0e6;
     QQuickShaderEffectSource* shaderSource = nullptr;
     if (foundExplicitAnchor) {
         shaderSource =
             new QQuickShaderEffectSource(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
         shaderSource->setSourceItem(shaderAnchor);
-        shaderSource->setLive(false);
+        shaderSource->setLive(true);
         shaderSource->setHideSource(true);
-        shaderSource->setOpacity(0.0);
+        shaderSource->setWidth(shaderAnchor->width());
+        shaderSource->setHeight(shaderAnchor->height());
+        shaderSource->setX(kOffscreenCoord);
+        shaderSource->setY(kOffscreenCoord);
     }
 
     // Parent the ShaderEffect to the anchor's parent (sibling) so it
@@ -210,11 +250,15 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
-    shaderItem->setITime(0.0);
-
-    if (shaderSource) {
-        shaderItem->setSourceItem(shaderSource);
-    }
+    // Initialise iTime to the leg's start value BEFORE the QQuickShaderEffect
+    // can paint a frame. Show legs run iTime 0→1 (start at 0); hide legs run
+    // 1→0 (start at 1). If we always initialised to 0.0 here, a hide leg's
+    // first paint between attach and the AnimatedValue's start-tick at
+    // shaderTime->start(...) would briefly render at iTime=0 — i.e. the
+    // "transition start" state (popin scaleFrom, slide slid-out, dissolve
+    // fully dissolved) on top of an already-visible surface, producing a
+    // visible flash before the hide animation reverses out.
+    shaderItem->setITime(isShowLeg ? qreal(0.0) : qreal(1.0));
 
     const QVariantMap translated =
         PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(effect, shaderParameters);
@@ -222,15 +266,71 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
         shaderItem->setShaderParams(translated);
     }
 
-    // Size + position the shader to match the anchor.
-    shaderItem->setWidth(shaderAnchor->width());
-    shaderItem->setHeight(shaderAnchor->height());
-    shaderItem->setX(shaderAnchor->x());
-    shaderItem->setY(shaderAnchor->y());
-    shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
+    // Size + position the shader.
+    //
+    // boundsPadding (from metadata.json) enlarges the shader effect's
+    // bounding box by a fraction of the anchor's size on every side so
+    // shaders that distort their silhouette outward (morph's UV warp)
+    // have room to render the rippled outline before the bounding box
+    // clips it. The anchor sits in the centre of the padded box; shaders
+    // that opt in (boundsPadding > 0) must remap vTexCoord back to anchor
+    // [0,1] for their UV math.
+    //
+    // iResolution stays in LOGICAL units to match the project-wide shader
+    // convention (libs/phosphor-rendering/src/shadereffect.cpp:763-765,
+    // common.glsl pxScale()). Animation shaders derive UV from the vertex-
+    // stage `vTexCoord` varying, not from `gl_FragCoord.xy / iResolution`
+    // — gl_FragCoord is post-DPR pixel coords and would overshoot [0,1]
+    // by a factor of DPR.
+    const qreal pad = qMax(qreal(0.0), effect.boundsPadding);
+    const qreal padW = shaderAnchor->width() * pad;
+    const qreal padH = shaderAnchor->height() * pad;
+    shaderItem->setWidth(shaderAnchor->width() + 2.0 * padW);
+    shaderItem->setHeight(shaderAnchor->height() + 2.0 * padH);
+    shaderItem->setX(shaderAnchor->x() - padW);
+    shaderItem->setY(shaderAnchor->y() - padH);
+    shaderItem->setIResolution(QSizeF(shaderAnchor->width() + 2.0 * padW, shaderAnchor->height() + 2.0 * padH));
 
-    // Sync geometry if anchor resizes mid-transition.
-    auto syncGeometry = [shaderItem, shaderSource, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
+    // Push the bounds-padding fraction into the structural slot
+    // customParams[7].x so opt-in shaders (e.g. morph) can remap
+    // vTexCoord → anchor-space without hardcoding a constant that
+    // can drift from metadata.json. This slot is reserved by
+    // SurfaceAnimator — `translateAnimationParams` fills user-declared
+    // parameters from customParams[0] up sequentially, and no current
+    // shader declares >24 float params, so customParams[7] (slots 28-31)
+    // is unused by the user-parameter mapping. Documented in
+    // libs/phosphor-rendering/include/PhosphorRendering/ShaderEffect.h
+    // (customParams8 Q_PROPERTY).
+    QVector4D structuralParams = shaderItem->customParamAt(7);
+    structuralParams.setX(static_cast<float>(pad));
+    shaderItem->setCustomParamAt(7, structuralParams);
+
+    // setSourceItem is what wires up FBO sampling and triggers the
+    // shader effect's first sync into the scene graph. Setting it
+    // LAST — after all initial uniforms, custom params, and geometry
+    // are in place — guarantees that the shader's first painted frame
+    // sees a fully-initialised state. Mirrors the setITime ordering
+    // rationale above: any property set after setSourceItem could
+    // race the first paint and produce a visible flash with default-
+    // valued uniforms (boundsPadding=0 collapses the morph remap
+    // regardless of the metadata; un-translated shaderParameters
+    // leaves user uniforms at -1 sentinel; pre-padding geometry would
+    // clip rippled silhouettes).
+    if (shaderSource) {
+        shaderItem->setSourceItem(shaderSource);
+    }
+
+    // Sync geometry if anchor resizes mid-transition. iResolution stays
+    // in logical units (animation shaders derive UV from `vTexCoord`).
+    // Padding around the shader effect tracks the anchor's live size.
+    //
+    // shaderSource is captured as QPointer so that any teardown path that
+    // destroys it independently of shaderItem (scene-graph rebuild,
+    // explicit deleteLater outside teardownShaderLeg) doesn't leave the
+    // lambda dereferencing freed memory. Auto-disconnect on shaderItem
+    // destruction normally protects this — QPointer is belt-and-braces.
+    auto syncGeometry = [shaderItem, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource), pad,
+                         anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
         if (!anchorPtr) {
             return;
         }
@@ -239,25 +339,81 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
         if (w <= 0.0 || h <= 0.0) {
             return;
         }
-        shaderItem->setWidth(w);
-        shaderItem->setHeight(h);
-        shaderItem->setX(anchorPtr->x());
-        shaderItem->setY(anchorPtr->y());
-        shaderItem->setIResolution(QSizeF(w, h));
-        if (shaderSource) {
-            shaderSource->setWidth(w);
-            shaderSource->setHeight(h);
-            shaderSource->setX(anchorPtr->x());
-            shaderSource->setY(anchorPtr->y());
+        const qreal padW = w * pad;
+        const qreal padH = h * pad;
+        shaderItem->setWidth(w + 2.0 * padW);
+        shaderItem->setHeight(h + 2.0 * padH);
+        shaderItem->setX(anchorPtr->x() - padW);
+        shaderItem->setY(anchorPtr->y() - padH);
+        shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+        if (shaderSourcePtr) {
+            shaderSourcePtr->setWidth(w);
+            shaderSourcePtr->setHeight(h);
         }
     };
+    // Connect to all four geometry signals — anchor x/y can shift mid-leg
+    // when sibling visibility flips trigger parent layout reflow (we hide
+    // visible siblings below; QML Row/ColumnLayout re-pack on visible
+    // change), or when the host's anchored layout (centerIn/anchors.fill)
+    // re-evaluates on parent resize. Without xChanged/yChanged the shader
+    // effect renders at the stale anchor coordinates while the FBO source
+    // also captures from there — visible mid-animation drift.
+    //
+    // CRUCIALLY connected BEFORE the sibling-hide loop. Hiding siblings
+    // mutates parent-layout-managed children synchronously, which can
+    // emit xChanged/yChanged on the anchor as Row/ColumnLayout re-packs.
+    // If the connects ran after the loop, the shader item would be stuck
+    // at the pre-reflow coordinates captured at lines 273-297 above —
+    // visible offset for the entire show leg until the next geometry
+    // signal happens to fire.
     QObject::connect(shaderAnchor, &QQuickItem::widthChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
+    QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
+    QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
+
+    // Hide visible decorator siblings of the anchor for the leg. We
+    // would prefer to redirect their `source` to the shader so the
+    // decoration (e.g. drop shadow) keeps tracking the shader's output,
+    // but Qt 6 MultiEffect crashes inside its private QQuickShaderEffect
+    // when given a non-stock QQuickItem as source. Hiding gives a clean
+    // shader transition at the cost of the decoration popping back in
+    // at teardown. Skipped for fallback anchors.
+    QList<QPointer<QQuickItem>> hiddenSiblings;
+    if (foundExplicitAnchor && shaderAnchor->parentItem()) {
+        const auto siblings = shaderAnchor->parentItem()->childItems();
+        for (QQuickItem* sibling : siblings) {
+            if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
+                continue;
+            }
+            if (sibling->isVisible()) {
+                hiddenSiblings.append(QPointer<QQuickItem>(sibling));
+                sibling->setVisible(false);
+            }
+        }
+    }
+
+    // Snap residual scales along the chain shaderAnchor → … → target
+    // back to 1.0. The shader-exclusive leg suppresses the C++ scale
+    // leg, so a previous non-shader hide that left an intermediate
+    // QML item (Loader, host wrapper, the anchor itself) at
+    // hideScaleTo would render the entire shader subtree at the
+    // residual scale. target.setScale(1.0) below covers the surface
+    // root; this loop covers everything between it and the anchor.
+    {
+        QQuickItem* it = shaderAnchor;
+        while (it && it != target) {
+            if (!qFuzzyCompare(it->scale(), qreal(1.0))) {
+                it->setScale(1.0);
+            }
+            it = it->parentItem();
+        }
+    }
 
     out.shaderItem = shaderItem;
     out.shaderSource = shaderSource;
     out.shaderAnchor = shaderAnchor;
     out.foundExplicitAnchor = foundExplicitAnchor;
+    out.hiddenSiblings = std::move(hiddenSiblings);
     return out;
 }
 
@@ -286,6 +442,10 @@ public:
         std::unique_ptr<PhosphorAnimation::AnimatedValue<qreal>> shaderTime;
         QPointer<PhosphorRendering::ShaderEffect> shaderItem;
         QPointer<QQuickShaderEffectSource> shaderSource;
+        /// Anchor siblings flipped to invisible for the leg. Restored on
+        /// teardown. QPointer auto-nulls if the QML scene tears down mid-
+        /// flight.
+        QList<QPointer<QQuickItem>> hiddenSiblings;
         int pendingLegs = 0;
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
@@ -321,12 +481,14 @@ public:
         }
         if (track.shaderItem) {
             // Disconnect the anchor→shaderItem signal connections BEFORE
-            // queueing the shaderItem for delete. Qt's
-            // receiver-destroyed auto-disconnect runs only when the
-            // shaderItem is actually destroyed by the event loop — the
-            // window between deleteLater() and dispatch is wide enough
-            // for layer.enabled=false (below) to fire widthChanged
-            // synchronously against a queued-for-delete receiver.
+            // queueing the shaderItem for delete. Qt's receiver-destroyed
+            // auto-disconnect runs only when the shaderItem is actually
+            // destroyed by the event loop, leaving a window between
+            // deleteLater() and dispatch where surrounding teardown work
+            // (sibling visibility restore, scene-graph reflow on
+            // shaderSource deleteLater) can still fire xChanged/y/width/
+            // heightChanged on the anchor against a queued-for-delete
+            // receiver. The explicit disconnect closes that window.
             if (track.shaderAnchor) {
                 QObject::disconnect(track.shaderAnchor.data(), nullptr, track.shaderItem.data(), nullptr);
             }
@@ -337,6 +499,14 @@ public:
             track.shaderSource->deleteLater();
             track.shaderSource = nullptr;
         }
+        // Restore visibility of the siblings we hid for the leg. QPointer
+        // skips items the QML scene tore down meanwhile.
+        for (const QPointer<QQuickItem>& sibling : track.hiddenSiblings) {
+            if (sibling) {
+                sibling->setVisible(true);
+            }
+        }
+        track.hiddenSiblings.clear();
         track.shaderAnchor.clear();
         track.foundExplicitAnchor = false;
     }
@@ -456,6 +626,7 @@ public:
             slot.shaderAnchor.clear();
             slot.shaderItem = nullptr;
             slot.shaderSource = nullptr;
+            slot.hiddenSiblings.clear();
             slot.foundExplicitAnchor = false;
             slot.target = target;
             slot.onComplete = std::move(onComplete);
@@ -470,9 +641,21 @@ public:
         // shader's first frames aren't invisible; hide keeps the
         // current opacity (shader drives perceived fade-out), then
         // snaps to 0.0 on shader completion (see legCompleted below).
+        //
+        // Scale must ALSO snap to 1.0: the scale leg is suppressed
+        // when a shader is active (`hasScaleLeg` gates on `!hasShaderLeg`),
+        // and a previous non-shader hide that ran a scale-down leg
+        // leaves `target->scale()` at hideScaleTo. Without snapping,
+        // the QML root carries that residual scale into the shader
+        // leg and the entire subtree — including our shaderItem and
+        // any redirected MultiEffect — renders at the reduced scale.
+        // The user sees a correctly-rendered shader at the wrong
+        // visual size and a "pop to full size" at teardown when the
+        // next non-shader cycle restores scale via its own scale leg.
         if (hasShaderLeg) {
             const bool isShow = (toOpacity > fromOpacity);
             target->setOpacity(isShow ? toOpacity : fromOpacity);
+            target->setScale(1.0);
         } else {
             target->setOpacity(fromOpacity);
         }
@@ -498,12 +681,19 @@ public:
             }
             if (hasShaderLeg) {
                 // resolvedShaderEff already validated by hasShaderLeg.
+                // isShowLeg lets attachShaderToAnchor seed iTime to the
+                // leg's start value (0 for show, 1 for hide) so the very
+                // first paint after the QQuickShaderEffect is added to
+                // the scene matches the AnimatedValue's intended start
+                // — see attachShaderToAnchor's setITime block.
+                const bool isShowLeg = (toOpacity > fromOpacity);
                 ShaderAttachResult attached =
-                    attachShaderToAnchor(target, resolvedShaderEff, shaderEffectId, shaderParameters);
+                    attachShaderToAnchor(target, resolvedShaderEff, shaderEffectId, shaderParameters, isShowLeg);
                 it->second.shaderItem = attached.shaderItem;
                 it->second.shaderSource = attached.shaderSource;
                 it->second.shaderAnchor = attached.shaderAnchor;
                 it->second.foundExplicitAnchor = attached.foundExplicitAnchor;
+                it->second.hiddenSiblings = std::move(attached.hiddenSiblings);
                 it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
             }
         }
@@ -576,7 +766,27 @@ public:
                        "profile paths are empty for surface"
                     << surface;
             }
-            it->second.shaderTime->start(0.0, 1.0,
+            // Run iTime backward on hide so shaders whose visual depends on
+            // direction (pixelate dissipating, popin scaling up, slide
+            // revealing, dissolve filling in) play in reverse for the hide
+            // leg without each shader having to know the leg sign. iTime
+            // semantics in the GLSL stay the same — iTime=0 is the
+            // "transition start" state (pixelated / small / slid-out /
+            // dissolved), iTime=1 is the "fully resolved" state (clear /
+            // full size / fully revealed / opaque). On show we tween 0→1;
+            // on hide we tween 1→0 so the surface visibly transitions
+            // OUT through the same intermediate states.
+            //
+            // Symmetric envelopes (morph's `sin(iTime*pi)`, glitch's
+            // sin-shaped peak) are direction-invariant by construction —
+            // the peak still lands mid-leg either way.
+            const bool isShowLegInner = (toOpacity > fromOpacity);
+            const qreal shaderFrom = isShowLegInner ? qreal(0.0) : qreal(1.0);
+            const qreal shaderTo = isShowLegInner ? qreal(1.0) : qreal(0.0);
+            // No setITime here — attachShaderToAnchor (called with the
+            // same isShowLeg flag) already seeded iTime to shaderFrom
+            // before the QQuickShaderEffect could paint a frame.
+            it->second.shaderTime->start(shaderFrom, shaderTo,
                                          buildSpec(
                                              resolveProfile(m_registry, shaderLegProfilePath), clock,
                                              /*onValueChanged=*/
