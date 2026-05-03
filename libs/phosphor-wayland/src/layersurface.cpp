@@ -32,6 +32,7 @@ LayerSurface::LayerSurface(QWindow* window)
     window->setProperty(LayerSurfaceProps::MarginsTop, 0);
     window->setProperty(LayerSurfaceProps::MarginsRight, 0);
     window->setProperty(LayerSurfaceProps::MarginsBottom, 0);
+    window->setProperty(LayerSurfaceProps::ExclusiveEdge, static_cast<int>(m_exclusiveEdge));
 
     QWindow* rawWindow = window;
     m_destroyedConnection = connect(window, &QObject::destroyed, this, [rawWindow]() {
@@ -244,6 +245,28 @@ void LayerSurface::setMargins(const QMargins& margins)
 QMargins LayerSurface::margins() const
 {
     return m_margins;
+}
+
+void LayerSurface::setExclusiveEdge(Anchors edge)
+{
+    int bits = static_cast<int>(edge);
+    if (bits != 0 && bits != AnchorTop && bits != AnchorBottom && bits != AnchorLeft && bits != AnchorRight) {
+        qCWarning(lcLayerSurface) << "setExclusiveEdge() called with invalid value" << Qt::hex << bits
+                                  << "— must be a single anchor or AnchorNone";
+        return;
+    }
+    if (m_exclusiveEdge == edge)
+        return;
+    m_exclusiveEdge = edge;
+    if (m_window)
+        m_window->setProperty(LayerSurfaceProps::ExclusiveEdge, static_cast<int>(edge));
+    Q_EMIT exclusiveEdgeChanged();
+    emitPropertiesChanged();
+}
+
+LayerSurface::Anchors LayerSurface::exclusiveEdge() const
+{
+    return m_exclusiveEdge;
 }
 
 std::pair<uint32_t, uint32_t> LayerSurface::computeLayerSize(Anchors anchors, const QSize& windowSize)

@@ -113,6 +113,7 @@ private Q_SLOTS:
         QCOMPARE(surface->scope(), QStringLiteral("phosphorwayland"));
         QCOMPARE(surface->screen(), nullptr);
         QCOMPARE(surface->margins(), QMargins());
+        QCOMPARE(surface->exclusiveEdge(), LayerSurface::Anchors());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -192,6 +193,35 @@ private Q_SLOTS:
 
         surface->setScope(QStringLiteral("test-scope"));
         QCOMPARE(spy.count(), 1);
+    }
+
+    void testSetExclusiveEdge_emitsOnChange()
+    {
+        QWindow window;
+        SurfaceGuard guard(window);
+        auto* surface = LayerSurface::get(&window);
+        QSignalSpy spy(surface, &LayerSurface::exclusiveEdgeChanged);
+
+        surface->setExclusiveEdge(LayerSurface::AnchorTop);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(surface->exclusiveEdge(), LayerSurface::Anchors(LayerSurface::AnchorTop));
+
+        surface->setExclusiveEdge(LayerSurface::AnchorTop);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testSetExclusiveEdge_invalidValue_ignored()
+    {
+        QWindow window;
+        SurfaceGuard guard(window);
+        auto* surface = LayerSurface::get(&window);
+        QSignalSpy spy(surface, &LayerSurface::exclusiveEdgeChanged);
+
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("setExclusiveEdge\\(\\) called with invalid value")));
+        surface->setExclusiveEdge(LayerSurface::AnchorTop | LayerSurface::AnchorLeft);
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(surface->exclusiveEdge(), LayerSurface::Anchors());
     }
 
     void testSetMargins_emitsOnChange()
@@ -396,6 +426,7 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsBottom).toInt(), 0);
+        QCOMPARE(window.property(LayerSurfaceProps::ExclusiveEdge).toInt(), 0);
     }
 
     void testPropertiesPropagateToWindow()
@@ -424,6 +455,9 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 2);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 3);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsBottom).toInt(), 4);
+
+        surface->setExclusiveEdge(LayerSurface::AnchorBottom);
+        QCOMPARE(window.property(LayerSurfaceProps::ExclusiveEdge).toInt(), 2); // AnchorBottom
     }
 
     void testIsLayerShellProperty()

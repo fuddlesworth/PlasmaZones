@@ -28,6 +28,7 @@ inline constexpr const char* MarginsLeft = "_ps_margins_left";
 inline constexpr const char* MarginsTop = "_ps_margins_top";
 inline constexpr const char* MarginsRight = "_ps_margins_right";
 inline constexpr const char* MarginsBottom = "_ps_margins_bottom";
+inline constexpr const char* ExclusiveEdge = "_ps_exclusive_edge";
 } // namespace LayerSurfaceProps
 
 /// Wayland layer-shell surface backed by zwlr_layer_shell_v1.
@@ -44,6 +45,7 @@ class PHOSPHORWAYLAND_EXPORT LayerSurface : public QObject
     Q_PROPERTY(QString scope READ scope WRITE setScope NOTIFY scopeChanged)
     Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
     Q_PROPERTY(QMargins margins READ margins WRITE setMargins NOTIFY marginsChanged)
+    Q_PROPERTY(Anchors exclusiveEdge READ exclusiveEdge WRITE setExclusiveEdge NOTIFY exclusiveEdgeChanged)
 
 public:
     ~LayerSurface() override;
@@ -91,6 +93,9 @@ public:
     void setMargins(const QMargins& margins);
     QMargins margins() const;
 
+    void setExclusiveEdge(Anchors edge);
+    Anchors exclusiveEdge() const;
+
     // ── Immutable properties (must set before show()) ────────────────
     void setScope(const QString& scope);
     QString scope() const;
@@ -117,6 +122,7 @@ Q_SIGNALS:
     void keyboardInteractivityChanged();
     void scopeChanged();
     void marginsChanged();
+    void exclusiveEdgeChanged();
     void screenChanged();
     void propertiesChanged();
 
@@ -170,6 +176,7 @@ private:
     QString m_scope;
     QPointer<QScreen> m_screen;
     QMargins m_margins;
+    Anchors m_exclusiveEdge;
     QMetaObject::Connection m_destroyedConnection;
 };
 

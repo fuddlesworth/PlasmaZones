@@ -12,6 +12,9 @@
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 #include <phosphorwayland_export.h>
 #include "wlr_layer_shell_protocol.h"
+#include "single_pixel_buffer_protocol.h"
+#include "idle_notify_protocol.h"
+#include "xdg_toplevel_drag_protocol.h"
 
 namespace PhosphorWayland {
 
@@ -35,11 +38,12 @@ public:
         return m_globalAvailable ? m_layerShell : nullptr;
     }
 
-    /// The protocol version we negotiated with the compositor (1-4).
+    /// The protocol version we negotiated with the compositor (1-5).
     /// Callers should check this before using version-gated features:
     ///   v2: set_layer (runtime layer changes)
     ///   v3: destroy request
     ///   v4: on_demand keyboard interactivity
+    ///   v5: set_exclusive_edge
     uint32_t boundVersion() const
     {
         return m_boundVersion;
@@ -70,6 +74,21 @@ public:
     CallbackId addGlobalRemovedCallback(GlobalRemovedCallback cb);
     void removeGlobalRemovedCallback(CallbackId id);
 
+    struct wp_single_pixel_buffer_manager_v1* singlePixelBufferManager() const
+    {
+        return m_singlePixelBufferAvailable ? m_singlePixelBufferManager : nullptr;
+    }
+
+    struct ext_idle_notifier_v1* idleNotifier() const
+    {
+        return m_idleNotifierAvailable ? m_idleNotifier : nullptr;
+    }
+
+    struct xdg_toplevel_drag_manager_v1* toplevelDragManager() const
+    {
+        return m_toplevelDragManagerAvailable ? m_toplevelDragManager : nullptr;
+    }
+
     /// Access the Wayland display for explicit flushing after surface creation.
     QtWaylandClient::QWaylandDisplay* display() const
     {
@@ -86,11 +105,19 @@ private:
     struct wl_registry* m_registry = nullptr;
     uint32_t m_layerShellId = 0;
     uint32_t m_boundVersion = 0;
-    // Tracks whether the compositor's global is still advertised.
-    // When false, layerShell() returns nullptr to prevent new surface creation,
-    // but m_layerShell is kept non-null for proper cleanup in the destructor
-    // (avoids leaking the wl_proxy when the global is removed at runtime).
     bool m_globalAvailable = false;
+
+    struct wp_single_pixel_buffer_manager_v1* m_singlePixelBufferManager = nullptr;
+    uint32_t m_singlePixelBufferManagerId = 0;
+    bool m_singlePixelBufferAvailable = false;
+
+    struct ext_idle_notifier_v1* m_idleNotifier = nullptr;
+    uint32_t m_idleNotifierId = 0;
+    bool m_idleNotifierAvailable = false;
+
+    struct xdg_toplevel_drag_manager_v1* m_toplevelDragManager = nullptr;
+    uint32_t m_toplevelDragManagerId = 0;
+    bool m_toplevelDragManagerAvailable = false;
 
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;
