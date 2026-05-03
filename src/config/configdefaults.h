@@ -19,6 +19,8 @@
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
 #include <PhosphorTiles/AutotileConstants.h>
+// Animation duration / stagger UI bounds — generic policy, not autotile-specific.
+#include <PhosphorAnimation/AnimationLimits.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -866,11 +868,11 @@ public:
     }
     static constexpr int animationDurationMin()
     {
-        return PhosphorTiles::AutotileDefaults::MinAnimationDuration;
+        return PhosphorAnimation::Limits::MinAnimationDurationMs;
     }
     static constexpr int animationDurationMax()
     {
-        return PhosphorTiles::AutotileDefaults::MaxAnimationDuration;
+        return PhosphorAnimation::Limits::MaxAnimationDurationMs;
     }
     static int animationSequenceMode()
     {
@@ -890,11 +892,11 @@ public:
     }
     static constexpr int animationStaggerIntervalMin()
     {
-        return PhosphorTiles::AutotileDefaults::MinAnimationStaggerIntervalMs;
+        return PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs;
     }
     static constexpr int animationStaggerIntervalMax()
     {
-        return PhosphorTiles::AutotileDefaults::MaxAnimationStaggerIntervalMs;
+        return PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs;
     }
     static QString animationEasingCurve()
     {
