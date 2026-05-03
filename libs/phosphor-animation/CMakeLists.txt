@@ -155,12 +155,6 @@ set(phosphoranimation_SRCS
     src/curveloader.cpp
     src/profileloader.cpp
 
-    # QML wrappers (ex phosphor-animation-qml)
-    src/phosphoranimation_qml_plugin.cpp
-    src/phosphorcurve.cpp
-    src/qtquickclockmanager.cpp
-    src/phosphormotionanimation.cpp
-
     # Shader pipeline (ex phosphor-animation-shaders)
     src/animationshadereffect.cpp
     src/animationshaderregistry.cpp

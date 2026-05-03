@@ -172,7 +172,7 @@ Item {
         readonly property int containerRadius: Kirigami.Units.largeSpacing * 2
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
-        readonly property int previewWidth: 160
+        readonly property int previewWidth: Kirigami.Units.gridUnit * 10
     }
 
     Shortcut {

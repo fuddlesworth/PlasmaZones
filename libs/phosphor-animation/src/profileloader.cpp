@@ -165,7 +165,7 @@ namespace {
 /// UUIDs are never reused within a process.
 QString defaultOwnerTag()
 {
-    return QStringLiteral("profileloader-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return QStringLiteral("profileloader-") + QUuid::createUuid().toString();
 }
 } // namespace
 

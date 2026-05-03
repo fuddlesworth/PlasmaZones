@@ -574,10 +574,11 @@ private:
 
     /// Phase 6: animation shader effect discovery. Scans
     /// `plasmazones/animations` from XDG data dirs and monitors for
-    /// user-dropped packs via QFileSystemWatcher. Declared BEFORE
-    /// m_overlayService (which holds a borrowed pointer via
-    /// m_animShaderRegistry) so reverse-order destruction tears
-    /// the service down before this registry.
+    /// user-dropped packs via QFileSystemWatcher. Declared AFTER
+    /// m_overlayService — lifetime is managed explicitly in stop():
+    /// the overlay service's borrowed registry pointer is nulled
+    /// before this registry is reset, preventing dangling-pointer
+    /// access during shutdown.
     std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
 
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.

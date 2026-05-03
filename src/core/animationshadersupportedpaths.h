@@ -78,7 +78,11 @@ inline QStringList shaderSupportedEventPaths()
 /// and the daemon's optional verification path.
 inline bool eventPathSupportsShaderLeg(const QString& path)
 {
-    return shaderSupportedEventPaths().contains(path);
+    static const QSet<QString> kSupported = []() {
+        const QStringList list = shaderSupportedEventPaths();
+        return QSet<QString>(list.cbegin(), list.cend());
+    }();
+    return kSupported.contains(path);
 }
 
 /// Drop every per-path override from @p src whose path is NOT in

@@ -102,7 +102,9 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * first calling removeExtraBinding(), the next prepare() will dereference a
  * dangling pointer — undefined behaviour, typically a crash inside the RHI
  * backend. ALWAYS call removeExtraBinding(binding) before destroying the
- * underlying QRhiTexture/QRhiSampler.
+ * underlying QRhiTexture/QRhiSampler. No automatic lifetime tracking
+ * exists — callers are solely responsible for the remove-before-destroy
+ * contract.
  */
 class PHOSPHORRENDERING_EXPORT ShaderNodeRhi : public QSGRenderNode
 {

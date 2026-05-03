@@ -21,7 +21,7 @@ Flickable {
     // refreshes it on shaderEffectsChanged. See AnimationEventCard.qml's
     // shaderCombo for the same pattern (Q_INVOKABLE results aren't
     // reactive across the QML binding boundary).
-    property var effectList: settingsController.animationsPage.availableShaderEffects()
+    property var effectList: settingsController.animationsPage.availableShaderEffects() // QVariantList from C++
     // Cached at component creation so the binding doesn't re-invoke
     // userShaderDirectoryPath() on every paint. Pure path accessor (no
     // mkpath side effect; see ensureUserShaderDirectory() / the Open

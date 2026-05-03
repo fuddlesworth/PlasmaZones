@@ -228,6 +228,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     ++it;
                     endShaderTransition(w);
                 }
+                Q_ASSERT(m_shaderTransitions.empty());
                 m_shaderCache.clear();
             });
 
@@ -4493,6 +4494,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     const quint64 myGeneration = it->second.generation;
     QPointer<KWin::EffectWindow> safeWindow(window);
     QTimer::singleShot(durationMs, this, [this, safeWindow, myGeneration]() {
+        // Two-tier guard: QPointer catches QObject destruction,
+        // endShaderTransition's isDeleted() catches KWin's deletion-animation phase
         if (!safeWindow) {
             return;
         }

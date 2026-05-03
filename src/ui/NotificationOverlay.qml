@@ -109,8 +109,8 @@ Window {
     // doesn't matter, but they MUST match osd.cpp's readOsdContentSize
     // fallbacks (kFallbackWidth / kFallbackHeight) so a missed property
     // read doesn't size the surface to one value while QML measures another.
-    readonly property int kFallbackContentWidth: 240
-    readonly property int kFallbackContentHeight: 70
+    readonly property int kFallbackContentWidth: Kirigami.Units.gridUnit * 15
+    readonly property int kFallbackContentHeight: Kirigami.Units.gridUnit * 4
     readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : kFallbackContentWidth
     readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : kFallbackContentHeight
 
@@ -151,8 +151,8 @@ Window {
     // ambiguous "binding sometimes drives size, sometimes doesn't" model.
     // Keep these as plain literal initializers; surface is visible=false
     // during warm-up so the value is cosmetic.
-    width: 240
-    height: 70
+    width: Kirigami.Units.gridUnit * 15
+    height: Kirigami.Units.gridUnit * 4
     // Start hidden; first Surface::show() flips visible=true. Subsequent
     // hides keep the layer surface mapped (keepMappedOnHide=true) so the
     // warmed Vulkan swapchain survives across show cycles.

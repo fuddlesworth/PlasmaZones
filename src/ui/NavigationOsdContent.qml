@@ -260,7 +260,7 @@ Item {
         source: container
         anchors.fill: container
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.5)
+        shadowColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
         shadowBlur: 1
         shadowVerticalOffset: 4
         shadowHorizontalOffset: 0
@@ -285,12 +285,12 @@ Item {
 
         anchors.centerIn: parent
         // Text-only: size based on message content
-        width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, 160)
+        width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10)
         height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
         color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
-        border.width: 1
+        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
 
         // Message label - informative text-based feedback
         Label {
@@ -315,6 +315,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: dismiss.fire()
+        Accessible.name: i18n("Dismiss notification")
     }
 
 }

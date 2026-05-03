@@ -1254,6 +1254,7 @@ void Daemon::stop()
     // process-global PhosphorProfileRegistry shed those entries here.
     m_profileLoader.reset();
     m_curveLoader.reset();
+    m_shaderBakePool.waitForDone(3000);
     if (m_overlayService) {
         m_overlayService->setAnimationShaderRegistry(nullptr);
     }

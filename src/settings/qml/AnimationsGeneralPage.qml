@@ -261,6 +261,7 @@ Flickable {
                     description: i18n("Pause between each window's animation start")
 
                     SettingsSlider {
+                        Accessible.name: i18n("Stagger delay")
                         enabled: animationsCard.toggleChecked
                         from: settingsController.generalPage.animationStaggerIntervalMin
                         to: settingsController.generalPage.animationStaggerIntervalMax
@@ -283,6 +284,7 @@ Flickable {
                     description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
+                        Accessible.name: i18n("Minimum distance")
                         enabled: animationsCard.toggleChecked
                         from: settingsController.generalPage.animationMinDistanceMin
                         to: settingsController.generalPage.animationMinDistanceMax

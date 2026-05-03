@@ -49,7 +49,8 @@ constexpr qreal kRefreshRateHz = 1000.0 / kTickIntervalMs;
 /// values. The metadata-side clamp at AnimationShaderEffect::fromJson
 /// caps at 2.0; this is a runtime backstop against any path that
 /// bypasses that clamp (test fixtures, future scripted-shader hooks).
-constexpr qreal kMaxBoundsPaddingFraction = 4.0;
+// Must match the metadata clamp in AnimationShaderEffect::fromJson()
+constexpr qreal kMaxBoundsPaddingFraction = 2.0;
 
 /// Compute the effective boundsPadding fraction for a shader item
 /// parented to @p anchor's parent. Result is clamped to:

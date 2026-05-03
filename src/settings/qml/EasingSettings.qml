@@ -174,6 +174,7 @@ ColumnLayout {
 
             property bool updating: false
 
+            Accessible.name: i18n("Easing style")
             enabled: easingRoot.animationsEnabled
             model: easingData.styles.map((s) => {
                 return s.label;
@@ -217,6 +218,7 @@ ColumnLayout {
 
             property bool updating: false
 
+            Accessible.name: i18n("Easing direction")
             enabled: easingRoot.animationsEnabled && easingStyleCombo.currentIndex > 0
             model: easingData.directions.map((d) => {
                 return d.label;
@@ -257,6 +259,7 @@ ColumnLayout {
         description: curveInfo.isElastic ? i18n("Strength of elastic overshoot") : i18n("Height of bounce peaks")
 
         SettingsSlider {
+            Accessible.name: i18n("Amplitude")
             enabled: easingRoot.animationsEnabled
             from: curveInfo.isElastic ? 1 : 0.5
             to: 3
@@ -286,6 +289,7 @@ ColumnLayout {
         description: i18n("Number of bounce repetitions")
 
         SettingsSlider {
+            Accessible.name: i18n("Bounces")
             enabled: easingRoot.animationsEnabled
             from: 1
             to: 8
@@ -307,6 +311,7 @@ ColumnLayout {
         description: i18n("Oscillation speed — lower is faster wobble")
 
         SettingsSlider {
+            Accessible.name: i18n("Period")
             enabled: easingRoot.animationsEnabled
             from: 0.1
             to: 1
@@ -333,6 +338,7 @@ ColumnLayout {
         description: i18n("Total animation time in milliseconds")
 
         SettingsSlider {
+            Accessible.name: i18n("Duration")
             enabled: easingRoot.animationsEnabled
             from: settingsController.generalPage.animationDurationMin
             to: settingsController.generalPage.animationDurationMax

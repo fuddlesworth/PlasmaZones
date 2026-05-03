@@ -255,6 +255,9 @@ void AnimationsPageController::commitPending()
 
 void AnimationsPageController::revertPending()
 {
+    // Shader tree changes are reverted by the subsequent m_settings.load() call
+    // in SettingsController, not by this method. Do not call revertPending()
+    // without a following load().
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 
@@ -499,6 +502,7 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
 
 bool AnimationsPageController::setOverride(const QString& path, const QVariantMap& profileJson)
 {
+    const bool wasPending = hasPendingChanges();
     if (!isValidEventPath(path))
         return false;
 
@@ -541,13 +545,16 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
         return false;
     }
 
+    const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    Q_EMIT pendingChangesChanged();
+    if (wasPending != nowPending)
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
 bool AnimationsPageController::clearOverride(const QString& path)
 {
+    const bool wasPending = hasPendingChanges();
     if (!isValidEventPath(path))
         return false;
     const QString filePath = profileFilePath(path);
@@ -558,7 +565,8 @@ bool AnimationsPageController::clearOverride(const QString& path)
     if (!file.remove())
         return false;
     Q_EMIT overrideChanged(path);
-    Q_EMIT pendingChangesChanged();
+    if (wasPending != hasPendingChanges())
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -724,6 +732,7 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
                                                  const QVariantMap& parameters)
 {
+    const bool wasPending = hasPendingChanges();
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
@@ -781,15 +790,14 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     tree.setOverride(path, profile);
     m_settings->setShaderProfileTree(tree);
     // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
-    // Emit pendingChangesChanged so SettingsController treats this as a
-    // user-visible edit (without it the Save button never lit up for
-    // shader edits).
-    Q_EMIT pendingChangesChanged();
+    if (wasPending != hasPendingChanges())
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
 bool AnimationsPageController::clearShaderOverride(const QString& path)
 {
+    const bool wasPending = hasPendingChanges();
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
@@ -798,10 +806,8 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
         return false;
     tree.clearOverride(path);
     m_settings->setShaderProfileTree(tree);
-    // shaderProfileTreeChanged → constructor lambda → shaderProfileChanged.
-    // Emit pendingChangesChanged so the SettingsController slot re-evaluates
-    // hasPendingChanges and lights the Save button.
-    Q_EMIT pendingChangesChanged();
+    if (wasPending != hasPendingChanges())
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -839,6 +845,7 @@ int AnimationsPageController::shaderOverrideDescendantCount(const QString& path)
 
 int AnimationsPageController::clearShaderOverrideDescendants(const QString& path)
 {
+    const bool wasPending = hasPendingChanges();
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
@@ -854,8 +861,8 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     // emits a single path-agnostic shaderProfileChanged() (NOT one per
     // cleared path — QML consumers re-resolve every dependent binding
     // on any tree-edit anyway, so a path-keyed signal would be wasted
-    // chatter). Save-button accounting via pendingChangesChanged.
-    Q_EMIT pendingChangesChanged();
+    if (wasPending != hasPendingChanges())
+        Q_EMIT pendingChangesChanged();
     return toClear.size();
 }
 

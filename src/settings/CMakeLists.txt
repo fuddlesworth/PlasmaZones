@@ -20,6 +20,8 @@ set(plasmazones_settings_SRCS
     animationpresetlibrary.cpp
     motionsetstore.h
     motionsetstore.cpp
+    animationfileutils.h
+    animationfileutils.cpp
     editorpagecontroller.h
     editorpagecontroller.cpp
     generalpagecontroller.h

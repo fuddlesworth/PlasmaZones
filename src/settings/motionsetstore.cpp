@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "motionsetstore.h"
+#include "animationfileutils.h"
 
 #include "../core/logging.h"
 
@@ -28,36 +29,6 @@ static constexpr QLatin1String JsonPathKey{"path"};
 static constexpr QLatin1String JsonProfileKey{"profile"};
 static constexpr QLatin1String JsonVersionKey{"version"};
 
-/// Filesystem-safe slug — same rule as the preset library.
-static QString slugifyName(const QString& name)
-{
-    QString out;
-    out.reserve(name.size());
-    bool lastWasDash = false;
-    for (QChar c : name) {
-        const QChar lower = c.toLower();
-        if (lower.isLetterOrNumber() || lower == QLatin1Char('.')) {
-            out.append(lower);
-            lastWasDash = false;
-        } else if (!lastWasDash) {
-            out.append(QLatin1Char('-'));
-            lastWasDash = true;
-        }
-    }
-    while (out.startsWith(QLatin1Char('-')))
-        out.remove(0, 1);
-    while (out.endsWith(QLatin1Char('-')))
-        out.chop(1);
-    return out;
-}
-
-static QString jsonFilePath(const QString& dir, const QString& stem)
-{
-    if (stem.isEmpty())
-        return {};
-    return dir + QLatin1Char('/') + stem + QStringLiteral(".json");
-}
-
 } // namespace motionset_detail
 
 MotionSetStore::MotionSetStore(ProfilesDirFn profilesDirFn, std::function<QString()> motionSetsDirFn,
@@ -72,7 +43,7 @@ MotionSetStore::MotionSetStore(ProfilesDirFn profilesDirFn, std::function<QStrin
 
 QString MotionSetStore::motionSetFilePath(const QString& setName) const
 {
-    return motionset_detail::jsonFilePath(m_motionSetsDir(), motionset_detail::slugifyName(setName));
+    return animfileutil::jsonFilePath(m_motionSetsDir(), animfileutil::slugify(setName));
 }
 
 QVariantList MotionSetStore::availableMotionSets() const
@@ -199,6 +170,7 @@ bool MotionSetStore::applyMotionSet(const QString& name)
         // path already has dirty in-memory snapshots for every committed
         // peer — Discard restores them atomically.
         Q_EMIT pendingChangesChanged();
+        Q_EMIT motionSetsChanged();
         return false;
     }
 

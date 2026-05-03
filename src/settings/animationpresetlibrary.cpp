@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "animationpresetlibrary.h"
+#include "animationfileutils.h"
 
 #include "../core/logging.h"
 
@@ -22,35 +23,6 @@ namespace presetlib_detail {
 
 static constexpr QLatin1String JsonNameKey{"name"};
 
-static QString slugifyPresetName(const QString& name)
-{
-    QString out;
-    out.reserve(name.size());
-    bool lastWasDash = false;
-    for (QChar c : name) {
-        const QChar lower = c.toLower();
-        if (lower.isLetterOrNumber() || lower == QLatin1Char('.')) {
-            out.append(lower);
-            lastWasDash = false;
-        } else if (!lastWasDash) {
-            out.append(QLatin1Char('-'));
-            lastWasDash = true;
-        }
-    }
-    while (out.startsWith(QLatin1Char('-')))
-        out.remove(0, 1);
-    while (out.endsWith(QLatin1Char('-')))
-        out.chop(1);
-    return out;
-}
-
-static QString jsonFilePath(const QString& dir, const QString& stem)
-{
-    if (stem.isEmpty())
-        return {};
-    return dir + QLatin1Char('/') + stem + QStringLiteral(".json");
-}
-
 } // namespace presetlib_detail
 
 AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot, QObject* parent)
@@ -62,7 +34,7 @@ AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, Snap
 
 QString AnimationPresetLibrary::presetFilePath(const QString& presetName) const
 {
-    return presetlib_detail::jsonFilePath(m_profilesDir(), presetlib_detail::slugifyPresetName(presetName));
+    return animfileutil::jsonFilePath(m_profilesDir(), animfileutil::slugify(presetName));
 }
 
 QVariantList AnimationPresetLibrary::userPresets() const
@@ -116,7 +88,7 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     // Reject names that match a built-in event path — the file would
     // collide with an override slot. Check both the original name and
     // the slug because slugify lowercases.
-    const QString slug = presetlib_detail::slugifyPresetName(name);
+    const QString slug = animfileutil::slugify(name);
     if (slug.isEmpty())
         return false;
     const QStringList builtInPaths = ProfilePaths::allBuiltInPaths();
@@ -127,7 +99,7 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     if (!QDir().mkpath(dir))
         return false;
 
-    const QString filePath = presetlib_detail::jsonFilePath(dir, slug);
+    const QString filePath = animfileutil::jsonFilePath(dir, slug);
     if (filePath.isEmpty())
         return false;
 

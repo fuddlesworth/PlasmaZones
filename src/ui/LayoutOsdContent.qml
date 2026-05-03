@@ -129,7 +129,7 @@ Item {
         source: container
         anchors.fill: container
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.5)
+        shadowColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
         shadowBlur: 1
         shadowVerticalOffset: 4
         shadowHorizontalOffset: 0
@@ -153,7 +153,7 @@ Item {
         color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.15)
-        border.width: 1
+        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
 
         // Layout preview
         Item {
@@ -177,12 +177,12 @@ Item {
                 id: zonePreview
 
                 anchors.fill: parent
-                anchors.margins: 4
+                anchors.margins: Kirigami.Units.smallSpacing
                 zones: root.zones
                 isHovered: false
                 isActive: true
-                zonePadding: 2
-                edgeGap: 2
+                zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
+                edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
                 minZoneSize: 12
                 showZoneNumbers: true
                 producesOverlappingZones: root.producesOverlappingZones
@@ -197,7 +197,7 @@ Item {
                 showMasterDot: root.showMasterDot
                 masterCount: root.masterCount
                 fontStrikeout: root.fontStrikeout
-                animationDuration: 150
+                animationDuration: Kirigami.Units.shortDuration
             }
 
         }
@@ -206,7 +206,7 @@ Item {
         Rectangle {
             anchors.fill: previewContainer
             visible: root.locked && !root.disabled
-            color: Qt.rgba(0, 0, 0, 0.5)
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
             radius: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
@@ -223,7 +223,7 @@ Item {
         Rectangle {
             anchors.fill: previewContainer
             visible: root.disabled
-            color: Qt.rgba(0, 0, 0, 0.5)
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
             radius: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
@@ -277,6 +277,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: dismiss.fire()
+        Accessible.name: i18n("Dismiss notification")
     }
 
 }

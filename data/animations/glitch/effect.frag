@@ -67,10 +67,15 @@ void main()
     // Sample the surface with per-channel offset for the chromatic
     // aberration. Texture sampler has clampToEdge so off-surface UVs
     // bleed edge colour rather than wrapping or going transparent.
-    float r = texture(iChannel0, uvR).r;
-    float g = texture(iChannel0, uvG).g;
-    float b = texture(iChannel0, uvB).b;
-    float a = texture(iChannel0, uvG).a;
-
-    fragColor = vec4(r, g, b, a);
+    // Qt Quick uses premultiplied-alpha blending, so un-premultiply
+    // each sample before extracting the single channel, then
+    // re-premultiply against the chosen alpha.
+    vec4 sR = texture(iChannel0, uvR);
+    vec4 sG = texture(iChannel0, uvG);
+    vec4 sB = texture(iChannel0, uvB);
+    float a = sG.a;
+    float r = (sR.a > 0.001) ? sR.r / sR.a : 0.0;
+    float g = (sG.a > 0.001) ? sG.g / sG.a : 0.0;
+    float b = (sB.a > 0.001) ? sB.b / sB.a : 0.0;
+    fragColor = vec4(r * a, g * a, b * a, a);
 }

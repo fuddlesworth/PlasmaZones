@@ -26,7 +26,7 @@ Flickable {
     // refreshes it on motionSetsChanged. See AnimationEventCard.qml's
     // shaderCombo for the same pattern (Q_INVOKABLE results aren't
     // reactive across the QML binding boundary).
-    property var motionSetsList: settingsController.animationsPage.availableMotionSets()
+    property var motionSetsList: settingsController.animationsPage.availableMotionSets() // QVariantList from C++
     property bool _saving: false
 
     contentHeight: content.implicitHeight

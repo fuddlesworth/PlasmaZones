@@ -34,8 +34,8 @@ Window {
     // Layout constants (extracted from magic numbers for maintainability)
     readonly property real cardScaleBase: 0.35
     readonly property real cardWidthMultiplier: 2.2
-    readonly property real minCardWidth: 100
-    readonly property real minIconSize: 24
+    readonly property real minCardWidth: Kirigami.Units.gridUnit * 6
+    readonly property real minIconSize: Kirigami.Units.iconSizes.small
     readonly property real iconSizeRatio: 0.6
     readonly property real zoneSizeRefForFont: 200
     readonly property real minFontScale: 0.4

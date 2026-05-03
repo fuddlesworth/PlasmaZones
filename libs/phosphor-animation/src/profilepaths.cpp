@@ -91,6 +91,7 @@ QStringList allBuiltInPaths()
         WindowFocus,
         Zone,
         ZoneSnapIn,
+        ZoneSnapOut,
         ZoneSnapResize,
         ZoneHighlight,
         ZoneLayoutSwitchIn,

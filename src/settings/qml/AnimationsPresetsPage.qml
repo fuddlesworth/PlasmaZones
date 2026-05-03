@@ -24,15 +24,17 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    readonly property var appSettings: settingsController.settings
+
     // Refresh hook bound to the controller signal below. The list is loaded
     // from a Q_INVOKABLE — QML can't observe the controller's internal state
     // through that boundary, so the Connections block below manually
     // reassigns `userPresetsList` whenever the controller emits a change
     // signal. The cached `_easingUserPresets` / `_springUserPresets`
     // bindings re-evaluate from the new list automatically.
-    property var userPresetsList: settingsController.animationsPage.userPresets()
-    readonly property var _easingUserPresets: filterUserPresets(false)
-    readonly property var _springUserPresets: filterUserPresets(true)
+    property var userPresetsList: settingsController.animationsPage.userPresets() // QVariantList from C++
+    readonly property var _easingUserPresets: filterUserPresets(false) // QVariantList from C++
+    readonly property var _springUserPresets: filterUserPresets(true) // QVariantList from C++
     property bool _deletingPreset: false
 
     function isSpringEntry(curveStr) {
@@ -68,7 +70,7 @@ Flickable {
         // animationEasingCurve Q_PROPERTY lets the daemon's
         // publishActiveAnimationProfile pick it up via the same wire
         // every other Global edit uses.
-        appSettings.animationEasingCurve = curveStr;
+        root.appSettings.animationEasingCurve = curveStr;
     }
 
     contentHeight: content.implicitHeight
