@@ -404,40 +404,41 @@ install(DIRECTORY data/curves/
     FILES_MATCHING PATTERN "*.json"
 )
 
-# Install shell-opinionated animation profile defaults (per-path
-# PhosphorAnimation Profile blobs). The daemon's ProfileLoader scans
-# ${XDG_DATA_DIRS}/plasmazones/profiles at startup; user overrides at
-# ~/.local/share/plasmazones/profiles win over these.
+# Install path for shell-opinionated animation profile JSONs. The
+# shipped tree carries zero per-leaf JSONs by design — animation
+# timings/curves are driven entirely from the Settings UI via
+# `PhosphorProfileRegistry::registerProfile`, with parent-chain
+# inheritance filling in unset leaves. This install rule is kept as
+# the system-wide pickup path for distros / packagers that want to
+# ship their own opinionated defaults; `ProfileLoader` scans
+# `${XDG_DATA_DIRS}/plasmazones/profiles` and user overrides at
+# `~/.local/share/plasmazones/profiles` always win.
 install(DIRECTORY data/profiles/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/profiles
     FILES_MATCHING PATTERN "*.json"
 )
 
-# Build-time check: every `profile: "..."` string in the shipped QML
-# must correspond to a data/profiles/<name>.json file — otherwise the
-# registry silently falls back to library defaults at runtime and the
-# typo only surfaces via UX review. The custom target depends on every
-# shipped profile JSON + every QML file we scan, so it re-runs when
-# either side changes. Falls back to a no-op echo if python3 is
-# missing, so the check is advisory for distros that build without a
-# python interpreter (the daemon itself does not require one).
+# Build-time check: every `"curve": "..."` reference in a shipped
+# profile JSON must resolve to either a built-in curve typeId or a
+# data/curves/<name>.json file. QML profile-name references are NOT
+# validated here — animation profiles are driven entirely from the
+# Settings UI via PhosphorProfileRegistry, with parent-chain
+# inheritance filling in any unset leaf path, so the shipped tree
+# legitimately carries zero per-leaf JSONs. Falls back to a no-op if
+# python3 is missing so the check stays advisory for distros that
+# build without a python interpreter (the daemon itself does not
+# require one).
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     file(GLOB _pz_profile_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/profiles/*.json")
     file(GLOB _pz_curve_jsons "${CMAKE_CURRENT_SOURCE_DIR}/data/curves/*.json")
-    file(GLOB_RECURSE _pz_profile_qmls
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/editor/qml/*.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/settings/qml/*.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/*.qml"
-    )
     add_custom_target(check-animation-profiles ALL
         COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
                 ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${_pz_profile_jsons} ${_pz_curve_jsons} ${_pz_profile_qmls}
+        DEPENDS ${_pz_profile_jsons} ${_pz_curve_jsons}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-animation-profiles.py
-        COMMENT "Verifying PhosphorAnimation profile names referenced in QML and curve refs in profiles"
+        COMMENT "Verifying curve refs in shipped PhosphorAnimation profile JSONs"
         VERBATIM
     )
 endif()

@@ -185,11 +185,13 @@ int main(int argc, char* argv[])
     }
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML
-    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve against
-    // the shipped data/profiles JSONs. Mirrors the daemon's loader setup;
-    // without it the editor's animations fall back to the library default
-    // 150 ms regardless of the shipped profile data. Must outlive the QML
-    // engine (Behavior bindings keep registry handles).
+    // `PhosphorMotionAnimation { profile: "..." }` lookups resolve. The
+    // shipped tree carries no bundled profile JSONs (timings are
+    // Settings-UI driven via the daemon's registry publisher); the
+    // bootstrap loader is still wired so user-authored JSONs at
+    // `~/.local/share/plasmazones/profiles/<path>.json` get picked up
+    // and so live-reload watches are armed for fresh installs. Must
+    // outlive the QML engine (Behavior bindings keep registry handles).
     PlasmaZones::AnimationBootstrap animationBootstrap;
 
     // Publish the bootstrap-owned registries + a fresh clock manager as

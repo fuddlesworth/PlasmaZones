@@ -191,15 +191,15 @@ PhosphorAnimation::Profile resolveProfile(PhosphorAnimation::PhosphorProfileRegi
     if (path.isEmpty()) {
         return PhosphorAnimation::Profile{}.withDefaults();
     }
-    if (auto p = registry.resolve(path)) {
-        return p->withDefaults();
-    }
-    qCWarning(lcSurfaceAnimator).nospace() << "Profile path '" << path
-                                           << "' did not resolve through registry — "
-                                              "falling back to library defaults (150 ms OutCubic). "
-                                              "Check the profile name for typos and that the "
-                                              "corresponding JSON ships under data/profiles/.";
-    return PhosphorAnimation::Profile{}.withDefaults();
+    // Inheritance-aware resolve so a parent-node card edit at e.g.
+    // `panel.popup` propagates to every `panel.popup.*.*` leg even
+    // when the bundled per-leaf JSONs (panel.popup.layoutPicker.show
+    // .json etc.) hardcode their own duration. The previous direct
+    // `registry.resolve(path)` call only matched the exact leaf —
+    // bundled leaf entries silently shadowed the user's parent
+    // override and the slider had no visible effect on legs whose
+    // bundled JSON happened to ship.
+    return registry.resolveWithInheritance(path);
 }
 
 /// Build a MotionSpec<qreal> — centralises construction so beginShow

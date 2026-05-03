@@ -3,6 +3,10 @@
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
+#include <PhosphorAnimation/ProfilePaths.h>
+
+#include <QStringList>
+
 namespace PhosphorAnimation {
 
 std::atomic<PhosphorProfileRegistry*> PhosphorProfileRegistry::s_defaultRegistry{nullptr};
@@ -37,6 +41,60 @@ std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) con
         return std::nullopt;
     }
     return *it;
+}
+
+Profile PhosphorProfileRegistry::resolveWithInheritance(const QString& path) const
+{
+    // Build the chain root-first so the overlay walk runs shallow →
+    // deep, with each engaged optional in a deeper entry replacing
+    // the shallower one. Mirrors ProfileTree::resolve and
+    // ShaderProfileTree::resolve so consumers see consistent
+    // inheritance semantics regardless of which container holds the
+    // overrides.
+    QStringList chain;
+    QString cursor = path;
+    while (!cursor.isEmpty()) {
+        chain.prepend(cursor);
+        cursor = ProfilePaths::parentPath(cursor);
+    }
+
+    Profile effective; // default-constructed: every optional nullopt
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const QString& step : chain) {
+            const auto it = m_profiles.constFind(step);
+            if (it == m_profiles.constEnd()) {
+                continue;
+            }
+            const Profile& src = *it;
+            // Same overlay rule as ProfileTree::overlay — every
+            // engaged optional in src wins; unset (nullopt) fields
+            // in src leave effective alone (the inheritance
+            // mechanism). Curve / duration / minDistance /
+            // sequenceMode / staggerInterval / presetName are
+            // independent — a child that only set `duration` still
+            // inherits the parent's `curve`.
+            if (src.curve) {
+                effective.curve = src.curve;
+            }
+            if (src.duration) {
+                effective.duration = src.duration;
+            }
+            if (src.minDistance) {
+                effective.minDistance = src.minDistance;
+            }
+            if (src.sequenceMode) {
+                effective.sequenceMode = src.sequenceMode;
+            }
+            if (src.staggerInterval) {
+                effective.staggerInterval = src.staggerInterval;
+            }
+            if (src.presetName) {
+                effective.presetName = src.presetName;
+            }
+        }
+    }
+    return effective.withDefaults();
 }
 
 void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile& profile)

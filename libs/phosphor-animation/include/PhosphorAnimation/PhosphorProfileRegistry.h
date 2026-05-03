@@ -36,8 +36,32 @@ public:
     /// Read the process-wide default; nullptr if none published yet.
     static PhosphorProfileRegistry* defaultRegistry();
 
-    /// Resolve @p path to a Profile if registered.
+    /// Resolve @p path to a Profile if registered. Exact match only —
+    /// returns `nullopt` if no entry exists at exactly @p path. For
+    /// inheritance-aware resolution that walks the parent chain and
+    /// overlays each level (the semantics every animation consumer
+    /// actually wants — a parent-node override at `panel.popup`
+    /// SHOULD propagate to `panel.popup.layoutPicker.show`), use
+    /// @c resolveWithInheritance instead.
     std::optional<Profile> resolve(const QString& path) const;
+
+    /// Resolve @p path with parent-chain inheritance. Walks
+    /// `path → parent(path) → ... → "global"`, starting from a
+    /// default-constructed `Profile`, and overlays each registered
+    /// entry along the chain — every engaged optional field in a
+    /// deeper entry replaces the shallower one (deeper-leaf-wins),
+    /// while unset fields inherit from the parent. Falls through to
+    /// the library defaults via `Profile::withDefaults()` so the
+    /// returned value is always fully populated.
+    ///
+    /// This is the registry-level mirror of `ProfileTree::resolve` /
+    /// `ShaderProfileTree::resolve`. Without it, a parent-node card
+    /// edit (e.g. "All Popups → 2000 ms" written to `panel.popup`)
+    /// is silently shadowed by any deeper bundled JSON
+    /// (`panel.popup.layoutPicker.show.json` with hardcoded 150 ms),
+    /// because `resolve()` only checks the exact leaf and never sees
+    /// the parent's override.
+    Profile resolveWithInheritance(const QString& path) const;
 
     /// Register or replace the profile at @p path (direct/untagged owner).
     void registerProfile(const QString& path, const Profile& profile);

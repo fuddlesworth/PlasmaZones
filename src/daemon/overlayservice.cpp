@@ -141,12 +141,15 @@ namespace {
 //     A JSON edit to `panel.popup.layoutPicker.hide` affects ONLY the
 //     layout picker; siblings are unaffected.
 //
-// Built-in defaults for every path ship under `data/profiles/`. The
-// PhosphorProfileRegistry's `resolve()` is exact-match (no walk-up), so
-// each path needs an explicit JSON or it falls back to library defaults
-// (150 ms OutCubic). User overrides at
-// `~/.local/share/plasmazones/profiles/<path>.json` win over the
-// shipped defaults via the loader's owner-tagged precedence.
+// The shipped tree carries zero bundled per-leaf profile JSONs — every
+// profile is sourced from the Settings UI's per-node overrides via
+// `PhosphorProfileRegistry::registerProfile`, with
+// `resolveWithInheritance()` walking the parent chain so a parent-node
+// edit (e.g. "All Popups → 2000 ms" written to `panel.popup`)
+// propagates to every leaf under it. Unset paths fall through to
+// library defaults (150 ms OutCubic). User-authored JSONs at
+// `~/.local/share/plasmazones/profiles/<path>.json` are still loaded
+// by ProfileLoader for advanced users who want file-based overrides.
 //
 // **Within-family scale-leg coupling (intentional, scoped).** Each
 // surface family's hide-leg-scale reuses the surface family's
@@ -228,11 +231,10 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 ///
 /// **Popup surface family — dedicated path partition.** Every leg
 /// resolves under `panel.popup.layoutPicker.*`, NOT under `osd.*`. A
-/// JSON edit to `panel.popup.layoutPicker.hide` affects ONLY the layout
-/// picker; OSD timings stay independent. Built-in defaults for every
-/// path ship under `data/profiles/panel.popup.layoutPicker.*.json`
-/// mirroring the prior OSD-borrowed timings so the migration is
-/// behaviour-preserving.
+/// Settings-UI edit at `panel.popup.layoutPicker.hide` affects ONLY
+/// the layout picker; OSD timings stay independent. With no override
+/// set, `resolveWithInheritance` walks up to `panel.popup` and finally
+/// to library defaults (150 ms OutCubic).
 ///
 /// Shader legs key on the same `.show` / `.hide` leaves so a user can
 /// dissolve in and slide out (or any asymmetric pair). Both leaves walk
@@ -263,12 +265,10 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
 /// **Popup surface family — dedicated path partition.** Every leg
 /// resolves under `panel.popup.zoneSelector.*`, NOT under the shared
 /// `panel.popup` baseline or the generic `widget.fadeOut` it previously
-/// borrowed. A JSON edit to `panel.popup.zoneSelector.hide` affects
-/// ONLY the zone selector. Built-in defaults under
-/// `data/profiles/panel.popup.zoneSelector.*.json` mirror the prior
-/// `panel.popup` (show, 150 ms widget-out) and `widget.fadeOut`
-/// (hide, 400 ms cubic-in) timings so the migration is
-/// behaviour-preserving.
+/// borrowed. A Settings-UI edit at `panel.popup.zoneSelector.hide`
+/// affects ONLY the zone selector. With no override set,
+/// `resolveWithInheritance` walks up to `panel.popup` then library
+/// defaults.
 PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
