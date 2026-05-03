@@ -373,6 +373,25 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     if (!m_surfaceAnimator) {
         return;
     }
+    // Diagnostic log gated on lcOverlay().isDebugEnabled() — qCDebug
+    // gates the OUTPUT but Qt evaluates argument expressions
+    // unconditionally, so the seven extra resolveShaderEffect calls
+    // would run even when debug logging is disabled. Each
+    // ShaderProfileTree::resolve walks the parent chain and overlay-
+    // merges every override; on a typical settings-edit signal storm
+    // this is wasted work the explicit gate eliminates.
+    if (lcOverlay().isDebugEnabled()) {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        qCDebug(lcOverlay).nospace()
+            << "applyShaderProfilesToAnimator — overrides=" << tree.overriddenPaths().size()
+            << " resolved: osd.show=" << resolveShaderEffect(tree, PP::OsdShow)
+            << " osd.hide=" << resolveShaderEffect(tree, PP::OsdHide)
+            << " zoneSelector.show=" << resolveShaderEffect(tree, PP::PanelPopupZoneSelectorShow)
+            << " zoneSelector.hide=" << resolveShaderEffect(tree, PP::PanelPopupZoneSelectorHide)
+            << " layoutPicker.show=" << resolveShaderEffect(tree, PP::PanelPopupLayoutPickerShow)
+            << " layoutPicker.hide=" << resolveShaderEffect(tree, PP::PanelPopupLayoutPickerHide)
+            << " snapAssist.show=" << resolveShaderEffect(tree, PP::PanelPopupSnapAssistShow);
+    }
     m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
@@ -395,27 +414,22 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
         return;
     }
 
-    // Single destroyed-cleanup per surface, gated by a dynamic property
-    // so warm-path → recursive window-path don't install two slots on
-    // the same surface (the warming branch below removes the surface
-    // from the set before recursing, which makes the recursive call
-    // re-enter THIS function and would otherwise hit the connect again).
-    // The dynamic property survives QPointer-style invalidation; on
-    // surface destruction the slot fires once and removes the address
-    // from the set, then auto-cleans because the receiver (`this`) is
-    // alive and the sender just died (auto-disconnect on sender-destroy).
-    if (!surface->property("pz_primingDestroyedConnected").toBool()) {
-        surface->setProperty("pz_primingDestroyedConnected", true);
-        // static_cast crosses the ~Surface boundary by the time this
-        // slot fires (QObject::destroyed is emitted from ~QObject after
-        // ~Surface has run), so the resulting pointer is no longer a
-        // valid Surface*. SAFE here ONLY because the value is used
-        // exclusively as a QSet hash key (compare-by-address); never
-        // dereferenced. Do NOT add a `surface->...` call inside this
-        // lambda without first verifying the operation is address-only.
-        connect(surface, &QObject::destroyed, this, [this](QObject* dying) {
-            m_primingSurfaces.remove(static_cast<PhosphorLayer::Surface*>(dying));
+    // Single destroyed-cleanup per surface (per OverlayService
+    // instance), tracked in m_primingDestroyedConnections. Replaces
+    // the earlier `pz_primingDestroyedConnected` dynamic-property
+    // gate which leaked across service instances — a fresh service
+    // re-encountering the same Surface* would skip wiring its own
+    // cleanup. The slot's static_cast on `dying` is safe because the
+    // resulting pointer is only used as a hash-map key (compare-by-
+    // address); ~QObject has already run by the time destroyed fires.
+    if (!m_primingDestroyedConnections.contains(surface)) {
+        QMetaObject::Connection destroyedConn = connect(surface, &QObject::destroyed, this, [this](QObject* dying) {
+            auto* surf = static_cast<PhosphorLayer::Surface*>(dying);
+            m_primingSurfaces.remove(surf);
+            m_primingFrameConnections.remove(surf);
+            m_primingDestroyedConnections.remove(surf);
         });
+        m_primingDestroyedConnections.insert(surface, destroyedConn);
     }
 
     auto* window = surface->window();
@@ -438,12 +452,19 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
         // (surface) → return` after the first one already inserted +
         // armed, leaking the second stateChanged slot for the rest of
         // the surface's lifetime.
+        //
+        // Disconnects on Hidden OR Failed: a surface stuck in Failed
+        // never reaches Hidden, so without the Failed branch the
+        // sentinel sits in m_primingSurfaces indefinitely, blocking
+        // any future re-prime even after a recovery path puts the
+        // surface back into a usable state.
         m_primingSurfaces.insert(surface);
         QPointer<PhosphorLayer::Surface> guard(surface);
         auto warmConn = std::make_shared<QMetaObject::Connection>();
         *warmConn = connect(surface, &PhosphorLayer::Surface::stateChanged, this,
                             [this, guard, warmConn](PhosphorLayer::Surface::State newState) {
-                                if (newState != PhosphorLayer::Surface::State::Hidden) {
+                                if (newState != PhosphorLayer::Surface::State::Hidden
+                                    && newState != PhosphorLayer::Surface::State::Failed) {
                                     return;
                                 }
                                 QObject::disconnect(*warmConn);
@@ -455,8 +476,23 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
                                 // contains() guard re-evaluates to false
                                 // and proceeds to insert + arm the
                                 // frameSwapped handler.
-                                m_primingSurfaces.remove(guard.data());
-                                if (guard->window() != nullptr) {
+                                //
+                                // CRITICAL: gate the recursive prime on
+                                // `m_primingSurfaces.remove(...)` returning
+                                // true. If a user-show called
+                                // cancelSurfacePrime during the warm-pending
+                                // window, the surface was already removed
+                                // from the set, `remove()` returns false,
+                                // and we MUST NOT recurse — recursion would
+                                // re-arm a fresh prime cycle whose
+                                // frameSwapped-driven hide() races the
+                                // user's just-shown content off the screen.
+                                // Without this guard, cancelSurfacePrime is
+                                // a silent no-op while the warm hasn't
+                                // completed.
+                                const bool stillPriming = m_primingSurfaces.remove(guard.data());
+                                if (stillPriming && newState == PhosphorLayer::Surface::State::Hidden
+                                    && guard->window() != nullptr) {
                                     primeSurfaceRenderPipeline(guard.data());
                                 }
                             });
@@ -469,12 +505,27 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
     // least one image, and the QML scene-graph (including any
     // QSGLayer that the shader path will later use) has rendered
     // at least one frame.
+    //
+    // The connection is tracked in m_primingFrameConnections so
+    // cancelSurfacePrime can disconnect it explicitly — without
+    // tracking, the connection survives until next paint and we
+    // accumulate one stale slot per prime cycle for the surface's
+    // lifetime under rapid show/hide.
     QPointer<PhosphorLayer::Surface> guard(surface);
-    auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn = connect(window, &QQuickWindow::frameSwapped, this, [this, conn, guard]() {
-        QObject::disconnect(*conn);
+    QMetaObject::Connection frameConn = connect(window, &QQuickWindow::frameSwapped, this, [this, guard]() {
         if (!guard) {
+            // Surface died after the connection was armed but before
+            // first frameSwapped — the destroyed-signal lambda in
+            // m_primingDestroyedConnections has already cleaned the
+            // map entry, and Qt's sender-destruction auto-disconnect
+            // (window dies with surface) will retire this lambda
+            // shortly. Nothing to do here.
             return;
+        }
+        const auto connIt = m_primingFrameConnections.find(guard.data());
+        if (connIt != m_primingFrameConnections.end()) {
+            QObject::disconnect(connIt.value());
+            m_primingFrameConnections.erase(connIt);
         }
         // Only hide if the user hasn't already taken over the surface
         // (cancelSurfacePrime would have removed us from the set).
@@ -482,25 +533,28 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
             guard->hide();
         }
     });
+    m_primingFrameConnections.insert(surface, frameConn);
     surface->show();
 }
 
 void OverlayService::cancelSurfacePrime(PhosphorLayer::Surface* surface)
 {
     // Idempotent — called from every user show path so a non-priming
-    // surface short-circuits cheaply. The frameSwapped lambda installed
-    // in primeSurfaceRenderPipeline still fires on the next painted
-    // frame after this call (we do NOT track the connection here so we
-    // can't disconnect it explicitly), but the lambda's
-    // m_primingSurfaces.remove(guard) returns false because we just
-    // removed the surface from the set — so the queued hide() is
-    // skipped and the connection self-disconnects on first fire. Net
-    // effect: cancelled prime surfaces show without any post-show hide
-    // race, even though the QMetaObject::Connection lives until the
-    // next paint. Surfaces that get torn down outside of
-    // cancelSurfacePrime are auto-removed via the destroyed signal
-    // connection installed once-per-surface in primeSurfaceRenderPipeline.
+    // surface short-circuits cheaply. Disconnect the frameSwapped
+    // lambda EXPLICITLY (tracked in m_primingFrameConnections) so the
+    // queued hide-on-first-paint never fires after a user-show. The
+    // m_primingSurfaces.remove() is the secondary guard the lambda
+    // would also check, but explicit disconnection is the safer
+    // primary contract — any future event-loop pump between cancel
+    // and the user's surface->show() is now harmless. Surfaces that
+    // get torn down outside of cancelSurfacePrime are cleaned via the
+    // destroyed signal connection in m_primingDestroyedConnections.
     m_primingSurfaces.remove(surface);
+    const auto connIt = m_primingFrameConnections.find(surface);
+    if (connIt != m_primingFrameConnections.end()) {
+        QObject::disconnect(connIt.value());
+        m_primingFrameConnections.erase(connIt);
+    }
 }
 
 OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
@@ -780,6 +834,24 @@ OverlayService::~OverlayService()
     // etc. — if we let ~m_surfaceManager's drain run instead, those members could
     // already be destroyed (C++ member destruction order is reverse declaration).
     m_surfaceManager->drainDeferredDeletes();
+
+    // Explicitly disconnect + clear the prime-tracking maps so the
+    // invariant ("every Connection retired before its sender's window
+    // is gone") doesn't depend on Qt's receiver-context auto-disconnect
+    // ordering during member destruction. After drainDeferredDeletes
+    // every prime-tracked surface is destroyed, so most Connections are
+    // already retired by sender-destruction; this loop is defensive
+    // against any future path that adds prime-tracked surfaces outside
+    // of m_screenStates / the three explicit singletons.
+    for (const auto& conn : std::as_const(m_primingFrameConnections)) {
+        QObject::disconnect(conn);
+    }
+    m_primingFrameConnections.clear();
+    for (const auto& conn : std::as_const(m_primingDestroyedConnections)) {
+        QObject::disconnect(conn);
+    }
+    m_primingDestroyedConnections.clear();
+    m_primingSurfaces.clear();
 }
 
 PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams params)

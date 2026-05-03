@@ -641,6 +641,23 @@ private:
     /// Surface::show() so the queued prime-hide doesn't race the user's
     /// content off the screen.
     QSet<PhosphorLayer::Surface*> m_primingSurfaces;
+    /// Per-surface frameSwapped Connection (only for the window-armed
+    /// stage of priming; the warm-pending stage doesn't use it).
+    /// cancelSurfacePrime explicitly disconnects the entry here so the
+    /// queued hide-on-first-paint lambda doesn't fire after a user-show
+    /// — without this, the connection lives until next paint and leaks
+    /// one slot per prime cycle for the surface's lifetime under rapid
+    /// show/hide toggling.
+    QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingFrameConnections;
+    /// Per-surface destroyed-signal Connection. Replaces the earlier
+    /// `pz_primingDestroyedConnected` Qt dynamic property gate which
+    /// leaked across OverlayService instances (test fixtures, daemon
+    /// hot-restart) — a fresh service that re-encountered the same
+    /// Surface* would skip wiring its own cleanup. Per-instance
+    /// tracking ensures each service installs exactly one slot per
+    /// surface; the surface's own destruction auto-disconnects via
+    /// `this`-receiver-context, and we drop the entry from the slot.
+    QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingDestroyedConnections;
     // "Notifications have been pre-warmed" flag. With LayoutOsd and
     // NavigationOsd unified onto a single per-screen NotificationOverlay
     // surface, this single flag gates whether the screenAdded hot-plug

@@ -92,6 +92,15 @@ Item {
     // any user-intended setting with via deeper-leaf-wins overlay.
     // Source-of-truth list: `src/core/animationshadersupportedpaths.h`.
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
+    // Number of shader overrides on paths strictly DEEPER than this card's
+    // eventPath. Only meaningful for parent-node cards: a stale leaf
+    // override (e.g. `panel.popup.layoutPicker.show = "dissolve"` set in
+    // a previous session) silently wins the deeper-leaf-overlay merge in
+    // `ShaderProfileTree::resolve` and shadows the parent's value at
+    // runtime. Surfaced via the warning banner below with a one-click
+    // "Clear shadowing children" button. Refreshed on any
+    // shaderProfileChanged signal (see Connections at line 222+).
+    property int _shadowingChildrenCount: 0
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
@@ -156,6 +165,11 @@ Item {
         root.currentShaderEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
         root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({
         });
+        // Recompute deeper-override count on every shader-tree update —
+        // the warning banner below depends on it. Cheap (O(N) over
+        // overriddenPaths). Only meaningful for parent-node cards but
+        // we always refresh so the binding stays consistent.
+        root._shadowingChildrenCount = settingsController.animationsPage.shaderOverrideDescendantCount(root.eventPath);
     }
 
     function refreshFromTree() {
@@ -269,6 +283,33 @@ Item {
 
                     return i18n("Using library defaults");
                 }
+            }
+
+            // ── Shadowing-children warning (parent-node cards only) ───
+            // ShaderProfileTree::resolve walks parent → leaf and overlays
+            // each level's `effectId` if engaged; deeper leaves win. So
+            // a stale per-leg override from an earlier session (e.g. an
+            // old "Layout Picker — Show = dissolve" left over after the
+            // user switches to a parent "All Popups = morph") silently
+            // overrides the parent at runtime — even though the parent
+            // card visually shows "morph" and the user never sees the
+            // shadowing leaf. Surface it explicitly with one-click
+            // remediation; without the button, the only fix is to find
+            // each shadowing leaf manually and clear its override.
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                type: Kirigami.MessageType.Warning
+                visible: root.isParentNode && root._shadowingChildrenCount > 0
+                text: i18np("%n child event has a shader override that overrides this parent.", "%n child events have shader overrides that override this parent.", root._shadowingChildrenCount)
+                actions: [
+                    Kirigami.Action {
+                        text: i18n("Clear shadowing children")
+                        icon.name: "edit-clear-all"
+                        onTriggered: {
+                            settingsController.animationsPage.clearShaderOverrideDescendants(root.eventPath);
+                        }
+                    }
+                ]
             }
 
             Label {

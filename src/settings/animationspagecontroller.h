@@ -257,6 +257,26 @@ public:
     /// state.
     Q_INVOKABLE bool clearShaderOverride(const QString& path);
 
+    /// Count of shader overrides on paths strictly DEEPER than @p path
+    /// (i.e. paths whose first component up to a `.` matches @p path).
+    /// Used by parent-node cards to surface "N deeper overrides shadow
+    /// this parent" — without it, a stale leaf set in a previous
+    /// session silently wins the deeper-leaf-overlay merge inside
+    /// `ShaderProfileTree::resolve` and the parent's value never
+    /// reaches runtime even though the UI control shows it set.
+    Q_INVOKABLE int shaderOverrideDescendantCount(const QString& path) const;
+
+    /// Clear every shader override whose path is strictly DEEPER than
+    /// @p path (i.e. paths starting with `<path>.`). Does NOT clear
+    /// the override at @p path itself. Returns the number of cleared
+    /// entries. Persists the batch via a single `setShaderProfileTree`
+    /// write, which fires `shaderProfileTreeChanged` once and (via the
+    /// constructor's broadcast lambda) one path-agnostic
+    /// `shaderProfileChanged()` signal — NOT one per cleared path.
+    /// Also emits `pendingChangesChanged()`. Used by parent-node
+    /// cards' "Clear shadowing children" affordance.
+    Q_INVOKABLE int clearShaderOverrideDescendants(const QString& path);
+
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.

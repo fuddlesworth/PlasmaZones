@@ -805,4 +805,58 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     return true;
 }
 
+namespace {
+/// Collect every override path strictly DEEPER than @p path
+/// (i.e. starting with `<path>.`). Centralises the prefix-match math
+/// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
+/// share one definition of "descendant" — the trailing `.` boundary
+/// is what excludes both the path itself ("panel.popup") and sibling
+/// names with shared prefix ("panel.popup-something").
+QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                             const QString& path)
+{
+    QStringList out;
+    if (path.isEmpty()) {
+        return out;
+    }
+    const QString prefix = path + QLatin1Char('.');
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& p : paths) {
+        if (p.startsWith(prefix)) {
+            out.append(p);
+        }
+    }
+    return out;
+}
+} // namespace
+
+int AnimationsPageController::shaderOverrideDescendantCount(const QString& path) const
+{
+    if (!m_settings)
+        return 0;
+    return collectShaderOverrideDescendants(m_settings->shaderProfileTree(), path).size();
+}
+
+int AnimationsPageController::clearShaderOverrideDescendants(const QString& path)
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings)
+        return 0;
+    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const QStringList toClear = collectShaderOverrideDescendants(tree, path);
+    if (toClear.isEmpty())
+        return 0;
+    for (const QString& p : toClear)
+        tree.clearOverride(p);
+    m_settings->setShaderProfileTree(tree);
+    // setShaderProfileTree fires shaderProfileTreeChanged exactly once
+    // for the whole tree; the constructor's broadcast lambda then
+    // emits a single path-agnostic shaderProfileChanged() (NOT one per
+    // cleared path — QML consumers re-resolve every dependent binding
+    // on any tree-edit anyway, so a path-keyed signal would be wasted
+    // chatter). Save-button accounting via pendingChangesChanged.
+    Q_EMIT pendingChangesChanged();
+    return toClear.size();
+}
+
 } // namespace PlasmaZones

@@ -162,9 +162,13 @@ ApplicationWindow {
             "label": i18n("Zones"),
             "iconName": "view-grid"
         }, {
-            "name": "animations-overlays",
-            "label": i18n("Overlays"),
+            "name": "animations-notifications",
+            "label": i18n("Notifications"),
             "iconName": "dialog-information"
+        }, {
+            "name": "animations-popups",
+            "label": i18n("Popups"),
+            "iconName": "view-presentation"
         }, {
             "name": "animations-workspaces",
             "label": i18n("Workspaces"),
@@ -214,7 +218,8 @@ ApplicationWindow {
         "animations-general": "AnimationsGeneralPage.qml",
         "animations-windows": "AnimationsWindowsPage.qml",
         "animations-zones": "AnimationsZonesPage.qml",
-        "animations-overlays": "AnimationsOverlaysPage.qml",
+        "animations-notifications": "AnimationsNotificationsPage.qml",
+        "animations-popups": "AnimationsPopupsPage.qml",
         "animations-workspaces": "AnimationsWorkspacesPage.qml",
         "animations-widgets": "AnimationsWidgetsPage.qml",
         "animations-presets": "AnimationsPresetsPage.qml",

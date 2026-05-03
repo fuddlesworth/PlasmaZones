@@ -161,7 +161,8 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationShaderParamEditor.qml
         qml/AnimationsWindowsPage.qml
         qml/AnimationsZonesPage.qml
-        qml/AnimationsOverlaysPage.qml
+        qml/AnimationsNotificationsPage.qml
+        qml/AnimationsPopupsPage.qml
         qml/AnimationsWorkspacesPage.qml
         qml/AnimationsWidgetsPage.qml
         qml/AnimationsGeneralPage.qml
