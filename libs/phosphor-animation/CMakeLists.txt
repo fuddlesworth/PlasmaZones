@@ -94,7 +94,6 @@ set(phosphoranimation_public_HDRS
     # Core motion runtime
     include/PhosphorAnimation/AnimationLimits.h
     include/PhosphorAnimation/PhosphorAnimation.h
-    include/PhosphorAnimation/AnimationLimits.h
     include/PhosphorAnimation/Curve.h
     include/PhosphorAnimation/Easing.h
     include/PhosphorAnimation/Spring.h
