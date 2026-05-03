@@ -33,7 +33,7 @@
 
 #version 450
 
-#include "../_shared/animation_uniforms.glsl"
+#include <animation_uniforms.glsl>
 
 #define ROOT_THREE 1.73205080757
 
@@ -118,7 +118,7 @@ void main()
 
     // Aspect-correct so cells stay regular on non-square surfaces.
     // iResolution is in LOGICAL units per
-    // _shared/animation_uniforms.glsl; the 0.001 floor guards against
+    // shared/animation_uniforms.glsl; the 0.001 floor guards against
     // zero-height anchors without distorting aspect on sub-1-logical-
     // pixel cases the way a 1.0 floor would.
     float aspectRatio = iResolution.x / max(iResolution.y, 0.001);

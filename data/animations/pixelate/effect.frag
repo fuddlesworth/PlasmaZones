@@ -25,7 +25,7 @@
 
 #version 450
 
-#include "../_shared/animation_uniforms.glsl"
+#include <animation_uniforms.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 // `maxBlockSize` is interpreted in NORMALISED UV units (0..1 across

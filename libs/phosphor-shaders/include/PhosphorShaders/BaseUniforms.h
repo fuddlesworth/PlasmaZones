@@ -84,7 +84,7 @@ struct alignas(16) BaseUniforms
 static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");
 
 // Per-field std140 offset asserts. These pin the layout the
-// `data/animations/_shared/animation_uniforms.glsl` canonical UBO depends
+// `data/animations/shared/animation_uniforms.glsl` canonical UBO depends
 // on — that GLSL declaration is a byte-for-byte std140 prefix of
 // `BaseUniforms`, which is what lets a single animation `effect.frag`
 // source produce identical visuals on both runtimes (compositor classic

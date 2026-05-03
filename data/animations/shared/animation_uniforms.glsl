@@ -24,7 +24,7 @@
 //     are dropped (padding only).
 //
 // Author guidance: include this file from each animation shader's
-// effect.frag with `#include "animation_uniforms.glsl"`. Do not declare
+// effect.frag with `#include <animation_uniforms.glsl>`. Do not declare
 // these fields anywhere else in your shader. Per-effect declared
 // parameters from metadata.json land in `customParams[N].xyz` slots in
 // declaration order — see `AnimationShaderRegistry::translateAnimationParams`

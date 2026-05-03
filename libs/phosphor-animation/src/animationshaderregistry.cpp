@@ -215,9 +215,9 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         }
 
         if (floatSlot >= AnimationShaderContract::kMaxParameterSlots) {
-            qWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
-                                 << AnimationShaderContract::kMaxParameterSlots
-                                 << "-slot customParams budget; dropping param" << param.id;
+            qCWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                  << AnimationShaderContract::kMaxParameterSlots
+                                  << "-slot customParams budget; dropping param" << param.id;
             continue;
         }
 
@@ -260,7 +260,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const QString& eff
 //
 // Animation shaders ship as `#version 450` GLSL with a canonical
 // `layout(std140, binding = 0) uniform AnimationUniforms { ... };` block
-// (see `data/animations/_shared/animation_uniforms.glsl`). Runtimes
+// (see `data/animations/shared/animation_uniforms.glsl`). Runtimes
 // without UBO-binding support — `KWin::GLShader`'s `setUniform(loc, val)`
 // API addresses default-block uniforms only — need the source rewritten
 // before compile. Daemon Qt-RHI / SPIR-V keeps the canonical form and
@@ -330,6 +330,11 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
         }
 
         output.append(QStringLiteral("uniform %1;").arg(decl));
+    }
+    if (inUboBlock) {
+        qCWarning(lcRegistry) << "rewriteCanonicalUboToDefaultBlock: UBO block was never closed with '};'"
+                                 " — returning original source unchanged";
+        return expandedShaderSource.toUtf8();
     }
     return output.join(QLatin1Char('\n')).toUtf8();
 }

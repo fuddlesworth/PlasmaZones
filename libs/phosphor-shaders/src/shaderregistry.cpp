@@ -97,11 +97,26 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     info.version = root.value(QLatin1String("version")).toString(QStringLiteral("1.0"));
     info.category = root.value(QLatin1String("category")).toString();
 
-    // Fragment / vertex shader paths (default: effect.frag, zone.vert)
+    // Fragment shader path (default: effect.frag).
     const QString fragShaderName = root.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag"));
-    const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString(QStringLiteral("zone.vert"));
     info.sourcePath = dir.filePath(fragShaderName);
-    info.vertexShaderPath = dir.filePath(vertShaderName);
+    // Vertex shader: explicit metadata declaration, per-shader zone.vert, or empty
+    // (ZoneShaderItem falls back to the shared zone.vert from search paths at render time).
+    const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString();
+    if (!vertShaderName.isEmpty()) {
+        const QString resolved = dir.filePath(vertShaderName);
+        if (QFile::exists(resolved)) {
+            info.vertexShaderPath = resolved;
+        } else {
+            qCWarning(lcShaderRegistry) << "Declared vertexShader" << vertShaderName << "not found in"
+                                        << dir.absolutePath();
+        }
+    } else {
+        const QString localVert = dir.filePath(QStringLiteral("zone.vert"));
+        if (QFile::exists(localVert)) {
+            info.vertexShaderPath = localVert;
+        }
+    }
 
     // Multi-pass: one or more buffer pass shaders (A->B->C->D).
     info.isMultipass = root.value(QLatin1String("multipass")).toBool(false);
@@ -271,13 +286,6 @@ QStringList shaderEntryWatchPaths(const ShaderRegistry::ShaderInfo& info)
     return paths;
 }
 
-/// Per-search-path watch additions: top-level shared shader source files
-/// (e.g. `common.glsl`, `audio.glsl`, `wallpaper.glsl`, the shared
-/// `zone.vert`, the default `effect.frag` if a pack inherits it).
-/// These live alongside shader subdirs and any of them changing should
-/// re-fire the rescan. Globs match every extension `shaderEntryWatchPaths`
-/// also tracks, so a top-level file moved into a pack subdir (or vice
-/// versa) gets the same coverage either way.
 QStringList shaderTopLevelWatchPaths(const QString& searchPath)
 {
     QStringList paths;
@@ -285,21 +293,25 @@ QStringList shaderTopLevelWatchPaths(const QString& searchPath)
     if (!dir.exists()) {
         return paths;
     }
-    const QStringList topFiles = dir.entryList(
-        {QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"), QStringLiteral("*.json")},
-        QDir::Files);
-    paths.reserve(topFiles.size());
+    const QStringList nameFilters = {QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"),
+                                     QStringLiteral("*.json")};
+    const QStringList topFiles = dir.entryList(nameFilters, QDir::Files);
     for (const QString& f : topFiles) {
         paths.append(dir.filePath(f));
+    }
+    QDir sharedDir(searchPath + QStringLiteral("/shared"));
+    if (sharedDir.exists()) {
+        const QStringList sharedFiles = sharedDir.entryList(nameFilters, QDir::Files);
+        for (const QString& f : sharedFiles) {
+            paths.append(sharedDir.filePath(f));
+        }
     }
     return paths;
 }
 
-/// Skip the reserved sentinel subdirectory `none` (means "no shader" in
-/// the consumer's UI).
 bool shaderSubdirSkip(const QString& subdirName)
 {
-    return subdirName == QLatin1String("none");
+    return subdirName == QLatin1String("none") || subdirName == QLatin1String("shared");
 }
 
 // No `setSignatureContrib` is wired below — the strategy auto-fingerprints

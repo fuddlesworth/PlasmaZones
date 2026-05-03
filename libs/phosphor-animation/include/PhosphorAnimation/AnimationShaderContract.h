@@ -52,7 +52,7 @@ namespace PhosphorAnimationShaders {
 /// // ...read from iTime, iResolution, customParams[N].xyz...
 /// @endcode
 ///
-/// The UBO layout (`data/animations/_shared/animation_uniforms.glsl`)
+/// The UBO layout (`data/animations/shared/animation_uniforms.glsl`)
 /// is a std140-aligned prefix of `PhosphorShaders::BaseUniforms` so the
 /// daemon's binding=0 upload populates it directly. The kwin-effect
 /// can't bind UBOs through `KWin::GLShader`, so it runs a small in-memory
@@ -157,7 +157,7 @@ inline QString slotKey(int slot)
 }
 
 /// @par Std140 offset contract
-/// The canonical `data/animations/_shared/animation_uniforms.glsl` UBO
+/// The canonical `data/animations/shared/animation_uniforms.glsl` UBO
 /// declares its fields at the same byte offsets as the prefix of
 /// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
 /// struct). That alignment is what lets a single `effect.frag` source

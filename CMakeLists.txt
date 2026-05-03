@@ -459,9 +459,7 @@ install(DIRECTORY data/animations/
     PATTERN "metadata.json"
     PATTERN "*.frag"
     PATTERN "*.vert"
-    # GLSL include files (currently `_shared/animation_uniforms.glsl` —
-    # the canonical UBO declaration each animation effect.frag pulls in
-    # via `#include "../_shared/animation_uniforms.glsl"`).
+    # GLSL include files (shared/animation_uniforms.glsl, shared/animation.vert).
     PATTERN "*.glsl"
     PATTERN "*.png"
 )

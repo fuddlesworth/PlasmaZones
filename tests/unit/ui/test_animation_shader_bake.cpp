@@ -32,8 +32,8 @@ private Q_SLOTS:
         const QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         bool any = false;
         for (const QString& sub : subdirs) {
-            if (sub.startsWith(QLatin1Char('_'))) {
-                continue; // _shared/ holds the canonical UBO include, not a pack
+            if (sub == QLatin1String("shared")) {
+                continue; // shared/ holds the canonical UBO include + default vert, not a pack
             }
             const QString frag = animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.frag");
             if (QFileInfo::exists(frag)) {
@@ -49,12 +49,8 @@ private Q_SLOTS:
     void testEveryAnimationShaderBakes()
     {
         QFETCH(QString, path);
-        // ShaderCompiler::loadAndExpand resolves `#include "..."` directives
-        // relative to the file's directory, so the canonical
-        // `../_shared/animation_uniforms.glsl` include is inlined before
-        // the SPIR-V bake. Empty includePaths is sufficient — animation
-        // shaders only include the one header sitting one directory up.
-        const auto result = PhosphorRendering::ShaderCompiler::compileFromFile(path, QStringList());
+        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations/shared")};
+        const auto result = PhosphorRendering::ShaderCompiler::compileFromFile(path, includePaths);
         QVERIFY2(
             result.success,
             qPrintable(QStringLiteral("Animation shader bake failed: ") + path + QStringLiteral(" — ") + result.error));

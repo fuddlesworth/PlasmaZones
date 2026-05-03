@@ -60,6 +60,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
+    Q_PROPERTY(QUrl vertexShaderUrl READ vertexShaderUrl WRITE setVertexShaderUrl NOTIFY vertexShaderUrlChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
     Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
 
@@ -183,6 +184,12 @@ public:
         return m_shaderSource;
     }
     void setShaderSource(const QUrl& source);
+
+    QUrl vertexShaderUrl() const
+    {
+        return m_vertexShaderUrl;
+    }
+    void setVertexShaderUrl(const QUrl& source);
 
     QVariantMap shaderParams() const
     {
@@ -479,6 +486,7 @@ Q_SIGNALS:
     void iResolutionChanged();
     void iMouseChanged();
     void shaderSourceChanged();
+    void vertexShaderUrlChanged();
     void shaderParamsChanged();
     void sourceItemChanged();
     void bufferShaderPathChanged();
@@ -554,6 +562,7 @@ private:
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;
+    QUrl m_vertexShaderUrl;
     QVariantMap m_shaderParams;
     QStringList m_shaderIncludePaths;
 

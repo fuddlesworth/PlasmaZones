@@ -21,6 +21,7 @@
 #include <chrono>
 #include <memory>
 #include <QDBusArgument>
+#include <QDir>
 #include <QFileInfo>
 #include <QVector4D>
 #include <QDBusConnection>
@@ -4322,16 +4323,23 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (effectId.isEmpty() || !window)
         return;
 
-    const auto eff = m_animationShaderRegistry.effect(effectId);
+    auto eff = m_animationShaderRegistry.effect(effectId);
     if (!eff.isValid())
         return;
 
+    // Resolve shared vertex shader from search paths when metadata omits it.
+    if (eff.vertexShaderPath.isEmpty()) {
+        for (const QString& sp : m_animationShaderRegistry.searchPaths()) {
+            const QString shared = sp + QStringLiteral("/shared/animation.vert");
+            if (QFile::exists(shared)) {
+                eff.vertexShaderPath = shared;
+                break;
+            }
+        }
+    }
+
     auto cacheIt = m_shaderCache.find(effectId);
     if (cacheIt == m_shaderCache.end()) {
-        // Resolve `#include "..."` directives so the canonical
-        // `animation_uniforms.glsl` is inline before the rewriter runs.
-        // The daemon side resolves includes inside ShaderCompiler;
-        // we mirror that here so authors maintain one source.
         QFile shaderFile(eff.fragmentShaderPath);
         if (!shaderFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
@@ -4342,25 +4350,55 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
             return;
         }
+        QStringList animIncludePaths;
+        for (const QString& sp : m_animationShaderRegistry.searchPaths()) {
+            const QString sharedDir = sp + QStringLiteral("/shared");
+            if (QDir(sharedDir).exists()) {
+                animIncludePaths.append(sharedDir);
+            }
+        }
         QString includeError;
         const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
-        const QString expanded =
-            PhosphorShaders::ShaderIncludeResolver::expandIncludes(rawSource, currentDir, QStringList(), &includeError);
+        const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+            rawSource, currentDir, animIncludePaths, &includeError);
         if (expanded.isEmpty()) {
             qCWarning(lcEffect) << "Failed to expand shader includes for" << effectId << ":" << includeError;
             return;
         }
 
-        // Convert the canonical UBO declaration to default-block
-        // uniforms KWin's classic-GL pipeline can bind. Lives in the
-        // animation-shaders library (alongside the contract) so the
-        // rewriter can be unit-tested without a compositor session;
-        // see `tests/test_animationshaderregistry.cpp`.
-        const QByteArray rewritten =
+        const QByteArray rewrittenFrag =
             PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(expanded);
 
-        auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, QByteArray(),
-                                                                            rewritten);
+        QByteArray rewrittenVert;
+        if (!eff.vertexShaderPath.isEmpty()) {
+            QFile vertFile(eff.vertexShaderPath);
+            if (!vertFile.open(QIODevice::ReadOnly)) {
+                qCWarning(lcEffect) << "Failed to open vertex shader" << eff.vertexShaderPath << "for effect"
+                                    << effectId << "— using KWin default vertex stage";
+            } else {
+                const QString rawVert = QString::fromUtf8(vertFile.readAll());
+                if (rawVert.isEmpty()) {
+                    qCWarning(lcEffect) << "Vertex shader file is empty" << eff.vertexShaderPath << "for effect"
+                                        << effectId;
+                } else {
+                    const QString vertDir = QFileInfo(eff.vertexShaderPath).absolutePath();
+                    QString vertIncErr;
+                    const QString expandedVert = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+                        rawVert, vertDir, animIncludePaths, &vertIncErr);
+                    if (expandedVert.isEmpty()) {
+                        qCWarning(lcEffect)
+                            << "Failed to expand vertex shader includes for" << effectId << ":" << vertIncErr;
+                    } else {
+                        rewrittenVert =
+                            PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(
+                                expandedVert);
+                    }
+                }
+            }
+        }
+
+        auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
+                                                                            rewrittenVert, rewrittenFrag);
         if (!shader || !shader->isValid()) {
             qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
             return;

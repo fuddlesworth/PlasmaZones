@@ -380,12 +380,11 @@ add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 # qsb-incompatible source change (e.g. accidentally re-introducing
 # default-block uniforms in #version 450) fails CI instead of silently
 # breaking the daemon's overlay-surface animation path. Pinned by the
-# canonical UBO declaration in data/animations/_shared/animation_uniforms.glsl.
+# canonical UBO declaration in data/animations/shared/animation_uniforms.glsl.
 add_executable(test_animation_shader_bake ui/test_animation_shader_bake.cpp)
 target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorRendering::PhosphorRendering)
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
-set_tests_properties(test_animation_shader_bake PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently

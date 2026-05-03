@@ -16,6 +16,8 @@
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 
+#include <QDir>
+#include <QFile>
 #include <QHash>
 #include <QLoggingCategory>
 #include <QObject>
@@ -256,7 +258,7 @@ struct ShaderAttachResult
 ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
                                         const PhosphorAnimationShaders::AnimationShaderEffect& effect,
                                         const QString& shaderEffectId, const QVariantMap& shaderParameters,
-                                        bool isShowLeg)
+                                        bool isShowLeg, const QStringList& shaderIncludePaths)
 {
     ShaderAttachResult out;
     QQuickItem* shaderAnchor = target;
@@ -323,7 +325,13 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // live layer — no same-pass conflict.
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
+    if (!shaderIncludePaths.isEmpty()) {
+        shaderItem->setShaderIncludePaths(shaderIncludePaths);
+    }
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
+    if (!effect.vertexShaderPath.isEmpty()) {
+        shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    }
     // Initialise iTime to the leg's start value BEFORE the QQuickShaderEffect
     // can paint a frame. Show legs run iTime 0→1 (start at 0); hide legs run
     // 1→0 (start at 1). If we always initialised to 0.0 here, a hide leg's
@@ -891,8 +899,21 @@ public:
     {
         // Resolve shader up front so legCount is accurate.
         PhosphorAnimationShaders::AnimationShaderEffect resolvedShaderEff;
+        QStringList animIncludePaths;
         if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
             resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
+            for (const QString& sp : m_shaderRegistry->searchPaths()) {
+                const QString sharedDir = sp + QStringLiteral("/shared");
+                if (QDir(sharedDir).exists()) {
+                    animIncludePaths.append(sharedDir);
+                    if (resolvedShaderEff.isValid() && resolvedShaderEff.vertexShaderPath.isEmpty()) {
+                        const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
+                        if (QFile::exists(sharedVert)) {
+                            resolvedShaderEff.vertexShaderPath = sharedVert;
+                        }
+                    }
+                }
+            }
         }
         const bool hasShaderLeg = resolvedShaderEff.isValid();
 
@@ -1152,8 +1173,8 @@ public:
                     // is added to the scene matches the AnimatedValue's
                     // intended start — see attachShaderToAnchor's
                     // setITime block.
-                    ShaderAttachResult attached =
-                        attachShaderToAnchor(target, resolvedShaderEff, shaderEffectId, shaderParameters, isShowLeg);
+                    ShaderAttachResult attached = attachShaderToAnchor(target, resolvedShaderEff, shaderEffectId,
+                                                                       shaderParameters, isShowLeg, animIncludePaths);
                     it->second.shaderItem = attached.shaderItem;
                     it->second.shaderSource = attached.shaderSource;
                     it->second.shaderAnchor = attached.shaderAnchor;

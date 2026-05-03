@@ -45,11 +45,11 @@ namespace PhosphorRendering {
 static const QString kDefaultVertexShaderSource = QStringLiteral(R"(#version 450
 
 layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 texcoord;
+layout(location = 1) in vec2 texCoord;
 layout(location = 0) out vec2 vTexCoord;
 
 void main() {
-    vTexCoord = texcoord;
+    vTexCoord = texCoord;
     gl_Position = vec4(position, 0.0, 1.0);
 }
 )");
@@ -221,32 +221,65 @@ void ShaderEffect::setIMouse(const QPointF& mouse)
 // Shader Source / Buffer Setters
 // ============================================================================
 
+static bool isLocalShaderUrl(const QUrl& url)
+{
+    if (!url.isValid() || url.isEmpty()) {
+        return true;
+    }
+    const QString scheme = url.scheme();
+    return url.isLocalFile() || scheme.isEmpty() || scheme == QLatin1String("file") || scheme == QLatin1String("qrc");
+}
+
+static QString localPathFromShaderUrl(const QUrl& url)
+{
+    if (!url.isValid() || url.isEmpty()) {
+        return QString();
+    }
+    if (url.scheme() == QLatin1String("qrc")) {
+        return QLatin1Char(':') + url.path();
+    }
+    const QString local = url.toLocalFile();
+    if (!local.isEmpty()) {
+        return local;
+    }
+    return url.path();
+}
+
 void ShaderEffect::setShaderSource(const QUrl& source)
 {
     if (m_shaderSource == source) {
         return;
     }
-    // Reject URL schemes we cannot load. Clearing the source (empty/invalid
-    // URL) is always allowed. loadFragmentShader() below only handles local
-    // file paths and qrc: resources, so http://, ftp://, etc. would fail
-    // later with a generic "Shader loading failed" — reject at the boundary
-    // per CLAUDE.md "input validation at system boundaries" so misuse is
-    // diagnosed where the bad URL enters the API.
-    if (source.isValid() && !source.isEmpty()) {
-        const QString scheme = source.scheme();
-        const bool isLocal = source.isLocalFile() || scheme.isEmpty() || scheme == QLatin1String("file")
-            || scheme == QLatin1String("qrc");
-        if (!isLocal) {
-            qCWarning(lcShaderNode) << "setShaderSource: unsupported URL scheme" << scheme
-                                    << "— only file:// and qrc: are accepted";
-            setError(QStringLiteral("Unsupported shader URL scheme: ") + scheme);
-            return;
-        }
+    if (!isLocalShaderUrl(source)) {
+        qCWarning(lcShaderNode) << "setShaderSource: unsupported URL scheme" << source.scheme()
+                                << "— only file:// and qrc: are accepted";
+        setError(QStringLiteral("Unsupported shader URL scheme: ") + source.scheme());
+        return;
     }
     m_shaderSource = source;
     m_shaderDirty = true;
     setStatus(Status::Loading);
     Q_EMIT shaderSourceChanged();
+    update();
+}
+
+void ShaderEffect::setVertexShaderUrl(const QUrl& source)
+{
+    if (m_vertexShaderUrl == source) {
+        return;
+    }
+    if (!isLocalShaderUrl(source)) {
+        qCWarning(lcShaderNode) << "setVertexShaderUrl: unsupported URL scheme" << source.scheme()
+                                << "— only file:// and qrc: are accepted";
+        setError(QStringLiteral("Unsupported vertex shader URL scheme: ") + source.scheme());
+        return;
+    }
+    m_vertexShaderUrl = source;
+    m_shaderDirty = true;
+    if (source.isValid() && !source.isEmpty()) {
+        setStatus(Status::Loading);
+    }
+    Q_EMIT vertexShaderUrlChanged();
     update();
 }
 
@@ -876,24 +909,24 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     const bool needLoad = wasDirty || freshNode;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-            QString fragPath = m_shaderSource.toLocalFile();
-            if (m_shaderSource.scheme() == QLatin1String("qrc")) {
-                fragPath = QLatin1Char(':') + m_shaderSource.path();
-            }
+            const QString fragPath = localPathFromShaderUrl(m_shaderSource);
 
             if (!fragPath.isEmpty()) {
                 node->setShaderIncludePaths(m_shaderIncludePaths);
-                // Push the default identity vertex shader before loading
-                // the fragment stage. The pipeline requires both stages
-                // to compile — without this, fragment-only consumers
-                // (SurfaceAnimator's transition effects, plain QML
-                // ShaderEffect users) leave m_vertexShaderSource empty
-                // and the bake aborts with "Vertex or fragment shader
-                // source is empty". Subclasses that need geometry-aware
-                // vertex stages (e.g. ZoneShaderItem with its zone.vert)
-                // override updatePaintNode() entirely and bypass this
-                // base implementation.
-                node->setVertexShaderSource(kDefaultVertexShaderSource);
+                bool vertLoaded = false;
+                if (m_vertexShaderUrl.isValid() && !m_vertexShaderUrl.isEmpty()) {
+                    const QString vertPath = localPathFromShaderUrl(m_vertexShaderUrl);
+                    if (!vertPath.isEmpty()) {
+                        vertLoaded = node->loadVertexShader(vertPath);
+                        if (!vertLoaded) {
+                            qCWarning(lcShaderNode)
+                                << "Vertex shader load failed:" << vertPath << "— falling back to built-in default";
+                        }
+                    }
+                }
+                if (!vertLoaded) {
+                    node->setVertexShaderSource(kDefaultVertexShaderSource);
+                }
                 if (node->loadFragmentShader(fragPath)) {
                     node->invalidateShader();
                     setStatus(Status::Ready);

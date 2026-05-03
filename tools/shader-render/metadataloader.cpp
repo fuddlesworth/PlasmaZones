@@ -126,8 +126,20 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     // ── Shader source files (resolve absolute) ──────────────────
     out.fragmentShader = resolveRelative(
         metadataDir, obj.value(QLatin1String("fragmentShader")).toString(kDefaultFragmentShaderFilename));
-    out.vertexShader =
-        resolveRelative(metadataDir, obj.value(QLatin1String("vertexShader")).toString(kDefaultVertexShaderFilename));
+    const QString vertName = obj.value(QLatin1String("vertexShader")).toString();
+    if (!vertName.isEmpty()) {
+        const QString resolved = resolveRelative(metadataDir, vertName);
+        if (!resolved.isEmpty() && QFile::exists(resolved)) {
+            out.vertexShader = resolved;
+        } else {
+            qCWarning(lcMetadataLoader) << "Declared vertexShader" << vertName << "not found in" << metadataDir;
+        }
+    } else {
+        const QString localVert = resolveRelative(metadataDir, kDefaultVertexShaderFilename);
+        if (!localVert.isEmpty() && QFile::exists(localVert)) {
+            out.vertexShader = localVert;
+        }
+    }
 
     // Validate at the boundary: a metadata.json that points at a missing
     // fragment shader fails the loader rather than silently propagating a

@@ -113,7 +113,7 @@ public:
 
     /// Rewrite the canonical `layout(std140, binding = 0) uniform
     /// AnimationUniforms { ... };` block (from
-    /// `data/animations/_shared/animation_uniforms.glsl`) into default-block
+    /// `data/animations/shared/animation_uniforms.glsl`) into default-block
     /// uniform declarations a classic-GL pipeline can bind. Used by
     /// runtimes that cannot bind UBOs through their shader-program API
     /// (notably `KWin::GLShader`, which addresses default-block uniforms

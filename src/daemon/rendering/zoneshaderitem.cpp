@@ -9,6 +9,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
@@ -39,7 +40,15 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     // which has user shaders but NOT common.glsl). We need the system dir too.
     const QStringList allShaderDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
-    setShaderIncludePaths(allShaderDirs);
+    QStringList includePaths;
+    for (const QString& dir : allShaderDirs) {
+        const QString sharedDir = dir + QStringLiteral("/shared");
+        if (QDir(sharedDir).exists()) {
+            includePaths.append(sharedDir);
+        }
+        includePaths.append(dir);
+    }
+    setShaderIncludePaths(includePaths);
 
     // Set PlasmaZones-specific default colors from ConfigDefaults
     // (the library defaults are all-transparent).
@@ -302,7 +311,6 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Sync shader source ───────────────────────────────────────────
-    // PlasmaZones derives vertex shader path from zone.vert in the same directory.
     // Consume the parent's atomic dirty flag so runtime setShaderSource /
     // setShaderIncludePaths / reloadShader() calls actually trigger a reload —
     // without this, only status transitions reached the reload branch.
@@ -318,41 +326,41 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 fragPath = QLatin1Char(':') + shaderSource().path();
             }
 
-            // Derive vertex shader path: zone.vert (fallback to legacy zone.vert.glsl)
+            // Resolve vertex shader: per-shader zone.vert > shared/zone.vert from include paths.
             QString vertPath;
             if (!fragPath.isEmpty()) {
                 const QString dir = QFileInfo(fragPath).absolutePath();
-                const QString vertDefault = dir + QStringLiteral("/zone.vert");
-                const QString vertLegacy = dir + QStringLiteral("/zone.vert.glsl");
-                vertPath = QFile::exists(vertDefault) ? vertDefault : vertLegacy;
+                const QString vertLocal = dir + QStringLiteral("/zone.vert");
+                if (QFile::exists(vertLocal)) {
+                    vertPath = vertLocal;
+                } else {
+                    for (const QString& incDir : shaderIncludePaths()) {
+                        const QString candidate = incDir + QStringLiteral("/zone.vert");
+                        if (QFile::exists(candidate)) {
+                            vertPath = candidate;
+                            break;
+                        }
+                    }
+                }
             }
 
-            // Set include paths for PlasmaZones shader system
             node->setShaderIncludePaths(shaderIncludePaths());
             qCDebug(PlasmaZones::lcOverlay)
                 << "Shader include paths:" << shaderIncludePaths() << "vertPath:" << vertPath;
 
-            // Clear old shader sources before loading new ones
             node->setVertexShaderSource(QString());
             node->setFragmentShaderSource(QString());
 
             bool loaded = true;
-            // Load vertex shader first - REQUIRED for zone rendering
-            if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
+            if (!vertPath.isEmpty()) {
                 if (!node->loadVertexShader(vertPath)) {
                     qCWarning(PlasmaZones::lcOverlay)
                         << "Failed to load vertex shader:" << vertPath << "error:" << node->shaderError();
                     loaded = false;
                 }
             } else {
-                if (vertPath.isEmpty()) {
-                    qCWarning(PlasmaZones::lcOverlay)
-                        << "Required vertex shader not found (cannot derive path - fragment path is empty)";
-                } else {
-                    const QString dir = QFileInfo(fragPath).absolutePath();
-                    qCWarning(PlasmaZones::lcOverlay)
-                        << "Required vertex shader not found: expected zone.vert or zone.vert.glsl in" << dir;
-                }
+                qCWarning(PlasmaZones::lcOverlay)
+                    << "No vertex shader found for" << fragPath << "— expected zone.vert in shader dir or search paths";
                 loaded = false;
             }
 

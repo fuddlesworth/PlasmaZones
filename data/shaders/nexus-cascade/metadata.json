@@ -6,9 +6,12 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "multipass": true,
-    "bufferShaders": ["pass0.frag", "pass1.frag", "pass2.frag"],
+    "bufferShaders": [
+        "pass0.frag",
+        "pass1.frag",
+        "pass2.frag"
+    ],
     "fragmentShader": "effect.frag",
-    "vertexShader": "zone.vert",
     "parameters": [
         {
             "id": "speed",
@@ -234,6 +237,13 @@
             "min": 2.0,
             "max": 12.0
         },
-        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 20, "default": true}
+        {
+            "id": "showLabels",
+            "name": "Show Labels",
+            "group": "Labels",
+            "type": "bool",
+            "slot": 20,
+            "default": true
+        }
     ]
 }

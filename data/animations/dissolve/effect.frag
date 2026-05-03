@@ -14,7 +14,7 @@
 
 #version 450
 
-#include "../_shared/animation_uniforms.glsl"
+#include <animation_uniforms.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define grain    customParams[0].x  // noise cell size in normalised UV units
