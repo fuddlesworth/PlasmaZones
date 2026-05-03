@@ -1,0 +1,163 @@
+// SPDX-FileCopyrightText: 2025 arch-disciple (niri-shader-collection)
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Honeycomb wipe — a hexagonal-grid radial mask that reveals/hides the
+// surface from the centre outward. Direct port of arch-disciple's niri
+// shader (10_Advanced/honeycomb.kdl): same flat-top hex orientation,
+// same axial → cube → round → error-correction snap, same per-cell
+// flat shading at the wave front. Result matches niri's reference
+// screenshot 1:1 instead of approximating it with a different
+// rectangular-Voronoi formulation.
+//
+// Niri host bindings → PlasmaZones equivalents:
+//   niri_clamped_progress  →  iTime          (per-leg [0,1] from
+//                                             SurfaceAnimator's
+//                                             shaderTime AV)
+//   niri_random_seed       →  hexSize param  (metadata.json exposes
+//                                             cell radius directly
+//                                             instead of a per-window
+//                                             random)
+//   soft_edge_width = 0.15 →  softEdge param (also exposed)
+//   niri_tex               →  iChannel0      (live FBO of the
+//                                             shaderAnchor item, SRB
+//                                             binding 7)
+//   niri_geo_to_tex        →  identity       (vTexCoord is already in
+//                                             tex space)
+//   size_geo               →  iResolution    (used only for aspect)
+//
+// Niri's collection ships open + close as separate shaders that differ
+// only by `progress` vs `1 - progress`. SurfaceAnimator already runs
+// iTime 0→1 on show and 1→0 on hide, so this single shader covers
+// both directions.
+
+#version 450
+
+#include "../_shared/animation_uniforms.glsl"
+
+#define ROOT_THREE 1.73205080757
+
+// metadata.json declaration order → customParams[0] sub-slots.
+//   .x = hexSize  — cell radius in aspect-corrected normalised UV
+//                   units. Default 0.15 produces ~6 hexes vertically
+//                   on a popup, matching niri's reference look.
+//                   Niri's `0.02 + random/20` (~0.02..0.07) is tuned
+//                   for fullscreen windows and renders as sub-pixel
+//                   cells on a layout-picker popup.
+//   .y = softEdge — smoothstep-band width at the wave front, in the
+//                   same normalised units as hexSize. Default 0.15
+//                   matches niri's hard-coded value so the per-cell
+//                   reveal cadence reads identically.
+#define hexSize  customParams[0].x
+#define softEdge customParams[0].y
+
+layout(binding = 7) uniform sampler2D iChannel0;
+
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 fragColor;
+
+float roundValue(float v) { return floor(v + 0.5); }
+
+// Snap fractional axial coords to the integer axial coord of the
+// nearest flat-top hex cell. Identical algorithm to niri's
+// round_to_hex: convert axial (q, r) → cube (x, y, z) with the
+// `x + y + z = 0` invariant, round each component independently, then
+// fix up whichever component drifted the most so the invariant holds.
+//
+// Returns axial (q, r) of the snapped cell.
+vec2 roundToHex(vec2 axial)
+{
+    float x = axial.x;
+    float z = axial.y;
+    float y = -x - z;
+
+    float rx = roundValue(x);
+    float ry = roundValue(y);
+    float rz = roundValue(z);
+
+    float dx = abs(rx - x);
+    float dy = abs(ry - y);
+    float dz = abs(rz - z);
+
+    if (dx > dy && dx > dz) {
+        rx = -ry - rz;
+    } else if (dy > dz) {
+        ry = -rx - rz;
+    } else {
+        rz = -ry - rx;
+    }
+
+    return vec2(rx, rz);
+}
+
+// Cartesian → axial for a flat-top hex with circumradius `size`.
+// Mirrors niri's get_axial_coords exactly — the 2/3 horizontal step
+// and the (-1/3, √3/3) vertical mixing are the canonical flat-top
+// inverse of the centre-laying transform below.
+vec2 getAxialCoords(vec2 p, float size)
+{
+    float q = p.x * (2.0 / 3.0) / size;
+    float r = (-p.x / 3.0 + (ROOT_THREE / 3.0) * p.y) / size;
+    return vec2(q, r);
+}
+
+// Axial → Cartesian for a flat-top hex with circumradius `size`.
+// Centres lay on a (1.5·size) horizontal lattice with √3·size
+// vertical spacing, staggered by half-row per column (the q*0.5
+// term inside the y mix).
+vec2 getHexCenter(vec2 axial, float size)
+{
+    float x = axial.x * 1.5 * size;
+    float y = ROOT_THREE * (axial.y + axial.x * 0.5) * size;
+    return vec2(x, y);
+}
+
+void main()
+{
+    float progress = clamp(iTime, 0.0, 1.0);
+
+    // Aspect-correct so cells stay regular on non-square surfaces.
+    // iResolution is in LOGICAL units per
+    // _shared/animation_uniforms.glsl; the 0.001 floor guards against
+    // zero-height anchors without distorting aspect on sub-1-logical-
+    // pixel cases the way a 1.0 floor would.
+    float aspectRatio = iResolution.x / max(iResolution.y, 0.001);
+
+    vec2 normalizedCoords = vec2(vTexCoord.x * aspectRatio, vTexCoord.y);
+    vec2 normalizedCenter = vec2(0.5 * aspectRatio, 0.5);
+
+    // Floor matches metadata.json `min: 0.04` so a host that bypasses
+    // metadata validation can't drive the cells below the advertised
+    // range.
+    float unitSize = max(hexSize, 0.04);
+    float softEdgeWidth = max(softEdge, 0.001);
+
+    // Snap the fragment to the centre of its enclosing hex cell, then
+    // compute the centre's distance from screen centre. Every fragment
+    // in the same cell shares one hexDist value — that's the per-cell
+    // flat shading that produces visible cellular boundaries at the
+    // wave front.
+    vec2 axial = getAxialCoords(normalizedCoords, unitSize);
+    vec2 snappedAxial = roundToHex(axial);
+    vec2 hexCenter = getHexCenter(snappedAxial, unitSize);
+    float hexDist = distance(hexCenter, normalizedCenter);
+
+    // Wave front grows linearly with iTime. Niri's
+    // `length(centre) * 1.25` heuristic gives the wave room to reach
+    // corner cells whose centres sit slightly outside `length(centre)`.
+    // Wave starts at `softEdge` BELOW zero so even the centre cell
+    // (hexDist ≈ 0) is masked at iTime=0; without that offset, niri's
+    // `progress * (max + soft)` formulation would expose the centre
+    // cell on the very first frame.
+    float maxRevealRadius = length(normalizedCenter) * 1.25;
+    float waveRadius = progress * (maxRevealRadius + softEdgeWidth);
+
+    float mask = smoothstep(waveRadius - softEdgeWidth, waveRadius, hexDist);
+
+    // Sample the live anchor FBO and gate it on the radial mask.
+    // Premult-alpha invariant: multiplying both colour and alpha by
+    // the same scalar keeps the daemon's blend pipeline composing
+    // correctly with the parent chain's opacity.
+    vec4 sampled = texture(iChannel0, vTexCoord);
+    fragColor = sampled * (1.0 - mask);
+}
