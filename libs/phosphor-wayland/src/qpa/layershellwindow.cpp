@@ -230,6 +230,11 @@ void LayerShellWindow::applyProperties()
     // Size — use 0 for axes anchored to both edges; clamp to avoid uint32_t wrap on negative
     auto [w, h] = LayerSurface::computeLayerSize(LayerSurface::Anchors::fromInt(anchors), qwindow->size());
     zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
+
+    if (m_integration && m_integration->boundVersion() >= 5) {
+        int exclusiveEdge = qwindow->property(LayerSurfaceProps::ExclusiveEdge).toInt();
+        zwlr_layer_surface_v1_set_exclusive_edge(m_layerSurface, static_cast<uint32_t>(exclusiveEdge));
+    }
 }
 
 QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) const
