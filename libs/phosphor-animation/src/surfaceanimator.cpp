@@ -1235,9 +1235,13 @@ public:
             // No setITime here — attachShaderToAnchor (called with the
             // same isShowLeg flag) already seeded iTime to shaderFrom
             // before the QQuickShaderEffect could paint a frame.
+            const PhosphorAnimation::Profile shaderLegProfile = resolveProfile(m_registry, shaderLegProfilePath);
+            qCDebug(lcSurfaceAnimator).nospace()
+                << "shader leg start: path=" << shaderLegProfilePath
+                << " duration=" << shaderLegProfile.effectiveDuration() << "ms surface=" << surface;
             it->second.shaderTime->start(shaderFrom, shaderTo,
                                          buildSpec(
-                                             resolveProfile(m_registry, shaderLegProfilePath), clock,
+                                             shaderLegProfile, clock,
                                              /*onValueChanged=*/
                                              [this, surface](const qreal& v) {
                                                  auto sit = m_tracks.find(surface);
