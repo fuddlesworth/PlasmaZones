@@ -173,6 +173,9 @@ QStringList WindowTrackingService::snappedWindows() const
 
 int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
 {
+    Q_ASSERT(m_snapState);
+    if (!m_snapState)
+        return 0;
     int pruned = m_snapState->pruneStaleAssignments(aliveWindowIds);
 
     int wtsCleaned = 0;

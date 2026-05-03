@@ -65,7 +65,7 @@ struct EngineSet
  * @param settings        Settings instance (borrowed)
  * @param vdm             Virtual desktop manager (borrowed)
  * @param windowRegistry  Window registry for class lookups (borrowed)
- * @param parent          QObject parent for engine lifetime
+ * @param parent          Unused (engines use unique_ptr ownership)
  * @return EngineSet with all three objects constructed
  */
 EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,

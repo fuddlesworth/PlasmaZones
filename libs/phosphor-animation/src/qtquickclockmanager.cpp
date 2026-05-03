@@ -48,11 +48,10 @@ QtQuickClockManager::~QtQuickClockManager()
 
 void QtQuickClockManager::setDefaultManager(QtQuickClockManager* manager)
 {
-    // Relaxed store: the publishing thread must have fully constructed
-    // *manager before calling this method, and the consumer-side
-    // load-and-use sequence is a single pointer dereference that needs
-    // no happens-before with any other memory. Matches the
-    // PhosphorCurve::setDefaultRegistry contract.
+    // Release store: the publishing thread must have fully constructed
+    // *manager before calling this method. The acquire load in
+    // defaultManager() ensures the consumer sees all constructor
+    // writes. Matches the PhosphorCurve::setDefaultRegistry contract.
     s_defaultManager.store(manager, std::memory_order_release);
 }
 

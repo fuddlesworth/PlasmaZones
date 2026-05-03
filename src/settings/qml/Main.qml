@@ -596,6 +596,7 @@ ApplicationWindow {
 
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.smallSpacing
+                    Accessible.name: i18n("Search settings pages")
                     placeholderText: i18n("Search...")
                     visible: !window.sidebarCompact
                     leftPadding: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
@@ -1190,6 +1191,7 @@ ApplicationWindow {
                         text: i18n("What's New")
                         flat: true
                         icon.name: "go-next"
+                        Accessible.name: i18n("View what's new")
                         onClicked: whatsNewDialog.open()
                     }
 
