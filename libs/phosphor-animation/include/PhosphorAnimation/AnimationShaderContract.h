@@ -53,12 +53,12 @@ namespace PhosphorAnimationShaders {
 /// @endcode
 ///
 /// The UBO layout (`data/animations/shared/animation_uniforms.glsl`)
-/// is a std140-aligned prefix of `PhosphorShaders::BaseUniforms` so the
-/// daemon's binding=0 upload populates it directly. The kwin-effect
-/// can't bind UBOs through `KWin::GLShader`, so it runs a small in-memory
-/// source rewriter that converts the UBO declaration to default-block
-/// uniforms before handing the source to
-/// `KWin::ShaderManager::generateCustomShader`.
+/// is std140-aligned with `PhosphorShaders::BaseUniforms` and covers
+/// its full 672-byte footprint, so the daemon's binding=0 upload
+/// populates it directly. The kwin-effect can't bind UBOs through
+/// `KWin::GLShader`, so it runs a small in-memory source rewriter that
+/// converts the UBO declaration to default-block uniforms before
+/// handing the source to `KWin::ShaderManager::generateCustomShader`.
 ///
 /// @par Per-effect declared parameters
 /// Every parameter declared in `metadata.json` lands in either a

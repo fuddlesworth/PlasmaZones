@@ -575,11 +575,12 @@ private Q_SLOTS:
     // ── colorKey ─────────────────────────────────────────────────────
     //
     // Sibling helper to `CustomParams::slotKey` for the `customColors[N]`
-    // region. ShaderEffect::setShaderParams's color-decoder branch and
-    // (when the first color-typed animation param ships) the registry
-    // encoder both consume keys produced here. Pin the format so a
-    // future drift fragments at most this single test, not three call
-    // sites.
+    // region. Three call sites consume keys produced here:
+    // `ShaderEffect::setShaderParams`'s color-decoder branch,
+    // `AnimationShaderRegistry::translateAnimationParams`'s color-param
+    // encoder, and the kwin-effect's per-transition `customColorsValues`
+    // pack. Pin the format so a future drift fragments at most this
+    // single test, not all three call sites.
 
     void testColorKey()
     {

@@ -6,9 +6,10 @@
 //
 //   • Daemon overlay-surface execution (PhosphorRendering::ShaderEffect →
 //     ShaderNodeRhi → BaseUniforms UBO at binding=0). The UBO layout
-//     below is a prefix of `PhosphorShaders::BaseUniforms` (672 bytes);
-//     std140 offsets MUST stay aligned with that struct so the daemon's
-//     binding=0 upload feeds the right values into every field.
+//     below is std140-aligned with `PhosphorShaders::BaseUniforms` and
+//     covers its full 672-byte footprint (the C struct's explicit pad
+//     fields are absorbed here as implicit std140 alignment); the
+//     daemon's binding=0 upload feeds the right values into every field.
 //
 //   • Compositor window-content execution (kwin-effect KWin::GLShader,
 //     classic GL). KWin's shader pipeline does not bind UBOs, so the

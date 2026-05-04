@@ -71,20 +71,45 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         e.previewPath = dir.filePath(e.previewPath);
     }
 
-    // Resolve buffer shader paths (relative to effect dir, like fragment/vertex).
+    // Resolve buffer shader paths (relative to effect dir, like
+    // fragment/vertex). Multipass is fail-closed on any missing buffer:
+    // `bufferShaderPaths` is positionally aligned with `bufferWraps`
+    // and `bufferFilters` (per-buffer overrides), and silently
+    // compacting a missing entry would shift downstream wrap/filter
+    // overrides onto the wrong buffer with no surface signal to the
+    // author. Disable multipass entirely instead so the author sees the
+    // full pipeline degrade to single-pass — they will notice and fix
+    // their `metadata.json`. The single-pass fallback is a documented
+    // graceful-degradation contract; silent index corruption is not.
     if (e.isMultipass) {
-        QStringList resolved;
-        for (const QString& bufPath : e.bufferShaderPaths) {
-            const QString abs = dir.filePath(bufPath);
-            if (QFile::exists(abs)) {
-                resolved.append(abs);
-            } else {
-                qCWarning(lcRegistry).noquote() << "Animation effect" << e.id << "missing buffer shader:" << abs;
-            }
-        }
-        e.bufferShaderPaths = resolved;
-        if (resolved.isEmpty()) {
+        if (e.bufferShaderPaths.isEmpty()) {
+            // `multipass: true` with no declared buffer shaders is
+            // meaningless — there's nothing to run as a buffer pass.
+            // Normalize to single-pass so downstream consumers and
+            // diagnostics see a coherent state.
             e.isMultipass = false;
+        } else {
+            QStringList resolved;
+            QStringList missing;
+            for (const QString& bufPath : e.bufferShaderPaths) {
+                const QString abs = dir.filePath(bufPath);
+                if (QFile::exists(abs)) {
+                    resolved.append(abs);
+                } else {
+                    missing.append(abs);
+                }
+            }
+            if (missing.isEmpty()) {
+                e.bufferShaderPaths = resolved;
+            } else {
+                qCWarning(lcRegistry).noquote()
+                    << "Animation effect" << e.id << "is missing" << missing.size() << "of"
+                    << e.bufferShaderPaths.size()
+                    << "declared buffer shader(s); disabling multipass and falling back to single-pass. Missing files:"
+                    << missing.join(QLatin1String(", "));
+                e.isMultipass = false;
+                e.bufferShaderPaths.clear();
+            }
         }
     }
 

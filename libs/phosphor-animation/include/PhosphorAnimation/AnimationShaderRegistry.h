@@ -86,20 +86,33 @@ public:
     bool hasEffect(const QString& id) const;
     QStringList effectIds() const;
 
-    /// Translate a friendly parameter map into the canonical
-    /// `customParams<N>_<x|y|z|w>` slot keys consumed by both runtimes
-    /// that drive animation shaders. Slots are allocated in metadata
-    /// declaration order — the first declared float/int/bool param fills
-    /// `customParams1_x`, the second `customParams1_y`, …, the fifth
-    /// `customParams2_x`, etc., up to 32 slots
-    /// (`AnimationShaderContract::kMaxParameterSlots`).
+    /// Translate a friendly parameter map into the canonical slot keys
+    /// consumed by both runtimes that drive animation shaders. Two
+    /// independent allocators advance in metadata declaration order:
     ///
-    /// Bool values become `0.0` or `1.0`. Missing keys fall back to the
-    /// metadata-declared default, then to `0.0`. Unknown parameter ids
-    /// in `friendlyParams` are silently ignored. Color parameters are
-    /// **not** currently translated — animation effects don't declare
-    /// them today; if they do, this helper will need a separate
-    /// `customColor<N>` mapping (see `AnimationShaderContract`).
+    ///   • Float / int / bool parameters fill `customParams<N>_<x|y|z|w>`
+    ///     — the first declared param lands in `customParams1_x`, the
+    ///     second in `customParams1_y`, …, the fifth in `customParams2_x`,
+    ///     up to 32 slots (`AnimationShaderContract::kMaxParameterSlots`).
+    ///
+    ///   • Color parameters fill `customColor<N>` — the first declared
+    ///     color lands in `customColor1`, the second in `customColor2`,
+    ///     up to 16 slots (`AnimationShaderContract::kMaxCustomColors`).
+    ///     Color values are coerced to `QColor` at this boundary —
+    ///     `QString` forms parsable by `QColor::QColor(QString)`
+    ///     (`"#rrggbb"`, `"red"`, `"#rrggbbaa"`) are accepted alongside
+    ///     `QColor` instances; everything else falls back to the declared
+    ///     default, then `Qt::transparent`.
+    ///
+    /// The two allocators advance independently — a color parameter does
+    /// NOT consume a `customParams` sub-slot, so a `[color, float]`
+    /// declaration produces `customColor1` + `customParams1_x`, not
+    /// `customColor1` + `customParams1_y`.
+    ///
+    /// Bool values become `0.0` or `1.0`. Missing float keys fall back
+    /// to the metadata-declared default, then to `0.0`. Unknown parameter
+    /// ids in `friendlyParams` are silently ignored. Slot-budget overflows
+    /// log a warning and drop the offending parameter.
     ///
     /// Returns an empty map when `effectId` resolves to no registered
     /// effect or when the effect declares no parameters.
@@ -122,10 +135,11 @@ public:
     /// Input must already have `#include` directives expanded so the
     /// canonical UBO block is in the source as a literal (the rewriter is
     /// line-based; it does not run the GLSL preprocessor itself). Fields
-    /// that are pure-padding on the classic-GL path — `qt_Matrix` /
-    /// `qt_Opacity` (KWin manages its own scene-graph transform/opacity)
-    /// and the `_appField0` / `_appField1` std140 alignment slots — are
-    /// dropped during rewrite.
+    /// that have no meaning on the classic-GL path are dropped during
+    /// rewrite: `qt_Matrix` / `qt_Opacity` (KWin manages its own
+    /// scene-graph transform/opacity), the `_appField0` / `_appField1`
+    /// std140 alignment slots, and `iFlipBufferY` (daemon-only Y-flip
+    /// signal — always 1 on the daemon, no equivalent on the kwin path).
     ///
     /// Idempotent on input that has no canonical UBO block (returns the
     /// source unchanged). Returns the rewritten source as UTF-8 bytes
