@@ -4282,10 +4282,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // per-effect declared parameters land in `customParams[N]`
             // slots populated at transition begin time by
             // `translateAnimationParams`. Overlay-only uniforms
-            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `customColors[]`,
+            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`,
             // audio/wallpaper/multipass) are intentionally not populated
-            // here — they belong to overlay shaders, not animation
-            // transitions.
+            // here — they receive zero values on the compositor path.
             //
             // Guard every setUniform against `loc < 0`. GL silently
             // ignores -1, so this is defence in depth rather than a
@@ -4307,7 +4306,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     continue;
                 shader->setUniform(loc, transition.customParamsValues[slot]);
             }
-            for (int slot = 0; slot < PhosphorShaders::CustomColors::kColorCount; ++slot) {
+            for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
                 const int loc = cached->customColorsLoc[slot];
                 if (loc < 0)
                     continue;
@@ -4433,8 +4432,9 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                 + '[' + QByteArray::number(slot) + ']';
             cached.customParamsLoc[slot] = shader->uniformLocation(name.constData());
         }
-        for (int slot = 0; slot < PhosphorShaders::CustomColors::kColorCount; ++slot) {
-            const QByteArray name = QByteArray("customColors[") + QByteArray::number(slot) + ']';
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+            const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomColorsArray)
+                + '[' + QByteArray::number(slot) + ']';
             cached.customColorsLoc[slot] = shader->uniformLocation(name.constData());
         }
         cached.shader = std::move(shader);
@@ -4484,7 +4484,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         };
         transition.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
     }
-    for (int slot = 0; slot < PhosphorShaders::CustomColors::kColorCount; ++slot) {
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
         const QString key = PhosphorShaders::CustomColors::colorKey(slot);
         const auto it = translated.constFind(key);
         if (it != translated.constEnd()) {

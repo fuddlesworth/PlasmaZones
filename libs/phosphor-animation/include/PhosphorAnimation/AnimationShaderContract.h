@@ -75,17 +75,18 @@ namespace PhosphorAnimationShaders {
 /// 0.2}`) into the slot-keyed map (e.g. `{"customParams1_x": 1,
 /// "customParams1_y": 0.2}`) both runtimes consume.
 ///
-/// @par What's intentionally NOT in this contract
-/// Overlay shaders' rich UBO fields (`iMouse`, `iDate`, `iTimeDelta`,
-/// `iFrame`, `iTimeHi`, `iChannelResolution[]`, `iTextureResolution[]`,
-/// `iAudioSpectrumSize`, `iFlipBufferY`, audio / wallpaper / user
-/// textures, multipass buffer samplers) — and the `customColors[16]`
-/// array — are **not** part of the animation contract. They are
-/// declared in `data/shaders/common.glsl` and populated only by the
-/// daemon's overlay path. An animation shader that reads those fields
-/// will get either zero or undefined values; if you need them, the
-/// effect belongs in `data/shaders/` (overlay), not `data/animations/`
-/// (transition).
+/// @par Core animation contract
+/// `iTime`, `iResolution`, `customParams[8]`, and `customColors[16]`
+/// are the active contract fields populated by both runtimes.
+///
+/// @par Extended fields (daemon-only, zero on compositor)
+/// `iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `iTimeHi`,
+/// `iChannelResolution[]`, `iTextureResolution[]`,
+/// `iAudioSpectrumSize`, and multipass buffer samplers are declared
+/// in the UBO for forward compatibility but receive zero values on
+/// both runtimes unless the daemon's overlay surface populates them.
+/// Animation shaders may read them but should not depend on non-zero
+/// values. `iFlipBufferY` is stripped by the kwin rewriter.
 namespace AnimationShaderContract {
 
 /// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes

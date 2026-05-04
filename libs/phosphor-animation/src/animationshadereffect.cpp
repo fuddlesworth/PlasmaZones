@@ -110,12 +110,18 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.bufferScale = qBound(0.125, obj.value(QLatin1String("bufferScale")).toDouble(1.0), 1.0);
     e.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString();
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
-    for (const QJsonValue& v : wrapsArr)
-        e.bufferWraps.append(v.toString());
+    for (const QJsonValue& v : wrapsArr) {
+        const QString w = v.toString();
+        if (!w.isEmpty())
+            e.bufferWraps.append(w);
+    }
     e.bufferFilter = obj.value(QLatin1String("bufferFilter")).toString();
     const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
-    for (const QJsonValue& v : filtersArr)
-        e.bufferFilters.append(v.toString());
+    for (const QJsonValue& v : filtersArr) {
+        const QString f = v.toString();
+        if (!f.isEmpty())
+            e.bufferFilters.append(f);
+    }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 
     // Clamp negatives at the input boundary — a negative boundsPadding
