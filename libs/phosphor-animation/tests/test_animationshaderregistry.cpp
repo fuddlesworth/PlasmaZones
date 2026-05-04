@@ -628,6 +628,72 @@ private Q_SLOTS:
         QCOMPARE(c, QColor(Qt::red));
         QCOMPARE(result.value(QStringLiteral("customParams1_x")).toDouble(), 1.5);
     }
+
+    /// Independence of the float and color allocators. A
+    /// `[color, float, color, float]` declaration must produce
+    /// `customColor1 + customParams1_x + customColor2 + customParams1_y`,
+    /// NOT `customColor1 + customParams1_y + customColor2 +
+    /// customParams2_x`. The allocators advance separately; a regression
+    /// that collapsed them back into a single counter (or that
+    /// accidentally bumped floatSlot for color params) would silently
+    /// corrupt the float-slot delivery for any pack mixing the two
+    /// types.
+    void testColorAndFloatAllocatorsAdvanceIndependently()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-mixed");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        const auto makeParam = [](const QString& id, const QString& type, const QVariant& def) {
+            AnimationShaderEffect::ParameterInfo p;
+            p.id = id;
+            p.type = type;
+            p.defaultValue = def;
+            return p;
+        };
+        eff.parameters = {
+            makeParam(QStringLiteral("c0"), QStringLiteral("color"), QColor(Qt::red)),
+            makeParam(QStringLiteral("f0"), QStringLiteral("float"), 0.1),
+            makeParam(QStringLiteral("c1"), QStringLiteral("color"), QColor(Qt::green)),
+            makeParam(QStringLiteral("f1"), QStringLiteral("float"), 0.2),
+        };
+
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
+        // Color allocator: c0 → customColor1, c1 → customColor2.
+        QCOMPARE(r.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::red));
+        QCOMPARE(r.value(QStringLiteral("customColor2")).value<QColor>(), QColor(Qt::green));
+        // Float allocator advances independently: f0 → customParams1_x
+        // (NOT customParams1_y, which would happen if the color params
+        // had bumped floatSlot), f1 → customParams1_y.
+        QCOMPARE(r.value(QStringLiteral("customParams1_x")).toDouble(), 0.1);
+        QCOMPARE(r.value(QStringLiteral("customParams1_y")).toDouble(), 0.2);
+        // Pin the negative side too — neither customParams2_x nor a
+        // stray entry from a collapsed allocator should appear.
+        QVERIFY(!r.contains(QStringLiteral("customParams2_x")));
+    }
+
+    /// String hex codes from a friendlyParams map (e.g. user-edited
+    /// config that wrote `"#ff8800"`) coerce to QColor at the registry
+    /// boundary. Without this coercion, the kwin-effect's
+    /// `value<QColor>()` decoder would receive an invalid QColor and
+    /// silently render the slot as black.
+    void testColorParamCoercesStringHex()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-color-string");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo tint;
+        tint.id = QStringLiteral("tint");
+        tint.type = QStringLiteral("color");
+        // Note no defaultValue — friendly map is the only source.
+        eff.parameters = {tint};
+
+        const QVariantMap result = AnimationShaderRegistry::translateAnimationParams(
+            eff, {{QStringLiteral("tint"), QStringLiteral("#ff8800")}});
+        QVERIFY(result.contains(QStringLiteral("customColor1")));
+        const QColor c = result.value(QStringLiteral("customColor1")).value<QColor>();
+        QVERIFY(c.isValid());
+        QCOMPARE(c, QColor(0xff, 0x88, 0x00));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderRegistry)

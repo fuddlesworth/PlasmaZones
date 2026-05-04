@@ -61,19 +61,26 @@ namespace PhosphorAnimationShaders {
 /// `KWin::ShaderManager::generateCustomShader`.
 ///
 /// @par Per-effect declared parameters
-/// Every parameter declared in `metadata.json` lands in a
-/// `customParams[N].xyz` slot in declaration order. Float/int/bool
-/// parameters fill `customParams[0].x`, `customParams[0].y`,
-/// `customParams[0].z`, `customParams[0].w`, then `customParams[1].x`,
-/// … through `customParams[7].w` (32 slots total). Color parameters
-/// would fill `customColors[N]` in a separate region (animation effects
-/// don't currently declare color parameters; if they do, the contract
-/// extends accordingly).
+/// Every parameter declared in `metadata.json` lands in either a
+/// `customParams[N].xyz` slot (float / int / bool) or a
+/// `customColors[N]` slot (color), in declaration order. The two
+/// allocators advance independently — a color parameter does NOT
+/// consume a `customParams` sub-slot, so a `[color, float]` declaration
+/// produces `customColors[0]` + `customParams[0].x`, not
+/// `customColors[0]` + `customParams[0].y`. Float / int / bool
+/// parameters fill `customParams[0].x` … `customParams[7].w` (32
+/// slots); color parameters fill `customColors[0]` … `customColors[15]`
+/// (16 slots).
 ///
 /// `AnimationShaderRegistry::translateAnimationParams(effectId, friendlyMap)`
 /// converts a friendly parameter map (e.g. `{"direction": 1, "parallax":
-/// 0.2}`) into the slot-keyed map (e.g. `{"customParams1_x": 1,
-/// "customParams1_y": 0.2}`) both runtimes consume.
+/// 0.2, "tint": "#ff8800"}`) into the slot-keyed map (e.g.
+/// `{"customParams1_x": 1, "customParams1_y": 0.2,
+/// "customColor1": QColor(0xff, 0x88, 0x00)}`) both runtimes consume.
+/// Color values are coerced to QColor at that boundary — strings
+/// parseable by the QColor constructor are accepted alongside QColor
+/// instances; everything else falls back to the declared default, then
+/// transparent.
 ///
 /// @par Core animation contract
 /// `iTime`, `iResolution`, `customParams[8]`, and `customColors[16]`

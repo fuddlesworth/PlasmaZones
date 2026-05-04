@@ -202,9 +202,9 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     for (const auto& param : effect.parameters) {
         const QString& type = param.type;
         if (type == QLatin1String("color")) {
-            if (colorSlot >= PhosphorShaders::CustomColors::kColorCount) {
+            if (colorSlot >= AnimationShaderContract::kMaxCustomColors) {
                 qCWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
-                                      << PhosphorShaders::CustomColors::kColorCount
+                                      << AnimationShaderContract::kMaxCustomColors
                                       << "-slot customColors budget; dropping color param" << param.id;
                 continue;
             }
