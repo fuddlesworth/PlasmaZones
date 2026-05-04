@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
@@ -19,6 +20,7 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QMutexLocker>
+#include <QThread>
 #include <QTimer>
 #include <QImage>
 #include <QGuiApplication>
@@ -120,8 +122,8 @@ bool OverlayService::anyScreenUsesShader() const
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    for (const QString& screenId : m_screenStates.keys()) {
-        if (useShaderForScreen(screenId)) {
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        if (useShaderForScreen(it.key())) {
             return true;
         }
     }
@@ -195,6 +197,13 @@ void OverlayService::stopShaderAnimation()
     if (m_shaderPreviewWindow) {
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
     }
+    // Animation-shader path: clear the SurfaceAnimator's cached
+    // spectrum so any in-flight transition stops sampling stale audio
+    // and any subsequent attach starts fresh at silence. Mirrors the
+    // overlay-window clear above.
+    if (m_surfaceAnimator) {
+        m_surfaceAnimator->setAudioSpectrum({});
+    }
     if (m_shaderUpdateTimer) {
         m_shaderUpdateTimer->stop();
         qCDebug(lcOverlay) << "Shader animation stopped";
@@ -217,10 +226,28 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
         && m_settings->enableAudioVisualizer()) {
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), wrapped);
     }
+    // Animation-shader path: feed the same spectrum into the
+    // SurfaceAnimator so every active transition shader (snap-assist
+    // popup, OSD, layout-picker, zone-selector show/hide) sees the
+    // live audio data on `iAudioSpectrumSize` / the audio bindings.
+    // The SurfaceAnimator pushes the spectrum to every active shader
+    // item and caches it for items that attach mid-stream.
+    if (m_surfaceAnimator) {
+        m_surfaceAnimator->setAudioSpectrum(spectrum);
+    }
 }
 
 void OverlayService::updateShaderUniforms()
 {
+    // Pinned to the GUI thread by m_shaderUpdateTimer (a QObject parented
+    // to `this`, fired only on the thread that owns it). The frame-counter
+    // overflow guard below uses fetch_add + store NOT as a TOCTOU-safe
+    // sequence but as cheap relaxed-atomic increments — the assert pins
+    // the thread invariant in debug builds so a future refactor that
+    // drives the timer from a worker thread surfaces here rather than
+    // as silently-corrupted iFrame on simultaneous invocations.
+    Q_ASSERT(thread() == QThread::currentThread());
+
     qint64 currentTime;
     {
         QMutexLocker locker(&m_shaderTimerMutex);

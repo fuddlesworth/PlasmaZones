@@ -12,6 +12,7 @@
 #include <QPointer>
 #include <QString>
 #include <QVariantMap>
+#include <QVector>
 
 #include <memory>
 
@@ -25,6 +26,7 @@ class AnimationShaderRegistry;
 
 namespace PhosphorLayer {
 class Role;
+class Surface;
 }
 
 QT_BEGIN_NAMESPACE
@@ -234,6 +236,55 @@ public:
     /// May be called after construction (the daemon creates the registry
     /// after the overlay service). Null disables shader transitions.
     void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
+
+    /// @name Dynamic shader uniforms
+    /// @brief Cross-runtime feature parity with overlay shaders for the
+    /// per-frame uniforms that don't come from the per-effect static
+    /// metadata. Most are auto-driven by the animator and need no
+    /// consumer wiring:
+    ///
+    ///   • `iTimeDelta` — real-time seconds between SurfaceAnimator
+    ///     driver ticks (matches overlay's wall-clock convention).
+    ///   • `iFrame` — per-leg frame counter, resets to 0 on each fresh
+    ///     attach; post-incremented per push so the first frame reports 0.
+    ///   • `iMouse` — driven by a `QQuickHoverHandler` installed on each
+    ///     attached shader item, mirroring the overlay path's
+    ///     `MouseArea { hoverEnabled }` / `HoverHandler` pattern. The
+    ///     handler reports cursor position in shader-item-local pixels
+    ///     (matches `iResolution`); when the cursor leaves the shader's
+    ///     bounding box, `iMouse` is set to `(-1, -1)` — same off-region
+    ///     sentinel the overlay path uses.
+    ///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync,
+    ///     throttled to 1 Hz refresh.
+    ///   • `iTimeHi` — auto-computed wrap counterpart of `iTime` by
+    ///     `ShaderNodeRhi`'s std140 split. Always 0 on this path since
+    ///     `iTime` stays in [0,1] and never wraps. Animation shader
+    ///     authors should NOT read `iTimeHi`; the field exists only to
+    ///     keep the std140 layout aligned with the overlay UBO so a
+    ///     single `effect.frag` source compiles against either runtime.
+    ///
+    /// The single uniform that NEEDS consumer wiring is
+    /// `setAudioSpectrum` below — there is no centralised QML producer
+    /// for CAVA data the way there is for hover events.
+    /// @{
+
+    /// Push the latest CAVA / audio-spectrum sample to every active
+    /// animation shader item. Mirrors the overlay path's
+    /// `OverlayService::onAudioSpectrumUpdated` → `audioSpectrum` QML
+    /// property write — animation shaders programmatically attached by
+    /// `SurfaceAnimator` have no QML scene to bind through, so the
+    /// consumer (typically the daemon's `OverlayService`) wires its
+    /// `IAudioSpectrumProvider::spectrumUpdated` signal here. The
+    /// spectrum is also re-pushed at attach time so a shader that
+    /// installs mid-stream sees the latest data on its first frame
+    /// instead of zero-initialised silence.
+    ///
+    /// Pass an empty vector to clear (e.g. when audio visualization is
+    /// disabled). Called at the audio framerate (typically 30-60 Hz);
+    /// `ShaderEffect::setAudioSpectrum` no-ops on identity so an
+    /// unchanged spectrum costs nothing.
+    void setAudioSpectrum(const QVector<float>& spectrum);
+    /// @}
 
     /// @name ISurfaceAnimator
     /// @{

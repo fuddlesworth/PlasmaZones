@@ -120,129 +120,13 @@ ColumnLayout {
     /// control on the right. Mirrors the inline layout the dialog used
     /// before extraction.
     property Component _wideRowComponent
-
-    _wideRowComponent: Component {
-        RowLayout {
-            required property var modelData
-            required property int index
-
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.largeSpacing
-
-            Label {
-                Layout.preferredWidth: root.labelColumnWidth
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                text: modelData ? (modelData.name || modelData.id || "") : ""
-                horizontalAlignment: Text.AlignRight
-                elide: Text.ElideRight
-            }
-
-            ShaderParameterRow {
-                Layout.fillWidth: true
-                Kirigami.Theme.inherit: true
-                compact: false
-                paramData: modelData
-                currentValues: root.currentValues
-                lockedParams: root.lockedParams
-                enableLocking: root.enableLocking
-                enableImage: root.enableImage
-                sliderValueLabelWidth: root.sliderValueLabelWidth
-                colorButtonSize: root.colorButtonSize
-                colorLabelWidth: root.colorLabelWidth
-                onValueChanged: function(id, value) {
-                    root.valueChanged(id, value);
-                }
-                onLockToggled: function(id, locked) {
-                    root.lockToggled(id, locked);
-                }
-                onRequestColorPicker: function(id, name, current) {
-                    root.requestColorPicker(id, name, current);
-                }
-                onRequestImagePicker: function(id) {
-                    root.requestImagePicker(id);
-                }
-            }
-
-        }
-
-    }
-
     /// Settings (compact) row: fillWidth title on the left, fixed-width
     /// control on the right. Layout mirrors the settings-app SettingsRow
-    /// (left/right margins, control max-width 45%) so per-event shader
-    /// params line up with the timing-mode and duration rows above them.
+    /// so per-event shader params line up with the timing-mode and
+    /// duration rows above them. The control's 45%-max-width clamp is
+    /// enforced by the enclosing SettingsRow, NOT here — this delegate
+    /// only sets the Layout.preferred sizes; SettingsRow caps them.
     property Component _compactRowComponent
-
-    _compactRowComponent: Component {
-        RowLayout {
-            required property var modelData
-            required property int index
-
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.largeSpacing
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.minimumWidth: Kirigami.Units.gridUnit * 10
-                spacing: Math.round(Kirigami.Units.smallSpacing / 2)
-
-                Label {
-                    text: modelData ? (modelData.name || modelData.id || "") : ""
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                Label {
-                    // `&&` short-circuits to its first falsy operand — when
-                    // modelData is undefined the whole chain returns undefined,
-                    // which QML can't coerce to bool/string. Wrap visibility in
-                    // `!!` and the text in an explicit ternary so the property
-                    // assignments always receive concrete typed values.
-                    readonly property string _description: (modelData && typeof modelData.description === "string") ? modelData.description : ""
-
-                    text: _description
-                    Layout.fillWidth: true
-                    visible: _description.length > 0
-                    font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.disabledTextColor
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 3
-                    elide: Text.ElideRight
-                }
-
-            }
-
-            ShaderParameterRow {
-                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                Kirigami.Theme.inherit: true
-                compact: true
-                paramData: modelData
-                currentValues: root.currentValues
-                lockedParams: root.lockedParams
-                enableLocking: root.enableLocking
-                enableImage: root.enableImage
-                sliderValueLabelWidth: root.sliderValueLabelWidth
-                colorButtonSize: root.colorButtonSize
-                colorLabelWidth: root.colorLabelWidth
-                onValueChanged: function(id, value) {
-                    root.valueChanged(id, value);
-                }
-                onLockToggled: function(id, locked) {
-                    root.lockToggled(id, locked);
-                }
-                onRequestColorPicker: function(id, name, current) {
-                    root.requestColorPicker(id, name, current);
-                }
-                onRequestImagePicker: function(id) {
-                    root.requestImagePicker(id);
-                }
-            }
-
-        }
-
-    }
 
     signal valueChanged(string paramId, var value)
     /// Emitted once per affected param. A group-lock click fans out into
@@ -256,6 +140,7 @@ ColumnLayout {
     signal requestImagePicker(string paramId)
 
     spacing: Kirigami.Units.smallSpacing
+
     // ── Toolbar (Lock-all / Randomize) ───────────────────────────────
     RowLayout {
         Layout.fillWidth: true
@@ -377,6 +262,123 @@ ColumnLayout {
         Repeater {
             model: root._parameterGroups.length === 0 ? root.parameters : []
             delegate: root.compact ? root._compactRowComponent : root._wideRowComponent
+        }
+
+    }
+
+    _wideRowComponent: Component {
+        RowLayout {
+            required property var modelData
+            required property int index
+
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.largeSpacing
+
+            Label {
+                Layout.preferredWidth: root.labelColumnWidth
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                text: modelData ? (modelData.name || modelData.id || "") : ""
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+            }
+
+            ShaderParameterRow {
+                Layout.fillWidth: true
+                Kirigami.Theme.inherit: true
+                compact: false
+                paramData: modelData
+                currentValues: root.currentValues
+                lockedParams: root.lockedParams
+                enableLocking: root.enableLocking
+                enableImage: root.enableImage
+                sliderValueLabelWidth: root.sliderValueLabelWidth
+                colorButtonSize: root.colorButtonSize
+                colorLabelWidth: root.colorLabelWidth
+                onValueChanged: function(id, value) {
+                    root.valueChanged(id, value);
+                }
+                onLockToggled: function(id, locked) {
+                    root.lockToggled(id, locked);
+                }
+                onRequestColorPicker: function(id, name, current) {
+                    root.requestColorPicker(id, name, current);
+                }
+                onRequestImagePicker: function(id) {
+                    root.requestImagePicker(id);
+                }
+            }
+
+        }
+
+    }
+
+    _compactRowComponent: Component {
+        RowLayout {
+            required property var modelData
+            required property int index
+
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.largeSpacing
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+
+                Label {
+                    text: modelData ? (modelData.name || modelData.id || "") : ""
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                }
+
+                Label {
+                    // `&&` short-circuits to its first falsy operand — when
+                    // modelData is undefined the whole chain returns undefined,
+                    // which QML can't coerce to bool/string. Wrap visibility in
+                    // `!!` and the text in an explicit ternary so the property
+                    // assignments always receive concrete typed values.
+                    readonly property string _description: (modelData && typeof modelData.description === "string") ? modelData.description : ""
+
+                    text: _description
+                    Layout.fillWidth: true
+                    visible: _description.length > 0
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
+                }
+
+            }
+
+            ShaderParameterRow {
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                Kirigami.Theme.inherit: true
+                compact: true
+                paramData: modelData
+                currentValues: root.currentValues
+                lockedParams: root.lockedParams
+                enableLocking: root.enableLocking
+                enableImage: root.enableImage
+                sliderValueLabelWidth: root.sliderValueLabelWidth
+                colorButtonSize: root.colorButtonSize
+                colorLabelWidth: root.colorLabelWidth
+                onValueChanged: function(id, value) {
+                    root.valueChanged(id, value);
+                }
+                onLockToggled: function(id, locked) {
+                    root.lockToggled(id, locked);
+                }
+                onRequestColorPicker: function(id, name, current) {
+                    root.requestColorPicker(id, name, current);
+                }
+                onRequestImagePicker: function(id) {
+                    root.requestImagePicker(id);
+                }
+            }
+
         }
 
     }

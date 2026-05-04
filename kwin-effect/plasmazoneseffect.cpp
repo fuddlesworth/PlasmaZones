@@ -4282,10 +4282,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // per-effect declared parameters land in `customParams[N]`
             // slots populated at transition begin time by
             // `translateAnimationParams`. Overlay-only uniforms
-            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `customColors[]`,
+            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`,
             // audio/wallpaper/multipass) are intentionally not populated
-            // here — they belong to overlay shaders, not animation
-            // transitions.
+            // here — they receive zero values on the compositor path.
             //
             // Guard every setUniform against `loc < 0`. GL silently
             // ignores -1, so this is defence in depth rather than a
@@ -4304,8 +4303,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                 const int loc = cached->customParamsLoc[slot];
                 if (loc < 0)
-                    continue; // shader didn't declare / reference this slot
+                    continue;
                 shader->setUniform(loc, transition.customParamsValues[slot]);
+            }
+            for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+                const int loc = cached->customColorsLoc[slot];
+                if (loc < 0)
+                    continue;
+                shader->setUniform(loc, transition.customColorsValues[slot]);
             }
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
@@ -4340,6 +4345,19 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
 
     auto cacheIt = m_shaderCache.find(effectId);
     if (cacheIt == m_shaderCache.end()) {
+        // Diagnostic-once-per-compile: log multipass degradation when the
+        // shader is first compiled for this session, not on every transition
+        // install. Lifecycle events (window.move on a drag, window.focus on
+        // alt-tab) can fire beginShaderTransition many times in quick
+        // succession against an already-cached effect; a per-install log
+        // would flood the journal. Cache invalidation (effectsChanged →
+        // m_shaderCache.clear) re-fires the log at the next install, which
+        // is the right semantic for hot-reload.
+        if (eff.isMultipass) {
+            qCInfo(lcEffect) << "Animation effect" << effectId
+                             << "is multipass — compositor path runs single-pass only (buffer passes skipped)";
+        }
+
         QFile shaderFile(eff.fragmentShaderPath);
         if (!shaderFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
@@ -4412,15 +4430,25 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
         cached.iResolutionLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
-        // Cache `customParams[0]` … `customParams[7]` element locations.
-        // Each declared parameter lands in one of these slots — see
-        // `AnimationShaderRegistry::translateAnimationParams` for the
-        // exact mapping. -1 for slots the shader didn't reference (e.g.
-        // a one-param effect optimises away customParams[1..7]).
+        // Cache element locations for the per-effect declared parameter
+        // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
+        // bool params, and `customColors[0..kMaxCustomColors-1]` for color
+        // params. Each declared parameter lands in one of these slots —
+        // see `AnimationShaderRegistry::translateAnimationParams` for
+        // the exact mapping. `glGetUniformLocation` returns -1 for slots
+        // the shader didn't reference (e.g. a one-param effect that the
+        // GLSL compiler optimises away the unused tail of either array);
+        // the per-frame push loop in paintWindow guards against -1 to
+        // skip the setUniform call.
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomParamsArray)
                 + '[' + QByteArray::number(slot) + ']';
             cached.customParamsLoc[slot] = shader->uniformLocation(name.constData());
+        }
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+            const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomColorsArray)
+                + '[' + QByteArray::number(slot) + ']';
+            cached.customColorsLoc[slot] = shader->uniformLocation(name.constData());
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
@@ -4468,6 +4496,30 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             return ok ? v : 0.0f;
         };
         transition.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+    }
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+        const QString key = PhosphorAnimationShaders::AnimationShaderContract::colorKey(slot);
+        const auto it = translated.constFind(key);
+        if (it == translated.constEnd()) {
+            continue;
+        }
+        // Registry-side `translateAnimationParams` coerces every color
+        // to a valid QColor — unparseable inputs fall through to the
+        // declared default and finally to `Qt::transparent`, which
+        // `isValid()` reports as true. So under the documented contract
+        // this guard never fires. It exists purely as defence-in-depth
+        // against a future caller that bypasses the registry encoder
+        // (e.g. injects a raw QString into a profile's
+        // effectiveParameters() pass-through) — `redF/greenF/blueF/alphaF`
+        // on an invalid QColor are undefined per Qt docs. Falling through
+        // to the default-init (0,0,0,0) keeps the slot at transparent
+        // black, matching the registry's documented Qt::transparent
+        // fallback.
+        const QColor c = it->value<QColor>();
+        if (!c.isValid()) {
+            continue;
+        }
+        transition.customColorsValues[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
     }
     // Bump generation for every install so the timer-driven teardown in
     // tryBeginShaderForEvent can detect supersession (a fresh transition

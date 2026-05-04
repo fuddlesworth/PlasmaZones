@@ -93,10 +93,13 @@ inline QString slotKey(int slot)
 ///   • `PhosphorRendering::ShaderEffect::setShaderParams` — decoder for
 ///     both runtime paths
 ///   • `AnimationShaderRegistry::translateAnimationParams` — animation
-///     shaders don't currently emit color params (the function silently
-///     skips them with a load-time warning at parse), but when the first
-///     color-typed animation param lands the encoder will route through
-///     this helper.
+///     shaders route color-typed params through this helper too. The
+///     encoder advances a separate `colorSlot` counter independently of
+///     the float `customParams` allocator (see
+///     `AnimationShaderContract.h` for the independence rationale) and
+///     enforces the 16-slot `kColorCount` budget; overflow is dropped
+///     with a `qCWarning`. The `AnimationShaderContract::colorKey`
+///     helper is a thin forwarder onto this function.
 ///
 /// Lifted alongside `CustomParams::slotKey` so a future format drift
 /// (renaming the prefix, switching to 0-based indexing, etc.) only has to

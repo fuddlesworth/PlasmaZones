@@ -11,6 +11,7 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -515,16 +516,24 @@ private:
         /// `AnimationShaderRegistry::translateAnimationParams` when the
         /// transition starts; paintWindow just pushes vec4s.
         ///
-        /// Overlay-only uniforms (`iMouse`, `iDate`, `iTimeDelta`,
-        /// `iFrame`, `customColors[]`, audio/wallpaper/multipass) are
-        /// intentionally NOT populated on this path — they belong to
-        /// overlay shaders, not animation transitions.
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
-        /// Cached locations for `customParams[0]` … `customParams[7]`.
-        /// -1 when the shader didn't declare that slot (e.g. an effect
-        /// with two parameters references only `customParams[0]`).
-        std::array<int, 8> customParamsLoc = {-1, -1, -1, -1, -1, -1, -1, -1};
+        // Slot counts sourced from AnimationShaderContract so a future
+        // change to the contract (e.g. growing the customParams budget)
+        // can't silently desync this cache from the translation +
+        // upload sites in plasmazoneseffect.cpp. The default-initialiser
+        // sets every entry to -1; std::array's value-initialisation
+        // doesn't, so wrap the construction.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc = []() {
+            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> a;
+            a.fill(-1);
+            return a;
+        }();
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc = []() {
+            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> a;
+            a.fill(-1);
+            return a;
+        }();
     };
     struct ShaderTransition
     {
@@ -536,8 +545,10 @@ private:
         /// 0.2}`); we pack those into vec4s here so paintWindow only does
         /// 8 setUniform calls per frame, not per-frame string lookups.
         /// Slots with no declared parameters stay at (0, 0, 0, 0).
-        std::array<QVector4D, 8> customParamsValues = {QVector4D(), QVector4D(), QVector4D(), QVector4D(),
-                                                       QVector4D(), QVector4D(), QVector4D(), QVector4D()};
+        std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsValues =
+            {};
+        std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsValues =
+            {};
         /// Two-mode progress source.
         /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
         ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
@@ -603,6 +614,17 @@ private:
     /// reusing the address can't false-match. Cleared explicitly on
     /// windowDeleted (defence in depth) and on window destroy via QPointer.
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
+    /// @p durationMs interpretation:
+    ///   • > 0: time-based transition. paintWindow reads progress as
+    ///     (now - startTimeMs) / durationMs, linear ramp; tryBeginShaderForEvent's
+    ///     timer fires `endShaderTransition` after this many ms.
+    ///   • 0 (default) / negative: animator-driven transition. paintWindow
+    ///     reads progress from `m_windowAnimator->animationFor(w)` (curved
+    ///     by the geometry animation's profile); the animator's completion
+    ///     callback drives `endShaderTransition`. Used by `applySnapGeometry`
+    ///     for zone.* events that already have an animator-tracked motion.
+    /// `tryBeginShaderForEvent` rejects the negative case before calling here;
+    /// internal callers (`applySnapGeometry`) pass the default 0.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0);
     void endShaderTransition(KWin::EffectWindow* window);

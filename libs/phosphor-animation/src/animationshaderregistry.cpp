@@ -6,7 +6,9 @@
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
+#include <QColor>
 #include <QDir>
+#include <QFile>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QStringList>
@@ -69,28 +71,52 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         e.previewPath = dir.filePath(e.previewPath);
     }
 
-    // Diagnostic: animation shaders cannot currently consume `color`
-    // typed parameters — `translateAnimationParams` skips them silently
-    // because no built-in pack declares one and the
-    // customColor<N>-aware encoder branch hasn't been written. Surface
-    // the limitation HERE (load-time, once per pack) so an author who
-    // tries to declare a color param sees a journal warning naming the
-    // pack and parameter, rather than silently observing default values
-    // in the shader.
-    //
-    // Use noquote() so QString fields render as bare text — without it,
-    // QDebug's default operator<<(QString) wraps each field in quotes
-    // (`'"id"'` instead of `'id'`), which makes the journal message
-    // harder to read and breaks downstream tooling that pattern-matches
-    // on the field text.
-    for (const auto& param : e.parameters) {
-        if (param.type == QLatin1String("color")) {
-            qCWarning(lcRegistry).nospace().noquote()
-                << "Animation effect '" << e.id << "' (in " << effectDir << ") declares color parameter '" << param.id
-                << "' — color-typed animation params are not yet supported and "
-                   "will be ignored at transition time. Move the effect to "
-                   "data/shaders/ (overlay path) or convert the parameter to "
-                   "float/int/bool with manual color encoding.";
+    // Resolve buffer shader paths (relative to effect dir, like
+    // fragment/vertex). Multipass is fail-closed on any missing buffer:
+    // `bufferShaderPaths` is positionally aligned with `bufferWraps`
+    // and `bufferFilters` (per-buffer overrides), and silently
+    // compacting a missing entry would shift downstream wrap/filter
+    // overrides onto the wrong buffer with no surface signal to the
+    // author. Disable multipass entirely instead so the author sees the
+    // full pipeline degrade to single-pass — they will notice and fix
+    // their `metadata.json`. The single-pass fallback is a documented
+    // graceful-degradation contract; silent index corruption is not.
+    if (e.isMultipass) {
+        if (e.bufferShaderPaths.isEmpty()) {
+            // `multipass: true` with no declared buffer shaders is
+            // meaningless — there's nothing to run as a buffer pass.
+            // Normalize to single-pass so downstream consumers and
+            // diagnostics see a coherent state.
+            e.isMultipass = false;
+        } else {
+            QStringList resolved;
+            QStringList missing;
+            for (const QString& bufPath : e.bufferShaderPaths) {
+                const QString abs = dir.filePath(bufPath);
+                if (QFile::exists(abs)) {
+                    resolved.append(abs);
+                } else {
+                    missing.append(abs);
+                }
+            }
+            if (missing.isEmpty()) {
+                e.bufferShaderPaths = resolved;
+            } else {
+                qCWarning(lcRegistry).noquote()
+                    << "Animation effect" << e.id << "is missing" << missing.size() << "of"
+                    << e.bufferShaderPaths.size()
+                    << "declared buffer shader(s); disabling multipass and falling back to single-pass. Missing files:"
+                    << missing.join(QLatin1String(", "));
+                e.isMultipass = false;
+                e.bufferShaderPaths.clear();
+                // Per-buffer overrides are positionally aligned with
+                // bufferShaderPaths; with paths cleared, the overrides are
+                // orphaned data that would still survive toJson round-trip
+                // and operator== comparison. Clear them in lockstep so the
+                // disabled-multipass struct is internally coherent.
+                e.bufferWraps.clear();
+                e.bufferFilters.clear();
+            }
         }
     }
 
@@ -109,6 +135,11 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
     }
     if (!e.vertexShaderPath.isEmpty()) {
         paths.append(e.vertexShaderPath);
+    }
+    for (const QString& bufPath : e.bufferShaderPaths) {
+        if (!bufPath.isEmpty()) {
+            paths.append(bufPath);
+        }
     }
     return paths;
 }
@@ -198,19 +229,57 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         return result;
     }
 
-    int floatSlot = 0; // sub-slot index in [0, 32) — fills customParams1_x..customParams8_w
+    int floatSlot = 0;
+    int colorSlot = 0;
     for (const auto& param : effect.parameters) {
         const QString& type = param.type;
-        // Color parameters would consume customColor<N> rather than a
-        // float sub-slot; not currently used by any built-in animation
-        // shader. When the first one lands, extend this branch to map
-        // color → "customColor<N>" with its own counter, using
-        // `PhosphorShaders::CustomColors::colorKey` as the canonical
-        // formatter. Skipped silently here at translation time —
-        // surfacing this on every transition begin would just spam the
-        // log; the diagnostic lives at load time in `parseEffect`,
-        // which fires a single qCWarning per pack at registry scan.
         if (type == QLatin1String("color")) {
+            if (colorSlot >= AnimationShaderContract::kMaxCustomColors) {
+                qCWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                      << AnimationShaderContract::kMaxCustomColors
+                                      << "-slot customColors budget; dropping color param" << param.id;
+                continue;
+            }
+            const QString uniformKey = AnimationShaderContract::colorKey(colorSlot);
+            // Coerce the source variant to a QColor at the registry
+            // boundary so the consumer (kwin-effect's setUniform site,
+            // ShaderEffect::setShaderParams) never has to defend against
+            // a string-shaped colour leaking through. Accepted shapes:
+            // already-a-QColor (QML/settings-UI path); QString in any
+            // form QColor's constructor parses (`"#rgb"`, `"#rrggbb"`,
+            // `"#aarrggbb"` with alpha FIRST per Qt's convention,
+            // higher-bit-depth `"#rrrgggbbb"` / `"#rrrrggggbbbb"`, SVG
+            // colour names like `"red"`, the `"transparent"` keyword);
+            // anything else falls back to the declared default, then
+            // transparent. CSS-style `"#rrggbbaa"` (alpha LAST, 9
+            // chars) is NOT accepted: any 9-char hex string is
+            // ambiguous between Qt and CSS encodings (same bytes,
+            // different channel meaning), so a rewrite would silently
+            // corrupt configs that already use Qt's order. Settings UI
+            // / config writers emit Qt-form (alpha first) explicitly.
+            const auto coerce = [](const QVariant& v) -> QColor {
+                if (v.canConvert<QColor>()) {
+                    const QColor c = v.value<QColor>();
+                    if (c.isValid())
+                        return c;
+                }
+                if (v.canConvert<QString>()) {
+                    const QColor c(v.toString());
+                    if (c.isValid())
+                        return c;
+                }
+                return {};
+            };
+            QColor resolved;
+            const auto it = friendlyParams.constFind(param.id);
+            if (it != friendlyParams.constEnd())
+                resolved = coerce(*it);
+            if (!resolved.isValid() && param.defaultValue.isValid() && !param.defaultValue.isNull())
+                resolved = coerce(param.defaultValue);
+            if (!resolved.isValid())
+                resolved = QColor(Qt::transparent);
+            result[uniformKey] = resolved;
+            ++colorSlot;
             continue;
         }
 
@@ -319,13 +388,33 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
         QString decl = workingTrimmed;
         decl.chop(1); // remove trailing ';'
 
+        // Extract the field name (the last whitespace-separated token,
+        // stripped of any `[N]` array suffix). A canonical declaration
+        // like `vec4 customParams[8]` yields `customParams`; `mat4
+        // qt_Matrix` yields `qt_Matrix`. Token-level matching is
+        // future-proof against a contract that adds e.g. `iFlipBufferYAdjusted`
+        // — substring matching would silently nuke that too. The
+        // `lastIndexOf(' ')` split also tolerates `highp vec4 ...`-style
+        // declarations: only the final token (the identifier) is matched.
+        const int lastSpace = decl.lastIndexOf(QLatin1Char(' '));
+        QString fieldName = (lastSpace >= 0) ? decl.mid(lastSpace + 1) : decl;
+        const int bracketIdx = fieldName.indexOf(QLatin1Char('['));
+        if (bracketIdx >= 0) {
+            fieldName = fieldName.left(bracketIdx);
+        }
+
         // Drop fields that are not part of the animation contract on the
         // classic-GL path. KWin manages its own scene-graph transform /
-        // opacity; `_appField0` / `_appField1` are pure padding that
-        // exists only to keep the std140 alignment in sync with the
-        // daemon's BaseUniforms.
-        if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
-            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))) {
+        // opacity; `_appField0/1` are daemon-side escape-hatch padding;
+        // `iFlipBufferY` (daemon-only, always 1) is stripped. All other
+        // fields emit as default-block uniforms. The canonical
+        // animation_uniforms.glsl deliberately carries no explicit
+        // `_pad*` declarations — std140's natural vec4-alignment of the
+        // next array fills the gaps (see the layout comment in that
+        // file) — so no `_pad*` strip entry is needed here.
+        if (fieldName == QLatin1String("qt_Matrix") || fieldName == QLatin1String("qt_Opacity")
+            || fieldName == QLatin1String("_appField0") || fieldName == QLatin1String("_appField1")
+            || fieldName == QLatin1String("iFlipBufferY")) {
             continue;
         }
 

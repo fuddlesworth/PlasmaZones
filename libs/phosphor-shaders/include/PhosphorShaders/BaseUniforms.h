@@ -126,6 +126,16 @@ static_assert(offsetof(BaseUniforms, customParams) == 128,
               "BaseUniforms::customParams must remain at std140 offset 128 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, customColors) == 256,
               "BaseUniforms::customColors must remain at std140 offset 256 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iChannelResolution) == 512,
+              "BaseUniforms::iChannelResolution must remain at std140 offset 512 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iAudioSpectrumSize) == 576,
+              "BaseUniforms::iAudioSpectrumSize must remain at std140 offset 576 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iFlipBufferY) == 580,
+              "BaseUniforms::iFlipBufferY must remain at std140 offset 580 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iTextureResolution) == 592,
+              "BaseUniforms::iTextureResolution must remain at std140 offset 592 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iTimeHi) == 656,
+              "BaseUniforms::iTimeHi must remain at std140 offset 656 (animation UBO contract)");
 
 /// UBO region offsets and sizes for partial updates (reduces GPU bandwidth).
 namespace UboRegions {

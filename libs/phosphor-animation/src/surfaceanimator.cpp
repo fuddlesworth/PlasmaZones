@@ -11,6 +11,7 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorRendering/ShaderEffect.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
@@ -24,7 +25,9 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <private/qquickhoverhandler_p.h>
 #include <private/qquickshadereffectsource_p.h>
+#include <private/qquicksinglepointhandler_p.h>
 #include <QStack>
 #include <QTimer>
 #include <QUrl>
@@ -105,6 +108,58 @@ inline qreal clampPaddingToParent(QQuickItem* anchor, qreal requestedPad)
         }
     }
     return qMin(pad, kMaxBoundsPaddingFraction);
+}
+
+/// Sanitise a `boundsPadding` source value into a NaN-free, finite
+/// qreal suitable for storage in a Track's `requestedPadPtr`. The
+/// `clampPaddingToParent` clamp above also rejects NaN, but inputs
+/// to this helper land in a `shared_ptr<qreal>` cell that the
+/// syncGeometry lambda dereferences without a NaN-check of its own
+/// — so a NaN in the cell would propagate through clampPaddingToParent's
+/// own input-side `qIsNaN` guard producing a 0.0 result on every paint.
+/// Sanitising at the assignment boundary keeps both the reuse-path
+/// refresh and the fresh-attach init using the same single-source
+/// rule and centralises a guard that previously duplicated.
+inline qreal sanitiseBoundsPadding(qreal requested)
+{
+    return qIsNaN(requested) ? qreal(0.0) : requested;
+}
+
+/// Apply the shader-item geometry derived from @p anchor + @p requestedPad.
+/// Centralises the math behind the per-leg syncGeometry lambda so the
+/// reuse path can re-fire it explicitly after a metadata hot-reload that
+/// changes `boundsPadding` between legs — without it, the persistent
+/// lambda only re-runs on the next anchor geometry signal, which for a
+/// static popup (snap-assist, OSD) may never come, leaving the shader
+/// rendered with the previous leg's pad until the anchor next moves or
+/// resizes. Idempotent on identity (every setter no-ops when the value
+/// is unchanged), so the common no-hot-reload reuse path costs nothing.
+inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
+                                  QQuickShaderEffectSource* shaderSource, qreal requestedPad)
+{
+    if (!anchor || !shaderItem) {
+        return;
+    }
+    const qreal w = anchor->width();
+    const qreal h = anchor->height();
+    if (w <= 0.0 || h <= 0.0) {
+        return;
+    }
+    const qreal pad = clampPaddingToParent(anchor, requestedPad);
+    const qreal padW = w * pad;
+    const qreal padH = h * pad;
+    shaderItem->setWidth(w + 2.0 * padW);
+    shaderItem->setHeight(h + 2.0 * padH);
+    shaderItem->setX(anchor->x() - padW);
+    shaderItem->setY(anchor->y() - padH);
+    shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+    QVector4D structural = shaderItem->customParamAt(7);
+    structural.setX(static_cast<float>(pad));
+    shaderItem->setCustomParamAt(7, structural);
+    if (shaderSource) {
+        shaderSource->setWidth(w);
+        shaderSource->setHeight(h);
+    }
 }
 } // namespace
 
@@ -219,6 +274,118 @@ PhosphorAnimation::MotionSpec<qreal> buildSpec(const PhosphorAnimation::Profile&
     return spec;
 }
 
+/// Hide every visible sibling of the shader anchor for the duration
+/// of a leg, returning QPointers so the caller can restore them on
+/// teardown. We would prefer to redirect decorator siblings (e.g.
+/// `MultiEffect { source: container }`) at the shader's output so the
+/// decoration keeps tracking, but Qt 6 MultiEffect crashes inside its
+/// private `QQuickShaderEffect` when given a non-stock `QQuickItem` as
+/// source. Hiding gives a clean shader transition at the cost of the
+/// decoration popping back in at teardown. Skipped for fallback
+/// anchors (no `shaderAnchor: true` tag found) — the fallback case
+/// hands back the consumer's QML root, whose siblings are usually
+/// unrelated layout siblings rather than per-anchor decorators.
+///
+/// Used by both `attachShaderToAnchor` (fresh attach) and `runLeg`'s
+/// reuse branch — between legs `teardownShaderLeg` restores siblings
+/// to visible while the parked shader item idles, so the next leg has
+/// to re-hide them.
+QList<QPointer<QQuickItem>> hideAnchorSiblings(QQuickItem* shaderAnchor, QQuickItem* shaderItem,
+                                               QQuickItem* shaderSource, bool foundExplicitAnchor)
+{
+    QList<QPointer<QQuickItem>> hidden;
+    if (!foundExplicitAnchor || !shaderAnchor || !shaderAnchor->parentItem()) {
+        return hidden;
+    }
+    const auto siblings = shaderAnchor->parentItem()->childItems();
+    for (QQuickItem* sibling : siblings) {
+        if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
+            continue;
+        }
+        if (sibling->isVisible()) {
+            hidden.append(QPointer<QQuickItem>(sibling));
+            sibling->setVisible(false);
+        }
+    }
+    return hidden;
+}
+
+/// Apply per-effect static configuration (fragment / vertex source,
+/// include paths, multipass, wallpaper, depth) to an existing shader
+/// item. Idempotent — every `ShaderEffect` setter no-ops on identity, so
+/// a repeat call with the same `effect` only incurs the cost of the
+/// wallpaper cache lookup (mtime-keyed, mutex-guarded; typically a
+/// cache hit).
+///
+/// Always-set semantics: every effect-level toggle is written
+/// unconditionally (the `else` arms explicitly clear), so a metadata.json
+/// hot-reload that DISABLES a feature (`isMultipass` true→false,
+/// `useWallpaper` true→false, `useDepthBuffer` true→false) propagates
+/// onto a reused shader item rather than leaving stale state from the
+/// prior leg. The `if (cond) … else …` shape matters here: a gated-set
+/// helper would silently keep the old buffers/wallpaper alive across
+/// the disable.
+///
+/// Called from both `attachShaderToAnchor` (fresh attach) and
+/// `runLeg`'s reuse branch (between legs of the same effect id, where
+/// a metadata.json hot-reload may have changed multipass / wallpaper /
+/// depth fields even while the id stayed stable). Centralising here
+/// keeps the two paths in lockstep so a future wired-through field
+/// can't silently apply only on fresh attach. Per-leg state — `iTime`,
+/// translated parameters, geometry, structural padding — is NOT this
+/// helper's concern; the caller threads those through separately.
+void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
+                             const PhosphorAnimationShaders::AnimationShaderEffect& effect,
+                             const QStringList& shaderIncludePaths)
+{
+    if (!shaderItem) {
+        return;
+    }
+    if (!shaderIncludePaths.isEmpty()) {
+        shaderItem->setShaderIncludePaths(shaderIncludePaths);
+    }
+    shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
+    if (!effect.vertexShaderPath.isEmpty()) {
+        shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    }
+    if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
+        shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);
+        shaderItem->setBufferFeedback(effect.bufferFeedback);
+        shaderItem->setBufferScale(effect.bufferScale);
+        // Per-buffer overrides: pass through unconditionally — empty
+        // string normalizes to the ShaderEffect defaults ("clamp"
+        // wrap, "linear" filter) per
+        // `ShaderNodeRhi::normalizeWrapMode`/`normalizeFilterMode`,
+        // and empty list clears any previous-leg overrides. Gating on
+        // `!isEmpty()` would let stale per-buffer overrides survive a
+        // hot-reload that removed them from `metadata.json`.
+        shaderItem->setBufferWrap(effect.bufferWrap);
+        shaderItem->setBufferWraps(effect.bufferWraps);
+        shaderItem->setBufferFilter(effect.bufferFilter);
+        shaderItem->setBufferFilters(effect.bufferFilters);
+    } else {
+        // Hot-reload disable path: clear whatever the previous leg
+        // configured so the reused shader item doesn't keep running
+        // stale buffer passes. Empty list / false / 1.0 are the
+        // ShaderEffect default-state values; setters no-op when the
+        // item is already at default.
+        shaderItem->setBufferShaderPaths({});
+        shaderItem->setBufferFeedback(false);
+        shaderItem->setBufferScale(1.0);
+        shaderItem->setBufferWrap(QString());
+        shaderItem->setBufferWraps({});
+        shaderItem->setBufferFilter(QString());
+        shaderItem->setBufferFilters({});
+    }
+    if (effect.useWallpaper) {
+        shaderItem->setUseWallpaper(true);
+        shaderItem->setWallpaperTexture(PhosphorShaders::ShaderRegistry::loadWallpaperImage());
+    } else {
+        shaderItem->setUseWallpaper(false);
+    }
+    shaderItem->setUseDepthBuffer(effect.useDepthBuffer);
+}
+
 /// Pieces produced by `attachShaderToAnchor`. The caller stashes
 /// these on its in-flight Track; the helper stays free of the inner
 /// Track type so a future caller can reuse it.
@@ -279,6 +446,20 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // the same pass" Vulkan validation: the source FBO render and the
     // shader effect's read are different render passes.
     //
+    // **Gated on `foundExplicitAnchor`**: only created when a descendant
+    // tagged `shaderAnchor: true` was found. The fallback path (no tag,
+    // anchor==target==QML root) leaves `shaderSource` null and skips the
+    // `setSourceItem` call below, so iChannel0 is unbound for the whole
+    // leg — the shader runs without a content texture and any
+    // `texture(iChannel0, …)` call returns whatever the GL spec does for
+    // an unbound sampler (typically transparent black). This is
+    // intentional: layer-enabling a QQuickRootItem-rooted target breaks
+    // scene-graph rendering for the consumer's whole window. Animation
+    // shaders that need an iChannel0 sample MUST be paired with a
+    // `shaderAnchor: true` descendant in the consumer's QML; the
+    // explicit=false case in the qCDebug above is the operator's signal
+    // that a shader is running source-less.
+    //
     // live=true: open animations have no prior frame to snapshot. A
     // one-shot grab (live=false) races the source's first layout/paint
     // and captures an empty FBO, leaving iChannel0 transparent for the
@@ -325,13 +506,38 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // live layer — no same-pass conflict.
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
-    if (!shaderIncludePaths.isEmpty()) {
-        shaderItem->setShaderIncludePaths(shaderIncludePaths);
-    }
-    shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
-    if (!effect.vertexShaderPath.isEmpty()) {
-        shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
-    }
+    applyEffectStaticConfig(shaderItem, effect, shaderIncludePaths);
+
+    // iMouse wiring — mirrors the overlay-shader pattern (RenderNodeOverlay's
+    // `MouseArea { hoverEnabled }` and ShaderSettingsDialog's `HoverHandler`
+    // both write cursor position through to `ZoneShaderItem::iMouse`,
+    // with a `(-1, -1)` sentinel when the cursor leaves the shader's
+    // bounding box). Self-contained: parented to shaderItem so it
+    // auto-destroys on teardown; no consumer-side bus required. The
+    // handler reports point coordinates in shader-item-local pixels,
+    // which equals the shader's `iResolution`, so authors can use
+    // `iMouse / iResolution` for normalised-UV math without per-runtime
+    // coordinate-system surprises.
+    auto* hoverHandler = new QQuickHoverHandler(shaderItem);
+    QPointer<PhosphorRendering::ShaderEffect> shaderItemForHover{shaderItem};
+    QObject::connect(hoverHandler, &QQuickSinglePointHandler::pointChanged, shaderItem,
+                     [shaderItemForHover, hoverHandler]() {
+                         if (!shaderItemForHover || !hoverHandler->isHovered()) {
+                             return;
+                         }
+                         shaderItemForHover->setIMouse(hoverHandler->point().position());
+                     });
+    QObject::connect(hoverHandler, &QQuickHoverHandler::hoveredChanged, shaderItem,
+                     [shaderItemForHover, hoverHandler]() {
+                         if (!shaderItemForHover || hoverHandler->isHovered()) {
+                             return;
+                         }
+                         // Cursor left the shader's bounding box — match
+                         // overlay's `(-1, -1)` off-region sentinel so
+                         // shader authors get one consistent "no cursor
+                         // here" signal across both runtimes.
+                         shaderItemForHover->setIMouse(QPointF(-1.0, -1.0));
+                     });
     // Initialise iTime to the leg's start value BEFORE the QQuickShaderEffect
     // can paint a frame. Show legs run iTime 0→1 (start at 0); hide legs run
     // 1→0 (start at 1). If we always initialised to 0.0 here, a hide leg's
@@ -432,33 +638,11 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // already-connected syncGeometry lambda picks up the new value
     // on the next anchor geometry signal. Capturing by value would
     // freeze the lambda on the original metadata.
-    auto requestedPadPtr = std::make_shared<qreal>(qIsNaN(effect.boundsPadding) ? qreal(0.0) : effect.boundsPadding);
+    auto requestedPadPtr = std::make_shared<qreal>(sanitiseBoundsPadding(effect.boundsPadding));
     QPointer<PhosphorRendering::ShaderEffect> shaderItemPtr{shaderItem};
     auto syncGeometry = [shaderItemPtr, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource),
                          requestedPadPtr, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
-        if (!anchorPtr || !shaderItemPtr) {
-            return;
-        }
-        const qreal w = anchorPtr->width();
-        const qreal h = anchorPtr->height();
-        if (w <= 0.0 || h <= 0.0) {
-            return;
-        }
-        const qreal pad = clampPaddingToParent(anchorPtr.data(), *requestedPadPtr);
-        const qreal padW = w * pad;
-        const qreal padH = h * pad;
-        shaderItemPtr->setWidth(w + 2.0 * padW);
-        shaderItemPtr->setHeight(h + 2.0 * padH);
-        shaderItemPtr->setX(anchorPtr->x() - padW);
-        shaderItemPtr->setY(anchorPtr->y() - padH);
-        shaderItemPtr->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
-        QVector4D structural = shaderItemPtr->customParamAt(7);
-        structural.setX(static_cast<float>(pad));
-        shaderItemPtr->setCustomParamAt(7, structural);
-        if (shaderSourcePtr) {
-            shaderSourcePtr->setWidth(w);
-            shaderSourcePtr->setHeight(h);
-        }
+        syncShaderGeometryNow(anchorPtr.data(), shaderItemPtr.data(), shaderSourcePtr.data(), *requestedPadPtr);
     };
     // Connect to all four geometry signals — anchor x/y can shift mid-leg
     // when sibling visibility flips trigger parent layout reflow (we hide
@@ -480,26 +664,10 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
 
-    // Hide visible decorator siblings of the anchor for the leg. We
-    // would prefer to redirect their `source` to the shader so the
-    // decoration (e.g. drop shadow) keeps tracking the shader's output,
-    // but Qt 6 MultiEffect crashes inside its private QQuickShaderEffect
-    // when given a non-stock QQuickItem as source. Hiding gives a clean
-    // shader transition at the cost of the decoration popping back in
-    // at teardown. Skipped for fallback anchors.
-    QList<QPointer<QQuickItem>> hiddenSiblings;
-    if (foundExplicitAnchor && shaderAnchor->parentItem()) {
-        const auto siblings = shaderAnchor->parentItem()->childItems();
-        for (QQuickItem* sibling : siblings) {
-            if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
-                continue;
-            }
-            if (sibling->isVisible()) {
-                hiddenSiblings.append(QPointer<QQuickItem>(sibling));
-                sibling->setVisible(false);
-            }
-        }
-    }
+    // Hide visible decorator siblings — see `hideAnchorSiblings` for the
+    // rationale (Qt 6 MultiEffect can't sample our shader item as source).
+    QList<QPointer<QQuickItem>> hiddenSiblings =
+        hideAnchorSiblings(shaderAnchor, shaderItem, shaderSource, foundExplicitAnchor);
 
     // Snap residual scales along the chain shaderAnchor → … → target
     // back to 1.0. The shader-exclusive leg suppresses the C++ scale
@@ -572,6 +740,15 @@ public:
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
         ISurfaceAnimator::CompletionCallback onComplete;
+        /// Per-leg `iFrame` counter pushed to the shader item by
+        /// `pushDynamicShaderUniforms`. Resets to 0 on each fresh attach
+        /// (matches overlay convention: `iFrame` starts at 0 when the
+        /// shader first runs and increments per rendered frame).
+        /// Post-incremented at push time so the first frame sees 0,
+        /// the second sees 1, etc. Reset on reuse-attach as well —
+        /// `iFrame` is per-leg, not per-shader-item-lifetime, so a
+        /// reused shader item starts fresh at 0 on the next leg.
+        int shaderFrameCount = 0;
     };
 
     /// Stash for shader pieces between legs. Populated by
@@ -994,8 +1171,7 @@ public:
                     // lambda using the OLD value when the anchor next
                     // moves/resizes.
                     if (reusedRequestedPadPtr) {
-                        *reusedRequestedPadPtr =
-                            qIsNaN(resolvedShaderEff.boundsPadding) ? qreal(0.0) : resolvedShaderEff.boundsPadding;
+                        *reusedRequestedPadPtr = sanitiseBoundsPadding(resolvedShaderEff.boundsPadding);
                     }
                     m_pendingReuse.erase(pendIt);
                 } else {
@@ -1117,6 +1293,25 @@ public:
                         reusedShaderSource->setLive(true);
                     }
                     reusedShaderItem->setVisible(true);
+                    // Re-apply per-effect static config so a metadata.json
+                    // hot-reload that changed multipass / wallpaper / depth
+                    // / vertex shader between legs propagates onto the
+                    // reused shader item. Idempotent on identity (the
+                    // ShaderEffect setters all no-op when the value is
+                    // unchanged), so the common no-hot-reload case costs
+                    // only a wallpaper-cache lookup.
+                    applyEffectStaticConfig(reusedShaderItem.data(), resolvedShaderEff, animIncludePaths);
+                    // Re-fire the geometry sync so a boundsPadding
+                    // hot-reload between legs (refreshed into the
+                    // shared cell at the reuse-claim site above) takes
+                    // effect immediately on the new leg's first frame.
+                    // The persistent syncGeometry lambda only runs on
+                    // anchor geometry signals; for static popups
+                    // (snap-assist, OSD) those may never fire while the
+                    // pad is wrong. Manually invoking the same logic
+                    // here closes that gap.
+                    syncShaderGeometryNow(reusedShaderAnchor.data(), reusedShaderItem.data(), reusedShaderSource.data(),
+                                          reusedRequestedPadPtr ? *reusedRequestedPadPtr : qreal(0.0));
                     // Reset iTime to the new leg's start so the first
                     // painted frame after the shaderTime AV starts
                     // matches the AnimatedValue's intended `from` —
@@ -1137,24 +1332,11 @@ public:
                     // were restored by teardownShaderLeg between legs
                     // so the static-Shown decoration was visible
                     // during the idle phase, but the new leg's shader
-                    // needs them out of the way to avoid the same
-                    // double-render that the fresh-attach path
-                    // prevents (see attachShaderToAnchor's
-                    // hiddenSiblings comment).
-                    QList<QPointer<QQuickItem>> hidden;
-                    if (reusedFoundExplicit && reusedShaderAnchor && reusedShaderAnchor->parentItem()) {
-                        const auto siblings = reusedShaderAnchor->parentItem()->childItems();
-                        for (QQuickItem* sibling : siblings) {
-                            if (sibling == reusedShaderAnchor.data() || sibling == reusedShaderItem.data()
-                                || sibling == reusedShaderSource.data()) {
-                                continue;
-                            }
-                            if (sibling->isVisible()) {
-                                hidden.append(QPointer<QQuickItem>(sibling));
-                                sibling->setVisible(false);
-                            }
-                        }
-                    }
+                    // needs them out of the way again. Same helper as
+                    // the fresh-attach path uses.
+                    QList<QPointer<QQuickItem>> hidden =
+                        hideAnchorSiblings(reusedShaderAnchor.data(), reusedShaderItem.data(),
+                                           reusedShaderSource.data(), reusedFoundExplicit);
                     it->second.shaderItem = reusedShaderItem;
                     it->second.shaderSource = reusedShaderSource;
                     it->second.shaderAnchor = reusedShaderAnchor;
@@ -1163,6 +1345,7 @@ public:
                     it->second.shaderEffectId = shaderEffectId;
                     it->second.requestedPadPtr = std::move(reusedRequestedPadPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                    seedShaderUniformsAtAttach(it->second);
                 } else {
                     // Fresh attach: no prior compatible shader pair, or
                     // the previous one was for a different effect id.
@@ -1183,6 +1366,7 @@ public:
                     it->second.shaderEffectId = shaderEffectId;
                     it->second.requestedPadPtr = std::move(attached.requestedPadPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                    seedShaderUniformsAtAttach(it->second);
                 }
             }
         }
@@ -1386,6 +1570,22 @@ public:
         for (auto& [s, _] : m_tracks) {
             surfaces.push_back(s);
         }
+        // Real-time delta for shader iTimeDelta — measured between
+        // SurfaceAnimator ticks (which fire at kTickIntervalMs cadence
+        // while any track is in flight). First tick after a quiescent
+        // period reports 0 instead of a stale wall-clock gap, matching
+        // OverlayService::updateShaderUniforms's clamp-on-resume idiom
+        // for the overlay path. Capped at 100 ms (same value as
+        // overlay's `maxDelta`) so a sleep/resume hiccup doesn't push
+        // a multi-second jump into the shader.
+        constexpr qreal kMaxShaderDeltaSecs = 0.1;
+        const qint64 nowNs = m_clock.now().count();
+        qreal shaderDeltaSecs = 0.0;
+        if (m_lastShaderTickNs > 0) {
+            shaderDeltaSecs = qBound(qreal(0.0), qreal(nowNs - m_lastShaderTickNs) / 1.0e9, kMaxShaderDeltaSecs);
+        }
+        m_lastShaderTickNs = nowNs;
+
         for (auto* s : surfaces) {
             auto it = m_tracks.find(s);
             if (it == m_tracks.end()) {
@@ -1409,10 +1609,96 @@ public:
             if (it->second.shaderTime) {
                 it->second.shaderTime->advance();
             }
+            // Re-find again: shaderTime->advance may have completed +
+            // erased via legCompleted. Then push per-frame dynamic
+            // uniforms (iTimeDelta, iFrame, iMouse, audio spectrum)
+            // so the next paint sees the latest values. Cheap on
+            // identity (each setter early-returns when unchanged).
+            it = m_tracks.find(s);
+            if (it == m_tracks.end()) {
+                continue;
+            }
+            if (it->second.shaderItem) {
+                pushDynamicShaderUniforms(it->second, shaderDeltaSecs);
+            }
         }
         // Stop the driver if every track completed during this tick.
         if (m_tracks.empty() && m_driverTimer.isActive()) {
             m_driverTimer.stop();
+            // Reset the tick-time anchor so the first tick after the
+            // next ensureDriving() reports 0 delta instead of the
+            // wall-clock gap accrued while the driver was idle.
+            m_lastShaderTickNs = 0;
+        }
+    }
+
+    /// Push per-frame dynamic shader uniforms onto an active track's
+    /// shader item. Mirrors the overlay path's per-frame
+    /// `OverlayService::updateShaderUniforms` writes for `iTimeDelta`
+    /// and `iFrame`, plus the on-update CAVA `audioSpectrum` dispatch —
+    /// animation shaders attached programmatically by `SurfaceAnimator`
+    /// have no QML scene to bind through, so the animator pumps these
+    /// directly each tick. Cheap on identity: every `ShaderEffect`
+    /// setter early-returns on unchanged input.
+    ///
+    /// Note: `iMouse` is NOT pumped here — it's auto-driven by the
+    /// per-shader-item `QQuickHoverHandler` installed in
+    /// `attachShaderToAnchor`, mirroring the overlay path's QML-side
+    /// `MouseArea`/`HoverHandler` wiring exactly.
+    void pushDynamicShaderUniforms(Track& track, qreal deltaSecs)
+    {
+        if (!track.shaderItem) {
+            return;
+        }
+        track.shaderItem->setITimeDelta(deltaSecs);
+        // Post-increment so the FIRST push after attach reports
+        // iFrame=0, matching overlay's `m_frameCount.fetch_add(1)`
+        // post-increment semantics.
+        track.shaderItem->setIFrame(track.shaderFrameCount++);
+        if (!m_audioSpectrum.isEmpty()) {
+            track.shaderItem->setAudioSpectrum(m_audioSpectrum);
+        }
+    }
+
+    /// Seed the dynamic uniforms (audio spectrum, iMouse) onto a freshly
+    /// attached or reused shader item BEFORE its first paint, so the
+    /// initial frame doesn't render silent or with stale cursor data
+    /// when the consumer already has audio flowing or the shader is
+    /// being reused after a parked idle phase. Resets the per-leg
+    /// `iFrame` counter to 0 — a reused shader item starts a new leg's
+    /// frame counter from scratch even though the underlying
+    /// QQuickShaderEffect is the same instance.
+    ///
+    /// `iMouse` is seeded by querying the persistent
+    /// `QQuickHoverHandler` installed by `attachShaderToAnchor`. On
+    /// fresh attach the handler reports `isHovered()` false until Qt
+    /// delivers the first hover event, so the seed lands `(-1, -1)` —
+    /// matching the GLSL contract's off-region sentinel. On reuse the
+    /// handler reflects the live cursor state at wake time, which
+    /// prevents a stale value from the previous leg (set while the
+    /// item was parked invisible) from leaking into the new leg's
+    /// first frame.
+    void seedShaderUniformsAtAttach(Track& track)
+    {
+        track.shaderFrameCount = 0;
+        if (!track.shaderItem) {
+            return;
+        }
+        if (!m_audioSpectrum.isEmpty()) {
+            track.shaderItem->setAudioSpectrum(m_audioSpectrum);
+        }
+        // FindDirectChildrenOnly: the hover handler is parented
+        // directly to the shaderItem in attachShaderToAnchor; a
+        // recursive search could pick up an unrelated handler from a
+        // QQuickItem subtree (e.g. a future scene-graph internal that
+        // installs its own handler) and seed iMouse from the wrong
+        // source.
+        QQuickHoverHandler* hover =
+            track.shaderItem->findChild<QQuickHoverHandler*>(QString{}, Qt::FindDirectChildrenOnly);
+        if (hover && hover->isHovered()) {
+            track.shaderItem->setIMouse(hover->point().position());
+        } else {
+            track.shaderItem->setIMouse(QPointF(-1.0, -1.0));
         }
     }
 
@@ -1427,6 +1713,18 @@ public:
     PhosphorAnimation::PhosphorProfileRegistry& m_registry;
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     Config m_defaultConfig;
+    /// Latest CAVA / audio-spectrum sample fed by the consumer via
+    /// `SurfaceAnimator::setAudioSpectrum`. Pushed verbatim to every
+    /// active animation shader item per-tick (see
+    /// `pushDynamicShaderUniforms`) and at attach time (see
+    /// `seedShaderUniformsAtAttach`). Empty = no audio data yet.
+    QVector<float> m_audioSpectrum;
+    /// Steady-clock-ns timestamp of the last `tickAll` invocation.
+    /// Used to compute real-time `iTimeDelta` for active shader items.
+    /// Reset to 0 when the driver stops so the first tick after the
+    /// next `ensureDriving()` reports 0 delta instead of the
+    /// wall-clock gap accrued while idle.
+    qint64 m_lastShaderTickNs = 0;
     /// Keyed on `Role::scopePrefix`. Lookup (configFor) is longest-
     /// prefix-match — a linear O(N) scan, which is fine for the handful
     /// of roles consumers register.
@@ -1580,6 +1878,21 @@ SurfaceAnimator::Config SurfaceAnimator::defaultConfig() const
 void SurfaceAnimator::setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry)
 {
     d->m_shaderRegistry = registry;
+}
+
+void SurfaceAnimator::setAudioSpectrum(const QVector<float>& spectrum)
+{
+    // Cache for newly-attached shader items (seedShaderUniformsAtAttach
+    // reads this field) AND push immediately to every active item so
+    // the next paint frame picks it up — same eager-dispatch contract
+    // as OverlayService::onAudioSpectrumUpdated → writeQmlProperty
+    // for the overlay path.
+    d->m_audioSpectrum = spectrum;
+    for (auto& [_, track] : d->m_tracks) {
+        if (track.shaderItem) {
+            track.shaderItem->setAudioSpectrum(spectrum);
+        }
+    }
 }
 
 void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete)

@@ -53,39 +53,76 @@ namespace PhosphorAnimationShaders {
 /// @endcode
 ///
 /// The UBO layout (`data/animations/shared/animation_uniforms.glsl`)
-/// is a std140-aligned prefix of `PhosphorShaders::BaseUniforms` so the
-/// daemon's binding=0 upload populates it directly. The kwin-effect
-/// can't bind UBOs through `KWin::GLShader`, so it runs a small in-memory
-/// source rewriter that converts the UBO declaration to default-block
-/// uniforms before handing the source to
-/// `KWin::ShaderManager::generateCustomShader`.
+/// is std140-aligned with `PhosphorShaders::BaseUniforms` and covers
+/// its full 672-byte footprint, so the daemon's binding=0 upload
+/// populates it directly. The kwin-effect can't bind UBOs through
+/// `KWin::GLShader`, so it runs a small in-memory source rewriter that
+/// converts the UBO declaration to default-block uniforms before
+/// handing the source to `KWin::ShaderManager::generateCustomShader`.
 ///
 /// @par Per-effect declared parameters
-/// Every parameter declared in `metadata.json` lands in a
-/// `customParams[N].xyz` slot in declaration order. Float/int/bool
-/// parameters fill `customParams[0].x`, `customParams[0].y`,
-/// `customParams[0].z`, `customParams[0].w`, then `customParams[1].x`,
-/// … through `customParams[7].w` (32 slots total). Color parameters
-/// would fill `customColors[N]` in a separate region (animation effects
-/// don't currently declare color parameters; if they do, the contract
-/// extends accordingly).
+/// Every parameter declared in `metadata.json` lands in either a
+/// `customParams[N].xyz` slot (float / int / bool) or a
+/// `customColors[N]` slot (color), in declaration order. The two
+/// allocators advance independently — a color parameter does NOT
+/// consume a `customParams` sub-slot, so a `[color, float]` declaration
+/// produces `customColors[0]` + `customParams[0].x`, not
+/// `customColors[0]` + `customParams[0].y`. Float / int / bool
+/// parameters fill `customParams[0].x` … `customParams[7].w` (32
+/// slots); color parameters fill `customColors[0]` … `customColors[15]`
+/// (16 slots).
 ///
 /// `AnimationShaderRegistry::translateAnimationParams(effectId, friendlyMap)`
 /// converts a friendly parameter map (e.g. `{"direction": 1, "parallax":
-/// 0.2}`) into the slot-keyed map (e.g. `{"customParams1_x": 1,
-/// "customParams1_y": 0.2}`) both runtimes consume.
+/// 0.2, "tint": "#ff8800"}`) into the slot-keyed map (e.g.
+/// `{"customParams1_x": 1, "customParams1_y": 0.2,
+/// "customColor1": QColor(0xff, 0x88, 0x00)}`) both runtimes consume.
+/// Color values are coerced to QColor at that boundary — strings
+/// parseable by the QColor constructor are accepted alongside QColor
+/// instances; everything else falls back to the declared default, then
+/// transparent.
 ///
-/// @par What's intentionally NOT in this contract
-/// Overlay shaders' rich UBO fields (`iMouse`, `iDate`, `iTimeDelta`,
-/// `iFrame`, `iTimeHi`, `iChannelResolution[]`, `iTextureResolution[]`,
-/// `iAudioSpectrumSize`, `iFlipBufferY`, audio / wallpaper / user
-/// textures, multipass buffer samplers) — and the `customColors[16]`
-/// array — are **not** part of the animation contract. They are
-/// declared in `data/shaders/common.glsl` and populated only by the
-/// daemon's overlay path. An animation shader that reads those fields
-/// will get either zero or undefined values; if you need them, the
-/// effect belongs in `data/shaders/` (overlay), not `data/animations/`
-/// (transition).
+/// @par Core animation contract
+/// `iTime`, `iResolution`, `customParams[8]`, and `customColors[16]`
+/// are the active contract fields populated by both runtimes.
+///
+/// @par Extended fields (daemon-populated, zero on compositor)
+/// On the daemon's `SurfaceAnimator` path these fields match the
+/// overlay-shader runtime exactly:
+///
+///   • `iTime` — per-leg progress in [0,1]
+///   • `iResolution` — surface size
+///   • `iTimeDelta` / `iFrame` — auto-driven by `SurfaceAnimator`'s
+///     driver tick (real-time delta in seconds; per-leg frame counter
+///     starting at 0 on each fresh attach)
+///   • `iMouse` — driven by a `QQuickHoverHandler` installed on each
+///     attached shader item by `SurfaceAnimator::attachShaderToAnchor`,
+///     mirroring the overlay path's `MouseArea { hoverEnabled }` and
+///     editor preview's `HoverHandler` pattern. Reports cursor position
+///     in shader-item-local pixels (matches `iResolution`); when the
+///     cursor leaves the shader's bounding box, `iMouse` is set to
+///     `(-1, -1)` — same off-region sentinel the overlay path uses.
+///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
+///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
+///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
+///     here)
+///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync
+///     (throttled to 1 Hz)
+///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
+///   • `iChannelResolution[]` — auto-populated when multipass buffer
+///     shaders are bound
+///   • `iTextureResolution[]` — auto-populated when user textures are
+///     bound (bindings 7-10)
+///
+/// On the compositor (kwin-effect) path these fields receive zero
+/// values: KWin's classic-GL pipeline has no central audio / cursor /
+/// time-delta producer, no auxiliary FBOs, and no wallpaper plumbing.
+/// Animation shaders that read them on the compositor get the GLSL-
+/// default zero. `iFlipBufferY` is stripped by the kwin rewriter
+/// entirely (daemon-only Y-flip signal). Shaders that need any of
+/// these should run on the daemon overlay path; the compositor path
+/// is suitable for transitions that depend only on `iTime`,
+/// `iResolution`, `customParams`, and `customColors`.
 namespace AnimationShaderContract {
 
 /// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
@@ -122,18 +159,30 @@ inline constexpr const char* kITime = "iTime";
 inline constexpr const char* kIResolution = "iResolution";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
-/// Element name for `glGetUniformLocation` on the compositor side
-/// (after the kwin-effect's source rewrite turns the array into
-/// default-block uniforms `customParams[0]..customParams[7]`).
+/// Cross-runtime element-name lookup constant: used by the kwin-effect's
+/// `glGetUniformLocation("customParams[N]")` calls (after the source
+/// rewriter at `AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock`
+/// turns the std140 UBO array into default-block uniforms
+/// `customParams[0]..customParams[7]`) and as a documentation anchor
+/// for shader authors. Symmetric with `kCustomColorsArray` below.
 inline constexpr const char* kCustomParamsArray = "customParams";
 
-/// Number of `vec4` slots in the `customParams` array. Forwards to the
-/// canonical constant in `<PhosphorShaders/CustomParamsKey.h>` so a
+/// Number of `vec4` slots in the `customParams` array (8). Forwards to
+/// the canonical constant in `<PhosphorShaders/CustomParamsKey.h>` so a
 /// single source of truth governs both libraries.
+///
+/// Note: this is the **vec4 slot count**, NOT the per-effect parameter
+/// budget. The per-parameter budget is `kMaxParameterSlots` (32 sub-slots
+/// across the 8 vec4s); a shader can declare up to 32 float/int/bool
+/// parameters before `translateAnimationParams` starts dropping overflow.
+/// The `kMaxCustomColors` constant below IS the per-color-param budget
+/// (16) — this naming asymmetry exists because customColors slots are
+/// whole-vec4 (one colour per slot) while customParams slots are
+/// sub-vec4 (one float per `.xyzw` component).
 inline constexpr int kMaxCustomParams = PhosphorShaders::CustomParams::kVecCount;
 
-/// Number of float sub-slots (4 per vec4 × 8 vec4s). Caps the count of
-/// declared parameters an animation shader can carry without spilling
+/// Number of float sub-slots (4 per vec4 × 8 vec4s = 32). Caps the count
+/// of declared parameters an animation shader can carry without spilling
 /// into a region the daemon's overlay extension owns. Forwards to the
 /// canonical constant in `<PhosphorShaders/CustomParamsKey.h>`.
 inline constexpr int kMaxParameterSlots = PhosphorShaders::CustomParams::kFlatSlotCount;
@@ -156,22 +205,69 @@ inline QString slotKey(int slot)
     return PhosphorShaders::CustomParams::slotKey(slot);
 }
 
+/// `vec4 customColors[N]` — per-effect declared color parameter slots.
+/// Cross-runtime element-name lookup constant, symmetric with
+/// `kCustomParamsArray` above: used by the kwin-effect's
+/// `glGetUniformLocation("customColors[N]")` calls (after the source
+/// rewriter converts the std140 UBO array into default-block uniforms
+/// `customColors[0]..customColors[15]`) and as a documentation anchor
+/// for shader authors.
+///
+/// Carries straight (non-premultiplied) RGBA: the encoder writes
+/// `QColor::redF/greenF/blueF/alphaF` verbatim, so a 50%-alpha red
+/// arrives at the shader as `(1.0, 0.0, 0.0, 0.5)` not
+/// `(0.5, 0.0, 0.0, 0.5)`. Authors should premultiply manually if
+/// their composite math expects it.
+///
+/// Naming asymmetry: the GLSL array is plural (`customColors[N]`) but
+/// the slot-key the encoder/decoder pass through `QVariantMap` is
+/// singular and 1-based (`customColor1` … `customColor16`). The
+/// encoder produces the singular form directly via
+/// `PhosphorShaders::CustomColors::colorKey(slot)` (a `"customColor"
+/// + (slot+1)` join — no string-manipulation step). This matches the
+/// `customParams[N]` ↔ `customParamsN_<x|y|z|w>` pattern — both choose
+/// 1-based singular keys for QML/JSON friendliness while keeping the
+/// GLSL declaration in 0-based plural form per std140 convention.
+inline constexpr const char* kCustomColorsArray = "customColors";
+inline constexpr int kMaxCustomColors = PhosphorShaders::CustomColors::kColorCount;
+
+/// Format a `customColor` slot key — thin forwarder onto
+/// `PhosphorShaders::CustomColors::colorKey`. Sibling of `slotKey(int)`
+/// for the customParams region. Kept here for the same reason: animation
+/// call sites stay inside this contract namespace instead of leaking the
+/// underlying phosphor-shaders header. See
+/// `<PhosphorShaders/CustomParamsKey.h>` for the format and the
+/// out-of-range graceful-degradation contract.
+inline QString colorKey(int slot)
+{
+    return PhosphorShaders::CustomColors::colorKey(slot);
+}
+
+/// @par Multipass limitation (compositor path)
+/// Animation shaders may declare multipass buffer shaders, wallpaper,
+/// and depth in their metadata. The daemon's SurfaceAnimator wires
+/// these through to PhosphorRendering::ShaderEffect which has full
+/// multipass support. However, the kwin-effect compositor path uses
+/// KWin::GLShader via OffscreenEffect, which is single-pass with no
+/// auxiliary FBOs. Multipass animation shaders degrade to single-pass
+/// on the compositor with a diagnostic log.
+
 /// @par Std140 offset contract
 /// The canonical `data/animations/shared/animation_uniforms.glsl` UBO
-/// declares its fields at the same byte offsets as the prefix of
+/// declares its fields at the same byte offsets as
 /// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
 /// struct). That alignment is what lets a single `effect.frag` source
 /// run on both runtimes without per-runtime overrides.
 ///
 /// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
-/// statements in `<PhosphorShaders/BaseUniforms.h>` for `iTime`,
-/// `iResolution`, `customParams`, and `customColors`. If anyone reorders
-/// `BaseUniforms`, those asserts fail at compile time and the canonical
-/// GLSL header has to be updated to match. The GLSL side is exercised
-/// at build time by `tests/unit/ui/test_animation_shader_bake.cpp`,
-/// which runs every built-in animation shader through `qsb` (which in
-/// turn computes std140 offsets) — a layout drift would surface there
-/// as a bake failure.
+/// statements in `<PhosphorShaders/BaseUniforms.h>` for every field
+/// declared in the GLSL UBO. If anyone reorders `BaseUniforms`, those
+/// asserts fail at compile time and the canonical GLSL header has to
+/// be updated to match. The GLSL side is exercised at build time by
+/// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
+/// built-in animation shader through `qsb` (which in turn computes
+/// std140 offsets) — a layout drift would surface there as a bake
+/// failure.
 
 } // namespace AnimationShaderContract
 

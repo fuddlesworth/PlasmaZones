@@ -43,6 +43,46 @@ QJsonObject AnimationShaderEffect::toJson() const
         if (clampedPadding > 0.0)
             obj.insert(QLatin1String("boundsPadding"), clampedPadding);
     }
+    if (isMultipass)
+        obj.insert(QLatin1String("multipass"), true);
+    if (!bufferShaderPaths.isEmpty()) {
+        QJsonArray arr;
+        for (const auto& p : bufferShaderPaths)
+            arr.append(p);
+        obj.insert(QLatin1String("bufferShaders"), arr);
+    }
+    if (useWallpaper)
+        obj.insert(QLatin1String("wallpaper"), true);
+    if (bufferFeedback)
+        obj.insert(QLatin1String("bufferFeedback"), true);
+    // qFuzzyCompare-against-default idiom: emit `bufferScale` only when
+    // it diverges from the 1.0 default. The `+ 1.0` shift is the
+    // standard Qt workaround for `qFuzzyCompare`'s zero-input
+    // pathology — `qFuzzyCompare(0.0, 0.0)` returns true but
+    // `qFuzzyCompare(1e-30, 0.0)` returns false. Comparing
+    // `bufferScale + 1.0` against `2.0` keeps both operands away from
+    // zero so the relative-tolerance check works for `bufferScale`
+    // values like 0.125 too.
+    if (!qFuzzyCompare(bufferScale + 1.0, 2.0))
+        obj.insert(QLatin1String("bufferScale"), bufferScale);
+    if (!bufferWrap.isEmpty())
+        obj.insert(QLatin1String("bufferWrap"), bufferWrap);
+    if (!bufferWraps.isEmpty()) {
+        QJsonArray arr;
+        for (const auto& w : bufferWraps)
+            arr.append(w);
+        obj.insert(QLatin1String("bufferWraps"), arr);
+    }
+    if (!bufferFilter.isEmpty())
+        obj.insert(QLatin1String("bufferFilter"), bufferFilter);
+    if (!bufferFilters.isEmpty()) {
+        QJsonArray arr;
+        for (const auto& f : bufferFilters)
+            arr.append(f);
+        obj.insert(QLatin1String("bufferFilters"), arr);
+    }
+    if (useDepthBuffer)
+        obj.insert(QLatin1String("depthBuffer"), true);
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -85,6 +125,32 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.fragmentShaderPath = obj.value(QLatin1String("fragmentShader")).toString();
     e.vertexShaderPath = obj.value(QLatin1String("vertexShader")).toString();
     e.previewPath = obj.value(QLatin1String("preview")).toString();
+    e.isMultipass = obj.value(QLatin1String("multipass")).toBool(false);
+    const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
+    for (const QJsonValue& v : bufArr) {
+        const QString name = v.toString();
+        if (!name.isEmpty())
+            e.bufferShaderPaths.append(name);
+    }
+    e.useWallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
+    e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
+    e.bufferScale = qBound(0.125, obj.value(QLatin1String("bufferScale")).toDouble(1.0), 1.0);
+    e.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString();
+    const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
+    for (const QJsonValue& v : wrapsArr) {
+        const QString w = v.toString();
+        if (!w.isEmpty())
+            e.bufferWraps.append(w);
+    }
+    e.bufferFilter = obj.value(QLatin1String("bufferFilter")).toString();
+    const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
+    for (const QJsonValue& v : filtersArr) {
+        const QString f = v.toString();
+        if (!f.isEmpty())
+            e.bufferFilters.append(f);
+    }
+    e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
+
     // Clamp negatives at the input boundary — a negative boundsPadding
     // would silently propagate into surfaceanimator.cpp's geometry math
     // (negative-area shader bounds) and into the shader's uv→anchorUv
@@ -146,6 +212,15 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (previewPath != other.previewPath)
         return false;
     if (!qFuzzyCompare(boundsPadding + 1.0, other.boundsPadding + 1.0))
+        return false;
+    if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
+        || useDepthBuffer != other.useDepthBuffer)
+        return false;
+    if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
+        return false;
+    if (bufferShaderPaths != other.bufferShaderPaths || bufferWrap != other.bufferWrap
+        || bufferWraps != other.bufferWraps || bufferFilter != other.bufferFilter
+        || bufferFilters != other.bufferFilters)
         return false;
     if (parameters.size() != other.parameters.size())
         return false;
