@@ -9,9 +9,11 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointF>
 #include <QPointer>
 #include <QString>
 #include <QVariantMap>
+#include <QVector>
 
 #include <memory>
 
@@ -234,6 +236,46 @@ public:
     /// May be called after construction (the daemon creates the registry
     /// after the overlay service). Null disables shader transitions.
     void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
+
+    /// @name Dynamic shader uniforms
+    /// @brief Cross-runtime feature parity with overlay shaders for the
+    /// per-frame uniforms that don't come from the per-effect static
+    /// metadata. Each setter caches the latest value and pushes it
+    /// immediately to every active shader item; newly-attached items
+    /// receive the cached value at attach time. `iTimeDelta` and
+    /// `iFrame` are auto-driven by the internal driver tick (no setter
+    /// needed) — `iTimeDelta` measures real-time seconds between frames
+    /// (consistent with overlay convention), `iFrame` increments per
+    /// rendered frame and resets to 0 on each fresh shader attach.
+    /// @{
+
+    /// Push the latest CAVA / audio-spectrum sample to every active
+    /// animation shader item. Mirrors the overlay path's
+    /// `OverlayService::onAudioSpectrumUpdated` → `audioSpectrum` QML
+    /// property write — animation shaders programmatically attached by
+    /// `SurfaceAnimator` have no QML scene to bind through, so the
+    /// consumer (typically the daemon's `OverlayService`) wires its
+    /// `IAudioSpectrumProvider::spectrumUpdated` signal here. The
+    /// spectrum is also re-pushed at attach time so a shader that
+    /// installs mid-stream sees the latest data on its first frame
+    /// instead of zero-initialised silence.
+    ///
+    /// Pass an empty vector to clear (e.g. when audio visualization is
+    /// disabled). Called at the audio framerate (typically 30-60 Hz);
+    /// `ShaderEffect::setAudioSpectrum` no-ops on identity so an
+    /// unchanged spectrum costs nothing.
+    void setAudioSpectrum(const QVector<float>& spectrum);
+
+    /// Push the latest cursor position to every active animation
+    /// shader item's `iMouse` slot. Coordinates are in the consumer's
+    /// preferred space (typically the surface-local pixels from a
+    /// QML `HoverHandler` or the daemon's cursor-tracking shadow);
+    /// the animator forwards verbatim. Defaults to `(0, 0)` until the
+    /// consumer wires it. Same parity rationale as `setAudioSpectrum`:
+    /// programmatically-attached animation shaders have no QML
+    /// property-binding path to a `MouseArea` like overlay shaders do.
+    void setMousePosition(const QPointF& position);
+    /// @}
 
     /// @name ISurfaceAnimator
     /// @{

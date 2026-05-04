@@ -657,6 +657,15 @@ public:
         bool shaderExclusive = false; ///< Shader replaces motion legs
         qreal targetOpacity = 1.0; ///< Snapped on completion when shaderExclusive
         ISurfaceAnimator::CompletionCallback onComplete;
+        /// Per-leg `iFrame` counter pushed to the shader item by
+        /// `pushDynamicShaderUniforms`. Resets to 0 on each fresh attach
+        /// (matches overlay convention: `iFrame` starts at 0 when the
+        /// shader first runs and increments per rendered frame).
+        /// Post-incremented at push time so the first frame sees 0,
+        /// the second sees 1, etc. Reset on reuse-attach as well —
+        /// `iFrame` is per-leg, not per-shader-item-lifetime, so a
+        /// reused shader item starts fresh at 0 on the next leg.
+        int shaderFrameCount = 0;
     };
 
     /// Stash for shader pieces between legs. Populated by
@@ -1256,6 +1265,7 @@ public:
                     it->second.shaderEffectId = shaderEffectId;
                     it->second.requestedPadPtr = std::move(reusedRequestedPadPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                    seedShaderUniformsAtAttach(it->second);
                 } else {
                     // Fresh attach: no prior compatible shader pair, or
                     // the previous one was for a different effect id.
@@ -1276,6 +1286,7 @@ public:
                     it->second.shaderEffectId = shaderEffectId;
                     it->second.requestedPadPtr = std::move(attached.requestedPadPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
+                    seedShaderUniformsAtAttach(it->second);
                 }
             }
         }
@@ -1479,6 +1490,22 @@ public:
         for (auto& [s, _] : m_tracks) {
             surfaces.push_back(s);
         }
+        // Real-time delta for shader iTimeDelta — measured between
+        // SurfaceAnimator ticks (which fire at kTickIntervalMs cadence
+        // while any track is in flight). First tick after a quiescent
+        // period reports 0 instead of a stale wall-clock gap, matching
+        // OverlayService::updateShaderUniforms's clamp-on-resume idiom
+        // for the overlay path. Capped at 100 ms (same value as
+        // overlay's `maxDelta`) so a sleep/resume hiccup doesn't push
+        // a multi-second jump into the shader.
+        constexpr qreal kMaxShaderDeltaSecs = 0.1;
+        const qint64 nowNs = m_clock.now().count();
+        qreal shaderDeltaSecs = 0.0;
+        if (m_lastShaderTickNs > 0) {
+            shaderDeltaSecs = qBound(qreal(0.0), qreal(nowNs - m_lastShaderTickNs) / 1.0e9, kMaxShaderDeltaSecs);
+        }
+        m_lastShaderTickNs = nowNs;
+
         for (auto* s : surfaces) {
             auto it = m_tracks.find(s);
             if (it == m_tracks.end()) {
@@ -1502,10 +1529,69 @@ public:
             if (it->second.shaderTime) {
                 it->second.shaderTime->advance();
             }
+            // Re-find again: shaderTime->advance may have completed +
+            // erased via legCompleted. Then push per-frame dynamic
+            // uniforms (iTimeDelta, iFrame, iMouse, audio spectrum)
+            // so the next paint sees the latest values. Cheap on
+            // identity (each setter early-returns when unchanged).
+            it = m_tracks.find(s);
+            if (it == m_tracks.end()) {
+                continue;
+            }
+            if (it->second.shaderItem) {
+                pushDynamicShaderUniforms(it->second, shaderDeltaSecs);
+            }
         }
         // Stop the driver if every track completed during this tick.
         if (m_tracks.empty() && m_driverTimer.isActive()) {
             m_driverTimer.stop();
+            // Reset the tick-time anchor so the first tick after the
+            // next ensureDriving() reports 0 delta instead of the
+            // wall-clock gap accrued while the driver was idle.
+            m_lastShaderTickNs = 0;
+        }
+    }
+
+    /// Push per-frame dynamic shader uniforms onto an active track's
+    /// shader item. Mirrors the overlay path's per-frame
+    /// `OverlayService::updateShaderUniforms` writes for `iTimeDelta`,
+    /// `iFrame`, `iMouse`, and the on-update CAVA `audioSpectrum`
+    /// dispatch — animation shaders attached programmatically by
+    /// `SurfaceAnimator` have no QML scene to bind through, so the
+    /// animator pumps these directly each tick. Cheap on identity:
+    /// every `ShaderEffect` setter early-returns on unchanged input.
+    void pushDynamicShaderUniforms(Track& track, qreal deltaSecs)
+    {
+        if (!track.shaderItem) {
+            return;
+        }
+        track.shaderItem->setITimeDelta(deltaSecs);
+        // Post-increment so the FIRST push after attach reports
+        // iFrame=0, matching overlay's `m_frameCount.fetch_add(1)`
+        // post-increment semantics.
+        track.shaderItem->setIFrame(track.shaderFrameCount++);
+        track.shaderItem->setIMouse(m_mousePosition);
+        if (!m_audioSpectrum.isEmpty()) {
+            track.shaderItem->setAudioSpectrum(m_audioSpectrum);
+        }
+    }
+
+    /// Seed the dynamic uniforms (audio spectrum, mouse) onto a freshly
+    /// attached or reused shader item BEFORE its first paint, so the
+    /// initial frame doesn't render silent + at (0,0) when the consumer
+    /// already has data flowing. Resets the per-leg `iFrame` counter to
+    /// 0 — a reused shader item starts a new leg's frame counter from
+    /// scratch even though the underlying QQuickShaderEffect is the
+    /// same instance.
+    void seedShaderUniformsAtAttach(Track& track)
+    {
+        track.shaderFrameCount = 0;
+        if (!track.shaderItem) {
+            return;
+        }
+        track.shaderItem->setIMouse(m_mousePosition);
+        if (!m_audioSpectrum.isEmpty()) {
+            track.shaderItem->setAudioSpectrum(m_audioSpectrum);
         }
     }
 
@@ -1520,6 +1606,25 @@ public:
     PhosphorAnimation::PhosphorProfileRegistry& m_registry;
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     Config m_defaultConfig;
+    /// Latest CAVA / audio-spectrum sample fed by the consumer via
+    /// `SurfaceAnimator::setAudioSpectrum`. Pushed verbatim to every
+    /// active animation shader item per-tick (see
+    /// `pushDynamicShaderUniforms`) and at attach time (see
+    /// `seedShaderUniformsAtAttach`). Empty = no audio data yet.
+    QVector<float> m_audioSpectrum;
+    /// Latest cursor position fed by the consumer via
+    /// `SurfaceAnimator::setMousePosition`. Forwarded verbatim to
+    /// `ShaderEffect::setIMouse` on every active shader item;
+    /// coordinate-space convention is the consumer's choice (typically
+    /// surface-local pixels). Defaults to (0, 0) until the consumer
+    /// wires it.
+    QPointF m_mousePosition;
+    /// Steady-clock-ns timestamp of the last `tickAll` invocation.
+    /// Used to compute real-time `iTimeDelta` for active shader items.
+    /// Reset to 0 when the driver stops so the first tick after the
+    /// next `ensureDriving()` reports 0 delta instead of the
+    /// wall-clock gap accrued while idle.
+    qint64 m_lastShaderTickNs = 0;
     /// Keyed on `Role::scopePrefix`. Lookup (configFor) is longest-
     /// prefix-match — a linear O(N) scan, which is fine for the handful
     /// of roles consumers register.
@@ -1673,6 +1778,31 @@ SurfaceAnimator::Config SurfaceAnimator::defaultConfig() const
 void SurfaceAnimator::setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry)
 {
     d->m_shaderRegistry = registry;
+}
+
+void SurfaceAnimator::setAudioSpectrum(const QVector<float>& spectrum)
+{
+    // Cache for newly-attached shader items (seedShaderUniformsAtAttach
+    // reads this field) AND push immediately to every active item so
+    // the next paint frame picks it up — same eager-dispatch contract
+    // as OverlayService::onAudioSpectrumUpdated → writeQmlProperty
+    // for the overlay path.
+    d->m_audioSpectrum = spectrum;
+    for (auto& [_, track] : d->m_tracks) {
+        if (track.shaderItem) {
+            track.shaderItem->setAudioSpectrum(spectrum);
+        }
+    }
+}
+
+void SurfaceAnimator::setMousePosition(const QPointF& position)
+{
+    d->m_mousePosition = position;
+    for (auto& [_, track] : d->m_tracks) {
+        if (track.shaderItem) {
+            track.shaderItem->setIMouse(position);
+        }
+    }
 }
 
 void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete)

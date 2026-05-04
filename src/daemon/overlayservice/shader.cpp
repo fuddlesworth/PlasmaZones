@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
@@ -195,6 +196,13 @@ void OverlayService::stopShaderAnimation()
     if (m_shaderPreviewWindow) {
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
     }
+    // Animation-shader path: clear the SurfaceAnimator's cached
+    // spectrum so any in-flight transition stops sampling stale audio
+    // and any subsequent attach starts fresh at silence. Mirrors the
+    // overlay-window clear above.
+    if (m_surfaceAnimator) {
+        m_surfaceAnimator->setAudioSpectrum({});
+    }
     if (m_shaderUpdateTimer) {
         m_shaderUpdateTimer->stop();
         qCDebug(lcOverlay) << "Shader animation stopped";
@@ -216,6 +224,15 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     if (m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible() && m_settings
         && m_settings->enableAudioVisualizer()) {
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), wrapped);
+    }
+    // Animation-shader path: feed the same spectrum into the
+    // SurfaceAnimator so every active transition shader (snap-assist
+    // popup, OSD, layout-picker, zone-selector show/hide) sees the
+    // live audio data on `iAudioSpectrumSize` / the audio bindings.
+    // The SurfaceAnimator pushes the spectrum to every active shader
+    // item and caches it for items that attach mid-stream.
+    if (m_surfaceAnimator) {
+        m_surfaceAnimator->setAudioSpectrum(spectrum);
     }
 }
 

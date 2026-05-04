@@ -86,14 +86,37 @@ namespace PhosphorAnimationShaders {
 /// `iTime`, `iResolution`, `customParams[8]`, and `customColors[16]`
 /// are the active contract fields populated by both runtimes.
 ///
-/// @par Extended fields (daemon-only, zero on compositor)
-/// `iMouse`, `iDate`, `iTimeDelta`, `iFrame`, `iTimeHi`,
-/// `iChannelResolution[]`, `iTextureResolution[]`,
-/// `iAudioSpectrumSize`, and multipass buffer samplers are declared
-/// in the UBO for forward compatibility but receive zero values on
-/// both runtimes unless the daemon's overlay surface populates them.
-/// Animation shaders may read them but should not depend on non-zero
-/// values. `iFlipBufferY` is stripped by the kwin rewriter.
+/// @par Extended fields (daemon-populated, zero on compositor)
+/// On the daemon's `SurfaceAnimator` path these fields match the
+/// overlay-shader runtime exactly:
+///
+///   • `iTime` — per-leg progress in [0,1]
+///   • `iResolution` — surface size
+///   • `iTimeDelta` / `iFrame` — auto-driven by `SurfaceAnimator`'s
+///     driver tick (real-time delta in seconds; per-leg frame counter
+///     starting at 0 on each fresh attach)
+///   • `iMouse` — fed by `SurfaceAnimator::setMousePosition`
+///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
+///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
+///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
+///     here)
+///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync
+///     (throttled to 1 Hz)
+///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
+///   • `iChannelResolution[]` — auto-populated when multipass buffer
+///     shaders are bound
+///   • `iTextureResolution[]` — auto-populated when user textures are
+///     bound (bindings 7-10)
+///
+/// On the compositor (kwin-effect) path these fields receive zero
+/// values: KWin's classic-GL pipeline has no central audio / cursor /
+/// time-delta producer, no auxiliary FBOs, and no wallpaper plumbing.
+/// Animation shaders that read them on the compositor get the GLSL-
+/// default zero. `iFlipBufferY` is stripped by the kwin rewriter
+/// entirely (daemon-only Y-flip signal). Shaders that need any of
+/// these should run on the daemon overlay path; the compositor path
+/// is suitable for transitions that depend only on `iTime`,
+/// `iResolution`, `customParams`, and `customColors`.
 namespace AnimationShaderContract {
 
 /// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
