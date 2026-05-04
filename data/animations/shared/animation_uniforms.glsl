@@ -41,6 +41,20 @@
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 
+// Std140 array stride note: `int[N]` and `float[N]` arrays have a per-
+// element stride of 16 bytes in std140 (rule 4: rounded up to vec4
+// alignment). That makes `int _pad0[2]` 32 bytes — NOT 8 — which would
+// shove the next field 24 bytes past where the C `BaseUniforms` upload
+// places it. Sibling daemon `data/shaders/common.glsl` solves this by
+// declaring no explicit padding and relying on std140's natural
+// vec4-alignment of the next array to bridge the gap. Match that
+// pattern here: after `int iFlipBufferY` (ending at 584), the next
+// `vec4 iTextureResolution[4]` is auto-aligned to offset 592 by std140
+// (rule 4 → 16-byte boundary), implicitly filling the same 8 bytes the
+// C struct's `_pad_after_audioSpectrum[2]` covers. Likewise the struct
+// itself is auto-aligned to a 16-byte multiple at the end, picking up
+// the trailing 12 bytes that C's `_pad_after_iTimeHi[3]` owns and
+// landing total size at 672 bytes — matching `BaseUniforms`.
 layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; ignored by kwin path
     float qt_Opacity;            // offset 64  (4 bytes)  — Qt scene-graph opacity; ignored by kwin path
@@ -57,10 +71,15 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     vec4 iChannelResolution[4];  // offset 512 (64 bytes)  — buffer texture sizes (multipass)
     int iAudioSpectrumSize;      // offset 576 — audio spectrum bin count
     int iFlipBufferY;            // offset 580 — always 1 (Y-flip); dropped by kwin rewriter
-    int _pad0[2];                // offset 584 — std140 alignment padding
+    // implicit 8-byte std140 padding here — the next vec4 array
+    // auto-aligns to the 16-byte boundary at 592, matching C's
+    // `_pad_after_audioSpectrum[2]` slot. Do NOT declare an explicit
+    // `int _pad[2]` — std140 stride-16 arrays would mis-align this.
     vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 7-10)
     float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime
-    float _pad1[3];              // offset 660 — struct alignment → total 672 bytes
+    // implicit 12-byte trailing pad — std140 rounds the struct end up
+    // to a 16-byte boundary, total 672 bytes, mirroring C's
+    // `_pad_after_iTimeHi[3]`. Same caveat: do NOT add `float _pad[3]`.
 };
 
 #endif

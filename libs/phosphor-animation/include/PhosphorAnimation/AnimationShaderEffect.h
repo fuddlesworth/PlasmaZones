@@ -85,14 +85,46 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// intermediate passes before the main fragment shader.
     QStringList bufferShaderPaths;
 
+    /// Opt-in multipass mode. When true and `bufferShaderPaths` is
+    /// non-empty, the daemon path runs those buffer passes before the
+    /// main fragment. The kwin-effect compositor path is single-pass
+    /// only; multipass effects degrade to single-pass there with a
+    /// diagnostic log (see `AnimationShaderContract.h`).
     bool isMultipass = false;
+
+    /// Bind the user's wallpaper as a sampler. Daemon-only — the
+    /// compositor path has no wallpaper plumbing so the field is
+    /// observed only by `SurfaceAnimator::attachShaderToAnchor`.
     bool useWallpaper = false;
+
+    /// Enable per-pass feedback (last frame's buffer is sampleable as
+    /// `iChannel<N>`). Requires `isMultipass`. Daemon-only.
     bool bufferFeedback = false;
+
+    /// Render-target scale relative to the surface size. Clamped to
+    /// `[0.125, 1.0]` at `fromJson` time. Daemon-only — the compositor
+    /// path doesn't allocate auxiliary FBOs.
     qreal bufferScale = 1.0;
+
+    /// Default wrap mode for all buffer samplers. Sibling of
+    /// `bufferWraps` (per-buffer overrides). Empty = ShaderEffect
+    /// default. Daemon-only.
     QString bufferWrap;
+
+    /// Per-buffer wrap-mode overrides; index aligns with
+    /// `bufferShaderPaths`. Daemon-only.
     QStringList bufferWraps;
+
+    /// Default filter mode for all buffer samplers. Empty = ShaderEffect
+    /// default. Daemon-only.
     QString bufferFilter;
+
+    /// Per-buffer filter-mode overrides; index aligns with
+    /// `bufferShaderPaths`. Daemon-only.
     QStringList bufferFilters;
+
+    /// Allocate a depth buffer alongside the colour FBO so the shader
+    /// can sample window depth. Daemon-only.
     bool useDepthBuffer = false;
 
     /// How much to enlarge the shader effect's bounding box beyond the

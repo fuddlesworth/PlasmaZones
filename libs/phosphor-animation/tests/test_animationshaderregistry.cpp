@@ -597,9 +597,15 @@ private Q_SLOTS:
         QVERIFY(colorKey(100).isEmpty());
     }
 
-    // ── parseEffect color-param diagnostic ───────────────────────────
+    // ── translateAnimationParams: color parameter routing ────────────
     //
-    // Animation shaders cannot consume `color`-typed parameters today —
+    // Color-typed parameters route to `customColor<N>` slots, sibling to
+    // the float/int/bool `customParams<N>_<x|y|z|w>` allocator. The two
+    // allocators advance independently — a color param does NOT consume
+    // a float sub-slot. Pin the encoder so a regression that accidentally
+    // collapsed the two allocators back into one (or dropped color
+    // routing altogether, as the predecessor revision did) surfaces here
+    // rather than as a silent black-default at runtime.
     void testColorParamTranslation()
     {
         AnimationShaderEffect eff;

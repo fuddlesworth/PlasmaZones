@@ -209,16 +209,38 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                 continue;
             }
             const QString uniformKey = PhosphorShaders::CustomColors::colorKey(colorSlot);
-            QVariant value;
+            // Coerce the source variant to a QColor at the registry
+            // boundary so the consumer (kwin-effect's setUniform site,
+            // ShaderEffect::setShaderParams) never has to defend against
+            // a string-shaped colour leaking through. Accepted shapes:
+            // already-a-QColor (QML/settings-UI path); QString in any
+            // form QColor's constructor parses (`"#rrggbb"`, `"red"`,
+            // SVG names, `"#rrggbbaa"`); anything else falls back to the
+            // declared default, then transparent. Without this, a
+            // user-edited config that wrote a hex string would silently
+            // render as black on both runtimes.
+            const auto coerce = [](const QVariant& v) -> QColor {
+                if (v.canConvert<QColor>()) {
+                    const QColor c = v.value<QColor>();
+                    if (c.isValid())
+                        return c;
+                }
+                if (v.canConvert<QString>()) {
+                    const QColor c(v.toString());
+                    if (c.isValid())
+                        return c;
+                }
+                return {};
+            };
+            QColor resolved;
             const auto it = friendlyParams.constFind(param.id);
-            if (it != friendlyParams.constEnd()) {
-                value = *it;
-            } else if (param.defaultValue.isValid() && !param.defaultValue.isNull()) {
-                value = param.defaultValue;
-            } else {
-                value = QColor(Qt::transparent);
-            }
-            result[uniformKey] = value;
+            if (it != friendlyParams.constEnd())
+                resolved = coerce(*it);
+            if (!resolved.isValid() && param.defaultValue.isValid() && !param.defaultValue.isNull())
+                resolved = coerce(param.defaultValue);
+            if (!resolved.isValid())
+                resolved = QColor(Qt::transparent);
+            result[uniformKey] = resolved;
             ++colorSlot;
             continue;
         }
@@ -330,11 +352,15 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
 
         // Drop fields that are not part of the animation contract on the
         // classic-GL path. KWin manages its own scene-graph transform /
-        // opacity; padding fields and iFlipBufferY (daemon-only, always 1)
-        // are stripped. All other fields emit as default-block uniforms.
+        // opacity; `_appField0/1` are daemon-side escape-hatch padding;
+        // `iFlipBufferY` (daemon-only, always 1) is stripped. All other
+        // fields emit as default-block uniforms. The canonical
+        // animation_uniforms.glsl deliberately carries no explicit
+        // `_pad*` declarations — std140's natural vec4-alignment of the
+        // next array fills the gaps (see the layout comment in that
+        // file) — so no `_pad*` strip entry is needed here.
         if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
             || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))
-            || decl.contains(QLatin1String("_pad0")) || decl.contains(QLatin1String("_pad1"))
             || decl.contains(QLatin1String("iFlipBufferY"))) {
             continue;
         }

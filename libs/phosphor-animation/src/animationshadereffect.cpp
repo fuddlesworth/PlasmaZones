@@ -42,6 +42,14 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("wallpaper"), true);
     if (bufferFeedback)
         obj.insert(QLatin1String("bufferFeedback"), true);
+    // qFuzzyCompare-against-default idiom: emit `bufferScale` only when
+    // it diverges from the 1.0 default. The `+ 1.0` shift is the
+    // standard Qt workaround for `qFuzzyCompare`'s zero-input
+    // pathology — `qFuzzyCompare(0.0, 0.0)` returns true but
+    // `qFuzzyCompare(1e-30, 0.0)` returns false. Comparing
+    // `bufferScale + 1.0` against `2.0` keeps both operands away from
+    // zero so the relative-tolerance check works for `bufferScale`
+    // values like 0.125 too.
     if (!qFuzzyCompare(bufferScale + 1.0, 2.0))
         obj.insert(QLatin1String("bufferScale"), bufferScale);
     if (!bufferWrap.isEmpty())

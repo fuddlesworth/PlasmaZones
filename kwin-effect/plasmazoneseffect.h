@@ -11,6 +11,7 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -517,8 +518,22 @@ private:
         ///
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
-        std::array<int, 8> customParamsLoc = {-1, -1, -1, -1, -1, -1, -1, -1};
-        std::array<int, 16> customColorsLoc = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+        // Slot counts sourced from AnimationShaderContract so a future
+        // change to the contract (e.g. growing the customParams budget)
+        // can't silently desync this cache from the translation +
+        // upload sites in plasmazoneseffect.cpp. The default-initialiser
+        // sets every entry to -1; std::array's value-initialisation
+        // doesn't, so wrap the construction.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc = []() {
+            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> a;
+            a.fill(-1);
+            return a;
+        }();
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc = []() {
+            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> a;
+            a.fill(-1);
+            return a;
+        }();
     };
     struct ShaderTransition
     {
@@ -530,9 +545,10 @@ private:
         /// 0.2}`); we pack those into vec4s here so paintWindow only does
         /// 8 setUniform calls per frame, not per-frame string lookups.
         /// Slots with no declared parameters stay at (0, 0, 0, 0).
-        std::array<QVector4D, 8> customParamsValues = {QVector4D(), QVector4D(), QVector4D(), QVector4D(),
-                                                       QVector4D(), QVector4D(), QVector4D(), QVector4D()};
-        std::array<QVector4D, 16> customColorsValues = {};
+        std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsValues =
+            {};
+        std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsValues =
+            {};
         /// Two-mode progress source.
         /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
         ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
