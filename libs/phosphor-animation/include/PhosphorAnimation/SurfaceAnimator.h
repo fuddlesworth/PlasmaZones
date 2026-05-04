@@ -9,7 +9,6 @@
 
 #include <QHash>
 #include <QObject>
-#include <QPointF>
 #include <QPointer>
 #include <QString>
 #include <QVariantMap>
@@ -240,13 +239,26 @@ public:
     /// @name Dynamic shader uniforms
     /// @brief Cross-runtime feature parity with overlay shaders for the
     /// per-frame uniforms that don't come from the per-effect static
-    /// metadata. Each setter caches the latest value and pushes it
-    /// immediately to every active shader item; newly-attached items
-    /// receive the cached value at attach time. `iTimeDelta` and
-    /// `iFrame` are auto-driven by the internal driver tick (no setter
-    /// needed) — `iTimeDelta` measures real-time seconds between frames
-    /// (consistent with overlay convention), `iFrame` increments per
-    /// rendered frame and resets to 0 on each fresh shader attach.
+    /// metadata. Most are auto-driven by the animator and need no
+    /// consumer wiring:
+    ///
+    ///   • `iTimeDelta` — real-time seconds between SurfaceAnimator
+    ///     driver ticks (matches overlay's wall-clock convention).
+    ///   • `iFrame` — per-leg frame counter, resets to 0 on each fresh
+    ///     attach; post-incremented per push so the first frame reports 0.
+    ///   • `iMouse` — driven by a `QQuickHoverHandler` installed on each
+    ///     attached shader item, mirroring the overlay path's
+    ///     `MouseArea { hoverEnabled }` / `HoverHandler` pattern. The
+    ///     handler reports cursor position in shader-item-local pixels
+    ///     (matches `iResolution`); when the cursor leaves the shader's
+    ///     bounding box, `iMouse` is set to `(-1, -1)` — same off-region
+    ///     sentinel the overlay path uses.
+    ///   • `iDate`, `iTimeHi` — auto-populated by `ShaderNodeRhi` as
+    ///     part of its scene-data sync.
+    ///
+    /// The single uniform that NEEDS consumer wiring is
+    /// `setAudioSpectrum` below — there is no centralised QML producer
+    /// for CAVA data the way there is for hover events.
     /// @{
 
     /// Push the latest CAVA / audio-spectrum sample to every active
@@ -265,16 +277,6 @@ public:
     /// `ShaderEffect::setAudioSpectrum` no-ops on identity so an
     /// unchanged spectrum costs nothing.
     void setAudioSpectrum(const QVector<float>& spectrum);
-
-    /// Push the latest cursor position to every active animation
-    /// shader item's `iMouse` slot. Coordinates are in the consumer's
-    /// preferred space (typically the surface-local pixels from a
-    /// QML `HoverHandler` or the daemon's cursor-tracking shadow);
-    /// the animator forwards verbatim. Defaults to `(0, 0)` until the
-    /// consumer wires it. Same parity rationale as `setAudioSpectrum`:
-    /// programmatically-attached animation shaders have no QML
-    /// property-binding path to a `MouseArea` like overlay shaders do.
-    void setMousePosition(const QPointF& position);
     /// @}
 
     /// @name ISurfaceAnimator

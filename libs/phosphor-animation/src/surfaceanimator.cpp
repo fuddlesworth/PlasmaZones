@@ -25,7 +25,9 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <private/qquickhoverhandler_p.h>
 #include <private/qquickshadereffectsource_p.h>
+#include <private/qquicksinglepointhandler_p.h>
 #include <QStack>
 #include <QTimer>
 #include <QUrl>
@@ -417,6 +419,37 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
     applyEffectStaticConfig(shaderItem, effect, shaderIncludePaths);
+
+    // iMouse wiring — mirrors the overlay-shader pattern (RenderNodeOverlay's
+    // `MouseArea { hoverEnabled }` and ShaderSettingsDialog's `HoverHandler`
+    // both write cursor position through to `ZoneShaderItem::iMouse`,
+    // with a `(-1, -1)` sentinel when the cursor leaves the shader's
+    // bounding box). Self-contained: parented to shaderItem so it
+    // auto-destroys on teardown; no consumer-side bus required. The
+    // handler reports point coordinates in shader-item-local pixels,
+    // which equals the shader's `iResolution`, so authors can use
+    // `iMouse / iResolution` for normalised-UV math without per-runtime
+    // coordinate-system surprises.
+    auto* hoverHandler = new QQuickHoverHandler(shaderItem);
+    QPointer<PhosphorRendering::ShaderEffect> shaderItemForHover{shaderItem};
+    QObject::connect(hoverHandler, &QQuickSinglePointHandler::pointChanged, shaderItem,
+                     [shaderItemForHover, hoverHandler]() {
+                         if (!shaderItemForHover || !hoverHandler->isHovered()) {
+                             return;
+                         }
+                         shaderItemForHover->setIMouse(hoverHandler->point().position());
+                     });
+    QObject::connect(hoverHandler, &QQuickHoverHandler::hoveredChanged, shaderItem,
+                     [shaderItemForHover, hoverHandler]() {
+                         if (!shaderItemForHover || hoverHandler->isHovered()) {
+                             return;
+                         }
+                         // Cursor left the shader's bounding box — match
+                         // overlay's `(-1, -1)` off-region sentinel so
+                         // shader authors get one consistent "no cursor
+                         // here" signal across both runtimes.
+                         shaderItemForHover->setIMouse(QPointF(-1.0, -1.0));
+                     });
     // Initialise iTime to the leg's start value BEFORE the QQuickShaderEffect
     // can paint a frame. Show legs run iTime 0→1 (start at 0); hide legs run
     // 1→0 (start at 1). If we always initialised to 0.0 here, a hide leg's
@@ -1554,12 +1587,17 @@ public:
 
     /// Push per-frame dynamic shader uniforms onto an active track's
     /// shader item. Mirrors the overlay path's per-frame
-    /// `OverlayService::updateShaderUniforms` writes for `iTimeDelta`,
-    /// `iFrame`, `iMouse`, and the on-update CAVA `audioSpectrum`
-    /// dispatch — animation shaders attached programmatically by
-    /// `SurfaceAnimator` have no QML scene to bind through, so the
-    /// animator pumps these directly each tick. Cheap on identity:
-    /// every `ShaderEffect` setter early-returns on unchanged input.
+    /// `OverlayService::updateShaderUniforms` writes for `iTimeDelta`
+    /// and `iFrame`, plus the on-update CAVA `audioSpectrum` dispatch —
+    /// animation shaders attached programmatically by `SurfaceAnimator`
+    /// have no QML scene to bind through, so the animator pumps these
+    /// directly each tick. Cheap on identity: every `ShaderEffect`
+    /// setter early-returns on unchanged input.
+    ///
+    /// Note: `iMouse` is NOT pumped here — it's auto-driven by the
+    /// per-shader-item `QQuickHoverHandler` installed in
+    /// `attachShaderToAnchor`, mirroring the overlay path's QML-side
+    /// `MouseArea`/`HoverHandler` wiring exactly.
     void pushDynamicShaderUniforms(Track& track, qreal deltaSecs)
     {
         if (!track.shaderItem) {
@@ -1570,26 +1608,32 @@ public:
         // iFrame=0, matching overlay's `m_frameCount.fetch_add(1)`
         // post-increment semantics.
         track.shaderItem->setIFrame(track.shaderFrameCount++);
-        track.shaderItem->setIMouse(m_mousePosition);
         if (!m_audioSpectrum.isEmpty()) {
             track.shaderItem->setAudioSpectrum(m_audioSpectrum);
         }
     }
 
-    /// Seed the dynamic uniforms (audio spectrum, mouse) onto a freshly
+    /// Seed the dynamic uniforms (audio spectrum) onto a freshly
     /// attached or reused shader item BEFORE its first paint, so the
-    /// initial frame doesn't render silent + at (0,0) when the consumer
-    /// already has data flowing. Resets the per-leg `iFrame` counter to
-    /// 0 — a reused shader item starts a new leg's frame counter from
+    /// initial frame doesn't render silent when the consumer already
+    /// has audio flowing. Resets the per-leg `iFrame` counter to 0 —
+    /// a reused shader item starts a new leg's frame counter from
     /// scratch even though the underlying QQuickShaderEffect is the
     /// same instance.
+    ///
+    /// `iMouse` seeding is unnecessary: the per-shader-item
+    /// `QQuickHoverHandler` (installed in `attachShaderToAnchor`)
+    /// fires `pointChanged` as soon as the cursor enters the shader's
+    /// bounding box, so the first frame either renders at the default
+    /// `m_iMouse` ((0,0)) or at the live cursor position depending on
+    /// whether the user is hovering — same first-frame contract as the
+    /// overlay path's `MouseArea` binding.
     void seedShaderUniformsAtAttach(Track& track)
     {
         track.shaderFrameCount = 0;
         if (!track.shaderItem) {
             return;
         }
-        track.shaderItem->setIMouse(m_mousePosition);
         if (!m_audioSpectrum.isEmpty()) {
             track.shaderItem->setAudioSpectrum(m_audioSpectrum);
         }
@@ -1612,13 +1656,6 @@ public:
     /// `pushDynamicShaderUniforms`) and at attach time (see
     /// `seedShaderUniformsAtAttach`). Empty = no audio data yet.
     QVector<float> m_audioSpectrum;
-    /// Latest cursor position fed by the consumer via
-    /// `SurfaceAnimator::setMousePosition`. Forwarded verbatim to
-    /// `ShaderEffect::setIMouse` on every active shader item;
-    /// coordinate-space convention is the consumer's choice (typically
-    /// surface-local pixels). Defaults to (0, 0) until the consumer
-    /// wires it.
-    QPointF m_mousePosition;
     /// Steady-clock-ns timestamp of the last `tickAll` invocation.
     /// Used to compute real-time `iTimeDelta` for active shader items.
     /// Reset to 0 when the driver stops so the first tick after the
@@ -1791,16 +1828,6 @@ void SurfaceAnimator::setAudioSpectrum(const QVector<float>& spectrum)
     for (auto& [_, track] : d->m_tracks) {
         if (track.shaderItem) {
             track.shaderItem->setAudioSpectrum(spectrum);
-        }
-    }
-}
-
-void SurfaceAnimator::setMousePosition(const QPointF& position)
-{
-    d->m_mousePosition = position;
-    for (auto& [_, track] : d->m_tracks) {
-        if (track.shaderItem) {
-            track.shaderItem->setIMouse(position);
         }
     }
 }

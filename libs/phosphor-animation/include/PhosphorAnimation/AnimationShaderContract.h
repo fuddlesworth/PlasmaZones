@@ -95,7 +95,13 @@ namespace PhosphorAnimationShaders {
 ///   • `iTimeDelta` / `iFrame` — auto-driven by `SurfaceAnimator`'s
 ///     driver tick (real-time delta in seconds; per-leg frame counter
 ///     starting at 0 on each fresh attach)
-///   • `iMouse` — fed by `SurfaceAnimator::setMousePosition`
+///   • `iMouse` — driven by a `QQuickHoverHandler` installed on each
+///     attached shader item by `SurfaceAnimator::attachShaderToAnchor`,
+///     mirroring the overlay path's `MouseArea { hoverEnabled }` and
+///     editor preview's `HoverHandler` pattern. Reports cursor position
+///     in shader-item-local pixels (matches `iResolution`); when the
+///     cursor leaves the shader's bounding box, `iMouse` is set to
+///     `(-1, -1)` — same off-region sentinel the overlay path uses.
 ///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
 ///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
 ///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
