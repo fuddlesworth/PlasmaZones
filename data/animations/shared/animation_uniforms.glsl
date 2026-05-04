@@ -52,8 +52,9 @@
 // places it. Sibling daemon `data/shaders/common.glsl` solves this by
 // declaring no explicit padding and relying on std140's natural
 // vec4-alignment of the next array to bridge the gap. Match that
-// pattern here: after `int iFlipBufferY` (ending at 584), the next
-// `vec4 iTextureResolution[4]` is auto-aligned to offset 592 by std140
+// pattern here: after `int iFlipBufferY` (4 bytes at offset 580,
+// occupying [580, 584)), the next `vec4 iTextureResolution[4]` is
+// auto-aligned to offset 592 by std140
 // (rule 4 → 16-byte boundary), implicitly filling the same 8 bytes the
 // C struct's `_pad_after_audioSpectrum[2]` covers. Likewise the struct
 // itself is auto-aligned to a 16-byte multiple at the end, picking up
@@ -93,7 +94,12 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     // `_pad_after_audioSpectrum[2]` slot. Do NOT declare an explicit
     // `int _pad[2]` — std140 stride-16 arrays would mis-align this.
     vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 7-10)
-    float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime
+    float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime;
+                                 //              always 0 on the animation path. Do NOT
+                                 //              read in animation shaders — exists only
+                                 //              to keep std140 layout aligned with the
+                                 //              overlay UBO so a single effect.frag
+                                 //              source compiles for either runtime.
     // implicit 12-byte trailing pad — std140 rounds the struct end up
     // to a 16-byte boundary, total 672 bytes, mirroring C's
     // `_pad_after_iTimeHi[3]`. Same caveat: do NOT add `float _pad[3]`.

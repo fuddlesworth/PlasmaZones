@@ -206,6 +206,13 @@ inline QString slotKey(int slot)
 }
 
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
+/// Cross-runtime element-name lookup constant, symmetric with
+/// `kCustomParamsArray` above: used by the kwin-effect's
+/// `glGetUniformLocation("customColors[N]")` calls (after the source
+/// rewriter converts the std140 UBO array into default-block uniforms
+/// `customColors[0]..customColors[15]`) and as a documentation anchor
+/// for shader authors.
+///
 /// Carries straight (non-premultiplied) RGBA: the encoder writes
 /// `QColor::redF/greenF/blueF/alphaF` verbatim, so a 50%-alpha red
 /// arrives at the shader as `(1.0, 0.0, 0.0, 0.5)` not
