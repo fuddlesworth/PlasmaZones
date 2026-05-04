@@ -78,6 +78,23 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// Preview image path (relative to the effect dir). For settings UI.
     QString previewPath;
 
+    // ── Multipass / advanced features (opt-in, matching overlay ShaderInfo) ──
+
+    /// Buffer-pass shader paths (relative to effect dir). When non-empty
+    /// and `isMultipass` is true, the daemon's ShaderEffect runs these as
+    /// intermediate passes before the main fragment shader.
+    QStringList bufferShaderPaths;
+
+    bool isMultipass = false;
+    bool useWallpaper = false;
+    bool bufferFeedback = false;
+    qreal bufferScale = 1.0;
+    QString bufferWrap;
+    QStringList bufferWraps;
+    QString bufferFilter;
+    QStringList bufferFilters;
+    bool useDepthBuffer = false;
+
     /// How much to enlarge the shader effect's bounding box beyond the
     /// anchor's logical size, expressed as a fraction of the anchor's
     /// width/height. The shader effect is positioned so the anchor sits

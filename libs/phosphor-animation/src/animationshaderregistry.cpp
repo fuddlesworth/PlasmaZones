@@ -6,7 +6,9 @@
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
+#include <QColor>
 #include <QDir>
+#include <QFile>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QStringList>
@@ -69,28 +71,20 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         e.previewPath = dir.filePath(e.previewPath);
     }
 
-    // Diagnostic: animation shaders cannot currently consume `color`
-    // typed parameters — `translateAnimationParams` skips them silently
-    // because no built-in pack declares one and the
-    // customColor<N>-aware encoder branch hasn't been written. Surface
-    // the limitation HERE (load-time, once per pack) so an author who
-    // tries to declare a color param sees a journal warning naming the
-    // pack and parameter, rather than silently observing default values
-    // in the shader.
-    //
-    // Use noquote() so QString fields render as bare text — without it,
-    // QDebug's default operator<<(QString) wraps each field in quotes
-    // (`'"id"'` instead of `'id'`), which makes the journal message
-    // harder to read and breaks downstream tooling that pattern-matches
-    // on the field text.
-    for (const auto& param : e.parameters) {
-        if (param.type == QLatin1String("color")) {
-            qCWarning(lcRegistry).nospace().noquote()
-                << "Animation effect '" << e.id << "' (in " << effectDir << ") declares color parameter '" << param.id
-                << "' — color-typed animation params are not yet supported and "
-                   "will be ignored at transition time. Move the effect to "
-                   "data/shaders/ (overlay path) or convert the parameter to "
-                   "float/int/bool with manual color encoding.";
+    // Resolve buffer shader paths (relative to effect dir, like fragment/vertex).
+    if (e.isMultipass) {
+        QStringList resolved;
+        for (const QString& bufPath : e.bufferShaderPaths) {
+            const QString abs = dir.filePath(bufPath);
+            if (QFile::exists(abs)) {
+                resolved.append(abs);
+            } else {
+                qCWarning(lcRegistry).noquote() << "Animation effect" << e.id << "missing buffer shader:" << abs;
+            }
+        }
+        e.bufferShaderPaths = resolved;
+        if (resolved.isEmpty()) {
+            e.isMultipass = false;
         }
     }
 
@@ -109,6 +103,11 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
     }
     if (!e.vertexShaderPath.isEmpty()) {
         paths.append(e.vertexShaderPath);
+    }
+    for (const QString& bufPath : e.bufferShaderPaths) {
+        if (!bufPath.isEmpty()) {
+            paths.append(bufPath);
+        }
     }
     return paths;
 }
@@ -198,19 +197,29 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         return result;
     }
 
-    int floatSlot = 0; // sub-slot index in [0, 32) — fills customParams1_x..customParams8_w
+    int floatSlot = 0;
+    int colorSlot = 0;
     for (const auto& param : effect.parameters) {
         const QString& type = param.type;
-        // Color parameters would consume customColor<N> rather than a
-        // float sub-slot; not currently used by any built-in animation
-        // shader. When the first one lands, extend this branch to map
-        // color → "customColor<N>" with its own counter, using
-        // `PhosphorShaders::CustomColors::colorKey` as the canonical
-        // formatter. Skipped silently here at translation time —
-        // surfacing this on every transition begin would just spam the
-        // log; the diagnostic lives at load time in `parseEffect`,
-        // which fires a single qCWarning per pack at registry scan.
         if (type == QLatin1String("color")) {
+            if (colorSlot >= PhosphorShaders::CustomColors::kColorCount) {
+                qCWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                      << PhosphorShaders::CustomColors::kColorCount
+                                      << "-slot customColors budget; dropping color param" << param.id;
+                continue;
+            }
+            const QString uniformKey = PhosphorShaders::CustomColors::colorKey(colorSlot);
+            QVariant value;
+            const auto it = friendlyParams.constFind(param.id);
+            if (it != friendlyParams.constEnd()) {
+                value = *it;
+            } else if (param.defaultValue.isValid() && !param.defaultValue.isNull()) {
+                value = param.defaultValue;
+            } else {
+                value = QColor(Qt::transparent);
+            }
+            result[uniformKey] = value;
+            ++colorSlot;
             continue;
         }
 
@@ -321,11 +330,12 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
 
         // Drop fields that are not part of the animation contract on the
         // classic-GL path. KWin manages its own scene-graph transform /
-        // opacity; `_appField0` / `_appField1` are pure padding that
-        // exists only to keep the std140 alignment in sync with the
-        // daemon's BaseUniforms.
+        // opacity; padding fields and iFlipBufferY (daemon-only, always 1)
+        // are stripped. All other fields emit as default-block uniforms.
         if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
-            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))) {
+            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))
+            || decl.contains(QLatin1String("_pad0")) || decl.contains(QLatin1String("_pad1"))
+            || decl.contains(QLatin1String("iFlipBufferY"))) {
             continue;
         }
 

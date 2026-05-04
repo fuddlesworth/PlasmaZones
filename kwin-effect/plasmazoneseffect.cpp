@@ -4304,8 +4304,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                 const int loc = cached->customParamsLoc[slot];
                 if (loc < 0)
-                    continue; // shader didn't declare / reference this slot
+                    continue;
                 shader->setUniform(loc, transition.customParamsValues[slot]);
+            }
+            for (int slot = 0; slot < PhosphorShaders::CustomColors::kColorCount; ++slot) {
+                const int loc = cached->customColorsLoc[slot];
+                if (loc < 0)
+                    continue;
+                shader->setUniform(loc, transition.customColorsValues[slot]);
             }
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
@@ -4336,6 +4342,11 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                 break;
             }
         }
+    }
+
+    if (eff.isMultipass) {
+        qCInfo(lcEffect) << "Animation effect" << effectId
+                         << "is multipass — compositor path runs single-pass only (buffer passes skipped)";
     }
 
     auto cacheIt = m_shaderCache.find(effectId);
@@ -4422,6 +4433,10 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                 + '[' + QByteArray::number(slot) + ']';
             cached.customParamsLoc[slot] = shader->uniformLocation(name.constData());
         }
+        for (int slot = 0; slot < PhosphorShaders::CustomColors::kColorCount; ++slot) {
+            const QByteArray name = QByteArray("customColors[") + QByteArray::number(slot) + ']';
+            cached.customColorsLoc[slot] = shader->uniformLocation(name.constData());
+        }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
     }
@@ -4468,6 +4483,14 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             return ok ? v : 0.0f;
         };
         transition.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+    }
+    for (int slot = 0; slot < PhosphorShaders::CustomColors::kColorCount; ++slot) {
+        const QString key = PhosphorShaders::CustomColors::colorKey(slot);
+        const auto it = translated.constFind(key);
+        if (it != translated.constEnd()) {
+            const QColor c = it->value<QColor>();
+            transition.customColorsValues[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+        }
     }
     // Bump generation for every install so the timer-driven teardown in
     // tryBeginShaderForEvent can detect supersession (a fresh transition

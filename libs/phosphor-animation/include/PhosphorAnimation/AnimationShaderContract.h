@@ -156,9 +156,22 @@ inline QString slotKey(int slot)
     return PhosphorShaders::CustomParams::slotKey(slot);
 }
 
+/// `vec4 customColors[N]` — per-effect declared color parameter slots.
+inline constexpr const char* kCustomColorsArray = "customColors";
+inline constexpr int kMaxCustomColors = PhosphorShaders::CustomColors::kColorCount;
+
+/// @par Multipass limitation (compositor path)
+/// Animation shaders may declare multipass buffer shaders, wallpaper,
+/// and depth in their metadata. The daemon's SurfaceAnimator wires
+/// these through to PhosphorRendering::ShaderEffect which has full
+/// multipass support. However, the kwin-effect compositor path uses
+/// KWin::GLShader via OffscreenEffect, which is single-pass with no
+/// auxiliary FBOs. Multipass animation shaders degrade to single-pass
+/// on the compositor with a diagnostic log.
+
 /// @par Std140 offset contract
 /// The canonical `data/animations/shared/animation_uniforms.glsl` UBO
-/// declares its fields at the same byte offsets as the prefix of
+/// declares its fields at the same byte offsets as
 /// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
 /// struct). That alignment is what lets a single `effect.frag` source
 /// run on both runtimes without per-runtime overrides.

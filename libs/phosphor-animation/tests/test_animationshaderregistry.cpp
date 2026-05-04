@@ -600,60 +600,27 @@ private Q_SLOTS:
     // ── parseEffect color-param diagnostic ───────────────────────────
     //
     // Animation shaders cannot consume `color`-typed parameters today —
-    // `translateAnimationParams` skips them silently because no built-in
-    // pack declares one and the customColor<N>-aware encoder hasn't been
-    // written. The runtime drop is the right behaviour, but a silent
-    // drop with no diagnostic leaves authors observing default values
-    // with no clue why. Pin the load-time warning that surfaces the
-    // limitation once per pack at registration time.
-
-    void testColorParamEmitsLoadTimeWarning()
+    void testColorParamTranslation()
     {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-color");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo tint;
+        tint.id = QStringLiteral("tint");
+        tint.type = QStringLiteral("color");
+        tint.defaultValue = QColor(Qt::red);
+        AnimationShaderEffect::ParameterInfo speed;
+        speed.id = QStringLiteral("speed");
+        speed.type = QStringLiteral("float");
+        speed.defaultValue = 1.5;
+        eff.parameters = {tint, speed};
 
-        const QString effectDir = tmp.path() + QStringLiteral("/with-color");
-        QDir().mkpath(effectDir);
-
-        // Write a metadata.json that declares a color parameter. Mirrors
-        // a hypothetical user-authored animation shader that inadvertently
-        // tries to use the overlay-shader color-uniform contract.
-        QJsonObject root;
-        root.insert(QLatin1String("id"), QStringLiteral("with-color"));
-        root.insert(QLatin1String("name"), QStringLiteral("with-color"));
-        root.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
-        root.insert(QLatin1String("category"), QStringLiteral("Test"));
-        QJsonArray params;
-        QJsonObject p;
-        p.insert(QLatin1String("id"), QStringLiteral("tint"));
-        p.insert(QLatin1String("type"), QStringLiteral("color"));
-        params.append(p);
-        root.insert(QLatin1String("parameters"), params);
-
-        QFile mf(effectDir + QStringLiteral("/metadata.json"));
-        QVERIFY(mf.open(QIODevice::WriteOnly));
-        mf.write(QJsonDocument(root).toJson());
-        mf.close();
-        QFile frag(effectDir + QStringLiteral("/effect.frag"));
-        QVERIFY(frag.open(QIODevice::WriteOnly));
-        frag.write("void main() {}");
-        frag.close();
-
-        // QTest::ignoreMessage matches the leading text of the qWarning
-        // — the warning is intentionally verbose with effect id, dir
-        // path, and parameter id; partial-match suffices to pin the
-        // diagnostic exists and names the offending pack.
-        QTest::ignoreMessage(
-            QtWarningMsg,
-            QRegularExpression(QStringLiteral(".*Animation effect 'with-color'.*declares color parameter 'tint'.*")));
-
-        AnimationShaderRegistry registry;
-        registry.addSearchPath(tmp.path(), LiveReload::Off);
-
-        // The pack still registers — the warning is informational, not a
-        // rejection. translateAnimationParams will skip the color param
-        // at transition time per the documented runtime semantics.
-        QVERIFY(registry.hasEffect(QStringLiteral("with-color")));
+        const QVariantMap result = AnimationShaderRegistry::translateAnimationParams(eff, {});
+        QVERIFY(result.contains(QStringLiteral("customColor1")));
+        QVERIFY(result.contains(QStringLiteral("customParams1_x")));
+        const QColor c = result.value(QStringLiteral("customColor1")).value<QColor>();
+        QCOMPARE(c, QColor(Qt::red));
+        QCOMPARE(result.value(QStringLiteral("customParams1_x")).toDouble(), 1.5);
     }
 };
 

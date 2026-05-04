@@ -11,6 +11,7 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorRendering/ShaderEffect.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
@@ -331,6 +332,30 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
     if (!effect.vertexShaderPath.isEmpty()) {
         shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    }
+    if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
+        shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);
+        shaderItem->setBufferFeedback(effect.bufferFeedback);
+        shaderItem->setBufferScale(effect.bufferScale);
+        if (!effect.bufferWrap.isEmpty()) {
+            shaderItem->setBufferWrap(effect.bufferWrap);
+        }
+        if (!effect.bufferWraps.isEmpty()) {
+            shaderItem->setBufferWraps(effect.bufferWraps);
+        }
+        if (!effect.bufferFilter.isEmpty()) {
+            shaderItem->setBufferFilter(effect.bufferFilter);
+        }
+        if (!effect.bufferFilters.isEmpty()) {
+            shaderItem->setBufferFilters(effect.bufferFilters);
+        }
+    }
+    if (effect.useWallpaper) {
+        shaderItem->setUseWallpaper(true);
+        shaderItem->setWallpaperTexture(PhosphorShaders::ShaderRegistry::loadWallpaperImage());
+    }
+    if (effect.useDepthBuffer) {
+        shaderItem->setUseDepthBuffer(true);
     }
     // Initialise iTime to the leg's start value BEFORE the QQuickShaderEffect
     // can paint a frame. Show legs run iTime 0→1 (start at 0); hide legs run

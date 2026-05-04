@@ -515,16 +515,10 @@ private:
         /// `AnimationShaderRegistry::translateAnimationParams` when the
         /// transition starts; paintWindow just pushes vec4s.
         ///
-        /// Overlay-only uniforms (`iMouse`, `iDate`, `iTimeDelta`,
-        /// `iFrame`, `customColors[]`, audio/wallpaper/multipass) are
-        /// intentionally NOT populated on this path — they belong to
-        /// overlay shaders, not animation transitions.
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
-        /// Cached locations for `customParams[0]` … `customParams[7]`.
-        /// -1 when the shader didn't declare that slot (e.g. an effect
-        /// with two parameters references only `customParams[0]`).
         std::array<int, 8> customParamsLoc = {-1, -1, -1, -1, -1, -1, -1, -1};
+        std::array<int, 16> customColorsLoc = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     };
     struct ShaderTransition
     {
@@ -538,6 +532,7 @@ private:
         /// Slots with no declared parameters stay at (0, 0, 0, 0).
         std::array<QVector4D, 8> customParamsValues = {QVector4D(), QVector4D(), QVector4D(), QVector4D(),
                                                        QVector4D(), QVector4D(), QVector4D(), QVector4D()};
+        std::array<QVector4D, 16> customColorsValues = {};
         /// Two-mode progress source.
         /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
         ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
