@@ -4485,7 +4485,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         transition.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
     }
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
-        const QString key = PhosphorShaders::CustomColors::colorKey(slot);
+        const QString key = PhosphorAnimationShaders::AnimationShaderContract::colorKey(slot);
         const auto it = translated.constFind(key);
         if (it != translated.constEnd()) {
             const QColor c = it->value<QColor>();

@@ -168,6 +168,18 @@ inline QString slotKey(int slot)
 inline constexpr const char* kCustomColorsArray = "customColors";
 inline constexpr int kMaxCustomColors = PhosphorShaders::CustomColors::kColorCount;
 
+/// Format a `customColor` slot key — thin forwarder onto
+/// `PhosphorShaders::CustomColors::colorKey`. Sibling of `slotKey(int)`
+/// for the customParams region. Kept here for the same reason: animation
+/// call sites stay inside this contract namespace instead of leaking the
+/// underlying phosphor-shaders header. See
+/// `<PhosphorShaders/CustomParamsKey.h>` for the format and the
+/// out-of-range graceful-degradation contract.
+inline QString colorKey(int slot)
+{
+    return PhosphorShaders::CustomColors::colorKey(slot);
+}
+
 /// @par Multipass limitation (compositor path)
 /// Animation shaders may declare multipass buffer shaders, wallpaper,
 /// and depth in their metadata. The daemon's SurfaceAnimator wires

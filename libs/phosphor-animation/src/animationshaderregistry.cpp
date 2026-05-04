@@ -208,7 +208,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                                       << "-slot customColors budget; dropping color param" << param.id;
                 continue;
             }
-            const QString uniformKey = PhosphorShaders::CustomColors::colorKey(colorSlot);
+            const QString uniformKey = AnimationShaderContract::colorKey(colorSlot);
             // Coerce the source variant to a QColor at the registry
             // boundary so the consumer (kwin-effect's setUniform site,
             // ShaderEffect::setShaderParams) never has to defend against
