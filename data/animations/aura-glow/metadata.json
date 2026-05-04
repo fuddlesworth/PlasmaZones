@@ -4,7 +4,7 @@
     "description": "Window crops into a colour-shifting glowing orb that fades — square-to-circle gradient with a hue-cycling rim",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Glow",
+    "category": "Fade",
     "fragmentShader": "effect.frag",
     "parameters": [
         {

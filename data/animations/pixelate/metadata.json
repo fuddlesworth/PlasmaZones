@@ -4,7 +4,7 @@
     "description": "Progressive pixelation transition that dissolves into blocks",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Geometric",
+    "category": "Pixelation",
     "fragmentShader": "effect.frag",
     "parameters": [
         {

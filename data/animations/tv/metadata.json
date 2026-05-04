@@ -4,7 +4,7 @@
     "description": "Old-CRT power-off: window collapses vertically to a horizontal line, then horizontally to a point, then flashes",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Geometric",
+    "category": "Slide",
     "fragmentShader": "effect.frag",
     "parameters": [
         {

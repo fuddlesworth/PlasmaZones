@@ -4,7 +4,7 @@
     "description": "Directional slide transition with configurable direction",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Geometric",
+    "category": "Slide",
     "fragmentShader": "effect.frag",
     "parameters": [
         {

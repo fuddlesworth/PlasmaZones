@@ -4,7 +4,7 @@
     "description": "Smooth warping morph transition using displacement fields",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Geometric",
+    "category": "Distortion",
     "fragmentShader": "effect.frag",
     "boundsPadding": 0.5,
     "parameters": [
