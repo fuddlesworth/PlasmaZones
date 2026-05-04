@@ -121,8 +121,8 @@ bool OverlayService::anyScreenUsesShader() const
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    for (const QString& screenId : m_screenStates.keys()) {
-        if (useShaderForScreen(screenId)) {
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        if (useShaderForScreen(it.key())) {
             return true;
         }
     }

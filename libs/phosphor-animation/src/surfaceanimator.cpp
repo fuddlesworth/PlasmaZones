@@ -109,6 +109,43 @@ inline qreal clampPaddingToParent(QQuickItem* anchor, qreal requestedPad)
     }
     return qMin(pad, kMaxBoundsPaddingFraction);
 }
+
+/// Apply the shader-item geometry derived from @p anchor + @p requestedPad.
+/// Centralises the math behind the per-leg syncGeometry lambda so the
+/// reuse path can re-fire it explicitly after a metadata hot-reload that
+/// changes `boundsPadding` between legs — without it, the persistent
+/// lambda only re-runs on the next anchor geometry signal, which for a
+/// static popup (snap-assist, OSD) may never come, leaving the shader
+/// rendered with the previous leg's pad until the anchor next moves or
+/// resizes. Idempotent on identity (every setter no-ops when the value
+/// is unchanged), so the common no-hot-reload reuse path costs nothing.
+inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
+                                  QQuickShaderEffectSource* shaderSource, qreal requestedPad)
+{
+    if (!anchor || !shaderItem) {
+        return;
+    }
+    const qreal w = anchor->width();
+    const qreal h = anchor->height();
+    if (w <= 0.0 || h <= 0.0) {
+        return;
+    }
+    const qreal pad = clampPaddingToParent(anchor, requestedPad);
+    const qreal padW = w * pad;
+    const qreal padH = h * pad;
+    shaderItem->setWidth(w + 2.0 * padW);
+    shaderItem->setHeight(h + 2.0 * padH);
+    shaderItem->setX(anchor->x() - padW);
+    shaderItem->setY(anchor->y() - padH);
+    shaderItem->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
+    QVector4D structural = shaderItem->customParamAt(7);
+    structural.setX(static_cast<float>(pad));
+    shaderItem->setCustomParamAt(7, structural);
+    if (shaderSource) {
+        shaderSource->setWidth(w);
+        shaderSource->setHeight(h);
+    }
+}
 } // namespace
 
 namespace internal {
@@ -590,29 +627,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QPointer<PhosphorRendering::ShaderEffect> shaderItemPtr{shaderItem};
     auto syncGeometry = [shaderItemPtr, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource),
                          requestedPadPtr, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
-        if (!anchorPtr || !shaderItemPtr) {
-            return;
-        }
-        const qreal w = anchorPtr->width();
-        const qreal h = anchorPtr->height();
-        if (w <= 0.0 || h <= 0.0) {
-            return;
-        }
-        const qreal pad = clampPaddingToParent(anchorPtr.data(), *requestedPadPtr);
-        const qreal padW = w * pad;
-        const qreal padH = h * pad;
-        shaderItemPtr->setWidth(w + 2.0 * padW);
-        shaderItemPtr->setHeight(h + 2.0 * padH);
-        shaderItemPtr->setX(anchorPtr->x() - padW);
-        shaderItemPtr->setY(anchorPtr->y() - padH);
-        shaderItemPtr->setIResolution(QSizeF(w + 2.0 * padW, h + 2.0 * padH));
-        QVector4D structural = shaderItemPtr->customParamAt(7);
-        structural.setX(static_cast<float>(pad));
-        shaderItemPtr->setCustomParamAt(7, structural);
-        if (shaderSourcePtr) {
-            shaderSourcePtr->setWidth(w);
-            shaderSourcePtr->setHeight(h);
-        }
+        syncShaderGeometryNow(anchorPtr.data(), shaderItemPtr.data(), shaderSourcePtr.data(), *requestedPadPtr);
     };
     // Connect to all four geometry signals — anchor x/y can shift mid-leg
     // when sibling visibility flips trigger parent layout reflow (we hide
@@ -1272,6 +1287,17 @@ public:
                     // unchanged), so the common no-hot-reload case costs
                     // only a wallpaper-cache lookup.
                     applyEffectStaticConfig(reusedShaderItem.data(), resolvedShaderEff, animIncludePaths);
+                    // Re-fire the geometry sync so a boundsPadding
+                    // hot-reload between legs (refreshed into the
+                    // shared cell at the reuse-claim site above) takes
+                    // effect immediately on the new leg's first frame.
+                    // The persistent syncGeometry lambda only runs on
+                    // anchor geometry signals; for static popups
+                    // (snap-assist, OSD) those may never fire while the
+                    // pad is wrong. Manually invoking the same logic
+                    // here closes that gap.
+                    syncShaderGeometryNow(reusedShaderAnchor.data(), reusedShaderItem.data(), reusedShaderSource.data(),
+                                          reusedRequestedPadPtr ? *reusedRequestedPadPtr : qreal(0.0));
                     // Reset iTime to the new leg's start so the first
                     // painted frame after the shaderTime AV starts
                     // matches the AnimatedValue's intended `from` —
@@ -1620,21 +1646,24 @@ public:
         }
     }
 
-    /// Seed the dynamic uniforms (audio spectrum) onto a freshly
+    /// Seed the dynamic uniforms (audio spectrum, iMouse) onto a freshly
     /// attached or reused shader item BEFORE its first paint, so the
-    /// initial frame doesn't render silent when the consumer already
-    /// has audio flowing. Resets the per-leg `iFrame` counter to 0 —
-    /// a reused shader item starts a new leg's frame counter from
-    /// scratch even though the underlying QQuickShaderEffect is the
-    /// same instance.
+    /// initial frame doesn't render silent or with stale cursor data
+    /// when the consumer already has audio flowing or the shader is
+    /// being reused after a parked idle phase. Resets the per-leg
+    /// `iFrame` counter to 0 — a reused shader item starts a new leg's
+    /// frame counter from scratch even though the underlying
+    /// QQuickShaderEffect is the same instance.
     ///
-    /// `iMouse` seeding is unnecessary: the per-shader-item
-    /// `QQuickHoverHandler` (installed in `attachShaderToAnchor`)
-    /// fires `pointChanged` as soon as the cursor enters the shader's
-    /// bounding box, so the first frame either renders at the default
-    /// `m_iMouse` ((0,0)) or at the live cursor position depending on
-    /// whether the user is hovering — same first-frame contract as the
-    /// overlay path's `MouseArea` binding.
+    /// `iMouse` is seeded by querying the persistent
+    /// `QQuickHoverHandler` installed by `attachShaderToAnchor`. On
+    /// fresh attach the handler reports `isHovered()` false until Qt
+    /// delivers the first hover event, so the seed lands `(-1, -1)` —
+    /// matching the GLSL contract's off-region sentinel. On reuse the
+    /// handler reflects the live cursor state at wake time, which
+    /// prevents a stale value from the previous leg (set while the
+    /// item was parked invisible) from leaking into the new leg's
+    /// first frame.
     void seedShaderUniformsAtAttach(Track& track)
     {
         track.shaderFrameCount = 0;
@@ -1643,6 +1672,19 @@ public:
         }
         if (!m_audioSpectrum.isEmpty()) {
             track.shaderItem->setAudioSpectrum(m_audioSpectrum);
+        }
+        // FindDirectChildrenOnly: the hover handler is parented
+        // directly to the shaderItem in attachShaderToAnchor; a
+        // recursive search could pick up an unrelated handler from a
+        // QQuickItem subtree (e.g. a future scene-graph internal that
+        // installs its own handler) and seed iMouse from the wrong
+        // source.
+        QQuickHoverHandler* hover =
+            track.shaderItem->findChild<QQuickHoverHandler*>(QString{}, Qt::FindDirectChildrenOnly);
+        if (hover && hover->isHovered()) {
+            track.shaderItem->setIMouse(hover->point().position());
+        } else {
+            track.shaderItem->setIMouse(QPointF(-1.0, -1.0));
         }
     }
 

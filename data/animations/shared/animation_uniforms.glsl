@@ -37,10 +37,10 @@
 // Layout-drift guard: the offsets below MUST stay aligned with
 // `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
-// for `iTime`, `iResolution`, `customParams`, `customColors`; if any of
-// those asserts fails after a `BaseUniforms` change, this header has to
-// move in lockstep. The bake test in `tests/unit/ui/test_animation_shader_bake.cpp`
-// surfaces GLSL-side drift by running `qsb` over every built-in shader.
+// for every field declared below — if any assert fails after a
+// `BaseUniforms` change, this header has to move in lockstep. The bake
+// test in `tests/unit/ui/test_animation_shader_bake.cpp` surfaces
+// GLSL-side drift by running `qsb` over every built-in shader.
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
@@ -77,10 +77,12 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     vec4 iMouse;                 // offset 96  — cursor position in shader-local pixels
                                  //              (daemon: QQuickHoverHandler-driven,
                                  //              .xy = position, (-1,-1) when off-region;
-                                 //              kwin: (0,0,0,0))
+                                 //              kwin: emitted as default-block uniform
+                                 //              but never bound by paintWindow → reads
+                                 //              GLSL-default zero)
     vec4 iDate;                  // offset 112 — year, month, day, seconds-since-midnight
                                  //              (daemon: ShaderNodeRhi sync at 1 Hz;
-                                 //              kwin: (0,0,0,0))
+                                 //              kwin: emitted but never bound → zero)
     vec4 customParams[8];        // offset 128 (128 bytes) — per-effect float/int/bool parameter slots
     vec4 customColors[16];       // offset 256 (256 bytes) — per-effect color parameter slots
     vec4 iChannelResolution[4];  // offset 512 (64 bytes)  — buffer texture sizes (multipass)

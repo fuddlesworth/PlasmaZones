@@ -257,8 +257,11 @@ public:
     ///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync,
     ///     throttled to 1 Hz refresh.
     ///   • `iTimeHi` — auto-computed wrap counterpart of `iTime` by
-    ///     `ShaderNodeRhi`'s std140 split (always 0 for animation
-    ///     shaders since `iTime` stays in [0,1]).
+    ///     `ShaderNodeRhi`'s std140 split. Always 0 on this path since
+    ///     `iTime` stays in [0,1] and never wraps. Animation shader
+    ///     authors should NOT read `iTimeHi`; the field exists only to
+    ///     keep the std140 layout aligned with the overlay UBO so a
+    ///     single `effect.frag` source compiles against either runtime.
     ///
     /// The single uniform that NEEDS consumer wiring is
     /// `setAudioSpectrum` below — there is no centralised QML producer

@@ -4504,15 +4504,17 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             continue;
         }
         // Registry-side `translateAnimationParams` coerces every color
-        // to a valid QColor (falls back to Qt::transparent on
-        // unparseable input), so the value here SHOULD always be valid.
-        // Guard explicitly anyway: a future caller that bypasses the
-        // registry encoder (e.g. injects a raw QString into a profile's
-        // effectiveParameters() pass-through) would otherwise produce
-        // an invalid QColor whose redF/greenF/blueF/alphaF are
-        // undefined per Qt docs. Falling through to the default-init
-        // (0,0,0,0) keeps the slot at transparent black, matching the
-        // registry's documented Qt::transparent fallback.
+        // to a valid QColor — unparseable inputs fall through to the
+        // declared default and finally to `Qt::transparent`, which
+        // `isValid()` reports as true. So under the documented contract
+        // this guard never fires. It exists purely as defence-in-depth
+        // against a future caller that bypasses the registry encoder
+        // (e.g. injects a raw QString into a profile's
+        // effectiveParameters() pass-through) — `redF/greenF/blueF/alphaF`
+        // on an invalid QColor are undefined per Qt docs. Falling through
+        // to the default-init (0,0,0,0) keeps the slot at transparent
+        // black, matching the registry's documented Qt::transparent
+        // fallback.
         const QColor c = it->value<QColor>();
         if (!c.isValid()) {
             continue;

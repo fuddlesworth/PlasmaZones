@@ -793,6 +793,143 @@ private Q_SLOTS:
         const QVariantMap rNoSrc = AnimationShaderRegistry::translateAnimationParams(noDefault, {});
         QCOMPARE(rNoSrc.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::transparent));
     }
+
+    /// Lower-digit hex forms accepted by `QColor::QColor(QString)` survive
+    /// the friendlyParams → customColor coercion. The encoder routes any
+    /// QString-shaped value through Qt's parser, so 3-digit, 12-bit, and
+    /// 16-bit forms all work alongside the canonical 6/8-digit forms
+    /// covered above. A future encoder tightening that forced a strict
+    /// 6-digit-only check would silently break user configs containing
+    /// any of these — pin every shape Qt actually accepts here. Note
+    /// Qt does NOT accept 4-digit `#argb` or `#rgba` forms — only the
+    /// shapes asserted below.
+    void testColorParamCoercesShortHex()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-color-short-hex");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo tint;
+        tint.id = QStringLiteral("tint");
+        tint.type = QStringLiteral("color");
+        eff.parameters = {tint};
+
+        // 3-digit `#rgb` expands to `#rrggbb` per Qt's parser.
+        {
+            const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("#f80")}});
+            const QColor c = r.value(QStringLiteral("customColor1")).value<QColor>();
+            QVERIFY(c.isValid());
+            QCOMPARE(c, QColor(0xff, 0x88, 0x00));
+        }
+        // 12-bit `#rrrgggbbb` accepted by Qt — extra precision is
+        // truncated to 8 bits per channel. Just assert validity here;
+        // Qt's exact truncation rule isn't part of this contract.
+        {
+            const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("#fff888000")}});
+            const QColor c = r.value(QStringLiteral("customColor1")).value<QColor>();
+            QVERIFY(c.isValid());
+        }
+        // 16-bit `#rrrrggggbbbb` accepted by Qt.
+        {
+            const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("#ffff88880000")}});
+            const QColor c = r.value(QStringLiteral("customColor1")).value<QColor>();
+            QVERIFY(c.isValid());
+        }
+        // The `"transparent"` keyword resolves to (0,0,0,0).
+        {
+            const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("transparent")}});
+            const QColor c = r.value(QStringLiteral("customColor1")).value<QColor>();
+            QVERIFY(c.isValid());
+            QCOMPARE(c, QColor(Qt::transparent));
+        }
+        // 4-digit forms are NOT supported — pin negative coverage so a
+        // future regression that "added" 4-digit support without going
+        // through the registry's strict default fallback surfaces here.
+        // (Without a declared default, an unparseable string falls
+        // through to Qt::transparent — the documented sentinel.)
+        AnimationShaderEffect noDefault;
+        noDefault.id = QStringLiteral("test-color-4digit-rejected");
+        noDefault.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo bare;
+        bare.id = QStringLiteral("tint");
+        bare.type = QStringLiteral("color");
+        noDefault.parameters = {bare};
+        const QVariantMap rReject = AnimationShaderRegistry::translateAnimationParams(
+            noDefault, {{QStringLiteral("tint"), QStringLiteral("#8f80")}});
+        QCOMPARE(rReject.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::transparent));
+    }
+
+    /// Parameter declarations beyond the customParams flat-slot budget
+    /// (`kMaxParameterSlots` = 32) are silently dropped at the
+    /// `translateAnimationParams` boundary with a `qCWarning`. Without
+    /// this test the encoder could regress to wrap-around indexing into
+    /// slot 0 (corrupting the first parameter) or to writing a phantom
+    /// `customParams9_x` key that consumers never look at. Pin the
+    /// budget cap by declaring 33 float params and asserting only 32
+    /// land in the result.
+    void testTranslateAnimationParamsFloatBudgetOverflow()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-overflow-float");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        constexpr int kBudget = PhosphorAnimationShaders::AnimationShaderContract::kMaxParameterSlots;
+        for (int i = 0; i < kBudget + 1; ++i) {
+            AnimationShaderEffect::ParameterInfo p;
+            p.id = QStringLiteral("p%1").arg(i);
+            p.type = QStringLiteral("float");
+            p.defaultValue = double(i);
+            eff.parameters.append(p);
+        }
+
+        // Expect ONE budget-overflow qCWarning for the 33rd parameter.
+        // Using QTest::ignoreMessage so it's scoped to this test only —
+        // unlike QLoggingCategory::setFilterRules which mutates global
+        // state and would persist if a downstream QVERIFY failed before
+        // the restore call.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("translateAnimationParams.*budget")));
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
+
+        // Last in-budget slot (`customParams8_w` per the 1-based +
+        // x/y/z/w encoder) populated.
+        const QString lastSlot = PhosphorAnimationShaders::AnimationShaderContract::slotKey(kBudget - 1);
+        QVERIFY(r.contains(lastSlot));
+        // The 33rd param must NOT have produced any key — neither a
+        // wrap-around nor a phantom customParams9_x.
+        QVERIFY(!r.contains(QStringLiteral("customParams9_x")));
+        // Total entries should not exceed the budget.
+        QVERIFY(r.size() <= kBudget);
+    }
+
+    /// Color declarations beyond the customColors slot budget
+    /// (`kMaxCustomColors` = 16) are silently dropped with a `qCWarning`.
+    /// Symmetric coverage to the float-budget test above.
+    void testTranslateAnimationParamsColorBudgetOverflow()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-overflow-color");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        constexpr int kBudget = PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors;
+        for (int i = 0; i < kBudget + 1; ++i) {
+            AnimationShaderEffect::ParameterInfo p;
+            p.id = QStringLiteral("c%1").arg(i);
+            p.type = QStringLiteral("color");
+            p.defaultValue = QColor(Qt::red);
+            eff.parameters.append(p);
+        }
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("translateAnimationParams.*budget")));
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
+
+        // Last in-budget slot is `customColor16` (1-based).
+        QVERIFY(r.contains(QStringLiteral("customColor%1").arg(kBudget)));
+        // The 17th color must NOT have produced any key — neither a
+        // wrap-around nor a phantom customColor17.
+        QVERIFY(!r.contains(QStringLiteral("customColor%1").arg(kBudget + 1)));
+        QVERIFY(r.size() <= kBudget);
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderRegistry)

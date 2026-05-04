@@ -107,6 +107,54 @@ private Q_SLOTS:
         b.id = QStringLiteral("morph");
         QVERIFY(a != b);
     }
+
+    /// Multipass / wallpaper / depth / buffer fields survive a full
+    /// `toJson()` → `fromJson()` round-trip. The PR that promoted the
+    /// animation UBO to the full BaseUniforms layout added every field
+    /// listed below; without coverage here, a regression that dropped
+    /// (say) `bufferWraps` from the JSON serialisation would silently
+    /// degrade multipass animation packs to single-pass on the daemon
+    /// path with no test signal.
+    void testJsonPreservesMultipassFields()
+    {
+        AnimationShaderEffect original;
+        original.id = QStringLiteral("multipass-test");
+        original.fragmentShaderPath = QStringLiteral("effect.frag");
+        original.isMultipass = true;
+        original.bufferShaderPaths = {QStringLiteral("buffer-a.frag"), QStringLiteral("buffer-b.frag")};
+        original.useWallpaper = true;
+        original.bufferFeedback = true;
+        original.bufferScale = 0.5;
+        original.bufferWrap = QStringLiteral("repeat");
+        original.bufferWraps = {QStringLiteral("clamp"), QStringLiteral("mirror")};
+        original.bufferFilter = QStringLiteral("linear");
+        original.bufferFilters = {QStringLiteral("nearest"), QStringLiteral("linear")};
+        original.useDepthBuffer = true;
+        original.boundsPadding = 0.25;
+
+        const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
+        QCOMPARE(restored, original);
+    }
+
+    /// `bufferScale` is clamped to `[0.125, 1.0]` at parse time so a
+    /// metadata.json author can't accidentally allocate gigabyte-sized
+    /// FBOs by writing a >1.0 multiplier or render at sub-pixel scales
+    /// that produce visible aliasing. The field still round-trips
+    /// for any in-range value (covered above); pin the clamp here so a
+    /// regression that removed it surfaces directly.
+    void testFromJsonClampsBufferScale()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("bufferScale"), 5.0);
+        const AnimationShaderEffect overshoot = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(overshoot.bufferScale, qreal(1.0));
+
+        obj.insert(QLatin1String("bufferScale"), 0.001);
+        const AnimationShaderEffect undershoot = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(undershoot.bufferScale, qreal(0.125));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderEffect)

@@ -159,18 +159,30 @@ inline constexpr const char* kITime = "iTime";
 inline constexpr const char* kIResolution = "iResolution";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
-/// Element name for `glGetUniformLocation` on the compositor side
-/// (after the kwin-effect's source rewrite turns the array into
-/// default-block uniforms `customParams[0]..customParams[7]`).
+/// Cross-runtime element-name lookup constant: used by the kwin-effect's
+/// `glGetUniformLocation("customParams[N]")` calls (after the source
+/// rewriter at `AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock`
+/// turns the std140 UBO array into default-block uniforms
+/// `customParams[0]..customParams[7]`) and as a documentation anchor
+/// for shader authors. Symmetric with `kCustomColorsArray` below.
 inline constexpr const char* kCustomParamsArray = "customParams";
 
-/// Number of `vec4` slots in the `customParams` array. Forwards to the
-/// canonical constant in `<PhosphorShaders/CustomParamsKey.h>` so a
+/// Number of `vec4` slots in the `customParams` array (8). Forwards to
+/// the canonical constant in `<PhosphorShaders/CustomParamsKey.h>` so a
 /// single source of truth governs both libraries.
+///
+/// Note: this is the **vec4 slot count**, NOT the per-effect parameter
+/// budget. The per-parameter budget is `kMaxParameterSlots` (32 sub-slots
+/// across the 8 vec4s); a shader can declare up to 32 float/int/bool
+/// parameters before `translateAnimationParams` starts dropping overflow.
+/// The `kMaxCustomColors` constant below IS the per-color-param budget
+/// (16) — this naming asymmetry exists because customColors slots are
+/// whole-vec4 (one colour per slot) while customParams slots are
+/// sub-vec4 (one float per `.xyzw` component).
 inline constexpr int kMaxCustomParams = PhosphorShaders::CustomParams::kVecCount;
 
-/// Number of float sub-slots (4 per vec4 × 8 vec4s). Caps the count of
-/// declared parameters an animation shader can carry without spilling
+/// Number of float sub-slots (4 per vec4 × 8 vec4s = 32). Caps the count
+/// of declared parameters an animation shader can carry without spilling
 /// into a region the daemon's overlay extension owns. Forwards to the
 /// canonical constant in `<PhosphorShaders/CustomParamsKey.h>`.
 inline constexpr int kMaxParameterSlots = PhosphorShaders::CustomParams::kFlatSlotCount;
@@ -203,11 +215,12 @@ inline QString slotKey(int slot)
 /// Naming asymmetry: the GLSL array is plural (`customColors[N]`) but
 /// the slot-key the encoder/decoder pass through `QVariantMap` is
 /// singular and 1-based (`customColor1` … `customColor16`). The
-/// encoder strips the trailing `s` and appends the 1-based index. This
-/// matches the `customParams[N]` ↔ `customParamsN_<x|y|z|w>` pattern
-/// — both choose 1-based singular keys for QML/JSON friendliness while
-/// keeping the GLSL declaration in 0-based plural form per std140
-/// convention.
+/// encoder produces the singular form directly via
+/// `PhosphorShaders::CustomColors::colorKey(slot)` (a `"customColor"
+/// + (slot+1)` join — no string-manipulation step). This matches the
+/// `customParams[N]` ↔ `customParamsN_<x|y|z|w>` pattern — both choose
+/// 1-based singular keys for QML/JSON friendliness while keeping the
+/// GLSL declaration in 0-based plural form per std140 convention.
 inline constexpr const char* kCustomColorsArray = "customColors";
 inline constexpr int kMaxCustomColors = PhosphorShaders::CustomColors::kColorCount;
 
@@ -240,14 +253,14 @@ inline QString colorKey(int slot)
 /// run on both runtimes without per-runtime overrides.
 ///
 /// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
-/// statements in `<PhosphorShaders/BaseUniforms.h>` for `iTime`,
-/// `iResolution`, `customParams`, and `customColors`. If anyone reorders
-/// `BaseUniforms`, those asserts fail at compile time and the canonical
-/// GLSL header has to be updated to match. The GLSL side is exercised
-/// at build time by `tests/unit/ui/test_animation_shader_bake.cpp`,
-/// which runs every built-in animation shader through `qsb` (which in
-/// turn computes std140 offsets) — a layout drift would surface there
-/// as a bake failure.
+/// statements in `<PhosphorShaders/BaseUniforms.h>` for every field
+/// declared in the GLSL UBO. If anyone reorders `BaseUniforms`, those
+/// asserts fail at compile time and the canonical GLSL header has to
+/// be updated to match. The GLSL side is exercised at build time by
+/// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
+/// built-in animation shader through `qsb` (which in turn computes
+/// std140 offsets) — a layout drift would surface there as a bake
+/// failure.
 
 } // namespace AnimationShaderContract
 
