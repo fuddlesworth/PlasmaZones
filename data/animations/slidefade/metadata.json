@@ -4,7 +4,7 @@
     "description": "Combined slide and opacity fade transition with soft edge",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Geometric",
+    "category": "Slide",
     "fragmentShader": "effect.frag",
     "parameters": [
         {

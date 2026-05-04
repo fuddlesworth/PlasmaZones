@@ -40,6 +40,10 @@ qt_add_qml_module(plasmazones_shared_qml
         CategoryBadge.qml
         LayoutCard.qml
         PopupFrame.qml
+        ShaderParameterEditor.qml
+        ShaderParameterRow.qml
+        ShaderParameterSection.qml
+        ShaderPickerButton.qml
         ZonePreview.qml
         ZoneShaderRenderer.qml
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/plasmazones/common

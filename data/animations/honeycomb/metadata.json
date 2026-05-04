@@ -4,7 +4,7 @@
     "description": "Hexagonal-grid radial wipe — cells reveal/hide from the centre outward",
     "author": "arch-disciple, ported by PlasmaZones",
     "version": "1.0",
-    "category": "Geometric",
+    "category": "Tile",
     "fragmentShader": "effect.frag",
     "parameters": [
         {

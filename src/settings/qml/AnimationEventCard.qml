@@ -3,9 +3,11 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as PZCommon
 
 /**
  * @brief Reusable card for per-event animation configuration.
@@ -31,6 +33,13 @@ import org.kde.kirigami as Kirigami
  *   - collapsible: bool — header click collapses the body
  */
 Item {
+    // Apply a single shader-param edit through the standard pipeline:
+    // replace the whole map (QML reactivity needs a new identity, not an
+    // in-place mutation), update the local cache so the editor doesn't
+    // wait for the round-trip, and persist via the controller. Used by
+    // both the inline param editor and the color dialog so the two
+    // paths can't drift.
+
     id: root
 
     required property string eventPath
@@ -101,6 +110,14 @@ Item {
     // "Clear shadowing children" button. Refreshed on any
     // shaderProfileChanged signal (see Connections at line 222+).
     property int _shadowingChildrenCount: 0
+    // Bumped on every `shaderEffectsChanged` so any binding that reads
+    // a shader-registry Q_INVOKABLE (`availableShaderEffects()`,
+    // `shaderParameters()`, etc.) can become reactive to registry
+    // mutations by mentioning this revision tick. The Q_INVOKABLE return
+    // values are not observed by QML's binding engine — without a
+    // tracked dependency on this tick, the bindings would evaluate once
+    // and stick at the initial (often empty, mid-warmup) result.
+    property int _shaderRegistryRev: 0
 
     // ── Inheritance summary (italic "Current: …" line when override off) ─
     function inheritSummaryText() {
@@ -148,6 +165,32 @@ Item {
             return i18n("ω=%1 · ζ=%2", root.currentSpringOmega.toFixed(1), root.currentSpringZeta.toFixed(2));
 
         return i18n("%1 ms", root.currentDuration);
+    }
+
+    // `effectId` is explicit so callers can snapshot it at user-action
+    // time (e.g. when the color dialog opens) rather than reading
+    // `root.currentShaderEffectId` at write time. Without that snapshot,
+    // a registry refresh that fires while the dialog is open could
+    // silently retarget the write at a different effect's param map.
+    function _writeShaderParam(effectId, paramId, value) {
+        if (!effectId)
+            return ;
+
+        // Bail if the user navigated to a different effect while the
+        // dialog (color picker / etc.) was open. Calling
+        // `setShaderOverride` with the stale effect id would silently
+        // reassign the eventPath to the OLD effect, undoing the user's
+        // navigation and reviving a dropped param map. Better to drop the
+        // late accept than to clobber state the user explicitly changed.
+        if (effectId !== root.currentShaderEffectId)
+            return ;
+
+        var next = Object.assign({
+        }, root.currentShaderParams || {
+        });
+        next[paramId] = value;
+        root.currentShaderParams = next;
+        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, next);
     }
 
     function refreshShaderFromTree() {
@@ -225,6 +268,12 @@ Item {
 
         function onShaderProfileChanged(path) {
             root.refreshShaderFromTree();
+        }
+
+        function onShaderEffectsChanged() {
+            // One tick invalidates every Q_INVOKABLE-derived shader binding
+            // on this card (picker's `_effects`, param editor's `_paramSchema`).
+            root._shaderRegistryRev++;
         }
 
         target: settingsController.animationsPage
@@ -417,111 +466,97 @@ Item {
                 title: i18n("Shader effect")
                 description: i18n("Apply a shader transition to this event")
 
-                WideComboBox {
+                PZCommon.ShaderPickerButton {
                     // `availableShaderEffects()` is a Q_INVOKABLE — QML's
                     // binding engine can't observe internal state of an
-                    // opaque function call, so a plain
-                    // `readonly property var _effects: …availableShaderEffects()`
-                    // evaluates exactly once and never refreshes. That broke
-                    // the saved-shader display at startup: when the registry
-                    // is still warming up (XDG scan completes asynchronously
-                    // on some setups) the first read returns an empty list,
-                    // `_indexOf("glitch")` falls through to 0, and the combo
-                    // sticks on "None" forever even after the registry
-                    // populates and emits `shaderEffectsChanged`.
-                    // Standard binding pattern (mirrors stickyHandlingCombo
-                    // in SnappingBehaviorPage): bind currentIndex to the
-                    // source-of-truth, write back through the controller in
-                    // onActivated. The controller routes through Settings::
-                    // setShaderProfileTree → shaderProfileTreeJson Q_PROPERTY
-                    // NOTIFY → SettingsController meta-object loop catches
-                    // it for dirty tracking.
+                    // opaque function call. The card's root-level
+                    // `_shaderRegistryRev` (ticked on `shaderEffectsChanged`)
+                    // is the dependency that makes this binding reactive
+                    // (mirrors the stickyHandlingCombo pattern in
+                    // SnappingBehaviorPage).
+                    id: shaderPicker
 
-                    id: shaderCombo
-
-                    // Tying the binding to a counter that ticks on the
-                    // controller's `shaderEffectsChanged` signal turns the
-                    // function call into a reactive binding without needing
-                    // a Q_PROPERTY surface for the effects list.
-                    property int _effectsRev: 0
                     readonly property var _effects: {
-                        _effectsRev; // re-evaluate when the registry signals
+                        root._shaderRegistryRev; // re-evaluate when the registry signals
                         return settingsController.animationsPage.availableShaderEffects();
                     }
-                    readonly property var _modelLabels: {
-                        var labels = [i18n("None")];
-                        for (var i = 0; i < _effects.length; i++) labels.push(_effects[i].name || _effects[i].id)
-                        return labels;
-                    }
 
-                    Accessible.name: i18n("Shader effect")
-                    model: _modelLabels
-                    // Binding intentionally inlines the lookup rather than
-                    // delegating to `_indexOf`: QML's reactive engine can
-                    // only re-evaluate when the bindings's expression reads
-                    // a tracked property, and a function-call boundary
-                    // breaks that tracking on some Qt versions. Inlining
-                    // makes both `_effects` (so newly-loaded effects
-                    // re-resolve the saved id to its real index) and
-                    // `root.currentShaderEffectId` (so refreshShaderFromTree
-                    // mutations refresh the combo) load-bearing
-                    // dependencies of the binding.
-                    currentIndex: {
-                        var id = root.currentShaderEffectId;
-                        if (!id || id.length === 0)
-                            return 0;
-
-                        for (var i = 0; i < _effects.length; i++) {
-                            if (_effects[i].id === id)
-                                return i + 1;
-
-                        }
-                        return 0;
-                    }
-                    onActivated: function(index) {
-                        if (index === 0) {
+                    // The picker provides its own `Accessible.name` derived
+                    // from the current selection's display text — leaving it
+                    // overrides that with a generic label and loses the
+                    // "currently selected: X" context for screen readers.
+                    Layout.fillWidth: true
+                    shaders: _effects
+                    currentShaderId: root.currentShaderEffectId
+                    // Explicit empty `noneShaderId` — the picker emits
+                    // `shaderSelected("")` for the synthetic None entry, so
+                    // `id.length === 0` below is the canonical clear-check.
+                    // Pinning the prop to "" defends against any future
+                    // default change in the shared component.
+                    noneShaderId: ""
+                    includeNoneEntry: true
+                    placeholderText: i18nc("@action:button", "Select shader…")
+                    onShaderSelected: function(id) {
+                        if (id.length === 0) {
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
-                        } else {
-                            var effect = _effects[index - 1];
-                            // Switching to a DIFFERENT effect: drop the
-                            // previous effect's parameter map. The new
-                            // effect's parameter schema is unrelated, so
-                            // carrying the old keys persists dead values
-                            // on disk (and the param editor's
-                            // paramInitialValue path falls through to
-                            // type-defaults anyway because the keys
-                            // don't match the new schema). Same effect:
-                            // pass through the current map so a no-op
-                            // re-pick doesn't wipe in-progress edits.
-                            var newParams = (effect.id === root.currentShaderEffectId) ? (root.currentShaderParams || ({
-                            })) : ({
-                            });
-                            settingsController.animationsPage.setShaderOverride(root.eventPath, effect.id, newParams);
+                            return ;
                         }
+                        // Re-pick of the same shader is a no-op: skip the
+                        // D-Bus round-trip to avoid bumping dirty-tracking
+                        // for a non-change.
+                        if (id === root.currentShaderEffectId)
+                            return ;
+
+                        // Switching to a DIFFERENT effect: drop the previous
+                        // effect's parameter map — the new effect's schema is
+                        // unrelated, so carrying old keys persists dead values
+                        // on disk that the daemon can't validate.
+                        settingsController.animationsPage.setShaderOverride(root.eventPath, id, ({
+                        }));
                     }
-
-                    Connections {
-                        function onShaderEffectsChanged() {
-                            ++shaderCombo._effectsRev;
-                        }
-
-                        target: settingsController.animationsPage
-                    }
-
                 }
 
             }
 
             // Inline parameter editor surfaces only when an effect is
-            // assigned and that effect declares parameters.
-            AnimationShaderParamEditor {
+            // assigned and that effect declares parameters. Shared with
+            // the editor's ShaderSettingsDialog — same row delegates,
+            // same accordion behaviour, but with locking/randomize/image
+            // disabled since animation packs don't use those affordances.
+            PZCommon.ShaderParameterEditor {
+                id: animationParamEditor
+
+                // `shaderParameters()` is a Q_INVOKABLE — invalidate the
+                // schema on registry mutations via the card's shared
+                // `_shaderRegistryRev` tick. `currentShaderEffectId` is
+                // already a tracked dependency through the binding body,
+                // so a shader switch reloads the schema automatically.
+                readonly property var _paramSchema: {
+                    root._shaderRegistryRev; // dependency for reactivity
+                    return root.currentShaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(root.currentShaderEffectId) : [];
+                }
+
                 Layout.fillWidth: true
-                visible: root._shaderLegSupported && effectId.length > 0
-                effectId: root.currentShaderEffectId
-                currentParams: root.currentShaderParams
-                onParamsChanged: function(next) {
-                    root.currentShaderParams = next;
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, root.currentShaderEffectId, next);
+                visible: root._shaderLegSupported && root.currentShaderEffectId.length > 0 && _paramSchema.length > 0
+                parameters: _paramSchema
+                currentValues: root.currentShaderParams
+                enableLocking: false
+                enableRandomize: false
+                enableGroups: true
+                enableImage: false
+                compact: true
+                onValueChanged: function(paramId, value) {
+                    root._writeShaderParam(root.currentShaderEffectId, paramId, value);
+                }
+                onRequestColorPicker: function(paramId, paramName, current) {
+                    // Snapshot the effect id at dialog-open time so the
+                    // accept handler writes back to the SAME effect even
+                    // if the registry refreshes mid-pick.
+                    animationColorDialog.effectId = root.currentShaderEffectId;
+                    animationColorDialog.paramId = paramId;
+                    animationColorDialog.paramName = paramName;
+                    animationColorDialog.selectedColor = current;
+                    animationColorDialog.open();
                 }
             }
 
@@ -550,6 +585,28 @@ Item {
             root.currentSpringZeta = zeta;
             root.currentTimingMode = CurvePresets.timingModeSpring;
             root.commitOverride();
+        }
+    }
+
+    // QtQuick.Dialogs.ColorDialog is a wrapper around the OS-native color
+    // picker — it runs in its own platform window, not as a QML overlay,
+    // so the in-QML use-after-free class that bites visual Kirigami
+    // dialogs (CurveEditorDialog, the editor's image FileDialog) does
+    // not apply here. No `parent:` assignment is needed (or accepted —
+    // ColorDialog has no `parent` property).
+    ColorDialog {
+        id: animationColorDialog
+
+        property string effectId: ""
+        property string paramId: ""
+        property string paramName: ""
+
+        title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
+        onAccepted: {
+            if (animationColorDialog.paramId === "" || animationColorDialog.effectId === "")
+                return ;
+
+            root._writeShaderParam(animationColorDialog.effectId, animationColorDialog.paramId, selectedColor.toString());
         }
     }
 

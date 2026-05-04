@@ -698,6 +698,14 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
     Q_INVOKABLE QString shaderPresetDirectory();
 
+    /// Look up a metadata-defined preset for @p shaderId by @p presetName.
+    /// Returns the preset's parameter map, or an empty map when the
+    /// shader / preset is unknown. Reads from the cached
+    /// @c availableShaders (each entry's @c presets list is populated
+    /// upstream by @c ShaderRegistry::shaderInfoToVariantMap), so no
+    /// additional D-Bus round-trip is needed at call time.
+    Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
+
     // Clipboard operations
     /**
      * @brief Copies selected zones to clipboard

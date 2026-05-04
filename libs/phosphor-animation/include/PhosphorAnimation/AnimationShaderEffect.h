@@ -142,14 +142,27 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.
+    /// Field names mirror the regular shader pack format
+    /// (PhosphorRendering::ShaderRegistry::ParameterInfo) so animation
+    /// packs and overlay packs can share QML editor components.
+    ///
+    /// **C++ field name vs JSON key asymmetry**: the QVariant fields are
+    /// suffixed `Value` because `default` is a C++ keyword in some
+    /// contexts; the wire-format and QML-facing keys are the bare forms
+    /// (`default`/`min`/`max`/`step`). See `toJson()` / `fromJson()` in
+    /// `animationshadereffect.cpp` for the mapping, and
+    /// `AnimationsPageController::parameterInfoToMap` for the QML side.
     struct ParameterInfo
     {
         QString id;
         QString name;
         QString type; ///< "float", "int", "bool", "color"
-        QVariant defaultValue;
-        QVariant minValue;
-        QVariant maxValue;
+        QString description; ///< Optional one-line tooltip for the settings UI.
+        QString group; ///< Optional accordion group name for the settings UI.
+        QVariant defaultValue; ///< JSON/QML key: `default`.
+        QVariant minValue; ///< JSON/QML key: `min`.
+        QVariant maxValue; ///< JSON/QML key: `max`.
+        QVariant stepValue; ///< Optional slider step; JSON/QML key: `step`. QML falls back to (max-min)/200.
     };
     QList<ParameterInfo> parameters;
 

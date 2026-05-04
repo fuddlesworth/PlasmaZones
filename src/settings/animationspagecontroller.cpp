@@ -618,13 +618,25 @@ namespace animations_controller_detail {
 
 static QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo& p)
 {
+    // Keys mirror PhosphorRendering::ShaderRegistry::parameterInfoToVariantMap
+    // so animation packs and overlay packs share QML editor components.
+    // Optional fields are emitted only when valid/non-empty.
     QVariantMap m;
     m.insert(QLatin1String("id"), p.id);
     m.insert(QLatin1String("name"), p.name);
     m.insert(QLatin1String("type"), p.type);
-    m.insert(QLatin1String("defaultValue"), p.defaultValue);
-    m.insert(QLatin1String("minValue"), p.minValue);
-    m.insert(QLatin1String("maxValue"), p.maxValue);
+    if (!p.description.isEmpty())
+        m.insert(QLatin1String("description"), p.description);
+    if (!p.group.isEmpty())
+        m.insert(QLatin1String("group"), p.group);
+    if (p.defaultValue.isValid())
+        m.insert(QLatin1String("default"), p.defaultValue);
+    if (p.minValue.isValid())
+        m.insert(QLatin1String("min"), p.minValue);
+    if (p.maxValue.isValid())
+        m.insert(QLatin1String("max"), p.maxValue);
+    if (p.stepValue.isValid())
+        m.insert(QLatin1String("step"), p.stepValue);
     return m;
 }
 
@@ -638,6 +650,11 @@ static QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
     m.insert(QLatin1String("version"), effect.version);
     m.insert(QLatin1String("category"), effect.category);
     m.insert(QLatin1String("isUserEffect"), effect.isUserEffect);
+    // `previewPath` is resolved to an absolute path by the registry's
+    // `parseEffect`, so QML can pass it directly to `Image.source` (with
+    // a `file://` scheme prefix). Empty when the pack didn't ship a
+    // preview — the page renders a placeholder for that case.
+    m.insert(QLatin1String("previewPath"), effect.previewPath);
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters) {
@@ -710,6 +727,123 @@ void AnimationsPageController::openUserShaderDirectory()
 {
     ensureUserShaderDirectory();
     QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectoryPath()));
+}
+
+namespace animations_controller_detail {
+
+/// Copy a directory recursively. Qt has no built-in equivalent; the
+/// stdlib's `std::filesystem::copy` exists but we stick to QDir/QFile
+/// for consistency with the rest of the codebase. Returns false on the
+/// first failure (broken file copy, mkpath fail, etc.) so the caller
+/// can roll back via QDir::removeRecursively.
+///
+/// Symlinks (file or dir) are explicitly skipped via `QDir::NoSymLinks`
+/// AND a per-entry `isSymLink()` guard. Without that, a dropped pack
+/// containing `metadata.json -> /etc/shadow` or `assets -> /etc` would
+/// silently follow the link during traversal and the recursive copy
+/// would smuggle arbitrary readable filesystem content into the user
+/// shader dir under deceptive names. A shader pack contains regular
+/// files only; anything exotic is suspect and refused.
+static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
+{
+    QDir sourceDir(sourcePath);
+    if (!sourceDir.exists())
+        return false;
+    if (!QDir().mkpath(destPath))
+        return false;
+
+    const QFileInfoList entries =
+        sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
+    for (const QFileInfo& entry : entries) {
+        // QDir::NoSymLinks already filters at the entryInfoList layer, but
+        // recheck per-entry: filesystem races (the entry being replaced
+        // by a symlink between enumeration and this iteration) and the
+        // historical leniency of QDir::NoSymLinks across Qt versions
+        // both argue for an explicit guard at the copy boundary.
+        if (entry.isSymLink())
+            continue;
+
+        const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
+        if (entry.isDir()) {
+            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
+                return false;
+        } else if (entry.isFile()) {
+            // QFile::copy refuses to overwrite — caller's collision check
+            // already guarantees a clean destination, but defend against
+            // a partial failed previous run leaving stale files.
+            if (QFile::exists(destEntryPath))
+                QFile::remove(destEntryPath);
+            if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
+                return false;
+        }
+        // Devices, FIFOs, sockets, etc. are not isFile()/isDir() and
+        // therefore fall through silently — same intent as the symlink
+        // skip above.
+    }
+    return true;
+}
+
+} // namespace animations_controller_detail
+
+bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
+{
+    if (sourceUrl.isEmpty())
+        return false;
+
+    // Accept both `file://...` URLs (drag-drop from a file manager) and
+    // bare paths (programmatic callers).
+    QString sourcePath = sourceUrl;
+    if (sourcePath.startsWith(QLatin1String("file://")))
+        sourcePath = QUrl(sourceUrl).toLocalFile();
+
+    // Normalise trailing slashes and `.`/`..` components — without this,
+    // a drop URL like `file:///path/to/pack/` produces an empty
+    // `fileName()` below and the destDir collapses onto the user shader
+    // dir itself, surfacing as a confusing "destination already exists"
+    // rather than a clean parse failure.
+    sourcePath = QDir::cleanPath(sourcePath);
+
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink()) {
+        qCWarning(lcConfig) << "installShaderPack: source is not an existing directory:" << sourcePath;
+        return false;
+    }
+    const QString sourceBasename = sourceInfo.fileName();
+    if (sourceBasename.isEmpty()) {
+        qCWarning(lcConfig) << "installShaderPack: source path has no basename:" << sourcePath;
+        return false;
+    }
+
+    // Validate metadata.json — without it the registry won't pick up the
+    // pack, so accepting the drop would silently be a no-op. Reject
+    // symlinked metadata so a malicious pack can't smuggle a non-shader
+    // JSON file's content past the validation gate.
+    const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
+    const QFileInfo metadataInfo(metadataPath);
+    if (!metadataInfo.exists() || !metadataInfo.isFile() || metadataInfo.isSymLink()) {
+        qCWarning(lcConfig) << "installShaderPack: source has no metadata.json:" << sourcePath;
+        return false;
+    }
+
+    if (!ensureUserShaderDirectory())
+        return false;
+
+    const QString destDir = userShaderDirectoryPath() + QLatin1Char('/') + sourceBasename;
+    if (QFileInfo::exists(destDir)) {
+        qCWarning(lcConfig) << "installShaderPack: destination already exists, refusing to overwrite:" << destDir;
+        return false;
+    }
+
+    if (!animations_controller_detail::copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
+        qCWarning(lcConfig) << "installShaderPack: copy failed; rolling back:" << destDir;
+        QDir(destDir).removeRecursively();
+        return false;
+    }
+
+    // The registry's filewatcher rescans on its own — no explicit poke
+    // needed. If a poke is ever required, emit `shaderEffectsChanged`
+    // here.
+    return true;
 }
 
 QVariantMap AnimationsPageController::rawShaderProfile(const QString& path) const
@@ -858,6 +992,32 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return toClear.size();
+}
+
+QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectId) const
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings || effectId.isEmpty())
+        return {};
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const QStringList overridden = tree.overriddenPaths();
+    QVariantList out;
+    for (const QString& p : overridden) {
+        const ShaderProfile profile = tree.directOverride(p);
+        if (!profile.effectId || *profile.effectId != effectId)
+            continue;
+        QVariantMap entry;
+        entry.insert(QLatin1String("path"), p);
+        entry.insert(QLatin1String("label"), eventLabel(p));
+        out.append(entry);
+    }
+    // Sort by label for deterministic UI order across runs — the tree's
+    // `overriddenPaths()` iterates a QHash internally so the order is
+    // not stable.
+    std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
+    });
+    return out;
 }
 
 } // namespace PlasmaZones

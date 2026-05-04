@@ -1,7 +1,9 @@
-# PlasmaZones Standalone Settings Application
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Compositor-agnostic settings app. Uses Kirigami for UI, no KDE System Settings dependency.
+# PlasmaZones Standalone Settings Application —
+# compositor-agnostic settings app. Uses Kirigami for UI, no KDE System
+# Settings dependency.
 
 find_package(KF6Kirigami REQUIRED)
 
@@ -160,7 +162,6 @@ qt_add_qml_module(plasmazones-settings
         # consumed by every Animations sub-page and the editor dialog.
         qml/AnimatedBoxTrack.qml
         qml/AnimationEventCard.qml
-        qml/AnimationShaderParamEditor.qml
         qml/AnimationsWindowsPage.qml
         qml/AnimationsZonesPage.qml
         qml/AnimationsNotificationsPage.qml
@@ -171,6 +172,8 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsMotionSetsPage.qml
         qml/AnimationsPresetsPage.qml
         qml/AnimationsShadersPage.qml
+        qml/AnimationsShaderCard.qml
+        qml/AnimationsShaderDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
         qml/CurveThumbnail.qml
@@ -209,7 +212,11 @@ qt_add_resources(plasmazones-settings "whatsnew_data"
         ${CMAKE_SOURCE_DIR}/data/whatsnew.json
 )
 
-# Embed org.plasmazones.common QML module (ZonePreview, CategoryBadge)
+# Embed org.plasmazones.common QML module — settings uses a hand-rolled
+# qmldir (see org_plasmazones_common/qmldir) instead of linking
+# plasmazones_shared_qmlplugin so the binary stays standalone. Every type
+# the settings UI consumes from the shared module must be both listed
+# here AND in the qmldir.
 qt_add_resources(plasmazones-settings "shared_common_qml"
     PREFIX "/qt/qml/org/plasmazones/common"
     BASE "${CMAKE_SOURCE_DIR}/src/shared"
@@ -217,6 +224,10 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
         ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ShaderPickerButton.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterRow.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterSection.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterEditor.qml
 )
 qt_add_resources(plasmazones-settings "shared_common_qmldir"
     PREFIX "/qt/qml/org/plasmazones/common"
