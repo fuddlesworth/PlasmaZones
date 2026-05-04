@@ -2,36 +2,42 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Doom — pixel-column melt. Each vertical column of cells slides
-// downward at a noise-randomized speed, while pixel cell size
-// grows with progress so the window dissolves into chunky
-// descending columns. Visually inspired by the equivalent effect
-// in Burn-My-Windows (doom.frag, Simon Schneegans), written
-// natively against our `iTime`/`iChannel0` contract.
+// downward at a noise-randomized speed; cell size grows with
+// progress; columns separate into chaotic streaks before sliding
+// off the bottom. Native port of the BMW close-direction
+// behaviour against our `iTime`/`iChannel0` contract.
 //
 // ## iTime convention
 //
 // `progress = 1 - clamp(iTime, 0, 1)` — 0 at visible, 1 at
-// destroyed. Every distortion magnitude scales with `progress`,
-// so on show (iTime 0→1) columns rise into place from below; on
-// hide (iTime 1→0) columns slide off the bottom. No direction
-// branching needed.
+// destroyed. On hide (iTime 1→0) the close formula plays
+// forward; on show (iTime 0→1) it plays in reverse so columns
+// rise into place from below.
 //
-// At progress=0 the noise term is gated to zero so the window
-// settles to a perfect rest state — no per-column jitter at the
-// solid endpoint. BMW's original formulation leaves a tiny
-// residual jitter at progress=0 (since `shiftProgress = -vScale`
-// can leave shift > 0 on noise peaks); we suppress that for
-// clean show/hide endpoints.
+// ## Match-BMW choices
 //
-// ## Coordinate space
+// * Per-column variation uses 4-octave `simplex2DFractal` (matches
+//   BMW). Single-octave gives much smoother variation and the
+//   adjacent columns end up too similar to look chaotic.
+// * `vScale` keeps BMW's `uActorScale=2` factor folded in
+//   (`* 0.00004` rather than `* 0.00002`) — without it, columns
+//   only slide half as far as BMW's at the same `verticalScale`.
+// * `shiftProgress = mix(-vScale, 1+vScale, progress)` starts
+//   negative so noise-driven jitter on individual columns at
+//   progress=0 leaves a tiny residual offset. BMW does this and
+//   it's part of the look — without the negative start, all
+//   columns move together at the same shifted progress and the
+//   melt loses its differentiation.
+// * Full `max(shift, 0)` subtraction (matches BMW's `0.5 *
+//   uActorScale * max(shift, 0)` at uActorScale=2). Halving this
+//   collapses the whole melt range.
 //
-// BMW runs on a doubled-height padded actor (uActorScale=2) so
-// columns can overshoot below the window bounds without being
-// cropped to the original actor frame. We don't have actor
-// padding, so columns that overshoot below `vTexCoord.y = 1` get
-// forced transparent via the explicit `inside` clamp. Combined
-// with the top/bottom edge mask, the visual reads as columns
-// "falling off" the bottom rather than smearing edge texels.
+// ## Off-window samples
+//
+// Columns that overshoot past `vTexCoord.y = 1` get forced
+// transparent via the `inside` clamp; without it the
+// clamp-to-edge sampler smears the bottom edge texel up the
+// column, breaking the "fell off" reading.
 
 #version 450
 
@@ -69,6 +75,19 @@ float simplex2D(vec2 p) {
     return 0.5 + 0.5 * dot(n, vec3(70.0));
 }
 
+// 4-octave fractal simplex. The fractal layering is what gives
+// adjacent columns differentiated fall speeds — single-octave
+// noise has too much spatial coherence and the columns end up
+// moving together. Same formulation BMW uses.
+float simplex2DFractal(vec2 p) {
+    mat2 m  = mat2(1.6, 1.2, -1.2, 1.6);
+    float f = 0.5000 * simplex2D(p);  p = m * p;
+    f      += 0.2500 * simplex2D(p);  p = m * p;
+    f      += 0.1250 * simplex2D(p);  p = m * p;
+    f      += 0.0625 * simplex2D(p);
+    return f;
+}
+
 void main()
 {
     vec2 uv = vTexCoord;
@@ -85,28 +104,30 @@ void main()
     // Snap to cell centre.
     vec2 cellUV = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
 
-    // Per-column noise. simplex2D fed `vec2(x*hScale, 0)` collapses
-    // to 1D variation along x — same column gets the same noise
-    // regardless of y. hScale ties horizontal cell density to the
-    // surface width so the number of distinct "fall speeds" stays
-    // sensible across window sizes.
+    // Per-column noise via 4-octave fractal. `cellUV.x * hScale`
+    // fed as `vec2(x, 0)` collapses to 1D variation along x —
+    // same column gets the same noise regardless of y.
     float hScale = horizontalScale * iResolution.x * 0.001;
-    float n = simplex2D(vec2(cellUV.x * hScale, 0.0)) * 2.0 - 0.5;
+    float noise  = simplex2DFractal(vec2(cellUV.x * hScale, 0.0)) * 2.0 - 0.5;
 
-    // Vertical shift. shiftProgress is monotonic in progress, going
-    // 0 → 1+vScale. Noise contribution is gated by progress so columns
-    // stay still at the visible endpoint (no residual jitter at
-    // progress=0).
-    float vScale        = verticalScale * iResolution.y * 0.00002;
-    float shiftProgress = mix(0.0, 1.0 + vScale, progress);
-    float shift         = n * vScale * progress + shiftProgress;
+    // Vertical shift. The `0.00004` constant folds in BMW's
+    // `uActorScale=2` factor (BMW: `* 0.00002 * uActorScale`).
+    // shiftProgress starts NEGATIVE at progress=0 — combined with
+    // `max(shift, 0)` below, this means most columns sit at zero
+    // shift while a few high-noise columns get a small head start.
+    // That's the spread that makes adjacent columns separate
+    // visibly during the melt.
+    float vScale        = verticalScale * iResolution.y * 0.00004;
+    float shiftProgress = mix(-vScale, 1.0 + vScale, progress);
+    float shift         = noise * vScale + shiftProgress;
 
-    // Sample from a position higher up in the source — the visible
-    // column shows what was originally above its current y, giving
-    // the "column fell down" reading. max(shift,0) prevents columns
-    // from sliding upward on noise dips.
+    // Sample from a position higher up in the source. BMW does
+    // `0.5 * uActorScale * max(shift, 0)` which at uActorScale=2 is
+    // a full `1.0 * max(shift, 0)`. Halving this collapses the
+    // melt range — at mid-progress the slowest and fastest columns
+    // end up only ~20% apart instead of ~50%.
     vec2 sampleUV = cellUV;
-    sampleUV.y -= 0.5 * max(shift, 0.0);
+    sampleUV.y -= max(shift, 0.0);
 
     // Force off-window samples to transparent so columns "fall off"
     // the bottom rather than smearing edge texels via clamp-to-edge.
