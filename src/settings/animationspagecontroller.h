@@ -224,7 +224,10 @@ public:
 
     /// XDG-writable user shader directory path (no side effects). Use
     /// `ensureUserShaderDirectory()` if you also need it created on disk.
-    Q_INVOKABLE QString userShaderDirectoryPath() const;
+    /// Internal helper — not exposed to QML; the page surfaces an
+    /// "Open Folder" button that calls `openUserShaderDirectory()`
+    /// directly rather than displaying the path as a label.
+    QString userShaderDirectoryPath() const;
 
     /// Ensure the user shader directory exists; create it if missing.
     /// @return true when the directory exists (newly created or already

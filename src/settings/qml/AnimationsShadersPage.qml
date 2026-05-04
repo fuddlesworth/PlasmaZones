@@ -32,7 +32,6 @@ Flickable {
     // AnimationEventCard (Q_INVOKABLE results aren't reactive across the
     // QML binding boundary).
     property var effectList: settingsController.animationsPage.availableShaderEffects()
-    readonly property string _userShaderDir: settingsController.animationsPage.userShaderDirectoryPath()
     // ── Filter state ────────────────────────────────────────────────────
     property string filterText: ""
     /// Map of `{ categoryName: true }`. Empty = show all categories.
@@ -291,19 +290,21 @@ Flickable {
 
                 }
 
+                // "Open Folder" — matches the layouts / autotile-algorithms
+                // toolbar pattern (see LayoutToolbar.qml). Path display is
+                // intentionally omitted: the file manager surfaces the
+                // location far better than an elided path string ever does.
                 RowLayout {
                     Layout.fillWidth: true
 
-                    Label {
+                    Item {
                         Layout.fillWidth: true
-                        text: root._userShaderDir
-                        elide: Text.ElideMiddle
-                        font: Kirigami.Theme.smallFont
                     }
 
                     Button {
-                        text: i18n("Open Directory")
+                        text: i18n("Open Folder")
                         icon.name: "folder-open"
+                        flat: true
                         Accessible.name: i18n("Open user shader directory")
                         onClicked: settingsController.animationsPage.openUserShaderDirectory()
                     }
