@@ -513,13 +513,14 @@ Flickable {
                         // Effects in this section. Cards in a Flow wrap
                         // to next row when they run out of horizontal
                         // space — gives 3-4 cards per row at typical
-                        // settings-window widths. AnimationsShaderCard
-                        // declares `required property var modelData`
-                        // (which it aliases to `effect`) so the Repeater's
-                        // auto-injection wires the per-effect map directly
-                        // — without that, the outer group delegate's
+                        // settings-window widths. The inner delegate
+                        // wrapper below declares its own `required
+                        // property var modelData` and pipes it to the
+                        // card's `effect` slot. Without that explicit
+                        // declaration, the outer group delegate's
                         // identically-named `modelData` would shadow the
-                        // inner Repeater's auto-inject.
+                        // Repeater's auto-injection and every card would
+                        // bind to the parent group instead of its row.
                         Flow {
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.smallSpacing
