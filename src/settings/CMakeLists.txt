@@ -172,6 +172,8 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsMotionSetsPage.qml
         qml/AnimationsPresetsPage.qml
         qml/AnimationsShadersPage.qml
+        qml/AnimationsShaderCard.qml
+        qml/AnimationsShaderDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
         qml/CurveThumbnail.qml
