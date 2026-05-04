@@ -19,9 +19,10 @@ Flickable {
 
     // Loaded from a Q_INVOKABLE; the Connections block below manually
     // refreshes it on shaderEffectsChanged. See AnimationEventCard.qml's
-    // shaderCombo for the same pattern (Q_INVOKABLE results aren't
+    // shaderPicker for the same pattern (Q_INVOKABLE results aren't
     // reactive across the QML binding boundary).
-    property var effectList: settingsController.animationsPage.availableShaderEffects() // QVariantList from C++
+    property var effectList: settingsController.animationsPage.availableShaderEffects()
+    // QVariantList from C++
     // Cached at component creation so the binding doesn't re-invoke
     // userShaderDirectoryPath() on every paint. Pure path accessor (no
     // mkpath side effect; see ensureUserShaderDirectory() / the Open
@@ -216,16 +217,21 @@ Flickable {
                                         }
 
                                         Label {
+                                            // Format floats to 2 decimals so a default like
+                                            // 0.123456789 doesn't render with 9 digits in
+                                            // the per-shader range display. Hoisted out of
+                                            // the binding so it isn't re-allocated per re-eval.
+                                            function fmt(v) {
+                                                if (typeof v === "number")
+                                                    return Number.isInteger(v) ? String(v) : v.toFixed(2);
+
+                                                return String(v);
+                                            }
+
                                             text: {
-                                                if (modelData.minValue !== undefined && modelData.maxValue !== undefined) {
-                                                    // Format floats to 2 decimals so a default like
-                                                    // 0.123456789 doesn't render with 9 digits in
-                                                    // the per-shader range display.
-                                                    const fmt = (v) => {
-                                                        return Number.isInteger(v) ? String(v) : Number(v).toFixed(2);
-                                                    };
-                                                    return i18n("[%1 .. %2]", fmt(modelData.minValue), fmt(modelData.maxValue));
-                                                }
+                                                if (modelData.min !== undefined && modelData.max !== undefined)
+                                                    return i18n("[%1 .. %2]", fmt(modelData.min), fmt(modelData.max));
+
                                                 return "";
                                             }
                                             color: Kirigami.Theme.disabledTextColor
@@ -234,7 +240,20 @@ Flickable {
                                         }
 
                                         Label {
-                                            text: i18n("default: %1", modelData.defaultValue !== undefined ? modelData.defaultValue : "")
+                                            // Reuse the sibling's formatter so a numeric default
+                                            // (like 0.85) doesn't render at full JS precision
+                                            // when the range above is rounded to 2dp.
+                                            function fmt(v) {
+                                                if (typeof v === "number")
+                                                    return Number.isInteger(v) ? String(v) : v.toFixed(2);
+
+                                                if (typeof v === "boolean")
+                                                    return v ? i18nc("@info bool true", "Yes") : i18nc("@info bool false", "No");
+
+                                                return String(v);
+                                            }
+
+                                            text: i18n("default: %1", modelData.default !== undefined ? fmt(modelData.default) : "")
                                             color: Kirigami.Theme.disabledTextColor
                                             font: Kirigami.Theme.smallFont
                                             Layout.fillWidth: true

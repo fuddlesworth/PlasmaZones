@@ -306,6 +306,25 @@ QString EditorController::noneShaderUuid() const
     return ShaderRegistry::noneShaderUuid();
 }
 
+QVariantMap EditorController::presetParams(const QString& shaderId, const QString& presetName) const
+{
+    if (shaderId.isEmpty() || presetName.isEmpty())
+        return {};
+    for (const QVariant& shaderVar : m_availableShaders) {
+        const QVariantMap shader = shaderVar.toMap();
+        if (shader.value(QLatin1String("id")).toString() != shaderId)
+            continue;
+        const QVariantList presets = shader.value(QLatin1String("presets")).toList();
+        for (const QVariant& presetVar : presets) {
+            const QVariantMap preset = presetVar.toMap();
+            if (preset.value(QLatin1String("name")).toString() == presetName)
+                return preset.value(QLatin1String("params")).toMap();
+        }
+        break;
+    }
+    return {};
+}
+
 void EditorController::setCurrentShaderId(const QString& id)
 {
     // Validate: must be empty (no shader) or exist in available shaders

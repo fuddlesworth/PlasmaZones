@@ -618,13 +618,25 @@ namespace animations_controller_detail {
 
 static QVariantMap parameterInfoToMap(const PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo& p)
 {
+    // Keys mirror PhosphorRendering::ShaderRegistry::parameterInfoToVariantMap
+    // so animation packs and overlay packs share QML editor components.
+    // Optional fields are emitted only when valid/non-empty.
     QVariantMap m;
     m.insert(QLatin1String("id"), p.id);
     m.insert(QLatin1String("name"), p.name);
     m.insert(QLatin1String("type"), p.type);
-    m.insert(QLatin1String("defaultValue"), p.defaultValue);
-    m.insert(QLatin1String("minValue"), p.minValue);
-    m.insert(QLatin1String("maxValue"), p.maxValue);
+    if (!p.description.isEmpty())
+        m.insert(QLatin1String("description"), p.description);
+    if (!p.group.isEmpty())
+        m.insert(QLatin1String("group"), p.group);
+    if (p.defaultValue.isValid())
+        m.insert(QLatin1String("default"), p.defaultValue);
+    if (p.minValue.isValid())
+        m.insert(QLatin1String("min"), p.minValue);
+    if (p.maxValue.isValid())
+        m.insert(QLatin1String("max"), p.maxValue);
+    if (p.stepValue.isValid())
+        m.insert(QLatin1String("step"), p.stepValue);
     return m;
 }
 

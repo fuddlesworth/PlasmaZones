@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
 import QtQuick.Controls as QQC
@@ -8,37 +8,57 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 /**
- * Collapsible section for shader parameters.
+ * @brief Collapsible accordion section for a group of shader parameters.
  *
- * Displays a clickable header with expand/collapse chevron and a parameter count badge.
- * Content is shown/hidden based on the expanded state.
+ * Header shows the group title, a parameter-count badge, and an optional
+ * group-level lock toggle. Bind `expanded` to a shared index and react to
+ * `toggled()` for accordion behavior:
  *
- * For accordion behavior, bind `expanded` to a shared index and handle `toggled` signal:
  *   ShaderParameterSection {
- *       title: "Group Name"
- *       groupParams: myParameterArray
- *       expanded: sharedExpandedIndex === myIndex
- *       onToggled: sharedExpandedIndex = (expanded ? -1 : myIndex)
+ *       title: groupName
+ *       groupParams: paramsForGroup
+ *       expanded: sharedIndex === myIndex
+ *       onToggled: sharedIndex = (expanded ? -1 : myIndex)
  *   }
+ *
+ * Lock-all state is computed from `lockedParams` (a `{ paramId: bool }`
+ * map). The host owns the map; we emit `groupLockToggled(lock)` so the
+ * host can write a batched update (one map mutation, not one per param).
+ *
+ * Required:
+ *   - `title`: string
+ *
+ * Optional:
+ *   - `groupParams`: var — parameter array for this group (default `[]`)
+ *   - `expanded`: bool
+ *   - `lockedParams`: var — `{ paramId: bool }`
+ *   - `enableLocking`: bool — show the group-lock toggle
+ *   - `contentComponent`: Component — body content (rows)
+ *
+ * Must be placed inside a `ColumnLayout` / `RowLayout` / Layout-aware
+ * parent — the root is itself a `ColumnLayout`.
  */
 ColumnLayout {
     id: root
 
     required property string title
-    property var groupParams: [] // Parameter array for this group (explicit, not closure-based)
-    property int paramCount: groupParams ? groupParams.length : 0
+    property var groupParams: []
+    readonly property int paramCount: groupParams ? groupParams.length : 0
     property bool expanded: true
     property alias contentComponent: contentLoader.sourceComponent
-    // Dialog reference for lock state access
-    property var dialogRoot: null
+    property var lockedParams: ({
+    })
+    property bool enableLocking: true
 
-    // Signal emitted when user clicks header (for accordion behavior)
     signal toggled()
+    /// Emitted when the group-lock button is clicked. `lock` is the new
+    /// state (true = lock all, false = unlock all). Host applies it as a
+    /// single batched mutation across all `groupParams`.
+    signal groupLockToggled(bool lock)
 
     Layout.fillWidth: true
     spacing: 0
 
-    // Section header - clickable to expand/collapse
     QQC.ItemDelegate {
         id: headerDelegate
 
@@ -46,7 +66,11 @@ ColumnLayout {
         Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5
         Accessible.name: root.title
         Accessible.role: Accessible.Button
-        Accessible.description: i18nc("@info:tooltip", "%1 parameters. Click to %2.", root.paramCount, root.expanded ? i18nc("@action", "collapse") : i18nc("@action", "expand"))
+        // Use complete sentences in each branch — nesting `i18nc` for verb
+        // substitution leaves translators with detached "collapse"/"expand"
+        // tokens that can't be re-ordered, gendered, or pluralised. `i18ncp`
+        // handles singular/plural for the count.
+        Accessible.description: root.expanded ? i18ncp("@info:tooltip expanded section", "%1 parameter. Click to collapse.", "%1 parameters. Click to collapse.", root.paramCount) : i18ncp("@info:tooltip collapsed section", "%1 parameter. Click to expand.", "%1 parameters. Click to expand.", root.paramCount)
         onClicked: root.toggled()
 
         contentItem: RowLayout {
@@ -57,7 +81,6 @@ ColumnLayout {
                 implicitWidth: Kirigami.Units.iconSizes.small
                 implicitHeight: Kirigami.Units.iconSizes.small
                 color: Kirigami.Theme.textColor
-                // Smooth rotation animation: 0° = collapsed, 90° = expanded
                 rotation: root.expanded ? 90 : 0
 
                 Behavior on rotation {
@@ -76,23 +99,27 @@ ColumnLayout {
                 Layout.fillWidth: true
             }
 
-            // Group lock toggle
             QQC.ToolButton {
-                readonly property var _lockedRef: root.dialogRoot ? root.dialogRoot.lockedParams : null
+                // Reads `root.lockedParams[p.id]` inside the loop register
+                // the parent map as a binding dependency directly — no
+                // separate proxy property is needed for reactivity.
                 readonly property bool allLocked: {
-                    void (_lockedRef);
-                    if (!root.dialogRoot || !root.groupParams || root.groupParams.length === 0)
+                    if (!root.groupParams || root.groupParams.length === 0 || !root.lockedParams)
                         return false;
 
                     for (var i = 0; i < root.groupParams.length; i++) {
                         var p = root.groupParams[i];
-                        if (p && p.id !== undefined && !root.dialogRoot.isParamLocked(p.id))
+                        if (p && p.id !== undefined && root.lockedParams[p.id] !== true)
                             return false;
 
                     }
                     return true;
                 }
 
+                // Hide the lock button on empty groups too — there's
+                // nothing to lock there, and rendering the unlocked-icon
+                // button on an empty section is just visual noise.
+                visible: root.enableLocking && root.paramCount > 0
                 icon.name: allLocked ? "object-locked" : "object-unlocked"
                 icon.width: Kirigami.Units.iconSizes.small
                 icon.height: Kirigami.Units.iconSizes.small
@@ -101,30 +128,9 @@ ColumnLayout {
                 QQC.ToolTip.text: allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
                 QQC.ToolTip.visible: hovered
                 QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: {
-                    if (!root.dialogRoot || !root.groupParams)
-                        return ;
-
-                    var lock = !allLocked;
-                    // Batch update: copy once, modify, assign once (avoids N intermediate copies)
-                    var copy = {
-                    };
-                    var current = root.dialogRoot.lockedParams;
-                    for (var key in current) copy[key] = current[key]
-                    for (var i = 0; i < root.groupParams.length; i++) {
-                        var p = root.groupParams[i];
-                        if (p && p.id !== undefined) {
-                            if (lock)
-                                copy[p.id] = true;
-                            else
-                                delete copy[p.id];
-                        }
-                    }
-                    root.dialogRoot.lockedParams = copy;
-                }
+                onClicked: root.groupLockToggled(!allLocked)
             }
 
-            // Parameter count badge
             Rectangle {
                 implicitWidth: countLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
                 implicitHeight: Kirigami.Units.gridUnit
@@ -148,12 +154,14 @@ ColumnLayout {
             color: headerDelegate.hovered ? Kirigami.Theme.hoverColor : "transparent"
             radius: Kirigami.Units.smallSpacing
 
-            // Subtle bottom border when expanded
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1
+                // Hairline divider — pixel-snap via devicePixelRatio so it
+                // renders crisp on HiDPI without violating the no-hardcoded-
+                // pixels rule.
+                height: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: root.expanded
                 opacity: 0.5
@@ -163,26 +171,24 @@ ColumnLayout {
 
     }
 
-    // Content area with smooth height animation
     Item {
         id: contentContainer
 
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
-        // Clip content during animation to hide overflow
         clip: true
-        // Animate height between 0 and content's actual height
         implicitHeight: root.expanded ? contentLoader.implicitHeight : 0
 
         Loader {
             id: contentLoader
 
             width: parent.width
-            // Keep active during collapse animation so content is visible while shrinking
-            active: root.expanded || contentContainer.implicitHeight > 0
-            // Ensure Kirigami theme context propagates to loaded content
+            // Keep loaded during collapse animation so content stays visible
+            // while shrinking. Track `height` (the animated value) rather than
+            // `implicitHeight` (the steady-state target) so the loader doesn't
+            // briefly deactivate when an in-flight animation crosses zero.
+            active: root.expanded || contentContainer.height > 0
             Kirigami.Theme.inherit: true
-            // Fade content along with height animation
             opacity: root.expanded ? 1 : 0
 
             Behavior on opacity {

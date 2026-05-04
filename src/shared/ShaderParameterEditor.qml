@@ -1,0 +1,384 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+/**
+ * @brief Reusable parameter editor for a shader.
+ *
+ * Wraps the Lock-all / Randomize toolbar plus the flat-or-grouped row
+ * rendering that previously lived inline in the editor's
+ * `ShaderSettingsDialog`. The animation settings consumes it without the
+ * toolbar (`enableLocking: false`, `enableRandomize: false`) and without
+ * accordion groups (`enableGroups: false`).
+ *
+ * The component is fully props-and-signals — it does not own state.
+ * The host:
+ *   - feeds `parameters` (the schema) and `currentValues` (the live map)
+ *   - listens for `valueChanged(id, value)` and writes back into its map
+ *   - optionally listens for `lockToggled` / `randomizeRequested` /
+ *     `lockAllRequested` and updates its locks map / runs randomize
+ *   - listens for `requestColorPicker` / `requestImagePicker` and opens
+ *     the platform dialog at the parent level (image dialogs in
+ *     particular need to outlive their delegate row)
+ *
+ * Accordion behavior: when `enableGroups: true` and the parameter list
+ * declares any `group` field, rows are split into ShaderParameterSection
+ * accordions. Exactly one group is expanded at a time;
+ * `expandedGroupIndex` is read/write so the host can choose "first
+ * open" (default 0), open a specific group (any non-negative index), or
+ * collapse everything (-1).
+ */
+ColumnLayout {
+    id: root
+
+    required property var parameters
+    required property var currentValues
+    property var lockedParams: ({
+    })
+    property bool enableLocking: true
+    property bool enableRandomize: true
+    property bool enableGroups: true
+    property bool enableImage: true
+    /// Compact mode renders rows in the settings-app style: title left,
+    /// fixed-width control on the right, indented to match `SettingsRow`.
+    /// Default (false) keeps the editor's wide-slider aesthetic.
+    property bool compact: false
+    property int expandedGroupIndex: 0
+    // Visual size hints forwarded to ShaderParameterRow. Defaults shift in
+    // compact mode to match the settings-app SettingsSlider sizing.
+    property int sliderValueLabelWidth: compact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 4
+    property int colorButtonSize: compact ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.gridUnit * 3
+    property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 7
+    property int labelColumnWidth: Kirigami.Units.gridUnit * 8
+    /// The toolbar row (Lock-all / Randomize) is on by default but can
+    /// be hidden when neither button is wanted (animation settings).
+    readonly property bool _showToolbar: enableLocking || enableRandomize || toolbarTrailing !== null
+    /// Optional trailing item for the toolbar row, instantiated after the
+    /// Lock-all / Randomize buttons. The editor dialog uses it for its
+    /// metadata-driven preset menu so the affordance stays in line with
+    /// the other parameter actions; setting it to `null` (default) keeps
+    /// the toolbar pristine for hosts that don't need extras.
+    property Component toolbarTrailing: null
+    readonly property var _parameterGroups: {
+        if (!enableGroups || !parameters || parameters.length === 0)
+            return [];
+
+        var hasGroups = false;
+        for (var i = 0; i < parameters.length; i++) {
+            if (parameters[i] && parameters[i].group) {
+                hasGroups = true;
+                break;
+            }
+        }
+        if (!hasGroups)
+            return [];
+
+        var defaultGroupName = i18nc("@title:group", "General");
+        var groupMap = {
+        };
+        var groupOrder = [];
+        for (var j = 0; j < parameters.length; j++) {
+            var param = parameters[j];
+            if (!param)
+                continue;
+
+            var groupName = param.group || defaultGroupName;
+            if (!groupMap[groupName]) {
+                groupMap[groupName] = [];
+                groupOrder.push(groupName);
+            }
+            groupMap[groupName].push(param);
+        }
+        var result = [];
+        for (var k = 0; k < groupOrder.length; k++) {
+            var name = groupOrder[k];
+            result.push({
+                "name": name,
+                "params": groupMap[name]
+            });
+        }
+        return result;
+    }
+    readonly property bool _hasAnyLocked: {
+        if (!lockedParams)
+            return false;
+
+        var keys = Object.keys(lockedParams);
+        for (var i = 0; i < keys.length; i++) {
+            if (lockedParams[keys[i]] === true)
+                return true;
+
+        }
+        return false;
+    }
+    // ── Row delegates ────────────────────────────────────────────────
+    /// Editor (wide) row: fixed-width title column on the left, fillWidth
+    /// control on the right. Mirrors the inline layout the dialog used
+    /// before extraction.
+    property Component _wideRowComponent
+
+    _wideRowComponent: Component {
+        RowLayout {
+            required property var modelData
+            required property int index
+
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.largeSpacing
+
+            Label {
+                Layout.preferredWidth: root.labelColumnWidth
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                text: modelData ? (modelData.name || modelData.id || "") : ""
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+            }
+
+            ShaderParameterRow {
+                Layout.fillWidth: true
+                Kirigami.Theme.inherit: true
+                compact: false
+                paramData: modelData
+                currentValues: root.currentValues
+                lockedParams: root.lockedParams
+                enableLocking: root.enableLocking
+                enableImage: root.enableImage
+                sliderValueLabelWidth: root.sliderValueLabelWidth
+                colorButtonSize: root.colorButtonSize
+                colorLabelWidth: root.colorLabelWidth
+                onValueChanged: function(id, value) {
+                    root.valueChanged(id, value);
+                }
+                onLockToggled: function(id, locked) {
+                    root.lockToggled(id, locked);
+                }
+                onRequestColorPicker: function(id, name, current) {
+                    root.requestColorPicker(id, name, current);
+                }
+                onRequestImagePicker: function(id) {
+                    root.requestImagePicker(id);
+                }
+            }
+
+        }
+
+    }
+
+    /// Settings (compact) row: fillWidth title on the left, fixed-width
+    /// control on the right. Layout mirrors the settings-app SettingsRow
+    /// (left/right margins, control max-width 45%) so per-event shader
+    /// params line up with the timing-mode and duration rows above them.
+    property Component _compactRowComponent
+
+    _compactRowComponent: Component {
+        RowLayout {
+            required property var modelData
+            required property int index
+
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.largeSpacing
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+
+                Label {
+                    text: modelData ? (modelData.name || modelData.id || "") : ""
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                }
+
+                Label {
+                    // `&&` short-circuits to its first falsy operand — when
+                    // modelData is undefined the whole chain returns undefined,
+                    // which QML can't coerce to bool/string. Wrap visibility in
+                    // `!!` and the text in an explicit ternary so the property
+                    // assignments always receive concrete typed values.
+                    readonly property string _description: (modelData && typeof modelData.description === "string") ? modelData.description : ""
+
+                    text: _description
+                    Layout.fillWidth: true
+                    visible: _description.length > 0
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
+                }
+
+            }
+
+            ShaderParameterRow {
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                Kirigami.Theme.inherit: true
+                compact: true
+                paramData: modelData
+                currentValues: root.currentValues
+                lockedParams: root.lockedParams
+                enableLocking: root.enableLocking
+                enableImage: root.enableImage
+                sliderValueLabelWidth: root.sliderValueLabelWidth
+                colorButtonSize: root.colorButtonSize
+                colorLabelWidth: root.colorLabelWidth
+                onValueChanged: function(id, value) {
+                    root.valueChanged(id, value);
+                }
+                onLockToggled: function(id, locked) {
+                    root.lockToggled(id, locked);
+                }
+                onRequestColorPicker: function(id, name, current) {
+                    root.requestColorPicker(id, name, current);
+                }
+                onRequestImagePicker: function(id) {
+                    root.requestImagePicker(id);
+                }
+            }
+
+        }
+
+    }
+
+    signal valueChanged(string paramId, var value)
+    /// Emitted once per affected param. A group-lock click fans out into
+    /// N synchronous emissions (one per param in the group). Hosts that
+    /// store locks in a single map and reassign atomically (the standard
+    /// pattern) coalesce the N emissions into one render.
+    signal lockToggled(string paramId, bool locked)
+    signal lockAllRequested(bool locked)
+    signal randomizeRequested()
+    signal requestColorPicker(string paramId, string paramName, color current)
+    signal requestImagePicker(string paramId)
+
+    spacing: Kirigami.Units.smallSpacing
+    // ── Toolbar (Lock-all / Randomize) ───────────────────────────────
+    RowLayout {
+        Layout.fillWidth: true
+        visible: root._showToolbar && root.parameters && root.parameters.length > 0
+        spacing: Kirigami.Units.smallSpacing
+
+        Label {
+            Layout.fillWidth: true
+            text: i18nc("@title:group", "Parameters")
+            font.weight: Font.DemiBold
+        }
+
+        ToolButton {
+            visible: root.enableLocking
+            icon.name: root._hasAnyLocked ? "object-unlocked" : "object-locked"
+            display: ToolButton.IconOnly
+            ToolTip.text: root._hasAnyLocked ? i18nc("@info:tooltip", "Unlock all parameters") : i18nc("@info:tooltip", "Lock all parameters")
+            Accessible.name: root._hasAnyLocked ? i18nc("@action:button", "Unlock All") : i18nc("@action:button", "Lock All")
+            Accessible.description: ToolTip.text
+            onClicked: root.lockAllRequested(!root._hasAnyLocked)
+        }
+
+        ToolButton {
+            visible: root.enableRandomize
+            icon.name: "roll"
+            display: ToolButton.IconOnly
+            ToolTip.text: root._hasAnyLocked ? i18nc("@info:tooltip", "Randomize unlocked parameters") : i18nc("@info:tooltip", "Randomize all parameters")
+            Accessible.name: i18nc("@action:button", "Random")
+            Accessible.description: ToolTip.text
+            onClicked: root.randomizeRequested()
+        }
+
+        Loader {
+            active: root.toolbarTrailing !== null
+            sourceComponent: root.toolbarTrailing
+        }
+
+    }
+
+    // ── Empty state when no parameters ───────────────────────────────
+    Label {
+        Layout.fillWidth: true
+        // Show the empty-state for both `parameters: undefined` and
+        // `parameters: []` — undefined would otherwise hide every layout
+        // branch and produce a blank component.
+        visible: !root.parameters || root.parameters.length === 0
+        text: i18nc("@info", "This effect has no configurable parameters.")
+        wrapMode: Text.WordWrap
+        opacity: 0.7
+    }
+
+    // ── Grouped (accordion) layout ───────────────────────────────────
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root._parameterGroups.length > 0
+        spacing: Kirigami.Units.smallSpacing
+
+        Repeater {
+            id: groupRepeater
+
+            model: root._parameterGroups
+
+            delegate: ShaderParameterSection {
+                id: paramSection
+
+                required property var modelData
+                required property int index
+
+                Layout.fillWidth: true
+                title: modelData.name
+                groupParams: modelData.params
+                expanded: root.expandedGroupIndex === index
+                lockedParams: root.lockedParams
+                enableLocking: root.enableLocking
+                onToggled: {
+                    root.expandedGroupIndex = expanded ? -1 : index;
+                }
+                onGroupLockToggled: function(lock) {
+                    // Synthesise per-id `lockToggled` signals so the host
+                    // reacts with the same handler it uses for single-row
+                    // toggles. The host typically batches-replaces its
+                    // lockedParams map, so the N notifications cost one
+                    // map mutation per click in practice — fan-out here
+                    // keeps the public signal surface uniform.
+                    for (var j = 0; j < paramSection.groupParams.length; j++) {
+                        var pp = paramSection.groupParams[j];
+                        if (pp && pp.id !== undefined)
+                            root.lockToggled(pp.id, lock);
+
+                    }
+                }
+
+                contentComponent: Component {
+                    ColumnLayout {
+                        Kirigami.Theme.inherit: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: paramSection.groupParams
+                            delegate: root.compact ? root._compactRowComponent : root._wideRowComponent
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
+
+    // ── Flat layout (no groups declared, or enableGroups disabled) ───
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root._parameterGroups.length === 0 && root.parameters && root.parameters.length > 0
+        spacing: Kirigami.Units.smallSpacing
+
+        Repeater {
+            model: root._parameterGroups.length === 0 ? root.parameters : []
+            delegate: root.compact ? root._compactRowComponent : root._wideRowComponent
+        }
+
+    }
+
+}

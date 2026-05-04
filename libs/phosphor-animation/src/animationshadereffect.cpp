@@ -28,8 +28,21 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("vertexShader"), vertexShaderPath);
     if (!previewPath.isEmpty())
         obj.insert(QLatin1String("preview"), previewPath);
-    if (boundsPadding > 0.0)
-        obj.insert(QLatin1String("boundsPadding"), boundsPadding);
+    // Clamp on emit so the JSON never carries an out-of-range value that
+    // fromJson would silently re-clamp on read. This makes `fromJson(toJson(x))`
+    // idempotent — successive round-trips produce a stable struct, even
+    // when the source `boundsPadding` was assigned out-of-range
+    // programmatically. (A single round-trip from an out-of-range source
+    // intentionally does NOT preserve the original out-of-range value;
+    // that's the whole point of the clamp.) The lower-bound check
+    // (`> 0.0` vs `>= 0.0`) is intentional: 0.0 is the documented default
+    // and is omitted from the JSON to keep authored metadata.json files
+    // terse.
+    {
+        const qreal clampedPadding = qBound(0.0, boundsPadding, 2.0);
+        if (clampedPadding > 0.0)
+            obj.insert(QLatin1String("boundsPadding"), clampedPadding);
+    }
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -40,12 +53,18 @@ QJsonObject AnimationShaderEffect::toJson() const
                 pObj.insert(QLatin1String("name"), p.name);
             if (!p.type.isEmpty())
                 pObj.insert(QLatin1String("type"), p.type);
+            if (!p.description.isEmpty())
+                pObj.insert(QLatin1String("description"), p.description);
+            if (!p.group.isEmpty())
+                pObj.insert(QLatin1String("group"), p.group);
             if (p.defaultValue.isValid())
                 pObj.insert(QLatin1String("default"), QJsonValue::fromVariant(p.defaultValue));
             if (p.minValue.isValid())
                 pObj.insert(QLatin1String("min"), QJsonValue::fromVariant(p.minValue));
             if (p.maxValue.isValid())
                 pObj.insert(QLatin1String("max"), QJsonValue::fromVariant(p.maxValue));
+            if (p.stepValue.isValid())
+                pObj.insert(QLatin1String("step"), QJsonValue::fromVariant(p.stepValue));
             params.append(pObj);
         }
         obj.insert(QLatin1String("parameters"), params);
@@ -88,12 +107,16 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         p.id = pObj.value(QLatin1String("id")).toString();
         p.name = pObj.value(QLatin1String("name")).toString();
         p.type = pObj.value(QLatin1String("type")).toString();
+        p.description = pObj.value(QLatin1String("description")).toString();
+        p.group = pObj.value(QLatin1String("group")).toString();
         if (pObj.contains(QLatin1String("default")))
             p.defaultValue = pObj.value(QLatin1String("default")).toVariant();
         if (pObj.contains(QLatin1String("min")))
             p.minValue = pObj.value(QLatin1String("min")).toVariant();
         if (pObj.contains(QLatin1String("max")))
             p.maxValue = pObj.value(QLatin1String("max")).toVariant();
+        if (pObj.contains(QLatin1String("step")))
+            p.stepValue = pObj.value(QLatin1String("step")).toVariant();
         e.parameters.append(std::move(p));
     }
 
@@ -102,6 +125,16 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
 
 bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
 {
+    // Equality is "is this the same effect from the same on-disk
+    // origin?", not "do these two structs serialise identically."
+    // `sourceDir` and `isUserEffect` are stamped by the registry loader
+    // (`AnimationShaderRegistry::parseEffect`) at scan time and are not
+    // round-tripped through `toJson`. A struct freshly built from
+    // `fromJson(toJson(x))` therefore has empty `sourceDir` and
+    // `isUserEffect == false`, so `x == fromJson(toJson(x))` is FALSE
+    // whenever `x` came from the registry — that's the contract, not a
+    // bug. Tests that need round-trip equality should compare against a
+    // copy that's had `sourceDir` / `isUserEffect` cleared.
     if (id != other.id || name != other.name || description != other.description)
         return false;
     if (author != other.author || version != other.version || category != other.category)
@@ -121,7 +154,10 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         const auto& b = other.parameters[i];
         if (a.id != b.id || a.name != b.name || a.type != b.type)
             return false;
-        if (a.defaultValue != b.defaultValue || a.minValue != b.minValue || a.maxValue != b.maxValue)
+        if (a.description != b.description || a.group != b.group)
+            return false;
+        if (a.defaultValue != b.defaultValue || a.minValue != b.minValue || a.maxValue != b.maxValue
+            || a.stepValue != b.stepValue)
             return false;
     }
     return true;
