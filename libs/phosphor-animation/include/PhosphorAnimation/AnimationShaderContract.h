@@ -194,6 +194,20 @@ inline QString slotKey(int slot)
 }
 
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
+/// Carries straight (non-premultiplied) RGBA: the encoder writes
+/// `QColor::redF/greenF/blueF/alphaF` verbatim, so a 50%-alpha red
+/// arrives at the shader as `(1.0, 0.0, 0.0, 0.5)` not
+/// `(0.5, 0.0, 0.0, 0.5)`. Authors should premultiply manually if
+/// their composite math expects it.
+///
+/// Naming asymmetry: the GLSL array is plural (`customColors[N]`) but
+/// the slot-key the encoder/decoder pass through `QVariantMap` is
+/// singular and 1-based (`customColor1` … `customColor16`). The
+/// encoder strips the trailing `s` and appends the 1-based index. This
+/// matches the `customParams[N]` ↔ `customParamsN_<x|y|z|w>` pattern
+/// — both choose 1-based singular keys for QML/JSON friendliness while
+/// keeping the GLSL declaration in 0-based plural form per std140
+/// convention.
 inline constexpr const char* kCustomColorsArray = "customColors";
 inline constexpr int kMaxCustomColors = PhosphorShaders::CustomColors::kColorCount;
 

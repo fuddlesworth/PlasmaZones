@@ -26,6 +26,7 @@ class AnimationShaderRegistry;
 
 namespace PhosphorLayer {
 class Role;
+class Surface;
 }
 
 QT_BEGIN_NAMESPACE
@@ -253,8 +254,11 @@ public:
     ///     (matches `iResolution`); when the cursor leaves the shader's
     ///     bounding box, `iMouse` is set to `(-1, -1)` — same off-region
     ///     sentinel the overlay path uses.
-    ///   • `iDate`, `iTimeHi` — auto-populated by `ShaderNodeRhi` as
-    ///     part of its scene-data sync.
+    ///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync,
+    ///     throttled to 1 Hz refresh.
+    ///   • `iTimeHi` — auto-computed wrap counterpart of `iTime` by
+    ///     `ShaderNodeRhi`'s std140 split (always 0 for animation
+    ///     shaders since `iTime` stays in [0,1]).
     ///
     /// The single uniform that NEEDS consumer wiring is
     /// `setAudioSpectrum` below — there is no centralised QML producer

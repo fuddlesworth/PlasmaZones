@@ -222,6 +222,42 @@ PhosphorAnimation::MotionSpec<qreal> buildSpec(const PhosphorAnimation::Profile&
     return spec;
 }
 
+/// Hide every visible sibling of the shader anchor for the duration
+/// of a leg, returning QPointers so the caller can restore them on
+/// teardown. We would prefer to redirect decorator siblings (e.g.
+/// `MultiEffect { source: container }`) at the shader's output so the
+/// decoration keeps tracking, but Qt 6 MultiEffect crashes inside its
+/// private `QQuickShaderEffect` when given a non-stock `QQuickItem` as
+/// source. Hiding gives a clean shader transition at the cost of the
+/// decoration popping back in at teardown. Skipped for fallback
+/// anchors (no `shaderAnchor: true` tag found) — the fallback case
+/// hands back the consumer's QML root, whose siblings are usually
+/// unrelated layout siblings rather than per-anchor decorators.
+///
+/// Used by both `attachShaderToAnchor` (fresh attach) and `runLeg`'s
+/// reuse branch — between legs `teardownShaderLeg` restores siblings
+/// to visible while the parked shader item idles, so the next leg has
+/// to re-hide them.
+QList<QPointer<QQuickItem>> hideAnchorSiblings(QQuickItem* shaderAnchor, QQuickItem* shaderItem,
+                                               QQuickItem* shaderSource, bool foundExplicitAnchor)
+{
+    QList<QPointer<QQuickItem>> hidden;
+    if (!foundExplicitAnchor || !shaderAnchor || !shaderAnchor->parentItem()) {
+        return hidden;
+    }
+    const auto siblings = shaderAnchor->parentItem()->childItems();
+    for (QQuickItem* sibling : siblings) {
+        if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
+            continue;
+        }
+        if (sibling->isVisible()) {
+            hidden.append(QPointer<QQuickItem>(sibling));
+            sibling->setVisible(false);
+        }
+    }
+    return hidden;
+}
+
 /// Apply per-effect static configuration (fragment / vertex source,
 /// include paths, multipass, wallpaper, depth) to an existing shader
 /// item. Idempotent — every `ShaderEffect` setter no-ops on identity, so
@@ -598,26 +634,10 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
 
-    // Hide visible decorator siblings of the anchor for the leg. We
-    // would prefer to redirect their `source` to the shader so the
-    // decoration (e.g. drop shadow) keeps tracking the shader's output,
-    // but Qt 6 MultiEffect crashes inside its private QQuickShaderEffect
-    // when given a non-stock QQuickItem as source. Hiding gives a clean
-    // shader transition at the cost of the decoration popping back in
-    // at teardown. Skipped for fallback anchors.
-    QList<QPointer<QQuickItem>> hiddenSiblings;
-    if (foundExplicitAnchor && shaderAnchor->parentItem()) {
-        const auto siblings = shaderAnchor->parentItem()->childItems();
-        for (QQuickItem* sibling : siblings) {
-            if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
-                continue;
-            }
-            if (sibling->isVisible()) {
-                hiddenSiblings.append(QPointer<QQuickItem>(sibling));
-                sibling->setVisible(false);
-            }
-        }
-    }
+    // Hide visible decorator siblings — see `hideAnchorSiblings` for the
+    // rationale (Qt 6 MultiEffect can't sample our shader item as source).
+    QList<QPointer<QQuickItem>> hiddenSiblings =
+        hideAnchorSiblings(shaderAnchor, shaderItem, shaderSource, foundExplicitAnchor);
 
     // Snap residual scales along the chain shaderAnchor → … → target
     // back to 1.0. The shader-exclusive leg suppresses the C++ scale
@@ -1272,24 +1292,11 @@ public:
                     // were restored by teardownShaderLeg between legs
                     // so the static-Shown decoration was visible
                     // during the idle phase, but the new leg's shader
-                    // needs them out of the way to avoid the same
-                    // double-render that the fresh-attach path
-                    // prevents (see attachShaderToAnchor's
-                    // hiddenSiblings comment).
-                    QList<QPointer<QQuickItem>> hidden;
-                    if (reusedFoundExplicit && reusedShaderAnchor && reusedShaderAnchor->parentItem()) {
-                        const auto siblings = reusedShaderAnchor->parentItem()->childItems();
-                        for (QQuickItem* sibling : siblings) {
-                            if (sibling == reusedShaderAnchor.data() || sibling == reusedShaderItem.data()
-                                || sibling == reusedShaderSource.data()) {
-                                continue;
-                            }
-                            if (sibling->isVisible()) {
-                                hidden.append(QPointer<QQuickItem>(sibling));
-                                sibling->setVisible(false);
-                            }
-                        }
-                    }
+                    // needs them out of the way again. Same helper as
+                    // the fresh-attach path uses.
+                    QList<QPointer<QQuickItem>> hidden =
+                        hideAnchorSiblings(reusedShaderAnchor.data(), reusedShaderItem.data(),
+                                           reusedShaderSource.data(), reusedFoundExplicit);
                     it->second.shaderItem = reusedShaderItem;
                     it->second.shaderSource = reusedShaderSource;
                     it->second.shaderAnchor = reusedShaderAnchor;

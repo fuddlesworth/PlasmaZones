@@ -21,7 +21,9 @@
 //     source to KWin::ShaderManager::generateCustomShader. `qt_Matrix`
 //     and `qt_Opacity` are dropped on the kwin path (KWin manages its
 //     own scene-graph transform / opacity); `_appField0` / `_appField1`
-//     are dropped (padding only); `iFlipBufferY` is dropped (daemon-only
+//     are dropped (consumer escape-hatch ints — populated from
+//     `BaseUniforms.appField0/1` on the daemon path, no equivalent
+//     plumbing on the kwin path); `iFlipBufferY` is dropped (daemon-only
 //     Y-flip signal, no equivalent on the kwin path).
 //
 // Author guidance: include this file from each animation shader's
@@ -61,13 +63,24 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; ignored by kwin path
     float qt_Opacity;            // offset 64  (4 bytes)  — Qt scene-graph opacity; ignored by kwin path
     float iTime;                 // offset 68  — animation progress in [0, 1]
-    float iTimeDelta;            // offset 72  — currently always 0 on the animation execution sites
-    int iFrame;                  // offset 76  — currently always 0
+    float iTimeDelta;            // offset 72  — real-time seconds between SurfaceAnimator
+                                 //              ticks (daemon path); 0 on kwin path
+    int iFrame;                  // offset 76  — per-leg frame counter starting at 0
+                                 //              (daemon path); 0 on kwin path
     vec2 iResolution;            // offset 80  — surface size in logical pixels
-    int _appField0;              // offset 88  — padding (BaseUniforms escape hatch, unused here)
-    int _appField1;              // offset 92  — padding
-    vec4 iMouse;                 // offset 96  — currently (0,0,0,0); reserved
-    vec4 iDate;                  // offset 112 — currently (0,0,0,0); reserved
+    int _appField0;              // offset 88  — consumer escape-hatch int
+                                 //              (BaseUniforms.appField0 on daemon path,
+                                 //              dropped by kwin rewriter)
+    int _appField1;              // offset 92  — consumer escape-hatch int
+                                 //              (BaseUniforms.appField1 on daemon path,
+                                 //              dropped by kwin rewriter)
+    vec4 iMouse;                 // offset 96  — cursor position in shader-local pixels
+                                 //              (daemon: QQuickHoverHandler-driven,
+                                 //              .xy = position, (-1,-1) when off-region;
+                                 //              kwin: (0,0,0,0))
+    vec4 iDate;                  // offset 112 — year, month, day, seconds-since-midnight
+                                 //              (daemon: ShaderNodeRhi sync at 1 Hz;
+                                 //              kwin: (0,0,0,0))
     vec4 customParams[8];        // offset 128 (128 bytes) — per-effect float/int/bool parameter slots
     vec4 customColors[16];       // offset 256 (256 bytes) — per-effect color parameter slots
     vec4 iChannelResolution[4];  // offset 512 (64 bytes)  — buffer texture sizes (multipass)

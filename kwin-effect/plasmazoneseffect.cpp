@@ -4430,11 +4430,16 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
         cached.iResolutionLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
-        // Cache `customParams[0]` … `customParams[7]` element locations.
-        // Each declared parameter lands in one of these slots — see
-        // `AnimationShaderRegistry::translateAnimationParams` for the
-        // exact mapping. -1 for slots the shader didn't reference (e.g.
-        // a one-param effect optimises away customParams[1..7]).
+        // Cache element locations for the per-effect declared parameter
+        // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
+        // bool params, and `customColors[0..kMaxCustomColors-1]` for color
+        // params. Each declared parameter lands in one of these slots —
+        // see `AnimationShaderRegistry::translateAnimationParams` for
+        // the exact mapping. `glGetUniformLocation` returns -1 for slots
+        // the shader didn't reference (e.g. a one-param effect that the
+        // GLSL compiler optimises away the unused tail of either array);
+        // the per-frame push loop in paintWindow guards against -1 to
+        // skip the setUniform call.
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomParamsArray)
                 + '[' + QByteArray::number(slot) + ']';
@@ -4495,10 +4500,24 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
         const QString key = PhosphorAnimationShaders::AnimationShaderContract::colorKey(slot);
         const auto it = translated.constFind(key);
-        if (it != translated.constEnd()) {
-            const QColor c = it->value<QColor>();
-            transition.customColorsValues[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+        if (it == translated.constEnd()) {
+            continue;
         }
+        // Registry-side `translateAnimationParams` coerces every color
+        // to a valid QColor (falls back to Qt::transparent on
+        // unparseable input), so the value here SHOULD always be valid.
+        // Guard explicitly anyway: a future caller that bypasses the
+        // registry encoder (e.g. injects a raw QString into a profile's
+        // effectiveParameters() pass-through) would otherwise produce
+        // an invalid QColor whose redF/greenF/blueF/alphaF are
+        // undefined per Qt docs. Falling through to the default-init
+        // (0,0,0,0) keeps the slot at transparent black, matching the
+        // registry's documented Qt::transparent fallback.
+        const QColor c = it->value<QColor>();
+        if (!c.isValid()) {
+            continue;
+        }
+        transition.customColorsValues[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
     }
     // Bump generation for every install so the timer-driven teardown in
     // tryBeginShaderForEvent can detect supersession (a fresh transition
