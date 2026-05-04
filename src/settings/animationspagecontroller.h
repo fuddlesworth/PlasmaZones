@@ -235,6 +235,17 @@ public:
     /// creating it first if missing.
     Q_INVOKABLE void openUserShaderDirectory();
 
+    /// Install a shader pack from a dropped folder. @p sourceUrl is a
+    /// `file://` URL pointing at a directory containing a `metadata.json`
+    /// at its root. The directory is copied recursively into
+    /// `userShaderDirectoryPath()/<basename>`; the registry's filewatcher
+    /// detects the new pack and emits `effectsChanged` automatically.
+    /// Validates that the source exists, is a directory, contains a
+    /// `metadata.json`, and that the basename does not collide with an
+    /// existing entry in the user dir (collision returns false rather
+    /// than overwriting). @return true on success.
+    Q_INVOKABLE bool installShaderPack(const QString& sourceUrl);
+
     /// Per-event shader override read.
     /// @return `{ effectId: QString, parameters: QVariantMap }` or empty
     /// when no override is set at this exact path.
@@ -276,6 +287,16 @@ public:
     /// Also emits `pendingChangesChanged()`. Used by parent-node
     /// cards' "Clear shadowing children" affordance.
     Q_INVOKABLE int clearShaderOverrideDescendants(const QString& path);
+
+    /// Reverse-lookup: list every event path whose direct shader
+    /// override targets @p effectId. Each entry: `{ path, label }` with
+    /// @c label produced by @c eventLabel(path). Used by the read-only
+    /// shaders browser to surface a "Used in:" line per shader so a
+    /// user can tell at a glance which assignments would be affected if
+    /// they uninstalled or replaced a pack. Inherited / resolved
+    /// references are intentionally NOT included — only direct
+    /// overrides count, mirroring the existing tree-walk semantics.
+    Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML

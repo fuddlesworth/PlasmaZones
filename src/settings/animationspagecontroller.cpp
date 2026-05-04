@@ -650,6 +650,11 @@ static QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
     m.insert(QLatin1String("version"), effect.version);
     m.insert(QLatin1String("category"), effect.category);
     m.insert(QLatin1String("isUserEffect"), effect.isUserEffect);
+    // `previewPath` is resolved to an absolute path by the registry's
+    // `parseEffect`, so QML can pass it directly to `Image.source` (with
+    // a `file://` scheme prefix). Empty when the pack didn't ship a
+    // preview — the page renders a placeholder for that case.
+    m.insert(QLatin1String("previewPath"), effect.previewPath);
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters) {
@@ -722,6 +727,90 @@ void AnimationsPageController::openUserShaderDirectory()
 {
     ensureUserShaderDirectory();
     QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectoryPath()));
+}
+
+namespace animations_controller_detail {
+
+/// Copy a directory recursively. Qt has no built-in equivalent; the
+/// stdlib's `std::filesystem::copy` exists but we stick to QDir/QFile
+/// for consistency with the rest of the codebase. Returns false on the
+/// first failure (broken file copy, mkpath fail, etc.) so the caller
+/// can roll back via QDir::removeRecursively.
+static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
+{
+    QDir sourceDir(sourcePath);
+    if (!sourceDir.exists())
+        return false;
+    if (!QDir().mkpath(destPath))
+        return false;
+
+    const QFileInfoList entries = sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& entry : entries) {
+        const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
+        if (entry.isDir()) {
+            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
+                return false;
+        } else if (entry.isFile()) {
+            // QFile::copy refuses to overwrite — caller's collision check
+            // already guarantees a clean destination, but defend against
+            // a partial failed previous run leaving stale files.
+            if (QFile::exists(destEntryPath))
+                QFile::remove(destEntryPath);
+            if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
+                return false;
+        }
+        // Symlinks, devices, etc. are intentionally skipped — a shader
+        // pack contains regular files only; anything exotic is suspect.
+    }
+    return true;
+}
+
+} // namespace animations_controller_detail
+
+bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
+{
+    if (sourceUrl.isEmpty())
+        return false;
+
+    // Accept both `file://...` URLs (drag-drop from a file manager) and
+    // bare paths (programmatic callers).
+    QString sourcePath = sourceUrl;
+    if (sourcePath.startsWith(QLatin1String("file://")))
+        sourcePath = QUrl(sourceUrl).toLocalFile();
+
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isDir()) {
+        qCWarning(lcConfig) << "installShaderPack: source is not an existing directory:" << sourcePath;
+        return false;
+    }
+
+    // Validate metadata.json — without it the registry won't pick up the
+    // pack, so accepting the drop would silently be a no-op.
+    const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
+    if (!QFile::exists(metadataPath)) {
+        qCWarning(lcConfig) << "installShaderPack: source has no metadata.json:" << sourcePath;
+        return false;
+    }
+
+    if (!ensureUserShaderDirectory())
+        return false;
+
+    const QString destDir = userShaderDirectoryPath() + QLatin1Char('/') + sourceInfo.fileName();
+    if (QFileInfo::exists(destDir)) {
+        qCWarning(lcConfig) << "installShaderPack: destination already exists, refusing to overwrite:" << destDir;
+        return false;
+    }
+
+    if (!animations_controller_detail::copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
+        qCWarning(lcConfig) << "installShaderPack: copy failed; rolling back:" << destDir;
+        QDir(destDir).removeRecursively();
+        return false;
+    }
+
+    // The registry's filewatcher rescans on its own — no explicit poke
+    // needed. If a poke is ever required, emit `shaderEffectsChanged`
+    // here.
+    return true;
 }
 
 QVariantMap AnimationsPageController::rawShaderProfile(const QString& path) const
@@ -870,6 +959,32 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     m_shaderTreeDirty = true;
     Q_EMIT pendingChangesChanged();
     return toClear.size();
+}
+
+QVariantList AnimationsPageController::shaderEffectUsages(const QString& effectId) const
+{
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings || effectId.isEmpty())
+        return {};
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const QStringList overridden = tree.overriddenPaths();
+    QVariantList out;
+    for (const QString& p : overridden) {
+        const ShaderProfile profile = tree.directOverride(p);
+        if (!profile.effectId || *profile.effectId != effectId)
+            continue;
+        QVariantMap entry;
+        entry.insert(QLatin1String("path"), p);
+        entry.insert(QLatin1String("label"), eventLabel(p));
+        out.append(entry);
+    }
+    // Sort by label for deterministic UI order across runs — the tree's
+    // `overriddenPaths()` iterates a QHash internally so the order is
+    // not stable.
+    std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
+    });
+    return out;
 }
 
 } // namespace PlasmaZones
