@@ -695,6 +695,104 @@ private Q_SLOTS:
         QVERIFY(c.isValid());
         QCOMPARE(c, QColor(0xff, 0x88, 0x00));
     }
+
+    /// Alpha channel survives the QColor → QVariantMap → kwin-effect
+    /// QVector4D round-trip. Without an explicit assertion, an encoder
+    /// regression that dropped the alpha (e.g. `setRgb()` instead of
+    /// `setRgba()`) would silently slip past `testColorParamTranslation`
+    /// because `QColor(Qt::red)` and a `setRgb()`-only result both
+    /// compare equal under `QColor::operator==` when alpha defaults to
+    /// 255.
+    void testColorParamPreservesAlpha()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-color-alpha");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo tint;
+        tint.id = QStringLiteral("tint");
+        tint.type = QStringLiteral("color");
+        eff.parameters = {tint};
+
+        // Friendly map carries an explicit non-255 alpha — pin that the
+        // encoder threads it through to the customColor1 slot.
+        const QColor source(0xff, 0x00, 0x00, 0x80);
+        const QVariantMap result =
+            AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("tint"), source}});
+        QVERIFY(result.contains(QStringLiteral("customColor1")));
+        const QColor c = result.value(QStringLiteral("customColor1")).value<QColor>();
+        QVERIFY(c.isValid());
+        QCOMPARE(c.alpha(), 0x80);
+        QCOMPARE(c, source);
+
+        // Qt's QColor accepts 8-char hex in `#AARRGGBB` form (alpha
+        // first), per `QColor::QColor(QString)` — NOT the CSS-style
+        // `#RRGGBBAA` convention. Pin that the encoder threads alpha
+        // through whichever form Qt's parser actually accepts.
+        const QVariantMap fromHex = AnimationShaderRegistry::translateAnimationParams(
+            eff, {{QStringLiteral("tint"), QStringLiteral("#80ff0000")}});
+        const QColor cHex = fromHex.value(QStringLiteral("customColor1")).value<QColor>();
+        QVERIFY(cHex.isValid());
+        QCOMPARE(cHex.alpha(), 0x80);
+        QCOMPARE(cHex.red(), 0xff);
+    }
+
+    /// Coercion-edge contract for the friendlyParams → customColor<N>
+    /// path. The translator's coerce lambda accepts QColor, QString
+    /// (any QColor-parseable form including SVG names), and falls back
+    /// to the declared default — ultimately to `Qt::transparent` if no
+    /// path resolves. Pin every edge so a regression in the lambda
+    /// surfaces here rather than as a silent black-default at runtime.
+    void testColorParamCoercionEdges()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("test-color-edges");
+        eff.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo tint;
+        tint.id = QStringLiteral("tint");
+        tint.type = QStringLiteral("color");
+        tint.defaultValue = QColor(Qt::blue);
+        eff.parameters = {tint};
+
+        // SVG colour name resolves via QColor's string ctor.
+        {
+            const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("red")}});
+            QCOMPARE(r.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::red));
+        }
+        // Invalid hex string falls back to the declared default (blue).
+        {
+            const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("#zzzzzz")}});
+            QCOMPARE(r.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::blue));
+        }
+        // Empty string falls back to the declared default (blue).
+        {
+            const QVariantMap r =
+                AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("tint"), QString()}});
+            QCOMPARE(r.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::blue));
+        }
+        // Wrong-type variant (int) falls back to the declared default
+        // (blue) — int → QColor cannot resolve, int → QString gives
+        // "42", which is not a valid colour, so the chain bottoms out
+        // on the declared default.
+        {
+            const QVariantMap r =
+                AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("tint"), 42}});
+            QCOMPARE(r.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::blue));
+        }
+
+        // No defaultValue + no friendlyParams entry → ultimate fallback
+        // to Qt::transparent (the chain's documented sentinel).
+        AnimationShaderEffect noDefault;
+        noDefault.id = QStringLiteral("test-color-no-default");
+        noDefault.fragmentShaderPath = QStringLiteral("/dummy/effect.frag");
+        AnimationShaderEffect::ParameterInfo bare;
+        bare.id = QStringLiteral("tint");
+        bare.type = QStringLiteral("color");
+        noDefault.parameters = {bare};
+        const QVariantMap rNoSrc = AnimationShaderRegistry::translateAnimationParams(noDefault, {});
+        QCOMPARE(rNoSrc.value(QStringLiteral("customColor1")).value<QColor>(), QColor(Qt::transparent));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderRegistry)

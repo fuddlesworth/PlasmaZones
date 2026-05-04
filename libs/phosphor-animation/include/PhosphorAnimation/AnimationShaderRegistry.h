@@ -100,9 +100,12 @@ public:
     ///     up to 16 slots (`AnimationShaderContract::kMaxCustomColors`).
     ///     Color values are coerced to `QColor` at this boundary —
     ///     `QString` forms parsable by `QColor::QColor(QString)`
-    ///     (`"#rrggbb"`, `"red"`, `"#rrggbbaa"`) are accepted alongside
-    ///     `QColor` instances; everything else falls back to the declared
-    ///     default, then `Qt::transparent`.
+    ///     (`"#rgb"`, `"#rrggbb"`, `"#aarrggbb"` with alpha FIRST per
+    ///     Qt's convention, SVG colour names like `"red"`) are accepted
+    ///     alongside `QColor` instances; everything else falls back to
+    ///     the declared default, then `Qt::transparent`. CSS-style
+    ///     `"#rrggbbaa"` (alpha last) is NOT accepted — Qt's parser
+    ///     doesn't recognise that order.
     ///
     /// The two allocators advance independently — a color parameter does
     /// NOT consume a `customParams` sub-slot, so a `[color, float]`

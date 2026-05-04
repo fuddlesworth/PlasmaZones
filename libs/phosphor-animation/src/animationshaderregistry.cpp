@@ -109,6 +109,13 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
                     << missing.join(QLatin1String(", "));
                 e.isMultipass = false;
                 e.bufferShaderPaths.clear();
+                // Per-buffer overrides are positionally aligned with
+                // bufferShaderPaths; with paths cleared, the overrides are
+                // orphaned data that would still survive toJson round-trip
+                // and operator== comparison. Clear them in lockstep so the
+                // disabled-multipass struct is internally coherent.
+                e.bufferWraps.clear();
+                e.bufferFilters.clear();
             }
         }
     }
@@ -239,11 +246,14 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             // ShaderEffect::setShaderParams) never has to defend against
             // a string-shaped colour leaking through. Accepted shapes:
             // already-a-QColor (QML/settings-UI path); QString in any
-            // form QColor's constructor parses (`"#rrggbb"`, `"red"`,
-            // SVG names, `"#rrggbbaa"`); anything else falls back to the
-            // declared default, then transparent. Without this, a
+            // form QColor's constructor parses (`"#rgb"`, `"#rrggbb"`,
+            // `"#aarrggbb"` with alpha FIRST per Qt's convention, SVG
+            // colour names like `"red"`); anything else falls back to
+            // the declared default, then transparent. Without this, a
             // user-edited config that wrote a hex string would silently
-            // render as black on both runtimes.
+            // render as black on both runtimes. Note: CSS-style
+            // `"#rrggbbaa"` (alpha last) is NOT accepted — Qt's
+            // QColor parser doesn't recognise that order.
             const auto coerce = [](const QVariant& v) -> QColor {
                 if (v.canConvert<QColor>()) {
                     const QColor c = v.value<QColor>();

@@ -4343,13 +4343,21 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
     }
 
-    if (eff.isMultipass) {
-        qCInfo(lcEffect) << "Animation effect" << effectId
-                         << "is multipass — compositor path runs single-pass only (buffer passes skipped)";
-    }
-
     auto cacheIt = m_shaderCache.find(effectId);
     if (cacheIt == m_shaderCache.end()) {
+        // Diagnostic-once-per-compile: log multipass degradation when the
+        // shader is first compiled for this session, not on every transition
+        // install. Lifecycle events (window.move on a drag, window.focus on
+        // alt-tab) can fire beginShaderTransition many times in quick
+        // succession against an already-cached effect; a per-install log
+        // would flood the journal. Cache invalidation (effectsChanged →
+        // m_shaderCache.clear) re-fires the log at the next install, which
+        // is the right semantic for hot-reload.
+        if (eff.isMultipass) {
+            qCInfo(lcEffect) << "Animation effect" << effectId
+                             << "is multipass — compositor path runs single-pass only (buffer passes skipped)";
+        }
+
         QFile shaderFile(eff.fragmentShaderPath);
         if (!shaderFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;

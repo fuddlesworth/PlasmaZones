@@ -220,6 +220,82 @@ PhosphorAnimation::MotionSpec<qreal> buildSpec(const PhosphorAnimation::Profile&
     return spec;
 }
 
+/// Apply per-effect static configuration (fragment / vertex source,
+/// include paths, multipass, wallpaper, depth) to an existing shader
+/// item. Idempotent — every `ShaderEffect` setter no-ops on identity, so
+/// a repeat call with the same `effect` only incurs the cost of the
+/// wallpaper cache lookup (mtime-keyed, mutex-guarded; typically a
+/// cache hit).
+///
+/// Always-set semantics: every effect-level toggle is written
+/// unconditionally (the `else` arms explicitly clear), so a metadata.json
+/// hot-reload that DISABLES a feature (`isMultipass` true→false,
+/// `useWallpaper` true→false, `useDepthBuffer` true→false) propagates
+/// onto a reused shader item rather than leaving stale state from the
+/// prior leg. The `if (cond) … else …` shape matters here: a gated-set
+/// helper would silently keep the old buffers/wallpaper alive across
+/// the disable.
+///
+/// Called from both `attachShaderToAnchor` (fresh attach) and
+/// `runLeg`'s reuse branch (between legs of the same effect id, where
+/// a metadata.json hot-reload may have changed multipass / wallpaper /
+/// depth fields even while the id stayed stable). Centralising here
+/// keeps the two paths in lockstep so a future wired-through field
+/// can't silently apply only on fresh attach. Per-leg state — `iTime`,
+/// translated parameters, geometry, structural padding — is NOT this
+/// helper's concern; the caller threads those through separately.
+void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
+                             const PhosphorAnimationShaders::AnimationShaderEffect& effect,
+                             const QStringList& shaderIncludePaths)
+{
+    if (!shaderItem) {
+        return;
+    }
+    if (!shaderIncludePaths.isEmpty()) {
+        shaderItem->setShaderIncludePaths(shaderIncludePaths);
+    }
+    shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
+    if (!effect.vertexShaderPath.isEmpty()) {
+        shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    }
+    if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
+        shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);
+        shaderItem->setBufferFeedback(effect.bufferFeedback);
+        shaderItem->setBufferScale(effect.bufferScale);
+        // Per-buffer overrides: pass through unconditionally — empty
+        // string normalizes to the ShaderEffect defaults ("clamp"
+        // wrap, "linear" filter) per
+        // `ShaderNodeRhi::normalizeWrapMode`/`normalizeFilterMode`,
+        // and empty list clears any previous-leg overrides. Gating on
+        // `!isEmpty()` would let stale per-buffer overrides survive a
+        // hot-reload that removed them from `metadata.json`.
+        shaderItem->setBufferWrap(effect.bufferWrap);
+        shaderItem->setBufferWraps(effect.bufferWraps);
+        shaderItem->setBufferFilter(effect.bufferFilter);
+        shaderItem->setBufferFilters(effect.bufferFilters);
+    } else {
+        // Hot-reload disable path: clear whatever the previous leg
+        // configured so the reused shader item doesn't keep running
+        // stale buffer passes. Empty list / false / 1.0 are the
+        // ShaderEffect default-state values; setters no-op when the
+        // item is already at default.
+        shaderItem->setBufferShaderPaths({});
+        shaderItem->setBufferFeedback(false);
+        shaderItem->setBufferScale(1.0);
+        shaderItem->setBufferWrap(QString());
+        shaderItem->setBufferWraps({});
+        shaderItem->setBufferFilter(QString());
+        shaderItem->setBufferFilters({});
+    }
+    if (effect.useWallpaper) {
+        shaderItem->setUseWallpaper(true);
+        shaderItem->setWallpaperTexture(PhosphorShaders::ShaderRegistry::loadWallpaperImage());
+    } else {
+        shaderItem->setUseWallpaper(false);
+    }
+    shaderItem->setUseDepthBuffer(effect.useDepthBuffer);
+}
+
 /// Pieces produced by `attachShaderToAnchor`. The caller stashes
 /// these on its in-flight Track; the helper stays free of the inner
 /// Track type so a future caller can reuse it.
@@ -280,6 +356,20 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // the same pass" Vulkan validation: the source FBO render and the
     // shader effect's read are different render passes.
     //
+    // **Gated on `foundExplicitAnchor`**: only created when a descendant
+    // tagged `shaderAnchor: true` was found. The fallback path (no tag,
+    // anchor==target==QML root) leaves `shaderSource` null and skips the
+    // `setSourceItem` call below, so iChannel0 is unbound for the whole
+    // leg — the shader runs without a content texture and any
+    // `texture(iChannel0, …)` call returns whatever the GL spec does for
+    // an unbound sampler (typically transparent black). This is
+    // intentional: layer-enabling a QQuickRootItem-rooted target breaks
+    // scene-graph rendering for the consumer's whole window. Animation
+    // shaders that need an iChannel0 sample MUST be paired with a
+    // `shaderAnchor: true` descendant in the consumer's QML; the
+    // explicit=false case in the qCDebug above is the operator's signal
+    // that a shader is running source-less.
+    //
     // live=true: open animations have no prior frame to snapshot. A
     // one-shot grab (live=false) races the source's first layout/paint
     // and captures an empty FBO, leaving iChannel0 transparent for the
@@ -326,37 +416,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // live layer — no same-pass conflict.
     auto* shaderItem =
         new PhosphorRendering::ShaderEffect(shaderAnchor->parentItem() ? shaderAnchor->parentItem() : shaderAnchor);
-    if (!shaderIncludePaths.isEmpty()) {
-        shaderItem->setShaderIncludePaths(shaderIncludePaths);
-    }
-    shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
-    if (!effect.vertexShaderPath.isEmpty()) {
-        shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
-    }
-    if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
-        shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);
-        shaderItem->setBufferFeedback(effect.bufferFeedback);
-        shaderItem->setBufferScale(effect.bufferScale);
-        if (!effect.bufferWrap.isEmpty()) {
-            shaderItem->setBufferWrap(effect.bufferWrap);
-        }
-        if (!effect.bufferWraps.isEmpty()) {
-            shaderItem->setBufferWraps(effect.bufferWraps);
-        }
-        if (!effect.bufferFilter.isEmpty()) {
-            shaderItem->setBufferFilter(effect.bufferFilter);
-        }
-        if (!effect.bufferFilters.isEmpty()) {
-            shaderItem->setBufferFilters(effect.bufferFilters);
-        }
-    }
-    if (effect.useWallpaper) {
-        shaderItem->setUseWallpaper(true);
-        shaderItem->setWallpaperTexture(PhosphorShaders::ShaderRegistry::loadWallpaperImage());
-    }
-    if (effect.useDepthBuffer) {
-        shaderItem->setUseDepthBuffer(true);
-    }
+    applyEffectStaticConfig(shaderItem, effect, shaderIncludePaths);
     // Initialise iTime to the leg's start value BEFORE the QQuickShaderEffect
     // can paint a frame. Show legs run iTime 0→1 (start at 0); hide legs run
     // 1→0 (start at 1). If we always initialised to 0.0 here, a hide leg's
@@ -1142,6 +1202,14 @@ public:
                         reusedShaderSource->setLive(true);
                     }
                     reusedShaderItem->setVisible(true);
+                    // Re-apply per-effect static config so a metadata.json
+                    // hot-reload that changed multipass / wallpaper / depth
+                    // / vertex shader between legs propagates onto the
+                    // reused shader item. Idempotent on identity (the
+                    // ShaderEffect setters all no-op when the value is
+                    // unchanged), so the common no-hot-reload case costs
+                    // only a wallpaper-cache lookup.
+                    applyEffectStaticConfig(reusedShaderItem.data(), resolvedShaderEff, animIncludePaths);
                     // Reset iTime to the new leg's start so the first
                     // painted frame after the shaderTime AV starts
                     // matches the AnimatedValue's intended `from` —

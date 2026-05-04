@@ -21,7 +21,8 @@
 //     source to KWin::ShaderManager::generateCustomShader. `qt_Matrix`
 //     and `qt_Opacity` are dropped on the kwin path (KWin manages its
 //     own scene-graph transform / opacity); `_appField0` / `_appField1`
-//     are dropped (padding only).
+//     are dropped (padding only); `iFlipBufferY` is dropped (daemon-only
+//     Y-flip signal, no equivalent on the kwin path).
 //
 // Author guidance: include this file from each animation shader's
 // effect.frag with `#include <animation_uniforms.glsl>`. Do not declare
