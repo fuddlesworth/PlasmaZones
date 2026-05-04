@@ -24,7 +24,13 @@ using PhosphorFsLoader::LiveReload;
 
 namespace {
 
-void writeMetadata(const QString& dir, const QString& id, const QString& fragShader = QStringLiteral("effect.frag"))
+/// Build a minimal metadata.json + effect.frag pair on disk for the
+/// registry's scanner to discover. The optional @p extra QJsonObject
+/// is merged into the metadata after the base fields, letting tests
+/// exercise multipass / wallpaper / depth / parameters declarations
+/// without duplicating the file-write boilerplate.
+void writeMetadata(const QString& dir, const QString& id, const QString& fragShader = QStringLiteral("effect.frag"),
+                   const QJsonObject& extra = {})
 {
     QDir().mkpath(dir);
     QJsonObject obj;
@@ -32,6 +38,9 @@ void writeMetadata(const QString& dir, const QString& id, const QString& fragSha
     obj.insert(QLatin1String("name"), id);
     obj.insert(QLatin1String("fragmentShader"), fragShader);
     obj.insert(QLatin1String("category"), QStringLiteral("Test"));
+    for (auto it = extra.begin(); it != extra.end(); ++it) {
+        obj.insert(it.key(), it.value());
+    }
 
     QFile file(dir + QStringLiteral("/metadata.json"));
     QVERIFY(file.open(QIODevice::WriteOnly));
@@ -96,6 +105,46 @@ private Q_SLOTS:
         QVERIFY(registry.hasEffect(QStringLiteral("dissolve")));
         QVERIFY(registry.hasEffect(QStringLiteral("slide")));
         QVERIFY(registry.hasEffect(QStringLiteral("glitch")));
+    }
+
+    /// Multipass / wallpaper / depth / buffer fields parsed and exposed
+    /// through the registry's scanner end-to-end. Catches regressions
+    /// in `parseEffect` that drop the new metadata fields when reading
+    /// from disk (the unit-level `testJsonPreservesMultipassFields`
+    /// covers the toJson↔fromJson round-trip; this one covers the
+    /// disk-scan path through the scan-strategy machinery).
+    void testDiscoversMultipassEffect()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject extra;
+        extra.insert(QLatin1String("multipass"), true);
+        extra.insert(QLatin1String("bufferShaders"), QJsonArray{QStringLiteral("buffer-a.frag")});
+        extra.insert(QLatin1String("wallpaper"), true);
+        extra.insert(QLatin1String("depthBuffer"), true);
+        extra.insert(QLatin1String("bufferScale"), 0.5);
+        writeMetadata(tmp.path() + QStringLiteral("/multipass"), QStringLiteral("multipass"),
+                      QStringLiteral("effect.frag"), extra);
+        // The buffer shader file must exist on disk too — registry's
+        // parseEffect drops `bufferShaderPaths` entries that don't
+        // resolve to a readable file, so a missing buffer shader would
+        // make `isMultipass` collapse back to false.
+        QFile bufFrag(tmp.path() + QStringLiteral("/multipass/buffer-a.frag"));
+        QVERIFY(bufFrag.open(QIODevice::WriteOnly));
+        bufFrag.write("void main() {}");
+        bufFrag.close();
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+
+        const AnimationShaderEffect eff = registry.effect(QStringLiteral("multipass"));
+        QVERIFY(eff.isValid());
+        QCOMPARE(eff.isMultipass, true);
+        QCOMPARE(eff.bufferShaderPaths.size(), 1);
+        QCOMPARE(eff.useWallpaper, true);
+        QCOMPARE(eff.useDepthBuffer, true);
+        QCOMPARE(eff.bufferScale, qreal(0.5));
     }
 
     void testLaterPathOverridesEarlier()
@@ -714,26 +763,32 @@ private Q_SLOTS:
         eff.parameters = {tint};
 
         // Friendly map carries an explicit non-255 alpha — pin that the
-        // encoder threads it through to the customColor1 slot.
-        const QColor source(0xff, 0x00, 0x00, 0x80);
-        const QVariantMap result =
-            AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("tint"), source}});
-        QVERIFY(result.contains(QStringLiteral("customColor1")));
-        const QColor c = result.value(QStringLiteral("customColor1")).value<QColor>();
-        QVERIFY(c.isValid());
-        QCOMPARE(c.alpha(), 0x80);
-        QCOMPARE(c, source);
+        // encoder threads it through to the customColor1 slot. Wrapped
+        // in a scope block so a future maintainer adding a third case
+        // can't accidentally have a `result` shadow the prior block's.
+        {
+            const QColor source(0xff, 0x00, 0x00, 0x80);
+            const QVariantMap result =
+                AnimationShaderRegistry::translateAnimationParams(eff, {{QStringLiteral("tint"), source}});
+            QVERIFY(result.contains(QStringLiteral("customColor1")));
+            const QColor c = result.value(QStringLiteral("customColor1")).value<QColor>();
+            QVERIFY(c.isValid());
+            QCOMPARE(c.alpha(), 0x80);
+            QCOMPARE(c, source);
+        }
 
         // Qt's QColor accepts 8-char hex in `#AARRGGBB` form (alpha
         // first), per `QColor::QColor(QString)` — NOT the CSS-style
         // `#RRGGBBAA` convention. Pin that the encoder threads alpha
         // through whichever form Qt's parser actually accepts.
-        const QVariantMap fromHex = AnimationShaderRegistry::translateAnimationParams(
-            eff, {{QStringLiteral("tint"), QStringLiteral("#80ff0000")}});
-        const QColor cHex = fromHex.value(QStringLiteral("customColor1")).value<QColor>();
-        QVERIFY(cHex.isValid());
-        QCOMPARE(cHex.alpha(), 0x80);
-        QCOMPARE(cHex.red(), 0xff);
+        {
+            const QVariantMap fromHex = AnimationShaderRegistry::translateAnimationParams(
+                eff, {{QStringLiteral("tint"), QStringLiteral("#80ff0000")}});
+            const QColor cHex = fromHex.value(QStringLiteral("customColor1")).value<QColor>();
+            QVERIFY(cHex.isValid());
+            QCOMPARE(cHex.alpha(), 0x80);
+            QCOMPARE(cHex.red(), 0xff);
+        }
     }
 
     /// Coercion-edge contract for the friendlyParams → customColor<N>

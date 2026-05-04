@@ -20,6 +20,7 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QMutexLocker>
+#include <QThread>
 #include <QTimer>
 #include <QImage>
 #include <QGuiApplication>
@@ -238,6 +239,15 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
 
 void OverlayService::updateShaderUniforms()
 {
+    // Pinned to the GUI thread by m_shaderUpdateTimer (a QObject parented
+    // to `this`, fired only on the thread that owns it). The frame-counter
+    // overflow guard below uses fetch_add + store NOT as a TOCTOU-safe
+    // sequence but as cheap relaxed-atomic increments — the assert pins
+    // the thread invariant in debug builds so a future refactor that
+    // drives the timer from a worker thread surfaces here rather than
+    // as silently-corrupted iFrame on simultaneous invocations.
+    Q_ASSERT(thread() == QThread::currentThread());
+
     qint64 currentTime;
     {
         QMutexLocker locker(&m_shaderTimerMutex);

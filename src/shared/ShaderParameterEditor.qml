@@ -122,8 +122,10 @@ ColumnLayout {
     property Component _wideRowComponent
     /// Settings (compact) row: fillWidth title on the left, fixed-width
     /// control on the right. Layout mirrors the settings-app SettingsRow
-    /// (left/right margins, control max-width 45%) so per-event shader
-    /// params line up with the timing-mode and duration rows above them.
+    /// so per-event shader params line up with the timing-mode and
+    /// duration rows above them. The control's 45%-max-width clamp is
+    /// enforced by the enclosing SettingsRow, NOT here — this delegate
+    /// only sets the Layout.preferred sizes; SettingsRow caps them.
     property Component _compactRowComponent
 
     signal valueChanged(string paramId, var value)

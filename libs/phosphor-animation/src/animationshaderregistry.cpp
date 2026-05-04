@@ -247,13 +247,16 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             // a string-shaped colour leaking through. Accepted shapes:
             // already-a-QColor (QML/settings-UI path); QString in any
             // form QColor's constructor parses (`"#rgb"`, `"#rrggbb"`,
-            // `"#aarrggbb"` with alpha FIRST per Qt's convention, SVG
-            // colour names like `"red"`); anything else falls back to
-            // the declared default, then transparent. Without this, a
-            // user-edited config that wrote a hex string would silently
-            // render as black on both runtimes. Note: CSS-style
-            // `"#rrggbbaa"` (alpha last) is NOT accepted — Qt's
-            // QColor parser doesn't recognise that order.
+            // `"#aarrggbb"` with alpha FIRST per Qt's convention,
+            // higher-bit-depth `"#rrrgggbbb"` / `"#rrrrggggbbbb"`, SVG
+            // colour names like `"red"`, the `"transparent"` keyword);
+            // anything else falls back to the declared default, then
+            // transparent. CSS-style `"#rrggbbaa"` (alpha LAST, 9
+            // chars) is NOT accepted: any 9-char hex string is
+            // ambiguous between Qt and CSS encodings (same bytes,
+            // different channel meaning), so a rewrite would silently
+            // corrupt configs that already use Qt's order. Settings UI
+            // / config writers emit Qt-form (alpha first) explicitly.
             const auto coerce = [](const QVariant& v) -> QColor {
                 if (v.canConvert<QColor>()) {
                     const QColor c = v.value<QColor>();
@@ -385,6 +388,21 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
         QString decl = workingTrimmed;
         decl.chop(1); // remove trailing ';'
 
+        // Extract the field name (the last whitespace-separated token,
+        // stripped of any `[N]` array suffix). A canonical declaration
+        // like `vec4 customParams[8]` yields `customParams`; `mat4
+        // qt_Matrix` yields `qt_Matrix`. Token-level matching is
+        // future-proof against a contract that adds e.g. `iFlipBufferYAdjusted`
+        // — substring matching would silently nuke that too. The
+        // `lastIndexOf(' ')` split also tolerates `highp vec4 ...`-style
+        // declarations: only the final token (the identifier) is matched.
+        const int lastSpace = decl.lastIndexOf(QLatin1Char(' '));
+        QString fieldName = (lastSpace >= 0) ? decl.mid(lastSpace + 1) : decl;
+        const int bracketIdx = fieldName.indexOf(QLatin1Char('['));
+        if (bracketIdx >= 0) {
+            fieldName = fieldName.left(bracketIdx);
+        }
+
         // Drop fields that are not part of the animation contract on the
         // classic-GL path. KWin manages its own scene-graph transform /
         // opacity; `_appField0/1` are daemon-side escape-hatch padding;
@@ -394,9 +412,9 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
         // `_pad*` declarations — std140's natural vec4-alignment of the
         // next array fills the gaps (see the layout comment in that
         // file) — so no `_pad*` strip entry is needed here.
-        if (decl.contains(QLatin1String("qt_Matrix")) || decl.contains(QLatin1String("qt_Opacity"))
-            || decl.contains(QLatin1String("_appField0")) || decl.contains(QLatin1String("_appField1"))
-            || decl.contains(QLatin1String("iFlipBufferY"))) {
+        if (fieldName == QLatin1String("qt_Matrix") || fieldName == QLatin1String("qt_Opacity")
+            || fieldName == QLatin1String("_appField0") || fieldName == QLatin1String("_appField1")
+            || fieldName == QLatin1String("iFlipBufferY")) {
             continue;
         }
 

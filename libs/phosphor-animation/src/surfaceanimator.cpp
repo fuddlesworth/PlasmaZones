@@ -110,6 +110,21 @@ inline qreal clampPaddingToParent(QQuickItem* anchor, qreal requestedPad)
     return qMin(pad, kMaxBoundsPaddingFraction);
 }
 
+/// Sanitise a `boundsPadding` source value into a NaN-free, finite
+/// qreal suitable for storage in a Track's `requestedPadPtr`. The
+/// `clampPaddingToParent` clamp above also rejects NaN, but inputs
+/// to this helper land in a `shared_ptr<qreal>` cell that the
+/// syncGeometry lambda dereferences without a NaN-check of its own
+/// — so a NaN in the cell would propagate through clampPaddingToParent's
+/// own input-side `qIsNaN` guard producing a 0.0 result on every paint.
+/// Sanitising at the assignment boundary keeps both the reuse-path
+/// refresh and the fresh-attach init using the same single-source
+/// rule and centralises a guard that previously duplicated.
+inline qreal sanitiseBoundsPadding(qreal requested)
+{
+    return qIsNaN(requested) ? qreal(0.0) : requested;
+}
+
 /// Apply the shader-item geometry derived from @p anchor + @p requestedPad.
 /// Centralises the math behind the per-leg syncGeometry lambda so the
 /// reuse path can re-fire it explicitly after a metadata hot-reload that
@@ -623,7 +638,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // already-connected syncGeometry lambda picks up the new value
     // on the next anchor geometry signal. Capturing by value would
     // freeze the lambda on the original metadata.
-    auto requestedPadPtr = std::make_shared<qreal>(qIsNaN(effect.boundsPadding) ? qreal(0.0) : effect.boundsPadding);
+    auto requestedPadPtr = std::make_shared<qreal>(sanitiseBoundsPadding(effect.boundsPadding));
     QPointer<PhosphorRendering::ShaderEffect> shaderItemPtr{shaderItem};
     auto syncGeometry = [shaderItemPtr, shaderSourcePtr = QPointer<QQuickShaderEffectSource>(shaderSource),
                          requestedPadPtr, anchorPtr = QPointer<QQuickItem>(shaderAnchor)]() {
@@ -1156,8 +1171,7 @@ public:
                     // lambda using the OLD value when the anchor next
                     // moves/resizes.
                     if (reusedRequestedPadPtr) {
-                        *reusedRequestedPadPtr =
-                            qIsNaN(resolvedShaderEff.boundsPadding) ? qreal(0.0) : resolvedShaderEff.boundsPadding;
+                        *reusedRequestedPadPtr = sanitiseBoundsPadding(resolvedShaderEff.boundsPadding);
                     }
                     m_pendingReuse.erase(pendIt);
                 } else {

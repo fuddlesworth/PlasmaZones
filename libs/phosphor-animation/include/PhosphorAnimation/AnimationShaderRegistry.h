@@ -106,8 +106,11 @@ public:
     ///     `"#rrrrggggbbbb"`, SVG colour names like `"red"`, and the
     ///     `"transparent"` keyword) — alongside `QColor` instances.
     ///     Everything else falls back to the declared default, then
-    ///     `Qt::transparent`. CSS-style `"#rrggbbaa"` (alpha last) is
-    ///     NOT accepted — Qt's parser doesn't recognise that order.
+    ///     `Qt::transparent`. CSS-style `"#rrggbbaa"` (alpha LAST, 9
+    ///     chars) is NOT accepted — any 9-char hex string is
+    ///     ambiguous between Qt-form and CSS-form, so a rewrite
+    ///     would silently corrupt configs that already use Qt's
+    ///     order; settings UI / config writers MUST emit Qt-form.
     ///
     /// The two allocators advance independently — a color parameter does
     /// NOT consume a `customParams` sub-slot, so a `[color, float]`

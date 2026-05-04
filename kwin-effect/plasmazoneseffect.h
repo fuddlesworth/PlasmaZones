@@ -614,6 +614,17 @@ private:
     /// reusing the address can't false-match. Cleared explicitly on
     /// windowDeleted (defence in depth) and on window destroy via QPointer.
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
+    /// @p durationMs interpretation:
+    ///   • > 0: time-based transition. paintWindow reads progress as
+    ///     (now - startTimeMs) / durationMs, linear ramp; tryBeginShaderForEvent's
+    ///     timer fires `endShaderTransition` after this many ms.
+    ///   • 0 (default) / negative: animator-driven transition. paintWindow
+    ///     reads progress from `m_windowAnimator->animationFor(w)` (curved
+    ///     by the geometry animation's profile); the animator's completion
+    ///     callback drives `endShaderTransition`. Used by `applySnapGeometry`
+    ///     for zone.* events that already have an animator-tracked motion.
+    /// `tryBeginShaderForEvent` rejects the negative case before calling here;
+    /// internal callers (`applySnapGeometry`) pass the default 0.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0);
     void endShaderTransition(KWin::EffectWindow* window);
