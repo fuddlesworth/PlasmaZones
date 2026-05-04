@@ -16,13 +16,16 @@ import org.kde.kirigami as Kirigami
  *
  * ## Layout
  *
- *   • User shaders card — directory path + "Open Directory" button.
+ *   • User shaders card — drop zone for installing user shader packs +
+ *     "Open Folder" button (matches the layouts / autotile-algorithms
+ *     toolbar pattern; no path label — the file manager surfaces the
+ *     location far better than a truncated string).
  *   • Filter bar — text search + per-category multi-select pills +
  *     built-in / user toggles.
- *   • Installed shaders card — packs grouped by category, each section
- *     headed with the category name and the (filtered / total) count.
- *     Each row shows the optional preview thumbnail, name, badges,
- *     description, and an expandable parameter list.
+ *   • Installed shaders card — packs grouped by category as a card grid;
+ *     each section headed with the category name and the count.
+ *     Card click opens AnimationsShaderDetailDialog for the full view
+ *     (preview, description, "Used in:" reverse-lookup, parameter list).
  */
 Flickable {
     id: root

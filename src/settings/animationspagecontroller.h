@@ -238,15 +238,19 @@ public:
     /// creating it first if missing.
     Q_INVOKABLE void openUserShaderDirectory();
 
-    /// Install a shader pack from a dropped folder. @p sourceUrl is a
-    /// `file://` URL pointing at a directory containing a `metadata.json`
-    /// at its root. The directory is copied recursively into
-    /// `userShaderDirectoryPath()/<basename>`; the registry's filewatcher
-    /// detects the new pack and emits `effectsChanged` automatically.
-    /// Validates that the source exists, is a directory, contains a
-    /// `metadata.json`, and that the basename does not collide with an
-    /// existing entry in the user dir (collision returns false rather
-    /// than overwriting). @return true on success.
+    /// Install a shader pack from a dropped folder. @p sourceUrl accepts
+    /// either a `file://` URL (drag-drop from a file manager) or a bare
+    /// absolute path (programmatic callers); both forms are normalised
+    /// via `QDir::cleanPath` before use. The source must be a directory
+    /// containing a `metadata.json` at its root. The directory is copied
+    /// recursively into `userShaderDirectoryPath()/<basename>`; the
+    /// registry's filewatcher detects the new pack and emits
+    /// `effectsChanged` automatically. Validates that the source exists,
+    /// is a non-symlinked directory with a non-symlinked `metadata.json`,
+    /// and that the basename does not collide with an existing entry in
+    /// the user dir (collision returns false rather than overwriting).
+    /// Symlinks anywhere inside the source tree are silently skipped by
+    /// the recursive copy. @return true on success.
     Q_INVOKABLE bool installShaderPack(const QString& sourceUrl);
 
     /// Per-event shader override read.

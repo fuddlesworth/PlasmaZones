@@ -81,7 +81,11 @@ ItemDelegate {
             Image {
                 anchors.fill: parent
                 anchors.margins: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-                source: parent._hasPreview ? "file://" + root.effect.previewPath : ""
+                // `encodeURI` percent-encodes spaces and unicode while
+                // preserving the path separators, which a raw
+                // `"file://" + path` concat would silently break on
+                // (e.g. a user-installed pack at `~/My Shaders/`).
+                source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
                 fillMode: Image.PreserveAspectCrop
                 sourceSize.width: width * 2
                 sourceSize.height: height * 2

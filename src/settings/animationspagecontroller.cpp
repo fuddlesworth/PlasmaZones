@@ -736,6 +736,14 @@ namespace animations_controller_detail {
 /// for consistency with the rest of the codebase. Returns false on the
 /// first failure (broken file copy, mkpath fail, etc.) so the caller
 /// can roll back via QDir::removeRecursively.
+///
+/// Symlinks (file or dir) are explicitly skipped via `QDir::NoSymLinks`
+/// AND a per-entry `isSymLink()` guard. Without that, a dropped pack
+/// containing `metadata.json -> /etc/shadow` or `assets -> /etc` would
+/// silently follow the link during traversal and the recursive copy
+/// would smuggle arbitrary readable filesystem content into the user
+/// shader dir under deceptive names. A shader pack contains regular
+/// files only; anything exotic is suspect and refused.
 static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
 {
     QDir sourceDir(sourcePath);
@@ -744,8 +752,17 @@ static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
     if (!QDir().mkpath(destPath))
         return false;
 
-    const QFileInfoList entries = sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    const QFileInfoList entries =
+        sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
     for (const QFileInfo& entry : entries) {
+        // QDir::NoSymLinks already filters at the entryInfoList layer, but
+        // recheck per-entry: filesystem races (the entry being replaced
+        // by a symlink between enumeration and this iteration) and the
+        // historical leniency of QDir::NoSymLinks across Qt versions
+        // both argue for an explicit guard at the copy boundary.
+        if (entry.isSymLink())
+            continue;
+
         const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
         if (entry.isDir()) {
             if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
@@ -759,8 +776,9 @@ static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
             if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
                 return false;
         }
-        // Symlinks, devices, etc. are intentionally skipped — a shader
-        // pack contains regular files only; anything exotic is suspect.
+        // Devices, FIFOs, sockets, etc. are not isFile()/isDir() and
+        // therefore fall through silently — same intent as the symlink
+        // skip above.
     }
     return true;
 }
@@ -778,16 +796,31 @@ bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
     if (sourcePath.startsWith(QLatin1String("file://")))
         sourcePath = QUrl(sourceUrl).toLocalFile();
 
+    // Normalise trailing slashes and `.`/`..` components — without this,
+    // a drop URL like `file:///path/to/pack/` produces an empty
+    // `fileName()` below and the destDir collapses onto the user shader
+    // dir itself, surfacing as a confusing "destination already exists"
+    // rather than a clean parse failure.
+    sourcePath = QDir::cleanPath(sourcePath);
+
     const QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists() || !sourceInfo.isDir()) {
+    if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink()) {
         qCWarning(lcConfig) << "installShaderPack: source is not an existing directory:" << sourcePath;
+        return false;
+    }
+    const QString sourceBasename = sourceInfo.fileName();
+    if (sourceBasename.isEmpty()) {
+        qCWarning(lcConfig) << "installShaderPack: source path has no basename:" << sourcePath;
         return false;
     }
 
     // Validate metadata.json — without it the registry won't pick up the
-    // pack, so accepting the drop would silently be a no-op.
+    // pack, so accepting the drop would silently be a no-op. Reject
+    // symlinked metadata so a malicious pack can't smuggle a non-shader
+    // JSON file's content past the validation gate.
     const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
-    if (!QFile::exists(metadataPath)) {
+    const QFileInfo metadataInfo(metadataPath);
+    if (!metadataInfo.exists() || !metadataInfo.isFile() || metadataInfo.isSymLink()) {
         qCWarning(lcConfig) << "installShaderPack: source has no metadata.json:" << sourcePath;
         return false;
     }
@@ -795,7 +828,7 @@ bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
     if (!ensureUserShaderDirectory())
         return false;
 
-    const QString destDir = userShaderDirectoryPath() + QLatin1Char('/') + sourceInfo.fileName();
+    const QString destDir = userShaderDirectoryPath() + QLatin1Char('/') + sourceBasename;
     if (QFileInfo::exists(destDir)) {
         qCWarning(lcConfig) << "installShaderPack: destination already exists, refusing to overwrite:" << destDir;
         return false;

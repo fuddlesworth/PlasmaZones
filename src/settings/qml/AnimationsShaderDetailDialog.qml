@@ -115,7 +115,10 @@ Kirigami.Dialog {
             Image {
                 anchors.fill: parent
                 anchors.margins: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-                source: parent._hasPreview ? "file://" + root.effect.previewPath : ""
+                // Encode spaces / unicode in the path before embedding
+                // into the `file://` URL — same rationale as
+                // AnimationsShaderCard.qml's preview Image.
+                source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
                 fillMode: Image.PreserveAspectFit
                 sourceSize.width: width * 2
                 sourceSize.height: height * 2
