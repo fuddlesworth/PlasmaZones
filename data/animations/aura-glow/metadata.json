@@ -1,0 +1,81 @@
+{
+    "id": "aura-glow",
+    "name": "Aura Glow",
+    "description": "Window crops into a colour-shifting glowing orb that fades — square-to-circle gradient with a hue-cycling rim",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Glow",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "speed",
+            "name": "Hue Speed",
+            "type": "float",
+            "default": 2.5,
+            "min": 0.0,
+            "max": 10.0
+        },
+        {
+            "id": "randomColor",
+            "name": "Random Color",
+            "type": "bool",
+            "default": false
+        },
+        {
+            "id": "startHue",
+            "name": "Start Hue",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "saturation",
+            "name": "Saturation",
+            "type": "float",
+            "default": 0.75,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "blur",
+            "name": "Blur Amount",
+            "type": "float",
+            "default": 15.0,
+            "min": 0.0,
+            "max": 50.0
+        },
+        {
+            "id": "seedX",
+            "name": "Seed X",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "seedY",
+            "name": "Seed Y",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "edgeSize",
+            "name": "Edge Size",
+            "type": "float",
+            "default": 0.75,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "edgeHardness",
+            "name": "Edge Hardness",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}

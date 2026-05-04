@@ -1,0 +1,59 @@
+{
+    "id": "apparition",
+    "name": "Apparition",
+    "description": "Window violently sucks into a swirling void with shake, twirl, and suction distortion",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Distortion",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "seedX",
+            "name": "Suction Center X",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "seedY",
+            "name": "Suction Center Y",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "shake",
+            "name": "Shake Intensity",
+            "type": "float",
+            "default": 3.0,
+            "min": 0.0,
+            "max": 10.0
+        },
+        {
+            "id": "twirl",
+            "name": "Twirl Intensity",
+            "type": "float",
+            "default": 5.0,
+            "min": 0.0,
+            "max": 15.0
+        },
+        {
+            "id": "suction",
+            "name": "Suction Intensity",
+            "type": "float",
+            "default": 0.75,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "randomness",
+            "name": "Center Randomness",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}

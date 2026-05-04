@@ -1,0 +1,233 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Aura Glow — window crops into a colour-shifting glowing orb that
+// fades. A `|x|^p + |y|^p` super-ellipse gradient (with `p`
+// growing from 2 to 100 with progress) blends from a square-shaped
+// crop to a circular crop; a hue-cycling rim sits on top, with a
+// subtle radial blur on the window content. Visually inspired by
+// Burn-My-Windows (aura-glow.frag, Justin Garza + Simon
+// Schneegans), written natively against our `iTime`/`iChannel0`.
+//
+// ## iTime convention
+//
+// `progress = clamp(iTime, 0, 1)` — 1 at visible, 0 at destroyed.
+// (Aura-Glow is one of the rare BMW shaders that uses
+// progress=visibility natively, matching our iTime convention
+// directly.) On show (iTime 0→1) the window emerges from a
+// shrinking circle of glow; on hide (iTime 1→0) it crops back into
+// one. No direction branch needed.
+//
+// ## Pacing curves baked in
+//
+// The shader uses several internal easings (easeInSine,
+// easeOutSine, easeOutCubic, plus a `pow(progress, 5)` shape on
+// the gradient exponent) that are signature to the Aura-Glow
+// pacing — they're not animation-profile choices. Users wanting
+// BMW-exact behaviour should pair this with a Linear profile.
+
+#version 450
+
+#include <animation_uniforms.glsl>
+
+#define glowSpeed       customParams[0].x
+#define randomColorFlag customParams[0].y
+#define startHue        customParams[0].z
+#define saturation      customParams[0].w
+#define blurAmount      customParams[1].x
+#define seedX           customParams[1].y
+#define seedY           customParams[1].z
+#define edgeSize        customParams[1].w
+#define edgeHardness    customParams[2].x
+
+layout(binding = 7) uniform sampler2D iChannel0;
+
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 fragColor;
+
+// 2D simplex noise — MIT-licensed (Inigo Quilez).
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+float simplex2D(vec2 p) {
+    const float K1 = 0.366025404;
+    const float K2 = 0.211324865;
+    vec2 i  = floor(p + (p.x + p.y) * K1);
+    vec2 a  = p - i + (i.x + i.y) * K2;
+    float m = step(a.y, a.x);
+    vec2 o  = vec2(m, 1.0 - m);
+    vec2 b  = a - o + K2;
+    vec2 c  = a - 1.0 + 2.0 * K2;
+    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
+    vec3 n  = h * h * h * h *
+            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
+                 dot(b, -1.0 + 2.0 * hash22(i + o)),
+                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
+    return 0.5 + 0.5 * dot(n, vec3(70.0));
+}
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * .1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float easeInSine(float t)  { return 1.0 - cos(t * 1.5707963267948966); }
+float easeOutSine(float t) { return sin(t * 1.5707963267948966); }
+float easeOutCubic(float t) {
+    float f = t - 1.0;
+    return f * f * f + 1.0;
+}
+
+// HSV-rotate `color` by `hueOffset` (in [0,1]). Implemented in HSV
+// space because the colour cycle is generated as RGB cosines and we
+// want to slide the whole rainbow palette along a single hue
+// parameter without changing saturation / value.
+vec3 offsetHue(vec3 color, float hueOffset)
+{
+    float maxC  = max(max(color.r, color.g), color.b);
+    float minC  = min(min(color.r, color.g), color.b);
+    float delta = maxC - minC;
+    float hue   = 0.0;
+    if (delta > 0.0) {
+        if (maxC == color.r)      hue = mod((color.g - color.b) / delta, 6.0);
+        else if (maxC == color.g) hue = (color.b - color.r) / delta + 2.0;
+        else                      hue = (color.r - color.g) / delta + 4.0;
+    }
+    hue /= 6.0;
+
+    float sat = (maxC > 0.0) ? (delta / maxC) : 0.0;
+    float val = maxC;
+    hue       = mod(hue + hueOffset, 1.0);
+
+    float c = val * sat;
+    float x = c * (1.0 - abs(mod(hue * 6.0, 2.0) - 1.0));
+    float m = val - c;
+
+    vec3 rgb;
+    if      (hue < 1.0/6.0) rgb = vec3(c, x, 0.0);
+    else if (hue < 2.0/6.0) rgb = vec3(x, c, 0.0);
+    else if (hue < 3.0/6.0) rgb = vec3(0.0, c, x);
+    else if (hue < 4.0/6.0) rgb = vec3(0.0, x, c);
+    else if (hue < 5.0/6.0) rgb = vec3(x, 0.0, c);
+    else                    rgb = vec3(c, 0.0, x);
+    return rgb + m;
+}
+
+// Straight-alpha "over" composite, for pre-multiplied input/output
+// where this layer (`over`) wants to be added on top of `under`
+// without losing colour saturation.
+vec4 alphaOver(vec4 under, vec4 over)
+{
+    if (under.a == 0.0 && over.a == 0.0) return vec4(0.0);
+    float a = mix(under.a, 1.0, over.a);
+    return vec4(mix(under.rgb * under.a, over.rgb, over.a) / a, a);
+}
+
+// 16-tap radial blur of the window content. `radius` in pixels;
+// `samples` is the inner-loop count (3 keeps the cost reasonable).
+// Pre-multiplied texture read is summed in pre-multiplied space and
+// divided by sample count — the result stays pre-multiplied.
+vec4 blurredInputColor(vec2 uv, float radius, float samples)
+{
+    vec4 acc = vec4(0.0);
+    const float tau = 6.28318530718;
+    const float dirs = 15.0;
+    for (float d = 0.0; d < tau; d += tau / dirs) {
+        for (float s = 0.0; s < 1.0; s += 1.0 / samples) {
+            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / iResolution;
+            acc += texture(iChannel0, uv + off);
+        }
+    }
+    return acc / samples / dirs;
+}
+
+void main()
+{
+    // Aura-glow uses progress=visibility natively, matching iTime.
+    float progress = clamp(iTime, 0.0, 1.0);
+
+    // Aspect-correct UV blend. At progress=1 (visible state) we use
+    // raw UV; at progress=0 (destroyed state) we use a 1:1
+    // aspect-corrected UV so the gradient mask ends up circular even
+    // on non-square windows.
+    vec2 uv         = vTexCoord;
+    vec2 oneToOneUV = uv - 0.5;
+    if (iResolution.x > iResolution.y) {
+        oneToOneUV.y *= iResolution.y / iResolution.x;
+    } else {
+        oneToOneUV.x *= iResolution.x / iResolution.y;
+    }
+    oneToOneUV += 0.5;
+    uv = mix(oneToOneUV, uv, progress);
+
+    // Super-ellipse gradient: `|x|^p + |y|^p`. p=2 is a circle, p=∞
+    // is a square. With `pow(progress, 5)` the gradient shape stays
+    // square (p=100) for most of the visible state and morphs to a
+    // circle (p=2) at the gone state. The crop-mask threshold then
+    // moves through the gradient from a square outline at visible
+    // to a near-zero contour at gone, producing the "window crops
+    // to a glowing orb that fades" reading.
+    float shape    = mix(2.0, 100.0, pow(progress, 5.0));
+    float gradient = pow(abs(uv.x - 0.5) * 2.0, shape) +
+                     pow(abs(uv.y - 0.5) * 2.0, shape);
+    gradient += simplex2D(vTexCoord + vec2(seedX, seedY)) * 0.5;
+
+    // Glow rim mask. `(progress - gradient)/(edge+0.1)` is positive
+    // where progress > gradient; after `1 - clamp(..., 0, 1)` the
+    // mask is 1 OUTSIDE the contour and ramps to 0 INSIDE it. The
+    // endpoint easing kills the glow at the visible state (where
+    // there's nothing to dissolve from) and ramps it in toward the
+    // gone state.
+    float glowMask = (progress - gradient) / (edgeSize + 0.1);
+    glowMask       = 1.0 - clamp(glowMask, 0.0, 1.0);
+    glowMask      *= easeOutSine(min(1.0, (1.0 - progress) * 4.0));
+
+    // Window UV: at visible state (progress=1) the scale is 1.0;
+    // at gone state the window has scaled up 10%. easeOutCubic
+    // makes the scale-up gentle.
+    vec2 windowUV  = (vTexCoord - 0.5) * mix(1.1, 1.0, easeOutCubic(progress)) + 0.5;
+    vec4 windowCol = (blurAmount > 0.0)
+        ? blurredInputColor(windowUV, (1.0 - progress) * blurAmount, 3.0)
+        : texture(iChannel0, windowUV);
+
+    // Don't draw glow where the window itself is transparent
+    // (window-content shaped, not square mask).
+    glowMask *= windowCol.a;
+
+    // Hue-cycling glow colour. cos(uv.xyx + offset) gives RGB
+    // dancing around 0 with phase offsets (0, 2, 4) producing a
+    // rainbow cycle. `progress * glowSpeed` ramps the cycle as
+    // visibility grows — show accelerates, hide decelerates.
+    vec3 glowColor = cos(progress * glowSpeed + uv.xyx + vec3(0.0, 2.0, 4.0));
+    bool useRandom = randomColorFlag > 0.5;
+    float hueShift = useRandom ? hash12(vec2(seedX, seedY)) : startHue;
+    glowColor = offsetHue(glowColor, hueShift + 0.1);
+    glowColor = clamp(glowColor * saturation, vec3(0.0), vec3(1.0));
+
+    // Add glow additively (light emission), then alphaOver for a
+    // non-additive component that helps on light themes.
+    windowCol.rgb += glowColor * glowMask;
+    windowCol = alphaOver(windowCol, vec4(glowColor, glowMask * 0.2));
+
+    // Crop mask: blend between a soft-edged smoothstep and a hard
+    // smoothstep based on `edgeHardness`. The window content is
+    // visible where `gradient < progress` — the crop contour sits
+    // at gradient=progress, expanding outward as progress grows.
+    float softCrop = 1.0 - smoothstep(progress - 0.5, progress + 0.5, gradient);
+    float hardCrop = 1.0 - smoothstep(progress - 0.05, progress + 0.05, gradient);
+    float cropMask = mix(softCrop, hardCrop, edgeHardness);
+
+    // Endpoint easings. The first multiplies the crop down toward
+    // the gone state (progress→0) so the crop contour vanishes
+    // smoothly. The second floors the crop to fully visible at the
+    // visible state (progress→1) so we never dim the solid window.
+    cropMask *= easeInSine(min(1.0, progress * 2.0));
+    cropMask = max(cropMask, 1.0 - easeOutSine(min(1.0, (1.0 - progress) * 4.0)));
+
+    windowCol.a *= cropMask;
+
+    fragColor = windowCol;
+}

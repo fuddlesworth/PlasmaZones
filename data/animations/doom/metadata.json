@@ -1,0 +1,35 @@
+{
+    "id": "doom",
+    "name": "Doom",
+    "description": "Pixel columns melt downward at noise-randomized speeds, sliding off the bottom edge",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Pixelation",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "maxPixelSize",
+            "name": "Max Pixel Size",
+            "type": "float",
+            "default": 10.0,
+            "min": 1.0,
+            "max": 50.0
+        },
+        {
+            "id": "horizontalScale",
+            "name": "Horizontal Scale",
+            "type": "float",
+            "default": 10.0,
+            "min": 1.0,
+            "max": 50.0
+        },
+        {
+            "id": "verticalScale",
+            "name": "Vertical Scale",
+            "type": "float",
+            "default": 10.0,
+            "min": 1.0,
+            "max": 50.0
+        }
+    ]
+}
