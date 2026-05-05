@@ -1734,6 +1734,13 @@ public:
     PhosphorAnimation::PhosphorProfileRegistry& m_registry;
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     Config m_defaultConfig;
+    /// Global animation enable. Mirrors `Settings::animationsEnabled`
+    /// — flipped via `SurfaceAnimator::setEnabled`. When false,
+    /// `beginShow`/`beginHide` snap to the target opacity and fire
+    /// completion synchronously, skipping the opacity / scale / shader
+    /// legs entirely. Default true so an animator built without
+    /// explicit setEnabled honors the historic always-on behaviour.
+    bool m_enabled = true;
     /// Latest CAVA / audio-spectrum sample fed by the consumer via
     /// `SurfaceAnimator::setAudioSpectrum`. Pushed verbatim to every
     /// active animation shader item per-tick (see
@@ -1924,6 +1931,23 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
         }
         return;
     }
+    // Global animations toggle off — snap directly to the visible end
+    // state and fire completion synchronously. Same contract as the
+    // kwin-effect's `m_windowAnimator->isEnabled()` gate; both runtimes
+    // honour `Settings::animationsEnabled` identically. Cancel any
+    // in-flight track first so a rapid toggle mid-animation can't leave
+    // the surface stuck at intermediate opacity.
+    if (!d->m_enabled) {
+        d->cancelTracking(surface);
+        if (rootItem) {
+            rootItem->setOpacity(1.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
     const Config cfg = d->configFor(surface->config().role);
 
     // Always start from fully transparent. Picking up from a mid-hide
@@ -1954,6 +1978,17 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
         }
         return;
     }
+    if (!d->m_enabled) {
+        d->cancelTracking(surface);
+        if (rootItem) {
+            rootItem->setOpacity(0.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
     const Config cfg = d->configFor(surface->config().role);
     // Read live opacity so hide-while-showing supersession picks up
     // from the current visible state, not from a hardcoded 1.0.
@@ -1971,6 +2006,16 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
         return;
     }
     d->cancelTracking(surface);
+}
+
+void SurfaceAnimator::setEnabled(bool enabled)
+{
+    d->m_enabled = enabled;
+}
+
+bool SurfaceAnimator::isEnabled() const
+{
+    return d->m_enabled;
 }
 
 } // namespace PhosphorAnimationLayer

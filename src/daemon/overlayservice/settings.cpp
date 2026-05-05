@@ -29,6 +29,7 @@ void OverlayService::setSettings(ISettings* settings)
             disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
             disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
             disconnect(m_settings, &ISettings::shaderProfileTreeChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::animationsEnabledChanged, this, nullptr);
         }
         // Disconnect the specific shadersChanged lambda we stashed below.
         // disconnect(src, sig, this, nullptr) would sever ALL slots on this
@@ -77,6 +78,22 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::shaderProfileTreeChanged, this, [this]() {
                 if (m_settings) {
                     applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                }
+            });
+
+            // Global animations toggle: when off, SurfaceAnimator snaps
+            // beginShow / beginHide to the target opacity and fires
+            // completion synchronously, skipping motion + shader legs.
+            // Mirrors the kwin-effect's `m_windowAnimator->isEnabled()`
+            // gate on `tryBeginShaderForEvent` — single
+            // `Settings::animationsEnabled` flag stops every animation
+            // on both runtimes.
+            if (m_surfaceAnimator) {
+                m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
+            }
+            connect(m_settings, &ISettings::animationsEnabledChanged, this, [this]() {
+                if (m_settings && m_surfaceAnimator) {
+                    m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
                 }
             });
 
