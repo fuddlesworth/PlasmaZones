@@ -84,16 +84,16 @@ struct alignas(16) BaseUniforms
 static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");
 
 // Per-field std140 offset asserts. These pin the layout the
-// `data/animations/shared/animation_uniforms.glsl` canonical UBO depends
-// on — that GLSL declaration is a byte-for-byte std140 prefix of
+// `data/animations/shared/animation_uniforms.glsl` canonical UBO branch
+// depends on — that GLSL declaration is a byte-for-byte std140 prefix of
 // `BaseUniforms`, which is what lets a single animation `effect.frag`
 // source produce identical visuals on both runtimes (compositor classic
-// GL via the kwin-effect's source rewriter, daemon Qt RHI via the
-// `binding=0` UBO upload). If anyone reorders or inserts a field above
-// any of these, the corresponding assert fails at compile time and the
-// canonical GLSL header MUST be updated to match (and all in-tree
-// `effect.frag` files re-baked, since their `customParams[N]` `#define`
-// macros encode the slot positions).
+// GL via the canonical header's `#ifdef PLASMAZONES_KWIN` default-block
+// branch, daemon Qt RHI via the `binding=0` UBO upload). If anyone
+// reorders or inserts a field above any of these, the corresponding
+// assert fails at compile time and the canonical GLSL header MUST be
+// updated to match (and all in-tree `effect.frag` files re-baked, since
+// their `customParams[N]` `#define` macros encode the slot positions).
 //
 // Every field declared in `animation_uniforms.glsl` is pinned here. A
 // previous revision asserted only iTime / iResolution / customParams /

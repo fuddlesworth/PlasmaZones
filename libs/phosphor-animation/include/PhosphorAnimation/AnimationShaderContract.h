@@ -52,13 +52,26 @@ namespace PhosphorAnimationShaders {
 /// // ...read from iTime, iResolution, customParams[N].xyz...
 /// @endcode
 ///
-/// The UBO layout (`data/animations/shared/animation_uniforms.glsl`)
-/// is std140-aligned with `PhosphorShaders::BaseUniforms` and covers
-/// its full 672-byte footprint, so the daemon's binding=0 upload
-/// populates it directly. The kwin-effect can't bind UBOs through
-/// `KWin::GLShader`, so it runs a small in-memory source rewriter that
-/// converts the UBO declaration to default-block uniforms before
-/// handing the source to `KWin::ShaderManager::generateCustomShader`.
+/// The canonical header (`data/animations/shared/animation_uniforms.glsl`)
+/// has two `#ifdef`-selected branches:
+///
+///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
+///     AnimationUniforms { ... };` — std140-aligned with
+///     `PhosphorShaders::BaseUniforms` covering the full 672-byte
+///     footprint, populated by Qt-RHI's binding=0 upload.
+///
+///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
+///     default-block `uniform float iTime;`-style declarations. The
+///     kwin-effect prepends `#define PLASMAZONES_KWIN` after the
+///     shader's `#version` line before passing the source to
+///     `KWin::ShaderManager::generateCustomShader`, which selects this
+///     branch. KWin's `KWin::GLShader::setUniform(loc, val)` API
+///     addresses default-block uniforms only and never binds UBOs.
+///
+/// Shader authors do NOT need their own `#ifdef PLASMAZONES_KWIN` blocks
+/// — both branches expose the same identifiers (`iTime`, `iResolution`,
+/// `customParams[N]`, `iChannel0`, etc.). The macro switch describes the
+/// uniform-binding ABI, not the runtime feature set.
 ///
 /// @par Per-effect declared parameters
 /// Every parameter declared in `metadata.json` lands in either a
@@ -114,15 +127,18 @@ namespace PhosphorAnimationShaders {
 ///   • `iTextureResolution[]` — auto-populated when user textures are
 ///     bound (bindings 7-10)
 ///
-/// On the compositor (kwin-effect) path these fields receive zero
-/// values: KWin's classic-GL pipeline has no central audio / cursor /
-/// time-delta producer, no auxiliary FBOs, and no wallpaper plumbing.
-/// Animation shaders that read them on the compositor get the GLSL-
-/// default zero. `iFlipBufferY` is stripped by the kwin rewriter
-/// entirely (daemon-only Y-flip signal). Shaders that need any of
-/// these should run on the daemon overlay path; the compositor path
-/// is suitable for transitions that depend only on `iTime`,
-/// `iResolution`, `customParams`, and `customColors`.
+/// On the compositor (kwin-effect) path these fields are declared as
+/// default-block uniforms by the canonical header but are not yet
+/// populated by `paintWindow` — animation shaders that read them on the
+/// compositor get the GLSL-default zero. `iFlipBufferY` and the
+/// `qt_Matrix` / `qt_Opacity` / `_appField0` / `_appField1` fields are
+/// daemon-only and absent from the `#ifdef PLASMAZONES_KWIN` branch
+/// entirely. Shaders that need audio / multipass / textures should
+/// continue running on the daemon overlay path until the compositor
+/// path grows the matching producers (FBO chain, CAVA subscription,
+/// texture cache); the compositor path is currently suitable for
+/// transitions that depend on `iTime`, `iResolution`, `customParams`,
+/// `customColors`, and the redirected window texture (`iChannel0`).
 namespace AnimationShaderContract {
 
 /// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
@@ -160,11 +176,10 @@ inline constexpr const char* kIResolution = "iResolution";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
 /// Cross-runtime element-name lookup constant: used by the kwin-effect's
-/// `glGetUniformLocation("customParams[N]")` calls (after the source
-/// rewriter at `AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock`
-/// turns the std140 UBO array into default-block uniforms
-/// `customParams[0]..customParams[7]`) and as a documentation anchor
-/// for shader authors. Symmetric with `kCustomColorsArray` below.
+/// `glGetUniformLocation("customParams[N]")` calls (the canonical header's
+/// `#ifdef PLASMAZONES_KWIN` branch declares them as default-block uniforms
+/// `customParams[0]..customParams[7]`) and as a documentation anchor for
+/// shader authors. Symmetric with `kCustomColorsArray` below.
 inline constexpr const char* kCustomParamsArray = "customParams";
 
 /// Number of `vec4` slots in the `customParams` array (8). Forwards to
@@ -208,10 +223,10 @@ inline QString slotKey(int slot)
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
 /// Cross-runtime element-name lookup constant, symmetric with
 /// `kCustomParamsArray` above: used by the kwin-effect's
-/// `glGetUniformLocation("customColors[N]")` calls (after the source
-/// rewriter converts the std140 UBO array into default-block uniforms
-/// `customColors[0]..customColors[15]`) and as a documentation anchor
-/// for shader authors.
+/// `glGetUniformLocation("customColors[N]")` calls (the canonical
+/// header's `#ifdef PLASMAZONES_KWIN` branch declares them as
+/// default-block uniforms `customColors[0]..customColors[15]`) and as
+/// a documentation anchor for shader authors.
 ///
 /// Carries straight (non-premultiplied) RGBA: the encoder writes
 /// `QColor::redF/greenF/blueF/alphaF` verbatim, so a 50%-alpha red

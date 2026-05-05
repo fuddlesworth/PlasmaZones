@@ -92,6 +92,38 @@ inline qint64 shaderClockNowMs()
 // stall waiting on a reply that may never come. On expiry the window is
 // left at its release position and a warning is logged.
 constexpr int EndDragTimeoutMs = 500;
+
+/// Splice `#define PLASMAZONES_KWIN` between the shader's `#version`
+/// directive and the rest of the source. The macro selects the
+/// default-block branch in `data/animations/shared/animation_uniforms.glsl`,
+/// which is what KWin's classic-GL `KWin::GLShader` API requires (no UBO
+/// bind path). The GLSL spec disallows non-comment, non-whitespace tokens
+/// before `#version`, so the define cannot just be prepended verbatim —
+/// we find the first newline at or after the `#version` line and inject
+/// after it.
+///
+/// Defensive fallback: if no `#version` is present (a hand-rolled vertex
+/// stage that opens with a comment block, say), inject at the very top
+/// since GL3+ legacy compilers default to compatibility profile and accept
+/// `#define` as the first token. The bake test on the daemon side catches
+/// any animation shader that ships without `#version`.
+inline QByteArray injectKwinDefineAfterVersion(const QString& source)
+{
+    static const QLatin1String kDefineLine("#define PLASMAZONES_KWIN\n");
+    const int versionIdx = source.indexOf(QLatin1String("#version"));
+    if (versionIdx < 0) {
+        return (QString(kDefineLine) + source).toUtf8();
+    }
+    const int newlineIdx = source.indexOf(QLatin1Char('\n'), versionIdx);
+    if (newlineIdx < 0) {
+        // `#version` line is unterminated (no trailing newline) — append
+        // a newline + define so the directive isn't merged with the macro.
+        return (source + QLatin1Char('\n') + QString(kDefineLine)).toUtf8();
+    }
+    QString out = source;
+    out.insert(newlineIdx + 1, kDefineLine);
+    return out.toUtf8();
+}
 } // namespace
 
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
@@ -857,7 +889,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // fresh window.close shader. Then layer the close shader on top of
     // whatever fade-out KWin applies as part of the close animation.
     endShaderTransition(w);
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs());
+    // Close is the reverse of open: same user-assigned shader plays
+    // 1→0 so an `appear` shader doubles as a `disappear` shader.
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(), /*reverse=*/true);
     m_windowAnimator->removeAnimation(w);
 
     const QString closedWindowId = getWindowId(w);
@@ -1128,7 +1162,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return; // intermediate axis-only flip, no shader
                 }
                 m_lastFullyMaximized.insert(window, fullyMaximized);
-                tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs());
+                // Going-to-maximized is "appear" (forward 0→1);
+                // returning to floating is "disappear" (reverse 1→0).
+                tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs(),
+                                       /*reverse=*/!fullyMaximized);
             });
 
     // Track when a monocle-maximized window goes fullscreen
@@ -3078,11 +3115,13 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 
     const bool minimized = w->isMinimized();
 
-    // window.minimize / window.unminimize shader transition. KWin handles the
-    // motion (the minimize-to-taskbar zoom is a separate stock effect chain),
-    // we layer the shader effect on top via redirect. Gated on the live
-    // minimized state so each direction can have its own profile.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs());
+    // window.minimize shader transition. KWin handles the motion (the
+    // minimize-to-taskbar zoom is a separate stock effect chain), we
+    // layer the shader effect on top via redirect. Going-to-minimized
+    // is "disappear" (reverse 1→0); coming-back-from-minimized is
+    // "appear" (forward 0→1) — same shader, both directions.
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                           /*reverse=*/minimized);
 
     if (minimized) {
         if (isWindowFloating(windowId)) {
@@ -4290,6 +4329,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 active = true;
             }
         }
+        // Flip the timeline for `going-away` events so a single user-
+        // assigned shader covers both directions of a paired event:
+        // window.open plays 0→1, window.close plays the same shader 1→0;
+        // going-to-minimized plays 1→0 while unminimize plays 0→1; same
+        // for maximize/unmaximize. Both progress sources are guaranteed
+        // to be in [0, 1] above, so the flip is bound-preserving.
+        if (transition.reverse) {
+            progress = 1.0 - progress;
+        }
         if (active) {
             const CachedShader* cached = transition.cached;
             KWin::GLShader* shader = cached->shader.get();
@@ -4352,7 +4400,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 }
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
-                                              const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs)
+                                              const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
+                                              bool reverse)
 {
     const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
@@ -4475,17 +4524,19 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             return;
         }
 
-        const QByteArray rewrittenFrag =
-            PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(expanded);
+        // Selects the default-block branch in `animation_uniforms.glsl`.
+        // KWin's `KWin::GLShader` API addresses default-block uniforms only
+        // (no UBO bind path), so the canonical header's `#ifdef
+        // PLASMAZONES_KWIN` branch emits plain `uniform float iTime;`-style
+        // declarations instead of the daemon's `layout(std140, binding=0)
+        // uniform AnimationUniforms { ... };`. The macro must land AFTER the
+        // shader's `#version` line — the GLSL spec disallows tokens before
+        // `#version` other than whitespace and comments — so the helper
+        // below splices it between the version directive and the rest of
+        // the source.
+        const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
 
-        // Default to the inline KWin-classic-GL vertex stage. Authors
-        // can override by setting `vertexShader` in metadata.json — the
-        // file is read, `#include`-expanded, and rewritten through the
-        // same UBO/sampler-binding adapter as the fragment, so a
-        // per-shader vertex stage is responsible for declaring
-        // `modelViewProjectionMatrix` and applying it to `gl_Position`
-        // (see kKwinDefaultVertexSource above).
-        QByteArray rewrittenVert = kKwinDefaultVertexSource;
+        QByteArray vertWithKwinDefine = kKwinDefaultVertexSource;
         if (!eff.vertexShaderPath.isEmpty()) {
             QFile vertFile(eff.vertexShaderPath);
             if (!vertFile.open(QIODevice::ReadOnly)) {
@@ -4505,16 +4556,14 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                         qCWarning(lcEffect) << "Failed to expand vertex shader includes for" << effectId << ":"
                                             << vertIncErr << "— falling back to KWin default vertex stage";
                     } else {
-                        rewrittenVert =
-                            PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(
-                                expandedVert);
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
                     }
                 }
             }
         }
 
         auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
-                                                                            rewrittenVert, rewrittenFrag);
+                                                                            vertWithKwinDefine, fragWithKwinDefine);
         if (!shader || !shader->isValid()) {
             qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
             return;
@@ -4625,6 +4674,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // successor. Counter is monotonic per-process; 64-bit so practically
     // unbounded.
     transition.generation = ++m_shaderTransitionGenerationCounter;
+    transition.reverse = reverse;
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();
@@ -4672,7 +4722,8 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     m_shaderTransitions.erase(it);
 }
 
-void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs)
+void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
+                                               bool reverse)
 {
     if (!window || durationMs <= 0) {
         return;
@@ -4691,7 +4742,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                             << m_shaderProfileTree.overriddenPaths().size() << ")";
         return;
     }
-    beginShaderTransition(window, profile, durationMs);
+    beginShaderTransition(window, profile, durationMs, reverse);
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window

@@ -29,8 +29,6 @@
 // (translateAnimationParams fills from customParams[0] up).
 #define boundsPadding customParams[7].x
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 

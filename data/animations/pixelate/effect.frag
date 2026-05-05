@@ -38,7 +38,6 @@
 // per ShaderNodeRhi::ensureUserTextureSampler; nearest-neighbour
 // would give crisper blocks but linear smooths over the layer-FBO
 // boundary on sub-pixel block sizes.
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;

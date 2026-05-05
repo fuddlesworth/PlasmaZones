@@ -40,8 +40,6 @@
 #define edgeSize        customParams[1].w
 #define edgeHardness    customParams[2].x
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 

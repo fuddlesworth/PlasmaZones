@@ -21,8 +21,6 @@
 #define blockSize customParams[0].y
 #define rgbSplit  customParams[0].z
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 

@@ -568,6 +568,16 @@ private:
         /// superseded — without this, a stale timer would tear down a fresh
         /// transition that replaced it before it had a chance to play out.
         quint64 generation = 0;
+        /// When true, paintWindow flips progress to 1 - progress before the
+        /// uniform write, so the shader runs from `iTime = 1.0` down to
+        /// `iTime = 0.0` over the transition's lifetime. Used by lifecycle
+        /// events whose semantic is "going away" — window.close, going-to-
+        /// minimized, going-to-unmaximized — so a single shader effect
+        /// doubles as both directions: an `appear` shader (e.g. fade-in
+        /// from glitch) reads progress=0 as "fully obscured" and progress=1
+        /// as "fully revealed", which is exactly the semantic users expect
+        /// for the corresponding `disappear` event.
+        bool reverse = false;
     };
     /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
     /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
@@ -625,8 +635,13 @@ private:
     ///     for zone.* events that already have an animator-tracked motion.
     /// `tryBeginShaderForEvent` rejects the negative case before calling here;
     /// internal callers (`applySnapGeometry`) pass the default 0.
+    ///
+    /// @p reverse flips paintWindow's progress to `1 - progress`, so the
+    /// shader plays its timeline backwards — used by "going away" events
+    /// (window.close, going-to-minimized, going-to-unmaximized) to share a
+    /// single user-assigned shader with the matching forward event.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
-                               int durationMs = 0);
+                               int durationMs = 0, bool reverse = false);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
@@ -647,7 +662,11 @@ private:
     /// a shader to this path), the registry doesn't have the effect yet, or
     /// the window pointer is null. Same null-tolerance contract as
     /// @ref beginShaderTransition.
-    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs);
+    ///
+    /// @p reverse forwards to @ref beginShaderTransition's reverse flag — see
+    /// that doc for semantics. Defaults to false (forward 0→1 timeline).
+    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
+                                bool reverse = false);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;

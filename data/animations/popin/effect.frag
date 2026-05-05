@@ -14,8 +14,6 @@
 #define scaleFrom customParams[0].x
 #define overshoot customParams[0].y
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 

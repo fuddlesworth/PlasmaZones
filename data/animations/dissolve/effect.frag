@@ -24,7 +24,6 @@
 // `QSGTextureProvider` here (live FBO from layer.enabled=true on
 // the anchor). See pixelate/effect.frag for the full binding-7
 // rationale.
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
