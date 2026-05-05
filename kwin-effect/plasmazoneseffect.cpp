@@ -706,7 +706,21 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
 
 bool PlasmaZonesEffect::isActive() const
 {
-    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations();
+    // Critical: include `!m_shaderTransitions.empty()` here. KWin calls
+    // isActive() before each paint cycle and EXCLUDES the effect from
+    // the chain when it returns false — meaning prePaintScreen and
+    // paintWindow are never called, so a shader transition installed
+    // via beginShaderTransition would never get a frame to advance on.
+    //
+    // Without this clause, the only paths that wake the chain are
+    // (a) interactive drag (`m_dragTracker->isDragging()`) and
+    // (b) zone-snap reflow animations (`m_windowAnimator`).
+    // window.move works through (a) because the drag holds isActive()
+    // true; every other lifecycle event (focus/open/close/minimize/
+    // maximize/resize) installs a shader transition only — without this
+    // clause those events would resolve cleanly, redirect the window,
+    // and then sit unrendered until the timer-driven teardown fired.
+    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderTransitions.empty();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
@@ -4190,9 +4204,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderTransitions.empty()) {
         // Windows have translation transforms that move them outside their
-        // frame geometry bounds — force full compositing mode.
+        // frame geometry bounds — force full compositing mode. Shader
+        // transitions also need this: without
+        // PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS the compositor skips
+        // our paintWindow override on stable, undamaged windows (focus,
+        // open after the fade settles, minimise, etc.), which means
+        // the shader installs and silently expires unrendered.
         data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     }
 
@@ -4203,21 +4222,20 @@ void PlasmaZonesEffect::postPaintScreen()
 {
     // Schedule targeted repaints for active animations instead of full-screen
     m_windowAnimator->scheduleRepaints();
-    // Lifecycle-event shader transitions (window.*) ride a monotonic
-    // steady-clock timer rather than m_windowAnimator. The animator-driven
-    // scheduleRepaints above won't request frames for them, so paintWindow
-    // would only fire on actual window damage — leaving iTime stuck. Walk
-    // the transition map and schedule a repaint for each window with an
-    // active time-based transition. Animator-driven transitions
-    // (durationMs == 0) are repainted by m_windowAnimator already; skip.
+    // Time-based shader transitions (window.*) ride a steady-clock
+    // timer, not m_windowAnimator, so paintWindow would only fire on
+    // surface damage and iTime would stall. Mirror KWin's own
+    // `AnimationEffect::postPaintScreen`: while a time-based transition
+    // is live, inject expanded-geometry layer repaint per active
+    // window so the next vsync runs our paint chain. Animator-driven
+    // transitions (durationMs == 0) are kept alive by
+    // m_windowAnimator->scheduleRepaints above.
     if (!m_shaderTransitions.empty()) {
         const qint64 now = shaderClockNowMs();
-        for (auto it = m_shaderTransitions.begin(); it != m_shaderTransitions.end(); ++it) {
-            const ShaderTransition& transition = it->second;
+        for (const auto& [w, transition] : m_shaderTransitions) {
             if (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs) {
-                KWin::EffectWindow* w = it->first;
                 if (w && !w->isDeleted()) {
-                    KWin::effects->addRepaint(w->expandedGeometry().toRect());
+                    w->addLayerRepaint(w->expandedGeometry().toAlignedRect());
                 }
             }
         }
@@ -4286,31 +4304,43 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // audio/wallpaper/multipass) are intentionally not populated
             // here — they receive zero values on the compositor path.
             //
-            // Guard every setUniform against `loc < 0`. GL silently
-            // ignores -1, so this is defence in depth rather than a
-            // correctness fix today, but the symmetric guard makes the
-            // intent ("only push uniforms the shader actually declared")
-            // explicit at all three uniform sites instead of just
-            // customParams. A future GL backend that doesn't honour the
-            // -1-is-noop convention would otherwise UB.
-            if (cached->iTimeLoc >= 0) {
-                shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
-            }
-            if (cached->iResolutionLoc >= 0) {
-                const QRectF geo = w->frameGeometry();
-                shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
-            }
-            for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
-                const int loc = cached->customParamsLoc[slot];
-                if (loc < 0)
-                    continue;
-                shader->setUniform(loc, transition.customParamsValues[slot]);
-            }
-            for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
-                const int loc = cached->customColorsLoc[slot];
-                if (loc < 0)
-                    continue;
-                shader->setUniform(loc, transition.customColorsValues[slot]);
+            // setUniform must run with the shader bound: KWin's
+            // `GLShader::setUniform` calls `glUniform*` directly, which
+            // writes into whichever program is active. KWin's
+            // `OffscreenEffect::drawWindow` only binds our shader later
+            // inside `OffscreenData::paint`'s ShaderBinder, so without
+            // this push the writes either hit GL_INVALID_OPERATION or
+            // land on the prior effect's program. Uniform values are
+            // stored in the program object, so push → set → pop leaves
+            // them in place for OffscreenEffect's subsequent bind.
+            //
+            // -1 from a uniformLocation lookup means the linker dropped
+            // the uniform (unreferenced in GLSL). GL silently ignores
+            // glUniform on -1, but the explicit `loc < 0` guard at every
+            // call site makes the intent ("only push uniforms the shader
+            // actually declared") explicit and survives a future GL
+            // backend that doesn't honour the -1-is-noop convention.
+            {
+                KWin::ShaderBinder binder(shader);
+                if (cached->iTimeLoc >= 0) {
+                    shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
+                }
+                if (cached->iResolutionLoc >= 0) {
+                    const QRectF geo = w->frameGeometry();
+                    shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+                }
+                for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+                    const int loc = cached->customParamsLoc[slot];
+                    if (loc < 0)
+                        continue; // shader didn't declare / reference this slot
+                    shader->setUniform(loc, transition.customParamsValues[slot]);
+                }
+                for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+                    const int loc = cached->customColorsLoc[slot];
+                    if (loc < 0)
+                        continue;
+                    shader->setUniform(loc, transition.customColorsValues[slot]);
+                }
             }
             OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
             return;
@@ -4328,20 +4358,81 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (effectId.isEmpty() || !window)
         return;
 
-    auto eff = m_animationShaderRegistry.effect(effectId);
-    if (!eff.isValid())
+    // OffscreenEffect's `redirect()` allocates an FBO sized to the
+    // window's frame geometry. A window that's already minimised /
+    // unmapped reports 0×0 (or 1×1) here, and FBO creation aborts
+    // with `GL_INVALID_VALUE … <levels>, <width> and <height> must
+    // be 1 or greater` followed by `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`
+    // — the redirect silently leaves the window in a half-broken
+    // state that contaminates every subsequent transition until KWin
+    // itself reallocates the offscreen data. Skip the install on
+    // collapsed surfaces. The minimize lifecycle event in particular
+    // fires AFTER KWin has already pulled the surface, so its shader
+    // assignment is intrinsically a no-op on this code path; users
+    // who want a minimise animation need an unredirect-time hook,
+    // which is out of scope here.
+    const QRectF geo = window->frameGeometry();
+    if (window->isMinimized() || geo.width() < 1.0 || geo.height() < 1.0) {
+        qCDebug(lcEffect) << "beginShaderTransition: skipping collapsed surface" << effectId
+                          << "window=" << window->windowClass() << "geo=" << geo
+                          << "isMinimized=" << window->isMinimized();
         return;
-
-    // Resolve shared vertex shader from search paths when metadata omits it.
-    if (eff.vertexShaderPath.isEmpty()) {
-        for (const QString& sp : m_animationShaderRegistry.searchPaths()) {
-            const QString shared = sp + QStringLiteral("/shared/animation.vert");
-            if (QFile::exists(shared)) {
-                eff.vertexShaderPath = shared;
-                break;
-            }
-        }
     }
+
+    auto eff = m_animationShaderRegistry.effect(effectId);
+    if (!eff.isValid()) {
+        qCWarning(lcEffect) << "beginShaderTransition: registry has no effect" << effectId
+                            << "— registry effect count=" << m_animationShaderRegistry.availableEffects().size();
+        return;
+    }
+
+    // KWin-specific default vertex stage. Hardcoded here rather than
+    // loaded from `data/animations/shared/animation.vert` because that
+    // file is shared with the daemon's RHI surface pipeline, which
+    // requires all uniforms to live in UBOs (default-block uniforms
+    // aren't supported under Qt-RHI/SPIR-V) and supplies vertex
+    // positions already in clip space — exactly the opposite of what
+    // KWin's classic-GL OffscreenEffect needs:
+    //
+    //   • Positions arrive in screen-pixel space (KWin's
+    //     `OffscreenData::paint` writes window-rect pixel coords into
+    //     the streaming buffer at `GLVertex2DLayout`'s position slot).
+    //   • The pixel→NDC projection lives in the
+    //     `modelViewProjectionMatrix` default-block uniform, which KWin
+    //     sets via `Mat4Uniform::ModelViewProjectionMatrix` (mapped to
+    //     uniform name `modelViewProjectionMatrix` per
+    //     `KWin::GLShader::resolveLocations` in
+    //     `<opengl/glshader.cpp>`). Skipping the multiplication leaves
+    //     the redirected quad at coords like (1920, 1080) — entirely
+    //     outside the [-1, 1] viewport — and the transition shader
+    //     runs but paints to nothing. Manifest: `tryBeginShader`
+    //     resolves, `beginShaderTransition` installs cleanly, no
+    //     compile warnings, but the user sees no visible animation.
+    //   • Attribute slot indices match `KWin::VA_Position` (0) and
+    //     `KWin::VA_TexCoord` (1) per `<opengl/glvertexbuffer.h>`;
+    //     explicit `layout(location = N)` decorations bypass KWin's
+    //     `bindAttributeLocation("position", ...)` lookup (which is
+    //     name-only and would mismatch our `texCoord` vs KWin's
+    //     `texcoord`).
+    //
+    // Authors that ship a per-shader vertex stage via metadata's
+    // `vertexShader` field still flow through the file-load path
+    // below. They opt out of this default and own the matrix /
+    // attribute contract themselves.
+    static const QByteArray kKwinDefaultVertexSource = QByteArrayLiteral(
+        "#version 450\n"
+        "\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "\n"
+        "void main() {\n"
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
 
     auto cacheIt = m_shaderCache.find(effectId);
     if (cacheIt == m_shaderCache.end()) {
@@ -4387,25 +4478,32 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         const QByteArray rewrittenFrag =
             PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(expanded);
 
-        QByteArray rewrittenVert;
+        // Default to the inline KWin-classic-GL vertex stage. Authors
+        // can override by setting `vertexShader` in metadata.json — the
+        // file is read, `#include`-expanded, and rewritten through the
+        // same UBO/sampler-binding adapter as the fragment, so a
+        // per-shader vertex stage is responsible for declaring
+        // `modelViewProjectionMatrix` and applying it to `gl_Position`
+        // (see kKwinDefaultVertexSource above).
+        QByteArray rewrittenVert = kKwinDefaultVertexSource;
         if (!eff.vertexShaderPath.isEmpty()) {
             QFile vertFile(eff.vertexShaderPath);
             if (!vertFile.open(QIODevice::ReadOnly)) {
                 qCWarning(lcEffect) << "Failed to open vertex shader" << eff.vertexShaderPath << "for effect"
-                                    << effectId << "— using KWin default vertex stage";
+                                    << effectId << "— falling back to KWin default vertex stage";
             } else {
                 const QString rawVert = QString::fromUtf8(vertFile.readAll());
                 if (rawVert.isEmpty()) {
                     qCWarning(lcEffect) << "Vertex shader file is empty" << eff.vertexShaderPath << "for effect"
-                                        << effectId;
+                                        << effectId << "— falling back to KWin default vertex stage";
                 } else {
                     const QString vertDir = QFileInfo(eff.vertexShaderPath).absolutePath();
                     QString vertIncErr;
                     const QString expandedVert = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
                         rawVert, vertDir, animIncludePaths, &vertIncErr);
                     if (expandedVert.isEmpty()) {
-                        qCWarning(lcEffect)
-                            << "Failed to expand vertex shader includes for" << effectId << ":" << vertIncErr;
+                        qCWarning(lcEffect) << "Failed to expand vertex shader includes for" << effectId << ":"
+                                            << vertIncErr << "— falling back to KWin default vertex stage";
                     } else {
                         rewrittenVert =
                             PhosphorAnimationShaders::AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(
@@ -4540,6 +4638,17 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // supersession is correct here).
     setShader(window, cachedEntry.shader.get());
     m_shaderTransitions.emplace(window, std::move(transition));
+
+    // Kick the compositor into painting now so paintWindow fires and
+    // the transition's iTime starts advancing. Without this, a shader
+    // installed on a stable window (e.g. window.focus on a window with
+    // no in-flight damage) would sit in m_shaderTransitions for its
+    // full duration without ever reaching paintWindow. Interactive
+    // events (window.move) don't need this because the drag is its own
+    // continuous repaint source. postPaintScreen drives subsequent
+    // frames via per-window expanded-geometry layer repaints.
+    window->addLayerRepaint(window->expandedGeometry().toAlignedRect());
+    KWin::effects->addRepaintFull();
 }
 
 void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
@@ -4570,7 +4679,17 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     const auto profile = m_shaderProfileTree.resolve(profilePath);
     if (profile.effectiveEffectId().isEmpty()) {
-        return; // user hasn't assigned a shader to this path
+        // Diagnostic warning so users + bug reports can see why a window
+        // event with a shader assignment in the settings UI silently
+        // produced no animation. The most common cause is a daemon-side
+        // prune dropping the override (path not in
+        // shaderConsumedLeafEventPaths / its ancestors at install time)
+        // or a D-Bus race firing the event before the tree finished
+        // loading.
+        qCWarning(lcEffect) << "tryBeginShader[" << profilePath
+                            << "]: no shader assigned (tree-resolve returned empty effectId, tree size="
+                            << m_shaderProfileTree.overriddenPaths().size() << ")";
+        return;
     }
     beginShaderTransition(window, profile, durationMs);
     // Capture the just-installed transition's generation so the deferred
@@ -4606,6 +4725,9 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
         const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
         if (doc.isObject()) {
             m_shaderProfileTree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object());
+            qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
+                              << m_shaderProfileTree.overriddenPaths().size()
+                              << "overrides — paths=" << m_shaderProfileTree.overriddenPaths();
         } else {
             qCWarning(lcEffect) << "Failed to parse shaderProfileTree from D-Bus — not a JSON object";
         }
@@ -4626,6 +4748,9 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
         if (!paths.isEmpty()) {
             m_animationShaderRegistry.addSearchPaths(paths);
         }
+        qCDebug(lcEffect) << "loadShaderRegistryFromDbus: added" << paths.size()
+                          << "search paths — registry effect count="
+                          << m_animationShaderRegistry.availableEffects().size();
     });
 }
 

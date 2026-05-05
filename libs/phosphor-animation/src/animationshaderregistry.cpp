@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 #include <QStringList>
 
 #include <optional>
@@ -425,7 +426,28 @@ QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QStr
                                  " — returning original source unchanged";
         return expandedShaderSource.toUtf8();
     }
-    return output.join(QLatin1Char('\n')).toUtf8();
+
+    // Strip `layout(binding = N)` decorations from sampler uniform
+    // declarations on the classic-GL path. The daemon-side RHI pipeline
+    // uses explicit binding-points (`iChannel0` lives at SRB binding 7
+    // in the canonical contract) but KWin's `OffscreenData::paint`
+    // binds the redirected window texture to the default active unit
+    // (`m_texture->bind()` with no `glActiveTexture` call → TEXTURE0).
+    // With `#version 450`, `layout(binding = 7)` pins the sampler to
+    // unit 7 at link time and KWin's bind to unit 0 is invisible to
+    // the shader — the texture sample returns transparent and the
+    // transition is a see-through no-op.
+    //
+    // Dropping the decoration alone leaves the sampler at GL's default
+    // (unit 0), which matches KWin's bind. The daemon-side RHI path
+    // never sees this rewrite (only the kwin-effect calls this helper),
+    // so the canonical binding-point contract on `iChannel0` /
+    // BaseUniforms is preserved on that runtime.
+    QString result = output.join(QLatin1Char('\n'));
+    static const QRegularExpression kSamplerBindingDecoration(
+        QStringLiteral(R"(layout\s*\(\s*binding\s*=\s*\d+\s*\)\s*(uniform\s+sampler))"));
+    result.replace(kSamplerBindingDecoration, QStringLiteral("\\1"));
+    return result.toUtf8();
 }
 
 } // namespace PhosphorAnimationShaders

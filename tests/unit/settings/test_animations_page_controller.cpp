@@ -886,6 +886,20 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.hide")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.show")));
 
+        // Window family — consumed leaves driven by the KWin effect's
+        // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
+        // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
+        // windowFinishUserMovedResized, maximized, minimized,
+        // focusChanged) and runs the resolved shader on the
+        // OffscreenEffect's redirected texture quad.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.open")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.close")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.minimize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.maximize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.move")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.resize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.focus")));
+
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a
         // shader override here cascades to every descendant. Without
@@ -898,12 +912,13 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist")));
+        // `window` itself is now a consumable ancestor — setting a
+        // shader at the family root cascades to every leaf above.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
 
-        // Paths the daemon's resolver never walks through — any
-        // assignment would be runtime-dead and silently shadow what
-        // the user thought they set on a sibling. Must stay unsupported.
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.open")));
+        // Paths the resolver never walks through — any assignment would
+        // be runtime-dead and silently shadow what the user thought
+        // they set on a sibling. Must stay unsupported.
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone.snapIn")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget")));

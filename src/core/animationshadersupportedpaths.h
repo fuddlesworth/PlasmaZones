@@ -12,12 +12,14 @@
 
 namespace PlasmaZones {
 
-/// Leaf event paths the daemon's overlay service actually resolves a
-/// shader effect for. Each appears as a @c resolveShaderEffect(tree, ...)
-/// call inside one of @c OverlayService::buildOsdConfig /
-/// @c buildLayoutPickerConfig / @c buildZoneSelectorConfig /
-/// @c buildSnapAssistConfig — when a future surface adds a shader leg,
-/// append its leg paths here in lockstep.
+/// Leaf event paths the daemon's overlay service AND the KWin effect
+/// actually resolve a shader effect for. Each appears as a
+/// @c resolveShaderEffect(tree, ...) call inside one of
+/// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
+/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig, OR as a
+/// @c tryBeginShaderForEvent(...) call in @c kwin-effect/plasmazoneseffect.cpp
+/// — when a future surface adds a shader leg, append its leg paths
+/// here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -34,6 +36,21 @@ inline QStringList shaderConsumedLeafEventPaths()
         // SnapAssist's hide leg is intentionally absent — the surface
         // is destroy-on-hide and never paints a hide frame, so a shader
         // assignment there would be runtime no-op.
+        //
+        // Window family — driven by the KWin OffscreenEffect at
+        // kwin-effect/plasmazoneseffect.cpp via tryBeginShaderForEvent
+        // on each window-lifecycle hook (windowAdded/windowClosed/
+        // windowFinishUserMovedResized/maximized/minimized/focusChanged).
+        // The effect resolves m_shaderProfileTree.resolve(path) per
+        // event, drives a per-window iTime AnimatedValue, and runs the
+        // shader on the OffscreenEffect's redirected texture quad.
+        PP::WindowOpen,
+        PP::WindowClose,
+        PP::WindowMinimize,
+        PP::WindowMaximize,
+        PP::WindowMove,
+        PP::WindowResize,
+        PP::WindowFocus,
     };
 }
 
@@ -48,7 +65,7 @@ inline QStringList shaderConsumedLeafEventPaths()
 /// leg.
 ///
 /// Paths that are NOT ancestors of any consumed leaf (e.g.
-/// `panel.slideIn`, `osd.pop`, `widget.fade`, `window.minimize`) are
+/// `panel.slideIn`, `osd.pop`, `widget.fade`, `zone.snapIn`) are
 /// excluded — there is no resolver path that walks through them, so
 /// any assignment would be runtime-dead and silently shadow what the
 /// user thought they set on a sibling. The settings UI hides the

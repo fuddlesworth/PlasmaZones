@@ -612,13 +612,34 @@ private Q_SLOTS:
     {
         // A shader without the canonical block (e.g. an author wrote
         // their own classic-GL `uniform float iTime;` directly) passes
-        // through unchanged.
+        // through unchanged. The sampler binding-decoration strip is
+        // active even on UBO-less sources, so a shader with no UBO and
+        // no sampler stays byte-identical.
         const QString src = QStringLiteral(
             "#version 450\n"
             "uniform float iTime;\n"
             "void main() {}\n");
         const QByteArray rewritten = AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src);
         QCOMPARE(QString::fromUtf8(rewritten).trimmed(), src.trimmed());
+    }
+
+    /// Pin the sampler `layout(binding = N)` strip. KWin's
+    /// `OffscreenData::paint` binds the redirected texture to the
+    /// active unit (defaults to TEXTURE0). With the binding decoration
+    /// preserved, `#version 450` link-time pins the sampler to unit N,
+    /// KWin's bind is invisible to the shader, the texture sample
+    /// returns transparent, and the entire transition is a see-through
+    /// no-op. Stripping the decoration drops the sampler back to GL's
+    /// default (unit 0), matching KWin's bind point.
+    void testRewriteStripsSamplerBindingDecoration()
+    {
+        const QString src = QStringLiteral(
+            "#version 450\n"
+            "layout(binding = 7) uniform sampler2D iChannel0;\n"
+            "void main() {}\n");
+        const QString out = QString::fromUtf8(AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(src));
+        QVERIFY(out.contains(QStringLiteral("uniform sampler2D iChannel0;")));
+        QVERIFY(!out.contains(QStringLiteral("layout(binding")));
     }
 
     // ── colorKey ─────────────────────────────────────────────────────
