@@ -93,7 +93,11 @@ ApplicationWindow {
         }, {
             "name": "snapping-effects",
             "label": i18n("Effects"),
-            "iconName": "preferences-desktop-effects",
+            "iconName": "preferences-desktop-effects"
+        }, {
+            "name": "snapping-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-display",
             "hasDividerAfter": true
         }, {
             "name": "snapping-behavior",
@@ -201,6 +205,7 @@ ApplicationWindow {
         "snapping-behavior": "SnappingBehaviorPage.qml",
         "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
         "snapping-effects": "SnappingEffectsPage.qml",
+        "snapping-shaders": "SnappingShadersPage.qml",
         "tiling-appearance": "TilingAppearancePage.qml",
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",

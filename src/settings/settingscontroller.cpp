@@ -29,6 +29,9 @@
 #include "dbusutils.h"
 #include "version.h"
 
+#include "../core/shaderregistry.h"
+#include "snappingshaderspagecontroller.h"
+
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -342,6 +345,23 @@ SettingsController::SettingsController(QObject* parent)
             setNeedsSave(true);
     });
 
+    // Overlay shader registry — settings-side mirror of the daemon's. The
+    // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
+    // + user search paths (`plasmazones/shaders`), so no extra path
+    // bookkeeping is needed here. Read-only browser surface — there is no
+    // per-event override store; assignments live on `Layout::shaderId`
+    // (per-layout) and the snapping page surfaces "Used by" by walking
+    // m_localLayoutManager's catalogue.
+    //
+    // The page controller is a `unique_ptr<>` declared after
+    // `m_localLayoutManager` (see header). Constructed without a QObject
+    // parent so member-destructor reverse-order tears it down BEFORE the
+    // borrowed layout registry — a QObject-child parent would defer
+    // destruction to ~QObject, dangling the layout-registry pointer.
+    m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
+    m_snappingShadersPage =
+        std::make_unique<SnappingShadersPageController>(m_overlayShaderRegistry, m_localLayoutManager.get());
+
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
     m_screenHelper.refreshScreens();
@@ -562,6 +582,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-behavior"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-effects"),
+        QStringLiteral("snapping-shaders"),
         QStringLiteral("snapping-assignments"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-appearance"),

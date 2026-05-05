@@ -7,34 +7,48 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Compact shader card for the Animations → Shaders grid.
+ * @brief Compact shader card for a shader-browser grid.
  *
- * Renders one effect as a fixed-width card: preview thumbnail (or a
- * theme-iconography placeholder when the pack didn't ship one), name
- * + badges row, two-line description, and a small footer chip showing
- * parameter count and an event-usage count. Clicking the card emits
- * `clicked(effect)` so the host can pop the detail dialog.
+ * Renders one effect as a fixed-width card: preview thumbnail (or an
+ * empty area when the pack didn't ship one), name + badges row, two-line
+ * description, and a small footer chip showing parameter count and a
+ * usage count. Clicking the card emits `showDetails(effect)`.
+ *
+ * Pack-agnostic: drives both the animation-shaders browser and the
+ * snapping-overlay-shaders browser. The host passes a `bridge` property
+ * exposing `shaderEffectUsages(id)` so the "Used in:" chip works for
+ * either domain (per-event paths for animations, per-layout names for
+ * snapping overlays).
  *
  * Required:
- *   - `effect`: var — effect map from `availableShaderEffects()`.
+ *   - `effect`: var — effect map (id, name, description, parameters,
+ *      previewPath, isUserEffect, ...).
+ *   - `bridge`: QtObject — exposes `shaderEffectUsages(id)`.
  *
  * Optional:
  *   - `usagesRev`: int — host-owned tick that invalidates the
  *      `shaderEffectUsages(id)` Q_INVOKABLE result on registry /
  *      override mutations. Forwarded into the binding's dependency set.
+ *   - `usageChipTextFn`: function(count) → string — domain-tuned copy
+ *      for the small "N use(s)" chip in the card footer. Host passes a
+ *      closure that calls `i18ncp(..., count)` with the LIVE count so
+ *      the right plural form is picked per locale, and so the chip
+ *      stays consistent with the dialog header's wording (animations
+ *      use "event"; snapping uses "layout"). Default: a generic
+ *      "%n use" / "%n uses".
  */
 ItemDelegate {
     id: root
 
     required property var effect
+    required property var bridge
     property int usagesRev: 0
+    property var usageChipTextFn: function(count) {
+        return i18ncp("@info shader usage count", "%n use", "%n uses", count);
+    }
 
     signal showDetails(var effect)
 
-    // Card geometry — fixed `width` (not `implicitWidth`) so the Flow
-    // host doesn't stretch cards based on enclosing-Layout fillWidth
-    // propagation. Height is content-driven so cards without preview
-    // images don't carry empty placeholder padding.
     width: Kirigami.Units.gridUnit * 14
     implicitWidth: width
     implicitHeight: cardLayout.implicitHeight + topPadding + bottomPadding
@@ -54,23 +68,16 @@ ItemDelegate {
         border.color: root.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
     }
 
-    // ItemDelegate's default contentItem is a Label; override with our
-    // own column so we get full control over the card body.
     contentItem: ColumnLayout {
         id: cardLayout
 
         spacing: Kirigami.Units.smallSpacing
 
-        // ── Preview thumbnail (only when the pack ships one) ──────
-        // Skip the preview area entirely for packs without
-        // `previewPath`. A placeholder iconography slot dominates the
-        // card visually for no real information gain — text content
-        // alone is enough when there's nothing to show.
         Rectangle {
             readonly property bool _hasPreview: root.effect && root.effect.previewPath && root.effect.previewPath.length > 0
 
             Layout.fillWidth: true
-            Layout.preferredHeight: width * 9 / 16 // 16:9 aspect
+            Layout.preferredHeight: width * 9 / 16
             visible: _hasPreview
             radius: Kirigami.Units.smallSpacing
             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
@@ -82,9 +89,9 @@ ItemDelegate {
                 anchors.fill: parent
                 anchors.margins: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
                 // `encodeURI` percent-encodes spaces and unicode while
-                // preserving the path separators, which a raw
-                // `"file://" + path` concat would silently break on
-                // (e.g. a user-installed pack at `~/My Shaders/`).
+                // preserving path separators, which a raw `"file://" + path`
+                // concat would silently break on (e.g. user-installed packs
+                // under `~/My Shaders/`).
                 source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
                 fillMode: Image.PreserveAspectCrop
                 sourceSize.width: width * 2
@@ -96,7 +103,6 @@ ItemDelegate {
 
         }
 
-        // ── Name row ──────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
@@ -117,7 +123,6 @@ ItemDelegate {
 
         }
 
-        // ── Description (max 2 lines) ─────────────────────────────
         Label {
             readonly property string _description: root.effect && typeof root.effect.description === "string" ? root.effect.description : ""
 
@@ -133,7 +138,6 @@ ItemDelegate {
             verticalAlignment: Text.AlignTop
         }
 
-        // ── Footer chips: parameter count + Used-in count ─────────
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
@@ -148,29 +152,22 @@ ItemDelegate {
                 Layout.fillWidth: true
             }
 
-            // "N events" chip — visible only when this shader is
-            // assigned somewhere. Tooltip carries the full label list;
-            // the detail dialog renders them inline. KI18n's `%n` is
-            // the canonical placeholder for the count in plural strings;
-            // `%1` here would render as a literal because the second
-            // count argument doesn't substitute back into the singular/
-            // plural template.
+            // Usage chip — visible only when this shader is assigned
+            // somewhere. Tooltip carries the full list; the detail dialog
+            // renders them inline.
             Label {
                 readonly property var _usages: {
                     root.usagesRev; // reactive dep
                     var id = root.effect ? root.effect.id : "";
-                    if (!id || id.length === 0)
+                    if (!id || id.length === 0 || !root.bridge)
                         return [];
 
-                    return settingsController.animationsPage.shaderEffectUsages(id);
+                    return root.bridge.shaderEffectUsages(id);
                 }
 
                 visible: _usages.length > 0
-                text: i18ncp("@info shader usage count", "%n event", "%n events", _usages.length)
+                text: root.usageChipTextFn(_usages.length)
                 font: Kirigami.Theme.smallFont
-                // Match the parameter-count's dim treatment — the chip
-                // is a count, not an alert; positiveTextColor was too
-                // attention-grabbing for a passive metadata item.
                 color: Kirigami.Theme.disabledTextColor
                 ToolTip.visible: hovered.hovered && _usages.length > 0
                 ToolTip.text: {

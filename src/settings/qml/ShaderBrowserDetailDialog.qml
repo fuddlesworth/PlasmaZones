@@ -8,65 +8,51 @@ import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Detail view for a single shader effect.
+ * @brief Detail view for a single shader effect (pack-agnostic).
  *
- * Triggered by clicking a card in the shader catalogue. Shows the same
+ * Triggered by clicking a card in a shader catalogue. Shows the same
  * data the card teases (name, badges, description, parameter count,
- * Used-in count) in full detail — large preview, complete description,
- * full Used-in list, and the entire parameter list using the same
- * compact one-line-per-param format the catalogue uses.
- *
- * ## Layout
- *
- * The dialog is structured as a vertical column of *sections*:
- *
- *   1. Optional preview thumbnail (full-width, 16:9).
- *   2. Header row — category pill, "User" badge, parameter count chip.
- *   3. Description (full text, no truncation).
- *   4. Author / version line (italic, dimmed).
- *   5. "Used in: …" list (only when the shader has direct overrides).
- *   6. Parameters section — `Kirigami.Heading` + `Kirigami.Separator`
- *      then one row per parameter.
- *
- * Each section is followed by a `Kirigami.Separator` so the visual
- * groups read as distinct, not as a wall of stacked labels. Sections
- * with no content (no description, no Used-in, no parameters) are
- * hidden along with their trailing separator so the dialog tightens
- * around what's actually shown.
+ * Used-in count) in full detail. Drives both the animation-shaders
+ * browser and the snapping-overlay-shaders browser via a `bridge`
+ * property exposing `shaderEffectUsages(id)`.
  *
  * Required:
- *   - `effect`: var — set by the host before calling `open()`. The
- *      dialog reads from this directly; no separate "load" step.
+ *   - `effect`: var — set by the host before calling `open()`.
+ *   - `bridge`: QtObject — exposes `shaderEffectUsages(id)`.
  *
  * Optional:
  *   - `usagesRev`: int — host-owned tick that invalidates the
- *      `shaderEffectUsages(id)` Q_INVOKABLE result. Without it, the
- *      Used-in list goes stale after any override mutation.
+ *      `shaderEffectUsages(id)` Q_INVOKABLE result.
+ *   - `usageHeaderTextFn`: function(count) → string — domain-tuned copy
+ *      for the "Used in: …" section header. The host passes a closure
+ *      that calls `i18ncp(..., count)` with the LIVE count so the
+ *      correct plural form is selected per locale (Polish / Russian /
+ *      Arabic etc. have plural forms beyond singular/plural). The
+ *      default emits a generic "Used in N event(s)" — wrappers should
+ *      override with their own context-specific copy.
  */
 Kirigami.Dialog {
-    // No `parent: root.Window.window.contentItem` reparenting —
-    // `Window.window` only works on Items, not Popups. Kirigami.Dialog
-    // (a Popup) handles its own modal parenting against the application
-    // window automatically.
-
     id: root
 
     property var effect: null
+    required property var bridge
     property int usagesRev: 0
+    property var usageHeaderTextFn: function(count) {
+        return i18ncp("@info shader usage section header", "Used in %n event", "Used in %n events", count);
+    }
     readonly property string _description: effect && typeof effect.description === "string" ? effect.description : ""
     readonly property string _author: effect && effect.author && effect.author.length > 0 ? effect.author : ""
     readonly property string _version: effect && effect.version && effect.version.length > 0 ? effect.version : ""
     readonly property var _usages: {
         usagesRev; // reactive dep
         var id = effect ? effect.id : "";
-        if (!id || id.length === 0)
+        if (!id || id.length === 0 || !bridge)
             return [];
 
-        return settingsController.animationsPage.shaderEffectUsages(id);
+        return bridge.shaderEffectUsages(id);
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
 
-    // Format helper shared between the param-row text segments.
     function _fmt(v) {
         if (typeof v === "number")
             return Number.isInteger(v) ? String(v) : v.toFixed(2);
@@ -78,12 +64,6 @@ Kirigami.Dialog {
     }
 
     title: effect ? (effect.name || effect.id || "") : ""
-    // Both `preferredWidth` AND `preferredHeight` are required —
-    // `Kirigami.Dialog` collapses its content area to zero when either
-    // is unset. Bind preferredHeight to the actual content's implicit
-    // height plus a chrome estimate (title bar + padding + footer)
-    // so the dialog tightens around what's actually shown — capped at
-    // 85% of the host item's height so it never overflows.
     preferredWidth: Kirigami.Units.gridUnit * 36
     preferredHeight: {
         var content = contentColumn.implicitHeight + Kirigami.Units.gridUnit * 6;
@@ -115,9 +95,6 @@ Kirigami.Dialog {
             Image {
                 anchors.fill: parent
                 anchors.margins: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-                // Encode spaces / unicode in the path before embedding
-                // into the `file://` URL — same rationale as
-                // AnimationsShaderCard.qml's preview Image.
                 source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
                 fillMode: Image.PreserveAspectFit
                 sourceSize.width: width * 2
@@ -134,11 +111,6 @@ Kirigami.Dialog {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
-            // Category pill (matches the card aesthetic). Explicit
-            // Layout.preferredWidth/Height ensures the RowLayout
-            // gives it space — a Rectangle's `implicitWidth` alone
-            // sometimes loses the layout negotiation when siblings
-            // declare `Layout.fillWidth`.
             Rectangle {
                 visible: root.effect && root.effect.category && root.effect.category.length > 0
                 radius: height / 2
@@ -234,7 +206,14 @@ Kirigami.Dialog {
                 }
 
                 Label {
-                    text: i18ncp("@info shader usage section header", "Used in %n event", "Used in %n events", root._usages.length)
+                    // Plural-form selection happens INSIDE the host's
+                    // `i18ncp(..., count)` closure — pre-baking
+                    // singular/plural strings here would break Polish /
+                    // Russian / Arabic etc. (more than two plural forms)
+                    // and would also lie about the count itself
+                    // (`%n` would be replaced with whatever count the
+                    // wrapper hard-coded, not the live `_usages.length`).
+                    text: root.usageHeaderTextFn(root._usages.length)
                     font.weight: Font.DemiBold
                 }
 
@@ -273,13 +252,6 @@ Kirigami.Dialog {
             Repeater {
                 model: root.effect && root.effect.parameters ? root.effect.parameters : []
 
-                // Each row is a Rectangle (the alternating-tint
-                // container) directly under the ColumnLayout, with a
-                // RowLayout anchored inside it. Putting the Rectangle
-                // *as the row* — not as a sibling of the RowLayout —
-                // avoids the "anchors on a layout-managed item" warning
-                // QML flags when an anchored child sits inside a
-                // RowLayout / ColumnLayout.
                 delegate: Rectangle {
                     id: paramRow
 
@@ -289,10 +261,6 @@ Kirigami.Dialog {
                     Layout.fillWidth: true
                     implicitHeight: rowContent.implicitHeight + Kirigami.Units.smallSpacing
                     radius: Kirigami.Units.smallSpacing / 2
-                    // Subtle alternating-row tint — improves
-                    // scannability on long parameter lists (e.g.
-                    // hexagon's 13 params) without the heavy striping
-                    // a ListView would impose.
                     color: index % 2 === 0 ? "transparent" : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
 
                     RowLayout {
@@ -303,9 +271,6 @@ Kirigami.Dialog {
                         anchors.rightMargin: Kirigami.Units.smallSpacing
                         spacing: Kirigami.Units.smallSpacing
 
-                        // Fixed-width name column so metadata aligns
-                        // across rows — much more scannable than a
-                        // self-sizing label per row.
                         Label {
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 10
                             Layout.alignment: Qt.AlignVCenter

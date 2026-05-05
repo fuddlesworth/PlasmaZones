@@ -1387,6 +1387,14 @@ public:
     {
         return QStringLiteral("/plasmazones/motionsets");
     }
+    /// Snapping overlay shader packs (the `data/shaders/` family — wallpaper
+    /// drift, neon-city, cosmic-flow, etc.). Mirrors the
+    /// `userAnimationsSubdir()` convention so settings + daemon code share
+    /// one source of truth for the on-disk location.
+    static QString userOverlayShadersSubdir()
+    {
+        return QStringLiteral("/plasmazones/shaders");
+    }
 
 private:
     // Non-instantiable
