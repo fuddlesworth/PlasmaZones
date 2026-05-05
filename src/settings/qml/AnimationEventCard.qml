@@ -83,7 +83,12 @@ Item {
     property int _inheritRev: 0
     readonly property var _inheritResolved: {
         _inheritRev;
-        return settingsController.animationsPage.resolvedProfile(root.eventPath);
+        // Coerce to {} when the Q_INVOKABLE returns undefined / null
+        // (mid-warmup, malformed path) so downstream `r.curve` /
+        // `r.duration` reads don't throw and the bindings fall back
+        // cleanly to the curve / duration defaults below.
+        return settingsController.animationsPage.resolvedProfile(root.eventPath) || ({
+        });
     }
     // True only for event paths the daemon's overlay service actually
     // consumes as a shader-leg surface. Gates the shader picker, the
@@ -546,21 +551,26 @@ Item {
                     includeNoneEntry: true
                     placeholderText: i18nc("@action:button", "Select shader…")
                     onShaderSelected: function(id) {
-                        if (id.length === 0) {
+                        // Coerce undefined / null to "" so the empty-id
+                        // check below doesn't throw on a model that
+                        // emits a non-string sentinel for a cleared
+                        // selection.
+                        var sid = id || "";
+                        if (sid.length === 0) {
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
                             return ;
                         }
                         // Re-pick of the same shader is a no-op: skip the
                         // D-Bus round-trip to avoid bumping dirty-tracking
                         // for a non-change.
-                        if (id === root.currentShaderEffectId)
+                        if (sid === root.currentShaderEffectId)
                             return ;
 
                         // Switching to a DIFFERENT effect: drop the previous
                         // effect's parameter map — the new effect's schema is
                         // unrelated, so carrying old keys persists dead values
                         // on disk that the daemon can't validate.
-                        settingsController.animationsPage.setShaderOverride(root.eventPath, id, ({
+                        settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
                         }));
                     }
                 }

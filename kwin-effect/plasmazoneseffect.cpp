@@ -815,6 +815,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
+        // Also clear the bridge-registration in-flight gate. Without
+        // this, a daemon-restart racing the in-flight registerBridge
+        // reply leaves the gate set: the new daemon's `daemonReady`
+        // signal arrives, slotDaemonReady sees the gate true and
+        // bails, and the gate only clears later when the stale call's
+        // error reply arrives — by which time no further signal will
+        // re-trigger slotDaemonReady. The effect would sit idle
+        // indefinitely. Resetting here keeps the gate authoritative
+        // across daemon restarts.
+        m_bridgeRegistrationInFlight = false;
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
         m_snapRestoreCache.clear();
@@ -3753,10 +3763,18 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
 {
     window->addRepaintFull();
-    if (oldFrame.isValid()) {
-        KWin::effects->addRepaint(oldFrame.toAlignedRect());
+    // Guard the global compositor repaint requests: this method can run
+    // from late D-Bus reply callbacks (callEndDrag → applySnap → here)
+    // that may dispatch during compositor teardown, when KWin::effects
+    // has been torn down. The window-local addRepaintFull above is
+    // safe because the EffectWindow itself is alive (we hold a
+    // QPointer-checked reference at the call site).
+    if (KWin::effects) {
+        if (oldFrame.isValid()) {
+            KWin::effects->addRepaint(oldFrame.toAlignedRect());
+        }
+        KWin::effects->addRepaint(newGeo);
     }
-    KWin::effects->addRepaint(newGeo);
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,

@@ -201,11 +201,22 @@ constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 // at or after offset 80 must land inside this range. Without this assert,
 // adding a field beyond the previous K_SCENE_HEADER end (the iTimeHi-
 // based cap) would silently regress the gap-bug fixed by extending the
-// region. Pinning the upper bound to sizeof(BaseUniforms) makes that
-// regression a compile-time failure.
+// region. Pin via the actual LAST field's offset+size so a developer
+// who manually narrows K_SCENE_HEADER_SIZE (e.g. `= offsetof(iTimeHi) -
+// K_SCENE_HEADER_OFFSET`, which is exactly the original regression)
+// fails to build. The earlier formulation
+// `K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms)`
+// was tautological because K_SCENE_HEADER_SIZE is itself defined as
+// `sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET` — the assert reduced
+// to `sizeof == sizeof` and could not catch the regression it claimed
+// to defend.
+static_assert(offsetof(BaseUniforms, _pad_after_iIsReversed) + sizeof(BaseUniforms::_pad_after_iIsReversed)
+                  <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
+              "K_SCENE_HEADER must cover the trailing _pad_after_iIsReversed bytes — "
+              "narrowing K_SCENE_HEADER_SIZE leaves the iIsReversed gap unmapped");
 static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms),
-              "K_SCENE_HEADER must cover [iResolution, end-of-BaseUniforms) — "
-              "every field at or after offset 80 must be uploaded by m_sceneDataDirty");
+              "K_SCENE_HEADER must reach end-of-BaseUniforms — defensive companion to "
+              "the trailing-field assert above");
 // Verify K_TIME_HI is fully nested inside K_SCENE_HEADER so the upload
 // site can skip the granular write when both dirty flags fire.
 static_assert(K_TIME_HI_OFFSET >= K_SCENE_HEADER_OFFSET

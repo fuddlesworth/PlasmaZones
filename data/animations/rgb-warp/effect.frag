@@ -59,9 +59,14 @@ void main()
     float progress   = 1.0 - visibility;
 
     // The wave sweeps faster when minSpeed is small (wave finishes
-    // earlier in the timeline). minSpeed clamped above 0 to avoid
-    // divide-by-zero in the offset normalisation.
-    float minSpeed = max(min(speedR, min(speedG, speedB)), 0.05);
+    // earlier in the timeline). minSpeed clamped above 0 AND below the
+    // value that drives waveTime ≥ 1.0, so the offset normalisation
+    // below has a structurally safe denominator without depending on
+    // its own per-divide floor to cancel out a brittle (1/wt - 1) ≈ 0
+    // edge case. With minSpeed ≤ 1.0, `mix(0.1, 0.9, minSpeed)` ≤ 0.9,
+    // leaving `(1/0.9) - 1 ≈ 0.111` as the smallest reachable
+    // denominator — safe by construction.
+    float minSpeed = clamp(min(speedR, min(speedG, speedB)), 0.05, 1.0);
     float waveTime = mix(0.1, 0.9, minSpeed);
 
     float waveProgress = progress / max(waveTime, 0.001);

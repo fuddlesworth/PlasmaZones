@@ -907,8 +907,11 @@ private:
     /// True between sending registerBridge and receiving its reply. Prevents
     /// the Introspect probe + daemonReady signal racing into two concurrent
     /// registrations before the first reply sets m_daemonServiceRegistered.
-    /// Reset on every reply path (success / error / rejection) so a future
-    /// retry can re-arm.
+    /// Reset on every reply path (success / error / rejection / version-
+    /// mismatch) so a future retry can re-arm. ALSO reset in the
+    /// serviceUnregistered handler so a daemon restart with an in-flight
+    /// stale call doesn't leave the gate stuck and silently swallow the
+    /// new daemon's daemonReady signal.
     bool m_bridgeRegistrationInFlight = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 

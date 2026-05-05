@@ -51,7 +51,10 @@ void main()
     float gate = smoothstep(visibility - soft, visibility + soft, noise);
 
     // Sample the captured surface and gate it on the per-cell noise.
-    // gate==0 → cell hidden (alpha 0); gate==1 → cell at full
+    // `gate` from the smoothstep above runs from 1 (cell still hidden,
+    // visibility hasn't reached this cell's noise threshold) down to 0
+    // (cell fully revealed). The output uses `(1 - gate)` so the cell
+    // alpha runs the visible direction: 0 → hidden, 1 → at full
     // surface alpha. Multiplying both colour and alpha keeps the
     // pre-multiplied-alpha invariant the daemon's blend pipeline
     // expects.

@@ -136,7 +136,13 @@ void main()
 
     // ----- Particle field -------------------------------------------------
 
-    vec2 pixelUV = (uv - 0.5) * iResolution / pScale;
+    // Match the defence-in-depth pattern in energize-a/effect.frag: even
+    // though `pScale` is already clamped above (line 78), the
+    // redundant max here makes a future refactor that drops the
+    // source-side clamp safe. Without it, energize-a and energize-b
+    // would diverge — energize-a still floors at the divide site,
+    // energize-b would silently divide by zero.
+    vec2 pixelUV = (uv - 0.5) * iResolution / max(pScale, 0.05);
 
     // Shower band sparkles — added on top of the band itself for a
     // glittery beam edge. Fine cells, twinkle via animated offset.
