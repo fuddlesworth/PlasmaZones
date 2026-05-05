@@ -4854,6 +4854,25 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // `vertexShader` field still flow through the file-load path
     // below. They opt out of this default and own the matrix /
     // attribute contract themselves.
+    // Y-flip the texCoord on the way out so animation shader math sees
+    // the same Y=0-at-top convention the daemon's Qt-RHI pipeline
+    // delivers. KWin's `OffscreenData::paint` populates the texCoord
+    // attribute with OpenGL FBO sampling coordinates (Y-up: Y=0 maps
+    // to the bottom row of the FBO; Y=1 to the top). Our animation
+    // shaders are authored against the daemon's Y=0-at-top convention
+    // (matrix's rain falls top-to-bottom via `fragCoord.y` math;
+    // dissolve's noise sweep, slidefade's leading edge, etc. all read
+    // vTexCoord.y as "0 at the top of the surface"). Without this
+    // flip the y-axis math runs upside-down on KWin and the rain
+    // appears to fall from the bottom up.
+    //
+    // The flip ALSO corrects the texture sample: with KWin's Y-up
+    // FBO storage, the window's top row is stored at FBO-Y=1.
+    // Sampling `uTexture0(unflipped vTexCoord)` at vTexCoord.y=0
+    // would return the bottom of the FBO (= bottom of the window).
+    // After the flip, `texture(uTexture0, vTexCoord)` at vTexCoord.y=0
+    // samples FBO-Y=1, which is the top of the window — matching the
+    // daemon's behaviour.
     static const QByteArray kKwinDefaultVertexSource = QByteArrayLiteral(
         "#version 450\n"
         "\n"
@@ -4865,7 +4884,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         "uniform mat4 modelViewProjectionMatrix;\n"
         "\n"
         "void main() {\n"
-        "    vTexCoord = texCoord;\n"
+        "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
         "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n");
 
