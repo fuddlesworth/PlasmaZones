@@ -897,7 +897,12 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         clearAllBorders();
     }
 
-    if (m_keyboardGrabbed) {
+    if (m_keyboardGrabbed && KWin::effects) {
+        // Symmetric with the `if (KWin::effects)` guard above: during
+        // compositor teardown KWin::effects can be null, and an
+        // unguarded deref here would crash even though we reached the
+        // destructor body cleanly. The compositor's own teardown
+        // releases the grab when KWin::effects is gone.
         KWin::effects->ungrabKeyboard();
         m_keyboardGrabbed = false;
     }

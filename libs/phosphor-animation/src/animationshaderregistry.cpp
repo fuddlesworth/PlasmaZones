@@ -114,26 +114,30 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         // Use canonicalFilePath() to follow symlinks — `QDir::cleanPath`
         // is purely lexical and does NOT resolve symbolic links, so a
         // pack author could ship `effectDir/innocent.png` as a symlink
-        // pointing to `/etc/passwd` and the lexical-only check at line
-        // ~129 would pass it (target lives under canonicalRoot
-        // lexically). The QImage load downstream then follows the
-        // symlink and reads the linked file. Defence-in-depth even
-        // though packs are nominally trusted: matches CLAUDE.md's
-        // "Sanitize file paths to prevent directory traversal" rule
-        // and protects against a future pack-distribution channel that
-        // accepts third-party uploads.
+        // pointing to `/etc/passwd` and the lexical-only check would
+        // pass it (target lives under canonicalRoot lexically). The
+        // QImage load downstream then follows the symlink and reads
+        // the linked file. Defence-in-depth even though packs are
+        // nominally trusted: matches CLAUDE.md's "Sanitize file paths
+        // to prevent directory traversal" rule and protects against a
+        // future pack-distribution channel that accepts third-party
+        // uploads.
         //
-        // canonicalFilePath() returns empty when the file doesn't
-        // exist, so we fall back to lexical cleanPath in that case.
-        // Authors do legitimately reference files that aren't on disk
-        // yet during pack development (live-reload picks them up when
-        // they appear), and rejecting all not-yet-existent paths would
-        // break that workflow.
-        const QFileInfo rootInfo(dir.absolutePath());
-        const QString canonicalRootResolved = rootInfo.canonicalFilePath();
+        // Critical correctness rule: BOTH sides of the prefix
+        // comparison MUST be in the same form (both canonical or both
+        // lexical). Mixing them mis-rejects benign paths whenever the
+        // effectDir is reached through a symlink (`~/.local` →
+        // `/var/lib/...` on container/SteamOS-style systems, macOS
+        // `/tmp` → `/private/tmp`, overlay mounts). canonicalFilePath()
+        // returns empty when the target file doesn't yet exist (the
+        // documented live-reload-during-development workflow), so we
+        // resolve the canonical root once and pick ONE comparison
+        // domain per slot — canonical-vs-canonical when the texture
+        // file resolves, lexical-vs-lexical when it's missing.
+        const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
+        const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
         const QString canonicalRoot =
-            (canonicalRootResolved.isEmpty() ? QDir::cleanPath(dir.absolutePath()) : canonicalRootResolved)
-            + QLatin1Char('/');
+            canonicalRootResolved.isEmpty() ? lexicalRoot : canonicalRootResolved + QLatin1Char('/');
         for (auto& tex : e.textures) {
             if (tex.path.isEmpty())
                 continue;
@@ -143,19 +147,23 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
             if (wasRelative) {
                 resolved = dir.filePath(resolved);
             }
-            const QFileInfo resolvedInfo(resolved);
-            const QString canonicalSymResolved = resolvedInfo.canonicalFilePath();
-            const QString canonical = canonicalSymResolved.isEmpty() ? QDir::cleanPath(resolved) : canonicalSymResolved;
+            const QString canonicalSymResolved = QFileInfo(resolved).canonicalFilePath();
+            // Pick comparison domain: prefer canonical (catches symlink
+            // escapes) when BOTH sides resolved, otherwise fall back to
+            // lexical for both. Never mix the two.
+            const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
+            const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
+            const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
             // Allow absolute paths that the author wrote intentionally
             // (e.g. /usr/share/plasmazones/...). Restrict relative paths
             // to within sourceDir — those came from metadata.json and a
             // `..`-escape (or a symlink that resolves outside) there
             // indicates either a pack-author bug or a malicious shipped
             // pack.
-            if (wasRelative && !canonical.startsWith(canonicalRoot)) {
+            if (wasRelative && !canonical.startsWith(comparisonRoot)) {
                 qCWarning(lcRegistry).noquote()
                     << "Animation effect" << e.id << "texture path" << tex.path << "resolves to" << canonical
-                    << "outside source dir" << canonicalRoot << "— rejected (path traversal guard)";
+                    << "outside source dir" << comparisonRoot << "— rejected (path traversal guard)";
                 // Clear BOTH path and wrap so the slot is internally
                 // coherent — `translateAnimationParams` skips empty-path
                 // slots, and a future `toJson` round-trip would drop

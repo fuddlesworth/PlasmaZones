@@ -1124,6 +1124,50 @@ private Q_SLOTS:
         QVERIFY(effects[0].textures[0].wrap.isEmpty());
     }
 
+    void testParseEffectRejectsTextureSymlinkEscape()
+    {
+        // Symlink defence-in-depth: the lexical-`..` test above also passes
+        // under the cleanPath-only fallback, so it doesn't actually exercise
+        // the canonicalFilePath path that catches symlink escapes. Pin THAT
+        // path: a symlink at `<effDir>/innocent.png` pointing to a file
+        // outside the effect dir must be rejected even though the
+        // metadata.json string itself looks benign (no `..` segments,
+        // a plain filename relative to the effect dir).
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Create a file outside the effect dir for the symlink to target.
+        const QString outsidePath = tmp.path() + QStringLiteral("/outside.png");
+        QFile outside(outsidePath);
+        QVERIFY(outside.open(QIODevice::WriteOnly));
+        outside.write("\x89PNG\r\n\x1a\n", 8);
+        outside.close();
+
+        const QString effDir = tmp.path() + QStringLiteral("/symlink-evil");
+        QVERIFY(QDir().mkpath(effDir));
+        const QString symlinkPath = effDir + QStringLiteral("/innocent.png");
+        QVERIFY(QFile::link(outsidePath, symlinkPath));
+
+        QJsonArray texArr;
+        QJsonObject t;
+        t.insert(QLatin1String("path"), QStringLiteral("innocent.png"));
+        texArr.append(t);
+        QJsonObject extra;
+        extra.insert(QLatin1String("textures"), texArr);
+        writeMetadata(effDir, QStringLiteral("symlink-evil"), QStringLiteral("e.frag"), extra);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("path traversal guard")));
+        AnimationShaderRegistry registry;
+        registry.addSearchPaths({tmp.path()}, LiveReload::Off);
+        const auto effects = registry.availableEffects();
+        QCOMPARE(effects.size(), 1);
+        QCOMPARE(effects[0].textures.size(), 1);
+        // Slot preserved with BOTH fields cleared (same shape as the
+        // lexical-traversal case — defence in depth applies symmetrically
+        // whether the escape was lexical or via symlink resolution).
+        QVERIFY(effects[0].textures[0].path.isEmpty());
+        QVERIFY(effects[0].textures[0].wrap.isEmpty());
+    }
+
     void testParseEffectResolvesTexturePathRelativeToSourceDir()
     {
         // Symmetric positive case: a benign relative path resolves to
