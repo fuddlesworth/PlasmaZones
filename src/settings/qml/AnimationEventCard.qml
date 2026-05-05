@@ -209,7 +209,20 @@ Item {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
         var resolved = settingsController.animationsPage.resolvedProfile(root.eventPath);
         var hasRaw = raw && Object.keys(raw).length > 0;
-        root.overrideEnabled = hasRaw;
+        // The card's "Override" toggle reflects ANY direct override at
+        // this path — timing curve OR shader assignment. Without the
+        // shader half, a user could see an event toggle "off" while a
+        // matrix shader was actively firing on every fire of that event
+        // (timing override clear, shader override still set), which
+        // exactly matches the user-reported "I turned this off but
+        // shaders still animate" bug. Reading rawShaderProfile here
+        // makes the toggle's checked state honest about both axes.
+        // rawShaderProfile returns {} when there's no direct override at
+        // this path; any non-empty map (effectId set, parameters set, etc.)
+        // indicates a direct override. Mirrors the rawProfile check above.
+        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
+        var hasShader = rawShader && Object.keys(rawShader).length > 0;
+        root.overrideEnabled = hasRaw || hasShader;
         // Effective values feed the controls. When override is off the
         // controls preview "what would happen if you turned it on" =
         // the resolved profile from the parent chain. When on, the
@@ -268,6 +281,14 @@ Item {
 
         function onShaderProfileChanged(path) {
             root.refreshShaderFromTree();
+            // The card's "Override" toggle now reflects whether either
+            // a timing OR a shader override exists at this path, so a
+            // shader-only change has to re-flip refreshFromTree's
+            // overrideEnabled binding too. Without this, clearing the
+            // shader on a path with no timing override would leave the
+            // toggle visually "on" until something else triggered a
+            // refreshFromTree call.
+            root.refreshFromTree();
         }
 
         function onShaderEffectsChanged() {
@@ -298,10 +319,20 @@ Item {
         toggleChecked: root.alwaysEnabled || root.overrideEnabled
         collapsible: root.collapsible
         onToggleClicked: function(checked) {
-            if (checked)
+            if (checked) {
                 root.commitOverride();
-            else
+            } else {
+                // Clear BOTH timing and shader at this path. A user who
+                // toggles "All Notifications" or "Show" off expects
+                // every override at that path to clear, not just the
+                // timing curve — without the paired shader clear, a
+                // previously-assigned matrix shader keeps firing even
+                // though the toggle reads "off". clearShaderOverride is
+                // a no-op when no shader is set, so paths that only
+                // had timing overrides see no behavior change.
                 settingsController.animationsPage.clearOverride(root.eventPath);
+                settingsController.animationsPage.clearShaderOverride(root.eventPath);
+            }
         }
 
         contentItem: ColumnLayout {
