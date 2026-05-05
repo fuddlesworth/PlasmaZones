@@ -47,14 +47,24 @@ void main()
     // `ceil(0+1)=1` so the grid collapses to per-pixel sampling
     // (visual no-op).
     float pixelSize = ceil(maxPixelSize * progress + 1.0);
-    vec2 pixelGrid  = vec2(pixelSize) / iResolution;
+    // Floor iResolution so an early-frame zero-sized surface doesn't
+    // divide-by-zero into an infinite pixelGrid. Real frames replace
+    // this with the actual surface size.
+    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
     vec4 sampled    = texture(uTexture0, cellUV);
 
     // Spoke parameterisation. `down = (0, 1)`; `dot(down, fragDir)`
     // is just `fragDir.y`. `acos(y)` ∈ [0, π], divided by 2π gives
     // [0, 0.5] for the right half. Manually reflect for left.
-    vec2 fragDir = normalize(cellUV - 0.5);
+    //
+    // Centre fragment guard: at `cellUV == 0.5` the difference vector
+    // is zero and `normalize(vec2(0))` produces NaN — a single texel
+    // that would write NaN-tinted output. Pick an arbitrary unit
+    // vector (down) for the exact centre so the angle calculation
+    // proceeds without polluting the frame.
+    vec2 centreOffset = cellUV - 0.5;
+    vec2 fragDir = (length(centreOffset) > 1e-6) ? normalize(centreOffset) : vec2(0.0, 1.0);
     float angle  = 0.5 * acos(clamp(fragDir.y, -1.0, 1.0)) / 3.14159265359;
     if (fragDir.x < 0.0) {
         angle = 1.0 - angle;

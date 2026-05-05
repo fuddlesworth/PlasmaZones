@@ -221,9 +221,23 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 if (extensionHasData && m_uniformExtension->isDirty()) {
                     uploadExtensionToUbo(batch);
                 }
-                // Defensive: if no granular flags set, do full base upload
+                // Defensive: if no granular flags set, do full base upload.
+                // Per the dirty-flag invariants documented above, this
+                // branch is normally unreachable when m_uniformsDirty=true
+                // (every setter that dirties m_uniformsDirty also dirties
+                // at least one granular flag), but a future setter that
+                // forgets the granular flag would silently skip the GPU
+                // write entirely without this safety net. Symmetric with
+                // the !m_didFullUploadOnce path above: if we fall back
+                // to a full base upload we must ALSO refresh the
+                // extension region (when present), otherwise an
+                // extension-only dirty in a future revision would land
+                // here and silently miss the upload.
                 if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
+                    if (extensionHasData) {
+                        uploadExtensionToUbo(batch);
+                    }
                 }
             }
             if (!m_vboUploaded) {

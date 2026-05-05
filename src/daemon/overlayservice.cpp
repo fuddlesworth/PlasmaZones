@@ -344,12 +344,14 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
     }
-    // If settings were wired BEFORE us, push the current animationsEnabled
-    // value now — `setSettings`'s push-on-connect path runs only when
-    // settings arrive after the animator exists. Without this catch-up
-    // path, `setSettings(...) → setupSurfaceAnimator(...)` order would
-    // leave the animator in its default-enabled state, ignoring a user
-    // "animations off" preference until the next toggle.
+    // Defensive sync: if settings happen to already be wired by the
+    // time `setupSurfaceAnimator` runs, push the current
+    // `animationsEnabled` value now so the animator doesn't sit at its
+    // default-enabled state until the next toggle. Today
+    // `setupSurfaceAnimator` is invoked from the constructor before
+    // `setSettings` ever runs, so this branch is a future-proofer for
+    // any code path that calls `setupSurfaceAnimator` post-
+    // construction (live-reload of the QML profile registry, etc.).
     if (m_settings) {
         m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
     }

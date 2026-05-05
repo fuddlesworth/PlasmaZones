@@ -73,7 +73,12 @@ void main()
     // ~(1-waveTime), enough to lift content off the top edge by
     // about one window-minus-waveTime height.
     float offset = max(waveProgress - uv.y, 0.0);
-    offset /= (1.0 / max(waveTime, 0.001)) - 1.0;
+    // Floor the denominator so an out-of-range minSpeed that drives
+    // waveTime to ≥1.0 (e.g. a future UI that lets speedR/G/B exceed 1)
+    // does not divide by zero. At waveTime=1.0 exactly, `(1/1)-1=0` —
+    // without the floor `offset/0` produces Inf and the texture sample
+    // walks off the surface with NaN UVs.
+    offset /= max((1.0 / max(waveTime, 0.001)) - 1.0, 0.001);
     offset *= (1.0 - waveTime);
 
     // Per-channel offset multipliers. Slowest channel gets ×1, faster

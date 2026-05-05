@@ -93,7 +93,9 @@ void main()
     // already-solid (dissolve→0) and already-gone (dissolve→1)
     // regions stay at their natural pixel size.
     float pixelSize = ceil(maxPixelSize * dissolve + 1.0);
-    vec2 pixelGrid  = vec2(pixelSize) / iResolution;
+    // Floor iResolution so an early-frame zero-sized surface doesn't
+    // divide-by-zero into an infinite pixelGrid.
+    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
     vec4 sampled    = texture(uTexture0, cellUV);
 

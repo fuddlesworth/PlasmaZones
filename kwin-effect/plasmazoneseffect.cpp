@@ -129,6 +129,14 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
     if (working.startsWith(QChar(0xFEFF))) {
         working.remove(0, 1);
     }
+    if (working.isEmpty()) {
+        // BOM-only source (or genuinely empty input) — emit a debug
+        // breadcrumb so a hot-reload that lands here surfaces the real
+        // cause faster than "GLSL compile failed: line 1 unexpected".
+        // Debug-level rather than warn because empty input from the
+        // bake test or unit fixtures is also legal.
+        qCDebug(lcEffect) << "injectKwinDefineAfterVersion: empty source after BOM strip — returning bare define";
+    }
 
     // Detect line ending so the injected define matches the source's
     // convention. GLSL compilers accept mixed CRLF/LF, but mixing
@@ -144,8 +152,20 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
     // embedded in `// ...` line comments or `/* ... */` block comments,
     // splicing the define into the comment body — the macro silently
     // disappears and the shader compiles against the wrong UBO ABI.
+    //
+    // `foundVersion` is tracked separately from `realVersionEnd` because
+    // a shader whose `#version` line ends at EOF without a trailing
+    // newline (rare but legal: a manual editor save that strips the
+    // final LF) hits `lineEnd == -1` on the match, leaving
+    // `realVersionEnd == -1`. Without the boolean we can't distinguish
+    // "no #version directive at all" (prepend define) from "#version
+    // at EOF, no newline" (must append `\n` + define). Conflating the
+    // two would emit `#define PLASMAZONES_KWIN\n#version 450`, which
+    // the GLSL compiler rejects because `#version` must be the first
+    // directive in the translation unit.
     int searchFrom = 0;
     int realVersionEnd = -1;
+    bool foundVersion = false;
     bool inBlockComment = false;
     while (searchFrom < working.size()) {
         const int lineEnd = working.indexOf(QLatin1Char('\n'), searchFrom);
@@ -183,7 +203,8 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
         }
         const QString trimmed = stripped.trimmed();
         if (trimmed.startsWith(QLatin1String("#version"))) {
-            realVersionEnd = lineEnd; // newline AFTER the version line
+            realVersionEnd = lineEnd; // newline AFTER the version line, or -1 if at EOF
+            foundVersion = true;
             break;
         }
         if (lineEnd < 0)
@@ -191,11 +212,21 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
         searchFrom = lineEnd + 1;
     }
 
-    if (realVersionEnd < 0) {
+    if (!foundVersion) {
         // No #version directive (or it was shadowed by an early break
         // mid block-comment). Prepend the define — GL3+ legacy compilers
         // accept `#define` as the first token in compatibility profile.
         return (defineLine + working).toUtf8();
+    }
+    if (realVersionEnd < 0) {
+        // `#version` line ends at EOF with no trailing newline. The
+        // GLSL spec requires `#version` to be the FIRST directive, so
+        // we cannot prepend the define; we must append it (with a
+        // separator newline) so the compiler still sees `#version`
+        // first. Without this branch the `!foundVersion` path above
+        // would run instead and emit invalid `#define\n#version`
+        // GLSL.
+        return (working + QLatin1Char('\n') + defineLine).toUtf8();
     }
     working.insert(realVersionEnd + 1, defineLine);
     return working.toUtf8();
@@ -847,6 +878,17 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
+    // Sever the registry's `effectsChanged` connection BEFORE anything
+    // else runs. The slot lambda touches `m_shaderTransitions`,
+    // `m_shaderCache`, and `m_textureCache` — all declared AFTER
+    // `m_animationShaderRegistry` in the header (h:507 vs h:698+), so
+    // they destruct FIRST in C++ reverse-declaration order. The
+    // registry destructs LAST, and any signal it (or its underlying
+    // file-watcher) emits during its own member teardown would
+    // dispatch to the slot AFTER the cache members are gone — UAF.
+    // Disconnect now while everything is still alive.
+    disconnect(&m_animationShaderRegistry, nullptr, this, nullptr);
+
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
@@ -5075,7 +5117,15 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // continuous repaint source. postPaintScreen drives subsequent
     // frames via per-window expanded-geometry layer repaints.
     window->addLayerRepaint(window->expandedGeometry().toAlignedRect());
-    KWin::effects->addRepaintFull();
+    if (KWin::effects) {
+        // Match the null-guard the constructor and destructor use for
+        // KWin::effects access — this method is callable from public
+        // entry points (animator-completion callback, programmatic
+        // shader installs from the future plugin API), and a future
+        // caller during compositor teardown could land here with
+        // KWin::effects null.
+        KWin::effects->addRepaintFull();
+    }
 }
 
 void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
@@ -5117,16 +5167,22 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     const auto profile = m_shaderProfileTree.resolve(profilePath);
     if (profile.effectiveEffectId().isEmpty()) {
-        // Diagnostic warning so users + bug reports can see why a window
-        // event with a shader assignment in the settings UI silently
-        // produced no animation. The most common cause is a daemon-side
-        // prune dropping the override (path not in
-        // shaderConsumedLeafEventPaths / its ancestors at install time)
-        // or a D-Bus race firing the event before the tree finished
-        // loading.
-        qCWarning(lcEffect) << "tryBeginShader[" << profilePath
-                            << "]: no shader assigned (tree-resolve returned empty effectId, tree size="
-                            << m_shaderProfileTree.overriddenPaths().size() << ")";
+        // Default-state path: a fresh user with no shader overrides
+        // anywhere in the tree resolves every event to empty effectId,
+        // which is correct ("no shader assigned"). Logging at WARNING
+        // for that floods the journal with bogus failures every time a
+        // window opens, closes, or moves. Only WARN when the tree has
+        // overrides (so an empty resolve here is genuinely surprising —
+        // the documented prune / D-Bus-race scenarios), otherwise
+        // demote to DEBUG.
+        if (m_shaderProfileTree.overriddenPaths().isEmpty()) {
+            qCDebug(lcEffect) << "tryBeginShader[" << profilePath
+                              << "]: no shader assigned (tree empty — default state)";
+        } else {
+            qCWarning(lcEffect) << "tryBeginShader[" << profilePath
+                                << "]: no shader assigned (tree-resolve returned empty effectId, tree size="
+                                << m_shaderProfileTree.overriddenPaths().size() << ")";
+        }
         return;
     }
     beginShaderTransition(window, profile, durationMs, reverse);

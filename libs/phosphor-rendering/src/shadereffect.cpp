@@ -102,6 +102,14 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
     // m_connectedWindow is a QPointer so a window destroyed out from under us
     // (reparent-during-teardown) leaves a null pointer instead of dangling.
     connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* win) {
+        // Idempotency guard: same-window re-emit (Qt has been observed to
+        // emit windowChanged with the unchanged QQuickWindow* in certain
+        // QQuickItem reparenting flows). Without this early-out we
+        // disconnect-then-reconnect the same `sceneGraphAboutToStop`
+        // signal, which is benign but burns ~2 lookups per emit.
+        if (m_connectedWindow.data() == win) {
+            return;
+        }
         if (m_connectedWindow) {
             disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
         }
@@ -449,9 +457,22 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // resolution live without the consumer having to re-emit the path.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         const QString sizeKey = QStringLiteral("uTexture%1_svgSize").arg(i);
-        const bool svgSizeChanged = params.contains(sizeKey);
-        if (svgSizeChanged) {
-            m_userTextureSvgSizes[i] = qBound(64, params.value(sizeKey).toInt(), 4096);
+        bool svgSizeChanged = false;
+        if (params.contains(sizeKey)) {
+            // Use the `bool ok` parse pattern (matches the float / colour
+            // extractors above). Without it, a non-numeric or missing-but-
+            // present QVariant returns 0 from toInt, then qBound(64,0,4096)
+            // = 64 — silently substituting the floor for any malformed
+            // value rather than retaining the prior, possibly user-tuned
+            // size. Skip the assignment entirely on parse failure so the
+            // prior value persists and a malformed setting can't downgrade
+            // the rasterise resolution.
+            bool ok = false;
+            const int v = params.value(sizeKey).toInt(&ok);
+            if (ok) {
+                m_userTextureSvgSizes[i] = qBound(64, v, 4096);
+                svgSizeChanged = true;
+            }
         }
 
         const QString texKey = QStringLiteral("uTexture%1").arg(i);
@@ -467,7 +488,15 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
         if (needsReload) {
             const QString path = m_userTexturePaths[i];
             QImage loaded;
-            if (!path.isEmpty() && QFile::exists(path)) {
+            // Drop the preceding `QFile::exists()` check: it's a TOCTOU
+            // race against the load below (file can vanish between the
+            // two calls), so it cannot serve as a true gate. The
+            // QImage / QSvgRenderer constructors already produce a null
+            // result on missing-file, and the keep-prior-image branch
+            // at line ~510 handles that case correctly. The exists()
+            // call only added a redundant stat() per setShaderParams
+            // call.
+            if (!path.isEmpty()) {
                 const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
                     || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
                 if (isSvg) {

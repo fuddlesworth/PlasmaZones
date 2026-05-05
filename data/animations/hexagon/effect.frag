@@ -118,7 +118,10 @@ void main()
     // Hex sample. texScale ties hex cell size to surface pixels so
     // tiles stay roughly constant-sized regardless of window
     // dimensions; tileScale is the user-facing tuning knob.
-    vec2 texScale = 0.1 * iResolution / max(tileScale, 0.05);
+    // Floor iResolution so an early-frame surface size of 0 doesn't
+    // produce a zero-component texScale (which would divide-by-zero in
+    // the lookupOffset below).
+    vec2 texScale = 0.1 * max(iResolution, vec2(1.0)) / max(tileScale, 0.05);
     vec4 hex      = getHexagons(uv * texScale);
 
     vec4 oColor = vec4(0.0);

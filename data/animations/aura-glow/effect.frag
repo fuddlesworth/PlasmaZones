@@ -135,7 +135,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     const float dirs = 15.0;
     for (float d = 0.0; d < tau; d += tau / dirs) {
         for (float s = 0.0; s < 1.0; s += 1.0 / samples) {
-            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / iResolution;
+            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / max(iResolution, vec2(1.0));
             acc += texture(uTexture0, uv + off);
         }
     }

@@ -2010,7 +2010,22 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
 
 void SurfaceAnimator::setEnabled(bool enabled)
 {
+    // Value-changed guard. Per CLAUDE.md ("Only emit signals when value
+    // actually changes") this method has no signal today, but pinning
+    // the no-op contract here keeps the door open for a future
+    // `enabledChanged` notify and prevents redundant work on settings
+    // sweeps that re-push the unchanged value.
+    if (d->m_enabled == enabled) {
+        return;
+    }
     d->m_enabled = enabled;
+    // Already-running tracks intentionally finish their current leg
+    // when the gate flips off — `beginShow` / `beginHide` consult the
+    // gate when DISPATCHING new legs (snapping to target opacity and
+    // firing completion synchronously), so the gate semantics are
+    // "next dispatch", not "kill in progress". Cancelling mid-leg
+    // would discard the user's already-started transition with no
+    // graceful unwind, which is worse than letting it finish.
 }
 
 bool SurfaceAnimator::isEnabled() const

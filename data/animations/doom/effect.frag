@@ -97,7 +97,11 @@ void main()
     // no-op — sampleUV sits at the per-pixel grid centre and the
     // sampler returns the exact source texel.
     float pixelSize = max(1.0, ceil(maxPixelSize * progress + 1.0));
-    vec2 pixelGrid  = vec2(pixelSize) / iResolution;
+    // Floor iResolution so an early-frame surface that hasn't reported
+    // its size (iResolution.x or .y == 0) doesn't divide-by-zero into
+    // an infinite pixelGrid. The first paintable frame replaces this
+    // with the real surface dimensions.
+    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
 
     // Snap to cell centre.
     vec2 cellUV = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;

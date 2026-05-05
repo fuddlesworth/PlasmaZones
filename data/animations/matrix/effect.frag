@@ -82,9 +82,14 @@ float edgeMask(float fadePixels) {
 // ~30 frames at LETTER_FLICKER_SPEED=2 (≈ 2 Hz at 60 fps), matching
 // BMW's per-frame cycling rate at the same speed value.
 float getText(vec2 fragCoord) {
+    // Floor letterSize so a metadata-bypassed value of 0 (or near-zero)
+    // doesn't divide-by-zero into NaN texture UVs. Live metadata
+    // declares a min of 5.0 so this is defence in depth against a
+    // hand-rolled animation engine bypassing schema validation.
+    float ls = max(letterSize, 1.0);
     vec2 pixelCoords = fragCoord * iResolution;
-    vec2 uv          = mod(pixelCoords, letterSize) / letterSize;
-    vec2 block       = pixelCoords / letterSize - uv;
+    vec2 uv          = mod(pixelCoords, ls) / ls;
+    vec2 block       = pixelCoords / ls - uv;
 
     uv += floor(hash22(floor(hash22(block) * vec2(12.9898, 78.233)
                               + LETTER_FLICKER_SPEED * float(iFrame) * (1.0 / 60.0)
@@ -103,8 +108,12 @@ float getText(vec2 fragCoord) {
 // distToDrop > 0 means the drop head has passed this fragment;
 // < 0 means it hasn't reached yet.
 vec2 getRain(vec2 fragCoord, float legProgress) {
+    // Floor letterSize for parity with getText — `mod(column, 0)` is
+    // undefined / NaN in GLSL; defence in depth against a metadata
+    // bypass that pushes letterSize to zero.
+    float ls = max(letterSize, 1.0);
     float column = fragCoord.x * iResolution.x;
-    column -= mod(column, letterSize);
+    column -= mod(column, ls);
 
     float delay = fract(sin(column) * 78.233) * mix(0.0, 1.0, randomness);
     float speed = fract(cos(column) * 12.989) * mix(0.0, 0.3, randomness) + 1.5;

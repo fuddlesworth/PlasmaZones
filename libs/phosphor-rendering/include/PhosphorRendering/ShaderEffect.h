@@ -216,15 +216,22 @@ public:
     ///     (clamped 64..4096; ignored for bitmap formats)
     ///
     /// **Trust boundary.** `uTexture<N>` paths are passed verbatim to
-    /// `QFile::exists` / `QImage::load` / `QSvgRenderer::load`. This
-    /// class does NOT sanitise traversal segments or enforce
-    /// absolute-path-only — the caller is the trust boundary.
+    /// `QImage::load` / `QSvgRenderer::load`. This class does NOT
+    /// sanitise traversal segments or enforce absolute-path-only — the
+    /// caller is the trust boundary.
     /// `AnimationShaderRegistry::translateAnimationParams` already
     /// resolves and traversal-checks pack-default paths at scan time;
     /// the kwin-effect's `m_textureCache` lookup keys absolute paths.
     /// A direct caller (e.g. tests, custom QML embedding) that
     /// forwards untrusted strings into `params["uTexture<N>"]` MUST
     /// pre-resolve and traversal-check before calling.
+    ///
+    /// **Subclass contract.** Overrides MUST chain to
+    /// `ShaderEffect::setShaderParams(params)` (or replicate the full
+    /// trust-boundary parse, including uTexture* / *_wrap /
+    /// *_svgSize). Skipping the base call leaves user-texture paths
+    /// uninterpreted and pinned to whatever the previous parse set —
+    /// silent stale samplers across reloads.
     virtual void setShaderParams(const QVariantMap& params);
 
     /// @brief Live texture-provider source bound to SRB binding 7

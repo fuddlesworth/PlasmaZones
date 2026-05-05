@@ -614,11 +614,17 @@ Item {
     }
 
     // Pop the editor as a window-level dialog so it doesn't get clipped
-    // by the scrolling Flickable that hosts the card.
+    // by the scrolling Flickable that hosts the card. Fall back to
+    // `null` (not `root`) when the Window context is unavailable: the
+    // fallback path only fires during teardown / early initialisation
+    // when nothing is opening the dialog anyway, and `null` keeps the
+    // dialog detached from the card so a future code path that opens
+    // it pre-realisation can't re-introduce the Flickable clip bug
+    // this assignment exists to avoid.
     CurveEditorDialog {
         id: curveDialog
 
-        parent: root.Window.window ? root.Window.window.contentItem : root
+        parent: root.Window.window ? root.Window.window.contentItem : null
         eventLabel: root.eventLabel
         timingMode: root.currentTimingMode
         easingCurve: root.currentEasingCurve

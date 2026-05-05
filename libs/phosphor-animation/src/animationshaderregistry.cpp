@@ -111,21 +111,47 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     // cheap here and matches CLAUDE.md's "Sanitize file paths to
     // prevent directory traversal" rule.
     {
-        const QString canonicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
+        // Use canonicalFilePath() to follow symlinks — `QDir::cleanPath`
+        // is purely lexical and does NOT resolve symbolic links, so a
+        // pack author could ship `effectDir/innocent.png` as a symlink
+        // pointing to `/etc/passwd` and the lexical-only check at line
+        // ~129 would pass it (target lives under canonicalRoot
+        // lexically). The QImage load downstream then follows the
+        // symlink and reads the linked file. Defence-in-depth even
+        // though packs are nominally trusted: matches CLAUDE.md's
+        // "Sanitize file paths to prevent directory traversal" rule
+        // and protects against a future pack-distribution channel that
+        // accepts third-party uploads.
+        //
+        // canonicalFilePath() returns empty when the file doesn't
+        // exist, so we fall back to lexical cleanPath in that case.
+        // Authors do legitimately reference files that aren't on disk
+        // yet during pack development (live-reload picks them up when
+        // they appear), and rejecting all not-yet-existent paths would
+        // break that workflow.
+        const QFileInfo rootInfo(dir.absolutePath());
+        const QString canonicalRootResolved = rootInfo.canonicalFilePath();
+        const QString canonicalRoot =
+            (canonicalRootResolved.isEmpty() ? QDir::cleanPath(dir.absolutePath()) : canonicalRootResolved)
+            + QLatin1Char('/');
         for (auto& tex : e.textures) {
             if (tex.path.isEmpty())
                 continue;
+            const QFileInfo origInfo(tex.path);
+            const bool wasRelative = !origInfo.isAbsolute();
             QString resolved = tex.path;
-            if (!QFileInfo(resolved).isAbsolute()) {
+            if (wasRelative) {
                 resolved = dir.filePath(resolved);
             }
-            const QString canonical = QDir::cleanPath(resolved);
+            const QFileInfo resolvedInfo(resolved);
+            const QString canonicalSymResolved = resolvedInfo.canonicalFilePath();
+            const QString canonical = canonicalSymResolved.isEmpty() ? QDir::cleanPath(resolved) : canonicalSymResolved;
             // Allow absolute paths that the author wrote intentionally
             // (e.g. /usr/share/plasmazones/...). Restrict relative paths
             // to within sourceDir — those came from metadata.json and a
-            // `..`-escape there indicates either a pack-author bug or a
-            // malicious shipped pack.
-            const bool wasRelative = !QFileInfo(tex.path).isAbsolute();
+            // `..`-escape (or a symlink that resolves outside) there
+            // indicates either a pack-author bug or a malicious shipped
+            // pack.
             if (wasRelative && !canonical.startsWith(canonicalRoot)) {
                 qCWarning(lcRegistry).noquote()
                     << "Animation effect" << e.id << "texture path" << tex.path << "resolves to" << canonical

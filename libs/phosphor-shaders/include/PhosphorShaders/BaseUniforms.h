@@ -212,6 +212,16 @@ static_assert(K_TIME_HI_OFFSET >= K_SCENE_HEADER_OFFSET
                   && K_TIME_HI_OFFSET + K_TIME_HI_SIZE <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
               "K_TIME_HI must be subsumed by K_SCENE_HEADER so a scene-data upload "
               "covers iTimeHi too without needing the m_timeHiDirty granular path");
+// Verify K_APP_FIELDS is fully nested inside K_SCENE_HEADER for the
+// same reason: the upload site uses an `else if` to skip the granular
+// app-fields write when scene-data is also dirty (the broader upload
+// already covers it). Pinning the nesting at compile time makes a
+// future field-shuffle that breaks containment a build failure rather
+// than a silent missed-upload regression.
+static_assert(K_APP_FIELDS_OFFSET >= K_SCENE_HEADER_OFFSET
+                  && K_APP_FIELDS_OFFSET + K_APP_FIELDS_SIZE <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
+              "K_APP_FIELDS must be subsumed by K_SCENE_HEADER so the scene-data upload "
+              "covers appField0/appField1 too without needing the m_appFieldsDirty granular path");
 
 // Total base size (for extension offset calculation)
 constexpr size_t K_BASE_SIZE = sizeof(BaseUniforms);
