@@ -99,46 +99,49 @@ namespace PhosphorAnimationShaders {
 /// `iTime`, `iResolution`, `customParams[8]`, and `customColors[16]`
 /// are the active contract fields populated by both runtimes.
 ///
-/// @par Extended fields (daemon-populated, zero on compositor)
-/// On the daemon's `SurfaceAnimator` path these fields match the
-/// overlay-shader runtime exactly:
+/// @par Cross-runtime field coverage
+/// Both runtimes populate the same core animation contract:
 ///
 ///   • `iTime` — per-leg progress in [0,1]
 ///   • `iResolution` — surface size
-///   • `iTimeDelta` / `iFrame` — auto-driven by `SurfaceAnimator`'s
-///     driver tick (real-time delta in seconds; per-leg frame counter
-///     starting at 0 on each fresh attach)
-///   • `iMouse` — driven by a `QQuickHoverHandler` installed on each
-///     attached shader item by `SurfaceAnimator::attachShaderToAnchor`,
-///     mirroring the overlay path's `MouseArea { hoverEnabled }` and
-///     editor preview's `HoverHandler` pattern. Reports cursor position
-///     in shader-item-local pixels (matches `iResolution`); when the
-///     cursor leaves the shader's bounding box, `iMouse` is set to
-///     `(-1, -1)` — same off-region sentinel the overlay path uses.
+///   • `iTimeDelta` — wall-clock seconds since the previous paint tick
+///     for this leg (0 on the first tick). Daemon: `SurfaceAnimator`'s
+///     driver delta. Kwin: `paintWindow`'s steady-clock delta.
+///   • `iFrame` — per-leg frame counter starting at 0 on each fresh
+///     attach. Daemon: `SurfaceAnimator`'s per-leg counter. Kwin:
+///     `ShaderTransition::frameCount`.
+///   • `iDate` — local-time `(year, month, day, seconds-since-midnight)`.
+///     Daemon: `ShaderNodeRhi` scene-data sync (throttled to 1 Hz).
+///     Kwin: `QDateTime::currentDateTime()` per paint.
+///   • `iMouse` — cursor position in shader-local logical pixels;
+///     `(-1, -1)` when off-surface. Daemon: `QQuickHoverHandler` on
+///     the attached shader item. Kwin: `effects->cursorPos()` minus
+///     the window's frame-geometry origin, gated on `frameGeometry()`
+///     containment.
+///   • `customParams[N]` / `customColors[N]` — per-effect declared
+///     parameters resolved at transition begin time.
+///   • `iChannel0` — redirected surface texture. Daemon: live FBO
+///     from the layer-enabled shader anchor. Kwin: KWin's
+///     `OffscreenEffect`-managed window snapshot.
+///
+/// @par Daemon-only extensions
+/// These fields receive zero values on the compositor path; shaders
+/// that need them must run on the daemon overlay path until the
+/// compositor wires the matching producers:
+///
 ///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
 ///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
 ///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
 ///     here)
-///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync
-///     (throttled to 1 Hz)
-///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///   • `iChannelResolution[]` — auto-populated when multipass buffer
 ///     shaders are bound
 ///   • `iTextureResolution[]` — auto-populated when user textures are
 ///     bound (bindings 7-10)
+///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///
-/// On the compositor (kwin-effect) path these fields are declared as
-/// default-block uniforms by the canonical header but are not yet
-/// populated by `paintWindow` — animation shaders that read them on the
-/// compositor get the GLSL-default zero. `iFlipBufferY` and the
-/// `qt_Matrix` / `qt_Opacity` / `_appField0` / `_appField1` fields are
-/// daemon-only and absent from the `#ifdef PLASMAZONES_KWIN` branch
-/// entirely. Shaders that need audio / multipass / textures should
-/// continue running on the daemon overlay path until the compositor
-/// path grows the matching producers (FBO chain, CAVA subscription,
-/// texture cache); the compositor path is currently suitable for
-/// transitions that depend on `iTime`, `iResolution`, `customParams`,
-/// `customColors`, and the redirected window texture (`iChannel0`).
+/// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
+/// `_appField1` are daemon-only and absent from the canonical header's
+/// `#ifdef PLASMAZONES_KWIN` branch entirely.
 namespace AnimationShaderContract {
 
 /// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
@@ -173,6 +176,36 @@ inline constexpr const char* kITime = "iTime";
 /// size on the compositor execution site; overlay-surface size on the
 /// daemon execution site.
 inline constexpr const char* kIResolution = "iResolution";
+
+/// `float iTimeDelta` — wall-clock seconds between consecutive paint
+/// ticks that fed this transition. First tick of a fresh transition
+/// reports `0.0`; subsequent ticks report `(now - lastPaint) / 1000`.
+/// Daemon equivalent: `SurfaceAnimator`'s driver-tick delta, fed by
+/// the same monotonic clock semantics.
+inline constexpr const char* kITimeDelta = "iTimeDelta";
+
+/// `int iFrame` — per-leg frame counter. Reset to 0 on every fresh
+/// `beginShaderTransition` install (or supersession), increments by 1
+/// on every paintWindow tick that feeds the transition. Daemon
+/// equivalent: `SurfaceAnimator`'s per-leg frame counter — same 0-based
+/// reset-on-attach semantic so shaders that key staggered effects off
+/// `iFrame` see identical sequences on both runtimes.
+inline constexpr const char* kIFrame = "iFrame";
+
+/// `vec4 iDate` — local-time `(year, month, day, seconds-since-midnight)`.
+/// Year and month are integers stored as floats (Year=2026.0, January=1.0);
+/// day-of-month likewise; the .w component carries fractional seconds for
+/// shaders that key on time-of-day. Read once per paint on the kwin path;
+/// daemon throttles its sync to 1 Hz.
+inline constexpr const char* kIDate = "iDate";
+
+/// `vec4 iMouse` — cursor position in shader-local pixels.
+/// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
+/// (window frame origin on the kwin path; overlay surface origin on
+/// the daemon path); `(-1, -1)` when the cursor is outside the shader's
+/// surface. `.zw` are reserved for click state in the daemon overlay
+/// contract; the kwin path leaves them at 0.
+inline constexpr const char* kIMouse = "iMouse";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
 /// Cross-runtime element-name lookup constant: used by the kwin-effect's

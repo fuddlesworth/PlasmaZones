@@ -21,8 +21,11 @@
 #include <chrono>
 #include <memory>
 #include <QDBusArgument>
+#include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QTime>
 #include <QVector4D>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -4305,7 +4308,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 
     auto sit = m_shaderTransitions.find(w);
     if (sit != m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
-        const auto& transition = sit->second;
+        // Non-const reference because the per-frame book-keeping (`frameCount`,
+        // `lastPaintTimeMs`) advances on every paintWindow tick that feeds
+        // the transition. Without the mutation, `iFrame` would stay at 0 and
+        // `iTimeDelta` would always read 0.
+        auto& transition = sit->second;
         // Two progress sources, picked by the transition's mode (see
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
@@ -4347,10 +4354,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // is 0..1 progress, iResolution is the surface size, and
             // per-effect declared parameters land in `customParams[N]`
             // slots populated at transition begin time by
-            // `translateAnimationParams`. Overlay-only uniforms
-            // (`iMouse`, `iDate`, `iTimeDelta`, `iFrame`,
-            // audio/wallpaper/multipass) are intentionally not populated
-            // here — they receive zero values on the compositor path.
+            // `translateAnimationParams`. iTimeDelta / iFrame / iDate /
+            // iMouse mirror the daemon's SurfaceAnimator semantics so a
+            // single shader source observes equivalent state on either
+            // runtime. Audio / multipass / texture uniforms are still
+            // unpopulated on the kwin path — those need C++ wiring
+            // (CAVA subscription, FBO chain, texture cache) that is out
+            // of scope for this commit.
             //
             // setUniform must run with the shader bound: KWin's
             // `GLShader::setUniform` calls `glUniform*` directly, which
@@ -4368,14 +4378,54 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // call site makes the intent ("only push uniforms the shader
             // actually declared") explicit and survives a future GL
             // backend that doesn't honour the -1-is-noop convention.
+            const qint64 nowMs = shaderClockNowMs();
+            const float iTimeDelta = (transition.lastPaintTimeMs < 0)
+                ? 0.0f
+                : static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f;
+            transition.lastPaintTimeMs = nowMs;
+            const int iFrameValue = transition.frameCount++;
+            const QRectF geo = w->frameGeometry();
+            // iMouse: cursor position in window-local logical pixels, with
+            // (-1, -1) sentinel when the cursor is outside the window's
+            // frame. Matches the daemon overlay path's
+            // QQuickHoverHandler-driven semantic so shaders that key on
+            // cursor proximity see identical behaviour on either runtime.
+            // .zw stay 0 — the daemon's click-state extension is not
+            // relevant here (no input grab on the redirected window).
+            const QPointF cursorGlobal = KWin::effects->cursorPos();
+            QVector4D iMouseValue(-1.0f, -1.0f, 0.0f, 0.0f);
+            if (geo.contains(cursorGlobal)) {
+                iMouseValue.setX(static_cast<float>(cursorGlobal.x() - geo.x()));
+                iMouseValue.setY(static_cast<float>(cursorGlobal.y() - geo.y()));
+            }
+            // iDate: local-time (year, month, day, seconds-since-midnight).
+            // QDate's year/month/day are 1-based per the GLSL contract.
+            // QTime::msecsSinceStartOfDay() / 1000.0 gives sub-second
+            // resolution for shaders that key on time-of-day.
+            const QDateTime nowDateTime = QDateTime::currentDateTime();
+            const QDate date = nowDateTime.date();
+            const float iDateW = static_cast<float>(nowDateTime.time().msecsSinceStartOfDay()) / 1000.0f;
+            const QVector4D iDateValue(static_cast<float>(date.year()), static_cast<float>(date.month()),
+                                       static_cast<float>(date.day()), iDateW);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
                     shader->setUniform(cached->iTimeLoc, static_cast<float>(progress));
                 }
                 if (cached->iResolutionLoc >= 0) {
-                    const QRectF geo = w->frameGeometry();
                     shader->setUniform(cached->iResolutionLoc, QVector2D(geo.width(), geo.height()));
+                }
+                if (cached->iTimeDeltaLoc >= 0) {
+                    shader->setUniform(cached->iTimeDeltaLoc, iTimeDelta);
+                }
+                if (cached->iFrameLoc >= 0) {
+                    shader->setUniform(cached->iFrameLoc, iFrameValue);
+                }
+                if (cached->iDateLoc >= 0) {
+                    shader->setUniform(cached->iDateLoc, iDateValue);
+                }
+                if (cached->iMouseLoc >= 0) {
+                    shader->setUniform(cached->iMouseLoc, iMouseValue);
                 }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];
@@ -4577,6 +4627,10 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
         cached.iResolutionLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
+        cached.iTimeDeltaLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITimeDelta);
+        cached.iFrameLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFrame);
+        cached.iDateLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIDate);
+        cached.iMouseLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMouse);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color

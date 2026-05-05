@@ -518,6 +518,10 @@ private:
         ///
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
+        int iTimeDeltaLoc = -1;
+        int iFrameLoc = -1;
+        int iDateLoc = -1;
+        int iMouseLoc = -1;
         // Slot counts sourced from AnimationShaderContract so a future
         // change to the contract (e.g. growing the customParams budget)
         // can't silently desync this cache from the translation +
@@ -578,6 +582,19 @@ private:
         /// as "fully revealed", which is exactly the semantic users expect
         /// for the corresponding `disappear` event.
         bool reverse = false;
+        /// Per-leg frame counter. Bumped each paintWindow tick where this
+        /// transition feeds the shader; reset to 0 on every fresh
+        /// beginShaderTransition install (or supersession). Mirrors the
+        /// daemon's `SurfaceAnimator` `iFrame` semantic: starts at 0 on
+        /// each fresh attach so shaders that read it (e.g. for staggered
+        /// per-frame randomness) see the same trajectory on both runtimes.
+        int frameCount = 0;
+        /// Wall-clock timestamp of the previous paintWindow tick that fed
+        /// this transition. -1 means "no prior paint yet" — first paint
+        /// produces `iTimeDelta = 0` rather than a spurious huge delta
+        /// from the install timestamp. `shaderClockNowMs()` based, so
+        /// monotonic and immune to NTP jumps mid-transition.
+        qint64 lastPaintTimeMs = -1;
     };
     /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
     /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
