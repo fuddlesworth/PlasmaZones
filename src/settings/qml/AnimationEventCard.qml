@@ -573,31 +573,44 @@ Item {
                     includeNoneEntry: true
                     placeholderText: i18nc("@action:button", "Select shader…")
                     onShaderSelected: function(id) {
+                        // "None" semantically means "no shader runs
+                        // at this event" — write the engaged-empty
+                        // sentinel (`setShaderOverride(path, "")`)
+                        // so it BLOCKS inheritance from an ancestor.
+                        // Without this, picking None on a child
+                        // event whose parent ("All Window Events"
+                        // etc.) has a shader assigned was a no-op:
+                        // clearShaderOverride would just remove a
+                        // direct override that doesn't exist, and
+                        // the parent's shader would keep cascading
+                        // down — directly contradicting the user's
+                        // pick.
+
                         // Coerce undefined / null to "" so the empty-id
                         // check below doesn't throw on a model that
                         // emits a non-string sentinel for a cleared
                         // selection.
                         var sid = id || "";
+                        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
+                        var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
                         if (sid.length === 0) {
-                            // Picker's "None" entry semantically
-                            // REMOVES the override (allows inheritance
-                            // from an ancestor) — this is intentionally
-                            // distinct from the card's OFF toggle,
-                            // which writes an engaged-empty sentinel
-                            // that BLOCKS inheritance. Picking "None"
-                            // is "let the parent's choice flow
-                            // through"; toggling OFF is "no shader at
-                            // this path or any descendant".
-                            settingsController.animationsPage.clearShaderOverride(root.eventPath);
+                            // Skip the write when the path already holds
+                            // the engaged-empty sentinel (directEffectId
+                            // === "" AND there's a direct override).
+                            // Engaged-empty serialises with effectId
+                            // present-but-empty, so rawShader will be
+                            // truthy with effectId = "".
+                            var alreadyDisabled = rawShader && typeof rawShader.effectId === "string" && rawShader.effectId === "";
+                            if (alreadyDisabled)
+                                return ;
+
+                            settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
+                            }));
                             // Imperative kick: don't rely solely on the
-                            // shaderProfileChanged broadcast → Connections
-                            // refresh chain. A signal-propagation hiccup
-                            // (out-of-order emit, late binding, picker
-                            // state captured at click time) can leave the
-                            // picker visually stuck on the prior value
-                            // even after the tree write succeeds.
-                            // Refreshing here force-syncs the card's
-                            // bindings against the now-current tree.
+                            // shaderProfileChanged broadcast →
+                            // Connections refresh chain. Refreshing here
+                            // force-syncs the card's bindings against
+                            // the now-current tree.
                             root.refreshShaderFromTree();
                             root.refreshFromTree();
                             root._inheritRev++;
@@ -613,8 +626,6 @@ Item {
                         // direct override at this path — that intent must
                         // produce a real write so a future parent change
                         // doesn't silently move the child off X.
-                        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
-                        var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
                         if (sid === directEffectId)
                             return ;
 
