@@ -136,8 +136,13 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         // file resolves, lexical-vs-lexical when it's missing.
         const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
         const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
+        // canonicalRoot is read ONLY in the `useCanonical=true` branch
+        // below, which is gated on `!canonicalRootResolved.isEmpty()`.
+        // Leave it empty in the missing-effectDir case rather than
+        // aliasing it to lexicalRoot — the alias was misleading because
+        // the value was never actually consumed.
         const QString canonicalRoot =
-            canonicalRootResolved.isEmpty() ? lexicalRoot : canonicalRootResolved + QLatin1Char('/');
+            canonicalRootResolved.isEmpty() ? QString() : canonicalRootResolved + QLatin1Char('/');
         for (auto& tex : e.textures) {
             if (tex.path.isEmpty())
                 continue;
@@ -229,10 +234,19 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     return e;
 }
 
-/// Per-payload watch list — frag + vert shader file paths. The strategy
-/// already adds the metadata.json itself; this callback is for everything
-/// else. Preview is informational only (no live-reload need on a static
-/// thumbnail) and is excluded.
+/// Per-payload watch list — frag + vert + buffer shader files AND
+/// declared user-texture paths. The strategy already adds the
+/// metadata.json itself; this callback covers everything else. Preview
+/// is informational only (no live-reload need on a static thumbnail)
+/// and is excluded.
+///
+/// Why textures are watched: `m_textureCache` (kwin-effect side) and
+/// `m_userTextureImages` (daemon ShaderEffect side) both key on
+/// absolute path. A bitmap content change with no path change would
+/// otherwise serve the stale GPU upload for the rest of the session
+/// — the registry's `effectsChanged` is the canonical invalidation
+/// signal both consumers consume, so feeding texture mtimes into the
+/// strategy's fingerprint propagates the reload uniformly.
 QStringList effectWatchPaths(const AnimationShaderEffect& e)
 {
     QStringList paths;
@@ -245,6 +259,11 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
     for (const QString& bufPath : e.bufferShaderPaths) {
         if (!bufPath.isEmpty()) {
             paths.append(bufPath);
+        }
+    }
+    for (const auto& tex : e.textures) {
+        if (!tex.path.isEmpty()) {
+            paths.append(tex.path);
         }
     }
     return paths;
@@ -437,15 +456,18 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     //
     // Pack-default paths in `effect.textures` are already absolute
     // (resolved + traversal-checked at parseEffect scan time). Runtime
-    // overrides from `friendlyParams` are emitted verbatim — the
-    // override path comes from the settings UI / D-Bus and the consumer
-    // (ShaderEffect or kwin-effect) is responsible for whatever
-    // resolution it wants. Empty / null paths skip the emit so a
-    // setShaderParams consumer's "missing key = no change" semantic
-    // doesn't accidentally clear a slot the caller intended to leave
-    // alone. Wrap-only entries are gated on a non-empty companion path
-    // so a consumer can't end up with a wrap mode applied to an unbound
-    // sampler.
+    // overrides from `friendlyParams` may arrive relative — settings UI
+    // / D-Bus callers don't all know the effect's sourceDir. Resolve
+    // relative override paths against `effect.sourceDir` for parity
+    // with pack-defaults, so the downstream cache (`m_textureCache` on
+    // kwin / `m_userTextureImages` on daemon) keys on a stable absolute
+    // path regardless of which input shape the caller used. Empty /
+    // null paths skip the emit so a setShaderParams consumer's
+    // "missing key = no change" semantic doesn't accidentally clear a
+    // slot the caller intended to leave alone. Wrap-only entries are
+    // gated on a non-empty companion path so a consumer can't end up
+    // with a wrap mode applied to an unbound sampler.
+    const QDir sourceDir(effect.sourceDir);
     for (int slot = 0; slot < AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
         const int glslSlot = slot + 1; // uTexture0 is reserved for the surface
         const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
@@ -460,6 +482,13 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         const auto pathOverride = friendlyParams.constFind(pathKey);
         if (pathOverride != friendlyParams.constEnd()) {
             path = pathOverride->toString();
+            // Resolve relative override paths against the effect's
+            // sourceDir. Skip when sourceDir is unset (degenerate
+            // case — pack came from an in-memory factory) so the
+            // override flows through unchanged.
+            if (!path.isEmpty() && QFileInfo(path).isRelative() && !effect.sourceDir.isEmpty()) {
+                path = sourceDir.filePath(path);
+            }
         }
         const auto wrapOverride = friendlyParams.constFind(wrapKey);
         if (wrapOverride != friendlyParams.constEnd()) {

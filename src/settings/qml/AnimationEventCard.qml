@@ -579,6 +579,15 @@ Item {
                         // selection.
                         var sid = id || "";
                         if (sid.length === 0) {
+                            // Picker's "None" entry semantically
+                            // REMOVES the override (allows inheritance
+                            // from an ancestor) — this is intentionally
+                            // distinct from the card's OFF toggle,
+                            // which writes an engaged-empty sentinel
+                            // that BLOCKS inheritance. Picking "None"
+                            // is "let the parent's choice flow
+                            // through"; toggling OFF is "no shader at
+                            // this path or any descendant".
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
                             return ;
                         }

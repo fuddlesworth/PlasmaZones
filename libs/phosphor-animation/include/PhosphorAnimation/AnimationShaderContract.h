@@ -200,12 +200,17 @@ inline constexpr const char* kIFrame = "iFrame";
 inline constexpr const char* kIDate = "iDate";
 
 /// `int iIsReversed` — direction signal for asymmetric leg rendering.
-/// 1 when the runtime is driving this leg in the "reverse" direction
-/// (window.close / going-to-minimized / unmaximize on the kwin path,
-/// hide leg on the daemon path); 0 for the forward direction. The
-/// runtime also flips iTime for reverse legs so symmetric shaders
-/// auto-mirror — asymmetric shaders branch on this when the iTime flip
-/// alone can't express the open-vs-close difference.
+/// Value is exactly `1` on reverse legs (window.close / going-to-
+/// minimized / unmaximize on the kwin path; hide leg on the daemon
+/// path) and exactly `0` on forward legs. The runtime also flips
+/// iTime for reverse legs so symmetric shaders auto-mirror —
+/// asymmetric shaders branch on this when the iTime flip alone can't
+/// express the open-vs-close difference.
+///
+/// Authoring rule: branch with `iIsReversed == 1` (NOT `iIsReversed != 0`
+/// or implicit-truthy). This pins the behaviour against any future
+/// runtime that elects to extend the encoding (e.g. negative for
+/// "unknown direction"). The matrix shader follows this convention.
 inline constexpr const char* kIIsReversed = "iIsReversed";
 
 /// Maximum number of user-declared textures per animation effect.

@@ -109,11 +109,15 @@ constexpr int EndDragTimeoutMs = 500;
 /// we find the first newline at or after the `#version` line and inject
 /// after it.
 ///
-/// Defensive fallback: if no `#version` is present (a hand-rolled vertex
-/// stage that opens with a comment block, say), inject at the very top
-/// since GL3+ legacy compilers default to compatibility profile and accept
-/// `#define` as the first token. The bake test on the daemon side catches
-/// any animation shader that ships without `#version`.
+/// Defensive fallback: if no `#version` is present (a hand-rolled
+/// shader that ships without one), synthesize `#version 450` and warn.
+/// KWin on Wayland with modern Mesa runs core profile, where the
+/// directive is mandatory — a bare `#define` would fail compile with
+/// a confusing line-1 error. The bake test on the daemon side already
+/// catches any built-in shader that ships without `#version`; the
+/// fallback exists to surface third-party packs that violate the
+/// contract with a useful journal entry rather than a cryptic GLSL
+/// error.
 inline QByteArray injectKwinDefineAfterVersion(const QString& source)
 {
     // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
@@ -214,9 +218,19 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
 
     if (!foundVersion) {
         // No #version directive (or it was shadowed by an early break
-        // mid block-comment). Prepend the define — GL3+ legacy compilers
-        // accept `#define` as the first token in compatibility profile.
-        return (defineLine + working).toUtf8();
+        // mid block-comment). KWin on Wayland with modern Mesa runs
+        // core profile, where `#version` is mandatory and a bare
+        // `#define` as the first token would fail compile with a
+        // confusing line-1 error. Synthesize a `#version 450` directive
+        // matching the rest of the animation suite, prepend the define,
+        // and warn so the author sees the contract violation in the
+        // journal.
+        qCWarning(lcEffect) << "Animation shader source has no #version directive — synthesizing `#version 450`. "
+                               "Animation shaders MUST declare `#version 450` (the canonical contract); the bake "
+                               "test on the daemon side enforces this.";
+        const QString header = useCrlf ? QStringLiteral("#version 450\r\n#define PLASMAZONES_KWIN\r\n")
+                                       : QStringLiteral("#version 450\n#define PLASMAZONES_KWIN\n");
+        return (header + working).toUtf8();
     }
     if (realVersionEnd < 0) {
         // `#version` line ends at EOF with no trailing newline. The
@@ -240,6 +254,14 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
 /// conversion ensures `KWin::GLTexture::upload` always sees a consistent
 /// pixel layout regardless of the source file's native format. Returns
 /// a null QImage on any failure; the caller logs and skips the slot.
+///
+/// SVG rasterise target: `Format_ARGB32_Premultiplied` first, then
+/// convert to `Format_RGBA8888` for the GPU upload. QPainter's
+/// source-over compositing is defined for premultiplied targets;
+/// rendering an SVG with semi-transparent strokes/fills directly into
+/// `Format_RGBA8888` produces subtly wrong alpha at partial-cover paths.
+/// Matches the daemon path's behaviour exactly so the same SVG renders
+/// identically on both runtimes.
 inline QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024)
 {
     if (path.isEmpty()) {
@@ -258,12 +280,12 @@ inline QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024)
         } else {
             size = QSize(svgMaxDim, svgMaxDim);
         }
-        QImage img(size, QImage::Format_RGBA8888);
-        img.fill(Qt::transparent);
-        QPainter painter(&img);
+        QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
+        rasterised.fill(Qt::transparent);
+        QPainter painter(&rasterised);
         renderer.render(&painter);
         painter.end();
-        return img;
+        return rasterised.convertToFormat(QImage::Format_RGBA8888);
     }
     return QImage(path).convertToFormat(QImage::Format_RGBA8888);
 }
@@ -4678,20 +4700,27 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 }
                 if (cached->iMouseLoc >= 0) {
                     // iMouse: cursor position in window-local logical
-                    // pixels, with (-1, -1) sentinel when the cursor is
-                    // outside the window's frame. Mirrors the daemon
-                    // overlay path's QQuickHoverHandler semantic so a
-                    // shader keying on cursor proximity sees identical
-                    // behaviour on both runtimes. .zw stay 0 — daemon's
-                    // click-state extension isn't relevant here. Hoisted
-                    // behind the loc>=0 guard for the same reason as
-                    // iDate above.
+                    // pixels (.xy), with `(-1, -1)` sentinel when the
+                    // cursor is outside the window's frame. .zw carry
+                    // the same position normalised to surface size,
+                    // computed unconditionally from the same xy values
+                    // — mirrors `ShaderNodeRhi::syncBaseUniforms`
+                    // exactly (off-region: .zw lands at slightly-
+                    // negative `(-1/w, -1/h)`; the .xy sentinel is the
+                    // canonical off-region check). Hoisted behind the
+                    // loc>=0 guard for the same reason as iDate above.
                     const QPointF cursorGlobal = KWin::effects->cursorPos();
-                    QVector4D iMouseValue(-1.0f, -1.0f, 0.0f, 0.0f);
+                    float localX = -1.0f;
+                    float localY = -1.0f;
                     if (geo.contains(cursorGlobal)) {
-                        iMouseValue.setX(static_cast<float>(cursorGlobal.x() - geo.x()));
-                        iMouseValue.setY(static_cast<float>(cursorGlobal.y() - geo.y()));
+                        localX = static_cast<float>(cursorGlobal.x() - geo.x());
+                        localY = static_cast<float>(cursorGlobal.y() - geo.y());
                     }
+                    QVector4D iMouseValue(localX, localY, 0.0f, 0.0f);
+                    if (geo.width() > 0.0)
+                        iMouseValue.setZ(localX / static_cast<float>(geo.width()));
+                    if (geo.height() > 0.0)
+                        iMouseValue.setW(localY / static_cast<float>(geo.height()));
                     shader->setUniform(cached->iMouseLoc, iMouseValue);
                 }
                 if (cached->iIsReversedLoc >= 0) {
@@ -4793,6 +4822,19 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (effectId.isEmpty() || !window)
         return;
 
+    // Global animations toggle. Mirrors the daemon's
+    // `SurfaceAnimator::beginShow/beginHide` early-out when
+    // `setEnabled(false)`. Gating here (rather than only in
+    // `tryBeginShaderForEvent`) covers BOTH callsite categories
+    // uniformly: window-lifecycle events that flow through
+    // `tryBeginShaderForEvent`, and zone.* events that flow through
+    // `applySnapGeometry → beginShaderTransition` directly. Without
+    // this gate the zone.* path would still install shader transitions
+    // even with global animations off.
+    if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
+        return;
+    }
+
     // OffscreenEffect's `redirect()` allocates an FBO sized to the
     // window's frame geometry. A window that's already minimised /
     // unmapped reports 0×0 (or 1×1) here, and FBO creation aborts
@@ -4853,7 +4895,16 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // Authors that ship a per-shader vertex stage via metadata's
     // `vertexShader` field still flow through the file-load path
     // below. They opt out of this default and own the matrix /
-    // attribute contract themselves.
+    // attribute contract themselves — INCLUDING the Y-flip described
+    // immediately below. A custom vertex stage that emits
+    // `vTexCoord = texCoord` (the obvious-looking pass-through) will
+    // render upside-down on the kwin path, because KWin's
+    // `OffscreenData::paint` populates texCoord with Y-up FBO sampling
+    // coordinates while animation shaders are authored against the
+    // daemon's Y=0-at-top convention. See the canonical GLSL header
+    // (`data/animations/shared/animation_uniforms.glsl`) for the full
+    // contract; the rule of thumb is "if you supply your own vertex
+    // shader for kwin, replicate the `1.0 - texCoord.y` flip".
     // Y-flip the texCoord on the way out so animation shader math sees
     // the same Y=0-at-top convention the daemon's Qt-RHI pipeline
     // delivers. KWin's `OffscreenData::paint` populates the texCoord
@@ -5322,14 +5373,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (!window || durationMs <= 0) {
         return;
     }
-    // Gate window-event shader transitions on the global animations
-    // toggle. The flag flows into `m_windowAnimator->setEnabled(...)`
-    // for motion tweens; without this matching gate, disabling
-    // animations globally would still let window.open / close / focus
-    // / etc. fire shader transitions. Mirrors the per-event "Override"
-    // toggle's contract: cleared per-event override falls back to the
-    // global default, and the global default's "off" is honoured here.
-    if (!m_windowAnimator->isEnabled()) {
+    // Fast-path early-out on the global animations toggle. The
+    // authoritative gate also lives in `beginShaderTransition` (so
+    // zone.* callers via `applySnapGeometry` are gated too), but
+    // dispatching there would still pay the shader-tree resolve cost
+    // — this skips it entirely when the global toggle is off.
+    if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
         return;
     }
     const auto profile = m_shaderProfileTree.resolve(profilePath);

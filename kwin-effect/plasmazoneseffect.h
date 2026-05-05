@@ -700,7 +700,23 @@ private:
     /// per-leg `KWin::GLTexture::upload` cost. Cleared on
     /// `effectsChanged` alongside `m_shaderCache` so a hot-reload that
     /// drops a texture file frees the GPU memory rather than holding it
-    /// for the rest of the session.
+    /// for the rest of the session. The registry's per-effect watch
+    /// list (see `effectWatchPaths` in animationshaderregistry.cpp)
+    /// includes declared texture file paths, so a bitmap content
+    /// change with no metadata change still re-fires `effectsChanged`
+    /// and invalidates this cache uniformly — no separate watcher
+    /// needed here.
+    ///
+    /// **Growth policy.** Between consecutive `effectsChanged` events
+    /// the cache grows monotonically with the count of UNIQUE texture
+    /// paths surfaced over the session. Bounded in practice by the
+    /// total number of distinct textures across all installed packs
+    /// (kMaxUserTextureSlots × pack count), which is small. No LRU /
+    /// reference-count eviction is implemented because (a) every
+    /// metadata edit / live-reload triggers a full clear, and (b) the
+    /// per-texture footprint is tens of MiB at most for atlas-style
+    /// uploads. Revisit if a third-party pack channel pushes the
+    /// long-tail bitmap count higher.
     ///
     /// **Declaration ORDER MATTERS.** C++ destroys members in reverse
     /// declaration order, so `m_textureCache` declared FIRST means it
