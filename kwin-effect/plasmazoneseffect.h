@@ -21,6 +21,7 @@
 #include <effect/offscreeneffect.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
+#include <opengl/gltexture.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
 #include <QJsonArray>
@@ -538,6 +539,37 @@ private:
             a.fill(-1);
             return a;
         }();
+        /// Uploaded user textures, keyed by user-slot index (0 → iChannel1,
+        /// 1 → iChannel2, 2 → iChannel3). Per the daemon parity contract,
+        /// user-declared textures begin at the runtime's slot 1 — slot 0
+        /// of the binding-7+ region is the redirected window itself
+        /// (`iChannel0`), bound by KWin's OffscreenEffect to TEXTURE0.
+        /// Uploaded once at compile time via `KWin::GLTexture::upload`,
+        /// destructed when the cache evicts (effect hot-reload via
+        /// `effectsChanged` clears every entry — see `m_shaderCache.clear`
+        /// in the constructor).
+        std::array<std::unique_ptr<KWin::GLTexture>,
+                   PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+            userTextures = {};
+        /// Sampler uniform locations for `iChannel1..3`. -1 means the GLSL
+        /// linker dropped the sampler (the shader source never read it),
+        /// in which case paintWindow skips both the bind and the
+        /// setUniform — saves a glActiveTexture call per unused slot.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
+            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
+            a.fill(-1);
+            return a;
+        }();
+        /// Element locations for `iTextureResolution[0..N-1]`. Symmetric
+        /// with `customParamsLoc` / `customColorsLoc` — the element-name
+        /// lookup happens at compile time so paintWindow does not
+        /// re-resolve "iTextureResolution[0]" string lookups per frame.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc =
+            []() {
+                std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
+                a.fill(-1);
+                return a;
+            }();
     };
     struct ShaderTransition
     {

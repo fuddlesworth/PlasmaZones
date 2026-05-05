@@ -199,6 +199,16 @@ inline constexpr const char* kIFrame = "iFrame";
 /// daemon throttles its sync to 1 Hz.
 inline constexpr const char* kIDate = "iDate";
 
+/// Maximum number of user-declared textures per animation effect.
+///
+/// Each declared texture binds to one of the canonical samplers
+/// `iChannel1` / `iChannel2` / `iChannel3`. The redirected surface
+/// itself (`iChannel0`, binding 7 on the daemon, TEXTURE0 on KWin) is
+/// not counted here — that's a separate runtime-managed slot. The
+/// daemon's `ShaderNodeRhi::kMaxUserTextures = 4` includes slot 0,
+/// hence the off-by-one in the budget.
+inline constexpr int kMaxUserTextureSlots = 3;
+
 /// `vec4 iMouse` — cursor position in shader-local pixels.
 /// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
 /// (window frame origin on the kwin path; overlay surface origin on

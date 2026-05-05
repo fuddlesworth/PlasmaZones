@@ -166,6 +166,30 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     };
     QList<ParameterInfo> parameters;
 
+    /// User texture slot. Each entry binds an asset file to one of the
+    /// canonical samplers `iChannel1` / `iChannel2` / `iChannel3` (slots
+    /// 0 / 1 / 2 here, which the runtimes map to texture-unit
+    /// allocations 1 / 2 / 3 — slot 0 of the binding-7+ region is the
+    /// surface itself / `iChannel0`, never user-declared).
+    ///
+    /// `path` is resolved relative to the effect's `sourceDir`. Loading
+    /// failures are non-fatal — the effect still installs and the
+    /// affected sampler reads transparent black; a `qCWarning` logs the
+    /// missing file. `wrap` mirrors the daemon-side overlay shader
+    /// vocabulary (`"clamp"` / `"repeat"` / `"mirror"`); empty value
+    /// uses the runtime default (clamp). Filter mode is not exposed
+    /// here — both runtimes use linear filtering for user textures
+    /// today. The slot index is the 0-based position in this list:
+    /// the first entry binds to `iChannel1`, the second to
+    /// `iChannel2`, etc. Up to three textures per effect; surplus
+    /// entries are silently dropped at parse time.
+    struct TextureSlot
+    {
+        QString path; ///< Filename relative to the effect's sourceDir.
+        QString wrap; ///< "clamp" / "repeat" / "mirror"; empty = runtime default.
+    };
+    QList<TextureSlot> textures;
+
     bool isValid() const
     {
         return !id.isEmpty() && !fragmentShaderPath.isEmpty();

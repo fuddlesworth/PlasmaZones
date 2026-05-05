@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 
+#include <PhosphorAnimation/AnimationShaderContract.h>
+
 #include <QJsonArray>
 #include <QJsonValue>
 
@@ -110,6 +112,18 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("parameters"), params);
     }
 
+    if (!textures.isEmpty()) {
+        QJsonArray texArr;
+        for (const auto& t : textures) {
+            QJsonObject tObj;
+            tObj.insert(QLatin1String("path"), t.path);
+            if (!t.wrap.isEmpty())
+                tObj.insert(QLatin1String("wrap"), t.wrap);
+            texArr.append(tObj);
+        }
+        obj.insert(QLatin1String("textures"), texArr);
+    }
+
     return obj;
 }
 
@@ -186,6 +200,27 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         e.parameters.append(std::move(p));
     }
 
+    // Cap the texture list at the contract budget. Surplus entries are
+    // silently dropped — the canonical UBO only declares iChannel1..3
+    // and exposing more would require both runtimes to grow more
+    // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
+    // would loosen this cap automatically.
+    const QJsonArray texArr = obj.value(QLatin1String("textures")).toArray();
+    e.textures.reserve(qMin(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
+    for (const QJsonValue& v : texArr) {
+        if (e.textures.size() >= AnimationShaderContract::kMaxUserTextureSlots)
+            break;
+        const QJsonObject tObj = v.toObject();
+        TextureSlot t;
+        t.path = tObj.value(QLatin1String("path")).toString();
+        t.wrap = tObj.value(QLatin1String("wrap")).toString();
+        // Drop entries with no path — they would map to a sampler with
+        // nothing bound. The runtimes would fall back to transparent
+        // black, but persisting the empty slot in JSON is just noise.
+        if (!t.path.isEmpty())
+            e.textures.append(std::move(t));
+    }
+
     return e;
 }
 
@@ -233,6 +268,14 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
             return false;
         if (a.defaultValue != b.defaultValue || a.minValue != b.minValue || a.maxValue != b.maxValue
             || a.stepValue != b.stepValue)
+            return false;
+    }
+    if (textures.size() != other.textures.size())
+        return false;
+    for (int i = 0; i < textures.size(); ++i) {
+        const auto& a = textures[i];
+        const auto& b = other.textures[i];
+        if (a.path != b.path || a.wrap != b.wrap)
             return false;
     }
     return true;

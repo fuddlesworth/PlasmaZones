@@ -70,6 +70,15 @@ uniform vec4 iTextureResolution[4];
 uniform float iTimeHi;
 
 uniform sampler2D iChannel0;
+// User-declared textures — see AnimationShaderEffect::TextureSlot in
+// metadata.json. The kwin-effect binds these to TEXTURE1..3 before
+// drawWindow; the daemon binds them to SRB bindings 8..10 via
+// ShaderNodeRhi::setUserTexture. Default `vec4(0)` (transparent black)
+// when the metadata declares fewer than 3 textures or a slot's file
+// failed to load.
+uniform sampler2D iChannel1;
+uniform sampler2D iChannel2;
+uniform sampler2D iChannel3;
 
 #else
 
@@ -121,6 +130,13 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 };
 
 layout(binding = 7) uniform sampler2D iChannel0;
+// User-declared textures — see AnimationShaderEffect::TextureSlot.
+// Bindings 8..10 mirror the daemon-side overlay shader convention so
+// shaders that already read iChannel1..3 from the overlay path produce
+// identical samples on the animation path.
+layout(binding = 8) uniform sampler2D iChannel1;
+layout(binding = 9) uniform sampler2D iChannel2;
+layout(binding = 10) uniform sampler2D iChannel3;
 
 #endif // PLASMAZONES_KWIN
 
