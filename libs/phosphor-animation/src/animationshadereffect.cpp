@@ -228,7 +228,6 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.textures.reserve(qMin<qsizetype>(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
     qsizetype slotIndex = 0;
     for (const QJsonValue& v : texArr) {
-        const qsizetype currentSlot = slotIndex++;
         if (e.textures.size() >= AnimationShaderContract::kMaxUserTextureSlots)
             break;
         const QJsonObject tObj = v.toObject();
@@ -247,9 +246,10 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         if (!t.wrap.isEmpty() && t.wrap != QLatin1String("clamp") && t.wrap != QLatin1String("repeat")
             && t.wrap != QLatin1String("mirror")) {
             qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown wrap value" << t.wrap
-                                         << "for slot" << currentSlot << "— reset to clamp";
+                                         << "for slot" << slotIndex << "— reset to runtime default";
             t.wrap.clear();
         }
+        ++slotIndex;
         // Drop entries with no path — they would map to a sampler with
         // nothing bound. The runtimes would fall back to transparent
         // black, but persisting the empty slot in JSON is just noise.

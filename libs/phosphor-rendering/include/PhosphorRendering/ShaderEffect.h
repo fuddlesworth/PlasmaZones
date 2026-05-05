@@ -513,7 +513,22 @@ public:
     /** Direct setter from C++ avoiding QVariantList round-trip. */
     void setAudioSpectrum(const QVector<float>& spectrum);
 
-    /** Set a user texture (slots 0-3, bindings 7-10). */
+    /**
+     * Set a user texture (slots 0-3, bindings 7-10) directly from a QImage,
+     * bypassing the path-driven loader.
+     *
+     * Clears the per-slot cached path and resets the companion svgSize / wrap
+     * settings so a subsequent params-driven load starts from a clean slot.
+     *
+     * Mixing-with-`setShaderParams` contract: a subsequent
+     * `setShaderParams(p)` will reload the texture from `p["uTextureN"]`
+     * even when `p` is byte-equal to the cached params map. The
+     * intervening direct-push sets a private dirty flag that suppresses
+     * the equality short-circuit on the very next call, so the cleared
+     * path is honoured and the on-disk image replaces the directly-set
+     * QImage. After that one re-parse, the flag is cleared and the
+     * usual fast-path resumes.
+     */
     void setUserTexture(int slot, const QImage& image);
     /** Set user texture wrap mode (slots 0-3). "clamp", "repeat", or "mirror". */
     void setUserTextureWrap(int slot, const QString& wrap);
@@ -714,6 +729,16 @@ private:
     /// without the 4× cost a 4096 default would impose on the common
     /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
     std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
+    /// Set by `setUserTexture` to flag that a directly-pushed QImage now
+    /// occupies one of the user-texture slots (path cache cleared). Honoured
+    /// by `setShaderParams`: when the incoming params map is byte-equal to
+    /// `m_shaderParams`, the early-return is normally fine, but if a direct
+    /// push intervened the cleared path needs to be reloaded from the
+    /// unchanged-on-the-wire `uTextureN` entry. Bypassing the early-return
+    /// in that one case lets the texture pipeline re-parse and reload.
+    /// Reset at the end of the parse branch so the cost is paid exactly
+    /// once per intervening direct push.
+    bool m_userTexturesDirectlyOverridden = false;
     QImage m_wallpaperTexture;
     mutable QMutex m_wallpaperTextureMutex;
     bool m_useWallpaper = false;

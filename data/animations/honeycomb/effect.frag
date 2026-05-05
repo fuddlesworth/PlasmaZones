@@ -167,12 +167,13 @@ void main()
     // transparent → partial → more-partial → solid as the wave
     // sweeps across them, instead of melting smoothly.
     //
-    // 5 steps (0, 0.25, 0.5, 0.75, 1.0) is enough to read as discrete
-    // increments at popup scale without making the transition feel
-    // jerky on a 2 s show animation. `floor(x * N + 0.5) / N` is the
-    // canonical "round to nearest of N+1 levels" snap.
-    const float kOpacitySteps = 4.0;
-    float steppedMask = floor(mask * kOpacitySteps + 0.5) / kOpacitySteps;
+    // 4 divisions producing 5 distinct levels (0, 0.25, 0.5, 0.75, 1.0)
+    // is enough to read as discrete increments at popup scale without
+    // making the transition feel jerky on a 2 s show animation.
+    // `floor(x * N + 0.5) / N` is the canonical "round to nearest of
+    // N+1 levels" snap.
+    const float kOpacityDivisions = 4.0;
+    float steppedMask = floor(mask * kOpacityDivisions + 0.5) / kOpacityDivisions;
 
     // Sample the live anchor FBO and gate it on the radial mask.
     // Premult-alpha invariant: multiplying both colour and alpha by

@@ -18,7 +18,9 @@
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 
+#include <QCoreApplication>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QHash>
 #include <QLoggingCategory>
@@ -1821,6 +1823,18 @@ SurfaceAnimator::SurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& reg
 
 SurfaceAnimator::~SurfaceAnimator()
 {
+    // Drain any salvaged-onComplete callbacks queued via
+    // QMetaObject::invokeMethod(&d->m_driverTimer, ..., Qt::QueuedConnection)
+    // by beginShow / beginHide's gate-off salvage paths. Without this
+    // flush, a posted QMetaCallEvent that hasn't been dispatched yet
+    // would be silently dropped when the timer (its receiver) is torn
+    // down with the rest of `*d`, stranding the in-flight previous
+    // caller's callback. Running it BEFORE `m_driverTimer.stop()`
+    // matches the ordering in the rest of the dtor (timer activity
+    // first, then state teardown) and guarantees salvaged-onComplete
+    // strands don't outlive the animator.
+    QCoreApplication::sendPostedEvents(&d->m_driverTimer, QEvent::MetaCall);
+
     // Stop the timer FIRST so no tick races with the teardown below.
     d->m_driverTimer.stop();
 
@@ -1952,6 +1966,18 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
         // (the file-wide QObject context for queued posts) so the
         // previous callback runs after this stack unwinds and is
         // free to re-enter SurfaceAnimator without state surprise.
+        //
+        // Order: the new caller's onComplete fires synchronously (the
+        // gate-off branch below), then the salvaged previous-track
+        // onComplete fires queued-asynchronously after this function
+        // returns. This is the OPPOSITE of completion-order intuition
+        // (oldest-first); consumers that chain off completion must
+        // tolerate either order. The trade-off is intentional: firing
+        // the salvage synchronously here would let the previous
+        // caller re-enter and mutate `m_tracks` mid-cancelTracking,
+        // and firing the new caller's onComplete queued would break
+        // the snap-and-confirm contract that callers rely on for
+        // gate-off (set-final-state-then-return semantics).
         if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
             if (auto prevOnComplete = std::move(it->second.onComplete)) {
                 QMetaObject::invokeMethod(
@@ -2013,6 +2039,14 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
         // dropping the in-flight caller's callback is the bug, not the
         // cancellation contract). Post via m_driverTimer so the previous
         // callback runs queued, after this stack unwinds.
+        //
+        // Order: the new caller's onComplete fires synchronously (the
+        // gate-off branch below), then the salvaged previous-track
+        // onComplete fires queued-asynchronously after this function
+        // returns. This is the OPPOSITE of completion-order intuition
+        // (oldest-first); consumers that chain off completion must
+        // tolerate either order. The trade-off matches beginShow: the
+        // synchronous gate-off contract trumps oldest-first ordering.
         if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
             if (auto prevOnComplete = std::move(it->second.onComplete)) {
                 QMetaObject::invokeMethod(

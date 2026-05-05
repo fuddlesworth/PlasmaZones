@@ -1108,6 +1108,80 @@ private Q_SLOTS:
         QVERIFY(!r.contains(QStringLiteral("uTexture1_wrap")));
     }
 
+    /// Dual-key edge case for the empty-string override + companion
+    /// wrap-override interaction. A caller that supplies BOTH
+    /// `uTexture1 = ""` (explicit clear) AND `uTexture1_wrap = "repeat"`
+    /// in the same friendlyParams map must end up with NEITHER key in
+    /// the result: the empty path triggers the "skip both keys" branch
+    /// at the end of the texture loop, which dominates the wrap
+    /// override's reassignment. Pin this so a future edit that adds an
+    /// early `wrap.clear()` in the empty-path branch (which would be
+    /// silently overwritten by the wrap override below it) doesn't
+    /// accidentally regress the orphan-wrap-emit guard.
+    void testTranslateAnimationParamsEmptyOverridePlusWrapOverrideDropsBoth()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("texdualclear");
+        eff.fragmentShaderPath = QStringLiteral("/abs/e.frag");
+        eff.sourceDir = QStringLiteral("/abs");
+        eff.textures.append({QStringLiteral("/abs/pack.png"), QStringLiteral("clamp")});
+
+        const QVariantMap friendly{
+            {QStringLiteral("uTexture1"), QString()}, // explicit clear
+            {QStringLiteral("uTexture1_wrap"), QStringLiteral("repeat")}, // companion wrap override
+        };
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+
+        // BOTH keys absent — the empty-path skip below the wrap-
+        // override dominates regardless of QVariantMap iteration order.
+        QVERIFY(!r.contains(QStringLiteral("uTexture1")));
+        QVERIFY(!r.contains(QStringLiteral("uTexture1_wrap")));
+    }
+
+    /// In-memory effect (sourceDir empty) with a clean override path —
+    /// the `pathHasNoTraversalSegments` branch must accept it and
+    /// thread the path through to the result map. Pairs with the
+    /// negative-coverage test below; together they pin the in-memory
+    /// branch's accept/reject contract.
+    void testInMemoryEffectAcceptsCleanOverridePath()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("inmem-clean");
+        eff.fragmentShaderPath = QStringLiteral("e.frag");
+        // sourceDir intentionally left empty — exercises the in-memory
+        // factory branch that has no on-disk anchor.
+
+        const QVariantMap friendly{
+            {QStringLiteral("uTexture1"), QStringLiteral("/user/clean.png")},
+        };
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+        QCOMPARE(r.value(QStringLiteral("uTexture1")).toString(), QStringLiteral("/user/clean.png"));
+    }
+
+    /// In-memory effect (sourceDir empty) with a `..`-traversal
+    /// override path — the sourceDir-independent
+    /// `pathHasNoTraversalSegments` guard rejects it, the slot stays
+    /// empty in the result, and a "path traversal guard" warning
+    /// surfaces in the journal so a malicious or buggy caller is
+    /// noticed. Pairs with the positive case above.
+    void testInMemoryEffectRejectsTraversalOverridePath()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("inmem-evil");
+        eff.fragmentShaderPath = QStringLiteral("e.frag");
+        // sourceDir intentionally left empty.
+
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QRegularExpression::escape(QStringLiteral("path traversal guard"))));
+
+        const QVariantMap friendly{
+            {QStringLiteral("uTexture1"), QStringLiteral("../../etc/passwd")},
+        };
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+        QVERIFY(!r.contains(QStringLiteral("uTexture1")));
+        QVERIFY(!r.contains(QStringLiteral("uTexture1_wrap")));
+    }
+
     void testTranslateAnimationParamsWrapOnlyOverrideRequiresPath()
     {
         // friendlyParams contains `uTexture1_wrap` but neither the pack

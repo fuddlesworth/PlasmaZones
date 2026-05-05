@@ -443,7 +443,16 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
 
 void ShaderEffect::setShaderParams(const QVariantMap& params)
 {
-    if (m_shaderParams == params) {
+    // Normal fast path: byte-equal params map means there's nothing to
+    // re-parse and no GPU-visible state to mutate. ONE exception:
+    // `setUserTexture` may have intervened since the last params push,
+    // clearing the per-slot path cache and storing a QImage directly.
+    // In that case the unchanged `uTextureN` entry in `params` must be
+    // honoured (re-loaded from disk) so the path-driven contract wins
+    // back over the direct push. We bypass the early-return exactly
+    // once per intervening direct push; the flag is cleared at the end
+    // of the parse branch below.
+    if (m_shaderParams == params && !m_userTexturesDirectlyOverridden) {
         return;
     }
     // Always update the stored map BEFORE the per-key parsing below — the
@@ -581,12 +590,17 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     //
     // Slot-key strings come from the pre-baked tables at the top of this
     // file — `kUserTextureSvgSizeKeys`, `kUserTexturePathKeys`, and
-    // `kUserTextureWrapKeys` — to avoid 12 fresh `QString::arg(i)`
-    // allocations per call regardless of which (if any) of the keys the
-    // params map references. Sized to `kMaxUserTextureSlots` which is
-    // also the loop bound.
+    // `kUserTextureWrapKeys` — to skip the per-call `QString::arg(i)`
+    // parse that the previous `arg`-formatted lookup paid on every
+    // iteration regardless of which (if any) of the keys the params map
+    // references. `QMap::contains(QLatin1String)` and `value(QLatin1String)`
+    // each still synthesise a temporary `QString` for the hash lookup, so
+    // we bind the QLatin1String to a local `QString` once per slot per key
+    // and reuse it across the contains/value pair to deduplicate that
+    // implicit conversion as well. Tables sized to `kMaxUserTextureSlots`,
+    // which is also the loop bound.
     for (int i = 0; i < kMaxUserTextures; ++i) {
-        const QLatin1String sizeKey = kUserTextureSvgSizeKeys[i];
+        const QString sizeKey(kUserTextureSvgSizeKeys[i]);
         bool svgSizeChanged = false;
         if (params.contains(sizeKey)) {
             // Use the `bool ok` parse pattern (matches the float / colour
@@ -598,6 +612,9 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // prior value persists and a malformed setting can't downgrade
             // the rasterise resolution.
             bool ok = false;
+            // Reuse the bound `sizeKey` QString for the value lookup so the
+            // implicit QLatin1String→QString conversion happens once per
+            // slot, not once for `contains` and again for `value`.
             const int v = params.value(sizeKey).toInt(&ok);
             if (ok) {
                 const int clamped = qBound(64, v, kMaxSvgDimension);
@@ -609,7 +626,10 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             }
         }
 
-        const QLatin1String texKey = kUserTexturePathKeys[i];
+        // Same per-iteration QString bind as `sizeKey` above: one
+        // QLatin1String→QString conversion shared by the contains+value
+        // pair instead of two implicit conversions per slot.
+        const QString texKey(kUserTexturePathKeys[i]);
         const bool hasTexKey = params.contains(texKey);
         const QString incomingPath = hasTexKey ? params.value(texKey).toString() : m_userTexturePaths[i];
         const bool pathChanged = hasTexKey && (m_userTexturePaths[i] != incomingPath);
@@ -699,7 +719,8 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             }
         }
 
-        const QLatin1String wrapKey = kUserTextureWrapKeys[i];
+        // Same per-iteration QString bind as `sizeKey` / `texKey` above.
+        const QString wrapKey(kUserTextureWrapKeys[i]);
         if (params.contains(wrapKey)) {
             const QString incomingWrap = params.value(wrapKey).toString();
             if (m_userTextureWraps[i] != incomingWrap) {
@@ -708,6 +729,15 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             }
         }
     }
+
+    // Re-parse complete: any pending direct-push override has now been
+    // honoured (or the loop above had nothing to reload). Clear the
+    // dirty flag so the equality short-circuit can resume on the next
+    // call. Doing this here, after the full per-slot scan, guarantees
+    // the cleared-path / unchanged-params race window described on
+    // `setUserTexture` is closed exactly once per intervening direct
+    // push and never permanently degrades the early-return fast path.
+    m_userTexturesDirectlyOverridden = false;
 
     if (anyMutation) {
         Q_EMIT shaderParamsChanged();
@@ -986,6 +1016,15 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
     // (path-change detection thinks nothing changed). The guard above
     // ensures this clear only fires when the image actually changed.
     m_userTexturePaths[slot].clear();
+    // Companion to the cleared path: signal `setShaderParams` to bypass
+    // its `m_shaderParams == params` early-return on the next call.
+    // Without this, the byte-equal-params fast path would skip the
+    // re-parse and the cleared `uTextureN` cached path would never get
+    // a chance to reload — the directly-set QImage above would silently
+    // persist past a re-push of the same params map. The flag is reset
+    // at the end of the parse branch in `setShaderParams` so the
+    // bypass costs at most one extra parse per intervening direct push.
+    m_userTexturesDirectlyOverridden = true;
     // Symmetric reset of the companion path-only state: clearing the path
     // without resetting svgSize/wrap would leave stale per-slot settings
     // that silently re-apply if a later setShaderParams reattaches the

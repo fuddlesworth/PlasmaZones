@@ -14,6 +14,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 #include <QStringList>
 
 #include <optional>
@@ -33,13 +34,16 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// caller decides whether to skip empty paths separately).
 ///
 /// PlasmaZones is Linux/Wayland only; lexical comparison is case-
-/// sensitive which matches Linux filesystem semantics.
+/// sensitive which matches Linux filesystem semantics. Splits on
+/// BOTH `/` and `\` as defence-in-depth against Windows-style
+/// traversal strings (`..\evil`) that QDir::cleanPath leaves untouched
+/// on POSIX hosts — cheap belt-and-braces for a security boundary.
 bool pathHasNoTraversalSegments(const QString& rawPath)
 {
     if (rawPath.isEmpty())
         return true;
     const QString cleaned = QDir::cleanPath(rawPath);
-    const QStringList segments = cleaned.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    const QStringList segments = cleaned.split(QRegularExpression(QStringLiteral("[/\\\\]")), Qt::SkipEmptyParts);
     for (const QString& seg : segments) {
         if (seg == QLatin1String("..")) {
             return false;
@@ -103,7 +107,6 @@ std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath
     // Pick comparison domain: prefer canonical (catches symlink
     // escapes) when BOTH sides resolved, otherwise fall back to
     // lexical for both. Never mix the two.
-    // PlasmaZones is Linux/Wayland only; lexical comparison is case-sensitive which matches Linux filesystem semantics.
     const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
     const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
     const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
@@ -218,10 +221,9 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         //
         // Validation lives in `validateTexturePathWithinEffectDir` so
         // the runtime override path in `translateAnimationParams`
-        // applies the IDENTICAL canonical / lexical / missing-file
-        // checks — symmetric defence whether the texture path arrived
-        // via metadata.json or via a friendlyParams override at use
-        // time.
+        // applies the IDENTICAL canonical / lexical traversal checks
+        // — symmetric defence whether the texture path arrived via
+        // metadata.json or via a friendlyParams override at use time.
         for (auto& tex : e.textures) {
             if (tex.path.isEmpty())
                 continue;
@@ -558,12 +560,14 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             if (candidate.isEmpty()) {
                 // Empty-string override = explicit clear of the slot.
                 // The pack-default wrap (if any) is intentionally
-                // dropped here because wrap is meaningless without a
-                // bound texture — emitting a wrap-only key would
-                // attach a wrap mode to an unbound sampler and
-                // violate the downstream contract.
+                // dropped because wrap is meaningless without a bound
+                // texture — emitting a wrap-only key would attach a
+                // wrap mode to an unbound sampler and violate the
+                // downstream contract. wrap is cleared via the path-
+                // empty skip below; explicit clear here would be
+                // redundant and silently overwritten by a later
+                // uTextureN_wrap override in the same params map.
                 path = candidate;
-                wrap.clear();
             } else if (effect.sourceDir.isEmpty()) {
                 // Degenerate case — pack came from an in-memory
                 // factory with no on-disk anchor. There is no

@@ -939,11 +939,24 @@ private Q_SLOTS:
         // diverged from the engaged-state-sensitive equality contract.
         QVERIFY(c.setShaderOverride(path, QString(), {}));
         QCOMPARE(spy.count(), 1);
+        // Pin tree state too — a future regression that returns true while
+        // quietly mutating the tree (e.g. clearing the engaged-empty
+        // sentinel) wouldn't trip the spy-count check, but would flip
+        // `effectId` from engaged-empty back to nullopt-on-read here.
+        QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
 
         // Third identical disable write — same invariant.
         QVERIFY(c.setShaderOverride(path, QString(), {}));
         QCOMPARE(spy.count(), 1);
+        QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
     }
+
+    // The descendant-coverage tests below each construct a fresh
+    // `Settings` under an `IsolatedConfigGuard`, so the guard redirects
+    // `QStandardPaths` away from the user's real `~/.config` for the
+    // lifetime of the test. Each case is therefore hermetic — no state
+    // leaks between tests, no dependency on Qt Test's invocation order,
+    // and no risk of clobbering the developer's actual config.
 
     /// `shaderOverrideDescendantCount` must count strict descendants only —
     /// not the path itself, not siblings with shared prefix. Pin both the

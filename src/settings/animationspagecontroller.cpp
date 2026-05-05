@@ -909,19 +909,12 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
             disabledProfile.parameters = parameters;
         ShaderProfileTree tree = m_settings->shaderProfileTree();
         // Compare-and-skip relies on `ShaderProfile::operator==` being
-        // engaged-state-sensitive (it forwards to `std::optional::operator==`,
-        // which treats `nullopt` and `optional(empty)` as DISTINCT). The
-        // engaged-empty `disabledProfile` constructed above (effectId =
-        // engaged-empty QString, parameters = nullopt because the guard
-        // above only engages on non-empty input) round-trips through
-        // `ShaderProfile::toJson`/`fromJson` without changing engaged-state:
-        // toJson omits `parameters` when nullopt, and fromJson leaves it
-        // nullopt when absent. So a disk-loaded disable sentinel for an
-        // unchanged path compares equal here and the write short-circuits.
-        // If a future caller hands us engaged-but-empty parameters and
-        // toJson starts emitting `"parameters": {}`, this comparison would
-        // need explicit normalization (reset `parameters` to nullopt when
-        // engaged-empty) to stay consistent with disk-loaded shape.
+        // engaged-state-sensitive (forwards to `std::optional::operator==`,
+        // which treats `nullopt` and `optional(empty)` as DISTINCT).
+        // `disabledProfile` round-trips through toJson/fromJson without
+        // changing engaged-state, so a disk-loaded disable sentinel for an
+        // unchanged path short-circuits here. If a future caller hands us
+        // engaged-but-empty parameters, normalize to nullopt before compare.
         if (tree.directOverride(path) == disabledProfile)
             return true;
         tree.setOverride(path, disabledProfile);

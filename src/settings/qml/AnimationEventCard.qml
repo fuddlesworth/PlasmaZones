@@ -33,15 +33,12 @@ import org.plasmazones.common as PZCommon
  *   - collapsible: bool — header click collapses the body
  */
 Item {
-    // Pick up changes that affect THIS card's path — the path itself
-    // (user toggled the override here) or an ancestor (we're inheriting
-    // from it and the inherited value just changed). Filter on path so
-    // a settings burst on an unrelated row doesn't drive every other
-    // card on the page through a refresh + Q_INVOKABLE round-trip.
-    // Without the filter, drag-editing a slider on one row drives
-    // N redundant `_inheritResolved` recompute kicks (where N = number
-    // of cards on the page) — defeats the cache the `_inheritRev`
-    // pattern was added to provide.
+    // Empty-string `path` is the controller's "tree fully reloaded"
+    // broadcast (discardChanges, full settings reload). Callers used
+    // to special-case it externally with `path === "" ||
+    // _pathAffectsThisCard(path)`; carving it out INSIDE the helper
+    // means future signal handlers get the right behaviour for free
+    // and can't silently miss the broadcast.
 
     id: root
 
@@ -281,12 +278,12 @@ Item {
         settingsController.animationsPage.setOverride(root.eventPath, profile);
     }
 
-    // Empty-string `path` is the controller's "tree fully reloaded"
-    // broadcast (discardChanges, full settings reload). Callers used
-    // to special-case it externally with `path === "" ||
-    // _pathAffectsThisCard(path)`; carving it out INSIDE the helper
-    // means future signal handlers get the right behaviour for free
-    // and can't silently miss the broadcast.
+    // Current emitters that pass empty-path: `shaderProfileChanged`
+    // ONLY (fires with `QString()` on full-tree reload). Every other
+    // emitter (e.g. `overrideChanged`) always passes a real path.
+    // The empty-path carve-out is forward-defense for any future
+    // global-broadcast emitter so signal handlers don't silently miss
+    // a tree-wide reload.
     function _pathAffectsThisCard(path) {
         if (path === "")
             return true;

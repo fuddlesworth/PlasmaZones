@@ -463,6 +463,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         for (KWin::LogicalOutput* output : KWin::effects->screens()) {
             onScreenAdded(output);
         }
+        // Seed the cursor cache with the live position so the first frame
+        // after a fresh shader install with iMouse declared sees the real
+        // cursor. The default-constructed QPointF(0, 0) would otherwise be
+        // misinterpreted as INSIDE any window whose frame contains the
+        // origin (i.e. all windows on the primary monitor with origin at
+        // (0, 0)) for one frame, producing a false-positive hover spike
+        // before prePaintScreen overwrites the cache on the next tick.
+        m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
     // Wire the fallback clock as the animator's default. The animator's
@@ -4352,7 +4360,16 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
     // Use deleteLater() rather than raw delete — OutlinedBorderItem is a QObject
     // parented into the scene graph and may have queued signals / pending paints
     // mid-cycle. CLAUDE.md: never manual-delete QObjects.
+    //
+    // Hide-then-deleteLater: updateWindowBorder calls removeWindowBorder and then
+    // immediately allocates a new OutlinedBorderItem under the same windowItem
+    // parent. Without setVisible(false) here, both the old and the new item live
+    // in the scene graph for one event-loop iteration (until deleteLater fires)
+    // and the user sees a one-frame flicker / Z-fight on every active-window
+    // swap. Hiding first short-circuits the old item's render path while the
+    // QObject deletion is still deferred per the CLAUDE.md no-manual-delete rule.
     if (wb.item) {
+        wb.item->setVisible(false);
         wb.item->deleteLater();
     }
     QObject::disconnect(wb.geometryConnection);
@@ -4798,7 +4815,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // in-flight transitions on a high-Hz display would
                     // otherwise pay the QDateTime / QDate / QTime build
                     // cost per transition per frame.
-                    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+                    //
+                    // Use shaderClockNowMs() (steady_clock) for the
+                    // staleness gate even though the cached value itself
+                    // is wall-clock-derived: a backwards NTP correction
+                    // on the wall clock would push `nowMs` below
+                    // `m_lastIDateRefreshMs`, the diff would go negative,
+                    // and the cache would never refresh again until the
+                    // wall clock caught back up. steady_clock guarantees
+                    // monotonic increase, matching the rest of the
+                    // shader-timing path.
+                    const qint64 nowMs = shaderClockNowMs();
                     if (nowMs - m_lastIDateRefreshMs >= 1000) {
                         const QDateTime nowDateTime = QDateTime::currentDateTime();
                         const QDate date = nowDateTime.date();
@@ -4972,19 +4999,38 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // pointer is only used for set membership cleanup (never
             // dereferenced unless the QPointer is still live).
             KWin::EffectWindow* rawWindow = w;
+            // Capture the EXPIRING transition's generation at queue-time
+            // so the queued lambda can confirm the transition it sees on
+            // dispatch is still the same one we observed as expired.
+            // Race window: between this queue and the lambda firing, a
+            // fresh `beginShaderTransition` may install a SUCCESSOR at
+            // the same EffectWindow* (e.g. window.focus retriggers while
+            // window.maximize was on its expiry frame). Without the
+            // generation check the lambda would call
+            // `endShaderTransition` on the successor and kill it before
+            // it ever paints. Mirrors the timer-driven teardown pattern
+            // in `tryBeginShaderForEvent` (~line 5744).
+            const quint64 expiringGeneration = sit->second.generation;
             QMetaObject::invokeMethod(
                 this,
-                [this, safeWindow, rawWindow]() {
+                [this, safeWindow, rawWindow, expiringGeneration]() {
                     if (!safeWindow) {
                         // Window died; windowDeleted already removed
                         // the entry. Don't risk wiping an entry that
                         // belongs to a successor sharing this address.
                         return;
                     }
+                    // Remove unconditionally so the pending-set entry
+                    // doesn't leak when the transition was already
+                    // ended via a different path (synchronous teardown,
+                    // windowDeleted, generation-mismatch successor).
                     m_pendingShaderExpiryEnd.remove(rawWindow);
-                    if (m_shaderTransitions.find(safeWindow.data()) != m_shaderTransitions.end()) {
+                    auto liveIt = m_shaderTransitions.find(safeWindow.data());
+                    if (liveIt != m_shaderTransitions.end() && liveIt->second.generation == expiringGeneration) {
                         endShaderTransition(safeWindow.data());
                     }
+                    // else: a successor replaced us (last-event-wins) and
+                    // owns its own teardown — leave it alone.
                 },
                 Qt::QueuedConnection);
         }

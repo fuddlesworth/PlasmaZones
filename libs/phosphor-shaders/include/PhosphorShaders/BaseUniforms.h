@@ -98,7 +98,10 @@ struct alignas(16) BaseUniforms
     // branch on it. Carved out of the trailing std140 pad so total
     // struct size stays 672 bytes.
     int iIsReversed; // offset 660
-    int _pad_after_iIsReversed[2]; // std140 struct alignment → total 672 bytes
+    // Ditto: trailing pad zeroed by value-init (`m_baseUniforms = {}`) and
+    // covered by K_SCENE_HEADER. See the expanded `_pad_after_audioSpectrum`
+    // comment above for the full std140 / upload-region rationale.
+    int _pad_after_iIsReversed[2]; // std140 struct alignment, total 672 bytes
 };
 
 static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");

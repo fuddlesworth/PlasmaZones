@@ -153,10 +153,16 @@ void main()
     // on non-square windows.
     vec2 uv         = vTexCoord;
     vec2 oneToOneUV = uv - 0.5;
-    if (iResolution.x > iResolution.y) {
-        oneToOneUV.y *= iResolution.y / iResolution.x;
+    // Defensive floor against first-frame `iResolution = (0, 0)` —
+    // matches the `blurredInputColor` divide above and the rest of
+    // the suite's pattern (matrix/hexagon/honeycomb/pixelate). The
+    // else branch would otherwise compute `0.0 / 0.0 = NaN` and
+    // poison the entire composite.
+    vec2 res = max(iResolution, vec2(1.0));
+    if (res.x > res.y) {
+        oneToOneUV.y *= res.y / res.x;
     } else {
-        oneToOneUV.x *= iResolution.x / iResolution.y;
+        oneToOneUV.x *= res.x / res.y;
     }
     oneToOneUV += 0.5;
     uv = mix(oneToOneUV, uv, progress);
