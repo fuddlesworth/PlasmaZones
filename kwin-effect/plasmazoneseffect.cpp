@@ -1109,7 +1109,18 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     endShaderTransition(w);
     // Close is the reverse of open: same user-assigned shader plays
     // 1→0 so an `appear` shader doubles as a `disappear` shader.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(), /*reverse=*/true);
+    //
+    // holdCloseGrab=true: request KWin::WindowClosedGrabRole so KWin
+    // keeps the window alive past its normal unmap-and-delete sequence
+    // for the duration of our close shader. Without the grab, KWin
+    // proceeds with final destruction as soon as this slot returns;
+    // OffscreenEffect's `redirect` is auto-released on deletion (per
+    // /usr/include/kwin/effect/offscreeneffect.h:53), so paintWindow
+    // never gets a frame to run the close shader on. The grab is
+    // released by `endShaderTransition` when the timer-driven teardown
+    // fires.
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
+                           /*reverse=*/true, /*holdCloseGrab=*/true);
     m_windowAnimator->removeAnimation(w);
 
     const QString closedWindowId = getWindowId(w);
@@ -4776,7 +4787,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
-                                              bool reverse)
+                                              bool reverse, bool holdCloseGrab)
 {
     const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
@@ -5004,6 +5015,15 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // otherwise pay that cost every frame.
     const auto existingIt = m_shaderTransitions.find(window);
     const bool isSameWindowSupersession = existingIt != m_shaderTransitions.end();
+    // Carry the prior transition's closeGrabHeld through supersession so
+    // ref/unref stay balanced. If the prior transition refWindow'd the
+    // closing window, the ref must stay held (the new transition takes
+    // ownership of the release). Without this, erasing the prior entry
+    // would lose track of the ref and leak the EffectWindow forever.
+    // Symmetric: if neither prior nor new transition holds the grab, no
+    // ref work happens — supersession of two non-close transitions is a
+    // no-op for ref accounting.
+    const bool existingHeldGrab = isSameWindowSupersession ? existingIt->second.closeGrabHeld : false;
     if (isSameWindowSupersession) {
         // Erase the prior bookkeeping but skip the unredirect — we're
         // about to re-shader this same window. setShader() below
@@ -5135,9 +5155,59 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // unbounded.
     transition.generation = ++m_shaderTransitionGenerationCounter;
     transition.reverse = reverse;
+    // Stamp the close-grab flag so endShaderTransition knows to release
+    // refWindow + WindowClosedGrabRole on teardown. The new transition
+    // inherits the prior transition's grab if supersession was a close-
+    // on-close case (so the ref isn't double-incremented or lost). If
+    // EITHER the prior or new install wants the grab, we treat it as
+    // held — the new transition's endShaderTransition will balance.
+    transition.closeGrabHeld = holdCloseGrab || existingHeldGrab;
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();
+    }
+
+    // Claim the closing window for our shader animation. Done HERE — after
+    // every early-return path (effectId empty, collapsed surface, registry
+    // miss, shader compile fail, supersession dedup) has been cleared and
+    // we're committed to installing the transition. Setting the grab
+    // earlier would leak it on any of those skip paths, leaving the window
+    // stranded in closing state with no transition to release it.
+    //
+    // Without WindowClosedGrabRole, KWin's normal teardown destroys the
+    // closing window as soon as `slotWindowClosed` returns — OffscreenEffect's
+    // `redirect` is auto-released on deletion (per the docstring at
+    // /usr/include/kwin/effect/offscreeneffect.h:53), so paintWindow never
+    // gets a frame to run the close shader on. Setting the grab here,
+    // while the window is still in the closing-but-not-yet-deleted window
+    // of validity, blocks final destruction until endShaderTransition
+    // releases it. The data role's value is the Effect's `this` pointer
+    // per KWin convention so other effects can detect the grab.
+    // refWindow() is the actual lifeline — KWin's docs at
+    // effecthandler.h:835 explicitly say "An effect which wants to
+    // animate the window closing should connect to this signal and
+    // reference the window by using refWindow". Without it, the
+    // EffectWindow is destroyed as soon as slotWindowClosed returns
+    // regardless of WindowClosedGrabRole — the grab role only tells
+    // OTHER effects to skip the window, it does NOT keep the window
+    // alive. paintWindow needs both the ref (for the EffectWindow* to
+    // remain valid across paint cycles) and the redirect (for the
+    // offscreen FBO snapshot).
+    //
+    // WindowClosedGrabRole is set in addition so KWin's built-in close
+    // animations (fade, glide, etc.) skip this window — their
+    // isFadeWindow check tests `effect.isGrabbed(w, WindowClosedGrabRole)`
+    // (see /usr/share/kwin-wayland/effects/fade/contents/code/main.js)
+    // and bails when grabbed. Without the grab, the built-in fade
+    // would race our shader.
+    //
+    // Only ref/grab when the caller is asking for the grab AND the prior
+    // transition didn't already hold one — otherwise we'd double-
+    // increment the refcount and leak the EffectWindow on the single
+    // unrefWindow in endShaderTransition.
+    if (holdCloseGrab && !existingHeldGrab) {
+        window->refWindow();
+        window->setData(KWin::WindowClosedGrabRole, QVariant::fromValue(static_cast<void*>(this)));
     }
 
     if (!isSameWindowSupersession) {
@@ -5177,6 +5247,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     if (it == m_shaderTransitions.end()) {
         return;
     }
+    const bool releaseCloseGrab = it->second.closeGrabHeld;
     // Guard against teardown on a window that's already been destroyed
     // (windowDeleted may have raced our timer). setShader / unredirect on a
     // deleted EffectWindow is undefined behaviour in KWin's offscreen-effect
@@ -5188,10 +5259,46 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         unredirect(window);
     }
     m_shaderTransitions.erase(it);
+    if (releaseCloseGrab) {
+        // Clear WindowClosedGrabRole while `window` is still alive
+        // (the ref we hold via refWindow() guarantees refcount >= 1
+        // here). The role clear is a courtesy for other effects;
+        // doing it now avoids touching `window` after the deferred
+        // unref below.
+        window->setData(KWin::WindowClosedGrabRole, QVariant());
+        // Defer unrefWindow to the next event-loop iteration. This is
+        // CRITICAL because endShaderTransition is reachable from
+        // paintWindow's expired-transition fall-through (line ~4782),
+        // and a synchronous unrefWindow there would destroy the
+        // EffectWindow while paintWindow still holds it as `w`. The
+        // caller would then deref a freed pointer when it falls
+        // through to OffscreenEffect::drawWindow — exactly the crash
+        // backtrace observed: paintWindow → drawWindow → finalDrawWindow
+        // → windowItem() on a destroyed EffectWindow. By queueing the
+        // unref through the event loop, KWin's destruction happens
+        // AFTER the current paint cycle has finished using `w`.
+        //
+        // The QPointer guards the queued lambda against `this`
+        // destruction across the queue boundary; the raw `window*`
+        // capture is fine because the ref we hold ensures the
+        // EffectWindow stays alive until the lambda runs (the lambda
+        // is what releases it).
+        QPointer<PlasmaZonesEffect> selfGuard(this);
+        KWin::EffectWindow* heldWindow = window;
+        QMetaObject::invokeMethod(
+            this,
+            [selfGuard, heldWindow]() {
+                if (!selfGuard) {
+                    return;
+                }
+                heldWindow->unrefWindow();
+            },
+            Qt::QueuedConnection);
+    }
 }
 
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                               bool reverse)
+                                               bool reverse, bool holdCloseGrab)
 {
     if (!window || durationMs <= 0) {
         return;
@@ -5226,7 +5333,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         }
         return;
     }
-    beginShaderTransition(window, profile, durationMs, reverse);
+    beginShaderTransition(window, profile, durationMs, reverse, holdCloseGrab);
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window

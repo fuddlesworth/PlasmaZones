@@ -656,6 +656,22 @@ private:
         /// from the install timestamp. `shaderClockNowMs()` based, so
         /// monotonic and immune to NTP jumps mid-transition.
         qint64 lastPaintTimeMs = -1;
+        /// True when this transition holds @c KWin::WindowClosedGrabRole on
+        /// the window. The grab keeps a closing window alive past KWin's
+        /// normal unmap-and-delete sequence so paintWindow has frames to
+        /// run the close shader on. OffscreenEffect's @c redirect alone
+        /// is insufficient — the OffscreenEffect docstring explicitly
+        /// states "The window will be automatically unredirected if it's
+        /// deleted", meaning a closing window is auto-released without
+        /// the grab and the close shader never gets a paint cycle.
+        ///
+        /// Set true only by the @c slotWindowClosed → @c
+        /// tryBeginShaderForEvent path (via the @c holdCloseGrab parameter
+        /// threaded through @c beginShaderTransition). Released in @c
+        /// endShaderTransition unconditionally — clearing the role on a
+        /// non-closing window is a no-op, and clearing it on a deleted
+        /// window lets KWin proceed with final destruction.
+        bool closeGrabHeld = false;
     };
     /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
     /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
@@ -737,7 +753,7 @@ private:
     /// (window.close, going-to-minimized, going-to-unmaximized) to share a
     /// single user-assigned shader with the matching forward event.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
-                               int durationMs = 0, bool reverse = false);
+                               int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
@@ -761,8 +777,21 @@ private:
     ///
     /// @p reverse forwards to @ref beginShaderTransition's reverse flag — see
     /// that doc for semantics. Defaults to false (forward 0→1 timeline).
+    ///
+    /// @p holdCloseGrab is true only for the @c slotWindowClosed call site;
+    /// it claims the window via @c KWin::WindowClosedGrabRole so KWin's
+    /// teardown blocks final deletion until our close shader has had its
+    /// frames. The grab is set BEFORE @ref beginShaderTransition's redirect
+    /// (so it lands while the window is still in the closing-but-not-yet-
+    /// deleted window of validity) and stored on the resulting transition's
+    /// @c closeGrabHeld field so @ref endShaderTransition can release it
+    /// when the timer-driven teardown runs. Pre-resolved here (rather than
+    /// inside the lambda) because we need to skip the grab when no shader
+    /// will install — otherwise a holdCloseGrab=true caller with no user-
+    /// assigned close shader would strand the window in closing state
+    /// forever.
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                bool reverse = false);
+                                bool reverse = false, bool holdCloseGrab = false);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
