@@ -802,13 +802,25 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
                                 << "]";
         return;
     }
+    // Value-changed guard: identity image push is a no-op. Without
+    // this, repeated calls with the same QImage clobber
+    // `m_userTexturePaths[slot]` on every call, so a caller that mixes
+    // `setUserTexture(slot, img)` with `setShaderParams({"uTextureN":
+    // "..."})` of the SAME path triggers a fresh disk reload on every
+    // params push (path-change detection sees the now-empty cache and
+    // assumes the path is new). Mirrors the existing cacheKey guard in
+    // `ShaderNodeRhi::setUserTexture` (shadernoderhisetters.cpp:234).
+    if (m_userTextureImages[slot].cacheKey() == image.cacheKey()) {
+        return;
+    }
     m_userTextureImages[slot] = image;
     // Clear the cached path so a subsequent setShaderParams call with
     // the previously-cached path correctly forces a reload from disk.
     // Without this, a caller that mixes the direct image setter with
     // params-driven loads would see the directly-set image silently
     // persist when the next params push happens to repeat the old path
-    // (path-change detection thinks nothing changed).
+    // (path-change detection thinks nothing changed). The guard above
+    // ensures this clear only fires when the image actually changed.
     m_userTexturePaths[slot].clear();
     update();
 }
@@ -945,8 +957,17 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setFrame(m_iFrame);
     node->setIsReversed(m_isReversed);
     // Use logical pixels for iResolution (shader params depend on consistent
-    // resolution; DPR mismatch handled by bilinear upscaling in the image pass).
-    node->setResolution(static_cast<float>(width()), static_cast<float>(height()));
+    // resolution; DPR mismatch handled by bilinear upscaling in the image
+    // pass). Read from `m_iResolution` so the public Q_PROPERTY setter
+    // actually drives the GPU value: previously this read width()/height()
+    // directly, which made `setIResolution` a no-op — the setter wrote the
+    // member, emitted the change signal, but the value never reached the
+    // node. `geometryChange` and `componentComplete` keep `m_iResolution`
+    // tracking the QQuickItem geometry by default, so unchanged callers
+    // see identical behaviour; an explicit override via the setter now
+    // actually takes effect (until the next geometry event clobbers it,
+    // matching the documented "current size for shaders" semantic).
+    node->setResolution(static_cast<float>(m_iResolution.width()), static_cast<float>(m_iResolution.height()));
     node->setMousePosition(m_iMouse);
 
     // ── Custom parameters (indexed API) ──────────────────────────────
