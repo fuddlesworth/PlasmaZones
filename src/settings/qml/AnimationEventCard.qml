@@ -589,20 +589,53 @@ Item {
                             // through"; toggling OFF is "no shader at
                             // this path or any descendant".
                             settingsController.animationsPage.clearShaderOverride(root.eventPath);
+                            // Imperative kick: don't rely solely on the
+                            // shaderProfileChanged broadcast → Connections
+                            // refresh chain. A signal-propagation hiccup
+                            // (out-of-order emit, late binding, picker
+                            // state captured at click time) can leave the
+                            // picker visually stuck on the prior value
+                            // even after the tree write succeeds.
+                            // Refreshing here force-syncs the card's
+                            // bindings against the now-current tree.
+                            root.refreshShaderFromTree();
+                            root.refreshFromTree();
+                            root._inheritRev++;
                             return ;
                         }
-                        // Re-pick of the same shader is a no-op: skip the
-                        // D-Bus round-trip to avoid bumping dirty-tracking
-                        // for a non-change.
-                        if (sid === root.currentShaderEffectId)
+                        // No-op when the user re-picks the value already
+                        // sitting at this path's DIRECT override. Compare
+                        // against the raw direct override (NOT the
+                        // resolved/inherited value): if the parent has
+                        // shader X and the child is currently inheriting
+                        // it, picking X explicitly on the child is the
+                        // user "promoting" the inherited value to a
+                        // direct override at this path — that intent must
+                        // produce a real write so a future parent change
+                        // doesn't silently move the child off X.
+                        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
+                        var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
+                        if (sid === directEffectId)
                             return ;
 
-                        // Switching to a DIFFERENT effect: drop the previous
-                        // effect's parameter map — the new effect's schema is
-                        // unrelated, so carrying old keys persists dead values
-                        // on disk that the daemon can't validate.
+                        // Switching to a DIFFERENT effect (or promoting an
+                        // inherited value to a direct override): drop the
+                        // previous effect's parameter map — the new
+                        // effect's schema is unrelated, so carrying old
+                        // keys persists dead values on disk that the
+                        // daemon can't validate.
                         settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
                         }));
+                        // Imperative kick — same rationale as the clear
+                        // path above. Force the picker's currentShaderId
+                        // binding (and the inheritance banner / shadowing-
+                        // children count) to re-evaluate against the now-
+                        // current tree so the UI never gets stuck on
+                        // stale state regardless of how the
+                        // shaderProfileChanged signal chain settles.
+                        root.refreshShaderFromTree();
+                        root.refreshFromTree();
+                        root._inheritRev++;
                     }
                 }
 
