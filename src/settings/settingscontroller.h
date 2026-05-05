@@ -29,6 +29,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PlasmaZones {
+class ShaderRegistry;
+}
+
 #include <QHash>
 #include <QObject>
 #include <QSet>
@@ -46,6 +50,7 @@ class AnimationShaderRegistry;
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
+#include "snappingshaderspagecontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "stagingservice.h"
 #include "tilingalgorithmcontroller.h"
@@ -89,6 +94,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
     Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
+    Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -377,6 +383,10 @@ public:
     {
         return m_snappingEffectsPage;
     }
+    SnappingShadersPageController* snappingShadersPage() const
+    {
+        return m_snappingShadersPage.get();
+    }
     TilingAppearanceController* tilingAppearancePage() const
     {
         return m_tilingAppearancePage;
@@ -608,6 +618,14 @@ private:
     /// outlives the page through child-destruction order.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
+    /// Settings-side mirror of the daemon's overlay-shader registry —
+    /// drives the read-only Snapping → Shaders browser. Same parent /
+    /// declaration-order rationale as `m_animationShaderRegistry` above.
+    /// The companion `m_snappingShadersPage` is declared further down as
+    /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
+    /// page borrows the layout registry — see the declaration-order
+    /// invariant block below.
+    PlasmaZones::ShaderRegistry* m_overlayShaderRegistry = nullptr;
 
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
@@ -683,6 +701,18 @@ private:
     /// ~QObject, which runs AFTER these member unique_ptrs have already
     /// released their borrowed targets.
     std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
+
+    /// Snapping→Shaders page sub-controller. Same declaration-order
+    /// rationale as `m_tilingAlgorithmPage`: borrows
+    /// `m_localLayoutManager` (the registry walked by `shaderEffectUsages`
+    /// for the "Used in:" reverse-lookup), so it MUST be a `unique_ptr<>`
+    /// declared AFTER that registry. A QObject-child raw pointer would
+    /// defer destruction to ~QObject, which runs AFTER the registry's
+    /// unique_ptr has already reset, leaving the controller holding a
+    /// dangling layout-registry pointer if any teardown signal fires.
+    /// Borrows `m_overlayShaderRegistry` too, but that registry is a
+    /// QObject child of `this` and survives until ~QObject — fine.
+    std::unique_ptr<SnappingShadersPageController> m_snappingShadersPage;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so

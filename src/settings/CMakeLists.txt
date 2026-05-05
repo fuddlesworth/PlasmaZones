@@ -34,6 +34,8 @@ set(plasmazones_settings_SRCS
     snappingbehaviorcontroller.cpp
     snappingeffectscontroller.h
     snappingeffectscontroller.cpp
+    snappingshaderspagecontroller.h
+    snappingshaderspagecontroller.cpp
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
     tilingalgorithmcontroller.h
@@ -172,8 +174,13 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsMotionSetsPage.qml
         qml/AnimationsPresetsPage.qml
         qml/AnimationsShadersPage.qml
-        qml/AnimationsShaderCard.qml
-        qml/AnimationsShaderDetailDialog.qml
+        qml/SnappingShadersPage.qml
+        # Pack-agnostic shader-browser components — shared by the
+        # animation-shader and snapping-overlay-shader pages. Both pages
+        # are thin wrappers that pass the right controller bridge.
+        qml/ShaderBrowserPage.qml
+        qml/ShaderBrowserCard.qml
+        qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
         qml/CurveThumbnail.qml
