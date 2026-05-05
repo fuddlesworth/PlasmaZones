@@ -1145,7 +1145,15 @@ private Q_SLOTS:
         const QString effDir = tmp.path() + QStringLiteral("/symlink-evil");
         QVERIFY(QDir().mkpath(effDir));
         const QString symlinkPath = effDir + QStringLiteral("/innocent.png");
-        QVERIFY(QFile::link(outsidePath, symlinkPath));
+        // Skip rather than hard-fail on filesystems without symlink support
+        // (FAT, restricted CI sandboxes, certain Docker storage drivers).
+        // QFile::link returns false on the unsupported case; the
+        // canonicalFilePath defence the test pins is filesystem-agnostic
+        // logic, so an unverified run on tmpfs/ext4/btrfs/overlayfs
+        // elsewhere is the right fallback.
+        if (!QFile::link(outsidePath, symlinkPath)) {
+            QSKIP("filesystem does not support symlinks — skipping symlink-escape coverage");
+        }
 
         QJsonArray texArr;
         QJsonObject t;
@@ -1195,8 +1203,15 @@ private Q_SLOTS:
         const auto effects = registry.availableEffects();
         QCOMPARE(effects.size(), 1);
         QCOMPARE(effects[0].textures.size(), 1);
-        // Path is absolutised to the effect's sourceDir.
-        QCOMPARE(effects[0].textures[0].path, QDir(effDir).filePath(QStringLiteral("atlas.png")));
+        // Path is absolutised to the effect's sourceDir. Compare via
+        // canonicalFilePath on BOTH sides so a temp-dir path that
+        // traverses a symlink (macOS `/tmp` → `/private/tmp`, container
+        // overlay mounts) doesn't false-fail the test — parseEffect now
+        // stores the canonical-resolved form when both root and target
+        // canonicalise, and the lexical-only `QDir(effDir).filePath(...)`
+        // form would diverge from it on those systems.
+        QCOMPARE(QFileInfo(effects[0].textures[0].path).canonicalFilePath(),
+                 QFileInfo(QDir(effDir).filePath(QStringLiteral("atlas.png"))).canonicalFilePath());
     }
 };
 
