@@ -5,7 +5,7 @@
 // toward its centre line, then collapses horizontally toward a
 // point, then a brief white-flash fade completes the transition.
 // Visually inspired by Burn-My-Windows (tv.frag, Simon Schneegans),
-// written natively against our `iTime`/`iChannel0` contract.
+// written natively against our `iTime`/`uTexture0` contract.
 //
 // ## iTime convention
 //
@@ -92,7 +92,7 @@ void main()
     // transparent so the squash doesn't smear edge texels.
     vec2 inside    = step(vec2(0.0), coords) * step(coords, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(iChannel0, coords) * onScreen;
+    vec4 sampled   = texture(uTexture0, coords) * onScreen;
 
     // Tint toward the flash colour as the collapse progresses.
     // sampled is pre-multiplied; multiplying the flash colour by

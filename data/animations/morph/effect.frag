@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Morph transition — sine-based UV displacement field warps the
-// rendered surface (sampled through iChannel0). The previous stub
+// rendered surface (sampled through uTexture0). The previous stub
 // emitted `vec4(warpedUv.x, warpedUv.y, warpMask, alpha)` — a
 // rainbow-like gradient of the UV coords — instead of sampling
 // anything, which is the "weird gradient that shows then QML
-// renders" report. Now: sample iChannel0 at the warped UV so the
+// renders" report. Now: sample uTexture0 at the warped UV so the
 // surface ITSELF deforms during the transition, then settles back
 // to its un-warped self as `iTime` reaches the leg endpoints
 // (sin envelope peaks at iTime==0.5).
@@ -65,5 +65,5 @@ void main()
         fragColor = vec4(0.0);
         return;
     }
-    fragColor = texture(iChannel0, sampleUv);
+    fragColor = texture(uTexture0, sampleUv);
 }

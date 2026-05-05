@@ -5,7 +5,7 @@
 // snapped to a grid whose cell size grows with progress; each cell
 // is gated by a per-spoke threshold so the wheel "spins" as it
 // dissolves. Visually inspired by Burn-My-Windows (pixel-wheel.frag,
-// Simon Schneegans), written natively against our `iTime`/`iChannel0`.
+// Simon Schneegans), written natively against our `iTime`/`uTexture0`.
 //
 // ## iTime convention
 //
@@ -49,7 +49,7 @@ void main()
     float pixelSize = ceil(maxPixelSize * progress + 1.0);
     vec2 pixelGrid  = vec2(pixelSize) / iResolution;
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
-    vec4 sampled    = texture(iChannel0, cellUV);
+    vec4 sampled    = texture(uTexture0, cellUV);
 
     // Spoke parameterisation. `down = (0, 1)`; `dot(down, fragDir)`
     // is just `fragDir.y`. `acos(y)` ∈ [0, π], divided by 2π gives

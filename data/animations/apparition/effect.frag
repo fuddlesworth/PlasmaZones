@@ -6,7 +6,7 @@
 // position-dependent whirl rotation) combine with a linear alpha
 // envelope to dissolve the window. Visually inspired by the
 // equivalent effect in Burn-My-Windows (apparition.frag, Simon
-// Schneegans), but written natively against our `iTime`/`iChannel0`
+// Schneegans), but written natively against our `iTime`/`uTexture0`
 // contract: no `uForOpening` collapse, no compat layer.
 //
 // ## iTime convention
@@ -30,14 +30,14 @@
 // BMW shaders run on a doubled-size padded actor (ACTOR_SCALE=2
 // with PADDING=0.5) so distorted UV lookups can sample into the
 // shadow padding region around the window. We don't have actor
-// padding — `iChannel0` covers exactly the surface bounds. So the
+// padding — `uTexture0` covers exactly the surface bounds. So the
 // padding-coord-frame math from BMW (`coords = uv * 2 - 0.5 -
 // center`) collapses to `coords = uv - center` here, and we force
 // off-window samples to transparent at the end so the "blow out
 // into void" reading is preserved (without explicit clamping the
 // edge-clamp sampler would smear edge texels across the window).
 //
-// `iChannel0` carries premultiplied alpha (Qt RHI / KWin
+// `uTexture0` carries premultiplied alpha (Qt RHI / KWin
 // convention). Multiplying the final sample by `visibility` scales
 // both RGB and alpha consistently — equivalent to BMW's straight-
 // alpha `oColor.a *= 1.0 - progress` followed by setOutputColor
@@ -128,7 +128,7 @@ void main()
     vec2 sampleUV  = coords + center;
     vec2 inside    = step(vec2(0.0), sampleUV) * step(sampleUV, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(iChannel0, sampleUV) * onScreen;
+    vec4 sampled   = texture(uTexture0, sampleUV) * onScreen;
 
     // Alpha envelope: linear in iTime. Keeping this linear (rather
     // than smootherstepping) means the suction/whirl amplitudes and

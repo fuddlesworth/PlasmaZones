@@ -6,7 +6,7 @@
 // channel travelling at a slightly different speed so a rainbow
 // trail follows the lift. Visually inspired by Burn-My-Windows
 // (rgbwarp.frag, Justin Garza + Simon Schneegans), written
-// natively against our `iTime`/`iChannel0` contract.
+// natively against our `iTime`/`uTexture0` contract.
 //
 // ## iTime convention
 //
@@ -82,9 +82,9 @@ void main()
     float mulG = speedG - minSpeed + 1.0;
     float mulB = speedB - minSpeed + 1.0;
 
-    vec4 colorR = texture(iChannel0, uv + vec2(0.0, offset * mulR));
-    vec4 colorG = texture(iChannel0, uv + vec2(0.0, offset * mulG));
-    vec4 colorB = texture(iChannel0, uv + vec2(0.0, offset * mulB));
+    vec4 colorR = texture(uTexture0, uv + vec2(0.0, offset * mulR));
+    vec4 colorG = texture(uTexture0, uv + vec2(0.0, offset * mulG));
+    vec4 colorB = texture(uTexture0, uv + vec2(0.0, offset * mulB));
 
     // Recombine. The texture is pre-multiplied; we extract the
     // per-channel pre-multiplied values and re-emit with the average

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Glitch transition — operates on the rendered surface (iChannel0,
+// Glitch transition — operates on the rendered surface (uTexture0,
 // binding 7) by sampling the captured surface with per-block UV
 // displacement and per-channel RGB offset. The previous stub built
 // `r/g/b` from `smoothstep(0, 1, uv)` (a centred radial mask) —
@@ -68,9 +68,9 @@ void main()
     // Qt Quick uses premultiplied-alpha blending, so un-premultiply
     // each sample before extracting the single channel, then
     // re-premultiply against the chosen alpha.
-    vec4 sR = texture(iChannel0, uvR);
-    vec4 sG = texture(iChannel0, uvG);
-    vec4 sB = texture(iChannel0, uvB);
+    vec4 sR = texture(uTexture0, uvR);
+    vec4 sG = texture(uTexture0, uvG);
+    vec4 sB = texture(uTexture0, uvB);
     float a = sG.a;
     float r = (sR.a > 0.001) ? sR.r / sR.a : 0.0;
     float g = (sG.a > 0.001) ? sG.g / sG.a : 0.0;

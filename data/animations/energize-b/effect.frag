@@ -6,7 +6,7 @@
 // trail of vertical beam-streaks and glimmering atom sparkles
 // behind it. Visually inspired by the equivalent effect in
 // Burn-My-Windows (energize-b.frag, Simon Schneegans), but written
-// natively against our `iTime`/`iChannel0` contract: no
+// natively against our `iTime`/`uTexture0` contract: no
 // `uForOpening` collapse, no compat layer.
 //
 // ## iTime convention
@@ -29,7 +29,7 @@
 //
 // ## Compositing
 //
-// `iChannel0` carries premultiplied alpha. We tint the window
+// `uTexture0` carries premultiplied alpha. We tint the window
 // toward the beam colour as it fades (stronger than Energize A —
 // 0.5 base mix vs A's 0.25 — to read as "matter is becoming
 // energy"), then add three additive emission layers: shower band,
@@ -184,7 +184,7 @@ void main()
     // tint is 0.5 (matter "becomes energy"). Tint is computed on
     // pre-multiplied colour so transparent regions don't acquire a
     // colour halo.
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     float tint = 0.5 * (1.0 - windowAlpha);
     sampled.rgb = mix(sampled.rgb, effectColor * sampled.a, tint);
     sampled *= windowAlpha;

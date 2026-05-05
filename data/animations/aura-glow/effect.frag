@@ -7,7 +7,7 @@
 // crop to a circular crop; a hue-cycling rim sits on top, with a
 // subtle radial blur on the window content. Visually inspired by
 // Burn-My-Windows (aura-glow.frag, Justin Garza + Simon
-// Schneegans), written natively against our `iTime`/`iChannel0`.
+// Schneegans), written natively against our `iTime`/`uTexture0`.
 //
 // ## iTime convention
 //
@@ -136,7 +136,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     for (float d = 0.0; d < tau; d += tau / dirs) {
         for (float s = 0.0; s < 1.0; s += 1.0 / samples) {
             vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / iResolution;
-            acc += texture(iChannel0, uv + off);
+            acc += texture(uTexture0, uv + off);
         }
     }
     return acc / samples / dirs;
@@ -189,7 +189,7 @@ void main()
     vec2 windowUV  = (vTexCoord - 0.5) * mix(1.1, 1.0, easeOutCubic(progress)) + 0.5;
     vec4 windowCol = (blurAmount > 0.0)
         ? blurredInputColor(windowUV, (1.0 - progress) * blurAmount, 3.0)
-        : texture(iChannel0, windowUV);
+        : texture(uTexture0, windowUV);
 
     // Don't draw glow where the window itself is transparent
     // (window-content shaped, not square mask).

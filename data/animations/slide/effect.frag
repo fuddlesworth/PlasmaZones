@@ -3,7 +3,7 @@
 //
 // Slide transition — directional reveal of the rendered surface.
 // `direction` selects the axis: 0=left, 1=right, 2=up, 3=down. The
-// surface is sampled through iChannel0; we mask it with a moving
+// surface is sampled through uTexture0; we mask it with a moving
 // edge so it slides into / out of view from the chosen direction.
 
 #version 450
@@ -59,5 +59,5 @@ void main()
         else if (dir == 2) sampleUv.y += offset;
         else               sampleUv.y -= offset;
     }
-    fragColor = texture(iChannel0, clamp(sampleUv, 0.0, 1.0));
+    fragColor = texture(uTexture0, clamp(sampleUv, 0.0, 1.0));
 }

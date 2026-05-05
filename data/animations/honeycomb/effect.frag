@@ -19,7 +19,7 @@
 //                                             instead of a per-window
 //                                             random)
 //   soft_edge_width = 0.15 →  softEdge param (also exposed)
-//   niri_tex               →  iChannel0      (live FBO of the
+//   niri_tex               →  uTexture0      (live FBO of the
 //                                             shaderAnchor item, SRB
 //                                             binding 7)
 //   niri_geo_to_tex        →  identity       (vTexCoord is already in
@@ -176,6 +176,6 @@ void main()
     // Premult-alpha invariant: multiplying both colour and alpha by
     // the same scalar keeps the daemon's blend pipeline composing
     // correctly with the parent chain's opacity.
-    vec4 sampled = texture(iChannel0, vTexCoord);
+    vec4 sampled = texture(uTexture0, vTexCoord);
     fragColor = sampled * (1.0 - steppedMask);
 }

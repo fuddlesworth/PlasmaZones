@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Dissolve transition — operates on the rendered surface sampled via
-// iChannel0 (SRB binding 7). SurfaceAnimator binds the shaderAnchor's
+// uTexture0 (SRB binding 7). SurfaceAnimator binds the shaderAnchor's
 // live `QSGTextureProvider` through `ShaderEffect::setSourceItem`,
 // so the shader sees the current rendered pixels rather than a
 // pre-leg snapshot. Per-cell noise gates the surface's alpha against
@@ -55,6 +55,6 @@ void main()
     // surface alpha. Multiplying both colour and alpha keeps the
     // pre-multiplied-alpha invariant the daemon's blend pipeline
     // expects.
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     fragColor = sampled * (1.0 - gate);
 }

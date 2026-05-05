@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Pop-in transition — center-anchored zoom of the rendered surface
-// (sampled through iChannel0) with optional overshoot. Previously a
+// (sampled through uTexture0) with optional overshoot. Previously a
 // stub that emitted a flat white mask; now scales the actual surface
 // from `scaleFrom` up through `1 + overshoot` and settles at 1.0.
 
@@ -56,5 +56,5 @@ void main()
         fragColor = vec4(0.0);
         return;
     }
-    fragColor = texture(iChannel0, sampleUv);
+    fragColor = texture(uTexture0, sampleUv);
 }

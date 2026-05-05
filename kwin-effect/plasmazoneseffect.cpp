@@ -37,6 +37,8 @@
 #include <QGuiApplication>
 #include <QIcon>
 #include <QImage>
+#include <QPainter>
+#include <QSvgRenderer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -127,6 +129,56 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
     QString out = source;
     out.insert(newlineIdx + 1, kDefineLine);
     return out.toUtf8();
+}
+
+/// Load a user-texture file into a QImage. Mirrors the daemon-side path
+/// in `PhosphorRendering::ShaderEffect::setShaderParams`: PNG/JPG/etc.
+/// load via `QImage`; `.svg` / `.svgz` rasterise via `QSvgRenderer` at
+/// the requested max-axis dimension (defaulting to 1024 to match
+/// ZoneShaderItem's pre-unification SVG size). The `QImage::Format_RGBA8888`
+/// conversion ensures `KWin::GLTexture::upload` always sees a consistent
+/// pixel layout regardless of the source file's native format. Returns
+/// a null QImage on any failure; the caller logs and skips the slot.
+inline QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024)
+{
+    if (path.isEmpty()) {
+        return {};
+    }
+    const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
+        || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+    if (isSvg) {
+        QSvgRenderer renderer(path);
+        if (!renderer.isValid()) {
+            return {};
+        }
+        QSize size = renderer.defaultSize();
+        if (!size.isEmpty()) {
+            size.scale(svgMaxDim, svgMaxDim, Qt::KeepAspectRatio);
+        } else {
+            size = QSize(svgMaxDim, svgMaxDim);
+        }
+        QImage img(size, QImage::Format_RGBA8888);
+        img.fill(Qt::transparent);
+        QPainter painter(&img);
+        renderer.render(&painter);
+        painter.end();
+        return img;
+    }
+    return QImage(path).convertToFormat(QImage::Format_RGBA8888);
+}
+
+/// Translate a metadata / params wrap-mode string to the GL enum the
+/// kwin-effect applies at bind time. Empty / unrecognised values fall
+/// through to `GL_CLAMP_TO_EDGE` (the GL default and the daemon's
+/// default per `ShaderNodeRhi::setUserTextureWrap`'s normalisation).
+inline GLenum wrapStringToEnum(const QString& wrap)
+{
+    const QString lower = wrap.toLower();
+    if (lower == QLatin1String("repeat"))
+        return GL_REPEAT;
+    if (lower == QLatin1String("mirror") || lower == QLatin1String("mirrored"))
+        return GL_MIRRORED_REPEAT;
+    return GL_CLAMP_TO_EDGE;
 }
 } // namespace
 
@@ -268,6 +320,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     endShaderTransition(w);
                 Q_ASSERT(m_shaderTransitions.empty());
                 m_shaderCache.clear();
+                // Drop the texture cache too — a hot-reload that swaps a
+                // texture file behind the same metadata.json path needs
+                // a fresh upload to pick up the new contents. The cache
+                // is keyed by absolute path; without this clear a
+                // file-content change with no path change would never
+                // refresh.
+                m_textureCache.clear();
             });
 
     // Frame-geometry shadow flush timer. Debounces per-window
@@ -4459,7 +4518,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // switches don't reset texture-unit bindings).
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
                      ++slot) {
-                    KWin::GLTexture* tex = cached->userTextures[slot].get();
+                    KWin::GLTexture* tex = transition.userTextures[slot];
                     if (!tex) {
                         continue;
                     }
@@ -4473,6 +4532,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     }
                     glActiveTexture(GL_TEXTURE1 + slot);
                     tex->bind();
+                    // Wrap mode lives on the cached `GLTexture`'s GL
+                    // state — apply the per-leg value so two transitions
+                    // sharing the same path can run with different
+                    // wrap modes without invalidating each other.
+                    tex->setWrapMode(transition.userTextureWrap[slot]);
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface
@@ -4487,7 +4551,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // a sampler that points at our matrix glyph atlas (or
             // whatever) when it expects a default-empty unit.
             for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-                if (!cached->userTextures[slot]) {
+                if (!transition.userTextures[slot]) {
                     continue;
                 }
                 glActiveTexture(GL_TEXTURE1 + slot);
@@ -4705,58 +4769,18 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             cached.customColorsLoc[slot] = shader->uniformLocation(name.constData());
         }
         // User textures: resolve sampler + iTextureResolution[N] uniform
-        // locations and upload each declared bitmap once. Wrap mode is
-        // applied before storing in the cache; filter is left at the
-        // KWin default (linear). Files that fail to load leave the
-        // cache slot as `nullptr`, the sampler will read transparent
-        // black at paint time, and a warning logs the missing path.
+        // locations only. The actual texture upload happens per-leg
+        // inside `beginShaderTransition`'s body below — keyed by the
+        // resolved path in `m_textureCache` so two legs with different
+        // override paths don't collide on the per-effect cache.
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-            const QByteArray samplerName = QStringLiteral("iChannel%1").arg(slot + 1).toUtf8();
+            // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
+            // the redirected surface, not user-declared). Matches the
+            // overlay shader convention in data/shaders/shared/textures.glsl.
+            const QByteArray samplerName = QStringLiteral("uTexture%1").arg(slot + 1).toUtf8();
             cached.userTextureLoc[slot] = shader->uniformLocation(samplerName.constData());
             const QByteArray resName = QByteArrayLiteral("iTextureResolution[") + QByteArray::number(slot) + ']';
             cached.iTextureResolutionLoc[slot] = shader->uniformLocation(resName.constData());
-            if (slot >= eff.textures.size()) {
-                continue; // metadata declares fewer textures than the budget
-            }
-            const auto& tex = eff.textures[slot];
-            QString resolved = tex.path;
-            if (!QFileInfo(resolved).isAbsolute() && !eff.sourceDir.isEmpty()) {
-                resolved = QDir(eff.sourceDir).filePath(tex.path);
-            }
-            if (resolved.isEmpty() || !QFileInfo::exists(resolved)) {
-                qCWarning(lcEffect) << "User texture not found:" << resolved << "for effect" << effectId << "slot"
-                                    << slot;
-                continue;
-            }
-            const QImage image(resolved);
-            if (image.isNull()) {
-                qCWarning(lcEffect) << "User texture failed to load:" << resolved << "for effect" << effectId;
-                continue;
-            }
-            std::unique_ptr<KWin::GLTexture> gpuTexture = KWin::GLTexture::upload(image);
-            if (!gpuTexture) {
-                qCWarning(lcEffect) << "GLTexture::upload failed:" << resolved << "for effect" << effectId;
-                continue;
-            }
-            // Wrap mode: empty (or "clamp") → CLAMP_TO_EDGE; "repeat" →
-            // REPEAT; "mirror" / "mirrored" → MIRRORED_REPEAT. Anything
-            // else falls through to clamp with a warning so a typo in
-            // metadata.json doesn't silently flip behaviour to repeat.
-            GLenum wrapEnum = GL_CLAMP_TO_EDGE;
-            const QString wrapLower = tex.wrap.toLower();
-            if (wrapLower.isEmpty() || wrapLower == QLatin1String("clamp")) {
-                wrapEnum = GL_CLAMP_TO_EDGE;
-            } else if (wrapLower == QLatin1String("repeat")) {
-                wrapEnum = GL_REPEAT;
-            } else if (wrapLower == QLatin1String("mirror") || wrapLower == QLatin1String("mirrored")) {
-                wrapEnum = GL_MIRRORED_REPEAT;
-            } else {
-                qCWarning(lcEffect) << "Unknown wrap mode" << tex.wrap << "for effect" << effectId << "slot" << slot
-                                    << "— defaulting to clamp";
-            }
-            gpuTexture->setWrapMode(wrapEnum);
-            gpuTexture->setFilter(GL_LINEAR);
-            cached.userTextures[slot] = std::move(gpuTexture);
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
@@ -4828,6 +4852,47 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             continue;
         }
         transition.customColorsValues[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+    }
+    // User textures: resolve per-leg paths from translated params.
+    // translateAnimationParams enriches the map with `uTextureN` /
+    // `uTextureN_wrap` keys (pack defaults from `eff.textures` merged
+    // with any `friendlyParams` runtime overrides), with relative paths
+    // already resolved against `eff.sourceDir`. We look each path up in
+    // `m_textureCache` (keyed by absolute path so two effects sharing
+    // the same texture file share one upload) and stash a non-owning
+    // pointer in the transition. Wrap mode is stored per-transition so
+    // two legs sharing a path can run with different wrap modes
+    // without invalidating each other's cache entry.
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
+        const int glslSlot = slot + 1; // uTexture0 is the surface
+        const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
+        const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(glslSlot);
+        const QString path = translated.value(pathKey).toString();
+        const QString wrap = translated.value(wrapKey).toString();
+        transition.userTextureWrap[slot] = wrapStringToEnum(wrap);
+        if (path.isEmpty()) {
+            transition.userTextures[slot] = nullptr;
+            continue;
+        }
+        auto cacheIt = m_textureCache.find(path);
+        if (cacheIt == m_textureCache.end()) {
+            const QImage img = loadUserTextureImage(path);
+            if (img.isNull()) {
+                qCWarning(lcEffect) << "User texture failed to load:" << path << "for effect" << effectId << "slot"
+                                    << slot;
+                transition.userTextures[slot] = nullptr;
+                continue;
+            }
+            std::unique_ptr<KWin::GLTexture> gpuTex = KWin::GLTexture::upload(img);
+            if (!gpuTex) {
+                qCWarning(lcEffect) << "GLTexture::upload failed:" << path << "for effect" << effectId;
+                transition.userTextures[slot] = nullptr;
+                continue;
+            }
+            gpuTex->setFilter(GL_LINEAR);
+            cacheIt = m_textureCache.emplace(path, std::move(gpuTex)).first;
+        }
+        transition.userTextures[slot] = cacheIt->second.get();
     }
     // Bump generation for every install so the timer-driven teardown in
     // tryBeginShaderForEvent can detect supersession (a fresh transition

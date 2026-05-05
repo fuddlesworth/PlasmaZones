@@ -6,7 +6,7 @@
 // concentrated central heart-glow that flares as the window
 // disappears. Visually inspired by the equivalent effect in
 // Burn-My-Windows (energize-a.frag, Simon Schneegans), but written
-// natively against our `iTime`/`iChannel0` contract rather than
+// natively against our `iTime`/`uTexture0` contract rather than
 // translating their `uProgress`/`uForOpening` model.
 //
 // ## iTime convention
@@ -30,7 +30,7 @@
 //
 // ## Compositing
 //
-// `iChannel0` carries premultiplied alpha (Qt RHI / KWin
+// `uTexture0` carries premultiplied alpha (Qt RHI / KWin
 // convention). We tint the premultiplied window toward the effect
 // colour as it fades, scale by the window-alpha envelope, and add
 // particle emission additively — particles emit their own light
@@ -185,7 +185,7 @@ void main()
     // pre-multiplied space, so we scale the effect colour by the
     // sampled alpha to avoid the "halo of effect colour around
     // transparent regions" artefact that plain mix would produce.
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     float tint = 0.25 * (1.0 - windowAlpha);
     sampled.rgb = mix(sampled.rgb, effectColor * sampled.a, tint);
     sampled *= windowAlpha;

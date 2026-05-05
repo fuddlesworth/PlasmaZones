@@ -12,7 +12,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
+#include <QPainter>
 #include <QQuickWindow>
+#include <QSvgRenderer>
 
 namespace PhosphorRendering {
 
@@ -402,6 +404,87 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
 
     for (int i = 0; i < kMaxCustomColors; ++i) {
         setCustomColorAt(i, extractColor(PhosphorShaders::CustomColors::colorKey(i), customColorAt(i)));
+    }
+
+    // ── User textures (uTexture0..3, uTexture0_wrap, uTexture0_svgSize) ──
+    //
+    // Single shared path for both runtimes that drive a ShaderEffect:
+    //   • Overlay zone backgrounds (ZoneShaderItem inherits this class)
+    //   • Animation overlay-surface transitions (SurfaceAnimator runs the
+    //     animation shader through a ShaderEffect on a layer-enabled
+    //     anchor; pack-bundled textures from metadata.json arrive in
+    //     `params` after AnimationShaderRegistry merges them with any
+    //     per-leg runtime overrides)
+    //
+    // Format mirrors the params keys ZoneShaderItem already accepted
+    // before unification:
+    //   • `uTextureN`       — file path (relative paths are NOT resolved
+    //                         here; the caller hands us absolute paths so
+    //                         the loader stays caller-agnostic)
+    //   • `uTextureN_wrap`  — "clamp" / "repeat" / "mirror" (empty defaults
+    //                         to the runtime's clamp behaviour)
+    //   • `uTextureN_svgSize` — SVG rasterise max-axis dimension in logical
+    //                         pixels (clamped 64..4096; ignored for bitmap
+    //                         formats)
+    //
+    // Path-change detection: we track the last-resolved path per slot and
+    // skip the file load when the path is unchanged. SVG-size changes
+    // force a re-rasterise of the same path so a slider can drive
+    // resolution live without the consumer having to re-emit the path.
+    for (int i = 0; i < kMaxUserTextures; ++i) {
+        const QString sizeKey = QStringLiteral("uTexture%1_svgSize").arg(i);
+        const bool svgSizeChanged = params.contains(sizeKey);
+        if (svgSizeChanged) {
+            m_userTextureSvgSizes[i] = qBound(64, params.value(sizeKey).toInt(), 4096);
+        }
+
+        const QString texKey = QStringLiteral("uTexture%1").arg(i);
+        const bool hasTexKey = params.contains(texKey);
+        const QString incomingPath = hasTexKey ? params.value(texKey).toString() : m_userTexturePaths[i];
+        const bool pathChanged = hasTexKey && (m_userTexturePaths[i] != incomingPath);
+        const bool needsReload = pathChanged || (svgSizeChanged && !m_userTexturePaths[i].isEmpty());
+
+        if (hasTexKey) {
+            m_userTexturePaths[i] = incomingPath;
+        }
+
+        if (needsReload) {
+            const QString path = m_userTexturePaths[i];
+            QImage loaded;
+            if (!path.isEmpty() && QFile::exists(path)) {
+                const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
+                    || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+                if (isSvg) {
+                    QSvgRenderer renderer(path);
+                    if (renderer.isValid()) {
+                        QSize size = renderer.defaultSize();
+                        const int maxDim = m_userTextureSvgSizes[i];
+                        if (!size.isEmpty()) {
+                            size.scale(maxDim, maxDim, Qt::KeepAspectRatio);
+                        } else {
+                            size = QSize(maxDim, maxDim);
+                        }
+                        loaded = QImage(size, QImage::Format_RGBA8888);
+                        loaded.fill(Qt::transparent);
+                        QPainter painter(&loaded);
+                        renderer.render(&painter);
+                        painter.end();
+                    }
+                } else {
+                    loaded = QImage(path).convertToFormat(QImage::Format_RGBA8888);
+                }
+            }
+            // Empty QImage is the canonical "transparent black" sentinel
+            // for the downstream sampler; both ShaderNodeRhi (RHI path)
+            // and the kwin-effect (classic-GL path) treat null images as
+            // an unbound slot.
+            m_userTextureImages[i] = loaded;
+        }
+
+        const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(i);
+        if (params.contains(wrapKey)) {
+            m_userTextureWraps[i] = params.value(wrapKey).toString();
+        }
     }
 
     Q_EMIT shaderParamsChanged();
@@ -817,6 +900,18 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
         node->setWallpaperTexture(m_wallpaperTexture);
     }
 
+    // ── User textures (uTexture0..3 / SRB bindings 7..10) ────────────
+    // Pushed here rather than in updatePaintNode so subclasses that
+    // override updatePaintNode and delegate to syncBasePropertiesToNode
+    // inherit texture sync without owning their own user-texture state
+    // (see ZoneShaderItem). The arrays are populated by setShaderParams
+    // and (for slot 0 on the SurfaceAnimator path) by
+    // setSourceTextureProvider rebinding the surface FBO.
+    for (int i = 0; i < kMaxUserTextures; ++i) {
+        node->setUserTexture(i, m_userTextureImages[i]);
+        node->setUserTextureWrap(i, m_userTextureWraps[i]);
+    }
+
     // ── Uniform extension ────────────────────────────────────────────
     // Push the extension stored on this item (if any) so subclasses that
     // override updatePaintNode() and delegate to syncBasePropertiesToNode()
@@ -875,14 +970,8 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
         freshNode = true;
     }
 
-    // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
+    // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper, user textures) ──
     syncBasePropertiesToNode(node);
-
-    // ── Sync user textures (bindings 7-10) ───────────────────────────
-    for (int i = 0; i < kMaxUserTextures; ++i) {
-        node->setUserTexture(i, m_userTextureImages[i]);
-        node->setUserTextureWrap(i, m_userTextureWraps[i]);
-    }
 
     // ── Sync source texture provider (slot 0 / binding 7 override) ───
     // Pushed every paint pass so a setSourceItem(...) call after the

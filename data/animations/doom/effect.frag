@@ -5,7 +5,7 @@
 // downward at a noise-randomized speed; cell size grows with
 // progress; columns separate into chaotic streaks before sliding
 // off the bottom. Native port of the BMW close-direction
-// behaviour against our `iTime`/`iChannel0` contract.
+// behaviour against our `iTime`/`uTexture0` contract.
 //
 // ## iTime convention
 //
@@ -131,7 +131,7 @@ void main()
     // the bottom rather than smearing edge texels via clamp-to-edge.
     vec2 inside    = step(vec2(0.0), sampleUV) * step(sampleUV, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(iChannel0, sampleUV) * onScreen;
+    vec4 sampled   = texture(uTexture0, sampleUV) * onScreen;
 
     // Top/bottom soft edge so the column tops fade rather than pop.
     float edgeFade = smoothstep(0.0, 0.1, uv.y) * smoothstep(0.0, 0.1, 1.0 - uv.y);

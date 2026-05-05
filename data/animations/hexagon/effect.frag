@@ -6,7 +6,7 @@
 // glowing edge lines fade in, in the second half each hex tile
 // shrinks toward its centre and disappears. Visually inspired by
 // Burn-My-Windows (hexagon.frag, Simon Schneegans), written
-// natively against our `iTime`/`iChannel0`.
+// natively against our `iTime`/`uTexture0`.
 //
 // ## iTime convention
 //
@@ -131,7 +131,7 @@ void main()
         // divisor makes the offset diverge as the tile shrinks to
         // nothing, so the lookup eventually goes off the texture.
         vec2 lookupOffset = tileProgress * hex.xy / texScale / max(1.0 - tileProgress, 0.001);
-        oColor = texture(iChannel0, uv + lookupOffset);
+        oColor = texture(uTexture0, uv + lookupOffset);
 
         vec4 glow = vec4(glowR, glowG, glowB, glowA);
         vec4 line = vec4(lineR, lineG, lineB, lineA);

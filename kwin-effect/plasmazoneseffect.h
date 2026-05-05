@@ -539,19 +539,7 @@ private:
             a.fill(-1);
             return a;
         }();
-        /// Uploaded user textures, keyed by user-slot index (0 → iChannel1,
-        /// 1 → iChannel2, 2 → iChannel3). Per the daemon parity contract,
-        /// user-declared textures begin at the runtime's slot 1 — slot 0
-        /// of the binding-7+ region is the redirected window itself
-        /// (`iChannel0`), bound by KWin's OffscreenEffect to TEXTURE0.
-        /// Uploaded once at compile time via `KWin::GLTexture::upload`,
-        /// destructed when the cache evicts (effect hot-reload via
-        /// `effectsChanged` clears every entry — see `m_shaderCache.clear`
-        /// in the constructor).
-        std::array<std::unique_ptr<KWin::GLTexture>,
-                   PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
-            userTextures = {};
-        /// Sampler uniform locations for `iChannel1..3`. -1 means the GLSL
+        /// Sampler uniform locations for `uTexture1..3`. -1 means the GLSL
         /// linker dropped the sampler (the shader source never read it),
         /// in which case paintWindow skips both the bind and the
         /// setUniform — saves a glActiveTexture call per unused slot.
@@ -621,6 +609,27 @@ private:
         /// each fresh attach so shaders that read it (e.g. for staggered
         /// per-frame randomness) see the same trajectory on both runtimes.
         int frameCount = 0;
+        /// Per-leg user-texture pointers. Resolved at
+        /// `beginShaderTransition` time from the translated params'
+        /// `uTexture<N>` keys (pack defaults merged with any per-leg
+        /// runtime override). Raw non-owning pointers into
+        /// `m_textureCache`, which owns the underlying `GLTexture` and
+        /// outlives every transition that references it. nullptr means
+        /// "no texture for this slot" — paintWindow skips the bind and
+        /// the sampler reads transparent black.
+        std::array<KWin::GLTexture*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+            userTextures = {};
+        /// Wrap-mode GL enum applied at bind time (GL_CLAMP_TO_EDGE /
+        /// GL_REPEAT / GL_MIRRORED_REPEAT). Stored per-leg rather than
+        /// on the cached `GLTexture` so two transitions sharing the
+        /// same on-disk path can run with different wrap modes without
+        /// invalidating each other's cache entry.
+        std::array<GLenum, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> userTextureWrap =
+            []() {
+                std::array<GLenum, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
+                a.fill(GL_CLAMP_TO_EDGE);
+                return a;
+            }();
         /// Wall-clock timestamp of the previous paintWindow tick that fed
         /// this transition. -1 means "no prior paint yet" — first paint
         /// produces `iTimeDelta = 0` rather than a spurious huge delta
@@ -653,6 +662,16 @@ private:
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
+    /// User-texture cache, keyed by absolute path. Multiple shader effects
+    /// (and multiple legs of the same effect) that reference the same
+    /// texture file share one upload — saves both GPU memory and the
+    /// per-leg `KWin::GLTexture::upload` cost. Cleared on
+    /// `effectsChanged` alongside `m_shaderCache` so a hot-reload that
+    /// drops a texture file frees the GPU memory rather than holding it
+    /// for the rest of the session. Wrap mode is per-cache-entry: a
+    /// caller that wants the same path with two different wrap modes
+    /// gets two cache entries.
+    std::map<QString, std::unique_ptr<KWin::GLTexture>> m_textureCache;
     /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
     /// inside @ref beginShaderTransition every time a transition installs;
     /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the

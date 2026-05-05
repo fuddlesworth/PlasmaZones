@@ -618,6 +618,19 @@ private:
     QVector<float> m_audioSpectrum;
     std::array<QImage, 4> m_userTextureImages;
     std::array<QString, 4> m_userTextureWraps;
+    /// Last-resolved file path per user-texture slot. Tracked here so
+    /// `setShaderParams` can detect path changes (load on transition,
+    /// not re-load on every params write) and so the SVG rasterise size
+    /// can re-render the same SVG path when only the size changes.
+    /// Empty when the slot has never been assigned a path.
+    std::array<QString, 4> m_userTexturePaths;
+    /// Per-slot SVG rasterise dimension (logical pixels, max-axis). Only
+    /// consulted on `.svg` / `.svgz` paths; bitmap formats ignore this.
+    /// Default 1024 carries forward the pre-unification ZoneShaderItem
+    /// behaviour — sized to be sharp at the typical zone-icon scale
+    /// without the 4× cost a 4096 default would impose on the common
+    /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
+    std::array<int, 4> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
     QImage m_wallpaperTexture;
     mutable QMutex m_wallpaperTextureMutex;
     bool m_useWallpaper = false;

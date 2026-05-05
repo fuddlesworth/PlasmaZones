@@ -5,7 +5,7 @@
 // wavefront emanates from a configurable origin point, with the
 // transition zone showing chunky pixels noise-keyed for randomness.
 // Visually inspired by Burn-My-Windows (pixel-wipe.frag, Simon
-// Schneegans), written natively against our `iTime`/`iChannel0`.
+// Schneegans), written natively against our `iTime`/`uTexture0`.
 //
 // ## iTime convention
 //
@@ -95,7 +95,7 @@ void main()
     float pixelSize = ceil(maxPixelSize * dissolve + 1.0);
     vec2 pixelGrid  = vec2(pixelSize) / iResolution;
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
-    vec4 sampled    = texture(iChannel0, cellUV);
+    vec4 sampled    = texture(uTexture0, cellUV);
 
     // Per-cell noise threshold gates the dissolve so the wavefront
     // is a chunky speckled pattern rather than a smooth ring. A cell

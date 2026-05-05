@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Matrix transition — ported from Burn-My-Windows' matrix.frag. The
-// rendered surface (`iChannel0`) gets wiped through a cascade of
-// falling glyphs sampled from a 16×16 atlas (`iChannel1`,
+// rendered surface (`uTexture0`) gets wiped through a cascade of
+// falling glyphs sampled from a 16×16 atlas (`uTexture1`,
 // `matrix-font.png`). Per-column delays and speeds keep the cascade
 // from looking metronomic.
 //
@@ -73,7 +73,7 @@ float getText(vec2 fragCoord) {
                               + LETTER_FLICKER_SPEED * (1.0 - iTime) * iTimeDelta * 60.0
                               + 42.254))
                 * LETTER_TILES);
-    return texture(iChannel1, uv / LETTER_TILES).r;
+    return texture(uTexture1, uv / LETTER_TILES).r;
 }
 
 // Per-column drop position. Returns vec2(rainAlpha, windowAlpha):
@@ -127,7 +127,7 @@ vec4 alphaOver(vec4 under, vec4 over) {
 // premultiplied RGBA, so divide-by-alpha before colour math keeps
 // blends consistent across runtimes.
 vec4 getInputColor(vec2 coords) {
-    vec4 color = texture(iChannel0, coords);
+    vec4 color = texture(uTexture0, coords);
     if (color.a > 0.0) {
         color.rgb /= color.a;
     }

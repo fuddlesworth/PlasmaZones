@@ -8,6 +8,7 @@
 
 #include <QColor>
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -225,7 +226,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                                                               const QVariantMap& friendlyParams)
 {
     QVariantMap result;
-    if (!effect.isValid() || effect.parameters.isEmpty()) {
+    if (!effect.isValid()) {
         return result;
     }
 
@@ -312,6 +313,62 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
 
         result[uniformKey] = value;
         ++floatSlot;
+    }
+
+    // ── User textures (uTexture1..3, uTexture1_wrap, ...) ──────────────
+    //
+    // Pack defaults come from `effect.textures` (the metadata schema);
+    // runtime overrides come from `friendlyParams[uTextureN]` /
+    // `friendlyParams[uTextureN_wrap]` so callers (settings UI, daemon
+    // overlay-service shader-profile resolution) can swap a packaged
+    // texture without touching the pack on disk.
+    //
+    // Slot offset: the canonical animation contract reserves
+    // `uTexture0` for the redirected window/surface. `effect.textures[0]`
+    // therefore maps to `uTexture1` (runtime slot 1 / SRB binding 8) and
+    // so on. friendlyParams may use the GLSL slot name (`uTexture1` ..
+    // `uTexture3`) verbatim — that's the same convention overlay zones
+    // use, which keeps the override format identical across categories.
+    //
+    // Path resolution: relative paths are resolved against
+    // `effect.sourceDir` (the on-disk location of the effect pack).
+    // Absolute paths pass through verbatim. Empty / null paths skip the
+    // emit so a setShaderParams consumer's "missing key = no change"
+    // semantic doesn't accidentally clear a slot that the caller
+    // intended to leave alone.
+    for (int slot = 0; slot < AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
+        const int glslSlot = slot + 1; // uTexture0 is reserved for the surface
+        const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
+        const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(glslSlot);
+
+        QString path;
+        QString wrap;
+        if (slot < effect.textures.size()) {
+            path = effect.textures[slot].path;
+            wrap = effect.textures[slot].wrap;
+        }
+        const auto pathOverride = friendlyParams.constFind(pathKey);
+        if (pathOverride != friendlyParams.constEnd()) {
+            path = pathOverride->toString();
+        }
+        const auto wrapOverride = friendlyParams.constFind(wrapKey);
+        if (wrapOverride != friendlyParams.constEnd()) {
+            wrap = wrapOverride->toString();
+        }
+
+        if (!path.isEmpty()) {
+            // Resolve relative to the effect's sourceDir so callers don't
+            // need to know the pack's on-disk location to author a
+            // metadata.json that ships its own texture asset.
+            const QFileInfo info(path);
+            if (!info.isAbsolute() && !effect.sourceDir.isEmpty()) {
+                path = QDir(effect.sourceDir).filePath(path);
+            }
+            result[pathKey] = path;
+        }
+        if (!wrap.isEmpty()) {
+            result[wrapKey] = wrap;
+        }
     }
 
     return result;

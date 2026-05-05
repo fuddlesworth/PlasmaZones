@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Slide-fade transition — directional reveal of the rendered surface
-// (sampled through iChannel0) with a soft alpha gradient at the
+// (sampled through uTexture0) with a soft alpha gradient at the
 // moving edge. Same direction semantics as `slide` (0..3 = left /
 // right / up / down) but the leading edge softens via fadeWidth.
 
@@ -39,6 +39,6 @@ void main()
     float alpha = smoothstep(visibility - fw, visibility, coord);
     alpha = 1.0 - alpha; // 1 inside the revealed region, 0 outside
 
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     fragColor = sampled * alpha;
 }

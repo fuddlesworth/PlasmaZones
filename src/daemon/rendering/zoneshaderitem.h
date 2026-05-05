@@ -135,14 +135,6 @@ public:
     // that directly from QML / C++ — no zone-specific alias needed.
 
     /**
-     * @brief Override setShaderParams to extract customParams/customColor/uTexture values.
-     *
-     * PlasmaZones shader metadata uses keys like "customParams1_x", "customColor1",
-     * "uTexture0" which must be parsed and applied to the corresponding properties.
-     */
-    void setShaderParams(const QVariantMap& params) override;
-
-    /**
      * @brief Refuse external uniform-extension replacement.
      *
      * ZoneShaderItem owns an internal ZoneUniformExtension (created in its
@@ -216,12 +208,6 @@ private:
     int m_zoneCount = 0;
     int m_highlightedCount = 0;
     int m_hoveredZoneIndex = -1;
-
-    // User texture data (parsed from shaderParams, bindings 7-10)
-    std::array<QString, 4> m_userTexturePaths;
-    std::array<QImage, 4> m_userTextureImages;
-    std::array<QString, 4> m_userTextureWraps;
-    std::array<int, 4> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
 
     // Labels texture (main thread writes, render thread reads via updatePaintNode)
     QImage m_labelsTexture;

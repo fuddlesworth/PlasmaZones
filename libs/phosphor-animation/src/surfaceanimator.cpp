@@ -20,10 +20,7 @@
 
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QHash>
-#include <QImage>
-#include <QImageReader>
 #include <QLoggingCategory>
 #include <QObject>
 #include <QPointer>
@@ -389,50 +386,16 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
     }
     shaderItem->setUseDepthBuffer(effect.useDepthBuffer);
 
-    // User-declared textures (iChannel1..3 / SRB bindings 8..10).
-    // Slot 0 of the underlying ShaderNodeRhi user-texture array is
-    // reserved for the surface FBO (`iChannel0`); user-declared
-    // textures map to slots 1..N. Walk the contract budget rather than
-    // `effect.textures.size()` so a hot-reload that drops a texture
-    // explicitly clears the slot it used to occupy — without the clear
-    // the reused shader item would keep sampling the prior leg's
-    // bitmap.
-    //
-    // Path resolution: absolute paths are honored verbatim; relative
-    // paths resolve against the effect's `sourceDir`. A missing /
-    // unreadable file logs a warning and the slot is cleared (sampler
-    // reads transparent black) rather than being left at the prior
-    // leg's bitmap.
-    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-        // +1: surface FBO holds slot 0 in the runtime's user-texture
-        // array; user-declared textures start at the runtime's slot 1.
-        const int runtimeSlot = slot + 1;
-        if (slot >= effect.textures.size()) {
-            shaderItem->setUserTexture(runtimeSlot, QImage());
-            shaderItem->setUserTextureWrap(runtimeSlot, QString());
-            continue;
-        }
-        const auto& tex = effect.textures[slot];
-        QString resolved = tex.path;
-        if (!QFileInfo(resolved).isAbsolute() && !effect.sourceDir.isEmpty()) {
-            resolved = QDir(effect.sourceDir).filePath(tex.path);
-        }
-        QImage img;
-        if (!resolved.isEmpty() && QFileInfo::exists(resolved)) {
-            QImageReader reader(resolved);
-            reader.setAutoTransform(true);
-            img = reader.read();
-            if (img.isNull()) {
-                qCWarning(lcSurfaceAnimator) << "User texture failed to load:" << resolved << "for effect" << effect.id
-                                             << "—" << reader.errorString();
-            }
-        } else {
-            qCWarning(lcSurfaceAnimator) << "User texture not found:" << resolved << "for effect" << effect.id << "slot"
-                                         << slot;
-        }
-        shaderItem->setUserTexture(runtimeSlot, img);
-        shaderItem->setUserTextureWrap(runtimeSlot, tex.wrap);
-    }
+    // User textures are NOT pushed here — they flow through the per-leg
+    // setShaderParams call alongside customParams/customColors. The
+    // registry's `translateAnimationParams` enriches the params map with
+    // pack-default `uTexture<N>` paths (resolved against
+    // `effect.sourceDir`) and any per-leg overrides from
+    // `friendlyParams`; ShaderEffect::setShaderParams handles the actual
+    // file load + node push. Centralising loading there means SVG
+    // rasterising, path-change detection, and slot-zero (surface)
+    // protection all live in one place — same code path overlay zones
+    // already use.
 }
 
 /// Pieces produced by `attachShaderToAnchor`. The caller stashes
