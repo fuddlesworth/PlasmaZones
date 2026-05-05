@@ -4979,6 +4979,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (!window || durationMs <= 0) {
         return;
     }
+    // Gate window-event shader transitions on the global animations
+    // toggle. The flag flows into `m_windowAnimator->setEnabled(...)`
+    // for motion tweens; without this matching gate, disabling
+    // animations globally would still let window.open / close / focus
+    // / etc. fire shader transitions. Mirrors the per-event "Override"
+    // toggle's contract: cleared per-event override falls back to the
+    // global default, and the global default's "off" is honoured here.
+    if (!m_windowAnimator->isEnabled()) {
+        return;
+    }
     const auto profile = m_shaderProfileTree.resolve(profilePath);
     if (profile.effectiveEffectId().isEmpty()) {
         // Diagnostic warning so users + bug reports can see why a window
