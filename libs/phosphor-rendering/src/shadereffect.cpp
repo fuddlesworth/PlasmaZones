@@ -199,6 +199,15 @@ void ShaderEffect::setIFrame(int frame)
     update();
 }
 
+void ShaderEffect::setIsReversed(bool reverse)
+{
+    if (m_isReversed == reverse) {
+        return;
+    }
+    m_isReversed = reverse;
+    update();
+}
+
 void ShaderEffect::setIResolution(const QSizeF& resolution)
 {
     if (m_iResolution == resolution) {
@@ -876,6 +885,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setTime(m_iTime);
     node->setTimeDelta(static_cast<float>(m_iTimeDelta));
     node->setFrame(m_iFrame);
+    node->setIsReversed(m_isReversed);
     // Use logical pixels for iResolution (shader params depend on consistent
     // resolution; DPR mismatch handled by bilinear upscaling in the image pass).
     node->setResolution(static_cast<float>(width()), static_cast<float>(height()));

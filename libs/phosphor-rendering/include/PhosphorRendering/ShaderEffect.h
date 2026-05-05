@@ -165,6 +165,16 @@ public:
     }
     void setIFrame(int frame);
 
+    bool isReversed() const
+    {
+        return m_isReversed;
+    }
+    /// Direction signal forwarded to ShaderNodeRhi → BaseUniforms::iIsReversed.
+    /// SurfaceAnimator pushes this on every leg attach (false for show, true
+    /// for hide). Symmetric shaders ignore the value; asymmetric shaders
+    /// branch on it (see canonical animation_uniforms.glsl docs).
+    void setIsReversed(bool reverse);
+
     QSizeF iResolution() const
     {
         return m_iResolution;
@@ -556,6 +566,7 @@ private:
     // ── Animation state ──────────────────────────────────────────────
     qreal m_iTime = 0.0;
     qreal m_iTimeDelta = 0.0;
+    bool m_isReversed = false;
     int m_iFrame = 0;
     QSizeF m_iResolution;
     QPointF m_iMouse;

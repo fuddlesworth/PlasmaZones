@@ -78,7 +78,18 @@ struct alignas(16) BaseUniforms
 
     // Wrap-offset counterpart of iTime
     float iTimeHi; // offset 656
-    float _pad_after_iTimeHi[3]; // std140 struct alignment → total 672 bytes
+
+    // Direction signal for asymmetric leg rendering. 1 when the runtime
+    // is driving this leg in the "reverse" direction (window.close /
+    // going-to-minimized / unmaximize on the kwin path; hide leg on
+    // the daemon path), 0 otherwise. Symmetric shaders ignore this and
+    // rely on the runtime's iTime flip to auto-mirror; asymmetric
+    // shaders (matrix's directional rain, rain windowAlpha trajectory,
+    // anything where open and close differ in more than time direction)
+    // branch on it. Carved out of the trailing std140 pad so total
+    // struct size stays 672 bytes.
+    int iIsReversed; // offset 660
+    float _pad_after_iIsReversed[2]; // std140 struct alignment → total 672 bytes
 };
 
 static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");
@@ -136,6 +147,8 @@ static_assert(offsetof(BaseUniforms, iTextureResolution) == 592,
               "BaseUniforms::iTextureResolution must remain at std140 offset 592 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, iTimeHi) == 656,
               "BaseUniforms::iTimeHi must remain at std140 offset 656 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iIsReversed) == 660,
+              "BaseUniforms::iIsReversed must remain at std140 offset 660 (animation UBO contract)");
 
 /// UBO region offsets and sizes for partial updates (reduces GPU bandwidth).
 namespace UboRegions {

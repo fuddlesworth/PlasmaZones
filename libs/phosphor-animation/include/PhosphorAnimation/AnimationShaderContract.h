@@ -199,6 +199,15 @@ inline constexpr const char* kIFrame = "iFrame";
 /// daemon throttles its sync to 1 Hz.
 inline constexpr const char* kIDate = "iDate";
 
+/// `int iIsReversed` — direction signal for asymmetric leg rendering.
+/// 1 when the runtime is driving this leg in the "reverse" direction
+/// (window.close / going-to-minimized / unmaximize on the kwin path,
+/// hide leg on the daemon path); 0 for the forward direction. The
+/// runtime also flips iTime for reverse legs so symmetric shaders
+/// auto-mirror — asymmetric shaders branch on this when the iTime flip
+/// alone can't express the open-vs-close difference.
+inline constexpr const char* kIIsReversed = "iIsReversed";
+
 /// Maximum number of user-declared textures per animation effect.
 ///
 /// Each declared texture binds to one of the canonical samplers

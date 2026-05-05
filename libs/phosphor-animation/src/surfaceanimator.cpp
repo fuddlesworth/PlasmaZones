@@ -559,6 +559,10 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // fully dissolved) on top of an already-visible surface, producing a
     // visible flash before the hide animation reverses out.
     shaderItem->setITime(isShowLeg ? qreal(0.0) : qreal(1.0));
+    // Direction signal for asymmetric shaders. Symmetric shaders ignore
+    // it and rely on the iTime flip alone to auto-mirror; matrix and
+    // future asymmetric shaders branch on this.
+    shaderItem->setIsReversed(!isShowLeg);
 
     const QVariantMap translated =
         PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(effect, shaderParameters);
@@ -1332,6 +1336,11 @@ public:
                     // value of the previous leg) leaks into the first
                     // frame of the new leg.
                     reusedShaderItem->setITime(isShowLeg ? qreal(0.0) : qreal(1.0));
+                    // Direction signal for asymmetric shaders. The reuse
+                    // path may swap a show leg into a hide leg (or vice
+                    // versa) on the same shader item, so re-push every
+                    // leg start.
+                    reusedShaderItem->setIsReversed(!isShowLeg);
                     // Re-translate parameter overrides — shaderParameters
                     // can differ between legs (per-event customisation).
                     const QVariantMap translated =

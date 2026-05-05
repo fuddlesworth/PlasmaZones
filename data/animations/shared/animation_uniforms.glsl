@@ -68,6 +68,13 @@ uniform vec4 iChannelResolution[4];
 uniform int iAudioSpectrumSize;
 uniform vec4 iTextureResolution[4];
 uniform float iTimeHi;
+// 1 when the runtime is driving this leg in the "reverse" direction
+// (window.close / going-to-minimized / unmaximize on the kwin path,
+// hide leg on the daemon path); 0 for the forward direction. Symmetric
+// shaders ignore this — the runtime ALSO flips iTime so they auto-mirror.
+// Asymmetric shaders (matrix's directional rain + open-vs-close window
+// reveal) branch on it. See UBO branch below for the full contract.
+uniform int iIsReversed;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -134,9 +141,20 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              to keep std140 layout aligned with the
                                  //              overlay UBO so a single effect.frag
                                  //              source compiles for either runtime.
-    // implicit 12-byte trailing pad — std140 rounds the struct end up
+    int iIsReversed;           // offset 660 — 1 on reverse legs (close / hide /
+                                 //              unmaximize), 0 on forward legs.
+                                 //              Symmetric shaders ignore this; the
+                                 //              runtime ALSO flips iTime for reverse
+                                 //              legs so they auto-mirror. Asymmetric
+                                 //              shaders branch on this when the iTime
+                                 //              flip alone can't express the open-vs-
+                                 //              close difference (e.g. matrix's rain
+                                 //              direction + windowAlpha reveal).
+                                 //              Carved out of the trailing std140
+                                 //              pad so total UBO size stays 672 bytes.
+    // implicit 8-byte trailing pad — std140 rounds the struct end up
     // to a 16-byte boundary, total 672 bytes, mirroring C's
-    // `_pad_after_iTimeHi[3]`.
+    // `_pad_after_iIsReversed[2]`.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;

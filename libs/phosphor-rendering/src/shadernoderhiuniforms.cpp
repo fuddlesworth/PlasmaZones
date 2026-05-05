@@ -33,6 +33,7 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
     m_baseUniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
     m_baseUniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
+    m_baseUniforms.iIsReversed = m_isReversed ? 1 : 0;
     // iDate only advances once per second. m_sceneDataDirty is set by every
     // mouse-move/resize event, so naïvely recomputing iDate whenever it's
     // true would hit QDateTime::currentDateTime() at 60+ Hz during

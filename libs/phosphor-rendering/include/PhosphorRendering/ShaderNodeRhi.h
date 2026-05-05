@@ -143,6 +143,12 @@ public:
     void setFrame(int frame);
     void setResolution(float width, float height);
     void setMousePosition(const QPointF& pos);
+    /// Direction signal for asymmetric leg rendering. Forward through
+    /// to BaseUniforms::iIsReversed at offset 660. SurfaceAnimator
+    /// pushes this from the leg's `isShowLeg` flag (false = reverse =
+    /// hide leg); kwin-effect parity is handled directly via setUniform
+    /// on the kwin path.
+    void setIsReversed(bool reverse);
 
     // ── Custom Parameters (indexed API) ────────────────────────────────
     void setCustomParams(int index, const QVector4D& params);
@@ -390,6 +396,7 @@ private:
     double m_time = 0.0;
     float m_timeDelta = 0.0f;
     int m_frame = 0;
+    bool m_isReversed = false;
     float m_timeHi = 0.0f; // Cached iTimeHi for wrap-offset change detection
     float m_width = 0.0f;
     float m_height = 0.0f;

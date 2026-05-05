@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/StaggerTimer.h>
@@ -2048,7 +2049,13 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_windowAnimator->setEnabled(v.toBool());
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
-        const int d = qBound(50, v.toInt(), 500);
+        // Clamp against the canonical settings-UI bounds. The earlier
+        // local 500ms cap silently clamped a 2000ms user setting down
+        // to 500ms, making shader transitions like matrix run far
+        // faster than the daemon path's identical setting (the daemon
+        // honours the full 2000ms range via the same constants).
+        const int d = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, v.toInt(),
+                             PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
     });
@@ -2065,7 +2072,8 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationSequenceMode = qBound(0, v.toInt(), 1);
     });
     loadSettingAsync(QStringLiteral("animationStaggerInterval"), [this](const QVariant& v) {
-        m_cachedAnimationStaggerInterval = qBound(10, v.toInt(), 200);
+        m_cachedAnimationStaggerInterval = qBound(PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs, v.toInt(),
+                                                  PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs);
     });
     loadShaderProfileFromDbus();
     loadShaderRegistryFromDbus();
@@ -4487,6 +4495,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iMouseLoc >= 0) {
                     shader->setUniform(cached->iMouseLoc, iMouseValue);
                 }
+                if (cached->iIsReversedLoc >= 0) {
+                    shader->setUniform(cached->iIsReversedLoc, transition.reverse ? 1 : 0);
+                }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];
                     if (loc < 0)
@@ -4748,6 +4759,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iFrameLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFrame);
         cached.iDateLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIDate);
         cached.iMouseLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMouse);
+        cached.iIsReversedLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIIsReversed);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color
@@ -4875,6 +4888,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             continue;
         }
         auto cacheIt = m_textureCache.find(path);
+        bool freshlyLoaded = false;
         if (cacheIt == m_textureCache.end()) {
             const QImage img = loadUserTextureImage(path);
             if (img.isNull()) {
@@ -4891,8 +4905,19 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             }
             gpuTex->setFilter(GL_LINEAR);
             cacheIt = m_textureCache.emplace(path, std::move(gpuTex)).first;
+            freshlyLoaded = true;
         }
         transition.userTextures[slot] = cacheIt->second.get();
+        // One-shot diagnostic per (effectId, slot, path) tuple — fires
+        // on first upload only, so a leg that re-uses an already-cached
+        // texture stays silent. Lets a journal scan answer "did matrix's
+        // glyph atlas actually load on the kwin path?" without per-paint
+        // spam.
+        if (freshlyLoaded) {
+            const QSize sz = cacheIt->second->size();
+            qCInfo(lcEffect) << "User texture loaded:" << path << "size=" << sz << "for effect" << effectId << "slot"
+                             << slot << "(uTexture" << glslSlot << ")";
+        }
     }
     // Bump generation for every install so the timer-driven teardown in
     // tryBeginShaderForEvent can detect supersession (a fresh transition

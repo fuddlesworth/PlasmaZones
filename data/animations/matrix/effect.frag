@@ -8,17 +8,14 @@
 // `matrix-font.png`). Per-column delays and speeds keep the cascade
 // from looking metronomic.
 //
-// Visual deviation from BMW: BMW renders rain top-to-bottom for both
-// open and close because they pass an explicit `uForOpening` uniform
-// that flips windowAlpha while keeping the rain motion forward. Our
-// contract drives a single direction-aware `iTime` (the C++ side flips
-// it for "going-away" events via the per-transition `reverse` flag),
-// which lets symmetric shaders auto-mirror but means asymmetric
-// shaders like Matrix observe the rain reversing direction across
-// open/close. The visual still reads as "appear via cascade" / "vanish
-// via cascade"; the rain just walks bottom-to-top on open and top-to-
-// bottom on close. Adding a separate forward-progress uniform to the
-// contract is the future fix if this becomes objectionable.
+// Direction handling: matrix is asymmetric — rain physically falls
+// top-to-bottom in BOTH directions, while the window-content reveal
+// trajectory inverts (open: invisible → visible; close: visible →
+// invisible). The runtime exposes `iIsReversed` so the shader can
+// branch the windowAlpha math without needing to flip the rain
+// direction. The runtime ALSO flips iTime for reverse legs (1→0
+// instead of 0→1), so an absolute-forward leg progress is recovered
+// via `mix(iTime, 1.0 - iTime, float(iIsReversed))`.
 
 #version 450
 
@@ -63,14 +60,22 @@ float edgeMask(float fadePixels) {
 
 // Glyph atlas sample. The atlas is a 16×16 grid of glyphs; each
 // fragment picks a tile based on its block coordinates plus a flicker
-// offset that cycles glyphs over time.
+// offset that cycles glyphs over time. BMW's original used
+// `LETTER_FLICKER_SPEED * uProgress * uDuration`, where the product
+// was elapsed-leg-seconds — a monotonically increasing quantity that
+// crossed integer boundaries every 1/LETTER_FLICKER_SPEED seconds and
+// flipped the chosen glyph. Our contract has `iFrame` (per-leg frame
+// counter) but no leg-duration uniform, so map iFrame onto the same
+// effective rate by assuming ~60 fps: increments of
+// `LETTER_FLICKER_SPEED / 60` per frame land integer crossings every
+// ~30 frames at LETTER_FLICKER_SPEED=2, matching BMW's ~1Hz cycling.
 float getText(vec2 fragCoord) {
     vec2 pixelCoords = fragCoord * iResolution;
     vec2 uv          = mod(pixelCoords, letterSize) / letterSize;
     vec2 block       = pixelCoords / letterSize - uv;
 
     uv += floor(hash22(floor(hash22(block) * vec2(12.9898, 78.233)
-                              + LETTER_FLICKER_SPEED * (1.0 - iTime) * iTimeDelta * 60.0
+                              + LETTER_FLICKER_SPEED * float(iFrame) * (1.0 / 60.0)
                               + 42.254))
                 * LETTER_TILES);
     return texture(uTexture1, uv / LETTER_TILES).r;
@@ -80,22 +85,28 @@ float getText(vec2 fragCoord) {
 //   .x = rain trail intensity (0..1, fades exponentially behind head)
 //   .y = window content visibility (0 = obscured, 1 = revealed)
 //
-// `bmwProgress = 1.0 - iTime` maps our `iTime ∈ [0,1]` (0 = transition
-// start, 1 = fully resolved) onto BMW's progress semantic (0 = visible,
-// 1 = transition complete). distToDrop > 0 means the drop head has
-// already passed this fragment; < 0 means it hasn't reached yet.
-vec2 getRain(vec2 fragCoord) {
+// `legProgress` is the absolute forward leg progress (0 at leg start,
+// 1 at leg end) regardless of direction — recovered from iTime by
+// undoing the runtime's reverse flip when iIsReversed is set.
+// distToDrop > 0 means the drop head has passed this fragment;
+// < 0 means it hasn't reached yet.
+vec2 getRain(vec2 fragCoord, float legProgress) {
     float column = fragCoord.x * iResolution.x;
     column -= mod(column, letterSize);
 
     float delay = fract(sin(column) * 78.233) * mix(0.0, 1.0, randomness);
     float speed = fract(cos(column) * 12.989) * mix(0.0, 0.3, randomness) + 1.5;
 
-    float bmwProgress = 1.0 - iTime;
-    float distToDrop  = (bmwProgress * 2.0 - delay) * speed - fragCoord.y;
+    // BMW's `uProgress` matches our `legProgress` exactly: 0 at start,
+    // 1 at end, in BOTH directions.
+    float distToDrop  = (legProgress * 2.0 - delay) * speed - fragCoord.y;
 
     float rainAlpha   = distToDrop >= 0.0 ? exp(-distToDrop / TRAIL_LENGTH) : 0.0;
-    float windowAlpha = 1.0 - clamp(iResolution.y * distToDrop, 0.0, FADE_WIDTH) / FADE_WIDTH;
+
+    // Window-fadeout sweep: 1 ahead of the rain head (window still
+    // visible), 0 behind (window has been wiped). BMW's natural
+    // `windowAlpha` for a CLOSE leg.
+    float windowSweep = 1.0 - clamp(iResolution.y * distToDrop, 0.0, FADE_WIDTH) / FADE_WIDTH;
 
     rainAlpha *= edgeMask(EDGE_FADE);
 
@@ -106,9 +117,10 @@ vec2 getRain(vec2 fragCoord) {
         rainAlpha *= smoothstep(0.0, 1.0, clamp((1.0 - fragCoord.y) / shorten, 0.0, 1.0));
     }
 
-    // BMW's `if (uForOpening) windowAlpha = 1.0 - windowAlpha;` is
-    // unnecessary here: our `reverse` flag flips iTime upstream so the
-    // bmwProgress trajectory inverts itself for the close direction.
+    // Direction-aware windowAlpha: BMW's CLOSE math gives the trajectory
+    // 1 → 0 (visible at start, wiped at end). For OPEN, invert so the
+    // window fades INTO visibility behind the rain.
+    float windowAlpha = (iIsReversed == 1) ? windowSweep : (1.0 - windowSweep);
     return vec2(rainAlpha, windowAlpha);
 }
 
@@ -138,25 +150,40 @@ void main() {
     vec2 coords = vTexCoord;
     coords.y    = coords.y * (overshoot + 1.0) - overshoot * 0.5;
 
-    vec2 rainMask  = getRain(coords);
+    // Absolute forward leg progress: 0 at leg start, 1 at leg end,
+    // regardless of direction. The runtime flips iTime for reverse
+    // legs (1→0); undo it here so the rain physically falls top-to-
+    // bottom in both directions.
+    float legProgress = (iIsReversed == 1) ? (1.0 - iTime) : iTime;
+
+    vec2 rainMask  = getRain(coords, legProgress);
     float textMask = getText(coords);
 
     vec4 oColor = getInputColor(coords);
+    // Capture the surface's original alpha BEFORE the rain-driven
+    // visibility decay below — used to mask the rain to the window's
+    // actual content. KWin's OffscreenEffect redirects to
+    // `expandedGeometry()`, an FBO that includes the drop-shadow /
+    // decoration padding around the window frame. Sampling uTexture0
+    // out there returns alpha=0 (transparent shadow region), so
+    // multiplying rain alpha by surfaceAlpha clips the rain to where
+    // the window actually has content. Daemon overlay surfaces match
+    // the QQuickItem size with no shadow padding so this mask is a
+    // no-op there (alpha=1 inside the popup).
+    float surfaceAlpha = oColor.a;
     oColor.a *= rainMask.y;
 
     // Final-fade: in the last 20% of the leg the residual rain trail
     // fades out so the resolved frame is pure window content with no
-    // lingering pixels. With our iTime contract (1 = fully resolved)
-    // we drive the fade off `1.0 - iTime` so it ramps in as the
-    // transition nears completion.
-    float bmwProgress = 1.0 - iTime;
-    float finalFade   =
-        1.0 - clamp((bmwProgress - FINAL_FADE_START_TIME) / (1.0 - FINAL_FADE_START_TIME), 0.0, 1.0);
+    // lingering pixels. Drives off `legProgress` so it ramps in as
+    // the transition nears completion regardless of direction.
+    float finalFade =
+        1.0 - clamp((legProgress - FINAL_FADE_START_TIME) / (1.0 - FINAL_FADE_START_TIME), 0.0, 1.0);
     float rainAlpha = finalFade * rainMask.x;
 
     vec4 text = vec4(mix(trailColor.rgb, tipColor.rgb,
                          min(1.0, pow(rainAlpha + 0.1, 4.0))),
-                     rainAlpha * textMask);
+                     rainAlpha * textMask * surfaceAlpha);
 
     oColor    = alphaOver(oColor, text);
     fragColor = oColor;

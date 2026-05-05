@@ -87,6 +87,16 @@ void ShaderNodeRhi::setMousePosition(const QPointF& pos)
     m_sceneDataDirty = true;
 }
 
+void ShaderNodeRhi::setIsReversed(bool reverse)
+{
+    if (m_isReversed == reverse) {
+        return;
+    }
+    m_isReversed = reverse;
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
+}
+
 // ============================================================================
 // Custom Params (indexed API)
 // ============================================================================
