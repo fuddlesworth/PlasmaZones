@@ -27,6 +27,13 @@
 // structural data (see ShaderEffect.h customParams8 Q_PROPERTY); no
 // user-declared parameter in any shipping shader reaches this slot
 // (translateAnimationParams fills from customParams[0] up).
+//
+// Kwin-effect path: plasmazoneseffect.cpp doesn't expand the redirected
+// window's geometry by `boundsPadding`, so the slot reads 0 and the UV
+// remap below collapses to identity (k=1, anchorUv=vTexCoord). That's
+// the correct behaviour on kwin — without geometry expansion there's
+// no padding region to remap into, so the warp simply samples the
+// un-padded surface directly.
 #define boundsPadding customParams[7].x
 
 layout(location = 0) in vec2 vTexCoord;

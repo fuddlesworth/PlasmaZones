@@ -1938,6 +1938,30 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
     // in-flight track first so a rapid toggle mid-animation can't leave
     // the surface stuck at intermediate opacity.
     if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginShow on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        // Salvage any in-flight previous-track onComplete BEFORE
+        // cancelTracking drops it. The bare cancellation contract
+        // (legCompleted-only firing) is correct for `cancel()` calls,
+        // but the gate-off short-circuit here also fires the NEW
+        // caller's onComplete synchronously below — leaving the
+        // previous caller's callback unfired strands them while a
+        // sibling caller gets serviced. Post via the m_driverTimer
+        // (the file-wide QObject context for queued posts) so the
+        // previous callback runs after this stack unwinds and is
+        // free to re-enter SurfaceAnimator without state surprise.
+        if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                QMetaObject::invokeMethod(
+                    &d->m_driverTimer,
+                    [cb = std::move(prevOnComplete)]() {
+                        cb();
+                    },
+                    Qt::QueuedConnection);
+            }
+        }
         d->cancelTracking(surface);
         if (rootItem) {
             rootItem->setOpacity(1.0);
@@ -1979,6 +2003,26 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
         return;
     }
     if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginHide on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        // Salvage previous-track onComplete before cancelTracking drops it.
+        // See beginShow's matching block for the rationale (gate-off path
+        // fires the new caller's onComplete synchronously below — silently
+        // dropping the in-flight caller's callback is the bug, not the
+        // cancellation contract). Post via m_driverTimer so the previous
+        // callback runs queued, after this stack unwinds.
+        if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                QMetaObject::invokeMethod(
+                    &d->m_driverTimer,
+                    [cb = std::move(prevOnComplete)]() {
+                        cb();
+                    },
+                    Qt::QueuedConnection);
+            }
+        }
         d->cancelTracking(surface);
         if (rootItem) {
             rootItem->setOpacity(0.0);
@@ -2017,13 +2061,21 @@ void SurfaceAnimator::setEnabled(bool enabled)
         return;
     }
     d->m_enabled = enabled;
-    // Already-running tracks intentionally finish their current leg
-    // when the gate flips off — `beginShow` / `beginHide` consult the
-    // gate when DISPATCHING new legs (snapping to target opacity and
-    // firing completion synchronously), so the gate semantics are
-    // "next dispatch", not "kill in progress". Cancelling mid-leg
-    // would discard the user's already-started transition with no
-    // graceful unwind, which is worse than letting it finish.
+    // Gate semantics are "next dispatch", not "kill in progress" — the
+    // toggle itself does not touch any tracks. A track that is currently
+    // mid-leg will continue to its natural `legCompleted` (firing its
+    // stored onComplete normally) ONLY if no subsequent
+    // `beginShow` / `beginHide` arrives in the meantime. If a new
+    // dispatch does arrive while the gate is off, that dispatch
+    // short-circuits via the gate-off branch in beginShow/beginHide,
+    // which calls `cancelTracking` on the in-flight track. Per the
+    // cancellation contract documented on `cancelTracking`,
+    // legCompleted does not fire on cancellation, so the in-flight
+    // track's onComplete would be dropped — the gate-off branch
+    // therefore salvages and queue-posts that callback before
+    // delegating to cancelTracking, so callers are not stranded
+    // when their in-flight animation is preempted by a gate-off
+    // dispatch.
 }
 
 bool SurfaceAnimator::isEnabled() const

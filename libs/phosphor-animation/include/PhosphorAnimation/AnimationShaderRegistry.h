@@ -144,6 +144,15 @@ private:
     /// Build + configure the scan strategy. Returns the base type so
     /// the helper can be invoked from the ctor's member-init list while
     /// staying agnostic of the subclass-private `ScanStrategy` typedef.
+    ///
+    /// `self` is captured for later signal emission via the strategy's
+    /// rescan callback lambda. The static helper itself only stores
+    /// `self` in lambda captures and MUST NOT dereference it before
+    /// the constructor returns — the strategy is built from the base
+    /// class's member-init list, so member fields of the derived
+    /// `AnimationShaderRegistry` are still uninitialised at the call
+    /// site. The first deref happens later, on a watcher-triggered
+    /// rescan, by which time the constructor has fully run.
     static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(AnimationShaderRegistry* self);
 
     // Non-owning typed alias for the strategy the base owns. Populated

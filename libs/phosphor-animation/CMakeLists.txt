@@ -176,8 +176,6 @@ set(phosphoranimation_SRCS
     src/surfaceanimator.cpp
 )
 
-set(phosphoranimation_detail_HDRS)
-
 # ===============================================================================
 # QML module sources (shared between STATIC and SHARED modules)
 # ===============================================================================
@@ -201,7 +199,6 @@ set(_phosphor_animation_qml_sources
 
 add_library(PhosphorAnimation SHARED
     ${phosphoranimation_public_HDRS}
-    ${phosphoranimation_detail_HDRS}
     ${phosphoranimation_SRCS}
 )
 

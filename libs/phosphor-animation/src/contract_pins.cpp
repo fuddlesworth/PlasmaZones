@@ -15,7 +15,7 @@
 // <PhosphorRendering/ShaderNodeRhi.h> there transitively pulls
 // <QtQuick/QSGTextureProvider>, which conflicts with epoxy/gl.h (the kwin-
 // effect path) on overlapping GL function-pointer typedefs.
-static_assert(::PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots + 1
-                  == ::PhosphorRendering::kMaxUserTextures,
+static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots + 1
+                  == PhosphorRendering::kMaxUserTextures,
               "AnimationShaderContract::kMaxUserTextureSlots must match "
               "PhosphorRendering::kMaxUserTextures - 1 (slot 0 reserved for surface)");

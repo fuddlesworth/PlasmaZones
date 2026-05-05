@@ -7,8 +7,13 @@
 
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PhosphorAnimationShaders {
+
+namespace {
+Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
+} // namespace
 
 QJsonObject AnimationShaderEffect::toJson() const
 {
@@ -120,9 +125,10 @@ QJsonObject AnimationShaderEffect::toJson() const
             // emitting them on write would cause the round-trip to
             // shrink the list silently. An entry with empty path but
             // non-empty wrap is also dropped: the wrap is meaningless
-            // without a sampler bound to it, and `parseEffect`'s
-            // path-traversal guard can produce exactly this shape by
-            // clearing path while leaving wrap intact (defence in
+            // without a sampler bound to it, and `parseEffect` (see
+            // AnimationShaderRegistry::parseEffect) can produce
+            // exactly this shape via its path-traversal guard, which
+            // clears path while leaving wrap intact (defence in
             // depth). Letting it round-trip would silently smuggle a
             // dead wrap value through future scans.
             if (t.path.isEmpty())
@@ -219,14 +225,31 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
     // would loosen this cap automatically.
     const QJsonArray texArr = obj.value(QLatin1String("textures")).toArray();
-    e.textures.reserve(qMin(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
+    e.textures.reserve(qMin<qsizetype>(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
+    qsizetype slotIndex = 0;
     for (const QJsonValue& v : texArr) {
+        const qsizetype currentSlot = slotIndex++;
         if (e.textures.size() >= AnimationShaderContract::kMaxUserTextureSlots)
             break;
         const QJsonObject tObj = v.toObject();
         TextureSlot t;
         t.path = tObj.value(QLatin1String("path")).toString();
         t.wrap = tObj.value(QLatin1String("wrap")).toString();
+        // Validate wrap against the documented vocabulary. An empty
+        // string is allowed and means "use the runtime default"
+        // (clamp on both runtimes). Any other value is a typo or a
+        // deprecated/foreign vocabulary import — log a warning and
+        // reset to empty so the runtime applies its default rather
+        // than carrying a string the runtime will silently coerce
+        // to clamp anyway. Keeping unknown values in the in-memory
+        // struct would also round-trip them back through toJson,
+        // re-persisting the typo to disk on the next save.
+        if (!t.wrap.isEmpty() && t.wrap != QLatin1String("clamp") && t.wrap != QLatin1String("repeat")
+            && t.wrap != QLatin1String("mirror")) {
+            qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown wrap value" << t.wrap
+                                         << "for slot" << currentSlot << "— reset to clamp";
+            t.wrap.clear();
+        }
         // Drop entries with no path — they would map to a sampler with
         // nothing bound. The runtimes would fall back to transparent
         // black, but persisting the empty slot in JSON is just noise.

@@ -20,14 +20,9 @@ namespace PlasmaZones {
 void OverlayService::setSettings(ISettings* settings)
 {
     if (m_settings != settings) {
-        // Disconnect from old settings signals. Single sweep severs
-        // every signal-slot connection where `m_settings` is sender
-        // and `this` is receiver — fail-safe against a future connect
-        // call here that doesn't have a paired per-signal disconnect
-        // line (the old per-signal pattern was discipline-fragile).
-        // The saved-handle disconnect immediately below MUST stay
-        // separate because it tracks a connection added on a different
-        // sender (`m_shaderRegistry`, not `m_settings`).
+        // Single-sweep disconnect of every (m_settings → this) connection,
+        // fail-safe vs. future connects that forget a paired disconnect.
+        // The shader-registry handle below stays separate (different sender).
         if (m_settings) {
             disconnect(m_settings, nullptr, this, nullptr);
         }

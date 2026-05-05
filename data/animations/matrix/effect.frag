@@ -50,6 +50,12 @@ const float TRAIL_LENGTH          = 0.2;
 const float FINAL_FADE_START_TIME = 0.8;
 const float LETTER_TILES          = 16.0;
 const float LETTER_FLICKER_SPEED  = 2.0;
+// BMW's original used `LETTER_FLICKER_SPEED * uProgress * uDuration`
+// where the product was elapsed-leg-seconds. Our contract has `iFrame`
+// (per-leg frame counter) but no leg-duration uniform, so we scale
+// iFrame by an assumed display rate to match BMW's per-frame cycling
+// cadence. 60 Hz is the canonical KWin/Qt scene-graph default.
+const float ASSUMED_FPS           = 60.0;
 
 // hash22 — Burn-My-Windows common.glsl. Drives both the per-column
 // delay and the in-tile glyph index (so each "drop" cycles through
@@ -75,16 +81,11 @@ float edgeMask(float fadePixels) {
 
 // Glyph atlas sample. The atlas is a 16×16 grid of glyphs; each
 // fragment picks a tile based on its block coordinates plus a flicker
-// offset that cycles glyphs over time. BMW's original used
-// `LETTER_FLICKER_SPEED * uProgress * uDuration`, where the product
-// was elapsed-leg-seconds — a monotonically increasing quantity that
-// crossed integer boundaries every 1/LETTER_FLICKER_SPEED seconds and
-// flipped the chosen glyph. Our contract has `iFrame` (per-leg frame
-// counter) but no leg-duration uniform, so map iFrame onto the same
-// effective rate by assuming ~60 fps: increments of
-// `LETTER_FLICKER_SPEED / 60` per frame land integer crossings every
-// ~30 frames at LETTER_FLICKER_SPEED=2 (≈ 2 Hz at 60 fps), matching
-// BMW's per-frame cycling rate at the same speed value.
+// offset that cycles glyphs over time. Map iFrame onto BMW's effective
+// rate by scaling with `1/ASSUMED_FPS`: increments of
+// `LETTER_FLICKER_SPEED / ASSUMED_FPS` per frame land integer crossings
+// every ~30 frames at LETTER_FLICKER_SPEED=2 (≈ 2 Hz at 60 fps),
+// matching BMW's per-frame cycling rate at the same speed value.
 float getText(vec2 fragCoord) {
     // Floor letterSize so a metadata-bypassed value of 0 (or near-zero)
     // doesn't divide-by-zero into NaN texture UVs. Live metadata
@@ -96,7 +97,7 @@ float getText(vec2 fragCoord) {
     vec2 block       = pixelCoords / ls - uv;
 
     uv += floor(hash22(floor(hash22(block) * vec2(12.9898, 78.233)
-                              + LETTER_FLICKER_SPEED * float(iFrame) * (1.0 / 60.0)
+                              + LETTER_FLICKER_SPEED * float(iFrame) * (1.0 / ASSUMED_FPS)
                               + 42.254))
                 * LETTER_TILES);
     return texture(uTexture1, uv / LETTER_TILES).r;
@@ -119,8 +120,19 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     float column = fragCoord.x * iResolution.x;
     column -= mod(column, ls);
 
-    float delay = fract(sin(column) * 78.233) * mix(0.0, 1.0, randomness);
-    float speed = fract(cos(column) * 12.989) * mix(0.0, 0.3, randomness) + 1.5;
+    // Clamp randomness as defence in depth — metadata declares [0,1]
+    // but a host that bypasses validation could push it out of range
+    // and turn the per-column delay/speed jitter into NaN territory.
+    float r = clamp(randomness, 0.0, 1.0);
+
+    // Offset `sin(column)` so the leftmost column (column == 0) gets
+    // a non-trivial phase. Without the offset, `sin(0) == 0` makes
+    // every window's leftmost column always lead the cascade with
+    // zero delay, breaking the per-column staggered look. `cos(column)`
+    // doesn't need the same fix because `cos(0) == 1` already produces
+    // a non-zero seed.
+    float delay = fract(sin(column + 17.0) * 78.233) * mix(0.0, 1.0, r);
+    float speed = fract(cos(column) * 12.989) * mix(0.0, 0.3, r) + 1.5;
 
     // BMW's `uProgress` matches our `legProgress` exactly: 0 at start,
     // 1 at end, in BOTH directions.
@@ -136,7 +148,7 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     rainAlpha *= edgeMask(EDGE_FADE);
 
     float shorten =
-        fract(sin(column + 42.0) * 33.423) * mix(0.0, overshoot * 0.25, randomness);
+        fract(sin(column + 42.0) * 33.423) * mix(0.0, overshoot * 0.25, r);
     if (shorten > 0.0) {
         rainAlpha *= smoothstep(0.0, 1.0, clamp(fragCoord.y / shorten, 0.0, 1.0));
         rainAlpha *= smoothstep(0.0, 1.0, clamp((1.0 - fragCoord.y) / shorten, 0.0, 1.0));

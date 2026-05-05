@@ -292,6 +292,40 @@ inline QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024)
     return QImage(path).convertToFormat(QImage::Format_RGBA8888);
 }
 
+/// Pre-baked uniform / param key strings for the hot paths.
+///
+/// `customParams[0..7]` and `uTexture1..3` (and their wrap / svgSize
+/// variants) are looked up dozens of times per shader transition install
+/// and per paintWindow tick. Building those names with `QStringLiteral(...).arg(slot)`
+/// allocates a fresh `QString` per call; pre-baking them as `QByteArray`
+/// (for `uniformLocation` calls that take `const char*`) and `QLatin1String`
+/// (for `QVariantMap::value` / `find` calls keyed by `QString`) eliminates
+/// the per-frame allocations entirely. Sized to the contract budgets so a
+/// future bump triggers a compile-time mismatch rather than a silent
+/// out-of-range read.
+constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+    kUserTextureSamplerNames = {"uTexture1", "uTexture2", "uTexture3"};
+constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+    kUserTextureWrapKeys = {"uTexture1_wrap", "uTexture2_wrap", "uTexture3_wrap"};
+constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+    kITextureResolutionKeys = {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"};
+constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>
+    kCustomParamsElementNames = {"customParams[0]", "customParams[1]", "customParams[2]", "customParams[3]",
+                                 "customParams[4]", "customParams[5]", "customParams[6]", "customParams[7]"};
+// Worst-case 16 slots — sized to `kMaxCustomColors`. If that ever rises
+// the array literal must grow; the static_assert below pins the length.
+constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors>
+    kCustomColorsElementNames = {"customColors[0]",  "customColors[1]",  "customColors[2]",  "customColors[3]",
+                                 "customColors[4]",  "customColors[5]",  "customColors[6]",  "customColors[7]",
+                                 "customColors[8]",  "customColors[9]",  "customColors[10]", "customColors[11]",
+                                 "customColors[12]", "customColors[13]", "customColors[14]", "customColors[15]"};
+static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams == 8,
+              "kCustomParamsElementNames literal must grow to match kMaxCustomParams");
+static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors == 16,
+              "kCustomColorsElementNames literal must grow to match kMaxCustomColors");
+static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots == 3,
+              "User-texture name arrays must grow to match kMaxUserTextureSlots");
+
 /// Translate a metadata / params wrap-mode string to the GL enum the
 /// kwin-effect applies at bind time. Empty / unrecognised values fall
 /// through to `GL_CLAMP_TO_EDGE` (the GL default and the daemon's
@@ -973,12 +1007,20 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // would let the offscreen FBOs linger until KWin's effect-removed
     // bookkeeping ran. Iterates a snapshot because endShaderTransition
     // erases from `m_shaderTransitions` mid-loop.
-    QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
-    for (auto& [w, _] : m_shaderTransitions) {
-        activeWindows.push_back(w);
-    }
-    for (auto* w : activeWindows) {
-        endShaderTransition(w);
+    //
+    // Guarded by `if (KWin::effects)` matching the clearAllBorders /
+    // ungrabKeyboard guards above: during compositor teardown the global
+    // is null and `endShaderTransition` dereferences it (setShader,
+    // unredirect, refWindow). The compositor's own teardown reclaims
+    // the offscreen state when KWin::effects is gone.
+    if (KWin::effects) {
+        QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
+        for (auto& [w, _] : m_shaderTransitions) {
+            activeWindows.push_back(w);
+        }
+        for (auto* w : activeWindows) {
+            endShaderTransition(w);
+        }
     }
 }
 
@@ -4306,8 +4348,13 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
     if (wb.clippedContainer) {
         wb.clippedContainer->setBorderRadius(wb.savedContainerRadius);
     }
-    // QPointer: item may already be null if Qt parent-child ownership destroyed it
-    delete wb.item.data();
+    // QPointer: item may already be null if Qt parent-child ownership destroyed it.
+    // Use deleteLater() rather than raw delete — OutlinedBorderItem is a QObject
+    // parented into the scene graph and may have queued signals / pending paints
+    // mid-cycle. CLAUDE.md: never manual-delete QObjects.
+    if (wb.item) {
+        wb.item->deleteLater();
+    }
     QObject::disconnect(wb.geometryConnection);
     m_windowBorders.erase(it);
 }
@@ -4570,6 +4617,15 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
         data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     }
 
+    // Cache cursor pos once per frame for shader-transition iMouse uniform.
+    // paintWindow runs once per active transition (and may run multiple
+    // times across outputs); reading KWin::effects->cursorPos() at every
+    // call multiplies up. Caching here also guarantees every transition
+    // this frame reads an identical iMouse, eliminating sub-frame jitter.
+    if (KWin::effects && !m_shaderTransitions.empty()) {
+        m_cachedCursorGlobal = KWin::effects->cursorPos();
+    }
+
     KWin::effects->prePaintScreen(data, presentTime);
 }
 
@@ -4733,14 +4789,27 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // form). Matches `shadernoderhiuniforms.cpp:51-52`
                     // exactly so a shader that reads iDate.w sees the
                     // same value on both runtimes.
-                    const QDateTime nowDateTime = QDateTime::currentDateTime();
-                    const QDate date = nowDateTime.date();
-                    const QTime t = nowDateTime.time();
-                    const float seconds = static_cast<float>(t.hour() * 3600 + t.minute() * 60 + t.second())
-                        + static_cast<float>(t.msec()) / 1000.0f;
-                    shader->setUniform(cached->iDateLoc,
-                                       QVector4D(static_cast<float>(date.year()), static_cast<float>(date.month()),
-                                                 static_cast<float>(date.day()), seconds));
+                    // 1Hz cache: re-decompose the QDateTime only when at
+                    // least 1000 ms have elapsed since the last refresh
+                    // (or this is the first paint to read iDate). Mirrors
+                    // shadernoderhiuniforms.cpp:42-53 — sub-second iDate
+                    // variation is invisible for typical shader use
+                    // (clocks, time-of-day tints, etc.), and multiple
+                    // in-flight transitions on a high-Hz display would
+                    // otherwise pay the QDateTime / QDate / QTime build
+                    // cost per transition per frame.
+                    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+                    if (nowMs - m_lastIDateRefreshMs >= 1000) {
+                        const QDateTime nowDateTime = QDateTime::currentDateTime();
+                        const QDate date = nowDateTime.date();
+                        const QTime t = nowDateTime.time();
+                        const float seconds = static_cast<float>(t.hour() * 3600 + t.minute() * 60 + t.second())
+                            + static_cast<float>(t.msec()) / 1000.0f;
+                        m_cachedIDate = QVector4D(static_cast<float>(date.year()), static_cast<float>(date.month()),
+                                                  static_cast<float>(date.day()), seconds);
+                        m_lastIDateRefreshMs = nowMs;
+                    }
+                    shader->setUniform(cached->iDateLoc, m_cachedIDate);
                 }
                 if (cached->iMouseLoc >= 0) {
                     // iMouse: cursor position in window-local logical
@@ -4770,7 +4839,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // would treat the same edge as OUTSIDE, so we'd
                     // synthesise the sentinel one pixel earlier than
                     // the daemon does. Spell out the inclusive check.
-                    const QPointF cursorGlobal = KWin::effects->cursorPos();
+                    // Cursor pos cached once per prePaintScreen — paintWindow
+                    // is called per active transition (and per output), so
+                    // re-reading KWin::effects->cursorPos() per call would
+                    // multiply up across high-Hz multi-output setups.
+                    const QPointF cursorGlobal = m_cachedCursorGlobal;
                     float localX = -1.0f;
                     float localY = -1.0f;
                     const bool insideInclusive = cursorGlobal.x() >= geo.x()
@@ -4886,19 +4959,29 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         if (!m_pendingShaderExpiryEnd.contains(w)) {
             m_pendingShaderExpiryEnd.insert(w);
             QPointer<KWin::EffectWindow> safeWindow(w);
-            // Stash the raw pointer too — `safeWindow` clears to null
-            // if KWin destroys the window before the queued slot runs,
-            // and `nullptr` is not the key the set was inserted with.
-            // The raw pointer is only used for set membership cleanup
-            // (never dereferenced unless the QPointer is still live).
+            // Stash the raw pointer too — used as the set key for
+            // membership cleanup. We MUST NOT remove the entry if the
+            // QPointer has been cleared: the EffectWindow at that
+            // address may have been destroyed by KWin and a fresh
+            // window allocated at the same address before this queued
+            // slot runs. The windowDeleted handler already calls
+            // endShaderTransition for the dying window (which removes
+            // the matching pending-expiry entry), so a null QPointer
+            // means cleanup already happened — removing again would
+            // wipe the new window's freshly-inserted entry. The raw
+            // pointer is only used for set membership cleanup (never
+            // dereferenced unless the QPointer is still live).
             KWin::EffectWindow* rawWindow = w;
             QMetaObject::invokeMethod(
                 this,
                 [this, safeWindow, rawWindow]() {
-                    m_pendingShaderExpiryEnd.remove(rawWindow);
                     if (!safeWindow) {
+                        // Window died; windowDeleted already removed
+                        // the entry. Don't risk wiping an entry that
+                        // belongs to a successor sharing this address.
                         return;
                     }
+                    m_pendingShaderExpiryEnd.remove(rawWindow);
                     if (m_shaderTransitions.find(safeWindow.data()) != m_shaderTransitions.end()) {
                         endShaderTransition(safeWindow.data());
                     }
@@ -5258,14 +5341,13 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // the per-frame push loop in paintWindow guards against -1 to
         // skip the setUniform call.
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
-            const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomParamsArray)
-                + '[' + QByteArray::number(slot) + ']';
-            cached.customParamsLoc[slot] = shader->uniformLocation(name.constData());
+            // Pre-baked element-name table — no per-slot QByteArray
+            // alloc. Sized + static_asserted against the contract budget
+            // at the namespace-level definition.
+            cached.customParamsLoc[slot] = shader->uniformLocation(kCustomParamsElementNames[slot]);
         }
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
-            const QByteArray name = QByteArray(PhosphorAnimationShaders::AnimationShaderContract::kCustomColorsArray)
-                + '[' + QByteArray::number(slot) + ']';
-            cached.customColorsLoc[slot] = shader->uniformLocation(name.constData());
+            cached.customColorsLoc[slot] = shader->uniformLocation(kCustomColorsElementNames[slot]);
         }
         // User textures: resolve sampler + iTextureResolution[N] uniform
         // locations only. The actual texture upload happens per-leg
@@ -5276,10 +5358,11 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
             // the redirected surface, not user-declared). Matches the
             // overlay shader convention in data/shaders/shared/textures.glsl.
-            const QByteArray samplerName = QStringLiteral("uTexture%1").arg(slot + 1).toUtf8();
-            cached.userTextureLoc[slot] = shader->uniformLocation(samplerName.constData());
-            const QByteArray resName = QByteArrayLiteral("iTextureResolution[") + QByteArray::number(slot) + ']';
-            cached.iTextureResolutionLoc[slot] = shader->uniformLocation(resName.constData());
+            // Pre-baked from the file-scope `kUserTextureSamplerNames` /
+            // `kITextureResolutionKeys` arrays — no per-slot QByteArray
+            // alloc per shader install.
+            cached.userTextureLoc[slot] = shader->uniformLocation(kUserTextureSamplerNames[slot]);
+            cached.iTextureResolutionLoc[slot] = shader->uniformLocation(kITextureResolutionKeys[slot]);
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderCache.emplace(effectId, std::move(cached)).first;
@@ -5383,19 +5466,17 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // on in-flight membership — so a second pass over the same path
     // costs only a hash lookup.
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-        const int glslSlot = slot + 1;
-        const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
-        const QString path = translated.value(pathKey).toString();
+        // Path key shares the GLSL sampler name (`uTexture<N>`) — see
+        // the metadata enrichment in `translateAnimationParams`.
+        const QString path = translated.value(QLatin1String(kUserTextureSamplerNames[slot])).toString();
         if (!path.isEmpty()) {
             warmUserTextureAsync(path);
         }
     }
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-        const int glslSlot = slot + 1; // uTexture0 is the surface
-        const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
-        const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(glslSlot);
-        const QString path = translated.value(pathKey).toString();
-        const QString wrap = translated.value(wrapKey).toString();
+        const int glslSlot = slot + 1; // uTexture0 is the surface; only used for the freshly-loaded log
+        const QString path = translated.value(QLatin1String(kUserTextureSamplerNames[slot])).toString();
+        const QString wrap = translated.value(QLatin1String(kUserTextureWrapKeys[slot])).toString();
         transition.userTextureWrap[slot] = wrapStringToEnum(wrap);
         if (path.isEmpty()) {
             transition.userTextures[slot] = nullptr;
@@ -5408,6 +5489,15 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             // time (or this is the very first transition for this
             // path). Subsequent transitions for the same path will
             // hit the cache and pay zero load cost.
+            //
+            // This load runs on the compositor thread (PNG decode +
+            // GLTexture::upload, or QSvgRenderer rasterise + upload).
+            // Surface the cost in the journal so cold-install stutter
+            // is attributable rather than mysterious. Don't skip the
+            // load — the first transition still needs a rendered
+            // texture or the slot would sample transparent black.
+            qCInfo(lcEffect) << "synchronous texture load on compositor thread:" << path
+                             << "(cache miss; first transition for this effect)";
             const QImage img = loadUserTextureImage(path);
             if (img.isNull()) {
                 qCWarning(lcEffect) << "User texture failed to load:" << path << "for effect" << effectId << "slot"

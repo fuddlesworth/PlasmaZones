@@ -913,6 +913,111 @@ private Q_SLOTS:
                  QString());
     }
 
+    /// Repeated identical OFF toggles MUST short-circuit after the first
+    /// write — the engaged-empty disable sentinel is materially the same
+    /// state on disk, so a no-op second call should not light the Save
+    /// button. Pins the comparison contract documented next to the
+    /// engaged-empty branch in `setShaderOverride`: `ShaderProfile::operator==`
+    /// is engaged-state-sensitive, and the constructed `disabledProfile`
+    /// matches the disk-loaded round-trip shape (parameters = nullopt).
+    void setShaderOverride_repeatedDisableIsNoOp()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString path = QStringLiteral("panel.popup");
+
+        // First disable write — fires pendingChangesChanged once.
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QCOMPARE(spy.count(), 1);
+
+        // Second identical disable write — must short-circuit, no extra
+        // signal. If this fires a second time, the compare-and-skip path
+        // diverged from the engaged-state-sensitive equality contract.
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QCOMPARE(spy.count(), 1);
+
+        // Third identical disable write — same invariant.
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /// `shaderOverrideDescendantCount` must count strict descendants only —
+    /// not the path itself, not siblings with shared prefix. Pin both the
+    /// non-zero and zero branches plus a deeply-nested chain.
+    void shaderOverrideDescendantCount_strictDescendantsOnly()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Empty tree → count is zero for any path.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel")), 0);
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 0);
+
+        // Self-only override at panel.popup — descendants of it: 0.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup"), QStringLiteral("dissolve"), {}));
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 0);
+        // Descendants of `panel` includes `panel.popup`: 1.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel")), 1);
+
+        // Add a deeply-nested descendant.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        // panel sees both descendants now.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel")), 2);
+        // panel.popup sees the leaf only (itself excluded by strict prefix).
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 1);
+        // panel.popup.layoutPicker sees the leaf below it.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup.layoutPicker")), 1);
+        // The leaf itself has no descendants.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup.layoutPicker.show")), 0);
+
+        // Empty path → zero (defensive: collectShaderOverrideDescendants
+        // bails on empty path so the prefix isn't a bare ".").
+        QCOMPARE(c.shaderOverrideDescendantCount(QString()), 0);
+    }
+
+    /// `clearShaderOverrideDescendants` removes every strict descendant,
+    /// preserves the path-itself override (parent-card "Clear shadowing
+    /// children" semantics), and is a no-op when count is zero.
+    void clearShaderOverrideDescendants_clearsStrictDescendantsOnly()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Build: parent override + two descendants at different depths.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup"), QStringLiteral("dissolve"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup.zoneSelector.show"), QStringLiteral("matrix"), {}));
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 2);
+
+        // Clear from panel.popup — both leaves go, panel.popup itself
+        // remains (it's the parent the user is keeping intact).
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("panel.popup")), 2);
+        QVERIFY2(spy.count() >= 1,
+                 "clearShaderOverrideDescendants MUST emit pendingChangesChanged when it cleared anything");
+        // Verify count is now zero.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 0);
+        // Parent override survived.
+        QCOMPARE(c.rawShaderProfile(QStringLiteral("panel.popup")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+        // Leaf overrides really gone.
+        QVERIFY(c.rawShaderProfile(QStringLiteral("panel.popup.layoutPicker.show")).isEmpty());
+        QVERIFY(c.rawShaderProfile(QStringLiteral("panel.popup.zoneSelector.show")).isEmpty());
+
+        // No-op call — count already zero.
+        QSignalSpy spy2(&c, &AnimationsPageController::pendingChangesChanged);
+        QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("panel.popup")), 0);
+        QCOMPARE(spy2.count(), 0);
+    }
+
     /// Set then explicit clear → both calls fire pendingChangesChanged.
     void setShaderOverride_thenClear_emitsTwice()
     {

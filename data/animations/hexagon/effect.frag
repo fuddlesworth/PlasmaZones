@@ -142,8 +142,11 @@ void main()
         // Glow shaping: stack of pow-curves on hex.w (squared
         // distance to cell centre) gives a tight bright core with
         // soft falloff. The constants come from BMW; tweaking them
-        // changes the glow distribution.
+        // changes the glow distribution. Clamp to [0,1] so the
+        // unbounded shaping (peaks at ~15.5) doesn't blow out the
+        // additive composite below into a saturated white bloom.
         glow.a *= pow(hex.w, 20.0) * 10.0 + pow(hex.w, 10.0) * 5.0 + pow(hex.w, 2.0) * 0.5;
+        glow.a = clamp(glow.a, 0.0, 1.0);
 
         // Line shaping: smoothstep-band along the cell edge for a
         // soft anti-aliased outline. Width scaled by lineWidth.

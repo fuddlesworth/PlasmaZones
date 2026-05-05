@@ -176,17 +176,21 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// failures are non-fatal — the effect still installs and the
     /// affected sampler reads transparent black; a `qCWarning` logs the
     /// missing file. `wrap` mirrors the daemon-side overlay shader
-    /// vocabulary (`"clamp"` / `"repeat"` / `"mirror"`); empty value
-    /// uses the runtime default (clamp). Filter mode is not exposed
-    /// here — both runtimes use linear filtering for user textures
-    /// today. The slot index is the 0-based position in this list:
-    /// the first entry binds to `iChannel1`, the second to
-    /// `iChannel2`, etc. Up to three textures per effect; surplus
+    /// vocabulary; the only accepted values are `"clamp"`, `"repeat"`,
+    /// `"mirror"`, and the empty string (which selects the runtime
+    /// default of clamp). Any other value is rejected by `fromJson` with
+    /// a `qCWarning` and stored as empty, so the runtime falls back to
+    /// the default rather than silently re-persisting the typo. Filter
+    /// mode is not exposed here — both runtimes use linear filtering
+    /// for user textures today. The slot index is the 0-based position
+    /// in this list: the first entry binds to `iChannel1`, the second
+    /// to `iChannel2`, etc. Up to three textures per effect; surplus
     /// entries are silently dropped at parse time.
     struct TextureSlot
     {
         QString path; ///< Filename relative to the effect's sourceDir.
-        QString wrap; ///< "clamp" / "repeat" / "mirror"; empty = runtime default.
+        QString
+            wrap; ///< "clamp" / "repeat" / "mirror"; empty = runtime default. Other values are rejected by fromJson.
 
         bool operator==(const TextureSlot& other) const
         {

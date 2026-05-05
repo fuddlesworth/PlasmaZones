@@ -297,10 +297,6 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // UBO region stays populated across scene-graph node recreations without
     // any extra plumbing here.
     // syncBasePropertiesToNode pushes user textures (slots 0..3) already.
-    // ZoneShaderItem used to maintain its own m_userTextureImages array and
-    // load images locally in setShaderParams; the unification with
-    // SurfaceAnimator's animation-shader path collapsed both onto the
-    // base ShaderEffect's setShaderParams + syncBasePropertiesToNode pair.
     syncBasePropertiesToNode(node);
 
     // ── Sync labels texture (zone-specific, not in parent) ───────────

@@ -135,6 +135,22 @@ public:
     };
     Q_ENUM(Status)
 
+    /// Hard ceiling on the per-axis SVG rasterisation dimension applied by
+    /// `setShaderParams` to the `uTexture<N>_svgSize` parameter. Exposed so
+    /// consumers (UI sliders, validators, tests) can mirror the clamp range
+    /// without hardcoding the value. The setter performs
+    /// `qBound(64, requested, kMaxSvgDimension)`; values outside the range
+    /// are silently clamped, not rejected.
+    static constexpr int kMaxSvgDimension = 2048;
+
+    /// Hard cap on the byte budget for a single rasterised SVG (16 MiB —
+    /// matches RGBA8 at `kMaxSvgDimension` × `kMaxSvgDimension`). When a
+    /// near-square doc would exceed this even after the per-axis clamp,
+    /// the rasterisation is downscaled proportionally and a warning is
+    /// logged. Exposed for the same mirror-the-cap reason as
+    /// `kMaxSvgDimension`.
+    static constexpr qint64 kMaxSvgPixelBytes = 16LL * 1024 * 1024;
+
     explicit ShaderEffect(QQuickItem* parent = nullptr);
     ~ShaderEffect() override;
 
@@ -220,7 +236,13 @@ public:
     ///   • `uTexture<N>_wrap` — wrap mode string ("clamp" / "repeat" /
     ///     "mirror"); ignored if no companion `uTexture<N>` resolves
     ///   • `uTexture<N>_svgSize` — SVG rasterise max-axis dimension
-    ///     (clamped 64..4096; ignored for bitmap formats)
+    ///     (clamped 64..2048; ignored for bitmap formats). The cap is
+    ///     exposed as `ShaderEffect::kMaxSvgDimension` for callers that
+    ///     want to mirror the clamp without hardcoding the value, and
+    ///     the per-rasterisation byte budget is exposed as
+    ///     `ShaderEffect::kMaxSvgPixelBytes` (a near-square doc whose
+    ///     RGBA8 size would exceed the budget is downscaled
+    ///     proportionally with a warning).
     ///
     /// **Trust boundary.** `uTexture<N>` paths are passed verbatim to
     /// `QImage::load` / `QSvgRenderer::load`. This class does NOT
@@ -232,6 +254,19 @@ public:
     /// A direct caller (e.g. tests, custom QML embedding) that
     /// forwards untrusted strings into `params["uTexture<N>"]` MUST
     /// pre-resolve and traversal-check before calling.
+    ///
+    /// **SVG rasterisation cost.** When the params map contains a
+    /// `uTexture<N>` whose path resolves to an `.svg` / `.svgz` file
+    /// (and the path or `uTexture<N>_svgSize` differs from the cached
+    /// state for that slot), this method calls `QSvgRenderer` and
+    /// `QPainter` synchronously on the calling thread to rasterise the
+    /// document up to the clamped dimension. The cost scales with
+    /// `kMaxSvgPixelBytes` in the worst case. Hot-path callers (e.g.
+    /// per-frame parameter pushes) should pre-warm the cache via the
+    /// kwin-effect's async loader path or perform the
+    /// load-and-cache step from a worker thread before calling
+    /// `setShaderParams`. Bitmap formats are loaded via `QImage` and
+    /// carry the same synchronous-IO caveat but no rasterisation cost.
     ///
     /// **Subclass contract.** Overrides MUST chain to
     /// `ShaderEffect::setShaderParams(params)` (or replicate the full

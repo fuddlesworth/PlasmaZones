@@ -116,10 +116,12 @@ void main()
 
     // Aspect-correct so cells stay regular on non-square surfaces.
     // iResolution is in LOGICAL units per
-    // shared/animation_uniforms.glsl; the 0.001 floor guards against
-    // zero-height anchors without distorting aspect on sub-1-logical-
-    // pixel cases the way a 1.0 floor would.
-    float aspectRatio = iResolution.x / max(iResolution.y, 0.001);
+    // shared/animation_uniforms.glsl; the 1.0 floor guards against
+    // first-frame `iResolution = (0, 0)` and matches the rest of the
+    // suite's defensive pattern (matrix/hexagon/pixelate). A
+    // sub-pixel y of 0.001 would explode the aspectRatio to ~1000
+    // and warp the hex cells into thin slivers.
+    float aspectRatio = iResolution.x / max(iResolution.y, 1.0);
 
     vec2 normalizedCoords = vec2(vTexCoord.x * aspectRatio, vTexCoord.y);
     vec2 normalizedCenter = vec2(0.5 * aspectRatio, 0.5);

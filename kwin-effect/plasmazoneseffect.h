@@ -784,6 +784,25 @@ private:
     /// Cleared when the queued end actually runs (success path) or
     /// when the transition is otherwise erased / superseded.
     QSet<KWin::EffectWindow*> m_pendingShaderExpiryEnd;
+    /// 1Hz cache for the `iDate` uniform. Recomputing iDate from
+    /// `QDateTime::currentDateTime()` on every paintWindow tick adds
+    /// microseconds per call, multiplied by every active transition,
+    /// for every output, every frame. The daemon's
+    /// `shadernoderhiuniforms.cpp` already caches at 1Hz for the same
+    /// reason — sub-second iDate variation is invisible (the .w
+    /// channel carries floating-point seconds anyway, but seeded once
+    /// per second is plenty of precision for the typical iDate-driven
+    /// shader effect). Mirror that policy here so kwin-side parity
+    /// matches the daemon side and the cost stays bounded.
+    qint64 m_lastIDateRefreshMs = 0;
+    QVector4D m_cachedIDate{};
+    /// Cursor position cached once per `prePaintScreen` rather than
+    /// re-read in paintWindow per active transition. `KWin::effects->cursorPos()`
+    /// is itself cheap, but multiple transitions paying the call per
+    /// frame multiplies up unnecessarily — and a cache also guarantees
+    /// every transition this frame sees an identical iMouse, eliminating
+    /// any sub-frame jitter from the cursor moving between paint calls.
+    QPointF m_cachedCursorGlobal;
     /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
     /// inside @ref beginShaderTransition every time a transition installs;
     /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the

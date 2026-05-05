@@ -87,10 +87,15 @@ void main()
     offset *= (1.0 - waveTime);
 
     // Per-channel offset multipliers. Slowest channel gets ×1, faster
-    // channels get higher multipliers so they trail upward.
-    float mulR = speedR - minSpeed + 1.0;
-    float mulG = speedG - minSpeed + 1.0;
-    float mulB = speedB - minSpeed + 1.0;
+    // channels get higher multipliers so they trail upward. Floor at 0
+    // as defence in depth — metadata clamps each speedX into a sane
+    // range, but a host that bypasses validation could push speedX
+    // below `minSpeed - 1` and produce a negative multiplier (channel
+    // would trail DOWNWARD off the bottom of the surface, breaking the
+    // chromatic-aberration look).
+    float mulR = max(speedR - minSpeed + 1.0, 0.0);
+    float mulG = max(speedG - minSpeed + 1.0, 0.0);
+    float mulB = max(speedB - minSpeed + 1.0, 0.0);
 
     vec4 colorR = texture(uTexture0, uv + vec2(0.0, offset * mulR));
     vec4 colorG = texture(uTexture0, uv + vec2(0.0, offset * mulG));

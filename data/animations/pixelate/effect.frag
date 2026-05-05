@@ -32,13 +32,6 @@
 // the surface). 0.1 ≈ a 10×10 block grid at peak pixelation.
 #define maxBlockSize customParams[0].x
 
-// User texture slot 0 → SRB binding 7. SurfaceAnimator binds the
-// shaderAnchor's live `QSGTextureProvider` here (FBO from the layer-
-// enabled anchor). The sampler defaults to `clampToEdge / linear`
-// per ShaderNodeRhi::ensureUserTextureSampler; nearest-neighbour
-// would give crisper blocks but linear smooths over the layer-FBO
-// boundary on sub-pixel block sizes.
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 

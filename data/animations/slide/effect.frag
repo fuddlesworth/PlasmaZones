@@ -59,5 +59,14 @@ void main()
         else if (dir == 2) sampleUv.y += offset;
         else               sampleUv.y -= offset;
     }
-    fragColor = texture(uTexture0, clamp(sampleUv, 0.0, 1.0));
+    // Inside-mask: if the parallax offset pushes the sample UV outside
+    // [0,1], emit transparent rather than letting the clampToEdge sampler
+    // smear the edge texels along the lead axis. Matches doom's and
+    // matrix's off-window guard, so all sliding shaders have a clean
+    // silhouette boundary instead of a 1-pixel edge-bleed band.
+    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    fragColor = texture(uTexture0, sampleUv);
 }

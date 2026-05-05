@@ -352,6 +352,8 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // `setSettings` ever runs, so this branch is a future-proofer for
     // any code path that calls `setupSurfaceAnimator` post-
     // construction (live-reload of the QML profile registry, etc.).
+    Q_ASSERT(!m_settings
+             && "setupSurfaceAnimator runs in ctor before setSettings; if this fires, the lifecycle invariant changed");
     if (m_settings) {
         m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
     }

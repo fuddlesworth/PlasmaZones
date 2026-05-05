@@ -221,7 +221,7 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// not counted here — that's a separate runtime-managed slot. The
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
-/// by the `static_assert` at the bottom of this header.
+/// by the `static_assert` in `libs/phosphor-animation/src/contract_pins.cpp`.
 inline constexpr int kMaxUserTextureSlots = 3;
 
 /// `vec4 iMouse` — cursor position in shader-local pixels.

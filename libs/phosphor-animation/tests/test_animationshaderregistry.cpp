@@ -856,8 +856,14 @@ private Q_SLOTS:
         // Using QTest::ignoreMessage so it's scoped to this test only —
         // unlike QLoggingCategory::setFilterRules which mutates global
         // state and would persist if a downstream QVERIFY failed before
-        // the restore call.
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("translateAnimationParams.*budget")));
+        // the restore call. Wrap the literal substrings in
+        // QRegularExpression::escape for consistency with the
+        // path-traversal-guard tests below — only the `.*` between
+        // the escaped halves is treated as a regex metasequence.
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QRegularExpression::escape(QStringLiteral("translateAnimationParams"))
+                                                + QStringLiteral(".*")
+                                                + QRegularExpression::escape(QStringLiteral("budget"))));
         const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
 
         // Last in-budget slot (`customParams8_w` per the 1-based +
@@ -888,7 +894,10 @@ private Q_SLOTS:
             eff.parameters.append(p);
         }
 
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("translateAnimationParams.*budget")));
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QRegularExpression::escape(QStringLiteral("translateAnimationParams"))
+                                                + QStringLiteral(".*")
+                                                + QRegularExpression::escape(QStringLiteral("budget"))));
         const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
 
         // Last in-budget slot is `customColor16` (1-based).
@@ -1070,6 +1079,33 @@ private Q_SLOTS:
         QVERIFY(!r.contains(QStringLiteral("uTexture1")));
         QVERIFY(!r.contains(QStringLiteral("uTexture2")));
         QVERIFY(!r.contains(QStringLiteral("uTexture3")));
+    }
+
+    /// Empty-string `uTextureN` override is treated as an explicit
+    /// clear: the slot is dropped from the result map entirely. The
+    /// pack-default `wrap` value MUST NOT survive into the result —
+    /// emitting a wrap-only key would attach a wrap mode to an
+    /// unbound sampler, violating the downstream contract. Pin the
+    /// exact behaviour: neither `uTexture1` nor `uTexture1_wrap`
+    /// appears in the output even though the pack supplied both.
+    void testTranslateAnimationParamsEmptyOverrideClearsPackWrap()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("texclear");
+        eff.fragmentShaderPath = QStringLiteral("/abs/e.frag");
+        eff.sourceDir = QStringLiteral("/abs");
+        // Pack default supplies BOTH path and wrap.
+        eff.textures.append({QStringLiteral("/abs/pack.png"), QStringLiteral("repeat")});
+
+        const QVariantMap friendly{
+            {QStringLiteral("uTexture1"), QString()}, // explicit empty-string clear
+        };
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+
+        // (a) explicit empty-string override clears the texture slot.
+        QVERIFY(!r.contains(QStringLiteral("uTexture1")));
+        // (b) pack's wrap value does not appear in the result `wrap` slot.
+        QVERIFY(!r.contains(QStringLiteral("uTexture1_wrap")));
     }
 
     void testTranslateAnimationParamsWrapOnlyOverrideRequiresPath()

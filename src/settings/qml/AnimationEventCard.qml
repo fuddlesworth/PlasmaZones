@@ -33,6 +33,16 @@ import org.plasmazones.common as PZCommon
  *   - collapsible: bool — header click collapses the body
  */
 Item {
+    // Pick up changes that affect THIS card's path — the path itself
+    // (user toggled the override here) or an ancestor (we're inheriting
+    // from it and the inherited value just changed). Filter on path so
+    // a settings burst on an unrelated row doesn't drive every other
+    // card on the page through a refresh + Q_INVOKABLE round-trip.
+    // Without the filter, drag-editing a slider on one row drives
+    // N redundant `_inheritResolved` recompute kicks (where N = number
+    // of cards on the page) — defeats the cache the `_inheritRev`
+    // pattern was added to provide.
+
     id: root
 
     required property string eventPath
@@ -271,16 +281,16 @@ Item {
         settingsController.animationsPage.setOverride(root.eventPath, profile);
     }
 
-    // Pick up changes that affect THIS card's path — the path itself
-    // (user toggled the override here) or an ancestor (we're inheriting
-    // from it and the inherited value just changed). Filter on path so
-    // a settings burst on an unrelated row doesn't drive every other
-    // card on the page through a refresh + Q_INVOKABLE round-trip.
-    // Without the filter, drag-editing a slider on one row drives
-    // N redundant `_inheritResolved` recompute kicks (where N = number
-    // of cards on the page) — defeats the cache the `_inheritRev`
-    // pattern was added to provide.
+    // Empty-string `path` is the controller's "tree fully reloaded"
+    // broadcast (discardChanges, full settings reload). Callers used
+    // to special-case it externally with `path === "" ||
+    // _pathAffectsThisCard(path)`; carving it out INSIDE the helper
+    // means future signal handlers get the right behaviour for free
+    // and can't silently miss the broadcast.
     function _pathAffectsThisCard(path) {
+        if (path === "")
+            return true;
+
         return path === root.eventPath || root.eventPath.startsWith(path + ".");
     }
 
@@ -293,14 +303,11 @@ Item {
 
     Connections {
         function onOverrideChanged(path) {
-            // Mirror the onShaderProfileChanged defensive guard: empty
-            // path is reserved for a future "tree fully reloaded"
-            // broadcast (today the controller only emits per-path, but
-            // discardChanges-style reloads could route through here too)
-            // and must refresh every card unconditionally — filtering
-            // it the way per-path emits get filtered would silently miss
-            // those broadcasts.
-            if (path !== "" && !root._pathAffectsThisCard(path))
+            // _pathAffectsThisCard treats path === "" as "tree fully
+            // reloaded" broadcast and returns true unconditionally, so
+            // a single check covers both per-path filtering and the
+            // global-broadcast carve-out.
+            if (!root._pathAffectsThisCard(path))
                 return ;
 
             root.refreshFromTree();
@@ -317,12 +324,11 @@ Item {
             // `Settings::setShaderProfileTree` which the controller
             // relays as a single path-agnostic emit (see
             // `animationspagecontroller.cpp` — `Q_EMIT
-            // shaderProfileChanged(QString())`). Filtering it out the
-            // way per-path emits get filtered would mean NO card ever
-            // refreshes its shader state for ANY shader-tree mutation
-            // — the exact bugs this Connections block was added to
-            // catch. Treat "" as "refresh me unconditionally".
-            if (path !== "" && !root._pathAffectsThisCard(path))
+            // shaderProfileChanged(QString())`). _pathAffectsThisCard
+            // treats "" as the broadcast sentinel and returns true so
+            // every card refreshes for it; per-path emits still get
+            // the prefix filter.
+            if (!root._pathAffectsThisCard(path))
                 return ;
 
             root.refreshShaderFromTree();
@@ -391,7 +397,7 @@ Item {
                 // either, so skipping the call is semantically complete.
                 if (root._shaderLegSupported)
                     settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
-                    }));
+                }));
 
             }
         }
@@ -583,7 +589,12 @@ Item {
                     id: shaderPicker
 
                     readonly property var _effects: {
-                        root._shaderRegistryRev; // re-evaluate when the registry signals
+                        // Tracked dependency: re-evaluate when the registry
+                        // signals shaderEffectsChanged (ticks _shaderRegistryRev).
+                        // `void()` makes the discard intent explicit and stops
+                        // any future code formatter / linter from flagging the
+                        // bare expression as a dead statement.
+                        void (root._shaderRegistryRev);
                         return settingsController.animationsPage.availableShaderEffects();
                     }
 
@@ -700,16 +711,19 @@ Item {
 
     // Pop the editor as a window-level dialog so it doesn't get clipped
     // by the scrolling Flickable that hosts the card. Fall back to
-    // `null` (not `root`) when the Window context is unavailable: the
-    // fallback path only fires during teardown / early initialisation
-    // when nothing is opening the dialog anyway, and `null` keeps the
-    // dialog detached from the card so a future code path that opens
-    // it pre-realisation can't re-introduce the Flickable clip bug
-    // this assignment exists to avoid.
+    // `root` (the card itself) when the Window context is unavailable
+    // — `null` was attempted first but Popup with `parent: null` emits
+    // "Popup must be attached to a window" warnings on `open()` and
+    // refuses to render. The `root` fallback only fires during
+    // teardown / early initialisation when nothing should be opening
+    // the dialog anyway; if a code path does open it pre-realisation,
+    // the Flickable clip bug returns BUT the dialog is at least
+    // visible, and the visible-but-clipped failure mode is easier to
+    // diagnose than the silent no-render `null` failure.
     CurveEditorDialog {
         id: curveDialog
 
-        parent: root.Window.window ? root.Window.window.contentItem : null
+        parent: root.Window.window ? root.Window.window.contentItem : root
         eventLabel: root.eventLabel
         timingMode: root.currentTimingMode
         easingCurve: root.currentEasingCurve

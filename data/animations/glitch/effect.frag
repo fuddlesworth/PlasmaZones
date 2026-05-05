@@ -46,12 +46,15 @@ void main()
 
     float bs = max(blockSize, 0.01);
     vec2 block = floor(uv / bs);
-    // floor(iTime * 10.0) quantises the jitter to ~10 buckets across the
-    // [0,1] leg — at 60Hz playback that's a fresh displacement every ~6
-    // frames, giving a step-frame "glitch" feel rather than continuous
-    // smooth noise. Replace `floor(iTime * 10.0)` with `iTime * 10.0` for
-    // continuous noise if a smoother variant is wanted.
-    float blockNoise = hash(block + floor(iTime * 10.0));
+    // Quantise the jitter to per-leg-frame buckets that bump every ~10
+    // frames (at 60 Hz, ~6 buckets per second of leg time). Drive off
+    // `iFrame` rather than `iTime` because iFrame is monotonically
+    // increasing in BOTH leg directions — SurfaceAnimator runs iTime
+    // 1→0 on the reverse leg, which would make `floor(iTime * 10.0)`
+    // tick BACKWARDS through the same bucket sequence on hide and
+    // produce a visible reverse-replay rather than a fresh jitter
+    // pattern.
+    float blockNoise = hash(block + floor(float(iFrame) * 0.1));
 
     float displacement = 0.0;
     if (blockNoise > (1.0 - strength * 0.5)) {

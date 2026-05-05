@@ -2,7 +2,7 @@
     "id": "matrix",
     "name": "Matrix",
     "description": "Falling-glyph rain transition that wipes the window through a Matrix-style cascade.",
-    "author": "PlasmaZones (ported from Burn-My-Windows by Schneegans)",
+    "author": "PlasmaZones (ported from Burn-My-Windows by Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
     "version": "1.0",
     "category": "Glitch",
     "fragmentShader": "effect.frag",

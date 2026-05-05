@@ -20,11 +20,6 @@
 #define grain    customParams[0].x  // noise cell size in normalised UV units
 #define softness customParams[0].y  // edge softness
 
-// Surface texture slot — SurfaceAnimator binds the shaderAnchor's
-// `QSGTextureProvider` here (live FBO from layer.enabled=true on
-// the anchor). See pixelate/effect.frag for the full binding-7
-// rationale.
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 

@@ -162,7 +162,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              to keep std140 layout aligned with the
                                  //              overlay UBO so a single effect.frag
                                  //              source compiles for either runtime.
-    int iIsReversed;           // offset 660 — 1 on reverse legs (close / hide /
+    int iIsReversed;             // offset 660 — 1 on reverse legs (close / hide /
                                  //              unmaximize), 0 on forward legs.
                                  //              Symmetric shaders ignore this; the
                                  //              runtime ALSO flips iTime for reverse
