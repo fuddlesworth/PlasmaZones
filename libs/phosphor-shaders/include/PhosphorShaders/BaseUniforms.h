@@ -89,7 +89,7 @@ struct alignas(16) BaseUniforms
     // branch on it. Carved out of the trailing std140 pad so total
     // struct size stays 672 bytes.
     int iIsReversed; // offset 660
-    float _pad_after_iIsReversed[2]; // std140 struct alignment → total 672 bytes
+    int _pad_after_iIsReversed[2]; // std140 struct alignment → total 672 bytes
 };
 
 static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");
@@ -168,22 +168,50 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
 constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 
-// Scene header: iResolution through end of iTextureResolution.
-// Excludes iTimeHi (has its own region below) and extension zone arrays.
-// WARNING: if a new field is added between iTextureResolution and iTimeHi,
-// it must be explicitly included in either this region or K_TIME_HI — a
-// field that lands in the gap between K_SCENE_HEADER end and K_TIME_HI
-// start will never be uploaded. Add a static_assert for any new field.
+// Scene header: iResolution through end of struct.
+// Covers iResolution, appFields, iMouse, iDate, customParams, customColors,
+// iChannelResolution, iAudioSpectrumSize, iFlipBufferY, iTextureResolution,
+// iTimeHi, iIsReversed, and the trailing std140 pad. Sized to the
+// remainder of BaseUniforms so any field added at or after offset 80
+// (iResolution) is automatically covered by m_sceneDataDirty's upload
+// path without needing a per-field dirty flag.
+//
+// History: an earlier revision capped K_SCENE_HEADER_SIZE at offsetof(iTimeHi),
+// leaving the gap from offsetof(iTimeHi) + sizeof(iTimeHi) (660) to
+// sizeof(BaseUniforms) (672) un-uploaded by partial-update paths. The
+// new iIsReversed field at offset 660 landed exactly in that gap and
+// silently failed to propagate to the GPU after the first full upload —
+// asymmetric direction-aware shaders read stale values forever.
+//
+// WARNING: a new field added BEFORE iResolution (offset < 80) must
+// extend K_MATRIX_OPACITY or land in its own region; this scene-header
+// range only covers offsets [80, sizeof(BaseUniforms)).
 constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(BaseUniforms, iResolution);
-constexpr size_t K_SCENE_HEADER_SIZE = offsetof(BaseUniforms, iTimeHi) - K_SCENE_HEADER_OFFSET;
+constexpr size_t K_SCENE_HEADER_SIZE = sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET;
 
-// iTimeHi block: uploaded when the wrap offset advances (rare)
+// iTimeHi block: a granular 4-byte upload region for the time-wrap-only
+// path (m_timeHiDirty fires every ~30 s when iTime crosses the wrap
+// boundary). Subsumed by K_SCENE_HEADER, so when m_sceneDataDirty also
+// fires for the same frame the upload site below skips this granular
+// write to avoid the duplicate 4-byte transfer.
 constexpr size_t K_TIME_HI_OFFSET = offsetof(BaseUniforms, iTimeHi);
 constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 
-// Verify the scene-header and iTimeHi regions are contiguous (no gap).
-static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == K_TIME_HI_OFFSET,
-              "Scene-header and iTimeHi regions must be contiguous — no un-uploaded gap");
+// Verify K_SCENE_HEADER reaches end of BaseUniforms — a new field added
+// at or after offset 80 must land inside this range. Without this assert,
+// adding a field beyond the previous K_SCENE_HEADER end (the iTimeHi-
+// based cap) would silently regress the gap-bug fixed by extending the
+// region. Pinning the upper bound to sizeof(BaseUniforms) makes that
+// regression a compile-time failure.
+static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms),
+              "K_SCENE_HEADER must cover [iResolution, end-of-BaseUniforms) — "
+              "every field at or after offset 80 must be uploaded by m_sceneDataDirty");
+// Verify K_TIME_HI is fully nested inside K_SCENE_HEADER so the upload
+// site can skip the granular write when both dirty flags fire.
+static_assert(K_TIME_HI_OFFSET >= K_SCENE_HEADER_OFFSET
+                  && K_TIME_HI_OFFSET + K_TIME_HI_SIZE <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
+              "K_TIME_HI must be subsumed by K_SCENE_HEADER so a scene-data upload "
+              "covers iTimeHi too without needing the m_timeHiDirty granular path");
 
 // Total base size (for extension offset calculation)
 constexpr size_t K_BASE_SIZE = sizeof(BaseUniforms);

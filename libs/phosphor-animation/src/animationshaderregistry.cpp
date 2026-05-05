@@ -10,7 +10,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLoggingCategory>
 #include <QStringList>
 
@@ -56,6 +58,32 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     e.sourceDir = effectDir;
     e.isUserEffect = isUserDir;
 
+    // Surface texture-list drops (cap-overflow + empty-path) at scan
+    // time. fromJson silently drops these to keep the in-memory struct
+    // clean, but pack authors writing a 4-texture metadata.json or
+    // accidentally leaving a `"path": ""` deserve a journal entry —
+    // mirrors the existing buffer-shader missing-file warning further
+    // below.
+    {
+        const QJsonArray declared = root.value(QLatin1String("textures")).toArray();
+        if (declared.size() > AnimationShaderContract::kMaxUserTextureSlots) {
+            qCWarning(lcRegistry).noquote()
+                << "Animation effect" << e.id << "declares" << declared.size() << "textures; cap is"
+                << AnimationShaderContract::kMaxUserTextureSlots
+                << "(canonical UBO budget) — surplus entries silently dropped at parse time";
+        }
+        int emptyPathDrops = 0;
+        for (const QJsonValue& v : declared) {
+            if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+                ++emptyPathDrops;
+            }
+        }
+        if (emptyPathDrops > 0) {
+            qCWarning(lcRegistry).noquote() << "Animation effect" << e.id << "has" << emptyPathDrops
+                                            << "texture entry/entries with empty `path` — dropped at parse time";
+        }
+    }
+
     // Resolve directory-relative paths via QDir::filePath, which returns
     // absolute inputs unchanged — keeps schema tolerance symmetric with
     // PhosphorShaders::ShaderRegistry's parser. Naive string concat
@@ -70,6 +98,43 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     }
     if (!e.previewPath.isEmpty()) {
         e.previewPath = dir.filePath(e.previewPath);
+    }
+
+    // Resolve user-texture paths to absolute form once at scan time —
+    // mirrors fragmentShaderPath handling. This avoids per-leg
+    // QFileInfo + QDir::filePath calls in `translateAnimationParams`
+    // (which fires on every transition install + can be hot during
+    // back-to-back lifecycle events). Sanitise against `..`-segment
+    // traversal: any TextureSlot whose canonical resolved path falls
+    // outside the effect's sourceDir is rejected with a warning. Pack
+    // metadata is shipped trusted but `untrusted-input` discipline is
+    // cheap here and matches CLAUDE.md's "Sanitize file paths to
+    // prevent directory traversal" rule.
+    {
+        const QString canonicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
+        for (auto& tex : e.textures) {
+            if (tex.path.isEmpty())
+                continue;
+            QString resolved = tex.path;
+            if (!QFileInfo(resolved).isAbsolute()) {
+                resolved = dir.filePath(resolved);
+            }
+            const QString canonical = QDir::cleanPath(resolved);
+            // Allow absolute paths that the author wrote intentionally
+            // (e.g. /usr/share/plasmazones/...). Restrict relative paths
+            // to within sourceDir — those came from metadata.json and a
+            // `..`-escape there indicates either a pack-author bug or a
+            // malicious shipped pack.
+            const bool wasRelative = !QFileInfo(tex.path).isAbsolute();
+            if (wasRelative && !canonical.startsWith(canonicalRoot)) {
+                qCWarning(lcRegistry).noquote()
+                    << "Animation effect" << e.id << "texture path" << tex.path << "resolves to" << canonical
+                    << "outside source dir" << canonicalRoot << "— rejected (path traversal guard)";
+                tex.path.clear(); // signal "no texture" downstream
+                continue;
+            }
+            tex.path = canonical;
+        }
     }
 
     // Resolve buffer shader paths (relative to effect dir, like
@@ -330,12 +395,17 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     // `uTexture3`) verbatim — that's the same convention overlay zones
     // use, which keeps the override format identical across categories.
     //
-    // Path resolution: relative paths are resolved against
-    // `effect.sourceDir` (the on-disk location of the effect pack).
-    // Absolute paths pass through verbatim. Empty / null paths skip the
-    // emit so a setShaderParams consumer's "missing key = no change"
-    // semantic doesn't accidentally clear a slot that the caller
-    // intended to leave alone.
+    // Pack-default paths in `effect.textures` are already absolute
+    // (resolved + traversal-checked at parseEffect scan time). Runtime
+    // overrides from `friendlyParams` are emitted verbatim — the
+    // override path comes from the settings UI / D-Bus and the consumer
+    // (ShaderEffect or kwin-effect) is responsible for whatever
+    // resolution it wants. Empty / null paths skip the emit so a
+    // setShaderParams consumer's "missing key = no change" semantic
+    // doesn't accidentally clear a slot the caller intended to leave
+    // alone. Wrap-only entries are gated on a non-empty companion path
+    // so a consumer can't end up with a wrap mode applied to an unbound
+    // sampler.
     for (int slot = 0; slot < AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
         const int glslSlot = slot + 1; // uTexture0 is reserved for the surface
         const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
@@ -356,16 +426,10 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             wrap = wrapOverride->toString();
         }
 
-        if (!path.isEmpty()) {
-            // Resolve relative to the effect's sourceDir so callers don't
-            // need to know the pack's on-disk location to author a
-            // metadata.json that ships its own texture asset.
-            const QFileInfo info(path);
-            if (!info.isAbsolute() && !effect.sourceDir.isEmpty()) {
-                path = QDir(effect.sourceDir).filePath(path);
-            }
-            result[pathKey] = path;
+        if (path.isEmpty()) {
+            continue; // no texture for this slot — skip both keys
         }
+        result[pathKey] = path;
         if (!wrap.isEmpty()) {
             result[wrapKey] = wrap;
         }

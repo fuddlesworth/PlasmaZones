@@ -1,6 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-FileCopyrightText: 2021 Simon Schneegans (Burn-My-Windows)
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// License rationale: Burn-My-Windows' upstream `matrix.frag` and the
+// helper functions copied verbatim from its `common.glsl` (`hash22`,
+// `alphaOver`, `getInputColor`) are GPL-3.0-or-later. Combining that
+// code with PlasmaZones requires GPL-3.0-or-later for this file
+// specifically — it CANNOT be sub-licensed as the LGPL-2.1-or-later
+// the rest of `data/animations/` uses. Other animation shaders in this
+// directory remain LGPL-2.1-or-later because their authoring is
+// PlasmaZones-original; only files with verbatim BMW content carry the
+// upstream-compatible GPL-3.0-or-later identifier (see honeycomb's
+// niri-port for the same pattern).
 //
 // Matrix transition — ported from Burn-My-Windows' matrix.frag. The
 // rendered surface (`uTexture0`) gets wiped through a cascade of
@@ -124,23 +135,30 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     return vec2(rainAlpha, windowAlpha);
 }
 
-// Alpha-over composite — Burn-My-Windows common.glsl alphaOver.
-// Authors keep this verbatim so the colour math matches the original.
+// Source-over composite returning PREMULTIPLIED output. BMW's upstream
+// `alphaOver` returns un-premultiplied (their `setOutputColor` macro
+// premultiplies on the way out); our pipeline writes `fragColor`
+// directly and both runtimes' compositors expect premultiplied input.
+// Returning straight-alpha here would produce visible halos around
+// semi-transparent rain pixels during the compositor's blend.
+//
+// Inputs `under` and `over` are still straight-alpha (consistent with
+// the rest of the shader's local math); we premultiply at the blend.
 vec4 alphaOver(vec4 under, vec4 over) {
-    if (under.a == 0.0 && over.a == 0.0) {
-        return vec4(0.0);
-    }
-    float a = mix(under.a, 1.0, over.a);
-    return vec4(mix(under.rgb * under.a, over.rgb, over.a) / a, a);
+    return vec4(over.rgb * over.a + under.rgb * under.a * (1.0 - over.a),
+                over.a + under.a * (1.0 - over.a));
 }
 
 // Surface sample with un-premultiplied colour. Mirrors BMW's
 // `getInputColor`: KWin and the daemon both deliver the surface as
 // premultiplied RGBA, so divide-by-alpha before colour math keeps
-// blends consistent across runtimes.
+// blends consistent across runtimes. Threshold matches the rest of the
+// suite (glitch, dissolve) — gating on `> 0.001` avoids divide-by-near-
+// zero blow-ups at edge-fade pixels where alpha can land in the
+// 0..0.001 range and produce rgb >> 1.0.
 vec4 getInputColor(vec2 coords) {
     vec4 color = texture(uTexture0, coords);
-    if (color.a > 0.0) {
+    if (color.a > 0.001) {
         color.rgb /= color.a;
     }
     return color;

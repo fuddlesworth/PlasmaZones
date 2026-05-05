@@ -13,7 +13,6 @@
 #include <QMutex>
 #include <QVariantList>
 #include <QVector>
-#include <array>
 #include <atomic>
 #include <memory>
 

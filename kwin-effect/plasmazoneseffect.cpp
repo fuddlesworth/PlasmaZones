@@ -117,18 +117,68 @@ constexpr int EndDragTimeoutMs = 500;
 inline QByteArray injectKwinDefineAfterVersion(const QString& source)
 {
     static const QLatin1String kDefineLine("#define PLASMAZONES_KWIN\n");
-    const int versionIdx = source.indexOf(QLatin1String("#version"));
-    if (versionIdx < 0) {
+
+    // Walk the source line-by-line and find the FIRST line whose
+    // non-whitespace prefix is `#version`. A naive
+    // `source.indexOf("#version")` would match `#version` substrings
+    // embedded in `// ...` line comments or `/* ... */` block comments,
+    // splicing the define into the comment body — the macro silently
+    // disappears and the shader compiles against the wrong UBO ABI.
+    int searchFrom = 0;
+    int realVersionEnd = -1;
+    bool inBlockComment = false;
+    while (searchFrom < source.size()) {
+        const int lineEnd = source.indexOf(QLatin1Char('\n'), searchFrom);
+        const int lineStop = (lineEnd < 0) ? source.size() : lineEnd;
+        QStringView line = QStringView(source).mid(searchFrom, lineStop - searchFrom);
+        // Strip block comments (single-line forms only — multi-line
+        // detection is handled across iterations via inBlockComment).
+        if (inBlockComment) {
+            const int closeIdx = line.indexOf(QLatin1String("*/"));
+            if (closeIdx < 0) {
+                searchFrom = (lineEnd < 0) ? source.size() : lineEnd + 1;
+                continue;
+            }
+            line = line.mid(closeIdx + 2);
+            inBlockComment = false;
+        }
+        // Drop line and same-line block comments before checking.
+        QString stripped;
+        stripped.reserve(line.size());
+        for (int i = 0; i < line.size();) {
+            if (i + 1 < line.size() && line[i] == QLatin1Char('/') && line[i + 1] == QLatin1Char('/')) {
+                break; // rest of line is comment
+            }
+            if (i + 1 < line.size() && line[i] == QLatin1Char('/') && line[i + 1] == QLatin1Char('*')) {
+                const int closeIdx = line.indexOf(QLatin1String("*/"), i + 2);
+                if (closeIdx < 0) {
+                    inBlockComment = true;
+                    break;
+                }
+                i = closeIdx + 2;
+                continue;
+            }
+            stripped.append(line[i]);
+            ++i;
+        }
+        const QString trimmed = stripped.trimmed();
+        if (trimmed.startsWith(QLatin1String("#version"))) {
+            realVersionEnd = lineEnd; // newline AFTER the version line
+            break;
+        }
+        if (lineEnd < 0)
+            break;
+        searchFrom = lineEnd + 1;
+    }
+
+    if (realVersionEnd < 0) {
+        // No #version directive (or it was shadowed by an early break
+        // mid block-comment). Prepend the define — GL3+ legacy compilers
+        // accept `#define` as the first token in compatibility profile.
         return (QString(kDefineLine) + source).toUtf8();
     }
-    const int newlineIdx = source.indexOf(QLatin1Char('\n'), versionIdx);
-    if (newlineIdx < 0) {
-        // `#version` line is unterminated (no trailing newline) — append
-        // a newline + define so the directive isn't merged with the macro.
-        return (source + QLatin1Char('\n') + QString(kDefineLine)).toUtf8();
-    }
     QString out = source;
-    out.insert(newlineIdx + 1, kDefineLine);
+    out.insert(realVersionEnd + 1, kDefineLine);
     return out.toUtf8();
 }
 
@@ -310,6 +360,19 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         return clockForOutput(output);
     });
     m_windowAnimator->setOnAnimationCompleteCallback([this](KWin::EffectWindow* w) {
+        // Only tear down ANIMATOR-DRIVEN shader transitions
+        // (durationMs == 0; the leg rides m_windowAnimator's timeline).
+        // Time-based transitions (durationMs > 0; window.open / close /
+        // focus / etc.) have their own QTimer teardown scheduled by
+        // tryBeginShaderForEvent — without this guard, a zone.snapIn
+        // transition that's been superseded by a window.* event leaves
+        // the original animator running its geometry tween, and that
+        // animator's eventual completion would prematurely kill the
+        // successor (whose own QTimer hasn't fired yet).
+        auto it = m_shaderTransitions.find(w);
+        if (it == m_shaderTransitions.end() || it->second.durationMs > 0) {
+            return;
+        }
         endShaderTransition(w);
     });
     connect(&m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
@@ -779,6 +842,21 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     }
     m_screenChangeHandler->stop();
     // We no longer reserve/unreserve edges; the daemon disables KWin snap via config.
+
+    // Explicitly tear down every active shader transition before the
+    // member-by-member destruction runs. `endShaderTransition` calls
+    // `setShader(window, nullptr)` and `unredirect(window)` to release
+    // KWin's offscreen state cleanly; relying on default destruction
+    // would let the offscreen FBOs linger until KWin's effect-removed
+    // bookkeeping ran. Iterates a snapshot because endShaderTransition
+    // erases from `m_shaderTransitions` mid-loop.
+    QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
+    for (auto& [w, _] : m_shaderTransitions) {
+        activeWindows.push_back(w);
+    }
+    for (auto* w : activeWindows) {
+        endShaderTransition(w);
+    }
 }
 
 bool PlasmaZonesEffect::supported()
@@ -4446,6 +4524,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // call site makes the intent ("only push uniforms the shader
             // actually declared") explicit and survives a future GL
             // backend that doesn't honour the -1-is-noop convention.
+            // iTimeDelta + iFrame are book-keeping that must advance every
+            // tick regardless of whether the shader declares the
+            // uniforms — they're inputs to the per-leg state machine.
             const qint64 nowMs = shaderClockNowMs();
             const float iTimeDelta = (transition.lastPaintTimeMs < 0)
                 ? 0.0f
@@ -4453,28 +4534,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             transition.lastPaintTimeMs = nowMs;
             const int iFrameValue = transition.frameCount++;
             const QRectF geo = w->frameGeometry();
-            // iMouse: cursor position in window-local logical pixels, with
-            // (-1, -1) sentinel when the cursor is outside the window's
-            // frame. Matches the daemon overlay path's
-            // QQuickHoverHandler-driven semantic so shaders that key on
-            // cursor proximity see identical behaviour on either runtime.
-            // .zw stay 0 — the daemon's click-state extension is not
-            // relevant here (no input grab on the redirected window).
-            const QPointF cursorGlobal = KWin::effects->cursorPos();
-            QVector4D iMouseValue(-1.0f, -1.0f, 0.0f, 0.0f);
-            if (geo.contains(cursorGlobal)) {
-                iMouseValue.setX(static_cast<float>(cursorGlobal.x() - geo.x()));
-                iMouseValue.setY(static_cast<float>(cursorGlobal.y() - geo.y()));
-            }
-            // iDate: local-time (year, month, day, seconds-since-midnight).
-            // QDate's year/month/day are 1-based per the GLSL contract.
-            // QTime::msecsSinceStartOfDay() / 1000.0 gives sub-second
-            // resolution for shaders that key on time-of-day.
-            const QDateTime nowDateTime = QDateTime::currentDateTime();
-            const QDate date = nowDateTime.date();
-            const float iDateW = static_cast<float>(nowDateTime.time().msecsSinceStartOfDay()) / 1000.0f;
-            const QVector4D iDateValue(static_cast<float>(date.year()), static_cast<float>(date.month()),
-                                       static_cast<float>(date.day()), iDateW);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -4490,9 +4549,36 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iFrameLoc, iFrameValue);
                 }
                 if (cached->iDateLoc >= 0) {
-                    shader->setUniform(cached->iDateLoc, iDateValue);
+                    // iDate: local-time (year, month, day, seconds-since-
+                    // midnight). Hoisted behind the loc>=0 guard so a
+                    // shader that doesn't read iDate doesn't pay the
+                    // QDateTime + QDate + QTime build cost on every
+                    // paint (a 144 Hz display × multiple in-flight
+                    // transitions would otherwise pay it dozens of
+                    // times per frame).
+                    const QDateTime nowDateTime = QDateTime::currentDateTime();
+                    const QDate date = nowDateTime.date();
+                    const float iDateW = static_cast<float>(nowDateTime.time().msecsSinceStartOfDay()) / 1000.0f;
+                    shader->setUniform(cached->iDateLoc,
+                                       QVector4D(static_cast<float>(date.year()), static_cast<float>(date.month()),
+                                                 static_cast<float>(date.day()), iDateW));
                 }
                 if (cached->iMouseLoc >= 0) {
+                    // iMouse: cursor position in window-local logical
+                    // pixels, with (-1, -1) sentinel when the cursor is
+                    // outside the window's frame. Mirrors the daemon
+                    // overlay path's QQuickHoverHandler semantic so a
+                    // shader keying on cursor proximity sees identical
+                    // behaviour on both runtimes. .zw stay 0 — daemon's
+                    // click-state extension isn't relevant here. Hoisted
+                    // behind the loc>=0 guard for the same reason as
+                    // iDate above.
+                    const QPointF cursorGlobal = KWin::effects->cursorPos();
+                    QVector4D iMouseValue(-1.0f, -1.0f, 0.0f, 0.0f);
+                    if (geo.contains(cursorGlobal)) {
+                        iMouseValue.setX(static_cast<float>(cursorGlobal.x() - geo.x()));
+                        iMouseValue.setY(static_cast<float>(cursorGlobal.y() - geo.y()));
+                    }
                     shader->setUniform(cached->iMouseLoc, iMouseValue);
                 }
                 if (cached->iIsReversedLoc >= 0) {
@@ -4529,10 +4615,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // switches don't reset texture-unit bindings).
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
                      ++slot) {
-                    KWin::GLTexture* tex = transition.userTextures[slot];
-                    if (!tex) {
+                    CachedTexture* entry = transition.userTextures[slot];
+                    if (!entry || !entry->texture) {
                         continue;
                     }
+                    KWin::GLTexture* tex = entry->texture.get();
                     if (cached->userTextureLoc[slot] >= 0) {
                         shader->setUniform(cached->userTextureLoc[slot], 1 + slot);
                     }
@@ -4545,9 +4632,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     tex->bind();
                     // Wrap mode lives on the cached `GLTexture`'s GL
                     // state — apply the per-leg value so two transitions
-                    // sharing the same path can run with different
-                    // wrap modes without invalidating each other.
-                    tex->setWrapMode(transition.userTextureWrap[slot]);
+                    // sharing the same path can run with different wrap
+                    // modes without invalidating each other. Skip the
+                    // setWrapMode call when the cache entry's last-
+                    // applied wrap matches the transition's target;
+                    // setWrapMode issues two `glTexParameteri`s and
+                    // would otherwise fire on every paintWindow tick.
+                    const GLenum wantWrap = transition.userTextureWrap[slot];
+                    if (entry->lastAppliedWrap != wantWrap) {
+                        tex->setWrapMode(wantWrap);
+                        entry->lastAppliedWrap = wantWrap;
+                    }
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface
@@ -4887,9 +4982,9 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             transition.userTextures[slot] = nullptr;
             continue;
         }
-        auto cacheIt = m_textureCache.find(path);
+        auto texIt = m_textureCache.find(path);
         bool freshlyLoaded = false;
-        if (cacheIt == m_textureCache.end()) {
+        if (texIt == m_textureCache.end()) {
             const QImage img = loadUserTextureImage(path);
             if (img.isNull()) {
                 qCWarning(lcEffect) << "User texture failed to load:" << path << "for effect" << effectId << "slot"
@@ -4904,17 +4999,22 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                 continue;
             }
             gpuTex->setFilter(GL_LINEAR);
-            cacheIt = m_textureCache.emplace(path, std::move(gpuTex)).first;
+            CachedTexture cachedTex;
+            cachedTex.texture = std::move(gpuTex);
+            // lastAppliedWrap stays at GL_CLAMP_TO_EDGE default; first
+            // bind below will apply the leg's actual wrap and update
+            // the tracker.
+            texIt = m_textureCache.emplace(path, std::move(cachedTex)).first;
             freshlyLoaded = true;
         }
-        transition.userTextures[slot] = cacheIt->second.get();
+        transition.userTextures[slot] = &texIt->second;
         // One-shot diagnostic per (effectId, slot, path) tuple — fires
         // on first upload only, so a leg that re-uses an already-cached
         // texture stays silent. Lets a journal scan answer "did matrix's
         // glyph atlas actually load on the kwin path?" without per-paint
         // spam.
         if (freshlyLoaded) {
-            const QSize sz = cacheIt->second->size();
+            const QSize sz = texIt->second.texture->size();
             qCInfo(lcEffect) << "User texture loaded:" << path << "size=" << sz << "for effect" << effectId << "slot"
                              << slot << "(uTexture" << glslSlot << ")";
         }

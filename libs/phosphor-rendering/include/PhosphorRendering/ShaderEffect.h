@@ -205,6 +205,26 @@ public:
     {
         return m_shaderParams;
     }
+    /// Push a parameter map onto the shader. Recognised keys:
+    ///   • `customParams<N>_<x|y|z|w>` (1-based) — float vec4 sub-slots
+    ///   • `customColor<N>` (1-based) — color vec4 slots
+    ///   • `uTexture<N>` (0-based, 0..3) — file path for the user-texture
+    ///     sampler at SRB binding 7..10 / GLSL `uTexture<N>`
+    ///   • `uTexture<N>_wrap` — wrap mode string ("clamp" / "repeat" /
+    ///     "mirror"); ignored if no companion `uTexture<N>` resolves
+    ///   • `uTexture<N>_svgSize` — SVG rasterise max-axis dimension
+    ///     (clamped 64..4096; ignored for bitmap formats)
+    ///
+    /// **Trust boundary.** `uTexture<N>` paths are passed verbatim to
+    /// `QFile::exists` / `QImage::load` / `QSvgRenderer::load`. This
+    /// class does NOT sanitise traversal segments or enforce
+    /// absolute-path-only — the caller is the trust boundary.
+    /// `AnimationShaderRegistry::translateAnimationParams` already
+    /// resolves and traversal-checks pack-default paths at scan time;
+    /// the kwin-effect's `m_textureCache` lookup keys absolute paths.
+    /// A direct caller (e.g. tests, custom QML embedding) that
+    /// forwards untrusted strings into `params["uTexture<N>"]` MUST
+    /// pre-resolve and traversal-check before calling.
     virtual void setShaderParams(const QVariantMap& params);
 
     /// @brief Live texture-provider source bound to SRB binding 7
@@ -564,12 +584,15 @@ protected:
 
 private:
     // ── Animation state ──────────────────────────────────────────────
+    // Field order minimises padding: 8-byte (qreal/QSizeF/QPointF) members
+    // grouped together, followed by 4-byte (int), trailing 1-byte bool.
+    // qreal-bool-int interleaving wastes 7 bytes via alignment padding.
     qreal m_iTime = 0.0;
     qreal m_iTimeDelta = 0.0;
-    bool m_isReversed = false;
-    int m_iFrame = 0;
     QSizeF m_iResolution;
     QPointF m_iMouse;
+    int m_iFrame = 0;
+    bool m_isReversed = false;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

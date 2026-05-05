@@ -205,6 +205,13 @@ void ShaderEffect::setIsReversed(bool reverse)
         return;
     }
     m_isReversed = reverse;
+    // Intentionally no `Q_PROPERTY` / `isReversedChanged` signal —
+    // SurfaceAnimator pushes this value imperatively at each leg
+    // attach, never bound declaratively from QML, and a missing-signal
+    // bug wouldn't surface in normal use. If this ever grows a
+    // QML-binding consumer, add the Q_PROPERTY + signal in the same
+    // patch; don't let the asymmetry with the rest of the
+    // animation-state setters fester silently.
     update();
 }
 
@@ -473,21 +480,36 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
                         } else {
                             size = QSize(maxDim, maxDim);
                         }
-                        loaded = QImage(size, QImage::Format_RGBA8888);
-                        loaded.fill(Qt::transparent);
-                        QPainter painter(&loaded);
+                        // Rasterise into ARGB32_Premultiplied — QPainter's
+                        // source-over compositing is defined for premultiplied
+                        // targets; rendering an SVG with semi-transparent
+                        // strokes/fills onto a non-premul RGBA8888 produces
+                        // subtly wrong alpha at partial-cover paths. Convert
+                        // to RGBA8888 afterwards for the RHI upload path
+                        // (which expects QRhiTexture::RGBA8 layout).
+                        QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
+                        rasterised.fill(Qt::transparent);
+                        QPainter painter(&rasterised);
                         renderer.render(&painter);
                         painter.end();
+                        loaded = rasterised.convertToFormat(QImage::Format_RGBA8888);
                     }
                 } else {
                     loaded = QImage(path).convertToFormat(QImage::Format_RGBA8888);
                 }
             }
-            // Empty QImage is the canonical "transparent black" sentinel
-            // for the downstream sampler; both ShaderNodeRhi (RHI path)
-            // and the kwin-effect (classic-GL path) treat null images as
-            // an unbound slot.
-            m_userTextureImages[i] = loaded;
+            // Empty path → intentional clear (sampler reads transparent black).
+            // Non-empty path that produced a null image → load failure (file
+            // missing, parse error, OOM). In the failure case, KEEP the prior
+            // image so a transient FS hiccup or a half-written replacement
+            // file doesn't drop a previously-valid texture mid-session;
+            // log a warning so the author notices.
+            if (path.isEmpty() || !loaded.isNull()) {
+                m_userTextureImages[i] = loaded;
+            } else {
+                qCWarning(lcShaderNode) << "ShaderEffect: failed to load user texture slot" << i << "from" << path
+                                        << "— keeping previously-loaded image";
+            }
         }
 
         const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(i);
@@ -752,6 +774,13 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
         return;
     }
     m_userTextureImages[slot] = image;
+    // Clear the cached path so a subsequent setShaderParams call with
+    // the previously-cached path correctly forces a reload from disk.
+    // Without this, a caller that mixes the direct image setter with
+    // params-driven loads would see the directly-set image silently
+    // persist when the next params push happens to repeat the old path
+    // (path-change detection thinks nothing changed).
+    m_userTexturePaths[slot].clear();
     update();
 }
 

@@ -115,13 +115,20 @@ QJsonObject AnimationShaderEffect::toJson() const
     if (!textures.isEmpty()) {
         QJsonArray texArr;
         for (const auto& t : textures) {
+            // Skip empty-path entries to preserve fromJson(toJson(x))
+            // round-trip stability — fromJson drops them on read, so
+            // emitting them on write would cause the round-trip to
+            // shrink the list silently.
+            if (t.path.isEmpty())
+                continue;
             QJsonObject tObj;
             tObj.insert(QLatin1String("path"), t.path);
             if (!t.wrap.isEmpty())
                 tObj.insert(QLatin1String("wrap"), t.wrap);
             texArr.append(tObj);
         }
-        obj.insert(QLatin1String("textures"), texArr);
+        if (!texArr.isEmpty())
+            obj.insert(QLatin1String("textures"), texArr);
     }
 
     return obj;
@@ -270,14 +277,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
             || a.stepValue != b.stepValue)
             return false;
     }
-    if (textures.size() != other.textures.size())
+    if (textures != other.textures)
         return false;
-    for (int i = 0; i < textures.size(); ++i) {
-        const auto& a = textures[i];
-        const auto& b = other.textures[i];
-        if (a.path != b.path || a.wrap != b.wrap)
-            return false;
-    }
     return true;
 }
 

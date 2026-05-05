@@ -20,16 +20,16 @@ namespace PlasmaZones {
 void OverlayService::setSettings(ISettings* settings)
 {
     if (m_settings != settings) {
-        // Disconnect from old settings signals
+        // Disconnect from old settings signals. Single sweep severs
+        // every signal-slot connection where `m_settings` is sender
+        // and `this` is receiver — fail-safe against a future connect
+        // call here that doesn't have a paired per-signal disconnect
+        // line (the old per-signal pattern was discipline-fragile).
+        // The saved-handle disconnect immediately below MUST stay
+        // separate because it tracks a connection added on a different
+        // sender (`m_shaderRegistry`, not `m_settings`).
         if (m_settings) {
-            disconnect(m_settings, &ISettings::settingsChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::overlayDisplayModeChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::shaderProfileTreeChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::animationsEnabledChanged, this, nullptr);
+            disconnect(m_settings, nullptr, this, nullptr);
         }
         // Disconnect the specific shadersChanged lambda we stashed below.
         // disconnect(src, sig, this, nullptr) would sever ALL slots on this

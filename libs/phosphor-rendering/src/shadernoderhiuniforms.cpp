@@ -194,14 +194,19 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_TIME_BLOCK_OFFSET);
                 }
-                if (m_timeHiDirty) {
+                // K_TIME_HI is subsumed by K_SCENE_HEADER. When both flags
+                // fire on the same frame, only the broader upload runs;
+                // the granular K_TIME_HI write only fires when scene-data
+                // is otherwise clean (the time-wrap-only path).
+                if (m_timeHiDirty && !m_sceneDataDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), K_TIME_HI_OFFSET, K_TIME_HI_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_TIME_HI_OFFSET);
                 }
                 if (m_sceneDataDirty) {
                     // Scene header: iResolution through end of BaseUniforms
-                    // (subsumes the appFields region — no need for a separate upload).
+                    // (subsumes the appFields, iTimeHi, and iIsReversed
+                    // regions — no need for separate uploads when this fires).
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_SCENE_HEADER_OFFSET);

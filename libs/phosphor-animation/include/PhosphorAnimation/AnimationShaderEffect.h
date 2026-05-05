@@ -187,6 +187,15 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     {
         QString path; ///< Filename relative to the effect's sourceDir.
         QString wrap; ///< "clamp" / "repeat" / "mirror"; empty = runtime default.
+
+        bool operator==(const TextureSlot& other) const
+        {
+            return path == other.path && wrap == other.wrap;
+        }
+        bool operator!=(const TextureSlot& other) const
+        {
+            return !(*this == other);
+        }
     };
     QList<TextureSlot> textures;
 

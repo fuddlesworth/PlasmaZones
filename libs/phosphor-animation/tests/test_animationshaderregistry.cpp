@@ -898,6 +898,254 @@ private Q_SLOTS:
         QVERIFY(!r.contains(QStringLiteral("customColor%1").arg(kBudget + 1)));
         QVERIFY(r.size() <= kBudget);
     }
+
+    // ── User-texture pipeline (kMaxUserTextureSlots = 3) ──────────────
+    //
+    // Pin the texture-slot surface introduced by the user-texture
+    // unification: schema cap, JSON round-trip, equality discrimination,
+    // translateAnimationParams emit (pack defaults + runtime overrides),
+    // and the texture-only effect case (no float/color params).
+    //
+    // The earlier audit found this surface had ZERO test coverage. Each
+    // case below exists because a regression there has caused observable
+    // user-visible breakage at least once during PR #399 development.
+
+    void testTextureSlotCapDropsSurplus()
+    {
+        // metadata.json declares 4 textures; AnimationShaderContract caps
+        // at 3 (one per user-facing iChannel/uTexture slot). Surplus
+        // entries are silently dropped at fromJson time.
+        QJsonArray texArr;
+        for (int i = 0; i < 5; ++i) {
+            QJsonObject t;
+            t.insert(QLatin1String("path"), QStringLiteral("tex%1.png").arg(i));
+            t.insert(QLatin1String("wrap"), QStringLiteral("clamp"));
+            texArr.append(t);
+        }
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("over-cap"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("e.frag"));
+        obj.insert(QLatin1String("textures"), texArr);
+
+        const auto eff = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(eff.textures.size(), PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots);
+        // Surviving entries must be the FIRST kMax entries — preserving
+        // declaration order so the effect's slot↔file mapping is stable.
+        QCOMPARE(eff.textures[0].path, QStringLiteral("tex0.png"));
+        QCOMPARE(eff.textures[2].path, QStringLiteral("tex2.png"));
+    }
+
+    void testTextureSlotEmptyPathDropped()
+    {
+        // An author writing `{"path": "", "wrap": "repeat"}` produces a
+        // slot with no bound texture. fromJson drops it rather than
+        // emitting a wrap-only override that would attach a wrap mode
+        // to an unbound sampler.
+        QJsonArray texArr;
+        QJsonObject empty;
+        empty.insert(QLatin1String("path"), QString());
+        empty.insert(QLatin1String("wrap"), QStringLiteral("repeat"));
+        QJsonObject good;
+        good.insert(QLatin1String("path"), QStringLiteral("real.png"));
+        texArr.append(empty);
+        texArr.append(good);
+
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("empty-path"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("e.frag"));
+        obj.insert(QLatin1String("textures"), texArr);
+
+        const auto eff = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(eff.textures.size(), 1);
+        QCOMPARE(eff.textures[0].path, QStringLiteral("real.png"));
+    }
+
+    void testTextureSlotJsonRoundTrip()
+    {
+        AnimationShaderEffect e;
+        e.id = QStringLiteral("rt");
+        e.fragmentShaderPath = QStringLiteral("e.frag");
+        AnimationShaderEffect::TextureSlot t1{QStringLiteral("a.png"), QStringLiteral("clamp")};
+        AnimationShaderEffect::TextureSlot t2{QStringLiteral("b.svg"), QStringLiteral("repeat")};
+        e.textures.append(t1);
+        e.textures.append(t2);
+
+        const auto restored = AnimationShaderEffect::fromJson(e.toJson());
+        QCOMPARE(restored.textures.size(), 2);
+        QCOMPARE(restored.textures[0].path, QStringLiteral("a.png"));
+        QCOMPARE(restored.textures[0].wrap, QStringLiteral("clamp"));
+        QCOMPARE(restored.textures[1].path, QStringLiteral("b.svg"));
+        QCOMPARE(restored.textures[1].wrap, QStringLiteral("repeat"));
+    }
+
+    void testTextureSlotEqualityDifferentiates()
+    {
+        AnimationShaderEffect a;
+        a.id = QStringLiteral("eq");
+        a.fragmentShaderPath = QStringLiteral("e.frag");
+        a.textures.append({QStringLiteral("noise.png"), QStringLiteral("repeat")});
+
+        AnimationShaderEffect b = a;
+        QVERIFY(a == b);
+
+        // Path differs.
+        b.textures[0].path = QStringLiteral("other.png");
+        QVERIFY(a != b);
+        b = a;
+
+        // Wrap differs.
+        b.textures[0].wrap = QStringLiteral("clamp");
+        QVERIFY(a != b);
+        b = a;
+
+        // Slot count differs.
+        b.textures.append({QStringLiteral("more.png"), QStringLiteral("clamp")});
+        QVERIFY(a != b);
+    }
+
+    void testTranslateAnimationParamsEmitsPackTextureDefaults()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("texdefault");
+        eff.fragmentShaderPath = QStringLiteral("/abs/e.frag");
+        eff.sourceDir = QStringLiteral("/abs");
+        eff.textures.append({QStringLiteral("/abs/tex.png"), QStringLiteral("repeat")});
+
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
+        // Slot 0 → uTexture1 (uTexture0 reserved for surface).
+        QCOMPARE(r.value(QStringLiteral("uTexture1")).toString(), QStringLiteral("/abs/tex.png"));
+        QCOMPARE(r.value(QStringLiteral("uTexture1_wrap")).toString(), QStringLiteral("repeat"));
+    }
+
+    void testTranslateAnimationParamsRuntimeOverrideWinsOverPackDefault()
+    {
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("texoverride");
+        eff.fragmentShaderPath = QStringLiteral("/abs/e.frag");
+        eff.sourceDir = QStringLiteral("/abs");
+        eff.textures.append({QStringLiteral("/abs/pack.png"), QStringLiteral("clamp")});
+
+        const QVariantMap friendly{
+            {QStringLiteral("uTexture1"), QStringLiteral("/user/override.png")},
+            {QStringLiteral("uTexture1_wrap"), QStringLiteral("mirror")},
+        };
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+        QCOMPARE(r.value(QStringLiteral("uTexture1")).toString(), QStringLiteral("/user/override.png"));
+        QCOMPARE(r.value(QStringLiteral("uTexture1_wrap")).toString(), QStringLiteral("mirror"));
+    }
+
+    void testTranslateAnimationParamsTextureOnlyEffect()
+    {
+        // A texture-only effect (no parameters declared) used to early-
+        // return from translateAnimationParams before the texture loop
+        // ran. Pin that the relaxation correctly emits texture keys
+        // even when `effect.parameters.isEmpty()`.
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("texonly");
+        eff.fragmentShaderPath = QStringLiteral("/abs/e.frag");
+        eff.sourceDir = QStringLiteral("/abs");
+        eff.textures.append({QStringLiteral("/abs/atlas.png"), QString()});
+
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
+        QVERIFY(r.contains(QStringLiteral("uTexture1")));
+        QCOMPARE(r.value(QStringLiteral("uTexture1")).toString(), QStringLiteral("/abs/atlas.png"));
+        // Empty wrap on the slot — translateAnimationParams omits the
+        // `_wrap` key entirely so a consumer's "missing key = no
+        // change" semantic preserves whatever default the runtime uses
+        // (clamp on both runtimes).
+        QVERIFY(!r.contains(QStringLiteral("uTexture1_wrap")));
+    }
+
+    void testTranslateAnimationParamsSkipsEmptyPathSlots()
+    {
+        // No pack default, no override — the slot key must NOT appear in
+        // the output map. Otherwise downstream consumers would see an
+        // empty `uTexture1` and wipe a previously-bound texture.
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("noslot");
+        eff.fragmentShaderPath = QStringLiteral("e.frag");
+        // No textures at all.
+
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, {});
+        QVERIFY(!r.contains(QStringLiteral("uTexture1")));
+        QVERIFY(!r.contains(QStringLiteral("uTexture2")));
+        QVERIFY(!r.contains(QStringLiteral("uTexture3")));
+    }
+
+    void testTranslateAnimationParamsWrapOnlyOverrideRequiresPath()
+    {
+        // friendlyParams contains `uTexture1_wrap` but neither the pack
+        // nor friendlyParams supplies a path → wrap key is silently
+        // skipped (orphan wrap on an unbound sampler is a contract
+        // violation downstream).
+        AnimationShaderEffect eff;
+        eff.id = QStringLiteral("orphanwrap");
+        eff.fragmentShaderPath = QStringLiteral("e.frag");
+
+        const QVariantMap friendly{
+            {QStringLiteral("uTexture1_wrap"), QStringLiteral("repeat")},
+        };
+        const QVariantMap r = AnimationShaderRegistry::translateAnimationParams(eff, friendly);
+        QVERIFY(!r.contains(QStringLiteral("uTexture1")));
+        QVERIFY(!r.contains(QStringLiteral("uTexture1_wrap")));
+    }
+
+    void testParseEffectRejectsTextureTraversalPath()
+    {
+        // A metadata.json with a `..`-traversal path must be rejected at
+        // scan time so a malicious shipped pack can't read arbitrary
+        // files via `QFile::exists` / `QImage::load`.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString effDir = tmp.path() + QStringLiteral("/evil");
+        QJsonArray texArr;
+        QJsonObject t;
+        t.insert(QLatin1String("path"), QStringLiteral("../../../etc/passwd"));
+        texArr.append(t);
+        QJsonObject extra;
+        extra.insert(QLatin1String("textures"), texArr);
+        writeMetadata(effDir, QStringLiteral("evil"), QStringLiteral("e.frag"), extra);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("path traversal guard")));
+        AnimationShaderRegistry registry;
+        registry.addSearchPaths({tmp.path()});
+        const auto effects = registry.availableEffects();
+        QCOMPARE(effects.size(), 1);
+        // Pack still loads — but the offending texture slot is cleared
+        // (path emptied) so downstream emit skips it.
+        QVERIFY(effects[0].textures.isEmpty() || effects[0].textures[0].path.isEmpty());
+    }
+
+    void testParseEffectResolvesTexturePathRelativeToSourceDir()
+    {
+        // Symmetric positive case: a benign relative path resolves to
+        // the absolute form once at scan time, so translateAnimationParams
+        // doesn't pay a per-leg QFileInfo cost.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString effDir = tmp.path() + QStringLiteral("/ok");
+        QDir().mkpath(effDir);
+        QFile bitmap(effDir + QStringLiteral("/atlas.png"));
+        QVERIFY(bitmap.open(QIODevice::WriteOnly));
+        bitmap.write("\x89PNG\r\n\x1a\n", 8); // minimal PNG signature so QFile::exists passes
+        bitmap.close();
+
+        QJsonArray texArr;
+        QJsonObject t;
+        t.insert(QLatin1String("path"), QStringLiteral("atlas.png"));
+        texArr.append(t);
+        QJsonObject extra;
+        extra.insert(QLatin1String("textures"), texArr);
+        writeMetadata(effDir, QStringLiteral("ok"), QStringLiteral("e.frag"), extra);
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPaths({tmp.path()});
+        const auto effects = registry.availableEffects();
+        QCOMPARE(effects.size(), 1);
+        QCOMPARE(effects[0].textures.size(), 1);
+        // Path is absolutised to the effect's sourceDir.
+        QCOMPARE(effects[0].textures[0].path, QDir(effDir).filePath(QStringLiteral("atlas.png")));
+    }
 };
 
 QTEST_MAIN(TestAnimationShaderRegistry)

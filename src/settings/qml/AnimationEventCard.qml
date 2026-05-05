@@ -33,13 +33,6 @@ import org.plasmazones.common as PZCommon
  *   - collapsible: bool — header click collapses the body
  */
 Item {
-    // Apply a single shader-param edit through the standard pipeline:
-    // replace the whole map (QML reactivity needs a new identity, not an
-    // in-place mutation), update the local cache so the editor doesn't
-    // wait for the round-trip, and persist via the controller. Used by
-    // both the inline param editor and the color dialog so the two
-    // paths can't drift.
-
     id: root
 
     required property string eventPath
@@ -258,6 +251,19 @@ Item {
         settingsController.animationsPage.setOverride(root.eventPath, profile);
     }
 
+    // Pick up changes that affect THIS card's path — the path itself
+    // (user toggled the override here) or an ancestor (we're inheriting
+    // from it and the inherited value just changed). Filter on path so
+    // a settings burst on an unrelated row doesn't drive every other
+    // card on the page through a refresh + Q_INVOKABLE round-trip.
+    // Without the filter, drag-editing a slider on one row drives
+    // N redundant `_inheritResolved` recompute kicks (where N = number
+    // of cards on the page) — defeats the cache the `_inheritRev`
+    // pattern was added to provide.
+    function _pathAffectsThisCard(path) {
+        return path === root.eventPath || root.eventPath.startsWith(path + ".");
+    }
+
     implicitHeight: card.implicitHeight
     Layout.fillWidth: true
     Component.onCompleted: {
@@ -265,21 +271,23 @@ Item {
         refreshShaderFromTree();
     }
 
-    // Pick up changes from any path in the tree — could be this event
-    // (user toggled override) or an ancestor (we're inheriting from it
-    // and the inherited value just changed). The signal is per-path
-    // but it's cheap to just refresh.
     Connections {
         function onOverrideChanged(path) {
+            if (!root._pathAffectsThisCard(path))
+                return ;
+
             root.refreshFromTree();
             // The signal is per-path but the resolved profile depends on
-            // the entire ancestor chain, so any change anywhere can shift
-            // the inheritance banner. Bump the revision tick to invalidate
-            // _inheritResolved.
+            // the entire ancestor chain, so any change at-or-above this
+            // path can shift the inheritance banner. Bump the revision
+            // tick to invalidate _inheritResolved.
             root._inheritRev++;
         }
 
         function onShaderProfileChanged(path) {
+            if (!root._pathAffectsThisCard(path))
+                return ;
+
             root.refreshShaderFromTree();
             // The card's "Override" toggle now reflects whether either
             // a timing OR a shader override exists at this path, so a
@@ -370,7 +378,7 @@ Item {
                 Layout.fillWidth: true
                 type: Kirigami.MessageType.Warning
                 visible: root.isParentNode && root._shadowingChildrenCount > 0
-                text: i18np("%n child event has a shader override that overrides this parent.", "%n child events have shader overrides that override this parent.", root._shadowingChildrenCount)
+                text: i18np("%n descendant event has a shader override that shadows this parent.", "%n descendant events have shader overrides that shadow this parent.", root._shadowingChildrenCount)
                 actions: [
                     Kirigami.Action {
                         text: i18n("Clear shadowing children")

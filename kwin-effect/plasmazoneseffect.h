@@ -506,6 +506,22 @@ private:
     // invalid and shader transitions gracefully no-op.
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+
+    /// User-texture cache entry. Owns the uploaded `GLTexture` and
+    /// tracks the wrap mode last applied to its GL state — so two
+    /// shader transitions sharing the same on-disk path can run with
+    /// different wrap modes without invalidating each other's cache
+    /// entry, and paintWindow can skip redundant `setWrapMode` calls
+    /// (each is two `glTexParameteri`s; on a high-Hz display with
+    /// multiple slots in flight the redundant traffic is non-trivial).
+    /// Forward-declared above `ShaderTransition` so the per-leg slot
+    /// pointers can hold `CachedTexture*`.
+    struct CachedTexture
+    {
+        std::unique_ptr<KWin::GLTexture> texture;
+        GLenum lastAppliedWrap = GL_CLAMP_TO_EDGE;
+    };
+
     struct CachedShader
     {
         std::unique_ptr<KWin::GLShader> shader;
@@ -617,8 +633,11 @@ private:
         /// `m_textureCache`, which owns the underlying `GLTexture` and
         /// outlives every transition that references it. nullptr means
         /// "no texture for this slot" — paintWindow skips the bind and
-        /// the sampler reads transparent black.
-        std::array<KWin::GLTexture*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+        /// the sampler reads transparent black. Pointing at the cache
+        /// entry rather than the bare `GLTexture` lets paintWindow
+        /// skip redundant `setWrapMode` calls by comparing against
+        /// `CachedTexture::lastAppliedWrap`.
+        std::array<CachedTexture*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
             userTextures = {};
         /// Wrap-mode GL enum applied at bind time (GL_CLAMP_TO_EDGE /
         /// GL_REPEAT / GL_MIRRORED_REPEAT). Stored per-leg rather than
@@ -659,20 +678,28 @@ private:
     /// @c std::unordered_map&lt;EffectWindow*, std::vector&lt;ShaderTransition&gt;&gt; with
     /// each transition holding its own AnimatedValue&lt;qreal&gt;, plus a
     /// composition rule per shader. Significantly more complex; not done here.
-    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
-    // Invariant: all ShaderTransition.cached pointers must be ended
-    // (via endShaderTransition) before any cache erasure.
-    std::map<QString, CachedShader> m_shaderCache;
     /// User-texture cache, keyed by absolute path. Multiple shader effects
     /// (and multiple legs of the same effect) that reference the same
     /// texture file share one upload — saves both GPU memory and the
     /// per-leg `KWin::GLTexture::upload` cost. Cleared on
     /// `effectsChanged` alongside `m_shaderCache` so a hot-reload that
     /// drops a texture file frees the GPU memory rather than holding it
-    /// for the rest of the session. Wrap mode is per-cache-entry: a
-    /// caller that wants the same path with two different wrap modes
-    /// gets two cache entries.
-    std::map<QString, std::unique_ptr<KWin::GLTexture>> m_textureCache;
+    /// for the rest of the session.
+    ///
+    /// **Declaration ORDER MATTERS.** C++ destroys members in reverse
+    /// declaration order, so `m_textureCache` declared FIRST means it
+    /// destructs LAST — outlives `m_shaderCache` and `m_shaderTransitions`.
+    /// `ShaderTransition::userTextures[]` holds raw non-owning pointers
+    /// into this cache; a reverse declaration would let the cache
+    /// destruct first and leave the transitions with dangling pointers.
+    /// `m_shaderCache` similarly needs to outlive its dependents (the
+    /// shader-program pointers in transitions) — declared second so it
+    /// destructs after `m_shaderTransitions`.
+    std::map<QString, CachedTexture> m_textureCache;
+    // Invariant: all ShaderTransition.cached pointers must be ended
+    // (via endShaderTransition) before any cache erasure.
+    std::map<QString, CachedShader> m_shaderCache;
+    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
     /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
     /// inside @ref beginShaderTransition every time a transition installs;
     /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the
