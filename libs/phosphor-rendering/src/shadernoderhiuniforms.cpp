@@ -162,7 +162,8 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //                        (toggle), prepare() on feedback-buffer clear
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
-//                        setCustomColor, setAudioSpectrum, setUserTexture
+//                        setCustomColor, setAudioSpectrum, setUserTexture,
+//                        setIsReversed
 //   m_appFieldsDirty  ← setAppField0, setAppField1
 //   m_extensionDirty  ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
@@ -217,9 +218,14 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_APP_FIELDS_OFFSET);
                 }
-                // Extension region: uploaded separately when dirty
+                // Extension region: uploaded separately when dirty.
+                // Track whether we've already uploaded the extension
+                // this frame so the defensive full-base fallback below
+                // doesn't re-upload it redundantly.
+                bool extensionUploaded = false;
                 if (extensionHasData && m_uniformExtension->isDirty()) {
                     uploadExtensionToUbo(batch);
+                    extensionUploaded = true;
                 }
                 // Defensive: if no granular flags set, do full base upload.
                 // Per the dirty-flag invariants documented above, this
@@ -230,12 +236,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // write entirely without this safety net. Symmetric with
                 // the !m_didFullUploadOnce path above: if we fall back
                 // to a full base upload we must ALSO refresh the
-                // extension region (when present), otherwise an
-                // extension-only dirty in a future revision would land
-                // here and silently miss the upload.
+                // extension region (when present and not already
+                // uploaded above), otherwise an extension-only dirty
+                // in a future revision would land here and silently
+                // miss the upload.
                 if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
-                    if (extensionHasData) {
+                    if (extensionHasData && !extensionUploaded) {
                         uploadExtensionToUbo(batch);
                     }
                 }

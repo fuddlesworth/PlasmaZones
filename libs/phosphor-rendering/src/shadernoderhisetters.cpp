@@ -45,6 +45,9 @@ void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifor
 
 void ShaderNodeRhi::setTime(double time)
 {
+    if (m_time == time) {
+        return;
+    }
     m_time = time;
     m_uniformsDirty = true;
     m_timeDirty = true;
@@ -58,6 +61,9 @@ void ShaderNodeRhi::setTime(double time)
 
 void ShaderNodeRhi::setTimeDelta(float delta)
 {
+    if (m_timeDelta == delta) {
+        return;
+    }
     m_timeDelta = delta;
     m_uniformsDirty = true;
     m_timeDirty = true;
@@ -65,6 +71,9 @@ void ShaderNodeRhi::setTimeDelta(float delta)
 
 void ShaderNodeRhi::setFrame(int frame)
 {
+    if (m_frame == frame) {
+        return;
+    }
     m_frame = frame;
     m_uniformsDirty = true;
     m_timeDirty = true;
@@ -82,6 +91,9 @@ void ShaderNodeRhi::setResolution(float width, float height)
 
 void ShaderNodeRhi::setMousePosition(const QPointF& pos)
 {
+    if (m_mousePosition == pos) {
+        return;
+    }
     m_mousePosition = pos;
     m_uniformsDirty = true;
     m_sceneDataDirty = true;

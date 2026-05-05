@@ -36,7 +36,14 @@ void main()
     else               coord = 1.0 - uv.y;
 
     float fw = max(fadeWidth, 0.001);
-    float alpha = smoothstep(visibility - fw, visibility, coord);
+    // Scale the smoothstep window to [0, 1+fw] so at visibility=1 the
+    // entire surface (coord ∈ [0, 1]) sits BELOW the lower edge of the
+    // smoothstep band — alpha = 1 everywhere, fully revealed. The naive
+    // `smoothstep(visibility - fw, visibility, coord)` puts the window
+    // at [1-fw, 1] for visibility=1, leaving a permanently-faded
+    // trailing band at coord ∈ (1-fw, 1] even when the leg has finished.
+    float scaledVis = visibility * (1.0 + fw);
+    float alpha = smoothstep(scaledVis - fw, scaledVis, coord);
     alpha = 1.0 - alpha; // 1 inside the revealed region, 0 outside
 
     vec4 sampled = texture(uTexture0, uv);

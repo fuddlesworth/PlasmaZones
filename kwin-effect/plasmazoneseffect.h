@@ -904,6 +904,12 @@ private:
     // synchronous isServiceRegistered() calls that block the compositor thread.
     // --- Daemon readiness / virtual screen fetch gate state ---
     bool m_daemonServiceRegistered = false;
+    /// True between sending registerBridge and receiving its reply. Prevents
+    /// the Introspect probe + daemonReady signal racing into two concurrent
+    /// registrations before the first reply sets m_daemonServiceRegistered.
+    /// Reset on every reply path (success / error / rejection) so a future
+    /// retry can re-arm.
+    bool m_bridgeRegistrationInFlight = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
     /// Pre-computed snap restore target for a pending app (appId → geometry + saved screen).

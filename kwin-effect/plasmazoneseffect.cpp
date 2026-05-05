@@ -1537,6 +1537,18 @@ void PlasmaZonesEffect::slotDaemonReady()
     if (m_daemonServiceRegistered) {
         return; // Already ready — idempotent guard
     }
+    if (m_bridgeRegistrationInFlight) {
+        // A registerBridge async call is already pending. The Introspect-
+        // probe path at line ~782 and the daemonReady D-Bus signal can
+        // both fire slotDaemonReady before the FIRST registerBridge reply
+        // sets m_daemonServiceRegistered. Without this gate, a daemon
+        // racing its own readiness signal against an Introspect probe
+        // would receive TWO registerBridge calls in flight, then both
+        // replies would call continueDaemonReadySetup() — duplicate state
+        // re-push. Idempotent? Mostly. Worth the fragility? No.
+        return;
+    }
+    m_bridgeRegistrationInFlight = true;
 
     qCInfo(lcEffect) << "daemon ready: registering bridge before re-pushing state";
 
@@ -1557,6 +1569,12 @@ void PlasmaZonesEffect::slotDaemonReady()
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        // Clear the in-flight flag on EVERY return path (success, error,
+        // rejection, version mismatch) so a subsequent slotDaemonReady
+        // can retry. m_daemonServiceRegistered remains the long-lived
+        // success gate; m_bridgeRegistrationInFlight only covers the
+        // narrow window between the call leaving and its reply arriving.
+        m_bridgeRegistrationInFlight = false;
         QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
         if (reply.isError()) {
             qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
