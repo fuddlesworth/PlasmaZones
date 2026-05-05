@@ -827,23 +827,47 @@ private Q_SLOTS:
         QVERIFY2(spy.count() >= 1, "setShaderOverride MUST emit pendingChangesChanged");
     }
 
-    /// `setShaderOverride(path, "")` — the empty-effectId clear shorthand
-    /// — MUST also emit pendingChangesChanged. Pre-fix it routed to
-    /// clearShaderOverride which silently mutated.
-    void setShaderOverride_emptyEffectClearsAndEmits()
+    /// `setShaderOverride(path, "")` writes an ENGAGED-EMPTY override —
+    /// the inheritance-blocking sentinel. `ShaderProfile::overlay`
+    /// treats it as a real value that wins over an ancestor's
+    /// effectId, so the OFF toggle on a card like `panel.popup` stops
+    /// a parent's `panel = "pixelate"` from cascading down to popup
+    /// events. The override is materially present in `rawShaderProfile`'s
+    /// view (an `effectId: ""` JSON entry) which is how the UI's
+    /// `refreshFromTree` distinguishes "explicitly disabled" (toggle
+    /// shows OFF, inheritance blocked) from "no override / inheriting"
+    /// (toggle shows OFF, inheritance flows). pendingChangesChanged
+    /// fires because the tree mutated.
+    void setShaderOverride_emptyEffectWritesDisableMarkerAndBlocksInheritance()
     {
         IsolatedConfigGuard guard;
         Settings settings;
         PhosphorAnimationShaders::AnimationShaderRegistry registry;
         AnimationsPageController c(&registry, &settings);
 
-        // First write something so there's state to clear.
-        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+        // Set a parent override so the engaged-empty descendant has
+        // something to block.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel"), QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("panel.popup.layoutPicker.show"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
+                 QStringLiteral("pixelate"));
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
-        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QString(), {}));
-        QVERIFY2(spy.count() >= 1, "setShaderOverride('','') MUST emit pendingChangesChanged on clear");
-        QVERIFY(c.rawShaderProfile(QStringLiteral("osd.show")).isEmpty());
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup"), QString(), {}));
+        QVERIFY2(spy.count() >= 1, "setShaderOverride(path, '') MUST emit pendingChangesChanged on disable");
+        // Direct override exists with engaged-empty effectId — the
+        // disable sentinel.
+        const QVariantMap raw = c.rawShaderProfile(QStringLiteral("panel.popup"));
+        QVERIFY(!raw.isEmpty());
+        QVERIFY(raw.contains(QStringLiteral("effectId")));
+        QCOMPARE(raw.value(QStringLiteral("effectId")).toString(), QString());
+        // Inheritance from `panel = "pixelate"` is blocked at `panel.popup`,
+        // so every descendant that doesn't override resolves to empty.
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("panel.popup.layoutPicker.show"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
+                 QString());
     }
 
     /// Set then explicit clear → both calls fire pendingChangesChanged.

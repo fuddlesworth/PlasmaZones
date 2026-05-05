@@ -218,9 +218,24 @@ Item {
         // rawShaderProfile returns {} when there's no direct override at
         // this path; any non-empty map (effectId set, parameters set, etc.)
         // indicates a direct override. Mirrors the rawProfile check above.
+        // Engaged-empty effectId is the "explicitly disabled" sentinel
+        // (writes an inheritance-blocking override at this path; see
+        // AnimationsPageController::setShaderOverride). The toggle should
+        // read OFF for that state — the user has explicitly turned this
+        // event off, not configured it. Only an engaged-NON-empty
+        // effectId, or any other shader-profile content (parameters
+        // map), counts as "configured ON".
         var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
-        var hasShader = rawShader && Object.keys(rawShader).length > 0;
-        root.overrideEnabled = hasRaw || hasShader;
+        // Boolean-coerce every short-circuit result. The `&&` chain
+        // returns the first falsy operand (which can be `null` or
+        // `undefined`, NOT `false`), and QML's typed `bool` property
+        // setter rejects `undefined` with "Cannot assign [undefined] to
+        // bool". Wrap each predicate in Boolean() so the assignment
+        // always lands a real true/false.
+        var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
+        var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
+        var hasShader = hasShaderEffect || hasShaderParams;
+        root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // Effective values feed the controls. When override is off the
         // controls preview "what would happen if you turned it on" =
         // the resolved profile from the parent chain. When on, the
@@ -345,16 +360,23 @@ Item {
             if (checked) {
                 root.commitOverride();
             } else {
-                // Clear BOTH timing and shader at this path. A user who
-                // toggles "All Notifications" or "Show" off expects
-                // every override at that path to clear, not just the
-                // timing curve — without the paired shader clear, a
-                // previously-assigned matrix shader keeps firing even
-                // though the toggle reads "off". clearShaderOverride is
-                // a no-op when no shader is set, so paths that only
-                // had timing overrides see no behavior change.
+                // Toggle OFF semantic: clear timing override AND write
+                // an inheritance-blocking shader override. Plain
+                // `clearShaderOverride` only removes the entry at this
+                // path, leaving inheritance from an ancestor (e.g.
+                // `panel` → "dissolve") to cascade down — exactly the
+                // user-reported "I disabled all popups but dissolve
+                // still plays" bug. `setShaderOverride(path, "", {})`
+                // writes an engaged-empty effectId that
+                // `ShaderProfile::overlay` treats as "explicitly no
+                // shader", winning over the parent's effectId and
+                // blocking the cascade. Same call works for parent
+                // cards (panel.popup, window, osd, etc.) so a single
+                // OFF toggle on the parent disables every descendant
+                // that doesn't have its own override.
                 settingsController.animationsPage.clearOverride(root.eventPath);
-                settingsController.animationsPage.clearShaderOverride(root.eventPath);
+                settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
+                }));
             }
         }
 
