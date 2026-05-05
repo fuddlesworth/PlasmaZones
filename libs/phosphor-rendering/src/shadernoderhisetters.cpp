@@ -595,7 +595,13 @@ void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
 
 QString ShaderNodeRhi::normalizeWrapMode(const QString& wrap)
 {
-    return (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    if (wrap == QLatin1String("repeat")) {
+        return QStringLiteral("repeat");
+    }
+    if (wrap == QLatin1String("mirror")) {
+        return QStringLiteral("mirror");
+    }
+    return QStringLiteral("clamp");
 }
 
 QString ShaderNodeRhi::normalizeFilterMode(const QString& filter)
@@ -605,6 +611,17 @@ QString ShaderNodeRhi::normalizeFilterMode(const QString& filter)
     if (filter == QLatin1String("mipmap"))
         return QStringLiteral("mipmap");
     return QStringLiteral("linear");
+}
+
+QRhiSampler::AddressMode ShaderNodeRhi::wrapModeToRhiAddress(const QString& wrap)
+{
+    if (wrap == QLatin1String("repeat")) {
+        return QRhiSampler::Repeat;
+    }
+    if (wrap == QLatin1String("mirror")) {
+        return QRhiSampler::Mirror;
+    }
+    return QRhiSampler::ClampToEdge;
 }
 
 } // namespace PhosphorRendering

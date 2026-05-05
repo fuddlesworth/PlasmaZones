@@ -78,8 +78,15 @@ uniform vec4 iMouse;
 uniform vec4 iDate;
 uniform vec4 customParams[8];
 uniform vec4 customColors[16];
-uniform vec4 iChannelResolution[4];
-uniform int iAudioSpectrumSize;
+// `iChannelResolution[4]` and `iAudioSpectrumSize` from the UBO branch
+// are intentionally absent here: kwin-effect/plasmazoneseffect.cpp
+// never calls `setUniform` for either, and no animation shader in
+// `data/animations/` references them. Adding default-block declarations
+// would compile but read garbage at runtime — better to surface the
+// gap as a compile error if a future shader reaches for them on the
+// kwin path. (The UBO branch keeps both fields for std140 layout
+// parity with `PhosphorShaders::BaseUniforms`; see static_asserts in
+// `<PhosphorShaders/BaseUniforms.h>`.)
 uniform vec4 iTextureResolution[4];
 uniform float iTimeHi;
 // 1 when the runtime is driving this leg in the "reverse" direction

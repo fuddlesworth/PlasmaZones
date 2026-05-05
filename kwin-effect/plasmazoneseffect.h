@@ -28,6 +28,8 @@
 #include <QObject>
 #include <QVector>
 #include <QSet>
+#include <QSize>
+#include <QThreadPool>
 #include <QTimer>
 #include <QDBusPendingCall>
 #include <QHash>
@@ -38,6 +40,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -728,10 +731,59 @@ private:
     /// shader-program pointers in transitions) — declared second so it
     /// destructs after `m_shaderTransitions`.
     std::map<QString, CachedTexture> m_textureCache;
+    /// Async texture pre-warm pipeline.
+    ///
+    /// Texture loading (PNG decode + format conversion + GLTexture upload —
+    /// or, worse, SVG rasterise via QSvgRenderer at 1024px max-axis +
+    /// upload) takes multiple milliseconds per file on a cold cache, all
+    /// of which would otherwise run synchronously on the compositor
+    /// thread inside `beginShaderTransition`'s per-leg load loop. At
+    /// 144 Hz the per-frame budget is ~6.9 ms, so a single uncached
+    /// SVG slot can blow the budget on its own and produce a visible
+    /// stutter on the very first frame of a freshly-assigned shader.
+    ///
+    /// Pattern: kick `warmUserTextureAsync` to off-load `loadUserTextureImage`
+    /// (CPU-only — QImage decode and QSvgRenderer rasterise) onto a worker
+    /// thread, then dispatch the resulting `QImage` back to the compositor
+    /// thread via `QMetaObject::invokeMethod(...,
+    /// Qt::QueuedConnection)` to perform `KWin::GLTexture::upload`
+    /// (which MUST run on the GL-context thread). Subsequent
+    /// transitions hit the warm cache and pay zero load cost.
+    ///
+    /// Pool size is fixed at 1 to keep semantics simple — multi-threaded
+    /// loads of the same file would race on `m_textureLoadsInFlight`
+    /// dedupe and produce duplicate GPU uploads. A serialised single-
+    /// worker pool delivers near-all of the latency win (the bottleneck
+    /// is the rasterise/decode cost, not parallelism) without that
+    /// complexity.
+    QThreadPool m_textureLoaderPool;
+    /// Set of absolute texture paths currently in-flight on
+    /// `m_textureLoaderPool`. Prevents `warmUserTextureAsync` from
+    /// queuing duplicate loads when several shader transitions
+    /// reference the same file in quick succession (e.g. multiple
+    /// windows opening at once with the same effect assigned).
+    /// Entries are removed when the GL-thread upload completes (or
+    /// the worker observes a load failure).
+    QSet<QString> m_textureLoadsInFlight;
+    /// Off-load a texture load onto the loader pool, then upload to
+    /// the GL cache on the compositor thread when the worker
+    /// finishes. Returns immediately if the path is already cached
+    /// or already in-flight. Pass an explicit @p svgSize override
+    /// to match a previously-rasterised size (otherwise defaults to
+    /// the same 1024-px max-axis as `loadUserTextureImage`'s default).
+    void warmUserTextureAsync(const QString& absolutePath, std::optional<QSize> svgSize = std::nullopt);
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
     std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    /// Windows for which a paintWindow expiry-fall-through has already
+    /// queued a deferred @ref endShaderTransition via
+    /// @c QMetaObject::invokeMethod. Guards against the next paint
+    /// frame (before the queued end has actually run) re-queuing a
+    /// duplicate end and double-tearing-down the same transition.
+    /// Cleared when the queued end actually runs (success path) or
+    /// when the transition is otherwise erased / superseded.
+    QSet<KWin::EffectWindow*> m_pendingShaderExpiryEnd;
     /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
     /// inside @ref beginShaderTransition every time a transition installs;
     /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the

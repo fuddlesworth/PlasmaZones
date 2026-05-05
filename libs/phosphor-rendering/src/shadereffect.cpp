@@ -16,7 +16,38 @@
 #include <QQuickWindow>
 #include <QSvgRenderer>
 
+#include <cmath>
+
 namespace PhosphorRendering {
+
+// Keep the public ShaderEffect.h mirror constant in lock-step with the
+// authoritative ShaderNodeRhi.h value. Compile-time check — a future drift
+// would otherwise silently mis-size m_userTexture* member arrays.
+static_assert(kMaxUserTextureSlots == kMaxUserTextures,
+              "ShaderEffect::kMaxUserTextureSlots must equal ShaderNodeRhi::kMaxUserTextures");
+
+// ============================================================================
+// SVG rasterisation safety caps
+// ============================================================================
+//
+// Hard ceiling on the per-axis SVG rasterisation dimension. The user-supplied
+// `uTextureN_svgSize` parameter is already clamped by setShaderParams; this
+// constant lowers that ceiling to a sane texture size for window decorations
+// and is the single source of truth for the safety cap (also clamped at
+// allocation time inside setShaderParams to defend against direct member
+// pokes from subclasses or future setters).
+static constexpr int kMaxSvgDimension = 2048;
+/// Default per-slot SVG rasterise size — sized to be sharp at the typical
+/// zone-icon scale without the 4× cost a 4096 default would impose. Mirrors
+/// the in-class member initialiser; kept here so reset paths (e.g.
+/// setUserTexture) reference a single source of truth.
+static constexpr int kDefaultSvgRasteriseSize = 1024;
+/// Hard cap on the byte budget for a single rasterised SVG (16 MiB at RGBA8 =
+/// 2048×2048). When a clamped dimension still exceeds this, the renderer
+/// downscales proportionally and warns; protects against pathological
+/// aspect-ratios where a 2048×2048 ceiling would still expand to a
+/// 16 MP-worth area after KeepAspectRatio fitting on a square doc.
+static constexpr qint64 kMaxSvgPixelBytes = 16LL * 1024 * 1024;
 
 // ============================================================================
 // Default identity vertex shader
@@ -124,6 +155,17 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
                     m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
+        } else {
+            // Window detached: the scene graph owns the render node and has
+            // either deleted it already or will before any future paint. Drop
+            // our raw pointer NOW so the destructor's `if (m_renderNode &&
+            // window())` guard collapses to a true safety check — without
+            // this the dtor relies solely on `window()` returning nullptr to
+            // detect the dangling case, which is correct today but coupled
+            // to QQuickItem teardown ordering. Clearing here makes the
+            // tracker self-consistent regardless of how the dtor liveness
+            // check evolves.
+            m_renderNode = nullptr;
         }
     });
 }
@@ -389,45 +431,65 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // transitions) silently dropped every declared parameter. Now any
     // consumer that calls `setShaderParams` with translated keys lands the
     // values in the UBO via `setCustomParamAt` / `setCustomColorAt`.
-    auto extractFloat = [&params](const QString& key, float defaultVal) -> float {
-        const auto it = params.constFind(key);
-        if (it == params.constEnd()) {
-            return defaultVal;
+    // Single-pass key scan to short-circuit the 32 + 16 hash lookups when the
+    // payload contains no slot-keyed entries (the common case for callers that
+    // only push, e.g., uTextureN paths or shader-source URLs). Both helpers
+    // emit fixed prefixes (`customParams`, `customColor`); a single startsWith
+    // pass over the params keys is cheaper than 48 hash misses on every call.
+    bool hasParamsKey = false;
+    bool hasColorKey = false;
+    for (auto it = params.constBegin(); it != params.constEnd() && !(hasParamsKey && hasColorKey); ++it) {
+        const QString& key = it.key();
+        if (!hasParamsKey && key.startsWith(QLatin1String("customParams"))) {
+            hasParamsKey = true;
+        } else if (!hasColorKey && key.startsWith(QLatin1String("customColor"))) {
+            hasColorKey = true;
         }
-        bool ok = false;
-        const float val = it->toFloat(&ok);
-        return ok ? val : defaultVal;
-    };
-
-    for (int i = 0; i < kMaxCustomParams; ++i) {
-        QVector4D cp = customParamAt(i);
-        cp.setX(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'x'), cp.x()));
-        cp.setY(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'y'), cp.y()));
-        cp.setZ(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'z'), cp.z()));
-        cp.setW(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'w'), cp.w()));
-        setCustomParamAt(i, cp);
     }
 
-    auto extractColor = [&params](const QString& key, const QColor& defaultVal) -> QColor {
-        const auto it = params.constFind(key);
-        if (it == params.constEnd()) {
-            return defaultVal;
-        }
-        const QVariant& val = *it;
-        if (val.canConvert<QColor>()) {
-            return val.value<QColor>();
-        }
-        if (val.typeId() == QMetaType::QString) {
-            QColor color(val.toString());
-            if (color.isValid()) {
-                return color;
+    if (hasParamsKey) {
+        auto extractFloat = [&params](const QString& key, float defaultVal) -> float {
+            const auto it = params.constFind(key);
+            if (it == params.constEnd()) {
+                return defaultVal;
             }
-        }
-        return defaultVal;
-    };
+            bool ok = false;
+            const float val = it->toFloat(&ok);
+            return ok ? val : defaultVal;
+        };
 
-    for (int i = 0; i < kMaxCustomColors; ++i) {
-        setCustomColorAt(i, extractColor(PhosphorShaders::CustomColors::colorKey(i), customColorAt(i)));
+        for (int i = 0; i < kMaxCustomParams; ++i) {
+            QVector4D cp = customParamAt(i);
+            cp.setX(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'x'), cp.x()));
+            cp.setY(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'y'), cp.y()));
+            cp.setZ(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'z'), cp.z()));
+            cp.setW(extractFloat(PhosphorShaders::CustomParams::slotKey(i, 'w'), cp.w()));
+            setCustomParamAt(i, cp);
+        }
+    }
+
+    if (hasColorKey) {
+        auto extractColor = [&params](const QString& key, const QColor& defaultVal) -> QColor {
+            const auto it = params.constFind(key);
+            if (it == params.constEnd()) {
+                return defaultVal;
+            }
+            const QVariant& val = *it;
+            if (val.canConvert<QColor>()) {
+                return val.value<QColor>();
+            }
+            if (val.typeId() == QMetaType::QString) {
+                QColor color(val.toString());
+                if (color.isValid()) {
+                    return color;
+                }
+            }
+            return defaultVal;
+        };
+
+        for (int i = 0; i < kMaxCustomColors; ++i) {
+            setCustomColorAt(i, extractColor(PhosphorShaders::CustomColors::colorKey(i), customColorAt(i)));
+        }
     }
 
     // ── User textures (uTexture0..3, uTexture0_wrap, uTexture0_svgSize) ──
@@ -461,7 +523,7 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
         if (params.contains(sizeKey)) {
             // Use the `bool ok` parse pattern (matches the float / colour
             // extractors above). Without it, a non-numeric or missing-but-
-            // present QVariant returns 0 from toInt, then qBound(64,0,4096)
+            // present QVariant returns 0 from toInt, then qBound(64, 0, max)
             // = 64 — silently substituting the floor for any malformed
             // value rather than retaining the prior, possibly user-tuned
             // size. Skip the assignment entirely on parse failure so the
@@ -470,7 +532,7 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             bool ok = false;
             const int v = params.value(sizeKey).toInt(&ok);
             if (ok) {
-                m_userTextureSvgSizes[i] = qBound(64, v, 4096);
+                m_userTextureSvgSizes[i] = qBound(64, v, kMaxSvgDimension);
                 svgSizeChanged = true;
             }
         }
@@ -503,11 +565,31 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
                     QSvgRenderer renderer(path);
                     if (renderer.isValid()) {
                         QSize size = renderer.defaultSize();
-                        const int maxDim = m_userTextureSvgSizes[i];
+                        // Cap the requested per-axis size at the library
+                        // ceiling regardless of the per-slot setting — defends
+                        // against subclasses or future setters that bypass the
+                        // setShaderParams parse-time clamp.
+                        const int maxDim = qBound(64, m_userTextureSvgSizes[i], kMaxSvgDimension);
                         if (!size.isEmpty()) {
                             size.scale(maxDim, maxDim, Qt::KeepAspectRatio);
                         } else {
                             size = QSize(maxDim, maxDim);
+                        }
+                        // Byte-budget guard: even after the per-axis ceiling,
+                        // a near-square doc can request ~maxDim² × 4 bytes
+                        // (16 MiB at 2048²). For multiple effects rendering
+                        // simultaneously this can spike GUI memory; downscale
+                        // the rasterisation proportionally so the pixel area
+                        // stays within kMaxSvgPixelBytes / 4 pixels and warn.
+                        const qint64 pixelBytes = static_cast<qint64>(size.width()) * size.height() * 4;
+                        if (pixelBytes > kMaxSvgPixelBytes) {
+                            const double scale = std::sqrt(static_cast<double>(kMaxSvgPixelBytes) / pixelBytes);
+                            const QSize scaledSize(qMax(1, static_cast<int>(size.width() * scale)),
+                                                   qMax(1, static_cast<int>(size.height() * scale)));
+                            qCWarning(lcShaderNode)
+                                << "ShaderEffect: SVG rasterise size" << size << "exceeds byte budget"
+                                << kMaxSvgPixelBytes << "B — downscaling to" << scaledSize << "for slot" << i;
+                            size = scaledSize;
                         }
                         // Rasterise into ARGB32_Premultiplied — QPainter's
                         // source-over compositing is defined for premultiplied
@@ -822,6 +904,15 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
     // (path-change detection thinks nothing changed). The guard above
     // ensures this clear only fires when the image actually changed.
     m_userTexturePaths[slot].clear();
+    // Symmetric reset of the companion path-only state: clearing the path
+    // without resetting svgSize/wrap would leave stale per-slot settings
+    // that silently re-apply if a later setShaderParams reattaches the
+    // same path (path-change branch sees an empty cached path and triggers
+    // the load, but the prior svgSize/wrap would persist). Reset both to
+    // their library defaults so each setUserTexture pushes a fully-fresh
+    // slot.
+    m_userTextureSvgSizes[slot] = kDefaultSvgRasteriseSize;
+    m_userTextureWraps[slot] = QStringLiteral("clamp");
     update();
 }
 

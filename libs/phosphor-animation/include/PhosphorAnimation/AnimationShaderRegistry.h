@@ -147,10 +147,13 @@ private:
     static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(AnimationShaderRegistry* self);
 
     // Non-owning typed alias for the strategy the base owns. Populated
-    // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`.
-    // Named distinctly from the base's private `m_strategy` to make the
+    // in the ctor body via dynamic_cast (asserted non-null) so the
+    // invariant fires BEFORE the typed pointer is committed — keeps the
+    // narrow UB window between a hypothetical subclass-mismatch
+    // static_cast and its diagnostic out of the field's lifetime. Named
+    // distinctly from the base's private `m_strategy` to make the
     // shadowing explicit at the field declaration.
-    ScanStrategy* m_typedStrategy;
+    ScanStrategy* m_typedStrategy = nullptr;
 };
 
 } // namespace PhosphorAnimationShaders

@@ -2010,11 +2010,9 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
 
 void SurfaceAnimator::setEnabled(bool enabled)
 {
-    // Value-changed guard. Per CLAUDE.md ("Only emit signals when value
-    // actually changes") this method has no signal today, but pinning
-    // the no-op contract here keeps the door open for a future
-    // `enabledChanged` notify and prevents redundant work on settings
-    // sweeps that re-push the unchanged value.
+    // Skip the assignment when the gate value hasn't changed — settings
+    // sweeps re-push every gate on every save, and there's no point
+    // touching the member for a no-op write.
     if (d->m_enabled == enabled) {
         return;
     }

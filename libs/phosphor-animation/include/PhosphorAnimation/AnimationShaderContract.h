@@ -219,8 +219,9 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// `iChannel1` / `iChannel2` / `iChannel3`. The redirected surface
 /// itself (`iChannel0`, binding 7 on the daemon, TEXTURE0 on KWin) is
 /// not counted here — that's a separate runtime-managed slot. The
-/// daemon's `ShaderNodeRhi::kMaxUserTextures = 4` includes slot 0,
-/// hence the off-by-one in the budget.
+/// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
+/// hence the off-by-one in the budget. Pinned to the daemon constant
+/// by the `static_assert` at the bottom of this header.
 inline constexpr int kMaxUserTextureSlots = 3;
 
 /// `vec4 iMouse` — cursor position in shader-local pixels.
@@ -344,3 +345,12 @@ inline QString colorKey(int slot)
 } // namespace AnimationShaderContract
 
 } // namespace PhosphorAnimationShaders
+
+// The compile-time link between AnimationShaderContract::kMaxUserTextureSlots
+// and PhosphorRendering::kMaxUserTextures lives in
+// libs/phosphor-animation/src/contract_pins.cpp. It cannot live in this header
+// because translation units that only need contract definitions (notably the
+// kwin-effect, which already pulls in epoxy/gl.h via KWin) must not be forced
+// to also pull in <QtQuick/QSGTextureProvider> via ShaderNodeRhi.h — epoxy and
+// Qt's qopenglext.h declare overlapping GL function-pointer typedefs that
+// conflict when both end up in the same TU.

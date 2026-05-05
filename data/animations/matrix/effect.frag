@@ -62,10 +62,14 @@ vec2 hash22(vec2 p) {
 
 // Quad-edge alpha mask: 1.0 in the interior, fading to 0 within
 // `fadePixels` of any edge. Keeps the rain from cropping abruptly at
-// the window border.
+// the window border. Floor `iResolution` so an early-frame surface
+// that hasn't reported its size (iResolution.x or .y == 0) doesn't
+// produce NaN pixel coords — matches the defensive pattern used by
+// doom/hexagon/pixel-wheel/pixel-wipe/aura-glow.
 float edgeMask(float fadePixels) {
-    vec2 px = vTexCoord * iResolution;
-    vec2 fromEdge = min(px, iResolution - px);
+    vec2 res = max(iResolution, vec2(1.0));
+    vec2 px = vTexCoord * res;
+    vec2 fromEdge = min(px, res - px);
     return clamp(min(fromEdge.x, fromEdge.y) / fadePixels, 0.0, 1.0);
 }
 
@@ -166,7 +170,19 @@ vec4 alphaOver(vec4 under, vec4 over) {
 // suite (glitch, dissolve) — gating on `> 0.001` avoids divide-by-near-
 // zero blow-ups at edge-fade pixels where alpha can land in the
 // 0..0.001 range and produce rgb >> 1.0.
+//
+// Off-window guard: `main()` remaps `coords.y` through
+// `coords.y * (overshoot + 1) - overshoot * 0.5`, which lands outside
+// [0, 1] for the overshoot bands at the top/bottom of the surface
+// whenever `overshoot > 0`. Without this guard, the clamp-to-edge
+// sampler would smear edge texels into the overshoot region and the
+// un-premult divide above would amplify their colour. Force off-window
+// samples to fully transparent — same pattern as doom's `inside` mask
+// — so the overshoot bands compose as empty pixels.
 vec4 getInputColor(vec2 coords) {
+    if (coords.x < 0.0 || coords.x > 1.0 || coords.y < 0.0 || coords.y > 1.0) {
+        return vec4(0.0);
+    }
     vec4 color = texture(uTexture0, coords);
     if (color.a > 0.001) {
         color.rgb /= color.a;

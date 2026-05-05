@@ -293,7 +293,14 @@ Item {
 
     Connections {
         function onOverrideChanged(path) {
-            if (!root._pathAffectsThisCard(path))
+            // Mirror the onShaderProfileChanged defensive guard: empty
+            // path is reserved for a future "tree fully reloaded"
+            // broadcast (today the controller only emits per-path, but
+            // discardChanges-style reloads could route through here too)
+            // and must refresh every card unconditionally — filtering
+            // it the way per-path emits get filtered would silently miss
+            // those broadcasts.
+            if (path !== "" && !root._pathAffectsThisCard(path))
                 return ;
 
             root.refreshFromTree();
@@ -375,8 +382,17 @@ Item {
                 // OFF toggle on the parent disables every descendant
                 // that doesn't have its own override.
                 settingsController.animationsPage.clearOverride(root.eventPath);
-                settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
-                }));
+                // Gate the shader-blocking write on actual shader-leg
+                // support: setShaderOverride logs qCWarning and rejects
+                // any path not in shaderSupportedEventPaths(), so calling
+                // it on a non-shader-leg event (parent nodes, non-shader
+                // legs like panel.slideIn) just spams the log. Cards that
+                // can't carry a shader can't have inheritance to block
+                // either, so skipping the call is semantically complete.
+                if (root._shaderLegSupported)
+                    settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
+                    }));
+
             }
         }
 
@@ -543,6 +559,20 @@ Item {
                 description: i18n("Apply a shader transition to this event")
 
                 PZCommon.ShaderPickerButton {
+                    // "None" semantically means "no shader runs
+                    // at this event" — write the engaged-empty
+                    // sentinel (`setShaderOverride(path, "")`)
+                    // so it BLOCKS inheritance from an ancestor.
+                    // Without this, picking None on a child
+                    // event whose parent ("All Window Events"
+                    // etc.) has a shader assigned was a no-op:
+                    // clearShaderOverride would just remove a
+                    // direct override that doesn't exist, and
+                    // the parent's shader would keep cascading
+                    // down — directly contradicting the user's
+                    // pick.
+                    // refresh handled by onShaderProfileChanged broadcast handler
+
                     // `availableShaderEffects()` is a Q_INVOKABLE — QML's
                     // binding engine can't observe internal state of an
                     // opaque function call. The card's root-level
@@ -573,19 +603,6 @@ Item {
                     includeNoneEntry: true
                     placeholderText: i18nc("@action:button", "Select shader…")
                     onShaderSelected: function(id) {
-                        // "None" semantically means "no shader runs
-                        // at this event" — write the engaged-empty
-                        // sentinel (`setShaderOverride(path, "")`)
-                        // so it BLOCKS inheritance from an ancestor.
-                        // Without this, picking None on a child
-                        // event whose parent ("All Window Events"
-                        // etc.) has a shader assigned was a no-op:
-                        // clearShaderOverride would just remove a
-                        // direct override that doesn't exist, and
-                        // the parent's shader would keep cascading
-                        // down — directly contradicting the user's
-                        // pick.
-
                         // Coerce undefined / null to "" so the empty-id
                         // check below doesn't throw on a model that
                         // emits a non-string sentinel for a cleared
@@ -606,14 +623,7 @@ Item {
 
                             settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
                             }));
-                            // Imperative kick: don't rely solely on the
-                            // shaderProfileChanged broadcast →
-                            // Connections refresh chain. Refreshing here
-                            // force-syncs the card's bindings against
-                            // the now-current tree.
-                            root.refreshShaderFromTree();
-                            root.refreshFromTree();
-                            root._inheritRev++;
+                            // refresh handled by onShaderProfileChanged broadcast handler
                             return ;
                         }
                         // No-op when the user re-picks the value already
@@ -637,16 +647,6 @@ Item {
                         // daemon can't validate.
                         settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
                         }));
-                        // Imperative kick — same rationale as the clear
-                        // path above. Force the picker's currentShaderId
-                        // binding (and the inheritance banner / shadowing-
-                        // children count) to re-evaluate against the now-
-                        // current tree so the UI never gets stuck on
-                        // stale state regardless of how the
-                        // shaderProfileChanged signal chain settles.
-                        root.refreshShaderFromTree();
-                        root.refreshFromTree();
-                        root._inheritRev++;
                     }
                 }
 

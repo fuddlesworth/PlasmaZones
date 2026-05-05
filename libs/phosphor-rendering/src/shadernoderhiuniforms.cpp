@@ -325,8 +325,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     // User texture upload (bindings 7-10)
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureSamplers[i]) {
-            const QRhiSampler::AddressMode addr =
-                (m_userTextureWraps[i] == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            const QRhiSampler::AddressMode addr = wrapModeToRhiAddress(m_userTextureWraps[i]);
             m_userTextureSamplers[i].reset(
                 rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_userTextureSamplers[i]->create()) {

@@ -23,6 +23,65 @@ namespace PhosphorAnimationShaders {
 namespace {
 Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 
+/// Validate a (possibly relative) texture path against an effect dir.
+/// Returns the validated absolute path on success, or std::nullopt
+/// when the path is rejected (file missing under existent root, OR
+/// resolves outside the effect dir under either canonical-vs-canonical
+/// or lexical-vs-lexical comparison).
+///
+/// Shared between the scan-time texture-list resolver in `parseEffect`
+/// and the runtime override resolver in `translateAnimationParams` so
+/// both paths apply the same defence against `..`-traversal and
+/// symlink-escape. Callers handle the nullopt case to either skip the
+/// slot (overrides) or clear the slot in lockstep with its wrap field
+/// (parseEffect).
+///
+/// `effectId` is for the warning message only — diagnostic hygiene so
+/// pack authors see which effect's metadata or runtime override was
+/// rejected. Pass an empty string for runtime overrides where the
+/// effect id is implicit in the call context.
+std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath, const QString& effectDir,
+                                                          const QString& effectId)
+{
+    if (rawPath.isEmpty() || effectDir.isEmpty())
+        return std::nullopt;
+    const QDir dir(effectDir);
+    const QFileInfo origInfo(rawPath);
+    const bool wasRelative = !origInfo.isAbsolute();
+    QString resolved = rawPath;
+    if (wasRelative) {
+        resolved = dir.filePath(resolved);
+    }
+    const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
+    const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
+    const QString canonicalRoot =
+        canonicalRootResolved.isEmpty() ? QString() : canonicalRootResolved + QLatin1Char('/');
+    const QString canonicalSymResolved = QFileInfo(resolved).canonicalFilePath();
+    // Reject when canonical is empty for the target but the effect dir
+    // itself canonicalised — that means the file does not exist on disk
+    // and the lexical fallback would otherwise wave it through. Mirrors
+    // the parseEffect rejection reason; matches the missing-file
+    // contract documented at the call sites.
+    if (canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty() && !QFile::exists(resolved)) {
+        qCWarning(lcRegistry).noquote() << "Animation effect" << effectId << "texture file does not exist:" << resolved
+                                        << "— rejected (path traversal guard)";
+        return std::nullopt;
+    }
+    // Pick comparison domain: prefer canonical (catches symlink
+    // escapes) when BOTH sides resolved, otherwise fall back to
+    // lexical for both. Never mix the two.
+    const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
+    const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
+    const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
+    if (wasRelative && !canonical.startsWith(comparisonRoot)) {
+        qCWarning(lcRegistry).noquote() << "Animation effect" << effectId << "texture path" << rawPath << "resolves to"
+                                        << canonical << "outside source dir" << comparisonRoot
+                                        << "— rejected (path traversal guard)";
+        return std::nullopt;
+    }
+    return canonical;
+}
+
 /// Parse one already-validated metadata.json root into an
 /// AnimationShaderEffect. The strategy already ran the file-existence,
 /// size-cap, and JSON-object-root checks before invoking us; we own only
@@ -123,52 +182,17 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         // future pack-distribution channel that accepts third-party
         // uploads.
         //
-        // Critical correctness rule: BOTH sides of the prefix
-        // comparison MUST be in the same form (both canonical or both
-        // lexical). Mixing them mis-rejects benign paths whenever the
-        // effectDir is reached through a symlink (`~/.local` →
-        // `/var/lib/...` on container/SteamOS-style systems, macOS
-        // `/tmp` → `/private/tmp`, overlay mounts). canonicalFilePath()
-        // returns empty when the target file doesn't yet exist (the
-        // documented live-reload-during-development workflow), so we
-        // resolve the canonical root once and pick ONE comparison
-        // domain per slot — canonical-vs-canonical when the texture
-        // file resolves, lexical-vs-lexical when it's missing.
-        const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
-        const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
-        // canonicalRoot is read ONLY in the `useCanonical=true` branch
-        // below, which is gated on `!canonicalRootResolved.isEmpty()`.
-        // Leave it empty in the missing-effectDir case rather than
-        // aliasing it to lexicalRoot — the alias was misleading because
-        // the value was never actually consumed.
-        const QString canonicalRoot =
-            canonicalRootResolved.isEmpty() ? QString() : canonicalRootResolved + QLatin1Char('/');
+        // Validation lives in `validateTexturePathWithinEffectDir` so
+        // the runtime override path in `translateAnimationParams`
+        // applies the IDENTICAL canonical / lexical / missing-file
+        // checks — symmetric defence whether the texture path arrived
+        // via metadata.json or via a friendlyParams override at use
+        // time.
         for (auto& tex : e.textures) {
             if (tex.path.isEmpty())
                 continue;
-            const QFileInfo origInfo(tex.path);
-            const bool wasRelative = !origInfo.isAbsolute();
-            QString resolved = tex.path;
-            if (wasRelative) {
-                resolved = dir.filePath(resolved);
-            }
-            const QString canonicalSymResolved = QFileInfo(resolved).canonicalFilePath();
-            // Pick comparison domain: prefer canonical (catches symlink
-            // escapes) when BOTH sides resolved, otherwise fall back to
-            // lexical for both. Never mix the two.
-            const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
-            const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
-            const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
-            // Allow absolute paths that the author wrote intentionally
-            // (e.g. /usr/share/plasmazones/...). Restrict relative paths
-            // to within sourceDir — those came from metadata.json and a
-            // `..`-escape (or a symlink that resolves outside) there
-            // indicates either a pack-author bug or a malicious shipped
-            // pack.
-            if (wasRelative && !canonical.startsWith(comparisonRoot)) {
-                qCWarning(lcRegistry).noquote()
-                    << "Animation effect" << e.id << "texture path" << tex.path << "resolves to" << canonical
-                    << "outside source dir" << comparisonRoot << "— rejected (path traversal guard)";
+            const auto validated = validateTexturePathWithinEffectDir(tex.path, effectDir, e.id);
+            if (!validated) {
                 // Clear BOTH path and wrap so the slot is internally
                 // coherent — `translateAnimationParams` skips empty-path
                 // slots, and a future `toJson` round-trip would drop
@@ -178,7 +202,7 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
                 tex.wrap.clear();
                 continue;
             }
-            tex.path = canonical;
+            tex.path = *validated;
         }
     }
 
@@ -290,15 +314,20 @@ AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
 
 AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
     : MetadataPackRegistryBase(lcRegistry(), buildScanStrategy(this), parent)
-    , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
 {
-    // The static_cast above is safe by construction (`buildScanStrategy`
-    // is the only path that populates the base's strategy slot, and it
-    // always produces a `ScanStrategy`). Pin that invariant in debug
-    // builds via dynamic_cast so a future refactor that diverts the
-    // strategy slot fails loudly instead of silently UB-ing on lookup.
-    Q_ASSERT_X(dynamic_cast<ScanStrategy*>(strategy()) != nullptr, "AnimationShaderRegistry",
+    // `buildScanStrategy` is the only path that populates the base's
+    // strategy slot, and it always produces a `ScanStrategy`. Pin that
+    // invariant via dynamic_cast BEFORE storing the typed pointer so a
+    // future refactor that diverts the slot fails loudly instead of
+    // silently UB-ing on lookup. The dynamic_cast must run before the
+    // static_cast result is committed to `m_typedStrategy` — otherwise
+    // an unrelated subclass would be stored, observable across the
+    // narrow window before the assert fires (and removed entirely in
+    // release builds where Q_ASSERT_X is a no-op).
+    auto* typed = dynamic_cast<ScanStrategy*>(strategy());
+    Q_ASSERT_X(typed != nullptr, "AnimationShaderRegistry",
                "buildScanStrategy must return a MetadataPackScanStrategy<AnimationShaderEffect>");
+    m_typedStrategy = typed;
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;
@@ -383,7 +412,13 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             // corrupt configs that already use Qt's order. Settings UI
             // / config writers emit Qt-form (alpha first) explicitly.
             const auto coerce = [](const QVariant& v) -> QColor {
-                if (v.canConvert<QColor>()) {
+                // Type-id (NOT canConvert<QColor>) so a QString variant
+                // takes the QString branch below. QString DOES
+                // canConvert<QColor> — it returns an INVALID QColor for
+                // any string, swallowing the variant before the proper
+                // QColor(QString) constructor branch runs. The metatype
+                // check pins this branch to actual QColor variants.
+                if (v.metaType().id() == QMetaType::QColor) {
                     const QColor c = v.value<QColor>();
                     if (c.isValid())
                         return c;
@@ -458,16 +493,18 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     // (resolved + traversal-checked at parseEffect scan time). Runtime
     // overrides from `friendlyParams` may arrive relative — settings UI
     // / D-Bus callers don't all know the effect's sourceDir. Resolve
-    // relative override paths against `effect.sourceDir` for parity
-    // with pack-defaults, so the downstream cache (`m_textureCache` on
-    // kwin / `m_userTextureImages` on daemon) keys on a stable absolute
-    // path regardless of which input shape the caller used. Empty /
-    // null paths skip the emit so a setShaderParams consumer's
-    // "missing key = no change" semantic doesn't accidentally clear a
-    // slot the caller intended to leave alone. Wrap-only entries are
-    // gated on a non-empty companion path so a consumer can't end up
-    // with a wrap mode applied to an unbound sampler.
-    const QDir sourceDir(effect.sourceDir);
+    // and traversal-check relative override paths against
+    // `effect.sourceDir` via the SAME helper parseEffect uses, so the
+    // downstream cache (`m_textureCache` on kwin / `m_userTextureImages`
+    // on daemon) keys on a stable absolute path regardless of which
+    // input shape the caller used AND a malicious caller can't bypass
+    // the scan-time guard by passing `../../../etc/passwd` through a
+    // friendlyParams override. Empty / null paths skip the emit so a
+    // setShaderParams consumer's "missing key = no change" semantic
+    // doesn't accidentally clear a slot the caller intended to leave
+    // alone. Wrap-only entries are gated on a non-empty companion
+    // path so a consumer can't end up with a wrap mode applied to an
+    // unbound sampler.
     for (int slot = 0; slot < AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
         const int glslSlot = slot + 1; // uTexture0 is reserved for the surface
         const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
@@ -481,13 +518,28 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         }
         const auto pathOverride = friendlyParams.constFind(pathKey);
         if (pathOverride != friendlyParams.constEnd()) {
-            path = pathOverride->toString();
-            // Resolve relative override paths against the effect's
-            // sourceDir. Skip when sourceDir is unset (degenerate
-            // case — pack came from an in-memory factory) so the
-            // override flows through unchanged.
-            if (!path.isEmpty() && QFileInfo(path).isRelative() && !effect.sourceDir.isEmpty()) {
-                path = sourceDir.filePath(path);
+            const QString candidate = pathOverride->toString();
+            if (candidate.isEmpty()) {
+                path = candidate;
+            } else if (effect.sourceDir.isEmpty()) {
+                // Degenerate case — pack came from an in-memory factory
+                // with no on-disk anchor. The override flows through
+                // unchanged because there is no sourceDir to resolve
+                // relative paths against and no traversal root to
+                // bound an absolute path with.
+                path = candidate;
+            } else {
+                const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id);
+                if (!validated) {
+                    // Rejected override clears BOTH path and wrap for
+                    // this slot — same coherence rule parseEffect
+                    // applies. Skip the slot entirely so the unbound
+                    // sampler doesn't end up with a wrap-only emit.
+                    path.clear();
+                    wrap.clear();
+                } else {
+                    path = *validated;
+                }
             }
         }
         const auto wrapOverride = friendlyParams.constFind(wrapKey);

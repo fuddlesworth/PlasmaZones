@@ -1106,7 +1106,8 @@ private Q_SLOTS:
         extra.insert(QLatin1String("textures"), texArr);
         writeMetadata(effDir, QStringLiteral("evil"), QStringLiteral("e.frag"), extra);
 
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("path traversal guard")));
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QRegularExpression::escape(QStringLiteral("path traversal guard"))));
         AnimationShaderRegistry registry;
         registry.addSearchPaths({tmp.path()}, LiveReload::Off);
         const auto effects = registry.availableEffects();
@@ -1163,7 +1164,8 @@ private Q_SLOTS:
         extra.insert(QLatin1String("textures"), texArr);
         writeMetadata(effDir, QStringLiteral("symlink-evil"), QStringLiteral("e.frag"), extra);
 
-        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("path traversal guard")));
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QRegularExpression::escape(QStringLiteral("path traversal guard"))));
         AnimationShaderRegistry registry;
         registry.addSearchPaths({tmp.path()}, LiveReload::Off);
         const auto effects = registry.availableEffects();

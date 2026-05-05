@@ -170,6 +170,7 @@ set(phosphoranimation_SRCS
     src/animationshaderregistry.cpp
     src/shaderprofile.cpp
     src/shaderprofiletree.cpp
+    src/contract_pins.cpp
 
     # Layer animator (ex phosphor-animation-layer)
     src/surfaceanimator.cpp

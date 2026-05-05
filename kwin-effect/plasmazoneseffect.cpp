@@ -39,7 +39,9 @@
 #include <QIcon>
 #include <QImage>
 #include <QPainter>
+#include <QRunnable>
 #include <QSvgRenderer>
+#include <QThreadPool>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -403,6 +405,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // Single-worker pool for off-loading user-texture loads. See the
+    // header docstring for `m_textureLoaderPool` for the rationale —
+    // serialised loads keep the dedupe cheap and avoid duplicate GPU
+    // uploads if multiple shader transitions reference the same file
+    // in quick succession.
+    m_textureLoaderPool.setMaxThreadCount(1);
+
     // Populate per-output clocks from the currently-known output set.
     // Subsequent hotplug events land in onScreenAdded / onScreenRemoved.
     //
@@ -461,7 +470,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // a fresh upload to pick up the new contents. The cache
                 // is keyed by absolute path; without this clear a
                 // file-content change with no path change would never
-                // refresh.
+                // refresh. Drain in-flight async loads first so a
+                // worker that's mid-rasterise can't post a queued
+                // upload AFTER the cache clear and silently re-populate
+                // the cache with stale (pre-reload) bytes.
+                m_textureLoaderPool.waitForDone();
+                m_textureLoadsInFlight.clear();
                 m_textureCache.clear();
             });
 
@@ -920,6 +934,17 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // dispatch to the slot AFTER the cache members are gone — UAF.
     // Disconnect now while everything is still alive.
     disconnect(&m_animationShaderRegistry, nullptr, this, nullptr);
+
+    // Drain the texture loader pool before any other teardown. A
+    // worker that's mid-rasterise would otherwise post a queued
+    // upload via QMetaObject::invokeMethod against `this` AFTER our
+    // members start tearing down — UAF on the texture cache.
+    // QThreadPool::waitForDone is called here BEFORE we let the
+    // member's destructor run (which itself blocks on waitForDone)
+    // so the pending invokeMethod posts are flushed against a still-
+    // intact `this`.
+    m_textureLoaderPool.waitForDone();
+    m_textureLoadsInFlight.clear();
 
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
@@ -3391,13 +3416,20 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 
     const bool minimized = w->isMinimized();
 
-    // window.minimize shader transition. KWin handles the motion (the
-    // minimize-to-taskbar zoom is a separate stock effect chain), we
-    // layer the shader effect on top via redirect. Going-to-minimized
-    // is "disappear" (reverse 1→0); coming-back-from-minimized is
-    // "appear" (forward 0→1) — same shader, both directions.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
-                           /*reverse=*/minimized);
+    // window.minimize shader transition. We only fire on UN-minimize
+    // (forward 0→1, "appear"). The going-to-minimized direction is
+    // intentionally not a shader event on the kwin-effect path: KWin
+    // pulls the surface (collapses frame geometry to 0×0 / sets
+    // isMinimized=true) BEFORE this signal fires, and
+    // beginShaderTransition's collapsed-surface guard rejects the
+    // install — the FBO allocation aborts on a 0×0 redirect target.
+    // A genuine "going away" minimise animation would need an
+    // unredirect-time hook that captures the last live frame before
+    // KWin tears the surface down; that's out of scope for this layer.
+    if (!minimized) {
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                               /*reverse=*/false);
+    }
 
     if (minimized) {
         if (isWindowFloating(windowId)) {
@@ -4691,12 +4723,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // paint (a 144 Hz display × multiple in-flight
                     // transitions would otherwise pay it dozens of
                     // times per frame).
+                    //
+                    // iDate.w decomposes seconds-since-midnight from
+                    // hour/minute/second/msec rather than dividing
+                    // `msecsSinceStartOfDay()` by 1000 — at 12:00 the
+                    // raw msec count is ~43.2M, and a single-precision
+                    // float divide there only resolves to ~4 ms steps
+                    // (vs the ~1 µs steps produced by the decomposed
+                    // form). Matches `shadernoderhiuniforms.cpp:51-52`
+                    // exactly so a shader that reads iDate.w sees the
+                    // same value on both runtimes.
                     const QDateTime nowDateTime = QDateTime::currentDateTime();
                     const QDate date = nowDateTime.date();
-                    const float iDateW = static_cast<float>(nowDateTime.time().msecsSinceStartOfDay()) / 1000.0f;
+                    const QTime t = nowDateTime.time();
+                    const float seconds = static_cast<float>(t.hour() * 3600 + t.minute() * 60 + t.second())
+                        + static_cast<float>(t.msec()) / 1000.0f;
                     shader->setUniform(cached->iDateLoc,
                                        QVector4D(static_cast<float>(date.year()), static_cast<float>(date.month()),
-                                                 static_cast<float>(date.day()), iDateW));
+                                                 static_cast<float>(date.day()), seconds));
                 }
                 if (cached->iMouseLoc >= 0) {
                     // iMouse: cursor position in window-local logical
@@ -4704,15 +4748,35 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // cursor is outside the window's frame. .zw carry
                     // the same position normalised to surface size,
                     // computed unconditionally from the same xy values
-                    // — mirrors `ShaderNodeRhi::syncBaseUniforms`
-                    // exactly (off-region: .zw lands at slightly-
-                    // negative `(-1/w, -1/h)`; the .xy sentinel is the
-                    // canonical off-region check). Hoisted behind the
-                    // loc>=0 guard for the same reason as iDate above.
+                    // — matches the daemon's animation-shader iMouse
+                    // semantics: the `(-1, -1)` sentinel is applied at
+                    // the higher layer by `SurfaceAnimator` via its
+                    // `QQuickHoverHandler` (see
+                    // `surfaceanimator.cpp::seedShaderUniformsAtAttach`
+                    // — when the handler reports `!isHovered()` the
+                    // animator pushes `setIMouse(QPointF(-1, -1))`).
+                    // The rendering layer's
+                    // `ShaderNodeRhi::syncBaseUniforms` itself always
+                    // writes the live position; the sentinel is
+                    // applied at the higher layer. We synthesise the
+                    // same sentinel here directly because there is no
+                    // hover-handler equivalent in the KWin-effect
+                    // pipeline. Hoisted behind the loc>=0 guard for
+                    // the same reason as iDate above.
+                    //
+                    // Edge inclusivity: `QQuickHoverHandler` treats the
+                    // right/bottom edge as INSIDE the item (its hover
+                    // region is `[x, x+w]` × `[y, y+h]`). `QRectF::contains`
+                    // would treat the same edge as OUTSIDE, so we'd
+                    // synthesise the sentinel one pixel earlier than
+                    // the daemon does. Spell out the inclusive check.
                     const QPointF cursorGlobal = KWin::effects->cursorPos();
                     float localX = -1.0f;
                     float localY = -1.0f;
-                    if (geo.contains(cursorGlobal)) {
+                    const bool insideInclusive = cursorGlobal.x() >= geo.x()
+                        && cursorGlobal.x() <= geo.x() + geo.width() && cursorGlobal.y() >= geo.y()
+                        && cursorGlobal.y() <= geo.y() + geo.height();
+                    if (insideInclusive) {
                         localX = static_cast<float>(cursorGlobal.x() - geo.x());
                         localY = static_cast<float>(cursorGlobal.y() - geo.y());
                     }
@@ -4808,10 +4872,154 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             glActiveTexture(GL_TEXTURE0);
             return;
         }
-        endShaderTransition(w);
+        // Expiry fall-through: the transition is past its duration but
+        // still installed. Tearing it down synchronously here would
+        // unredirect the window mid-paint; the current frame would
+        // then render UN-redirected and the user would see a
+        // one-frame surface flash before the next frame stabilises.
+        // Defer the teardown to a queued slot so the current paint
+        // cycle still consumes the redirected (final-progress) state,
+        // and the unredirect runs before the next paint. The pending-
+        // set guard prevents the next frame (which lands before the
+        // queued slot runs) from re-queuing a duplicate end and
+        // double-tearing-down the same transition.
+        if (!m_pendingShaderExpiryEnd.contains(w)) {
+            m_pendingShaderExpiryEnd.insert(w);
+            QPointer<KWin::EffectWindow> safeWindow(w);
+            // Stash the raw pointer too — `safeWindow` clears to null
+            // if KWin destroys the window before the queued slot runs,
+            // and `nullptr` is not the key the set was inserted with.
+            // The raw pointer is only used for set membership cleanup
+            // (never dereferenced unless the QPointer is still live).
+            KWin::EffectWindow* rawWindow = w;
+            QMetaObject::invokeMethod(
+                this,
+                [this, safeWindow, rawWindow]() {
+                    m_pendingShaderExpiryEnd.remove(rawWindow);
+                    if (!safeWindow) {
+                        return;
+                    }
+                    if (m_shaderTransitions.find(safeWindow.data()) != m_shaderTransitions.end()) {
+                        endShaderTransition(safeWindow.data());
+                    }
+                },
+                Qt::QueuedConnection);
+        }
     }
 
     OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Async texture pre-warm.
+//
+// Pattern: a `QRunnable` posted to `m_textureLoaderPool` performs the
+// CPU-bound load (`loadUserTextureImage` — QImage decode for raster
+// formats, QSvgRenderer rasterise for SVG/SVGZ) on a worker thread,
+// producing a `QImage` in `Format_RGBA8888`. The worker then dispatches
+// a queued slot back to `this` via `QMetaObject::invokeMethod(...,
+// Qt::QueuedConnection)` so the GL upload (`KWin::GLTexture::upload`)
+// runs on the GL-context thread (the compositor thread). The cache
+// insert and in-flight set bookkeeping happen entirely on the
+// compositor thread, so no locking is needed against
+// `m_textureCache` or `m_textureLoadsInFlight`.
+//
+// Thread-safety notes:
+//   • `QSvgRenderer` is NOT thread-safe across instances (it owns
+//     mutable rasteriser state during `render()` per Qt docs).
+//     `loadUserTextureImage` constructs a fresh `QSvgRenderer` per
+//     call, so each worker invocation gets its own renderer — safe.
+//   • `QImage(path)` (PNG/JPG/etc. decode) is thread-safe across
+//     instances per Qt docs.
+//   • `KWin::GLTexture::upload` MUST run on the GL thread; that's
+//     why the upload is dispatched back via QueuedConnection rather
+//     than completed inline on the worker.
+// ─────────────────────────────────────────────────────────────────────────────
+void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::optional<QSize> svgSize)
+{
+    if (absolutePath.isEmpty()) {
+        return;
+    }
+    // Already warm — fast path, no allocation.
+    if (m_textureCache.find(absolutePath) != m_textureCache.end()) {
+        return;
+    }
+    // Already in flight — a worker is mid-load; deduplicate to avoid
+    // duplicate GPU uploads when several transitions request the
+    // same path before the first one completes.
+    if (m_textureLoadsInFlight.contains(absolutePath)) {
+        return;
+    }
+    m_textureLoadsInFlight.insert(absolutePath);
+
+    // SVG default size matches `loadUserTextureImage`'s 1024 max-axis
+    // when no override is provided. Captured by value into the worker.
+    const int svgMaxDim = svgSize.has_value() ? std::max(svgSize->width(), svgSize->height()) : 1024;
+
+    class Loader : public QRunnable
+    {
+    public:
+        Loader(PlasmaZonesEffect* effect, QString path, int svgMaxDim)
+            : m_effect(effect)
+            , m_path(std::move(path))
+            , m_svgMaxDim(svgMaxDim)
+        {
+        }
+        void run() override
+        {
+            QImage img = loadUserTextureImage(m_path, m_svgMaxDim);
+            QPointer<PlasmaZonesEffect> effect = m_effect;
+            QString path = m_path;
+            // Bounce back to the compositor thread for the GL upload.
+            // The QPointer guards against the effect being destroyed
+            // while the worker was running — destructor's
+            // `m_textureLoaderPool.waitForDone()` already protects
+            // against this for the in-process teardown case, but the
+            // QPointer is defence-in-depth for any future caller that
+            // schedules this without owning the pool's lifetime.
+            QMetaObject::invokeMethod(
+                effect.data(),
+                [effect, path, img = std::move(img)]() mutable {
+                    if (!effect) {
+                        return;
+                    }
+                    effect->m_textureLoadsInFlight.remove(path);
+                    if (img.isNull()) {
+                        qCWarning(lcEffect) << "warmUserTextureAsync: load failed for" << path;
+                        return;
+                    }
+                    // Re-check the cache: another transition may have
+                    // synchronously loaded this path while we were on
+                    // the worker. Honour the existing entry; dropping
+                    // ours avoids a redundant GPU upload.
+                    if (effect->m_textureCache.find(path) != effect->m_textureCache.end()) {
+                        return;
+                    }
+                    std::unique_ptr<KWin::GLTexture> gpuTex = KWin::GLTexture::upload(img);
+                    if (!gpuTex) {
+                        qCWarning(lcEffect) << "warmUserTextureAsync: GLTexture::upload failed for" << path;
+                        return;
+                    }
+                    gpuTex->setFilter(GL_LINEAR);
+                    gpuTex->setWrapMode(GL_CLAMP_TO_EDGE);
+                    CachedTexture cachedTex;
+                    cachedTex.texture = std::move(gpuTex);
+                    cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
+                    effect->m_textureCache.emplace(path, std::move(cachedTex));
+                    qCDebug(lcEffect) << "warmUserTextureAsync: cached" << path;
+                },
+                Qt::QueuedConnection);
+        }
+
+    private:
+        QPointer<PlasmaZonesEffect> m_effect;
+        QString m_path;
+        int m_svgMaxDim;
+    };
+
+    auto* loader = new Loader(this, absolutePath, svgMaxDim);
+    loader->setAutoDelete(true);
+    m_textureLoaderPool.start(loader);
 }
 
 void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
@@ -5163,6 +5371,25 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // pointer in the transition. Wrap mode is stored per-transition so
     // two legs sharing a path can run with different wrap modes
     // without invalidating each other's cache entry.
+    //
+    // Pre-warm: kick an async load for every declared texture path
+    // BEFORE the synchronous fallback loop below. On the very first
+    // transition for a given path the cache is cold and the
+    // synchronous loader still runs (so the first frame is correct);
+    // every subsequent transition for that path either hits the warm
+    // cache (worker completed) or hits the in-flight dedupe (worker
+    // still running, synchronous loader picks up the slack one more
+    // time). The warmup itself is cheap — early-out on cache hit and
+    // on in-flight membership — so a second pass over the same path
+    // costs only a hash lookup.
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
+        const int glslSlot = slot + 1;
+        const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
+        const QString path = translated.value(pathKey).toString();
+        if (!path.isEmpty()) {
+            warmUserTextureAsync(path);
+        }
+    }
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
         const int glslSlot = slot + 1; // uTexture0 is the surface
         const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
@@ -5177,6 +5404,10 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         auto texIt = m_textureCache.find(path);
         bool freshlyLoaded = false;
         if (texIt == m_textureCache.end()) {
+            // Synchronous fallback — the warm path didn't promote in
+            // time (or this is the very first transition for this
+            // path). Subsequent transitions for the same path will
+            // hit the cache and pay zero load cost.
             const QImage img = loadUserTextureImage(path);
             if (img.isNull()) {
                 qCWarning(lcEffect) << "User texture failed to load:" << path << "for effect" << effectId << "slot"
@@ -5313,6 +5544,12 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
 {
     if (!window)
         return;
+    // Drop the expiry-pending guard regardless of whether the
+    // transition still exists. If a synchronous teardown beat the
+    // queued slot to the punch, the queued slot must not see this
+    // window flagged as still-pending or it would skip a future
+    // expiry's re-queue.
+    m_pendingShaderExpiryEnd.remove(window);
     auto it = m_shaderTransitions.find(window);
     if (it == m_shaderTransitions.end()) {
         return;

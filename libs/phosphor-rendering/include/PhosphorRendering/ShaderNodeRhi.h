@@ -187,6 +187,9 @@ public:
     // ── Textures ───────────────────────────────────────────────────────
     void setAudioSpectrum(const QVector<float>& spectrum);
     void setUserTexture(int slot, const QImage& image);
+    /// Set per-slot sampler address mode. Accepts "clamp", "repeat", or
+    /// "mirror" (case-sensitive); other values fall back to "clamp" via
+    /// `normalizeWrapMode`.
     void setUserTextureWrap(int slot, const QString& wrap);
     void setWallpaperTexture(const QImage& image);
     void setUseWallpaper(bool use);
@@ -235,11 +238,19 @@ public:
     // ── Include Paths ──────────────────────────────────────────────────
     void setShaderIncludePaths(const QStringList& paths);
 
-    /// Normalize wrap mode string to "clamp" or "repeat" (static helper,
-    /// safe to call from any thread — operates on its arguments only).
+    /// Normalize wrap mode string to "clamp", "repeat", or "mirror" (static
+    /// helper, safe to call from any thread — operates on its arguments only).
+    /// Unknown / empty inputs fall back to "clamp" — that fallback is
+    /// load-bearing for legacy callers that pass an empty string when no
+    /// wrap is configured.
     static QString normalizeWrapMode(const QString& wrap);
     /// Normalize filter mode string to "nearest", "linear", or "mipmap".
     static QString normalizeFilterMode(const QString& filter);
+
+    /// Map a normalized wrap-mode string to QRhiSampler::AddressMode. Single
+    /// source of truth for sampler address-mode selection so callers can't
+    /// drift on the "mirror" / "repeat" / "clamp" mapping.
+    static QRhiSampler::AddressMode wrapModeToRhiAddress(const QString& wrap);
 
 protected:
     /**
