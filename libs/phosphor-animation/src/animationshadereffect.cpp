@@ -118,7 +118,13 @@ QJsonObject AnimationShaderEffect::toJson() const
             // Skip empty-path entries to preserve fromJson(toJson(x))
             // round-trip stability — fromJson drops them on read, so
             // emitting them on write would cause the round-trip to
-            // shrink the list silently.
+            // shrink the list silently. An entry with empty path but
+            // non-empty wrap is also dropped: the wrap is meaningless
+            // without a sampler bound to it, and `parseEffect`'s
+            // path-traversal guard can produce exactly this shape by
+            // clearing path while leaving wrap intact (defence in
+            // depth). Letting it round-trip would silently smuggle a
+            // dead wrap value through future scans.
             if (t.path.isEmpty())
                 continue;
             QJsonObject tObj;

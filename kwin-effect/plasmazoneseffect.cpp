@@ -116,7 +116,27 @@ constexpr int EndDragTimeoutMs = 500;
 /// any animation shader that ships without `#version`.
 inline QByteArray injectKwinDefineAfterVersion(const QString& source)
 {
-    static const QLatin1String kDefineLine("#define PLASMAZONES_KWIN\n");
+    // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
+    // is not a Unicode whitespace category, so QString::trimmed() does
+    // NOT remove it — without this strip a BOM-prefixed shader's first
+    // line is "﻿#version 450", trimmed("...") still leads with the
+    // BOM, the `startsWith("#version")` check fails, and we fall into
+    // the "no #version" prepend path. That writes
+    // `#define PLASMAZONES_KWIN\n﻿#version 450...`, which the
+    // GLSL compiler rejects because `#version` must be the first
+    // non-comment token of the source.
+    QString working = source;
+    if (working.startsWith(QChar(0xFEFF))) {
+        working.remove(0, 1);
+    }
+
+    // Detect line ending so the injected define matches the source's
+    // convention. GLSL compilers accept mixed CRLF/LF, but mixing
+    // produces visually inconsistent diffs and trips lints. If any
+    // CRLF appears in the source, emit "\r\n"; otherwise plain "\n".
+    const bool useCrlf = working.contains(QStringLiteral("\r\n"));
+    const QString defineLine =
+        useCrlf ? QStringLiteral("#define PLASMAZONES_KWIN\r\n") : QStringLiteral("#define PLASMAZONES_KWIN\n");
 
     // Walk the source line-by-line and find the FIRST line whose
     // non-whitespace prefix is `#version`. A naive
@@ -127,16 +147,16 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
     int searchFrom = 0;
     int realVersionEnd = -1;
     bool inBlockComment = false;
-    while (searchFrom < source.size()) {
-        const int lineEnd = source.indexOf(QLatin1Char('\n'), searchFrom);
-        const int lineStop = (lineEnd < 0) ? source.size() : lineEnd;
-        QStringView line = QStringView(source).mid(searchFrom, lineStop - searchFrom);
+    while (searchFrom < working.size()) {
+        const int lineEnd = working.indexOf(QLatin1Char('\n'), searchFrom);
+        const int lineStop = (lineEnd < 0) ? working.size() : lineEnd;
+        QStringView line = QStringView(working).mid(searchFrom, lineStop - searchFrom);
         // Strip block comments (single-line forms only — multi-line
         // detection is handled across iterations via inBlockComment).
         if (inBlockComment) {
             const int closeIdx = line.indexOf(QLatin1String("*/"));
             if (closeIdx < 0) {
-                searchFrom = (lineEnd < 0) ? source.size() : lineEnd + 1;
+                searchFrom = (lineEnd < 0) ? working.size() : lineEnd + 1;
                 continue;
             }
             line = line.mid(closeIdx + 2);
@@ -175,11 +195,10 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
         // No #version directive (or it was shadowed by an early break
         // mid block-comment). Prepend the define — GL3+ legacy compilers
         // accept `#define` as the first token in compatibility profile.
-        return (QString(kDefineLine) + source).toUtf8();
+        return (defineLine + working).toUtf8();
     }
-    QString out = source;
-    out.insert(realVersionEnd + 1, kDefineLine);
-    return out.toUtf8();
+    working.insert(realVersionEnd + 1, defineLine);
+    return working.toUtf8();
 }
 
 /// Load a user-texture file into a QImage. Mirrors the daemon-side path
@@ -4999,11 +5018,18 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                 continue;
             }
             gpuTex->setFilter(GL_LINEAR);
+            // Force the GL state and the tracker into the same starting
+            // condition. A freshly-uploaded GLTexture has GL_REPEAT on
+            // GL_TEXTURE_WRAP_S/T per GL spec; without an explicit
+            // setWrapMode here the tracker would default to
+            // GL_CLAMP_TO_EDGE and the first bind requesting clamp
+            // would skip the setWrapMode call (tracker comparison
+            // matches), leaving the texture at REPEAT — silently wrong
+            // sampling on the first frame.
+            gpuTex->setWrapMode(GL_CLAMP_TO_EDGE);
             CachedTexture cachedTex;
             cachedTex.texture = std::move(gpuTex);
-            // lastAppliedWrap stays at GL_CLAMP_TO_EDGE default; first
-            // bind below will apply the leg's actual wrap and update
-            // the tracker.
+            cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
             texIt = m_textureCache.emplace(path, std::move(cachedTex)).first;
             freshlyLoaded = true;
         }

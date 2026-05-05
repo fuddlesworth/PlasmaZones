@@ -79,7 +79,8 @@ float edgeMask(float fadePixels) {
 // counter) but no leg-duration uniform, so map iFrame onto the same
 // effective rate by assuming ~60 fps: increments of
 // `LETTER_FLICKER_SPEED / 60` per frame land integer crossings every
-// ~30 frames at LETTER_FLICKER_SPEED=2, matching BMW's ~1Hz cycling.
+// ~30 frames at LETTER_FLICKER_SPEED=2 (≈ 2 Hz at 60 fps), matching
+// BMW's per-frame cycling rate at the same speed value.
 float getText(vec2 fragCoord) {
     vec2 pixelCoords = fragCoord * iResolution;
     vec2 uv          = mod(pixelCoords, letterSize) / letterSize;

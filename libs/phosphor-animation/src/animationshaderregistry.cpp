@@ -130,7 +130,13 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
                 qCWarning(lcRegistry).noquote()
                     << "Animation effect" << e.id << "texture path" << tex.path << "resolves to" << canonical
                     << "outside source dir" << canonicalRoot << "— rejected (path traversal guard)";
-                tex.path.clear(); // signal "no texture" downstream
+                // Clear BOTH path and wrap so the slot is internally
+                // coherent — `translateAnimationParams` skips empty-path
+                // slots, and a future `toJson` round-trip would drop
+                // the empty entry rather than smuggling a dead wrap
+                // through.
+                tex.path.clear();
+                tex.wrap.clear();
                 continue;
             }
             tex.path = canonical;

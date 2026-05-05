@@ -1108,12 +1108,20 @@ private Q_SLOTS:
 
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("path traversal guard")));
         AnimationShaderRegistry registry;
-        registry.addSearchPaths({tmp.path()});
+        registry.addSearchPaths({tmp.path()}, LiveReload::Off);
         const auto effects = registry.availableEffects();
         QCOMPARE(effects.size(), 1);
-        // Pack still loads — but the offending texture slot is cleared
-        // (path emptied) so downstream emit skips it.
-        QVERIFY(effects[0].textures.isEmpty() || effects[0].textures[0].path.isEmpty());
+        // Pack still loads. The offending texture slot is preserved in
+        // the vector (slot-index stability) with BOTH path and wrap
+        // cleared — downstream emit skips empty-path slots, and the
+        // toJson round-trip drops them. Pin the exact shape: one slot,
+        // both fields empty. An OR-clause that also accepted
+        // `textures.isEmpty()` would silently pass a regression where
+        // parseEffect started dropping the slot entirely, masking a
+        // contract change.
+        QCOMPARE(effects[0].textures.size(), 1);
+        QVERIFY(effects[0].textures[0].path.isEmpty());
+        QVERIFY(effects[0].textures[0].wrap.isEmpty());
     }
 
     void testParseEffectResolvesTexturePathRelativeToSourceDir()
@@ -1139,7 +1147,7 @@ private Q_SLOTS:
         writeMetadata(effDir, QStringLiteral("ok"), QStringLiteral("e.frag"), extra);
 
         AnimationShaderRegistry registry;
-        registry.addSearchPaths({tmp.path()});
+        registry.addSearchPaths({tmp.path()}, LiveReload::Off);
         const auto effects = registry.availableEffects();
         QCOMPARE(effects.size(), 1);
         QCOMPARE(effects[0].textures.size(), 1);

@@ -285,7 +285,17 @@ Item {
         }
 
         function onShaderProfileChanged(path) {
-            if (!root._pathAffectsThisCard(path))
+            // Empty-string path is the controller's "tree fully reloaded"
+            // broadcast — set/clear/clearDescendants all route through
+            // `Settings::setShaderProfileTree` which the controller
+            // relays as a single path-agnostic emit (see
+            // `animationspagecontroller.cpp` — `Q_EMIT
+            // shaderProfileChanged(QString())`). Filtering it out the
+            // way per-path emits get filtered would mean NO card ever
+            // refreshes its shader state for ANY shader-tree mutation
+            // — the exact bugs this Connections block was added to
+            // catch. Treat "" as "refresh me unconditionally".
+            if (path !== "" && !root._pathAffectsThisCard(path))
                 return ;
 
             root.refreshShaderFromTree();
