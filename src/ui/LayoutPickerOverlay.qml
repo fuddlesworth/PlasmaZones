@@ -25,38 +25,48 @@ import QtQuick.Window
 Window {
     id: root
 
-    // Aliases let the C++ writeQmlProperty(window, "...", ...) callsites in
-    // overlayservice/snapassist.cpp continue to address the same names
-    // without knowing they're now stored on the inner content Item.
-    property alias layouts: content.layouts
-    property alias activeLayoutId: content.activeLayoutId
-    property alias globalAutoAssign: content.globalAutoAssign
-    property alias screenAspectRatio: content.screenAspectRatio
-    property alias backgroundColor: content.backgroundColor
-    property alias textColor: content.textColor
-    property alias highlightColor: content.highlightColor
-    property alias inactiveColor: content.inactiveColor
-    property alias borderColor: content.borderColor
-    property alias activeOpacity: content.activeOpacity
-    property alias inactiveOpacity: content.inactiveOpacity
-    property alias fontFamily: content.fontFamily
-    property alias fontSizeScale: content.fontSizeScale
-    property alias fontWeight: content.fontWeight
-    property alias fontItalic: content.fontItalic
-    property alias fontUnderline: content.fontUnderline
-    property alias fontStrikeout: content.fontStrikeout
-    property alias locked: content.locked
-    property alias selectedIndex: content.selectedIndex
+    // OSD-style content lifecycle gate — see ZoneSelectorWindow's
+    // `loaded` property for the rationale. C++ toggles this false→true
+    // around each surface->show() so the LayoutPickerContent inside the
+    // Loader is re-instantiated and its inner shaderAnchor is a fresh
+    // QQuickItem per show. Without this, the persistent shaderAnchor's
+    // QQuickItemLayer state survives across shows and subsequent
+    // vertex-shader transitions sample stale FBO content.
+    property bool loaded: false
+    // Data properties live on root (not aliased to the inner content)
+    // because the Loader-driven LayoutPickerContent is destroyed +
+    // recreated on every show — aliases would break each time the
+    // content is unloaded. The inner content's bindings reach for
+    // root.* via QML lexical scope inside the Component below.
+    property var layouts: []
+    property string activeLayoutId: ""
+    property bool globalAutoAssign: false
+    property real screenAspectRatio: 16 / 9
+    property color backgroundColor: "white"
+    property color textColor: "black"
+    property color highlightColor: "blue"
+    property color inactiveColor: "gray"
+    property color borderColor: "black"
+    property real activeOpacity: 0.7
+    property real inactiveOpacity: 0.3
+    property string fontFamily: ""
+    property real fontSizeScale: 1
+    property int fontWeight: Font.Normal
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
+    property bool locked: false
+    property int selectedIndex: -1
     /// Logically-shown gate — written by C++ alongside Surface::show/hide
     /// so a logically-hidden picker (still Qt-visible under
     /// keepMappedOnHide=true) doesn't silently respond to stray
     /// accelerator deliveries.
-    property alias _shortcutsActive: content._shortcutsActive
+    property bool _shortcutsActive: false
     /// Idempotency latch for `dismissRequested`. Reset by C++ on every
     /// show (QML's `on<Name>Changed` handler form does not work for
     /// underscore-prefixed properties, so the reset can't be tied to
     /// `_shortcutsActive`'s change signal).
-    property alias _dismissed: content._dismissed
+    property bool _dismissed: false
 
     // Public C++ signal contract — connected at snapassist.cpp via
     // SIGNAL(layoutSelected(QString)) / SIGNAL(dismissRequested()).
@@ -77,18 +87,51 @@ Window {
     // warmed Vulkan swapchain survives across show cycles.
     visible: false
 
-    LayoutPickerContent {
-        id: content
-
+    Loader {
         anchors.fill: parent
-        // Forward content's internal signals to the Window's public ones
-        // — preserves snapassist.cpp's existing
-        // SIGNAL(layoutSelected(QString)) / SIGNAL(dismissRequested())
-        // connection targets.
-        onLayoutSelected: function(layoutId) {
-            root.layoutSelected(layoutId);
+        active: root.loaded
+        sourceComponent: contentComp
+    }
+
+    Component {
+        id: contentComp
+
+        LayoutPickerContent {
+            anchors.fill: parent
+            // Bind data from root via QML lexical scope (the Component
+            // is declared inside ZoneSelectorWindow / LayoutPickerOverlay,
+            // so `root` resolves at component-instantiation time).
+            layouts: root.layouts
+            activeLayoutId: root.activeLayoutId
+            globalAutoAssign: root.globalAutoAssign
+            screenAspectRatio: root.screenAspectRatio
+            backgroundColor: root.backgroundColor
+            textColor: root.textColor
+            highlightColor: root.highlightColor
+            inactiveColor: root.inactiveColor
+            borderColor: root.borderColor
+            activeOpacity: root.activeOpacity
+            inactiveOpacity: root.inactiveOpacity
+            fontFamily: root.fontFamily
+            fontSizeScale: root.fontSizeScale
+            fontWeight: root.fontWeight
+            fontItalic: root.fontItalic
+            fontUnderline: root.fontUnderline
+            fontStrikeout: root.fontStrikeout
+            locked: root.locked
+            selectedIndex: root.selectedIndex
+            _shortcutsActive: root._shortcutsActive
+            _dismissed: root._dismissed
+            // Forward content's internal signals to the Window's public ones
+            // — preserves snapassist.cpp's existing
+            // SIGNAL(layoutSelected(QString)) / SIGNAL(dismissRequested())
+            // connection targets.
+            onLayoutSelected: function(layoutId) {
+                root.layoutSelected(layoutId);
+            }
+            onDismissRequested: root.dismissRequested()
         }
-        onDismissRequested: root.dismissRequested()
+
     }
 
 }
