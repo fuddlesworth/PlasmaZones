@@ -201,7 +201,9 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     // animates. Map the wl_surface on first show via Surface::show()
     // (idempotent on subsequent shows; the keepMappedOnHide=true config
     // means the wl_surface stays mapped between slot animations).
-    surface->show();
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
@@ -287,7 +289,9 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
     sizeOsdToScreen(window, screenGeom);
     cancelSurfacePrime(surface);
-    surface->show();
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
@@ -375,7 +379,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 
     sizeOsdToScreen(window, screenGeom);
     cancelSurfacePrime(surface);
-    surface->show();
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Notification, []() { });
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
@@ -756,7 +762,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // animator beginHide on the slot (see osdDismissRequested wiring
     // in ensurePassiveShellFor).
     cancelSurfacePrime(navSurface);
-    navSurface->show();
+    if (!navSurface->isLogicallyShown()) {
+        navSurface->show();
+    }
     osdSlot->setVisible(true);
     m_surfaceAnimator->beginShow(navSurface, osdSlot, PzRoles::Notification, []() { });
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");

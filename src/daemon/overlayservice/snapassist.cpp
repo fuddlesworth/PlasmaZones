@@ -202,7 +202,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     writeQmlProperty(slot, QStringLiteral("loaded"), true);
 
     cancelSurfacePrime(shellSurface);
-    shellSurface->show();
+    if (!shellSurface->isLogicallyShown()) {
+        shellSurface->show();
+    }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::SnapAssist, []() { });
 
@@ -449,7 +451,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(slot, QStringLiteral("loaded"), true);
 
     cancelSurfacePrime(shellSurface);
-    shellSurface->show();
+    if (!shellSurface->isLogicallyShown()) {
+        shellSurface->show();
+    }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::LayoutPicker, []() { });
 

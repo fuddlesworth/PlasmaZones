@@ -76,7 +76,9 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         writeQmlProperty(slot, QStringLiteral("loaded"), true);
         cancelSurfacePrime(state->passiveShellSurface);
-        state->passiveShellSurface->show();
+        if (!state->passiveShellSurface->isLogicallyShown()) {
+            state->passiveShellSurface->show();
+        }
         slot->setVisible(true);
         m_surfaceAnimator->beginShow(state->passiveShellSurface, slot, PzRoles::ZoneSelector, []() { });
     };

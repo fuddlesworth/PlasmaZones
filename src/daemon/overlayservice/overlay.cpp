@@ -23,6 +23,7 @@
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include "pz_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -210,7 +211,18 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             qCDebug(lcOverlay) << "initializeOverlay: screenId=" << screenId << "geom=" << geom << "windowScreen="
                                << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
             updateOverlayWindow(screenId, physScreen);
-            window->show();
+            // Post-shell-migration: shell window stays mapped permanently;
+            // animation drives the per-content slot's opacity. Surface::show()
+            // only fires on the very first transition Hidden→Shown.
+            auto* shellSurface = m_screenStates[screenId].passiveShellSurface;
+            auto* slot = m_screenStates[screenId].passiveShellMainOverlaySlot;
+            if (shellSurface && slot) {
+                if (!shellSurface->isLogicallyShown()) {
+                    shellSurface->show();
+                }
+                slot->setVisible(true);
+                m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::Overlay, []() { });
+            }
             window->update();
         }
     }
