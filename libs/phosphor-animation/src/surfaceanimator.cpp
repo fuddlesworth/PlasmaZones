@@ -772,6 +772,26 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::yChanged, shaderItem, syncGeometry);
 
+    // Seed the runtime-only uniforms (iAnchorSize, iSurfaceScreenPos,
+    // and the boundsExtent-dependent shader item geometry) once
+    // unconditionally. The signal-driven lambda above only fires on
+    // subsequent anchor geometry changes; for surfaces where the anchor
+    // is persistent across show/hide cycles (zone selector / snap-assist /
+    // layout picker — pre-warmed PopupFrames with constant width/height),
+    // the lambda would never fire post-attach and the uniforms would
+    // stay at their default-constructed zeros. Result on a Parent-extent
+    // shader: iAnchorSize = (0, 0) → cardSize → (1, 1) via the shader's
+    // own max guard → cardHalfClip ≈ 0 → geometry collapses to a point
+    // and the surface vanishes for the entire leg.
+    //
+    // OSDs hid this because their loaded content is freshly instantiated
+    // by NotificationOverlay's Loader on each show, which fires a fresh
+    // round of widthChanged/heightChanged on the inner card during the
+    // first layout pass and incidentally seeds the uniforms. Popups
+    // don't go through that re-instantiation, so they need an explicit
+    // first call.
+    syncGeometry();
+
     // Hide visible decorator siblings — see `hideAnchorSiblings` for the
     // rationale (Qt 6 MultiEffect can't sample our shader item as source).
     QList<QPointer<QQuickItem>> hiddenSiblings =
