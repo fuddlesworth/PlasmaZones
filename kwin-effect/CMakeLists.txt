@@ -41,6 +41,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/borders.cpp
+    plasmazoneseffect/window_identity.cpp
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp
