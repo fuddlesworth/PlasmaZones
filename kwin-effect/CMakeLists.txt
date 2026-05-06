@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_apply.cpp
+    plasmazoneseffect/drag_snap.cpp
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp
