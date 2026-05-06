@@ -60,16 +60,6 @@ Window {
     property int previewHeight: 101
     property bool previewLockAspect: true
     property bool positionIsVertical: false
-    // OSD-style content lifecycle gate. C++ sets `loaded = true` immediately
-    // before each `surface->show()` and `loaded = false` after the hide leg
-    // completes (or by toggling false→true on every show to force a fresh
-    // instantiation). The contentWrapper Item sits inside a Loader bound to
-    // this property: every show gets a brand-new shaderAnchor QQuickItem,
-    // matching NotificationOverlay's Loader-driven OSD lifecycle. Without
-    // that fresh instantiation the persistent PopupFrame anchor's
-    // QQuickItemLayer / QSGLayer state survives across shows and the second
-    // and subsequent vertex-shader transitions sample stale FBO content.
-    property bool loaded: false
     // Layout indicator dimensions (set from C++ to keep a single source of truth)
     property int indicatorWidth: 180
     property int indicatorHeight: 101
@@ -235,397 +225,380 @@ Window {
         }
     }
 
-    // OSD-style Loader: fresh content (and a fresh shaderAnchor) on every
-    // show. C++ toggles root.loaded = false then true around each show, so
-    // the previous show's contentWrapper QQuickItem is destroyed and a
-    // fresh one is instantiated — same lifecycle NotificationOverlay's
-    // mode-driven Loader gives the OSD inner card. See
-    // `OverlayService::showZoneSelector` for the C++ side of the toggle.
-    Loader {
-        anchors.fill: parent
-        active: root.loaded
-        sourceComponent: contentComp
-    }
-
     // Content wrapper. Opacity defaults to 1 — Phase 5 SurfaceAnimator
     // drives Window.contentItem opacity for show/hide so this child stays
     // at 1 and inherits visibility from the parent fade. Animating
     // root.opacity directly would emit Wayland setOpacity warnings on
     // layer-shell surfaces.
-    Component {
-        id: contentComp
+    Item {
+        id: contentWrapper
 
-        Item {
-            id: contentWrapper
+        anchors.fill: parent
 
-            anchors.fill: parent
+        // Main container - uses States for proper anchor management
+        // Conditional anchors with undefined don't reliably unset in QML
+        QFZCommon.PopupFrame {
+            // Scroll fade indicators — show gradient edges when content overflows
+            // Shader-anchor opt-in: SurfaceAnimator's shader leg walks
+            // its target's visual children for a `shaderAnchor: true`
+            // property tag and parents the transition shader to whatever
+            // it finds (sized after it). Without this, the wayland
+            // surface is fullscreen and the shader (pixelate / glitch /
+            // dissolve / …) renders across the whole screen instead of
+            // the visible selector card. The tag is a *property* rather
+            // than an objectName so distinct surfaces (LayoutPicker / OSDs /
+            // ZoneSelector) can each carry their own anchor without
+            // collision under any shared QObject traversal — the
+            // animator narrows lookup to the surface's own contentItem
+            // subtree but the property keeps the boolean nature of the
+            // tag explicit.
 
-            // Main container - uses States for proper anchor management
-            // Conditional anchors with undefined don't reliably unset in QML
-            QFZCommon.PopupFrame {
-                // Scroll fade indicators — show gradient edges when content overflows
-                // Shader-anchor opt-in: SurfaceAnimator's shader leg walks
-                // its target's visual children for a `shaderAnchor: true`
-                // property tag and parents the transition shader to whatever
-                // it finds (sized after it). Without this, the wayland
-                // surface is fullscreen and the shader (pixelate / glitch /
-                // dissolve / …) renders across the whole screen instead of
-                // the visible selector card. The tag is a *property* rather
-                // than an objectName so distinct surfaces (LayoutPicker / OSDs /
-                // ZoneSelector) can each carry their own anchor without
-                // collision under any shared QObject traversal — the
-                // animator narrows lookup to the surface's own contentItem
-                // subtree but the property keeps the boolean nature of the
-                // tag explicit.
+            id: container
 
-                id: container
+            property bool shaderAnchor: true
 
-                property bool shaderAnchor: true
-
-                // The `shaderAnchor` objectName remains for selector_update.cpp's
-                // independent `findQmlItemByName` polish() pass — that pass
-                // walks the same item by name and is unrelated to the
-                // animator's property-based lookup.
-                objectName: "shaderAnchor"
-                width: root.containerWidth
-                height: root.containerHeight
-                backgroundColor: root.backgroundColor
-                textColor: root.textColor
-                containerRadius: root.containerRadius
-                // State based on selectorPosition (0-8 grid)
-                // 0=TopLeft, 1=Top, 2=TopRight, 3=Left, 4=Center, 5=Right, 6=BottomLeft, 7=Bottom, 8=BottomRight
-                state: {
-                    switch (root.selectorPosition) {
-                    case 0:
-                        return "topLeft";
-                    case 1:
-                        return "top";
-                    case 2:
-                        return "topRight";
-                    case 3:
-                        return "left";
-                    case 4:
-                        return "center";
-                    case 5:
-                        return "right";
-                    case 6:
-                        return "bottomLeft";
-                    case 7:
-                        return "bottom";
-                    case 8:
-                        return "bottomRight";
-                    default:
-                        return "top";
-                    }
+            // The `shaderAnchor` objectName remains for selector_update.cpp's
+            // independent `findQmlItemByName` polish() pass — that pass
+            // walks the same item by name and is unrelated to the
+            // animator's property-based lookup.
+            objectName: "shaderAnchor"
+            width: root.containerWidth
+            height: root.containerHeight
+            backgroundColor: root.backgroundColor
+            textColor: root.textColor
+            containerRadius: root.containerRadius
+            // State based on selectorPosition (0-8 grid)
+            // 0=TopLeft, 1=Top, 2=TopRight, 3=Left, 4=Center, 5=Right, 6=BottomLeft, 7=Bottom, 8=BottomRight
+            state: {
+                switch (root.selectorPosition) {
+                case 0:
+                    return "topLeft";
+                case 1:
+                    return "top";
+                case 2:
+                    return "topRight";
+                case 3:
+                    return "left";
+                case 4:
+                    return "center";
+                case 5:
+                    return "right";
+                case 6:
+                    return "bottomLeft";
+                case 7:
+                    return "bottom";
+                case 8:
+                    return "bottomRight";
+                default:
+                    return "top";
                 }
-                states: [
-                    State {
-                        name: "topLeft"
+            }
+            states: [
+                State {
+                    name: "topLeft"
 
-                        AnchorChanges {
-                            target: container
-                            anchors.top: parent.top
-                            anchors.bottom: undefined
-                            anchors.left: parent.left
-                            anchors.right: undefined
-                            anchors.verticalCenter: undefined
-                            anchors.horizontalCenter: undefined
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.topMargin: root.containerTopMargin
-                            anchors.leftMargin: root.containerSideMargin
-                        }
-
-                    },
-                    State {
-                        name: "top"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: parent.top
-                            anchors.bottom: undefined
-                            anchors.left: undefined
-                            anchors.right: undefined
-                            anchors.verticalCenter: undefined
-                            anchors.horizontalCenter: parent.horizontalCenter
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.topMargin: root.containerTopMargin
-                        }
-
-                    },
-                    State {
-                        name: "topRight"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: parent.top
-                            anchors.bottom: undefined
-                            anchors.left: undefined
-                            anchors.right: parent.right
-                            anchors.verticalCenter: undefined
-                            anchors.horizontalCenter: undefined
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.topMargin: root.containerTopMargin
-                            anchors.rightMargin: root.containerSideMargin
-                        }
-
-                    },
-                    State {
-                        name: "left"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: undefined
-                            anchors.bottom: undefined
-                            anchors.left: parent.left
-                            anchors.right: undefined
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.horizontalCenter: undefined
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.leftMargin: root.containerSideMargin
-                        }
-
-                    },
-                    State {
-                        name: "center"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: undefined
-                            anchors.bottom: undefined
-                            anchors.left: undefined
-                            anchors.right: undefined
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.horizontalCenter: parent.horizontalCenter
-                        }
-
-                    },
-                    State {
-                        name: "right"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: undefined
-                            anchors.bottom: undefined
-                            anchors.left: undefined
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.horizontalCenter: undefined
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.rightMargin: root.containerSideMargin
-                        }
-
-                    },
-                    State {
-                        name: "bottomLeft"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: undefined
-                            anchors.bottom: parent.bottom
-                            anchors.left: parent.left
-                            anchors.right: undefined
-                            anchors.verticalCenter: undefined
-                            anchors.horizontalCenter: undefined
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.bottomMargin: root.containerTopMargin
-                            anchors.leftMargin: root.containerSideMargin
-                        }
-
-                    },
-                    State {
-                        name: "bottom"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: undefined
-                            anchors.bottom: parent.bottom
-                            anchors.left: undefined
-                            anchors.right: undefined
-                            anchors.verticalCenter: undefined
-                            anchors.horizontalCenter: parent.horizontalCenter
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.bottomMargin: root.containerTopMargin
-                        }
-
-                    },
-                    State {
-                        name: "bottomRight"
-
-                        AnchorChanges {
-                            target: container
-                            anchors.top: undefined
-                            anchors.bottom: parent.bottom
-                            anchors.left: undefined
-                            anchors.right: parent.right
-                            anchors.verticalCenter: undefined
-                            anchors.horizontalCenter: undefined
-                        }
-
-                        PropertyChanges {
-                            target: container
-                            anchors.bottomMargin: root.containerTopMargin
-                            anchors.rightMargin: root.containerSideMargin
-                        }
-
+                    AnchorChanges {
+                        target: container
+                        anchors.top: parent.top
+                        anchors.bottom: undefined
+                        anchors.left: parent.left
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
                     }
-                ]
 
-                // ScrollView wrapper for overflow handling
-                ScrollView {
-                    id: scrollView
+                    PropertyChanges {
+                        target: container
+                        anchors.topMargin: root.containerTopMargin
+                        anchors.leftMargin: root.containerSideMargin
+                    }
 
-                    anchors.centerIn: parent
-                    width: root.contentWidth
-                    height: root.contentHeight
-                    clip: root.needsScrolling || root.needsHorizontalScrolling
-                    contentWidth: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
-                    contentHeight: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
-                    // Only show scrollbars when needed
-                    ScrollBar.vertical.policy: root.needsScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                    ScrollBar.horizontal.policy: root.needsHorizontalScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                },
+                State {
+                    name: "top"
 
-                    // Layout previews grid
-                    GridLayout {
-                        id: contentGrid
+                    AnchorChanges {
+                        target: container
+                        anchors.top: parent.top
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
 
-                        objectName: "zoneSelectorContentGrid"
-                        width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
-                        height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
-                        columns: root.layoutColumns
-                        rowSpacing: root.indicatorSpacing
-                        columnSpacing: root.indicatorSpacing
+                    PropertyChanges {
+                        target: container
+                        anchors.topMargin: root.containerTopMargin
+                    }
 
-                        Repeater {
-                            model: root.layouts
+                },
+                State {
+                    name: "topRight"
 
-                            delegate: Item {
-                                id: indicator
+                    AnchorChanges {
+                        target: container
+                        anchors.top: parent.top
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
 
-                                required property var modelData
-                                required property int index
-                                property string layoutId: modelData.id || ""
-                                property bool isActive: layoutId === root.activeLayoutId
-                                property bool hasSelectedZone: root.selectedLayoutId === layoutId
+                    PropertyChanges {
+                        target: container
+                        anchors.topMargin: root.containerTopMargin
+                        anchors.rightMargin: root.containerSideMargin
+                    }
 
-                                width: root.indicatorWidth + root.cardSidePadding * 2
-                                height: root.indicatorHeight + root.labelSpace + root.cardPadding
-                                Layout.preferredWidth: width
-                                Layout.preferredHeight: height
+                },
+                State {
+                    name: "left"
 
-                                QFZCommon.LayoutCard {
-                                    anchors.fill: parent
-                                    layoutData: indicator.modelData
-                                    isActive: indicator.isActive
-                                    isSelected: indicator.hasSelectedZone
-                                    globalAutoAssign: root.globalAutoAssign
-                                    previewWidth: root.indicatorWidth
-                                    previewHeight: root.indicatorHeight
-                                    // Zone selector features
-                                    showCardBackground: true
-                                    interactive: !(root.locked && !indicator.isActive)
-                                    selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
-                                    // Zone appearance
-                                    zonePadding: root.scaledPadding
-                                    edgeGap: root.scaledPadding
-                                    minZoneSize: root.minZoneSize
-                                    zoneHighlightColor: root.highlightColor
-                                    zoneInactiveColor: root.inactiveColor
-                                    zoneBorderColor: root.borderColor
-                                    inactiveOpacity: root.inactiveOpacity
-                                    activeOpacity: root.activeOpacity
-                                    hoverScale: 1.05
-                                    // Theme
-                                    highlightColor: root.highlightColor
-                                    textColor: root.textColor
-                                    backgroundColor: root.backgroundColor
-                                    // Font
-                                    fontFamily: root.fontFamily
-                                    fontSizeScale: root.fontSizeScale
-                                    fontWeight: root.fontWeight
-                                    fontItalic: root.fontItalic
-                                    fontUnderline: root.fontUnderline
-                                    fontStrikeout: root.fontStrikeout
-                                    // Animation
-                                    animationDuration: animationConstants.normalDuration
-                                    shortAnimationDuration: animationConstants.shortDuration
-                                    labelTopMargin: root.labelTopMargin
-                                    onZoneHovered: function(zoneIndex) {
-                                        // Block zone interaction on locked non-active layouts
-                                        if (root.locked && !indicator.isActive)
-                                            return ;
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: undefined
+                        anchors.left: parent.left
+                        anchors.right: undefined
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenter: undefined
+                    }
 
-                                        // Guard: don't re-emit when nothing changed.
-                                        // C++ writes selectedLayoutId/selectedZoneIndex
-                                        // back via property bindings when it hit-tests;
-                                        // without this guard the round-trip would loop
-                                        // through zoneSelected → C++ slot → property
-                                        // write → onZoneHovered fires again.
-                                        if (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === zoneIndex)
-                                            return ;
+                    PropertyChanges {
+                        target: container
+                        anchors.leftMargin: root.containerSideMargin
+                    }
 
-                                        root.selectedLayoutId = indicator.layoutId;
-                                        root.selectedZoneIndex = zoneIndex;
-                                        var zones = indicator.modelData.zones || [];
-                                        var zone = zones[zoneIndex];
-                                        var relGeo = zone ? (zone.relativeGeometry || {
-                                        }) : {
-                                        };
-                                        root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
-                                    }
+                },
+                State {
+                    name: "center"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: undefined
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+
+                },
+                State {
+                    name: "right"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.rightMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "bottomLeft"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.bottomMargin: root.containerTopMargin
+                        anchors.leftMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "bottom"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: parent.bottom
+                        anchors.left: undefined
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.bottomMargin: root.containerTopMargin
+                    }
+
+                },
+                State {
+                    name: "bottomRight"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: parent.bottom
+                        anchors.left: undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.bottomMargin: root.containerTopMargin
+                        anchors.rightMargin: root.containerSideMargin
+                    }
+
+                }
+            ]
+
+            // ScrollView wrapper for overflow handling
+            ScrollView {
+                id: scrollView
+
+                anchors.centerIn: parent
+                width: root.contentWidth
+                height: root.contentHeight
+                clip: root.needsScrolling || root.needsHorizontalScrolling
+                contentWidth: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
+                contentHeight: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
+                // Only show scrollbars when needed
+                ScrollBar.vertical.policy: root.needsScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                ScrollBar.horizontal.policy: root.needsHorizontalScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+
+                // Layout previews grid
+                GridLayout {
+                    id: contentGrid
+
+                    objectName: "zoneSelectorContentGrid"
+                    width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
+                    height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
+                    columns: root.layoutColumns
+                    rowSpacing: root.indicatorSpacing
+                    columnSpacing: root.indicatorSpacing
+
+                    Repeater {
+                        model: root.layouts
+
+                        delegate: Item {
+                            id: indicator
+
+                            required property var modelData
+                            required property int index
+                            property string layoutId: modelData.id || ""
+                            property bool isActive: layoutId === root.activeLayoutId
+                            property bool hasSelectedZone: root.selectedLayoutId === layoutId
+
+                            width: root.indicatorWidth + root.cardSidePadding * 2
+                            height: root.indicatorHeight + root.labelSpace + root.cardPadding
+                            Layout.preferredWidth: width
+                            Layout.preferredHeight: height
+
+                            QFZCommon.LayoutCard {
+                                anchors.fill: parent
+                                layoutData: indicator.modelData
+                                isActive: indicator.isActive
+                                isSelected: indicator.hasSelectedZone
+                                globalAutoAssign: root.globalAutoAssign
+                                previewWidth: root.indicatorWidth
+                                previewHeight: root.indicatorHeight
+                                // Zone selector features
+                                showCardBackground: true
+                                interactive: !(root.locked && !indicator.isActive)
+                                selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
+                                // Zone appearance
+                                zonePadding: root.scaledPadding
+                                edgeGap: root.scaledPadding
+                                minZoneSize: root.minZoneSize
+                                zoneHighlightColor: root.highlightColor
+                                zoneInactiveColor: root.inactiveColor
+                                zoneBorderColor: root.borderColor
+                                inactiveOpacity: root.inactiveOpacity
+                                activeOpacity: root.activeOpacity
+                                hoverScale: 1.05
+                                // Theme
+                                highlightColor: root.highlightColor
+                                textColor: root.textColor
+                                backgroundColor: root.backgroundColor
+                                // Font
+                                fontFamily: root.fontFamily
+                                fontSizeScale: root.fontSizeScale
+                                fontWeight: root.fontWeight
+                                fontItalic: root.fontItalic
+                                fontUnderline: root.fontUnderline
+                                fontStrikeout: root.fontStrikeout
+                                // Animation
+                                animationDuration: animationConstants.normalDuration
+                                shortAnimationDuration: animationConstants.shortDuration
+                                labelTopMargin: root.labelTopMargin
+                                onZoneHovered: function(zoneIndex) {
+                                    // Block zone interaction on locked non-active layouts
+                                    if (root.locked && !indicator.isActive)
+                                        return ;
+
+                                    // Guard: don't re-emit when nothing changed.
+                                    // C++ writes selectedLayoutId/selectedZoneIndex
+                                    // back via property bindings when it hit-tests;
+                                    // without this guard the round-trip would loop
+                                    // through zoneSelected → C++ slot → property
+                                    // write → onZoneHovered fires again.
+                                    if (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === zoneIndex)
+                                        return ;
+
+                                    root.selectedLayoutId = indicator.layoutId;
+                                    root.selectedZoneIndex = zoneIndex;
+                                    var zones = indicator.modelData.zones || [];
+                                    var zone = zones[zoneIndex];
+                                    var relGeo = zone ? (zone.relativeGeometry || {
+                                    }) : {
+                                    };
+                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
+                                }
+                            }
+
+                            // Lock overlay for non-active layouts — absorbs all mouse events
+                            Rectangle {
+                                anchors.fill: parent
+                                visible: root.locked && !indicator.isActive
+                                z: 100
+                                // Theme-derived scrim rather than raw black so
+                                // light themes get a sensible dim colour too.
+                                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                                radius: Kirigami.Units.largeSpacing
+
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    source: "object-locked"
+                                    width: Math.min(parent.width, parent.height) * 0.3
+                                    height: width
+                                    color: Kirigami.Theme.highlightedTextColor
                                 }
 
-                                // Lock overlay for non-active layouts — absorbs all mouse events
-                                Rectangle {
+                                MouseArea {
                                     anchors.fill: parent
-                                    visible: root.locked && !indicator.isActive
-                                    z: 100
-                                    // Theme-derived scrim rather than raw black so
-                                    // light themes get a sensible dim colour too.
-                                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                                    radius: Kirigami.Units.largeSpacing
-
-                                    Kirigami.Icon {
-                                        anchors.centerIn: parent
-                                        source: "object-locked"
-                                        width: Math.min(parent.width, parent.height) * 0.3
-                                        height: width
-                                        color: Kirigami.Theme.highlightedTextColor
+                                    hoverEnabled: true
+                                    cursorShape: Qt.ForbiddenCursor
+                                    Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
+                                    onClicked: function(mouse) {
+                                        mouse.accepted = true;
                                     }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.ForbiddenCursor
-                                        Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
-                                        onClicked: function(mouse) {
-                                            mouse.accepted = true;
-                                        }
-                                        onPressed: function(mouse) {
-                                            mouse.accepted = true;
-                                        }
+                                    onPressed: function(mouse) {
+                                        mouse.accepted = true;
                                     }
-
                                 }
 
                             }
@@ -636,114 +609,114 @@ Window {
 
                 }
 
-                // Top fade: visible when scrolled down (more content above)
-                Rectangle {
-                    anchors.top: scrollView.top
-                    anchors.left: scrollView.left
-                    anchors.right: scrollView.right
-                    height: root.indicatorSpacing
-                    visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
-                    z: 10
+            }
 
-                    gradient: Gradient {
-                        GradientStop {
-                            position: 0
-                            color: root.fadeColor
-                        }
+            // Top fade: visible when scrolled down (more content above)
+            Rectangle {
+                anchors.top: scrollView.top
+                anchors.left: scrollView.left
+                anchors.right: scrollView.right
+                height: root.indicatorSpacing
+                visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
+                z: 10
 
-                        GradientStop {
-                            position: 1
-                            color: "transparent"
-                        }
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: root.fadeColor
+                    }
 
+                    GradientStop {
+                        position: 1
+                        color: "transparent"
                     }
 
                 }
 
-                // Bottom fade: visible when more content below
-                Rectangle {
-                    anchors.bottom: scrollView.bottom
-                    anchors.left: scrollView.left
-                    anchors.right: scrollView.right
-                    height: root.indicatorSpacing
-                    visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1 - autoScrollConstants.scrollThreshold)
-                    z: 10
+            }
 
-                    gradient: Gradient {
-                        GradientStop {
-                            position: 0
-                            color: "transparent"
-                        }
+            // Bottom fade: visible when more content below
+            Rectangle {
+                anchors.bottom: scrollView.bottom
+                anchors.left: scrollView.left
+                anchors.right: scrollView.right
+                height: root.indicatorSpacing
+                visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1 - autoScrollConstants.scrollThreshold)
+                z: 10
 
-                        GradientStop {
-                            position: 1
-                            color: root.fadeColor
-                        }
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: "transparent"
+                    }
 
+                    GradientStop {
+                        position: 1
+                        color: root.fadeColor
                     }
 
                 }
 
-                // Left fade: visible when scrolled right (more content to the left)
-                Rectangle {
-                    anchors.top: scrollView.top
-                    anchors.bottom: scrollView.bottom
-                    anchors.left: scrollView.left
-                    width: root.indicatorSpacing
-                    visible: root.needsHorizontalScrolling && scrollView.ScrollBar.horizontal.position > autoScrollConstants.scrollThreshold
-                    z: 10
+            }
 
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
+            // Left fade: visible when scrolled right (more content to the left)
+            Rectangle {
+                anchors.top: scrollView.top
+                anchors.bottom: scrollView.bottom
+                anchors.left: scrollView.left
+                width: root.indicatorSpacing
+                visible: root.needsHorizontalScrolling && scrollView.ScrollBar.horizontal.position > autoScrollConstants.scrollThreshold
+                z: 10
 
-                        GradientStop {
-                            position: 0
-                            color: root.fadeColor
-                        }
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
 
-                        GradientStop {
-                            position: 1
-                            color: "transparent"
-                        }
+                    GradientStop {
+                        position: 0
+                        color: root.fadeColor
+                    }
 
+                    GradientStop {
+                        position: 1
+                        color: "transparent"
                     }
 
                 }
 
-                // Right fade: visible when more content to the right
-                Rectangle {
-                    anchors.top: scrollView.top
-                    anchors.bottom: scrollView.bottom
-                    anchors.right: scrollView.right
-                    width: root.indicatorSpacing
-                    visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1 - autoScrollConstants.scrollThreshold)
-                    z: 10
+            }
 
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
+            // Right fade: visible when more content to the right
+            Rectangle {
+                anchors.top: scrollView.top
+                anchors.bottom: scrollView.bottom
+                anchors.right: scrollView.right
+                width: root.indicatorSpacing
+                visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1 - autoScrollConstants.scrollThreshold)
+                z: 10
 
-                        GradientStop {
-                            position: 0
-                            color: "transparent"
-                        }
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
 
-                        GradientStop {
-                            position: 1
-                            color: root.fadeColor
-                        }
+                    GradientStop {
+                        position: 0
+                        color: "transparent"
+                    }
 
+                    GradientStop {
+                        position: 1
+                        color: root.fadeColor
                     }
 
                 }
 
-                // Empty state
-                Label {
-                    anchors.centerIn: parent
-                    text: i18nc("@info zone selector empty state", "No layouts available")
-                    color: Kirigami.Theme.disabledTextColor
-                    visible: root.layouts.length === 0
-                }
+            }
 
+            // Empty state
+            Label {
+                anchors.centerIn: parent
+                text: i18nc("@info zone selector empty state", "No layouts available")
+                color: Kirigami.Theme.disabledTextColor
+                visible: root.layouts.length === 0
             }
 
         }

@@ -19,14 +19,6 @@ Window {
 
     id: root
 
-    // OSD-style content lifecycle gate — see ZoneSelectorWindow's
-    // `loaded` property for the rationale. C++ toggles this false→true
-    // around each surface->show() so the contentWrapper Loader
-    // re-instantiates the popup body and produces a fresh shaderAnchor
-    // QQuickItem per show. Without this, the persistent inner Item's
-    // QQuickItemLayer state survives across shows and subsequent vertex-
-    // shader transitions sample stale FBO content.
-    property bool loaded: false
     property var emptyZones: []
     property var candidates: []
     property int screenWidth: 1920
@@ -60,14 +52,6 @@ Window {
         onActivated: root.close()
     }
 
-    // OSD-style Loader: fresh content (and a fresh shaderAnchor) on every
-    // show. C++ toggles root.loaded false→true around each show.
-    Loader {
-        anchors.fill: parent
-        active: root.loaded
-        sourceComponent: contentComp
-    }
-
     // SurfaceAnimator (libs/phosphor-animation-layer) walks the animator
     // target's child items looking for `property bool shaderAnchor: true`
     // and binds THAT item's layer texture as iChannel0 for the per-event
@@ -79,231 +63,226 @@ Window {
     // transparent fallback texture (visually identical regardless of
     // which shader is selected). The wrapper Item gives the animator a
     // single anchor whose layer captures the entire visible overlay.
-    Component {
-        id: contentComp
+    Item {
+        // Layer texture exposed to the daemon's per-event transition
+        // shader; surfaceanimator enables `layer.enabled` on the matched
+        // item via setSourceItem at the start of each leg, so the FBO is
+        // active only while a shader leg is running.
+        property bool shaderAnchor: true
 
-        Item {
-            // Layer texture exposed to the daemon's per-event transition
-            // shader; surfaceanimator enables `layer.enabled` on the matched
-            // item via setSourceItem at the start of each leg, so the FBO is
-            // active only while a shader leg is running.
-            property bool shaderAnchor: true
+        anchors.fill: parent
 
+        // Backdrop - semi-transparent dim, click outside to close
+        Rectangle {
             anchors.fill: parent
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.25)
 
-            // Backdrop - semi-transparent dim, click outside to close
-            Rectangle {
+            MouseArea {
                 anchors.fill: parent
-                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.25)
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: root.close()
-                    Accessible.name: i18n("Dismiss snap assist overlay")
-                    Accessible.role: Accessible.Button
-                }
-
+                onClicked: root.close()
+                Accessible.name: i18n("Dismiss snap assist overlay")
+                Accessible.role: Accessible.Button
             }
 
-            // Each zone shows all candidates; user picks any window to snap to any zone
-            Repeater {
-                model: root.emptyZones
+        }
 
-                Item {
-                    id: zoneContainer
+        // Each zone shows all candidates; user picks any window to snap to any zone
+        Repeater {
+            model: root.emptyZones
 
-                    property var zone: modelData
+            Item {
+                id: zoneContainer
 
-                    x: zone ? zone.x : 0
-                    y: zone ? zone.y : 0
-                    width: zone ? zone.width : 0
-                    height: zone ? zone.height : 0
-                    visible: zone && zone.zoneId && root.candidates.length > 0
+                property var zone: modelData
 
-                    // Zone background - matches main overlay colors/borders including zone overrides
-                    Rectangle {
-                        id: zoneBg
+                x: zone ? zone.x : 0
+                y: zone ? zone.y : 0
+                width: zone ? zone.width : 0
+                height: zone ? zone.height : 0
+                visible: zone && zone.zoneId && root.candidates.length > 0
 
-                        // useCustomColors: zone override; else root (settings)
-                        readonly property bool useCustom: zone && (zone.useCustomColors === true || zone.useCustomColors === 1)
-                        readonly property color fillColor: useCustom && zone.inactiveColor ? zone.inactiveColor : root.inactiveColor
-                        readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : root.inactiveOpacity
-                        readonly property color strokeColor: useCustom && zone.borderColor ? zone.borderColor : root.borderColor
-                        readonly property int strokeWidth: useCustom && zone.borderWidth !== undefined ? zone.borderWidth : root.borderWidth
-                        readonly property int cornerRadius: useCustom && zone.borderRadius !== undefined ? zone.borderRadius : root.borderRadius
+                // Zone background - matches main overlay colors/borders including zone overrides
+                Rectangle {
+                    id: zoneBg
 
-                        anchors.fill: parent
-                        radius: zoneBg.cornerRadius
-                        color: Qt.rgba(zoneBg.fillColor.r, zoneBg.fillColor.g, zoneBg.fillColor.b, zoneBg.fillOpacity)
-                        border.color: zoneBg.strokeColor
-                        border.width: zoneBg.strokeWidth
+                    // useCustomColors: zone override; else root (settings)
+                    readonly property bool useCustom: zone && (zone.useCustomColors === true || zone.useCustomColors === 1)
+                    readonly property color fillColor: useCustom && zone.inactiveColor ? zone.inactiveColor : root.inactiveColor
+                    readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : root.inactiveOpacity
+                    readonly property color strokeColor: useCustom && zone.borderColor ? zone.borderColor : root.borderColor
+                    readonly property int strokeWidth: useCustom && zone.borderWidth !== undefined ? zone.borderWidth : root.borderWidth
+                    readonly property int cornerRadius: useCustom && zone.borderRadius !== undefined ? zone.borderRadius : root.borderRadius
+
+                    anchors.fill: parent
+                    radius: zoneBg.cornerRadius
+                    color: Qt.rgba(zoneBg.fillColor.r, zoneBg.fillColor.g, zoneBg.fillColor.b, zoneBg.fillOpacity)
+                    border.color: zoneBg.strokeColor
+                    border.width: zoneBg.strokeWidth
+                }
+
+                // Grid of candidate cards inside zone - centered, scaled like zone numbers
+                Flow {
+                    id: candidateFlow
+
+                    readonly property real zoneSize: Math.min(zoneContainer.width, zoneContainer.height) || 1
+                    readonly property real cardScale: root.cardScaleBase / Math.max(1, Math.sqrt(root.candidates.length))
+                    readonly property real cardBaseSize: zoneSize * cardScale
+                    readonly property real iconSize: Math.max(root.minIconSize, cardBaseSize * root.iconSizeRatio)
+                    readonly property real cardWidth: Math.max(root.minCardWidth, cardBaseSize * root.cardWidthMultiplier)
+                    // Scale font like ZoneItem zone name: base on theme, scale with zone size
+                    readonly property real fontPixelSize: {
+                        var baseSize = Kirigami.Theme.defaultFont.pixelSize;
+                        var scaleFactor = zoneSize / root.zoneSizeRefForFont;
+                        var scaledSize = baseSize * Math.max(root.minFontScale, Math.min(1, scaleFactor));
+                        return Math.max(root.minFontPx, Math.round(scaledSize));
                     }
+                    readonly property real flowWidth: zoneContainer.width - Kirigami.Units.smallSpacing * 2
+                    readonly property real cardTotalWidth: cardWidth + Kirigami.Units.smallSpacing * 2
+                    readonly property real flowSpacing: Math.max(2, Math.min(8, zoneSize * 0.02))
+                    readonly property int itemsPerRow: Math.max(1, Math.floor((flowWidth + flowSpacing) / (cardTotalWidth + flowSpacing)))
+                    readonly property real contentWidth: {
+                        var n = root.candidates.length;
+                        if (n <= 0)
+                            return 0;
 
-                    // Grid of candidate cards inside zone - centered, scaled like zone numbers
-                    Flow {
-                        id: candidateFlow
+                        var perRow = itemsPerRow;
+                        if (n <= perRow)
+                            return n * cardTotalWidth + (n - 1) * flowSpacing;
 
-                        readonly property real zoneSize: Math.min(zoneContainer.width, zoneContainer.height) || 1
-                        readonly property real cardScale: root.cardScaleBase / Math.max(1, Math.sqrt(root.candidates.length))
-                        readonly property real cardBaseSize: zoneSize * cardScale
-                        readonly property real iconSize: Math.max(root.minIconSize, cardBaseSize * root.iconSizeRatio)
-                        readonly property real cardWidth: Math.max(root.minCardWidth, cardBaseSize * root.cardWidthMultiplier)
-                        // Scale font like ZoneItem zone name: base on theme, scale with zone size
-                        readonly property real fontPixelSize: {
-                            var baseSize = Kirigami.Theme.defaultFont.pixelSize;
-                            var scaleFactor = zoneSize / root.zoneSizeRefForFont;
-                            var scaledSize = baseSize * Math.max(root.minFontScale, Math.min(1, scaleFactor));
-                            return Math.max(root.minFontPx, Math.round(scaledSize));
-                        }
-                        readonly property real flowWidth: zoneContainer.width - Kirigami.Units.smallSpacing * 2
-                        readonly property real cardTotalWidth: cardWidth + Kirigami.Units.smallSpacing * 2
-                        readonly property real flowSpacing: Math.max(2, Math.min(8, zoneSize * 0.02))
-                        readonly property int itemsPerRow: Math.max(1, Math.floor((flowWidth + flowSpacing) / (cardTotalWidth + flowSpacing)))
-                        readonly property real contentWidth: {
-                            var n = root.candidates.length;
-                            if (n <= 0)
-                                return 0;
+                        return perRow * cardTotalWidth + (perRow - 1) * flowSpacing;
+                    }
+                    readonly property real centerPadding: Math.max(0, (flowWidth - contentWidth) / 2)
 
-                            var perRow = itemsPerRow;
-                            if (n <= perRow)
-                                return n * cardTotalWidth + (n - 1) * flowSpacing;
+                    width: flowWidth
+                    leftPadding: centerPadding
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: Math.max(Kirigami.Units.smallSpacing, (zoneContainer.height - candidateFlow.implicitHeight) / 2)
+                    spacing: flowSpacing
 
-                            return perRow * cardTotalWidth + (perRow - 1) * flowSpacing;
-                        }
-                        readonly property real centerPadding: Math.max(0, (flowWidth - contentWidth) / 2)
+                    Repeater {
+                        model: root.candidates
 
-                        width: flowWidth
-                        leftPadding: centerPadding
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        anchors.topMargin: Math.max(Kirigami.Units.smallSpacing, (zoneContainer.height - candidateFlow.implicitHeight) / 2)
-                        spacing: flowSpacing
+                        Item {
+                            id: candidateCard
 
-                        Repeater {
-                            model: root.candidates
+                            property var candidate: modelData
+                            property bool hovered: cardMouse.containsMouse
 
-                            Item {
-                                id: candidateCard
+                            width: candidateFlow.cardWidth + Kirigami.Units.smallSpacing * 2
+                            height: cardContent.height + Kirigami.Units.smallSpacing * 2
 
-                                property var candidate: modelData
-                                property bool hovered: cardMouse.containsMouse
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Math.max(2, candidateFlow.zoneSize * 0.01)
+                                color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                                border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                                border.width: candidateCard.hovered ? Kirigami.Units.smallSpacing : Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
 
-                                width: candidateFlow.cardWidth + Kirigami.Units.smallSpacing * 2
-                                height: cardContent.height + Kirigami.Units.smallSpacing * 2
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: Math.max(2, candidateFlow.zoneSize * 0.01)
-                                    color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                                    border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                                    border.width: candidateCard.hovered ? Kirigami.Units.smallSpacing : Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
-
-                                    Behavior on color {
-                                        PhosphorMotionAnimation {
-                                            profile: "zone.snapIn"
-                                            durationOverride: 150
-                                        }
-
-                                    }
-
-                                    Behavior on border.color {
-                                        PhosphorMotionAnimation {
-                                            profile: "zone.snapIn"
-                                            durationOverride: 150
-                                        }
-
+                                Behavior on color {
+                                    PhosphorMotionAnimation {
+                                        profile: "zone.snapIn"
+                                        durationOverride: 150
                                     }
 
                                 }
 
-                                Row {
-                                    id: cardContent
-
-                                    anchors.centerIn: parent
-                                    width: candidateFlow.cardWidth
-                                    spacing: Kirigami.Units.smallSpacing
-
-                                    Item {
-                                        width: candidateFlow.iconSize
-                                        height: width
-
-                                        Image {
-                                            // The provider URL embeds a monotonic generation token, so
-                                            // a re-insert always changes the source string and QML's
-                                            // QQuickPixmap cache invalidates correctly. Caching avoids
-                                            // re-entering the image-loader thread on every repaint of
-                                            // the snap-assist overlay (~12 candidates × multiple paints
-                                            // during the show animation).
-
-                                            anchors.fill: parent
-                                            visible: !!(candidate && candidate.thumbnail)
-                                            fillMode: Image.PreserveAspectFit
-                                            source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
-                                            // Memory bound: each insert mints a new URL, and the prior
-                                            // URL stays pinned in the process-global QQuickPixmap cache
-                                            // until that cache's own LRU evicts it. The QML cache is
-                                            // bounded independently of the daemon's QCache (size driven
-                                            // by Qt's own QML_DISK_CACHE_PATH / pixmap-cache budget,
-                                            // tunable via QML_PIXMAP_CACHE_LIMIT for an operator who
-                                            // sees the snap-assist working set growing on long sessions).
-                                            cache: true
-                                        }
-
-                                        Kirigami.Icon {
-                                            anchors.fill: parent
-                                            visible: !(candidate && candidate.thumbnail)
-                                            source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
-                                        }
-
-                                    }
-
-                                    Label {
-                                        width: parent.width - candidateFlow.iconSize - Kirigami.Units.smallSpacing
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        horizontalAlignment: Text.AlignLeft
-                                        verticalAlignment: Text.AlignVCenter
-                                        wrapMode: Text.WordWrap
-                                        maximumLineCount: 2
-                                        elide: Text.ElideRight
-                                        text: candidate ? (candidate.caption || "") : ""
-                                        font.pixelSize: candidateFlow.fontPixelSize
-                                        color: Kirigami.Theme.textColor
+                                Behavior on border.color {
+                                    PhosphorMotionAnimation {
+                                        profile: "zone.snapIn"
+                                        durationOverride: 150
                                     }
 
                                 }
 
-                                MouseArea {
-                                    // Don't close here — C++ manages the window lifecycle.
-                                    // During continuation, showSnapAssist() reuses this window
-                                    // with updated data. When all zones are filled, C++ calls
-                                    // hideSnapAssist() which destroys the window.
+                            }
 
-                                    id: cardMouse
+                            Row {
+                                id: cardContent
 
-                                    anchors.fill: parent
-                                    hoverEnabled: root.visible
-                                    cursorShape: Qt.PointingHandCursor
-                                    Accessible.name: candidate && candidate.caption ? i18n("Snap %1 to this zone", candidate.caption) : i18n("Snap window to this zone")
-                                    // ToolTip disabled: Breeze ToolTip causes binding loop on contentWidth
-                                    // when used inside Repeater+Flow. Accessible.name provides screen reader info.
-                                    onClicked: {
-                                        const wId = candidate ? candidate.windowId : "";
-                                        const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : "";
-                                        if (!zoneContainer.zone || !wId || !zoneId) {
-                                            root.close();
-                                            return ;
-                                        }
-                                        const z = zoneContainer.zone;
-                                        const geo = z && z.x !== undefined && z.y !== undefined ? JSON.stringify({
-                                            "x": z.x,
-                                            "y": z.y,
-                                            "width": z.width,
-                                            "height": z.height
-                                        }) : "{}";
-                                        root.windowSelected(wId, zoneId, geo);
+                                anchors.centerIn: parent
+                                width: candidateFlow.cardWidth
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Item {
+                                    width: candidateFlow.iconSize
+                                    height: width
+
+                                    Image {
+                                        // The provider URL embeds a monotonic generation token, so
+                                        // a re-insert always changes the source string and QML's
+                                        // QQuickPixmap cache invalidates correctly. Caching avoids
+                                        // re-entering the image-loader thread on every repaint of
+                                        // the snap-assist overlay (~12 candidates × multiple paints
+                                        // during the show animation).
+
+                                        anchors.fill: parent
+                                        visible: !!(candidate && candidate.thumbnail)
+                                        fillMode: Image.PreserveAspectFit
+                                        source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
+                                        // Memory bound: each insert mints a new URL, and the prior
+                                        // URL stays pinned in the process-global QQuickPixmap cache
+                                        // until that cache's own LRU evicts it. The QML cache is
+                                        // bounded independently of the daemon's QCache (size driven
+                                        // by Qt's own QML_DISK_CACHE_PATH / pixmap-cache budget,
+                                        // tunable via QML_PIXMAP_CACHE_LIMIT for an operator who
+                                        // sees the snap-assist working set growing on long sessions).
+                                        cache: true
                                     }
+
+                                    Kirigami.Icon {
+                                        anchors.fill: parent
+                                        visible: !(candidate && candidate.thumbnail)
+                                        source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
+                                    }
+
                                 }
 
+                                Label {
+                                    width: parent.width - candidateFlow.iconSize - Kirigami.Units.smallSpacing
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    horizontalAlignment: Text.AlignLeft
+                                    verticalAlignment: Text.AlignVCenter
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                    text: candidate ? (candidate.caption || "") : ""
+                                    font.pixelSize: candidateFlow.fontPixelSize
+                                    color: Kirigami.Theme.textColor
+                                }
+
+                            }
+
+                            MouseArea {
+                                // Don't close here — C++ manages the window lifecycle.
+                                // During continuation, showSnapAssist() reuses this window
+                                // with updated data. When all zones are filled, C++ calls
+                                // hideSnapAssist() which destroys the window.
+
+                                id: cardMouse
+
+                                anchors.fill: parent
+                                hoverEnabled: root.visible
+                                cursorShape: Qt.PointingHandCursor
+                                Accessible.name: candidate && candidate.caption ? i18n("Snap %1 to this zone", candidate.caption) : i18n("Snap window to this zone")
+                                // ToolTip disabled: Breeze ToolTip causes binding loop on contentWidth
+                                // when used inside Repeater+Flow. Accessible.name provides screen reader info.
+                                onClicked: {
+                                    const wId = candidate ? candidate.windowId : "";
+                                    const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : "";
+                                    if (!zoneContainer.zone || !wId || !zoneId) {
+                                        root.close();
+                                        return ;
+                                    }
+                                    const z = zoneContainer.zone;
+                                    const geo = z && z.x !== undefined && z.y !== undefined ? JSON.stringify({
+                                        "x": z.x,
+                                        "y": z.y,
+                                        "width": z.width,
+                                        "height": z.height
+                                    }) : "{}";
+                                    root.windowSelected(wId, zoneId, geo);
+                                }
                             }
 
                         }
