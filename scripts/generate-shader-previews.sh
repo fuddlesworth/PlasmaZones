@@ -24,7 +24,9 @@ readonly AUDIO_MODE="sine"
 readonly LAYOUT="master-stack"
 # Last frame of the sequence: iTime has had time to advance into a
 # representative pose for time-driven and audio-reactive shaders.
-readonly KEEP_FRAME="preview_000060.png"
+# Derived from $FRAMES so the two stay in sync if FRAMES is retuned.
+# encoder.cpp:18-21 documents the 6-digit zero-padded index format.
+readonly KEEP_FRAME="$(printf 'preview_%06d.png' "$FRAMES")"
 
 repo_root() {
     git -C "$(dirname "$0")" rev-parse --show-toplevel
