@@ -1295,8 +1295,40 @@ public:
                 const bool anchorMatches = pending.foundExplicitAnchor
                     ? (currentAnchor != nullptr && currentAnchor == pending.shaderAnchor.data())
                     : (currentAnchor == nullptr && pending.shaderAnchor.data() == target);
-                if (pending.shaderItem && pending.shaderAnchor && pending.shaderEffectId == shaderEffectId
-                    && pending.target.data() == target && anchorMatches) {
+                // Force fresh-attach for boundsExtent=Parent shaders.
+                // OSDs already do this incidentally — NotificationOverlay's
+                // Loader re-instantiates LayoutOsdContent on every show,
+                // which produces a new inner-card QQuickItem per show, so
+                // the anchor-match check below fails and they fall through
+                // to the fresh-attach branch. Popups have a persistent
+                // PopupFrame anchor (zone selector / snap-assist /
+                // layout-picker pre-warmed surfaces), so they hit the
+                // reuse path instead — and the reuse path leaves the
+                // shader pipeline in a state that doesn't survive the
+                // park/wake cycle for a screen-sized shader item: the
+                // first show animates correctly, every subsequent show
+                // pops in with no visible animation.
+                //
+                // Every speculative fix at the layer / source / FBO /
+                // texture-provider / SRB level either failed or papered
+                // over the symptom (scheduleUpdate + setSourceItem
+                // round-trips, m_lastSourceRhiTexture invalidation,
+                // resetAllBindingsAndPipelines on every push). Until the
+                // exact stale state is identified, take the same path
+                // OSDs already take: skip the reuse cache for Parent
+                // extent and fresh-attach every leg. The reuse cache's
+                // documented purpose is dodging "Resource update batch
+                // pool exhausted (max 64)" under rapid show/hide
+                // toggling (zone-selector during a drag); typical
+                // popup user-triggered show/hide cadence is far below
+                // that threshold. Anchor-extent shaders keep the
+                // existing reuse semantics — every fragment-only effect
+                // shipping in data/animations/ uses Anchor extent and
+                // worked correctly before this PR.
+                const bool parentExtent = resolvedShaderEff.boundsExtent
+                    == PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent::Parent;
+                if (!parentExtent && pending.shaderItem && pending.shaderAnchor
+                    && pending.shaderEffectId == shaderEffectId && pending.target.data() == target && anchorMatches) {
                     reusedShaderItem = std::move(pending.shaderItem);
                     reusedShaderSource = std::move(pending.shaderSource);
                     reusedShaderAnchor = pending.shaderAnchor;
@@ -1428,34 +1460,14 @@ public:
                     // the idle phase. Wake them up here BEFORE setting
                     // any leg-specific state so the SG sync that
                     // follows runLeg picks them up live.
-                    // Drop the consumer shader item's binding to the
-                    // source first — this releases any stale
-                    // QSGTextureProvider / QRhiTexture pointer cached
-                    // in the ShaderNodeRhi from the previous leg, so
-                    // that when we re-bind below, every per-frame
-                    // setSourceTextureProvider call on the node sees
-                    // a real null→provider transition and forces an
-                    // SRB rebuild against the freshly-grabbed FBO.
-                    // Without this nullptr step, ShaderEffect's
-                    // updatePaintNode would push the same source
-                    // provider pointer the node already saw last leg,
-                    // hit ShaderNodeRhi::setSourceTextureProvider's
-                    // same-pointer early-return, and keep its SRB
-                    // bound to the previous leg's FBO content.
-                    reusedShaderItem->setSourceItem(nullptr);
-
                     if (reusedShaderSource) {
-                        // Wake the source FBO. Order matches
-                        // attachShaderToAnchor's fresh-attach setup:
-                        // setLive(true) before setHideSource(true).
-                        // scheduleUpdate() flips Qt's private `m_grab`
-                        // flag so the next paint actually re-renders
-                        // the FBO from the source item — setLive and
-                        // setHideSource only call update() (schedule a
-                        // paint) without setting m_grab.
-                        reusedShaderSource->setLive(true);
+                        // setHideSource(true) re-installs the anchor's
+                        // QQuickItemLayer so the FBO captures the anchor
+                        // content (and the anchor is suppressed from
+                        // direct scene render — the shader effect is
+                        // the sole renderer for the leg's duration).
                         reusedShaderSource->setHideSource(true);
-                        reusedShaderSource->scheduleUpdate();
+                        reusedShaderSource->setLive(true);
                     }
                     reusedShaderItem->setVisible(true);
                     // Re-apply per-effect static config so a metadata.json
@@ -1520,23 +1532,6 @@ public:
                     it->second.boundsExtentPtr = std::move(reusedBoundsExtentPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
                     seedShaderUniformsAtAttach(it->second);
-                    // Re-bind source LAST, mirroring attachShaderToAnchor's
-                    // setSourceItem-after-everything-else order. Going
-                    // through the nullptr→source transition (we cleared
-                    // the binding above) bypasses
-                    // ShaderEffect::setSourceItem's same-pointer early-
-                    // return, which lets the next per-frame
-                    // updatePaintNode push the source's textureProvider
-                    // through ShaderNodeRhi::setSourceTextureProvider
-                    // as a real null→provider transition — that path
-                    // resets m_lastSourceRhiTexture and rebuilds the
-                    // SRB against whatever QRhiTexture* the freshly-
-                    // grabbed FBO produces, even if Qt's RHI texture
-                    // pool recycled the same pointer the previous leg
-                    // used.
-                    if (reusedShaderItem && reusedShaderSource) {
-                        reusedShaderItem->setSourceItem(reusedShaderSource.data());
-                    }
                 } else {
                     // Fresh attach: no prior compatible shader pair, or
                     // the previous one was for a different effect id.
