@@ -149,7 +149,11 @@ void main()
     const float CELL_FINE = 6.0;
     const float CELL_MED  = 18.0;
 
-    vec2 pixelUV = (uv - 0.5) * iResolution / max(pScale, 0.05);
+    // Floor iResolution so a first-frame zero-sized surface doesn't
+    // collapse pixelUV to (0,0) and flatten the entire sparkle field
+    // for one paint. Matches the early-frame defence used by
+    // pixelate/doom/honeycomb at the same divide site.
+    vec2 pixelUV = (uv - 0.5) * max(iResolution, vec2(1.0)) / max(pScale, 0.05);
 
     // Layer A: dense fine sparkles — small cells, fast-evolving offset.
     // The 2D-offset trick (animating the lookup position via a slowly

@@ -371,7 +371,12 @@ private:
     bool m_multiBufferShadersReady = false;
     bool m_multiBufferShaderDirty = true;
     int m_multiBufferShaderRetries = 0;
-    // Dummy 1x1 texture for iChannel0 when multipass is set but buffer not yet created
+    // Dummy 1x1 texture for the multipass channel-0 buffer slot (SRB
+    // binding 2, GLSL `iChannel0`) when multipass is configured but the
+    // backing buffer hasn't been created yet. Distinct from the user-
+    // texture slot 0 (SRB binding 7, GLSL `uTexture0`) — the iChannel0
+    // name here refers to the buffer-channel binding, not the renamed
+    // user-texture.
     std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
     std::unique_ptr<QRhiSampler> m_dummyChannelSampler;
     bool m_dummyChannelTextureNeedsUpload = false;

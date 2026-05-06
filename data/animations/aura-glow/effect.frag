@@ -133,19 +133,26 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     vec4 acc = vec4(0.0);
     const float tau = 6.28318530718;
     const float dirs = 15.0;
-    // int loop bound so iteration count exactly matches `samples` — the
-    // float `s += 1.0 / samples` form can step `samples` or `samples+1`
-    // times depending on float precision (s=0.999... vs 1.000...), and
-    // the divisor below would no longer match the iteration count.
-    int sampleCount = int(samples);
+    // int loop bound so iteration count exactly matches the divisor —
+    // the float `s += 1.0 / samples` form can step `samples` or
+    // `samples+1` times depending on float precision (s=0.999...
+    // vs 1.000...), and the per-iteration `s` would no longer be
+    // in bijection with the divisor. Floored to >=1 so a hostile
+    // or buggy host that pushes samples to 0 or negative produces
+    // one sample, not a divide-by-zero.
+    int sampleCount = max(int(samples), 1);
+    float sampleCountF = float(sampleCount);
+    // Hoist iResolution floor out of the 45-tap inner loop —
+    // invariant across all samples.
+    vec2 flooredResolution = max(iResolution, vec2(1.0));
     for (float d = 0.0; d < tau; d += tau / dirs) {
         for (int i = 0; i < sampleCount; ++i) {
-            float s = float(i) / samples;
-            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / max(iResolution, vec2(1.0));
+            float s = float(i) / sampleCountF;
+            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / flooredResolution;
             acc += texture(uTexture0, uv + off);
         }
     }
-    return acc / samples / dirs;
+    return acc / sampleCountF / dirs;
 }
 
 void main()

@@ -197,8 +197,8 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
 {
     // Precondition: m_zoneData must be populated by a prior setZones/parseZoneData call.
     if (m_zoneData.rects.size() != static_cast<qsizetype>(m_zones.size())) {
-        qWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
-                            << "zones=" << m_zones.size() << ") - setZones must be called first";
+        qCWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
+                             << "zones=" << m_zones.size() << ") - setZones must be called first";
         return;
     }
     // Pre-compute highlight flags outside the mutex to avoid blocking the render

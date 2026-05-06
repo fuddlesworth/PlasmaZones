@@ -122,7 +122,7 @@ void main()
     // shift while a few high-noise columns get a small head start.
     // That's the spread that makes adjacent columns separate
     // visibly during the melt.
-    float vScale        = verticalScale * iResolution.y * 0.00004;
+    float vScale        = verticalScale * flooredResolution.y * 0.00004;
     float shiftProgress = mix(-vScale, 1.0 + vScale, progress);
     float shift         = noise * vScale + shiftProgress;
 

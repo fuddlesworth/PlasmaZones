@@ -332,7 +332,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             }
             resetAllBindingsAndPipelines();
         }
-        if (!m_userTextureDirty[i] || !m_userTextures[i] || !m_userTextureSamplers[i]) {
+        // Sampler is the only hard prerequisite — m_userTextures[i] may be
+        // null after a previous failed create() on this slot, in which case
+        // the size-mismatch branch below allocates fresh. Without that gate
+        // relaxation the failed-create retry promised by the qCWarning text
+        // is structurally unreachable: the loop short-circuits on
+        // !m_userTextures[i] before line 354 ever runs again.
+        if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
         const QImage& img = m_userTextureImages[i];
@@ -346,21 +352,27 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
         if (textureSizeMax > 0 && (targetSize.width() > textureSizeMax || targetSize.height() > textureSizeMax)) {
             qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
-                                    << "exceeds device TextureSizeMax" << textureSizeMax << "— clamping";
+                                    << "exceeds device TextureSizeMax" << textureSizeMax << ", clamping";
             targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
         }
-        if (m_userTextures[i]->pixelSize() != targetSize) {
+        // Branch covers two cases uniformly:
+        //   (a) initial allocation when m_userTextures[i] is null (after a
+        //       prior failed create reset us to nullptr).
+        //   (b) resize when the existing texture's pixel size doesn't match
+        //       the new target.
+        if (!m_userTextures[i] || m_userTextures[i]->pixelSize() != targetSize) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!m_userTextures[i]->create()) {
                 qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
-                                        << "— slot will retry next frame";
+                                        << ", slot will retry next frame";
                 // Reset to nullptr so appendUserTextureBindings() skips the
                 // slot via its truthiness gate (the SRB must NOT bind a
                 // failed texture; it would wire a non-functional GPU resource
                 // into the pipeline). Keep dirty=true so the next prepare()
-                // pass retries — a transient RHI-side condition (OOM, device
-                // loss, post-clamp size acceptance) can clear and the slot
-                // self-heals.
+                // pass retries — the relaxed gate above lets a null pointer
+                // re-enter this branch on the next frame, so a transient
+                // RHI-side condition (OOM, device loss, post-clamp size
+                // acceptance) can clear and the slot self-heals.
                 m_userTextures[i].reset();
                 continue;
             }

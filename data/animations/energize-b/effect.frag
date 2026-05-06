@@ -142,7 +142,10 @@ void main()
     // source-side clamp safe. Without it, energize-a and energize-b
     // would diverge — energize-a still floors at the divide site,
     // energize-b would silently divide by zero.
-    vec2 pixelUV = (uv - 0.5) * iResolution / max(pScale, 0.05);
+    // Floor iResolution so a first-frame zero-sized surface doesn't
+    // collapse pixelUV to (0,0) and flatten the entire particle field
+    // for one paint. Matches the energize-a defence at the same site.
+    vec2 pixelUV = (uv - 0.5) * max(iResolution, vec2(1.0)) / max(pScale, 0.05);
 
     // Shower band sparkles — added on top of the band itself for a
     // glittery beam edge. Fine cells, twinkle via animated offset.

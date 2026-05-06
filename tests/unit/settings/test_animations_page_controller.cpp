@@ -159,8 +159,8 @@ private Q_SLOTS:
         }
         QVERIFY(foundZoneCategory);
         QVERIFY(foundZoneSnapIn);
-        QVERIFY2(zoneCategoryFlag, "'zone' should be flagged as a category — it has children");
-        QVERIFY2(!zoneSnapInCategoryFlag, "'zone.snapIn' is a leaf — not a category");
+        QVERIFY2(zoneCategoryFlag, "'zone' should be flagged as a category: it has children");
+        QVERIFY2(!zoneSnapInCategoryFlag, "'zone.snapIn' is a leaf, not a category");
     }
 
     // ─── Override CRUD ────────────────────────────────────────────────────
@@ -793,7 +793,7 @@ private Q_SLOTS:
         // The override file MUST still exist — this is the load-bearing
         // assertion: removeUserPreset cannot collateral-damage overrides.
         QVERIFY2(QFileInfo::exists(overrideFilePath),
-                 "override file was deleted by removeUserPreset(\"zone.snapIn\") — preset CRUD MUST NOT touch override "
+                 "override file was deleted by removeUserPreset(\"zone.snapIn\"): preset CRUD MUST NOT touch override "
                  "slots");
         QCOMPARE(c.rawProfile(QStringLiteral("zone.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
     }
@@ -850,7 +850,7 @@ private Q_SLOTS:
         // Critical: the valid entry MUST NOT have been written. Atomic
         // semantics — all-or-nothing. Pre-fix this would be true.
         QVERIFY2(!c.hasOverride(QStringLiteral("zone.snapIn")),
-                 "applyMotionSet wrote partial state from a malformed set — should have rejected atomically");
+                 "applyMotionSet wrote partial state from a malformed set: should have rejected atomically");
     }
 
     // ─── Shader override pendingChangesChanged emission ───────────────────
@@ -1046,7 +1046,7 @@ private Q_SLOTS:
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
         QVERIFY(c.clearShaderOverride(QStringLiteral("osd.show")));
         QVERIFY2(spy.count() >= 2,
-                 qPrintable(QStringLiteral("expected ≥2 emissions, got ") + QString::number(spy.count())));
+                 qPrintable(QStringLiteral("expected >=2 emissions, got ") + QString::number(spy.count())));
     }
 
     // ─── Shader-leg support gate ──────────────────────────────────────────
