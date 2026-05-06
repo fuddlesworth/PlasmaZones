@@ -133,20 +133,20 @@ void OverlayService::hideZoneSelector()
     // Selected zone NOT cleared here — drag-end snap path needs it.
     //
     // Iterate every screen state and animate a slot-hide on each one
-    // whose zone selector slot is currently visible. The shell surface
-    // itself stays mapped — only the slot Item's opacity fades out.
-    const QStringList screenIds = m_screenStates.keys();
-    for (const QString& screenId : screenIds) {
-        auto& s = m_screenStates[screenId];
-        auto* slot = s.passiveShellZoneSelectorSlot;
+    // whose zone selector slot is currently visible. Iterator-based
+    // iteration avoids the keys()-list materialisation + per-key
+    // operator[] re-lookup (which would default-insert if a key were
+    // ever absent — fragile invariant to rely on).
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        auto* slot = it->passiveShellZoneSelectorSlot;
         if (!slot || !slot->isVisible()) {
             continue;
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
-        m_surfaceAnimator->beginHide(s.passiveShellSurface, slot, PzRoles::ZoneSelector,
-                                     [this, effectiveId = screenId]() {
-                                         onZoneSelectorSlotHideCompleted(effectiveId);
-                                     });
+        const QString screenId = it.key();
+        m_surfaceAnimator->beginHide(it->passiveShellSurface, slot, PzRoles::ZoneSelector, [this, screenId]() {
+            onZoneSelectorSlotHideCompleted(screenId);
+        });
     }
 
     Q_EMIT zoneSelectorVisibilityChanged(false);
@@ -476,10 +476,15 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
-        // Slot lifetime is the shell's — destroying the shell (via
-        // destroyPassiveShell) tears the slot down with it. Clear
-        // the per-screen-id residual fields so a re-show after screen
-        // hot-plug starts from a clean slate.
+        // Slot lifetime is the shell's — destroyPassiveShell tears the
+        // slot Item down with it. But if the slot is currently
+        // animating-visible at the moment of context-disable
+        // (e.g. user disabled snapping mid-drag), we need to drive
+        // the visible→hidden transition on this screen now so the
+        // slot doesn't stay painted on the still-mapped shell.
+        // hideZoneSelectorSlotOnScreen is a no-op when slot is
+        // already invisible.
+        hideZoneSelectorSlotOnScreen(screenId);
         it->zoneSelectorPhysScreen = nullptr;
         it->zoneSelectorGeometry = QRect();
         // If this screen was the active zone-selector source, clear the
@@ -526,14 +531,24 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     if (!physScreen) {
         return;
     }
+    // Short-circuit before ensurePassiveShellFor: if the slot is
+    // already visible we have nothing to do, and ensurePassiveShellFor
+    // would otherwise pay createWarmedOsdSurface +
+    // primeSurfaceRenderPipeline cost on the existing-shell path's
+    // first idempotent check (it does early-return there, but we
+    // skip the lookup-by-string cost too).
+    {
+        auto existing = m_screenStates.find(effectiveId);
+        if (existing != m_screenStates.end() && existing->passiveShellZoneSelectorSlot
+            && existing->passiveShellZoneSelectorSlot->isVisible()) {
+            return;
+        }
+    }
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
     if (!state || !state->passiveShellSurface || !state->passiveShellZoneSelectorSlot) {
         return;
     }
     auto* slot = state->passiveShellZoneSelectorSlot;
-    if (slot->isVisible()) {
-        return;
-    }
     state->zoneSelectorPhysScreen = physScreen;
     state->zoneSelectorGeometry = targetGeom;
     if (state->passiveShellWindow) {

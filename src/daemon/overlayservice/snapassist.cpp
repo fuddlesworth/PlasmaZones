@@ -121,19 +121,20 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         return;
     }
 
-    // If snap-assist is currently shown on a DIFFERENT screen, dismiss it
-    // there first — snap-assist is a singleton across all screens.
+    // If snap-assist is currently shown on a DIFFERENT screen, dismiss
+    // it there first — snap-assist is a singleton across all screens.
+    // Animator-driven beginHide on (prevSurface, prevSlot,
+    // PzRoles::SnapAssist) keys ONLY the snap-assist track via the
+    // per-(Surface, target) animator keying — sibling slots on the
+    // same shell (OSD, zone-selector) keep animating cleanly.
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
         const QString prevScreenId = m_snapAssistScreenId;
-        if (auto* prevState = m_screenStates.value(prevScreenId).passiveShellSnapAssistSlot
-                ? &m_screenStates[prevScreenId]
-                : nullptr) {
-            m_surfaceAnimator->cancel(prevState->passiveShellSurface);
-            if (prevState->passiveShellSnapAssistSlot) {
-                prevState->passiveShellSnapAssistSlot->setVisible(false);
-                writeQmlProperty(prevState->passiveShellSnapAssistSlot, QStringLiteral("loaded"), false);
-            }
-            syncPassiveShellSurfaceState(prevScreenId);
+        auto prevIt = m_screenStates.find(prevScreenId);
+        if (prevIt != m_screenStates.end() && prevIt->passiveShellSurface && prevIt->passiveShellSnapAssistSlot) {
+            m_surfaceAnimator->beginHide(prevIt->passiveShellSurface, prevIt->passiveShellSnapAssistSlot,
+                                         PzRoles::SnapAssist, [this, prevScreenId]() {
+                                             onSnapAssistSlotHideCompleted(prevScreenId);
+                                         });
         }
     }
 
@@ -302,10 +303,10 @@ void OverlayService::hideSnapAssist()
     m_snapAssistVisible = false;
     m_snapAssistScreenId.clear();
 
-    auto* state = m_screenStates.value(screenId).passiveShellSnapAssistSlot ? &m_screenStates[screenId] : nullptr;
-    if (state && state->passiveShellSurface && state->passiveShellSnapAssistSlot) {
-        m_surfaceAnimator->beginHide(state->passiveShellSurface, state->passiveShellSnapAssistSlot, PzRoles::SnapAssist,
-                                     [this, effectiveId = screenId]() {
+    auto stateIt = m_screenStates.find(screenId);
+    if (stateIt != m_screenStates.end() && stateIt->passiveShellSurface && stateIt->passiveShellSnapAssistSlot) {
+        m_surfaceAnimator->beginHide(stateIt->passiveShellSurface, stateIt->passiveShellSnapAssistSlot,
+                                     PzRoles::SnapAssist, [this, effectiveId = screenId]() {
                                          onSnapAssistSlotHideCompleted(effectiveId);
                                      });
     }
@@ -470,9 +471,9 @@ void OverlayService::hideLayoutPicker()
     m_layoutPickerVisible = false;
     m_layoutPickerScreenId.clear();
 
-    auto* state = m_screenStates.value(screenId).passiveShellLayoutPickerSlot ? &m_screenStates[screenId] : nullptr;
-    if (state && state->passiveShellSurface && state->passiveShellLayoutPickerSlot) {
-        m_surfaceAnimator->beginHide(state->passiveShellSurface, state->passiveShellLayoutPickerSlot,
+    auto stateIt = m_screenStates.find(screenId);
+    if (stateIt != m_screenStates.end() && stateIt->passiveShellSurface && stateIt->passiveShellLayoutPickerSlot) {
+        m_surfaceAnimator->beginHide(stateIt->passiveShellSurface, stateIt->passiveShellLayoutPickerSlot,
                                      PzRoles::LayoutPicker, [this, effectiveId = screenId]() {
                                          onLayoutPickerSlotHideCompleted(effectiveId);
                                      });

@@ -63,9 +63,11 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
     QObject::disconnect(state.overlayGeomConnection);
     state.overlayGeomConnection = {};
-    if (state.overlaySurface) {
-        state.overlaySurface->deleteLater();
-    }
+    // overlaySurface and overlayWindow are aliases pointing at the
+    // SAME Surface/QQuickWindow as passiveShellSurface/passiveShellWindow
+    // (set in createOverlayWindow). deleteLater on both queues two
+    // DeferredDelete events — the second fires on a freed object, UAF.
+    // Delete only via the passiveShell* handle.
     if (state.passiveShellSurface) {
         state.passiveShellSurface->deleteLater();
     }
@@ -889,8 +891,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // hot-plug cycles don't slowly accumulate dead keys. Matches
             // cleanupVirtualScreenStates semantics: the state entry is
             // meaningless without at least one live window.
+            // overlaySurface is an alias of passiveShellSurface — checking
+            // both is redundant. Erase when the shell itself is gone.
             auto& s = m_screenStates[id];
-            if (!s.overlaySurface && !s.passiveShellSurface) {
+            if (!s.passiveShellSurface) {
                 m_screenStates.remove(id);
             }
         }

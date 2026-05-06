@@ -703,18 +703,22 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
         return;
     }
     QObject::disconnect(it->overlayGeomConnection);
-    // Slot lifetime is the shell's; overlay surface is now an alias of
-    // the shell surface — clearing the legacy fields is enough.
+    // overlaySurface / overlayWindow are aliases of the shell pair;
+    // clearing them here is just a sentinel reset — the actual
+    // wl_surface stays alive (via passiveShellSurface) until
+    // destroyPassiveShell runs. Do NOT auto-erase the screen-state
+    // entry from this path: the entry is still live (the shell hosts
+    // OSD / snap-assist / picker / zone-selector slots independently
+    // of the main overlay's lifetime), and erasing here would orphan
+    // the passiveShellSurface against destroyAllWindowsForPhysicalScreen's
+    // expectation that the entry survives until destroyPassiveShell
+    // is called too.
     it->overlaySurface = nullptr;
     it->overlayWindow = nullptr;
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
     it->labelsTextureHash = 0;
-
-    if (!it->overlaySurface && !it->passiveShellSurface) {
-        m_screenStates.erase(it);
-    }
 }
 
 void OverlayService::updateOverlayWindow(QScreen* screen)
