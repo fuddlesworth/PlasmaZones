@@ -141,6 +141,38 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// (see data/animations/morph/effect.frag for the canonical pattern).
     qreal boundsPadding = 0.0;
 
+    /// How wide the shader effect's render target is — relative to its
+    /// anchor (default) or its anchor's parent item.
+    ///
+    ///   • `Anchor` (default): FBO covers `anchor + 2 · boundsPadding ·
+    ///     anchor` on each axis. iResolution equals the FBO size, so
+    ///     `vTexCoord` 0..1 spans the captured anchor texture 1:1.
+    ///     Existing fragment-only effects (morph, dissolve, glitch, …)
+    ///     all use this.
+    ///
+    ///   • `Parent`: FBO covers the anchor's parent item (the QML scene
+    ///     root for OSDs and popups, both screen-sized post-Phase-6
+    ///     fullscreen surface migration). iResolution equals the captured
+    ///     anchor's pixel size — NOT the FBO. The shader is responsible
+    ///     for using `iSurfaceScreenPos` + `iResolution` to position the
+    ///     card-sized quad within the parent-sized FBO via its vertex
+    ///     stage. This unlocks vertex-shader effects that translate the
+    ///     surface across the screen (fly-in from edge, slide, lift) —
+    ///     they're constrained to the FBO bounds by definition, so the
+    ///     FBO has to span the screen for the motion to read as real
+    ///     screen-scale travel.
+    ///
+    /// Authors who pick `Parent` MUST ship a custom vertex shader that
+    /// remaps `position` to the card's region within the FBO; the
+    /// default identity vertex stage stretches the card texture across
+    /// the entire screen. See `data/animations/fly-in/effect.vert` for
+    /// the canonical positioning pattern.
+    enum class BoundsExtent {
+        Anchor,
+        Parent,
+    };
+    BoundsExtent boundsExtent = BoundsExtent::Anchor;
+
     /// Hard ceiling on `boundsPadding`. SHARED source-of-truth between
     /// the metadata clamp in `AnimationShaderEffect::fromJson` /
     /// `toJson` and the runtime clamp in
