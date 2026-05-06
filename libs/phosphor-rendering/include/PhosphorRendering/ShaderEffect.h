@@ -67,6 +67,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
     Q_PROPERTY(QVector4D iSurfaceScreenPos READ iSurfaceScreenPos WRITE setISurfaceScreenPos NOTIFY
                    iSurfaceScreenPosChanged FINAL)
+    Q_PROPERTY(QSizeF iAnchorSize READ iAnchorSize WRITE setIAnchorSize NOTIFY iAnchorSizeChanged FINAL)
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
@@ -211,6 +212,18 @@ public:
     /// → BaseUniforms::iSurfaceScreenPos at offset 672. SurfaceAnimator
     /// pushes this at attach time and on every anchor geometry change.
     void setISurfaceScreenPos(const QVector4D& pos);
+
+    QSizeF iAnchorSize() const
+    {
+        return m_iAnchorSize;
+    }
+    /// Anchor (card) pixel size in logical pixels. Decoupled from
+    /// `iResolution` (which Qt auto-resets to the shader item's
+    /// bounds on every geometry event) so vertex shaders rendering a
+    /// card-sized region inside a parent-sized FBO can read a stable
+    /// "size of the visible thing" value. Forwards to ShaderNodeRhi →
+    /// BaseUniforms::iAnchorSize at offset 688.
+    void setIAnchorSize(const QSizeF& size);
 
     QSizeF iResolution() const
     {
@@ -609,6 +622,7 @@ Q_SIGNALS:
     void iMouseChanged();
     void isReversedChanged();
     void iSurfaceScreenPosChanged();
+    void iAnchorSizeChanged();
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
@@ -688,6 +702,7 @@ private:
     int m_iFrame = 0;
     bool m_isReversed = false;
     QVector4D m_iSurfaceScreenPos;
+    QSizeF m_iAnchorSize;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

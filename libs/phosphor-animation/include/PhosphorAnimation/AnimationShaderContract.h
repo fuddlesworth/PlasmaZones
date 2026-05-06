@@ -228,6 +228,13 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// would observe for the same on-screen surface.
 inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
+/// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
+/// pixels. Decoupled from `iResolution` so vertex shaders can rely on
+/// it under any boundsExtent; `iResolution` is auto-reset by Qt to the
+/// shader item's bounds on every geometry event and would otherwise
+/// clobber any anchor-size override on a `boundsExtent: parent` item.
+inline constexpr const char* kIAnchorSize = "iAnchorSize";
+
 /// Maximum number of user-declared textures per animation effect.
 ///
 /// Each declared texture binds to one of the canonical samplers

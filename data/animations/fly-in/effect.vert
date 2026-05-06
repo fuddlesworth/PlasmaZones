@@ -66,14 +66,22 @@ void main() {
     float t = clamp(iTime, 0.0, 1.0);
     float remaining = 1.0 - t;
 
-    // Decide direction from card position on its host screen.
+    // Decide direction from card position on its host screen. Card size
+    // comes from `iAnchorSize` (NOT `iResolution`): the latter is auto-
+    // reset by Qt to the shader item's bounds on every geometry event,
+    // which under boundsExtent=parent means the entire screen — so
+    // reading iResolution here would produce a screen-sized card during
+    // motion. iAnchorSize is the runtime-pushed captured-anchor size
+    // and stays stable per leg.
+    //
     // Default to "fly from left" when iSurfaceScreenPos hasn't been
     // populated yet (.zw = 0 means the runtime didn't push a screen
     // size — typically the first frame on the daemon path before the
     // window's compositor configure). This keeps the shader visible
     // and recognisable rather than producing a NaN division below.
     float screenW = max(iSurfaceScreenPos.z, 1.0);
-    float cardCenterX = iSurfaceScreenPos.x + iResolution.x * 0.5;
+    vec2 cardSize = vec2(max(iAnchorSize.x, 1.0), max(iAnchorSize.y, 1.0));
+    float cardCenterX = iSurfaceScreenPos.x + cardSize.x * 0.5;
     float leftDist = cardCenterX;
     float rightDist = screenW - cardCenterX;
     float dirSign = (leftDist < rightDist) ? -1.0 : 1.0;
@@ -84,7 +92,7 @@ void main() {
     // origin). For "fly from right", screenW - cardLeft pixels of
     // rightward travel.
     float clearancePx = (dirSign < 0.0)
-        ? max(iSurfaceScreenPos.x + iResolution.x, 1.0)
+        ? max(iSurfaceScreenPos.x + cardSize.x, 1.0)
         : max(screenW - iSurfaceScreenPos.x, 1.0);
     float offsetPx = dirSign * remaining * clearancePx;
 
@@ -94,23 +102,28 @@ void main() {
     vec2 shifted = position + vec2(offsetPx, 0.0);
     gl_Position = modelViewProjectionMatrix * vec4(shifted, 0.0, 1.0);
 #else
-    // Daemon (boundsExtent=parent): the FBO spans iSurfaceScreenPos.zw
-    // (the host screen / VS rect — see syncShaderGeometryNow's Parent
-    // branch in surfaceanimator.cpp). Map the standard (-1..1) clip-
-    // space quad onto the *card's* region within the FBO so the
-    // captured anchor texture renders at native pixel size at the
-    // card's resting screen position, then add the fly-in offset.
-    vec2 fboSizePx = vec2(max(iSurfaceScreenPos.z, 1.0), max(iSurfaceScreenPos.w, 1.0));
+    // Daemon (boundsExtent=parent): the FBO spans iResolution (= the
+    // shader item's bounds = the parent item = host screen / VS rect
+    // post-fullscreen-OSD migration). Map the standard (-1..1) clip-
+    // space quad onto the card's region within the FBO so the captured
+    // anchor texture renders at native pixel size at the card's
+    // resting screen position, then add the fly-in offset.
+    //
+    // iResolution naturally tracks the FBO size (Qt auto-syncs it from
+    // the shader item's geometry). Use that directly for FBO width /
+    // height. For card pixel size we read iAnchorSize — see the comment
+    // above for why iResolution is unsafe for "size of the card."
+    vec2 fboSizePx = vec2(max(iResolution.x, 1.0), max(iResolution.y, 1.0));
 
     // Card centre in clip space. GL clip-space Y is up, screen Y is
     // down — flip on the way in.
-    vec2 cardCenterPx = iSurfaceScreenPos.xy + iResolution * 0.5;
+    vec2 cardCenterPx = iSurfaceScreenPos.xy + cardSize * 0.5;
     vec2 cardCenterClip;
     cardCenterClip.x = (cardCenterPx.x / fboSizePx.x) * 2.0 - 1.0;
     cardCenterClip.y = -((cardCenterPx.y / fboSizePx.y) * 2.0 - 1.0);
 
     // Card half-size relative to FBO, also in clip-space units.
-    vec2 cardHalfClip = iResolution / fboSizePx;
+    vec2 cardHalfClip = cardSize / fboSizePx;
 
     // Map (-1..1) input clip-space onto the card's clip-space region.
     vec2 cardClipPos = cardCenterClip + position * cardHalfClip;

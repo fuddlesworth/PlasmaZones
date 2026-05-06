@@ -368,6 +368,16 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     }
                     shader->setUniform(cached->iSurfaceScreenPosLoc, surfaceScreenPos);
                 }
+                if (cached->iAnchorSizeLoc >= 0) {
+                    // The window's frameGeometry IS the visible "card" on the
+                    // kwin path — there's no separate anchor-vs-FBO distinction
+                    // here, so iAnchorSize matches iResolution. Pushed for
+                    // contract parity with the daemon path so shaders can
+                    // reach for the captured surface's pixel size via one
+                    // uniform name regardless of runtime.
+                    shader->setUniform(cached->iAnchorSizeLoc,
+                                       QVector2D(static_cast<float>(geo.width()), static_cast<float>(geo.height())));
+                }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];
                     if (loc < 0)

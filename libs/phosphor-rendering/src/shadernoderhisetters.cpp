@@ -119,6 +119,16 @@ void ShaderNodeRhi::setSurfaceScreenPos(const QVector4D& pos)
     m_sceneDataDirty = true;
 }
 
+void ShaderNodeRhi::setAnchorSize(const QSizeF& size)
+{
+    if (m_anchorSize == size) {
+        return;
+    }
+    m_anchorSize = size;
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
+}
+
 // ============================================================================
 // Custom Params (indexed API)
 // ============================================================================

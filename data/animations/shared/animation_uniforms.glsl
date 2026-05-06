@@ -102,6 +102,14 @@ uniform int iIsReversed;
 // this. Both runtimes populate it once per leg attach + on every anchor
 // or window geometry signal.
 uniform vec4 iSurfaceScreenPos;
+// Anchor (card) pixel size in logical pixels. Decoupled from iResolution
+// because Qt auto-resets iResolution to the QQuickItem's bounds on any
+// geometry event — a `boundsExtent: parent` shader item is parent-sized
+// (= screen) and that auto-reset would clobber any anchor-size override.
+// Vertex shaders mapping a captured small texture into a parent-sized
+// FBO read this for the card's pixel dimensions; iResolution still
+// carries the FBO size as usual.
+uniform vec2 iAnchorSize;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -186,11 +194,18 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              Populated by SurfaceAnimator (daemon)
                                  //              and paint_pipeline (kwin-effect) once
                                  //              per leg attach + on every anchor /
-                                 //              window geometry change. Vertex and
-                                 //              fragment shaders that need spatial
-                                 //              awareness (fly-in from closest edge,
-                                 //              screen-relative noise) read this.
-                                 //              Total UBO size: 688 bytes.
+                                 //              window geometry change.
+    vec2 iAnchorSize;            // offset 688 (8 bytes) — anchor (card) pixel size
+                                 //              in logical pixels. Decoupled from
+                                 //              iResolution because Qt's QQuickItem
+                                 //              geometryChange auto-resets iResolution
+                                 //              to the item's bounds on any geometry
+                                 //              event, which clobbers an anchor-size
+                                 //              override under boundsExtent=parent.
+                                 //              Vertex shaders that need the captured
+                                 //              card's pixel dimensions read this.
+    // implicit 8-byte trailing pad — std140 rounds the struct end up
+    // to a 16-byte boundary, total 704 bytes.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;

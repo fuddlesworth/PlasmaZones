@@ -45,7 +45,10 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     // std140: 8 bytes implicit padding here (int + 4 trailing pad bytes)
     // before the vec4 below aligns to a 16-byte boundary at offset 672.
     vec4 iSurfaceScreenPos; // .xy = surface origin in screen pixels; .zw = (screenW, screenH)
-    // ── Zone extension (after BaseUniforms; starts at offset 688) ────
+    vec2 iAnchorSize;    // anchor (card) pixel size; zone shaders ignore it
+    // std140: 8 bytes implicit trailing pad (struct alignment to 16 bytes)
+    // before the vec4 below aligns to a 16-byte boundary at offset 704.
+    // ── Zone extension (after BaseUniforms; starts at offset 704) ────
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];

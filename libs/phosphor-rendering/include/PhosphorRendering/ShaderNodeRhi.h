@@ -13,6 +13,7 @@
 #include <QMatrix4x4>
 #include <QPointF>
 #include <QPointer>
+#include <QSizeF>
 #include <QQuickItem>
 #include <QSGRenderNode>
 #include <QSGTextureProvider>
@@ -160,6 +161,12 @@ public:
     /// attach + on each anchor geometry signal. kwin-effect handles its
     /// parity directly via setUniform on its path.
     void setSurfaceScreenPos(const QVector4D& pos);
+
+    /// Anchor (card) pixel size in logical pixels — companion to
+    /// iSurfaceScreenPos. Forwards to BaseUniforms::iAnchorSize at
+    /// offset 688. SurfaceAnimator pushes the anchor's logical
+    /// width/height on every geometry signal.
+    void setAnchorSize(const QSizeF& size);
 
     // ── Custom Parameters (indexed API) ────────────────────────────────
     void setCustomParams(int index, const QVector4D& params);
@@ -422,6 +429,7 @@ private:
     int m_frame = 0;
     bool m_isReversed = false;
     QVector4D m_surfaceScreenPos;
+    QSizeF m_anchorSize;
     float m_timeHi = 0.0f; // Cached iTimeHi for wrap-offset change detection
     float m_width = 0.0f;
     float m_height = 0.0f;

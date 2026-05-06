@@ -38,6 +38,8 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms.iSurfaceScreenPos[1] = m_surfaceScreenPos.y();
     m_baseUniforms.iSurfaceScreenPos[2] = m_surfaceScreenPos.z();
     m_baseUniforms.iSurfaceScreenPos[3] = m_surfaceScreenPos.w();
+    m_baseUniforms.iAnchorSize[0] = static_cast<float>(m_anchorSize.width());
+    m_baseUniforms.iAnchorSize[1] = static_cast<float>(m_anchorSize.height());
     // iDate only advances once per second. m_sceneDataDirty is set by every
     // mouse-move/resize event, so naïvely recomputing iDate whenever it's
     // true would hit QDateTime::currentDateTime() at 60+ Hz during

@@ -112,12 +112,26 @@ struct alignas(16) BaseUniforms
     // SurfaceAnimator (daemon) and paint_pipeline.cpp (kwin-effect).
     int _pad_before_iSurfaceScreenPos[2]; // offset 664 — std140 vec4 alignment for the next field
     float iSurfaceScreenPos[4]; // offset 672 (16 bytes) — (surfaceX, surfaceY, screenW, screenH)
-    // Ditto: trailing pad zeroed by value-init (`m_baseUniforms = {}`) and
-    // covered by K_SCENE_HEADER. See the expanded `_pad_after_audioSpectrum`
-    // comment above for the full std140 / upload-region rationale.
+
+    // Anchor (card) pixel size in logical pixels. Decoupled from
+    // `iResolution` because Qt's QQuickItem geometryChange handler
+    // auto-resets `iResolution` to the shader item's bounds whenever
+    // the item's geometry changes — for `boundsExtent: parent` shaders
+    // the item is parent-sized and that auto-reset sweeps any explicit
+    // setIResolution(anchor.size) override back to (parent.w, parent.h).
+    // Vertex shaders that need to know the rendered card's size in pixels
+    // (fly-in mapping the captured texture onto a small region within a
+    // parent-sized FBO) read this directly. Daemon writes it on every
+    // anchor geometry signal; kwin-effect writes it from frameGeometry.
+    // .xy = (anchorWidth, anchorHeight); .zw reserved (zero today).
+    // std140: vec2 alignment is 8 bytes — lands at offset 688 directly
+    // after iSurfaceScreenPos with no implicit pad. Trailing 8 bytes
+    // make up the std140 16-byte struct alignment; total size 696.
+    float iAnchorSize[2]; // offset 688 (8 bytes)
+    int _pad_after_iAnchorSize[2]; // offset 696 — std140 16-byte struct alignment, total 704
 };
 
-static_assert(sizeof(BaseUniforms) == 688, "BaseUniforms must be exactly 688 bytes");
+static_assert(sizeof(BaseUniforms) == 704, "BaseUniforms must be exactly 704 bytes");
 
 // Per-field std140 offset asserts. These pin the layout the
 // `data/animations/shared/animation_uniforms.glsl` canonical UBO branch
@@ -176,6 +190,8 @@ static_assert(offsetof(BaseUniforms, iIsReversed) == 660,
               "BaseUniforms::iIsReversed must remain at std140 offset 660 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, iSurfaceScreenPos) == 672,
               "BaseUniforms::iSurfaceScreenPos must remain at std140 offset 672 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iAnchorSize) == 688,
+              "BaseUniforms::iAnchorSize must remain at std140 offset 688 (animation UBO contract)");
 
 /// UBO region offsets and sizes for partial updates (reduces GPU bandwidth).
 namespace UboRegions {
@@ -237,9 +253,9 @@ constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 // `sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET` — the assert reduced
 // to `sizeof == sizeof` and could not catch the regression it claimed
 // to defend.
-static_assert(offsetof(BaseUniforms, iSurfaceScreenPos) + sizeof(BaseUniforms::iSurfaceScreenPos)
+static_assert(offsetof(BaseUniforms, iAnchorSize) + sizeof(BaseUniforms::iAnchorSize)
                   <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
-              "K_SCENE_HEADER must cover iSurfaceScreenPos — "
+              "K_SCENE_HEADER must cover iAnchorSize — "
               "narrowing K_SCENE_HEADER_SIZE leaves a trailing-field gap unmapped");
 static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms),
               "K_SCENE_HEADER must reach end-of-BaseUniforms — defensive companion to "

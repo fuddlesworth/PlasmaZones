@@ -171,12 +171,21 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         // Fill the anchor's parent item. The shader item is already
         // parented to anchor->parentItem() (see attachShaderToAnchor),
         // so (0, 0) puts the FBO origin at the parent's origin and the
-        // parent's full bounds become the rendering canvas. Shaders
-        // running here must use iSurfaceScreenPos (anchor's screen
-        // origin + screen size) plus iResolution (anchor's pixel size,
-        // see below) to position content within the screen-sized FBO.
+        // parent's full bounds become the rendering canvas. Authors
+        // running shaders here use `iAnchorSize` (the captured card's
+        // pixel size, pushed below) and `iSurfaceScreenPos` (card's
+        // screen origin + host screen dims) to remap the standard
+        // (-1..1) clip-space quad onto the card's region within the
+        // parent-sized FBO via their vertex stage. iResolution naturally
+        // tracks the FBO size — Qt's QQuickItem::geometryChange auto-
+        // resets it to the shader item's bounds on every geometry event,
+        // so we DO NOT try to override it to anchor size here; that
+        // override would silently get clobbered mid-leg whenever the
+        // animation fires update() (which causes the rendered card to
+        // briefly appear at parent size = the entire screen, the bug
+        // that motivated the iAnchorSize uniform).
         // Parent-less anchors (rare — see the warning at attach time)
-        // fall through to the Anchor branch via the default w/h fallback.
+        // fall through to the Anchor branch.
         if (QQuickItem* parent = anchor->parentItem()) {
             const qreal pw = parent->width();
             const qreal ph = parent->height();
@@ -184,13 +193,6 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
             shaderItem->setY(0.0);
             shaderItem->setWidth(pw);
             shaderItem->setHeight(ph);
-            // iResolution = anchor (card) pixel size for Parent mode.
-            // Authors writing parent-extent shaders treat iResolution
-            // as "the visible thing's size" so vTexCoord 0..1 keeps
-            // mapping to the captured anchor texture. The FBO size is
-            // implicit from iSurfaceScreenPos.zw (= screen size) for
-            // shaders that need it.
-            shaderItem->setIResolution(QSizeF(w, h));
         } else {
             shaderItem->setWidth(w + 2.0 * padW);
             shaderItem->setHeight(h + 2.0 * padH);
@@ -212,6 +214,11 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
         shaderSource->setWidth(w);
         shaderSource->setHeight(h);
     }
+    // iAnchorSize tracks the captured card's pixel size on every sync —
+    // independent of iResolution which Qt auto-resets to the shader
+    // item's bounds. Vertex shaders read this for the visible card's
+    // size in pixels regardless of boundsExtent.
+    shaderItem->setIAnchorSize(QSizeF(w, h));
 
     // Push iSurfaceScreenPos = (surfaceX, surfaceY, screenW, screenH)
     // alongside iResolution so vert / frag effects that reach for spatial
