@@ -220,29 +220,42 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     // size in pixels regardless of boundsExtent.
     shaderItem->setIAnchorSize(QSizeF(w, h));
 
-    // Push iSurfaceScreenPos = (surfaceX, surfaceY, screenW, screenH)
-    // alongside iResolution so vert / frag effects that reach for spatial
-    // context (fly-in from closest edge, screen-relative noise) see fresh
-    // values on every anchor geometry signal — same lifecycle the rest of
-    // this helper drives. Window position is the wl_surface origin the
-    // compositor assigned via layer-shell margins; on Wayland LayerShell
-    // it's only valid once the compositor has acked the configure, which
-    // for a freshly shown OSD / popup may happen one or two frames after
-    // attach. Until then `window->position()` reads (0, 0) — vert shaders
-    // see a brief "starting from screen origin" wrongness for the first
-    // frames; subsequent geometry-signal-driven re-syncs settle it. Add a
-    // window-level position-change connect later if a leg's run length is
-    // ever shorter than the configure latency.
-    if (QQuickWindow* window = anchor->window()) {
+    // iSurfaceScreenPos describes where the card sits within its
+    // *playing field* and how big that field is. The "playing field"
+    // on the daemon path is the wl_surface (= the window's logical
+    // size = the anchor's parent for Parent-extent shaders): for a
+    // virtual-screen popup the wl_surface IS the VS rect, so a
+    // fly-in from "the nearest edge" naturally reads as flying in
+    // from the VS's edge — which is what the user sees.
+    //
+    // CRITICAL: do NOT add `window->position()` to the card's
+    // surface-local position. For a popup on a VS at screen offset
+    // (X, Y), `window->position()` reports the VS offset but the
+    // shader's FBO is the wl_surface (sized to the VS, NOT to the
+    // physical screen). Adding the offset would produce absolute-
+    // screen coords that overflow the FBO clip-space mapping —
+    // VS-1's centred card would land at clip-x = 2.0 and never
+    // render. xy MUST stay surface-local.
+    //
+    // Likewise zw is the wl_surface size, not the physical screen
+    // size, because the shader's clip-space (-1..1) maps to the
+    // FBO (= wl_surface) bounds. Closest-edge math computed against
+    // the surface size correctly fires the VS edges as the "screen
+    // edges" the user perceives.
+    if (QQuickItem* parent = anchor->parentItem()) {
         const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
-        const QPoint windowPos = window->position();
-        QSize screenSize;
-        if (QScreen* screen = window->screen()) {
-            screenSize = screen->geometry().size();
-        }
-        shaderItem->setISurfaceScreenPos(QVector4D(
-            static_cast<float>(windowPos.x() + anchorScene.x()), static_cast<float>(windowPos.y() + anchorScene.y()),
-            static_cast<float>(screenSize.width()), static_cast<float>(screenSize.height())));
+        const qreal fieldW = parent->width();
+        const qreal fieldH = parent->height();
+        shaderItem->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
+                                                   static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
+                                                   static_cast<float>(fieldH)));
+    } else if (QQuickWindow* window = anchor->window()) {
+        // Parent-less anchor (rare — see attachShaderToAnchor's
+        // warning). Fall back to the window's logical size.
+        const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+        shaderItem->setISurfaceScreenPos(
+            QVector4D(static_cast<float>(anchorScene.x()), static_cast<float>(anchorScene.y()),
+                      static_cast<float>(window->width()), static_cast<float>(window->height())));
     }
 }
 } // namespace
