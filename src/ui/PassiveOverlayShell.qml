@@ -161,6 +161,10 @@ Window {
         }
 
         anchors.fill: parent
+        // Topmost slot: notifications/OSDs paint above every other content
+        // type so a layout-OSD or nav-OSD reads cleanly even when stacked
+        // over an active zone overlay or open snap-assist.
+        z: 3
         // SurfaceAnimator drives this Item's opacity. Start at 0 so the
         // first paint pre-show doesn't flash the OSD at full opacity.
         opacity: 0
@@ -278,6 +282,9 @@ Window {
         property bool loaded: false
 
         anchors.fill: parent
+        // Popup tier — modal pickers paint above the zone selector and
+        // main overlay but below notifications/OSDs (z=3).
+        z: 2
         opacity: 0
         visible: false
 
@@ -367,6 +374,9 @@ Window {
         }
 
         anchors.fill: parent
+        // Popup tier — same z as snap-assist (the two are mutually
+        // exclusive at any given moment) and below OSDs (z=3).
+        z: 2
         opacity: 0
         visible: false
 
@@ -508,6 +518,10 @@ Window {
         }
 
         anchors.fill: parent
+        // Mid tier — paints above the main zone overlay (z=0) and below
+        // popups (z=2) / OSDs (z=3). Drag-time selector card sits in
+        // front of the zone-overlay layer the user sees during the drag.
+        z: 1
         opacity: 0
         visible: false
 
@@ -685,6 +699,10 @@ Window {
         }
 
         anchors.fill: parent
+        // Bottom tier — zone overlay during a window drag is the
+        // backdrop content; selector (z=1), popups (z=2), and OSDs
+        // (z=3) all paint over it.
+        z: 0
         opacity: 0
         visible: false
 
