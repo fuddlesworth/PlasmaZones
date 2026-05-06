@@ -21,9 +21,11 @@
 #include <array>
 #include <chrono>
 #include <memory>
+#include <QCoreApplication>
 #include <QDBusArgument>
 #include <QDate>
 #include <QDateTime>
+#include <QEvent>
 #include <QDir>
 #include <QFileInfo>
 #include <QTime>
@@ -1048,6 +1050,20 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         for (auto* w : activeWindows) {
             endShaderTransition(w);
         }
+        // endShaderTransition queues each window's `unrefWindow` via
+        // QMetaObject::invokeMethod(this, ..., Qt::QueuedConnection) to
+        // avoid use-after-free in paintWindow's expiry fall-through. In
+        // the destructor path that defer is unsafe in the opposite
+        // direction: ~QObject runs after this body returns and discards
+        // pending posted MetaCalls targeted at `this`, so the queued
+        // unrefs would never fire and KWin's EffectWindow refcount
+        // stays incremented for every close-grab transition active at
+        // teardown — leaking the close grab. Drain the queue here, while
+        // `this` is still fully constructed and the lambdas can safely
+        // run. The lambdas only call `KWin::effects->unrefWindow(...)`
+        // and don't touch our member state after the unref, so
+        // synchronous dispatch from the dtor body is sound.
+        QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
     }
 }
 
