@@ -114,6 +114,7 @@ public:
         PhosphorLayer::Surface* passiveShellSurface = nullptr;
         QQuickWindow* passiveShellWindow = nullptr;
         QQuickItem* passiveShellOsdSlot = nullptr;
+        QQuickItem* passiveShellSnapAssistSlot = nullptr;
 
         QQuickWindow* overlayWindow = nullptr;
         QScreen* overlayPhysScreen = nullptr;
@@ -284,25 +285,6 @@ public:
      */
     void warmUpNotifications();
 
-    /**
-     * @brief Pre-create the snap-assist surface for the primary screen so
-     * the FIRST user-triggered show is just a setVisible toggle rather
-     * than a full QML compile + scene-graph build + Wayland configure
-     * round-trip + first-paint pipeline create. SnapAssistOverlay.qml's
-     * Repeater-of-zones × Repeater-of-candidate-cards body costs ~100-300 ms
-     * to instantiate on the GUI thread plus ~tens of ms of render-thread
-     * polishAndSync that the GUI thread blocks on; without pre-warming
-     * that cost falls on a user-triggered show (e.g. layout-switch
-     * shortcut), and any sibling surface mid-animation (the layout-OSD's
-     * fly-in fired in the same shortcut handler) sees its
-     * SurfaceAnimator GUI-thread tick miss frames for the duration —
-     * the visible OSD pause-mid-fly-in symptom this method addresses.
-     *
-     * Idempotent — guarded by `m_snapAssistWindow != nullptr` inside
-     * `createSnapAssistWindowFor`. Rerunning is harmless.
-     */
-    void warmUpSnapAssist();
-
 private:
     /**
      * @brief Install the QGuiApplication::screenAdded hook for the
@@ -388,9 +370,6 @@ public:
      */
     void warmUpLayoutPicker();
 
-protected:
-    bool eventFilter(QObject* obj, QEvent* event) override;
-
 public Q_SLOTS:
     // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
     // dismiss path: QML auto-dismiss timer → loaded content's
@@ -417,6 +396,12 @@ private Q_SLOTS:
     /// osdSlotItem) — the shell wl_surface itself stays mapped, only
     /// the OSD slot Item's opacity animates to 0.
     void onOsdDismissRequested();
+
+    /// Receiver for the shell's `snapAssistDismissRequested` QML signal
+    /// (backdrop click + the Escape global accel routes to
+    /// `hideSnapAssist` directly). Same animator-driven slot-hide
+    /// pattern as onOsdDismissRequested.
+    void onSnapAssistDismissRequested();
 
 private:
     // Sync CAVA service state (start/stop/reconfigure) with current settings.
@@ -600,11 +585,12 @@ private:
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
     QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
 
-    // Snap Assist overlay (window picker after snapping)
-    PhosphorLayer::Surface* m_snapAssistSurface = nullptr;
-    QQuickWindow* m_snapAssistWindow = nullptr;
-    QPointer<QScreen> m_snapAssistScreen;
+    // Snap Assist (window picker after snapping). Post-shell-migration
+    // snap-assist is an Item slot inside the per-screen passive shell;
+    // these track *which* screen's shell currently shows it (singleton
+    // across all screens) and whether it's logically visible.
     QString m_snapAssistScreenId;
+    bool m_snapAssistVisible = false;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     // Bounded LRU cache + QML image provider. Constructed eagerly in the
     // OverlayService ctor (before the SurfaceManager) so @ref m_thumbnailProvider
@@ -782,9 +768,10 @@ private:
     /// backed by the given physical screen. Used by both virtualScreensChanged and handleScreenRemoved.
     void destroyAllWindowsForPhysicalScreen(QScreen* screen);
 
-    void createSnapAssistWindow(QScreen* physScreen);
-    void createSnapAssistWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
-    void destroySnapAssistWindow();
+    /// Animator-driven slot-hide completion for snap-assist. Mirrors
+    /// onOsdSlotHideCompleted: flips slot.visible=false + clears
+    /// `loaded` so a subsequent show toggles it false→true freshly.
+    void onSnapAssistSlotHideCompleted(const QString& effectiveId);
 
     void createLayoutPickerWindow(QScreen* physScreen);
     void createLayoutPickerWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);

@@ -57,11 +57,22 @@ Window {
     /// surface), then invokes SurfaceAnimator::beginShow with this Item
     /// as the rootItem argument.
     readonly property alias osdSlotItem: osdSlot
+    /// Snap-assist slot Item — SurfaceAnimator target for snap-assist
+    /// show/hide. C++ writes data properties (emptyZones, candidates,
+    /// screenWidth, etc.) directly on this Item. Modal kbd grab is gone
+    /// (the shell is kbd-None); Escape routes via the daemon's
+    /// KGlobalAccel cancel-overlay shortcut.
+    readonly property alias snapAssistSlotItem: snapAssistSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — the shell
     /// stays mapped permanently, only the slot's opacity animates).
     signal osdDismissRequested()
+    /// Forwarded from snap-assist's `windowSelected` signal — host wires
+    /// to onSnapAssistWindowSelected.
+    signal snapAssistWindowSelected(string windowId, string zoneId, string geometryJson)
+    /// Forwarded from snap-assist's backdrop click / dismiss request.
+    signal snapAssistDismissRequested()
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
@@ -218,6 +229,73 @@ Window {
                 sourceZoneId: osdSlot.sourceZoneId
                 windowCount: osdSlot.windowCount
                 errorColor: osdSlot.errorColor
+            }
+
+        }
+
+    }
+
+    Item {
+        id: snapAssistSlot
+
+        // Snap-assist data properties — C++ writes these before each
+        // show; SnapAssistContent picks them up via QML lexical scope.
+        property var emptyZones: []
+        property var candidates: []
+        property int screenWidth: 1920
+        property int screenHeight: 1080
+        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property real activeOpacity: 0.5
+        property real inactiveOpacity: 0.3
+        property int borderWidth: Kirigami.Units.smallSpacing
+        property int borderRadius: Kirigami.Units.gridUnit
+        // OSD-style content lifecycle gate. C++ toggles false→true around
+        // each show so SnapAssistContent is re-instantiated, producing a
+        // fresh shaderAnchor QQuickItem per show — avoids stale FBO content
+        // on subsequent vertex-shader transitions.
+        property bool loaded: false
+
+        anchors.fill: parent
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: snapAssistLoader
+
+            anchors.fill: parent
+            active: snapAssistSlot.loaded
+            // asynchronous: true keeps the GUI thread responsive while
+            // the snap-assist body (Repeater of zones × Repeater of
+            // candidate cards) is instantiated. Without async loading a
+            // sibling slot's animation (e.g. an OSD fly-in) stalls
+            // mid-flight while this content mounts.
+            asynchronous: true
+            sourceComponent: snapAssistContentComp
+            onLoaded: {
+                if (snapAssistLoader.item) {
+                    snapAssistLoader.item.windowSelected.connect(root.snapAssistWindowSelected);
+                    snapAssistLoader.item.dismissRequested.connect(root.snapAssistDismissRequested);
+                }
+            }
+        }
+
+        Component {
+            id: snapAssistContentComp
+
+            SnapAssistContent {
+                emptyZones: snapAssistSlot.emptyZones
+                candidates: snapAssistSlot.candidates
+                screenWidth: snapAssistSlot.screenWidth
+                screenHeight: snapAssistSlot.screenHeight
+                highlightColor: snapAssistSlot.highlightColor
+                inactiveColor: snapAssistSlot.inactiveColor
+                borderColor: snapAssistSlot.borderColor
+                activeOpacity: snapAssistSlot.activeOpacity
+                inactiveOpacity: snapAssistSlot.inactiveOpacity
+                borderWidth: snapAssistSlot.borderWidth
+                borderRadius: snapAssistSlot.borderRadius
             }
 
         }

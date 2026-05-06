@@ -445,54 +445,29 @@ void Daemon::connectLayoutSignals()
     // Set initial layout filter
     updateLayoutFilter();
 
-    // Pre-warm the per-screen NotificationOverlay surface unconditionally.
-    // First-time QML compilation of NotificationOverlay.qml (~100-300ms)
-    // would otherwise block the event loop during the first layout switch
-    // (manual or autotile) or first keyboard navigation action, causing
-    // perceptible lag. Deferred so daemon init completes first.
+    // Pre-warm the per-screen unified passive overlay shell. The shell
+    // hosts every kbd-None overlay slot (OSD, snap-assist, …) so a
+    // single warm-up at daemon start covers QML compile + first-paint
+    // pipeline build for all of them — subsequent per-content shows are
+    // animator-only operations on already-mapped slot Items inside the
+    // already-warmed shell wl_surface. Deferred so daemon init completes
+    // first.
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
-            // Single warm-up covers both layout-OSD and navigation-OSD —
-            // they share one per-screen surface (NotificationOverlay.qml).
             m_overlayService->warmUpNotifications();
-            // Snap assist warm-up: pre-pays QML compile + first-paint
-            // pipeline build at daemon init, so the first user-triggered
-            // show is just a setVisible toggle. Without this, when a
-            // layout-switch shortcut handler fires both the layout-OSD
-            // (synchronous) and a snap-assist (deferred via
-            // OverlayAdaptor::showSnapAssist's QTimer::singleShot), the
-            // OSD's vertex-shader fly-in starts ticking on
-            // SurfaceAnimator's GUI-thread QTimer, and then the GUI
-            // thread blocks for the duration of snap-assist's first
-            // QQuickWindow::polishAndSync (QML compile + render-thread
-            // sync waiting on FBO alloc + QRhiGraphicsPipeline::create
-            // + QShaderBaker::bake). The OSD's iTime stops advancing
-            // for that block, then jumps forward to its scheduled value
-            // when the GUI thread resumes — the visible "halfway pause
-            // then jump" symptom. Pre-warming moves all of that work
-            // to daemon init time, where no other animation is in
-            // flight to be stalled.
+            // Snap-assist post-shell-migration: it's an Item slot inside
+            // the per-screen passive shell. The shell's QML compile +
+            // pipeline build is already paid by warmUpNotifications;
+            // SnapAssistContent itself is async-loaded at first show.
             //
-            // Snap-assist's role uses keyboard_interactivity=Exclusive,
-            // and the prime cycle inside createSnapAssistWindowFor maps
-            // the wl_surface for ~one frame to capture the first
-            // frameSwapped before unmapping. That's a brief
-            // (~16 ms) keyboard grab during daemon startup. Acceptable
-            // tradeoff vs the visible OSD-pause symptom on every
-            // subsequent layout switch. Layout-picker stays unwarmed
-            // for the reasons documented below.
-            m_overlayService->warmUpSnapAssist();
-            // Layout Picker is intentionally NOT pre-warmed: the
-            // pre-warmed wl_surface gets initially mapped with
-            // keyboard_interactivity=None (so the warm hidden surface
-            // doesn't grab the keyboard), and KWin's wlr-layer-shell
-            // doesn't re-evaluate keyboard focus when interactivity is
-            // mutated to Exclusive on a still-mapped surface. Result:
-            // the picker never received KeyPress events on user-show
-            // and Escape didn't dismiss it. Creating fresh per-show
-            // makes the surface map with Exclusive from the start;
-            // KWin grants focus on initial map. ~50-100 ms first-show
-            // latency is back, but the picker is rare and user-triggered.
+            // Layout Picker is intentionally NOT pre-warmed: it keeps
+            // its own kbd-Exclusive layer-shell surface (not yet
+            // migrated). KWin's wlr-layer-shell doesn't re-evaluate
+            // keyboard focus when interactivity is mutated to Exclusive
+            // on a still-mapped surface, so a pre-warmed mapped picker
+            // surface would never receive KeyPress on user-show.
+            // Creating fresh per-show makes the surface map with
+            // Exclusive from the start.
         });
     }
 

@@ -517,6 +517,20 @@ void Daemon::connectShortcutSignals()
             m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
         }
     });
+    // Snap-assist Escape: the unified PassiveOverlayShell is kbd-None
+    // (the legacy SnapAssistOverlay's kbd-Exclusive QML Shortcut for
+    // Escape no longer exists), so we register the global Escape
+    // accelerator on every snap-assist show — cancelSnap() routes
+    // Escape to hideSnapAssist() via the existing
+    // isSnapAssistVisible() branch (windowdragadaptor.cpp:265). The
+    // matching unregister fires on snapAssistDismissed via
+    // WindowDragAdaptor::onSnapAssistDismissed.
+    connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
+            [this](const QString&, const EmptyZoneList&, const SnapAssistCandidateList&) {
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
+                }
+            });
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Only release the Escape grab if no drag is currently active —
         // otherwise the in-progress drag's own cancel-overlay shortcut

@@ -462,9 +462,10 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     state.passiveShellWindow = surface->window();
     state.notificationPhysScreen = physScreen;
 
-    // Cache the OSD slot Item — exposed as `osdSlotItem` on the shell
-    // window root via QML alias. Per-show writeQmlProperty / animator
-    // beginShow target this Item directly.
+    // Cache the per-content slot Items — exposed as `osdSlotItem` /
+    // `snapAssistSlotItem` on the shell window root via QML aliases.
+    // Per-show writeQmlProperty / animator beginShow target these Items
+    // directly.
     if (auto* window = surface->window()) {
         state.passiveShellOsdSlot = qvariant_cast<QQuickItem*>(window->property("osdSlotItem"));
         if (!state.passiveShellOsdSlot) {
@@ -472,12 +473,17 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
                 << "PassiveOverlayShell on screen=" << effectiveId
                 << "did not expose `osdSlotItem` — OSD content writes will fall through. Check QML resource.";
         }
+        state.passiveShellSnapAssistSlot = qvariant_cast<QQuickItem*>(window->property("snapAssistSlotItem"));
+        if (!state.passiveShellSnapAssistSlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+                                 << "did not expose `snapAssistSlotItem` — snap-assist on this screen will fail.";
+        }
 
-        // Wire osdDismissRequested from QML → animator-driven slot hide.
-        // The slot hides via SurfaceAnimator::beginHide on (shellSurface,
-        // slotItem) with the per-content Notification role config; the
-        // shell wl_surface itself stays mapped.
+        // Wire QML signals → animator-driven slot hide / forward.
         QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
+        QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
+        QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
+                         SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
     }
 
     // Prime the wl_surface map + Vulkan swapchain init + first-frame

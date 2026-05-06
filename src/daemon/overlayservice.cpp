@@ -534,15 +534,14 @@ OverlayService::~OverlayService()
     // deleted pointer in ~Impl.
     cleanupAllScreenStates(m_screenStates);
 
-    // Singleton surfaces (snap assist, layout picker, shader preview) are
-    // QObject children of `this`, so the QObject parent-child system would
-    // destroy them AFTER our own destructor body runs — i.e. after the
-    // member destructors. Schedule their deletion now so SurfaceManager's
-    // drain loop picks them up before the engine is destroyed.
-    if (m_snapAssistSurface) {
-        m_snapAssistSurface->deleteLater();
-        m_snapAssistSurface = nullptr;
-    }
+    // Singleton surfaces (layout picker, shader preview) are QObject
+    // children of `this`, so the QObject parent-child system would
+    // destroy them AFTER our own destructor body runs — i.e. after
+    // the member destructors. Schedule their deletion now so
+    // SurfaceManager's drain loop picks them up before the engine is
+    // destroyed. Snap-assist post-shell-migration is an Item slot
+    // inside the per-screen passive shell — its lifetime is the
+    // shell's, no separate cleanup here.
     if (m_layoutPickerSurface) {
         m_layoutPickerSurface->deleteLater();
         m_layoutPickerSurface = nullptr;
@@ -900,10 +899,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         }
     }
 
-    // Clean up snap assist and layout picker if on this physical screen
-    if (m_snapAssistScreen == screen) {
-        destroySnapAssistWindow();
-    }
+    // Clean up layout picker if on this physical screen. Snap-assist is
+    // post-shell-migration an Item slot inside the per-screen passive
+    // shell — destroying the shell (above, via destroyNotificationWindow)
+    // tears the slot down with it.
     if (m_layoutPickerScreen == screen) {
         destroyLayoutPickerWindow();
     }
