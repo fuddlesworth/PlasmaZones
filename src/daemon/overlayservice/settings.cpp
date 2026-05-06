@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include "qml_property_names.h"
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
@@ -44,6 +45,18 @@ void OverlayService::setSettings(ISettings* settings)
                     updateZoneSelectorWindow(it.key());
                 }
             };
+            // updateZoneSelectorWindow reads ~20 settings (zone padding, border
+            // width / radius, font, color, plus per-screen resolved
+            // ZoneSelectorConfig fields) and pushes them as QML properties.
+            // Connecting to ~20 specific *Changed signals would track the
+            // dependency graph manually with no functional difference: QML
+            // property writes short-circuit on equal value, so the worst case
+            // for the catch-all is N redundant property lookups across the
+            // selector windows — measured in microseconds. The catch-all is
+            // the maintenance-cheap choice; specific connections below cover
+            // the cases where the response is structurally different
+            // (overlay-window recreation, audio-spectrum start/stop, shader
+            // tree apply).
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
 
             // Recreate overlay windows when the overlay display mode changes
@@ -109,11 +122,12 @@ void OverlayService::setSettings(ISettings* settings)
                     PhosphorRendering::ShaderCompiler::clearCache();
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                         auto* window = it_.value().overlayWindow;
-                        if (window && window->property("isShaderOverlay").toBool()) {
+                        if (window && window->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
                             QMetaObject::invokeMethod(window, "reloadShader");
                         }
                     }
-                    if (m_shaderPreviewWindow && m_shaderPreviewWindow->property("isShaderOverlay").toBool()) {
+                    if (m_shaderPreviewWindow
+                        && m_shaderPreviewWindow->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
                         QMetaObject::invokeMethod(m_shaderPreviewWindow, "reloadShader");
                     }
                 });
@@ -296,11 +310,12 @@ void OverlayService::syncCavaState()
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                 auto* window = it_.value().overlayWindow;
                 if (window) {
-                    writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+                    writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }
             }
             if (m_shaderPreviewWindow) {
-                writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+                writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::AudioSpectrum),
+                                 QVariantList());
             }
         }
     }

@@ -3,6 +3,7 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
+#include "overlayservice/qml_property_names.h"
 #include "snapassistthumbnailprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
@@ -1094,12 +1095,12 @@ void OverlayService::setIdleForDragPause()
         // zones properties below is not sufficient — on some shaders the
         // base pass still renders visible output when zoneCount==0, and the
         // input region stays active until the flag change lands.
-        writeQmlProperty(window, QStringLiteral("_idled"), true);
-        writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
-        writeQmlProperty(window, QStringLiteral("zoneCount"), 0);
-        writeQmlProperty(window, QStringLiteral("highlightedCount"), 0);
-        writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
-        writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), true);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Zones), QVariantList());
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::ZoneCount), 0);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
         // side's labelsTexture property still holds the previously-built image
         // (setProperty was never called with a new one); it just isn't sampled
@@ -1166,7 +1167,7 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         }
         const bool shouldBeActive =
             showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
-        writeQmlProperty(window, QStringLiteral("_idled"), !shouldBeActive);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
     }
 }
 

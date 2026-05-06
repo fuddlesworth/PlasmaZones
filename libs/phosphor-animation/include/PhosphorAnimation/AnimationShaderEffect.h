@@ -156,6 +156,19 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// area).
     static constexpr qreal kMaxBoundsPadding = 2.0;
 
+    /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
+    /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —
+    /// the lowest cost-floor that still gives Shadertoy-style buffer
+    /// effects something to work with). 1.0 means full-resolution
+    /// FBOs (no downscale). Hosted here as the source-of-truth that
+    /// `fromJson`'s clamp + the round-trip stability comment in
+    /// `toJson` reference; a future runtime that consumes bufferScale
+    /// from a non-JSON source can read these constants directly.
+    static constexpr qreal kMinBufferScale = 0.125;
+    static constexpr qreal kMaxBufferScale = 1.0;
+    static_assert(kMinBufferScale > 0.0 && kMinBufferScale < kMaxBufferScale,
+                  "kMinBufferScale must be positive and strictly less than kMaxBufferScale");
+
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.
     /// Field names mirror the regular shader pack format

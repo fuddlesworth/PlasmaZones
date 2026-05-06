@@ -74,7 +74,13 @@ void main()
     vec4 sR = texture(uTexture0, uvR);
     vec4 sG = texture(uTexture0, uvG);
     vec4 sB = texture(uTexture0, uvB);
-    float a = sG.a;
+    // Output alpha is the MAX of the three sample alphas, not just sG.a.
+    // When chromatic offset lands R or B on opaque pixels but G on a
+    // transparent edge, using sG.a alone would zero the entire pixel and
+    // erase the valid R+B chromatic split (visible "missing pixels" at
+    // window edges during glitch). max() preserves any sample's contribution
+    // and keeps the chromatic-aberration intent intact at silhouette edges.
+    float a = max(max(sR.a, sG.a), sB.a);
     float r = (sR.a > 0.001) ? sR.r / sR.a : 0.0;
     float g = (sG.a > 0.001) ? sG.g / sG.a : 0.0;
     float b = (sB.a > 0.001) ? sB.b / sB.a : 0.0;

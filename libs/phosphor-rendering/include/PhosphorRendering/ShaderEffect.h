@@ -263,10 +263,12 @@ public:
     /// `QPainter` synchronously on the calling thread to rasterise the
     /// document up to the clamped dimension. The cost scales with
     /// `kMaxSvgPixelBytes` in the worst case. Hot-path callers (e.g.
-    /// per-frame parameter pushes) should pre-warm the cache via the
-    /// kwin-effect's async loader path or perform the
-    /// load-and-cache step from a worker thread before calling
-    /// `setShaderParams`. Bitmap formats are loaded via `QImage` and
+    /// per-frame parameter pushes) should pre-warm via
+    /// `loadUserTextureFile(path, svgMaxDim)` from a worker thread (it's
+    /// thread-safe per Qt docs: each call constructs its own
+    /// QSvgRenderer / QImage instance with no shared mutable state)
+    /// and call `setUserTexture(slot, image)` on the GUI thread to
+    /// install the result. Bitmap formats are loaded via `QImage` and
     /// carry the same synchronous-IO caveat but no rasterisation cost.
     ///
     /// **Subclass contract.** Overrides MUST chain to
@@ -276,6 +278,18 @@ public:
     /// uninterpreted and pinned to whatever the previous parse set —
     /// silent stale samplers across reloads.
     virtual void setShaderParams(const QVariantMap& params);
+
+    /// Static helper that loads a user-texture file (PNG/JPG/etc. via
+    /// QImage; SVG/SVGZ via QSvgRenderer rasterised at @p svgMaxDim
+    /// max-axis with the same byte-budget guard as `setShaderParams`).
+    /// Thread-safe: each invocation constructs its own QSvgRenderer /
+    /// QImage instance — callers may invoke from a worker thread (e.g.
+    /// `QtConcurrent::run`) to off-load the cost from the GUI thread.
+    /// Returns a null QImage on load failure (file missing, parse
+    /// error, OOM); callers should keep their prior image in that case.
+    /// The result is in `QImage::Format_RGBA8888`, ready for
+    /// `setUserTexture(slot, image)` upload on the GUI thread.
+    static QImage loadUserTextureFile(const QString& path, int svgMaxDim);
 
     /// @brief Live texture-provider source bound to SRB binding 7
     ///        (`uTexture0`).

@@ -20,7 +20,9 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <limits>
 #include <memory>
+#include <unordered_set>
 #include <QCoreApplication>
 #include <QDBusArgument>
 #include <QDate>
@@ -4816,6 +4818,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 ? 0.0f
                 : static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f;
             transition.lastPaintTimeMs = nowMs;
+            // Pin the GLSL contract: `iFrame` is declared `uniform int`
+            // in animation_uniforms.glsl; bumping iFrameValue's type to
+            // unsigned without updating the shader (or vice versa) would
+            // silently reinterpret bit patterns at the SRB boundary.
+            static_assert(std::is_same_v<decltype(transition.frameCount), int>,
+                          "transition.frameCount must stay `int` to match GLSL `uniform int iFrame;`");
             const int iFrameValue = transition.frameCount++;
             const QRectF geo = w->frameGeometry();
             {
@@ -5124,6 +5132,49 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 //     why the upload is dispatched back via QueuedConnection rather
 //     than completed inline on the worker.
 // ─────────────────────────────────────────────────────────────────────────────
+void PlasmaZonesEffect::evictLruTextureIfOverBound()
+{
+    while (m_textureCache.size() > kTextureCacheSoftBound) {
+        // Build the set of cache pointers currently referenced by any
+        // active transition's userTextures slots. Eviction must skip
+        // every one of these — the transition holds a raw non-owning
+        // pointer that would dangle if we erased the entry.
+        std::unordered_set<const CachedTexture*> inFlight;
+        for (const auto& [_, transition] : m_shaderTransitions) {
+            for (CachedTexture* tex : transition.userTextures) {
+                if (tex) {
+                    inFlight.insert(tex);
+                }
+            }
+        }
+        // Find the cache entry with the smallest lastAccessTick that is
+        // NOT in-flight. If every entry is in flight (pathological;
+        // would require >kTextureCacheSoftBound concurrent transitions
+        // each referencing a unique texture), break — the cache
+        // transiently exceeds the bound rather than tearing a live
+        // pointer. Self-heals on the next eviction once a transition
+        // ends.
+        auto evictIt = m_textureCache.end();
+        quint64 oldestTick = std::numeric_limits<quint64>::max();
+        for (auto it = m_textureCache.begin(); it != m_textureCache.end(); ++it) {
+            if (inFlight.count(&it->second) > 0) {
+                continue;
+            }
+            if (it->second.lastAccessTick < oldestTick) {
+                oldestTick = it->second.lastAccessTick;
+                evictIt = it;
+            }
+        }
+        if (evictIt == m_textureCache.end()) {
+            return; // every entry is in flight; no safe eviction this pass
+        }
+        qCDebug(lcEffect) << "evictLruTextureIfOverBound: evicting" << evictIt->first
+                          << "(lastAccessTick=" << evictIt->second.lastAccessTick
+                          << ", cache size=" << m_textureCache.size() << ")";
+        m_textureCache.erase(evictIt);
+    }
+}
+
 void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 {
     if (absolutePath.isEmpty()) {
@@ -5219,7 +5270,9 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
                     CachedTexture cachedTex;
                     cachedTex.texture = std::move(gpuTex);
                     cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
+                    cachedTex.lastAccessTick = ++effect->m_textureCacheAccessTick;
                     effect->m_textureCache.emplace(path, std::move(cachedTex));
+                    effect->evictLruTextureIfOverBound();
                     qCDebug(lcEffect) << "warmUserTextureAsync: cached" << path;
                 },
                 Qt::QueuedConnection);
@@ -5620,6 +5673,13 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
         auto texIt = m_textureCache.find(path);
         bool freshlyLoaded = false;
+        if (texIt != m_textureCache.end()) {
+            // Bump the access tick on lookup so the LRU sweep sees this
+            // path as "fresh" — keeps frequently-used textures warm
+            // even if a flood of unique single-use textures pushes the
+            // cache over its bound.
+            texIt->second.lastAccessTick = ++m_textureCacheAccessTick;
+        }
         if (texIt == m_textureCache.end()) {
             // Synchronous fallback — the warm path didn't promote in
             // time (or this is the very first transition for this
@@ -5660,7 +5720,14 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             CachedTexture cachedTex;
             cachedTex.texture = std::move(gpuTex);
             cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
+            cachedTex.lastAccessTick = ++m_textureCacheAccessTick;
             texIt = m_textureCache.emplace(path, std::move(cachedTex)).first;
+            // Eviction sweep is safe here: std::map only invalidates the
+            // erased iterator, so `texIt` (the entry we just inserted)
+            // stays valid. The freshly-inserted entry's lastAccessTick
+            // is the global maximum, so it can never be the eviction
+            // victim.
+            evictLruTextureIfOverBound();
             freshlyLoaded = true;
         }
         transition.userTextures[slot] = &texIt->second;

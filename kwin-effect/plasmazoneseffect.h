@@ -523,6 +523,12 @@ private:
     {
         std::unique_ptr<KWin::GLTexture> texture;
         GLenum lastAppliedWrap = GL_CLAMP_TO_EDGE;
+        /// Monotonic access counter (NOT a wall-clock frame number).
+        /// Updated by `touchTextureCacheEntry` on every successful
+        /// lookup or fresh insert. The LRU eviction sweep evicts the
+        /// entry with the smallest value (least recently used) that
+        /// is NOT currently referenced by any in-flight transition.
+        quint64 lastAccessTick = 0;
     };
 
     struct CachedShader
@@ -628,6 +634,13 @@ private:
         /// daemon's `SurfaceAnimator` `iFrame` semantic: starts at 0 on
         /// each fresh attach so shaders that read it (e.g. for staggered
         /// per-frame randomness) see the same trajectory on both runtimes.
+        ///
+        /// Type pinned to `int` to match GLSL `uniform int iFrame;` in
+        /// `data/animations/shared/animation_uniforms.glsl`. The shared
+        /// header's UBO offset (76) is also `int`-sized so the kwin
+        /// `setUniform(iFrameLoc, iFrameValue)` push and the daemon
+        /// std140 layout agree. A static_assert at the push site below
+        /// pins this contract.
         int frameCount = 0;
         /// Per-leg user-texture pointers. Resolved at
         /// `beginShaderTransition` time from the translated params'
@@ -780,6 +793,29 @@ private:
     /// flush pending invokeMethod posts against `this` while members are
     /// still intact.
     quint64 m_textureCacheGeneration = 0;
+    /// Monotonic counter bumped on every cache lookup / insert. Stamped
+    /// onto `CachedTexture::lastAccessTick` so the LRU sweep below has
+    /// a stable order. Distinct from `m_textureCacheGeneration` (which
+    /// flips on hot-reload to invalidate in-flight workers).
+    quint64 m_textureCacheAccessTick = 0;
+    /// Soft upper bound on `m_textureCache` size. The cache is path-keyed
+    /// and entries can be referenced by raw pointers held in
+    /// `ShaderTransition::userTextures[]`, so eviction MUST skip any
+    /// entry currently in-flight. With kMaxUserTextureSlots * (typical
+    /// pack count of 5..20) the cache normally settles at <50 entries
+    /// even on third-party-pack-heavy installations; the cap is a
+    /// long-soak / hot-reload-without-effects-changed safety net rather
+    /// than a routine pressure relief.
+    static constexpr std::size_t kTextureCacheSoftBound = 32;
+    /// LRU sweep: when `m_textureCache.size() > kTextureCacheSoftBound`,
+    /// evict the entry with the smallest `lastAccessTick` that is NOT
+    /// referenced by any `m_shaderTransitions[*].userTextures[*]`. If
+    /// every entry is in flight (pathological), no-op — the cache
+    /// transiently exceeds the bound rather than tearing a live
+    /// transition's pointer. Called from the two cache-insert sites
+    /// (sync fallback in `beginShaderTransition` and async upload in
+    /// `warmUserTextureAsync`).
+    void evictLruTextureIfOverBound();
     /// Off-load a texture load onto the loader pool, then upload to
     /// the GL cache on the compositor thread when the worker
     /// finishes. Returns immediately if the path is already cached

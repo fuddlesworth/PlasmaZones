@@ -148,6 +148,58 @@ void main() {
 // Construction / Destruction
 // ============================================================================
 
+QImage ShaderEffect::loadUserTextureFile(const QString& path, int svgMaxDim)
+{
+    if (path.isEmpty()) {
+        return {};
+    }
+    const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
+        || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+    if (!isSvg) {
+        return QImage(path).convertToFormat(QImage::Format_RGBA8888);
+    }
+    QSvgRenderer renderer(path);
+    if (!renderer.isValid()) {
+        return {};
+    }
+    QSize size = renderer.defaultSize();
+    // Cap the requested per-axis size at the library ceiling regardless of
+    // the per-slot setting — defends against subclasses or future setters
+    // that bypass the setShaderParams parse-time clamp.
+    const int maxDim = qBound(64, svgMaxDim, kMaxSvgDimension);
+    if (!size.isEmpty()) {
+        size.scale(maxDim, maxDim, Qt::KeepAspectRatio);
+    } else {
+        size = QSize(maxDim, maxDim);
+    }
+    // Byte-budget guard: even after the per-axis ceiling, a near-square
+    // doc can request ~maxDim² × 4 bytes (16 MiB at 2048²). Downscale
+    // proportionally so the pixel area stays within kMaxSvgPixelBytes / 4
+    // pixels and warn.
+    const qint64 pixelBytes = static_cast<qint64>(size.width()) * size.height() * 4;
+    if (pixelBytes > kMaxSvgPixelBytes) {
+        const double scale = std::sqrt(static_cast<double>(kMaxSvgPixelBytes) / pixelBytes);
+        const QSize scaledSize(qMax(1, static_cast<int>(size.width() * scale)),
+                               qMax(1, static_cast<int>(size.height() * scale)));
+        qCWarning(lcShaderNode) << "ShaderEffect::loadUserTextureFile: SVG rasterise size" << size
+                                << "exceeds byte budget" << kMaxSvgPixelBytes << "B, downscaling to" << scaledSize
+                                << "for path" << path;
+        size = scaledSize;
+    }
+    // Rasterise into ARGB32_Premultiplied — QPainter's source-over
+    // compositing is defined for premultiplied targets; rendering an SVG
+    // with semi-transparent strokes/fills onto a non-premul RGBA8888
+    // produces subtly wrong alpha at partial-cover paths. Convert to
+    // RGBA8888 afterwards for the RHI upload path (which expects
+    // QRhiTexture::RGBA8 layout).
+    QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
+    rasterised.fill(Qt::transparent);
+    QPainter painter(&rasterised);
+    renderer.render(&painter);
+    painter.end();
+    return rasterised.convertToFormat(QImage::Format_RGBA8888);
+}
+
 ShaderEffect::ShaderEffect(QQuickItem* parent)
     : QQuickItem(parent)
 {
@@ -641,7 +693,6 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
 
         if (needsReload) {
             const QString path = m_userTexturePaths[i];
-            QImage loaded;
             // Drop the preceding `QFile::exists()` check: it's a TOCTOU
             // race against the load below (file can vanish between the
             // two calls), so it cannot serve as a true gate. The
@@ -651,57 +702,8 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // existing `m_userTextureImages[i]`) handles that case
             // correctly. The exists() call only added a redundant
             // stat() per setShaderParams call.
-            if (!path.isEmpty()) {
-                const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
-                    || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
-                if (isSvg) {
-                    QSvgRenderer renderer(path);
-                    if (renderer.isValid()) {
-                        QSize size = renderer.defaultSize();
-                        // Cap the requested per-axis size at the library
-                        // ceiling regardless of the per-slot setting — defends
-                        // against subclasses or future setters that bypass the
-                        // setShaderParams parse-time clamp.
-                        const int maxDim = qBound(64, m_userTextureSvgSizes[i], kMaxSvgDimension);
-                        if (!size.isEmpty()) {
-                            size.scale(maxDim, maxDim, Qt::KeepAspectRatio);
-                        } else {
-                            size = QSize(maxDim, maxDim);
-                        }
-                        // Byte-budget guard: even after the per-axis ceiling,
-                        // a near-square doc can request ~maxDim² × 4 bytes
-                        // (16 MiB at 2048²). For multiple effects rendering
-                        // simultaneously this can spike GUI memory; downscale
-                        // the rasterisation proportionally so the pixel area
-                        // stays within kMaxSvgPixelBytes / 4 pixels and warn.
-                        const qint64 pixelBytes = static_cast<qint64>(size.width()) * size.height() * 4;
-                        if (pixelBytes > kMaxSvgPixelBytes) {
-                            const double scale = std::sqrt(static_cast<double>(kMaxSvgPixelBytes) / pixelBytes);
-                            const QSize scaledSize(qMax(1, static_cast<int>(size.width() * scale)),
-                                                   qMax(1, static_cast<int>(size.height() * scale)));
-                            qCWarning(lcShaderNode)
-                                << "ShaderEffect: SVG rasterise size" << size << "exceeds byte budget"
-                                << kMaxSvgPixelBytes << "B — downscaling to" << scaledSize << "for slot" << i;
-                            size = scaledSize;
-                        }
-                        // Rasterise into ARGB32_Premultiplied — QPainter's
-                        // source-over compositing is defined for premultiplied
-                        // targets; rendering an SVG with semi-transparent
-                        // strokes/fills onto a non-premul RGBA8888 produces
-                        // subtly wrong alpha at partial-cover paths. Convert
-                        // to RGBA8888 afterwards for the RHI upload path
-                        // (which expects QRhiTexture::RGBA8 layout).
-                        QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
-                        rasterised.fill(Qt::transparent);
-                        QPainter painter(&rasterised);
-                        renderer.render(&painter);
-                        painter.end();
-                        loaded = rasterised.convertToFormat(QImage::Format_RGBA8888);
-                    }
-                } else {
-                    loaded = QImage(path).convertToFormat(QImage::Format_RGBA8888);
-                }
-            }
+            const int maxDim = qBound(64, m_userTextureSvgSizes[i], kMaxSvgDimension);
+            QImage loaded = path.isEmpty() ? QImage() : loadUserTextureFile(path, maxDim);
             // Empty path → intentional clear (sampler reads transparent black).
             // Non-empty path that produced a null image → load failure (file
             // missing, parse error, OOM). In the failure case, KEEP the prior

@@ -29,6 +29,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 #define glowSpeed       customParams[0].x
 #define randomColorFlag customParams[0].y
@@ -43,28 +44,9 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// 2D simplex noise — MIT-licensed (Inigo Quilez).
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-float simplex2D(vec2 p) {
-    const float K1 = 0.366025404;
-    const float K2 = 0.211324865;
-    vec2 i  = floor(p + (p.x + p.y) * K1);
-    vec2 a  = p - i + (i.x + i.y) * K2;
-    float m = step(a.y, a.x);
-    vec2 o  = vec2(m, 1.0 - m);
-    vec2 b  = a - o + K2;
-    vec2 c  = a - 1.0 + 2.0 * K2;
-    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    vec3 n  = h * h * h * h *
-            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
-                 dot(b, -1.0 + 2.0 * hash22(i + o)),
-                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
-    return 0.5 + 0.5 * dot(n, vec3(70.0));
-}
+// 2D simplex noise — MIT-licensed (Inigo Quilez). Definitions hosted
+// in shared/noise.glsl so the seven shaders that need it pull from one
+// source-of-truth rather than carrying a verbatim copy each.
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * .1031);

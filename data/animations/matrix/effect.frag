@@ -31,6 +31,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
 #define letterSize customParams[0].x
@@ -57,14 +58,9 @@ const float LETTER_FLICKER_SPEED  = 2.0;
 // cadence. 60 Hz is the canonical KWin/Qt scene-graph default.
 const float ASSUMED_FPS           = 60.0;
 
-// hash22 — Burn-My-Windows common.glsl. Drives both the per-column
+// hash22 hosted in shared/noise.glsl. Drives both the per-column
 // delay and the in-tile glyph index (so each "drop" cycles through
-// glyphs as it falls).
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
+// glyphs as it falls). Identical formulation to BMW's common.glsl.
 
 // Quad-edge alpha mask: 1.0 in the interior, fading to 0 within
 // `fadePixels` of any edge. Keeps the rain from cropping abruptly at

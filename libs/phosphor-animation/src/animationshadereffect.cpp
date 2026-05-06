@@ -167,7 +167,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
     e.useWallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
-    e.bufferScale = qBound(0.125, obj.value(QLatin1String("bufferScale")).toDouble(1.0), 1.0);
+    e.bufferScale = qBound(kMinBufferScale, obj.value(QLatin1String("bufferScale")).toDouble(1.0), kMaxBufferScale);
     e.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString();
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
     for (const QJsonValue& v : wrapsArr) {
@@ -221,6 +221,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     const QJsonArray texArr = obj.value(QLatin1String("textures")).toArray();
     e.textures.reserve(qMin<qsizetype>(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
     qsizetype slotIndex = 0;
+    int droppedEmpty = 0;
     for (const QJsonValue& v : texArr) {
         if (e.textures.size() >= AnimationShaderContract::kMaxUserTextureSlots)
             break;
@@ -240,15 +241,31 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         if (!t.wrap.isEmpty() && t.wrap != QLatin1String("clamp") && t.wrap != QLatin1String("repeat")
             && t.wrap != QLatin1String("mirror")) {
             qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown wrap value" << t.wrap
-                                         << "for slot" << slotIndex << "— reset to runtime default";
+                                         << "for slot" << slotIndex << ", reset to runtime default";
             t.wrap.clear();
         }
-        ++slotIndex;
         // Drop entries with no path — they would map to a sampler with
         // nothing bound. The runtimes would fall back to transparent
         // black, but persisting the empty slot in JSON is just noise.
-        if (!t.path.isEmpty())
+        // The visible warning here matters: TextureSlot has no explicit
+        // slot-index field; an empty entry preceding a populated one
+        // SHIFTS the populated entry's runtime slot. e.g. authoring
+        // [{path:""}, {path:"foo.png"}, {path:"bar.png"}] yields
+        // textures bound at iChannel1+iChannel2 instead of iChannel2+
+        // iChannel3 as the metadata reads. Loud so authors notice the
+        // implicit re-mapping.
+        if (t.path.isEmpty()) {
+            ++droppedEmpty;
+        } else {
+            if (droppedEmpty > 0) {
+                qCWarning(lcAnimationShader)
+                    << "AnimationShaderEffect::fromJson: textures[" << slotIndex << "] populated after" << droppedEmpty
+                    << "empty entries; runtime slot will be shifted by that count "
+                       "(empty entries are dropped, not preserved as gaps).";
+            }
             e.textures.append(std::move(t));
+        }
+        ++slotIndex;
     }
 
     return e;

@@ -360,35 +360,38 @@ Item {
         toggleChecked: root.alwaysEnabled || root.overrideEnabled
         collapsible: root.collapsible
         onToggleClicked: function(checked) {
+            // Toggle OFF semantic: clear timing override AND write
+            // an inheritance-blocking shader override. Plain
+            // `clearShaderOverride` only removes the entry at this
+            // path, leaving inheritance from an ancestor (e.g.
+            // `panel` -> "dissolve") to cascade down — exactly the
+            // user-reported "I disabled all popups but dissolve
+            // still plays" bug. `setShaderOverride(path, "", {})`
+            // writes an engaged-empty effectId that
+            // `ShaderProfile::overlay` treats as "explicitly no
+            // shader", winning over the parent's effectId and
+            // blocking the cascade. Same call works for parent
+            // cards (panel.popup, window, osd, etc.) so a single
+            // OFF toggle on the parent disables every descendant
+            // that doesn't have its own override.
+
             if (checked) {
                 root.commitOverride();
             } else {
-                // Toggle OFF semantic: clear timing override AND write
-                // an inheritance-blocking shader override. Plain
-                // `clearShaderOverride` only removes the entry at this
-                // path, leaving inheritance from an ancestor (e.g.
-                // `panel` → "dissolve") to cascade down — exactly the
-                // user-reported "I disabled all popups but dissolve
-                // still plays" bug. `setShaderOverride(path, "", {})`
-                // writes an engaged-empty effectId that
-                // `ShaderProfile::overlay` treats as "explicitly no
-                // shader", winning over the parent's effectId and
-                // blocking the cascade. Same call works for parent
-                // cards (panel.popup, window, osd, etc.) so a single
-                // OFF toggle on the parent disables every descendant
-                // that doesn't have its own override.
-                settingsController.animationsPage.clearOverride(root.eventPath);
-                // Gate the shader-blocking write on actual shader-leg
-                // support: setShaderOverride logs qCWarning and rejects
-                // any path not in shaderSupportedEventPaths(), so calling
-                // it on a non-shader-leg event (parent nodes, non-shader
-                // legs like panel.slideIn) just spams the log. Cards that
-                // can't carry a shader can't have inheritance to block
-                // either, so skipping the call is semantically complete.
+                // Ordering: write the inheritance-blocking shader
+                // sentinel FIRST, then clear the timing override. If
+                // the timing clear ever fails mid-flight (e.g. QFile
+                // out-of-disk error inside `clearOverride`'s on-disk
+                // write), the shader sentinel is already persisted —
+                // the user's "disable" intent is recorded in the
+                // shader tree even if the timing-side write rolls back.
+                // The reverse order would record neither on a partial
+                // failure, dropping the disable intent entirely.
                 if (root._shaderLegSupported)
                     settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
                 }));
 
+                settingsController.animationsPage.clearOverride(root.eventPath);
             }
         }
 

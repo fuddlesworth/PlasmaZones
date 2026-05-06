@@ -588,9 +588,24 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                 if (!pathHasNoTraversalSegments(candidate)) {
                     qCWarning(lcRegistry).noquote()
                         << "Animation effect" << effect.id << "runtime override texture path" << candidate
-                        << "— rejected (path traversal guard)";
+                        << "rejected (path traversal guard)";
                     path.clear();
                     wrap.clear();
+                } else if (QFileInfo(candidate).isRelative()) {
+                    // Relative paths in the in-memory branch are caller-
+                    // resolved (no sourceDir means no anchor for us to
+                    // resolve against). Accept the candidate verbatim
+                    // and emit a debug log so a settings-UI tester
+                    // notices when an in-memory effect's relative
+                    // override flows through unchanged. Production
+                    // packs should always have a sourceDir — this branch
+                    // is exercised by test fixtures and future scripted-
+                    // shader hooks.
+                    qCDebug(lcRegistry).noquote()
+                        << "Animation effect" << effect.id
+                        << "in-memory override texture path is relative:" << candidate
+                        << "— passed through caller-resolved (no sourceDir to anchor against)";
+                    path = candidate;
                 } else {
                     path = candidate;
                 }

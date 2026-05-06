@@ -3,6 +3,8 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include "qml_property_names.h"
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
@@ -191,11 +193,11 @@ void OverlayService::stopShaderAnimation()
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
         auto* window = it_.value().overlayWindow;
         if (window) {
-            writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+            writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
         }
     }
     if (m_shaderPreviewWindow) {
-        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+        writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
     }
     // Animation-shader path: clear the SurfaceAnimator's cached
     // spectrum so any in-flight transition stops sampling stale audio
@@ -218,13 +220,13 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         auto* window = it.value().overlayWindow;
         if (window && useShaderForScreen(it.key())) {
-            writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
+            writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
         }
     }
     // Shader preview (editor dialog) when visible and audio viz enabled
     if (m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible() && m_settings
         && m_settings->enableAudioVisualizer()) {
-        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), wrapped);
+        writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
     }
     // Animation-shader path: feed the same spectrum into the
     // SurfaceAnimator so every active transition shader (snap-assist
@@ -263,10 +265,13 @@ void OverlayService::updateShaderUniforms()
     // before the wrap, reintroducing the freezing bug at long uptimes.
     const double iTime = static_cast<double>(currentTime) / 1000.0;
 
-    // Calculate delta time with clamp (max 100ms prevents jumps after sleep/resume)
-    constexpr float maxDelta = 0.1f;
+    // Calculate delta time with clamp (sleep/resume / GC stall protection).
+    // Cap pinned to PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds
+    // so the daemon and the surface-animator runtimes share one source
+    // of truth — bumping one without the other was the prior drift risk.
     const qint64 lastTime = m_lastFrameTime.exchange(currentTime);
-    float iTimeDelta = qMin(static_cast<float>(currentTime - lastTime) / 1000.0f, maxDelta);
+    float iTimeDelta = qMin(static_cast<float>(currentTime - lastTime) / 1000.0f,
+                            PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
 
     // Prevent frame counter overflow (reset at 1 billion, ~193 days at 60fps)
     int frame = m_frameCount.fetch_add(1);
@@ -399,13 +404,14 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     // Note: applyShaderInfoToWindow sets shaderSource LAST internally.
     // We must set zones/labels BEFORE calling it so they're ready when
     // statusChanged fires. Set zones first, then call the helper.
-    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zones"), zones);
-    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zoneCount"), zones.size());
-    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("highlightedCount"), 0);
+    writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::Zones), zones);
+    writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::ZoneCount), zones.size());
+    writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
 
     const QSize size(qMax(1, width), qMax(1, height));
     const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
-    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
+    writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
+                     QVariant::fromValue(labelsImage));
 
     // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade).
     // Pass the preview's sub-rect + the containing physical screen so a
@@ -449,13 +455,14 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
 
     if (!zonesJson.isEmpty()) {
         const QVariantList zones = parseZonesJson(zonesJson, "updateShaderPreview:");
-        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zones"), zones);
-        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zoneCount"), zones.size());
+        writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::Zones), zones);
+        writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::ZoneCount), zones.size());
 
         const int w = qMax(1, m_shaderPreviewWindow->width());
         const int h = qMax(1, m_shaderPreviewWindow->height());
         const QImage labelsImage = buildLabelsImageForPreviewZones(zones, QSize(w, h), m_settings);
-        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
+        writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
+                         QVariant::fromValue(labelsImage));
     }
 
     if (!shaderParamsJson.isEmpty()) {
@@ -480,7 +487,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     placeholder.fill(Qt::transparent);
     QVariantMap initProps;
     initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
-    initProps.insert(QStringLiteral("isShaderOverlay"), true);
+    initProps.insert(QString(OverlayQmlPropertyNames::IsShaderOverlay), true);
 
     // Unique-per-instance scope to avoid compositor-side rate limiting when the
     // editor rapidly opens/closes the Shader Settings dialog. Routes through

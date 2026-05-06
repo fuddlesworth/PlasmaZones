@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
 #include <PhosphorAnimation/AnimatedValue.h>
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/IMotionClock.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -1596,10 +1597,12 @@ public:
         // while any track is in flight). First tick after a quiescent
         // period reports 0 instead of a stale wall-clock gap, matching
         // OverlayService::updateShaderUniforms's clamp-on-resume idiom
-        // for the overlay path. Capped at 100 ms (same value as
-        // overlay's `maxDelta`) so a sleep/resume hiccup doesn't push
-        // a multi-second jump into the shader.
-        constexpr qreal kMaxShaderDeltaSecs = 0.1;
+        // for the overlay path. Capped at the shared
+        // PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds (100 ms)
+        // so a sleep/resume hiccup doesn't push a multi-second jump
+        // into the shader. Both runtimes reference the same constant —
+        // bumping one without the other was the prior drift risk.
+        const qreal kMaxShaderDeltaSecs = static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
         const qint64 nowNs = m_clock.now().count();
         qreal shaderDeltaSecs = 0.0;
         if (m_lastShaderTickNs > 0) {

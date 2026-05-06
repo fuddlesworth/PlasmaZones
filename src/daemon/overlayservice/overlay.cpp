@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include "qml_property_names.h"
 #include "../../core/logging.h"
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -37,7 +38,7 @@ void OverlayService::destroyIfTypeMismatch(const QString& screenId)
     if (!existing) {
         return;
     }
-    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
+    const bool windowIsShader = existing->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool();
     const bool shouldUseShader = useShaderForScreen(screenId);
     if (windowIsShader != shouldUseShader) {
         destroyOverlayWindow(screenId);
@@ -393,7 +394,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         placeholder.fill(Qt::transparent);
         initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
     }
-    initProps.insert(QStringLiteral("isShaderOverlay"), usingShader);
+    initProps.insert(QString(OverlayQmlPropertyNames::IsShaderOverlay), usingShader);
 
     PhosphorLayer::Surface* surface = nullptr;
     if (usingShader) {
@@ -409,7 +410,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
-            initProps.insert(QStringLiteral("isShaderOverlay"), false);
+            initProps.insert(QString(OverlayQmlPropertyNames::IsShaderOverlay), false);
         }
     }
     if (!surface) {
@@ -472,7 +473,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         auto* window = it.value().overlayWindow;
         if (!window)
             continue;
-        const bool windowIsShader = window->property("isShaderOverlay").toBool();
+        const bool windowIsShader = window->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool();
         const bool shouldUseShader = useShaderForScreen(it.key());
         if (windowIsShader != shouldUseShader)
             screensToRecreate.append(it.key());
@@ -548,7 +549,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // wl_surface and show() creates a new one.
     // Non-shader overlays: hide() is safe — standard QML items recover from
     // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
-    if (window->property("isShaderOverlay").toBool()) {
+    if (window->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
         destroyOverlayWindow(screenId);
     } else {
         window->hide();
@@ -788,7 +789,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
 
     // Update shader-specific properties if using shader overlay
     // Only update if this window is actually a shader overlay window (check isShaderOverlay property)
-    const bool windowIsShader = window->property("isShaderOverlay").toBool();
+    const bool windowIsShader = window->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool();
     const bool screenUsesShader = useShaderForScreen(screenId);
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = m_shaderRegistry;

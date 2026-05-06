@@ -57,5 +57,18 @@ constexpr int MinAnimationStaggerIntervalMs = 10;
 /// without making large lists glacial.
 constexpr int MaxAnimationStaggerIntervalMs = 200;
 
+/// Hard ceiling on the per-frame `iTimeDelta` pushed into shaders, in
+/// seconds. Both runtimes (the daemon's overlay shader update path and
+/// the surface-animator's compositor-side push) clamp the steady-clock
+/// frame delta against this so a sleep/resume hiccup, GC stall, or
+/// scheduler glitch does not blast a multi-second jump into shaders
+/// that integrate `iTimeDelta` (sparkle drift, particle motion, noise
+/// advance). 100 ms is generous: at the worst-cap a single tick
+/// represents 6 frames worth of motion at 60 Hz, beyond which the
+/// effect "skips" rather than blurring through unrealistic motion.
+/// Pinned in this header so a future bump propagates to BOTH runtimes
+/// without one falling out of sync.
+constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
+
 } // namespace Limits
 } // namespace PhosphorAnimation

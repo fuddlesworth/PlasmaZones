@@ -321,8 +321,6 @@ install(TARGETS plasmazones_core
 # Rendering Library (ZoneShaderItem, shared between daemon and editor)
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
-    daemon/rendering/zoneshadercommon.h
-    daemon/rendering/zoneuniformextension.h
     daemon/rendering/zoneshadernoderhi.h
     daemon/rendering/zoneshadernoderhi.cpp
     daemon/rendering/zoneshaderitem.h

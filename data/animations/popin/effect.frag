@@ -49,12 +49,14 @@ void main()
     // zoomed-out, but with overshoot bouncing past 1 and back).
     vec2 sampleUv = (uv - center) / max(scale, 0.001) + center;
 
-    // Outside the texture's [0,1] range = beyond the surface; output
-    // transparent so the pop-in reads as a focused zoom rather than
-    // a stretched edge bleed.
-    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-    fragColor = texture(uTexture0, sampleUv);
+    // Outside the texture's [0,1] range = beyond the surface; fade to
+    // transparent so the pop-in reads as a focused zoom rather than a
+    // stretched edge bleed. A soft 0.005-wide smoothstep band replaces
+    // the prior hard `if (outside) return vec4(0)` — the hard cutoff
+    // produced a visible 1-texel discontinuity during the overshoot
+    // phase when inverse-scaled UV briefly leaves [0,1].
+    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sampleUv);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sampleUv);
+    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+    fragColor = texture(uTexture0, sampleUv) * mask;
 }

@@ -71,7 +71,17 @@ void main()
     // edge case. With minSpeed ≤ 1.0, `mix(0.1, 0.9, minSpeed)` ≤ 0.9,
     // leaving `(1/0.9) - 1 ≈ 0.111` as the smallest reachable
     // denominator — safe by construction.
-    float minSpeed = clamp(min(speedR, min(speedG, speedB)), 0.05, 1.0);
+    // Clamp each channel speed individually FIRST so a host that bypasses
+    // metadata pushes ALL three below 0.05 doesn't produce negative
+    // multipliers below. Without this individual clamp, e.g. speedR=0.01
+    // with floored minSpeed=0.05 yields mulR = max(0.01 - 0.05 + 1, 0) =
+    // 0.96 — a downward multiplier (channel trails DOWN, not up) that
+    // violates the "slowest channel gets ×1, faster channels higher"
+    // contract.
+    float speedRClamped = clamp(speedR, 0.05, 1.0);
+    float speedGClamped = clamp(speedG, 0.05, 1.0);
+    float speedBClamped = clamp(speedB, 0.05, 1.0);
+    float minSpeed = min(speedRClamped, min(speedGClamped, speedBClamped));
     float waveTime = mix(0.1, 0.9, minSpeed);
 
     float waveProgress = progress / max(waveTime, 0.001);
@@ -84,23 +94,20 @@ void main()
     // about one window-minus-waveTime height.
     float offset = max(waveProgress - uv.y, 0.0);
     // Floor the denominator so an out-of-range minSpeed that drives
-    // waveTime to ≥1.0 (e.g. a future UI that lets speedR/G/B exceed 1)
+    // waveTime to >=1.0 (e.g. a future UI that lets speedR/G/B exceed 1)
     // does not divide by zero. At waveTime=1.0 exactly, `(1/1)-1=0` —
     // without the floor `offset/0` produces Inf and the texture sample
     // walks off the surface with NaN UVs.
     offset /= max((1.0 / max(waveTime, 0.001)) - 1.0, 0.001);
     offset *= (1.0 - waveTime);
 
-    // Per-channel offset multipliers. Slowest channel gets ×1, faster
-    // channels get higher multipliers so they trail upward. Floor at 0
-    // as defence in depth — metadata clamps each speedX into a sane
-    // range, but a host that bypasses validation could push speedX
-    // below `minSpeed - 1` and produce a negative multiplier (channel
-    // would trail DOWNWARD off the bottom of the surface, breaking the
-    // chromatic-aberration look).
-    float mulR = max(speedR - minSpeed + 1.0, 0.0);
-    float mulG = max(speedG - minSpeed + 1.0, 0.0);
-    float mulB = max(speedB - minSpeed + 1.0, 0.0);
+    // Per-channel offset multipliers using the per-channel CLAMPED
+    // speeds. Slowest channel gets x1, faster channels get higher
+    // multipliers so they trail upward. The clamps above guarantee
+    // mulR/G/B are non-negative without further defence in depth.
+    float mulR = speedRClamped - minSpeed + 1.0;
+    float mulG = speedGClamped - minSpeed + 1.0;
+    float mulB = speedBClamped - minSpeed + 1.0;
 
     vec4 colorR = texture(uTexture0, uv + vec2(0.0, offset * mulR));
     vec4 colorG = texture(uTexture0, uv + vec2(0.0, offset * mulG));
