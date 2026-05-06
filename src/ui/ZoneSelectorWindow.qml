@@ -21,10 +21,10 @@ Window {
     // Phase 5: surface lifecycle + show/hide animations are entirely library-
     // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
     // PzRoles::ZoneSelector) drives this Window's content opacity via its
-    // `panel.popup` / `widget.fadeOut` profiles; the PhosphorLayer::Surface
-    // state machine handles `Qt.WindowTransparentForInput` on the underlying
-    // QWindow during the hide cycle. The previous `_selectorDismissed` flag
-    // + `showAnimation` / `hideAnimation` blocks are gone.
+    // `popup.zoneSelector.show` / `popup.zoneSelector.hide` profiles; the
+    // PhosphorLayer::Surface state machine handles `Qt.WindowTransparentForInput`
+    // on the underlying QWindow during the hide cycle. The previous
+    // `_selectorDismissed` flag + `showAnimation` / `hideAnimation` blocks are gone.
     // (Phase 5: showAnimation / hideAnimation removed — library drives.)
 
     id: root
@@ -164,8 +164,8 @@ Window {
     QtObject {
         id: animationConstants
 
-        readonly property int shortDuration: 150
-        readonly property int normalDuration: 200
+        readonly property int shortDuration: Kirigami.Units.shortDuration
+        readonly property int normalDuration: Kirigami.Units.longDuration
     }
 
     // Auto-scroll constants for drag-based scrolling.

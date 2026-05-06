@@ -125,7 +125,7 @@ public:
      * @brief Per-role profile + scale tuning bundle.
      *
      * `showProfile` / `hideProfile` are *Profile path strings* (e.g.
-     * "osd.show", "panel.popup"). They're resolved live through the
+     * "osd.show", "popup"). They're resolved live through the
      * registry on every dispatch so a settings-time profile reload
      * affects the next animation.
      *

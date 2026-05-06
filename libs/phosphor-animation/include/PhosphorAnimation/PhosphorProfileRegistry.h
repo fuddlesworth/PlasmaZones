@@ -40,8 +40,8 @@ public:
     /// returns `nullopt` if no entry exists at exactly @p path. For
     /// inheritance-aware resolution that walks the parent chain and
     /// overlays each level (the semantics every animation consumer
-    /// actually wants — a parent-node override at `panel.popup`
-    /// SHOULD propagate to `panel.popup.layoutPicker.show`), use
+    /// actually wants — a parent-node override at `popup`
+    /// SHOULD propagate to `popup.layoutPicker.show`), use
     /// @c resolveWithInheritance instead.
     std::optional<Profile> resolve(const QString& path) const;
 
@@ -60,7 +60,7 @@ public:
     /// overlays everything else (Settings publishes, user JSONs).
     /// Pass 2 always wins over pass 1, regardless of depth — so a
     /// user edit at the parent path `widget` (duration=800 ms) still
-    /// cascades to a leaf like `widget.pulse-fast` even when the
+    /// cascades to a leaf like `widget.pulse.fast` even when the
     /// leaf has a seed entry (500 ms cubic-bezier). Without the
     /// two-layer model, leaf seeds would silently shadow parent
     /// user-overrides via the deeper-wins rule — exactly the bug
