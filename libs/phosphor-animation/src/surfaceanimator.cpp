@@ -1428,31 +1428,42 @@ public:
                     // the idle phase. Wake them up here BEFORE setting
                     // any leg-specific state so the SG sync that
                     // follows runLeg picks them up live.
-                    // Drop the consumer shader item's binding to the
-                    // source first — this releases any stale
-                    // QSGTextureProvider / QRhiTexture pointer cached
-                    // in the ShaderNodeRhi from the previous leg, so
-                    // that when we re-bind below, every per-frame
-                    // setSourceTextureProvider call on the node sees
-                    // a real null→provider transition and forces an
-                    // SRB rebuild against the freshly-grabbed FBO.
-                    // Without this nullptr step, ShaderEffect's
-                    // updatePaintNode would push the same source
-                    // provider pointer the node already saw last leg,
-                    // hit ShaderNodeRhi::setSourceTextureProvider's
-                    // same-pointer early-return, and keep its SRB
-                    // bound to the previous leg's FBO content.
-                    reusedShaderItem->setSourceItem(nullptr);
-
                     if (reusedShaderSource) {
                         // Wake the source FBO. Order matches
                         // attachShaderToAnchor's fresh-attach setup:
                         // setLive(true) before setHideSource(true).
-                        // scheduleUpdate() flips Qt's private `m_grab`
-                        // flag so the next paint actually re-renders
-                        // the FBO from the source item — setLive and
-                        // setHideSource only call update() (schedule a
-                        // paint) without setting m_grab.
+                        //
+                        // CRITICAL: also call scheduleUpdate() to force
+                        // an FBO re-grab on the next paint.
+                        //
+                        // Qt's QQuickShaderEffectSource only re-renders
+                        // its internal FBO when the private `m_grab`
+                        // flag is set. setLive(true) and
+                        // setHideSource(true) BOTH call `update()`
+                        // (schedule a paint) but NEITHER call
+                        // `scheduleUpdate()` — which is the API that
+                        // flips `m_grab`. Without an explicit
+                        // scheduleUpdate, the next paint reads the
+                        // STALE FBO content from the end of the
+                        // previous leg. For a hide leg that's the
+                        // fully-transitioned-out frame (transparent
+                        // for fly-in, fully-pixelated for pixelate,
+                        // etc.), so the shader samples that stale
+                        // content for the entire show leg and the
+                        // surface appears to "pop in" without
+                        // animation when the post-leg setOpacity(1.0)
+                        // restores the anchor's direct render.
+                        //
+                        // boundsExtent=Anchor effects accidentally
+                        // dodged this because their shader-item
+                        // geometry tracks the anchor's x/y/w/h via
+                        // `syncShaderGeometryNow`'s anchor-change
+                        // signal hookups, and any geometry change
+                        // incidentally forces an FBO refresh. Parent-
+                        // extent's screen-sized item never changes
+                        // geometry between legs, so the staleness
+                        // surfaces dramatically as a non-animating
+                        // "pop in" on every subsequent show.
                         reusedShaderSource->setLive(true);
                         reusedShaderSource->setHideSource(true);
                         reusedShaderSource->scheduleUpdate();
@@ -1520,23 +1531,6 @@ public:
                     it->second.boundsExtentPtr = std::move(reusedBoundsExtentPtr);
                     it->second.shaderTime = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
                     seedShaderUniformsAtAttach(it->second);
-                    // Re-bind source LAST, mirroring attachShaderToAnchor's
-                    // setSourceItem-after-everything-else order. Going
-                    // through the nullptr→source transition (we cleared
-                    // the binding above) bypasses
-                    // ShaderEffect::setSourceItem's same-pointer early-
-                    // return, which lets the next per-frame
-                    // updatePaintNode push the source's textureProvider
-                    // through ShaderNodeRhi::setSourceTextureProvider
-                    // as a real null→provider transition — that path
-                    // resets m_lastSourceRhiTexture and rebuilds the
-                    // SRB against whatever QRhiTexture* the freshly-
-                    // grabbed FBO produces, even if Qt's RHI texture
-                    // pool recycled the same pointer the previous leg
-                    // used.
-                    if (reusedShaderItem && reusedShaderSource) {
-                        reusedShaderItem->setSourceItem(reusedShaderSource.data());
-                    }
                 } else {
                     // Fresh attach: no prior compatible shader pair, or
                     // the previous one was for a different effect id.
