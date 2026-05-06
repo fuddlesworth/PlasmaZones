@@ -500,6 +500,7 @@ void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)
     }
     it->passiveShellZoneSelectorSlot->setVisible(false);
     writeQmlProperty(it->passiveShellZoneSelectorSlot, QStringLiteral("loaded"), false);
+    syncPassiveShellSurfaceState(effectiveId);
 }
 
 bool OverlayService::hasSelectedZone() const

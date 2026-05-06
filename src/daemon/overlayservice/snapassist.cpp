@@ -124,14 +124,16 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // If snap-assist is currently shown on a DIFFERENT screen, dismiss it
     // there first — snap-assist is a singleton across all screens.
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
-        if (auto* prevState = m_screenStates.value(m_snapAssistScreenId).passiveShellSnapAssistSlot
-                ? &m_screenStates[m_snapAssistScreenId]
+        const QString prevScreenId = m_snapAssistScreenId;
+        if (auto* prevState = m_screenStates.value(prevScreenId).passiveShellSnapAssistSlot
+                ? &m_screenStates[prevScreenId]
                 : nullptr) {
             m_surfaceAnimator->cancel(prevState->passiveShellSurface);
             if (prevState->passiveShellSnapAssistSlot) {
                 prevState->passiveShellSnapAssistSlot->setVisible(false);
                 writeQmlProperty(prevState->passiveShellSnapAssistSlot, QStringLiteral("loaded"), false);
             }
+            syncPassiveShellSurfaceState(prevScreenId);
         }
     }
 
@@ -350,6 +352,7 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
     }
     it->passiveShellSnapAssistSlot->setVisible(false);
     writeQmlProperty(it->passiveShellSnapAssistSlot, QStringLiteral("loaded"), false);
+    syncPassiveShellSurfaceState(effectiveId);
 }
 
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
@@ -512,6 +515,7 @@ void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
     }
     it->passiveShellLayoutPickerSlot->setVisible(false);
     writeQmlProperty(it->passiveShellLayoutPickerSlot, QStringLiteral("loaded"), false);
+    syncPassiveShellSurfaceState(effectiveId);
 }
 
 void OverlayService::onLayoutPickerDismissRequested()

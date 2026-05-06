@@ -590,9 +590,7 @@ void OverlayService::onOsdDismissRequested()
 void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
 {
     // Animator hide leg settled — flip slot.visible=false so the next
-    // show's beginShow re-asserts opacity 0 → 1 cleanly. Surface stays
-    // mapped (keepMappedOnHide=true on the shell config); only the slot
-    // Item's visibility toggles.
+    // show's beginShow re-asserts opacity 0 → 1 cleanly.
     auto it = m_screenStates.find(effectiveId);
     if (it == m_screenStates.end() || !it->passiveShellOsdSlot) {
         return;
@@ -600,9 +598,34 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     it->passiveShellOsdSlot->setVisible(false);
     // Clear mode so the Loader unloads — keeps the QML scene tree
     // small between shows and forces a fresh per-show shaderAnchor on
-    // the next mode write (fresh QQuickItem each show, matching the
-    // OSD-style content lifecycle for clean shader transitions).
+    // the next mode write.
     writeQmlProperty(it->passiveShellOsdSlot, QStringLiteral("mode"), QString());
+    syncPassiveShellSurfaceState(effectiveId);
+}
+
+void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
+{
+    auto it = m_screenStates.find(effectiveId);
+    if (it == m_screenStates.end() || !it->passiveShellSurface) {
+        return;
+    }
+    auto& s = *it;
+    auto isVisible = [](QQuickItem* item) {
+        return item != nullptr && item->isVisible();
+    };
+    const bool anyVisible = isVisible(s.passiveShellOsdSlot) || isVisible(s.passiveShellSnapAssistSlot)
+        || isVisible(s.passiveShellLayoutPickerSlot) || isVisible(s.passiveShellZoneSelectorSlot)
+        || isVisible(s.passiveShellMainOverlaySlot);
+    if (anyVisible) {
+        if (!s.passiveShellSurface->isLogicallyShown()) {
+            s.passiveShellSurface->show();
+        }
+    } else if (s.passiveShellSurface->isLogicallyShown()) {
+        // keepMappedOnHide=true → wl_surface stays mapped, but
+        // Qt::WindowTransparentForInput flips on, so the shell stops
+        // eating clicks until the next slot becomes visible.
+        s.passiveShellSurface->hide();
+    }
 }
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,

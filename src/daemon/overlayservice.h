@@ -771,6 +771,19 @@ private:
     /// Animator-driven slot-hide completion for zone-selector.
     void onZoneSelectorSlotHideCompleted(const QString& effectiveId);
 
+    /// Drive the per-screen shell wl_surface map state from slot
+    /// visibility. Shell uses keepMappedOnHide=true; Surface::show()
+    /// /hide() flip Qt::WindowTransparentForInput. The flip only
+    /// happens through Surface's state machine, not through slot-level
+    /// animator hides — without this helper the shell never re-enters
+    /// Hidden after first show, and the input region eats every click
+    /// for the daemon's lifetime.
+    ///
+    /// Called after every slot setVisible toggle. Idempotent:
+    /// isLogicallyShown() guards re-show; the all-slots-hidden
+    /// predicate guards the hide.
+    void syncPassiveShellSurfaceState(const QString& effectiveId);
+
     /**
      * @brief Construct the SurfaceAnimator and register per-Role configs.
      *

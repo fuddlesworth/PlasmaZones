@@ -502,13 +502,13 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         return;
     }
     // Post-shell-migration: there's no separate wl_surface to destroy.
-    // The shell wl_surface stays mapped permanently; the slot's
-    // visibility and `loaded` state animate / unload as needed. Toggle
-    // `loaded` false so the Loader unloads its content (drops the
-    // ZoneShaderItem's QSGRenderNode pipeline cleanly), then setVisible
-    // false on the slot so the next show re-arms the animator.
+    // The slot's visibility + `loaded` state drop here; the shell-level
+    // sync downstream flips Qt::WindowTransparentForInput on the shell
+    // wl_surface when the last visible slot is gone so the daemon
+    // stops eating clicks while idle.
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
     slot->setVisible(false);
+    syncPassiveShellSurfaceState(screenId);
 }
 
 bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
