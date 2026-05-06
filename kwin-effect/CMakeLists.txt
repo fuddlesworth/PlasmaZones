@@ -39,6 +39,7 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
+    plasmazoneseffect/lifecycle.cpp
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp
