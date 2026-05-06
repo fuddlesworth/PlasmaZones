@@ -65,6 +65,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(QSizeF iResolution READ iResolution WRITE setIResolution NOTIFY iResolutionChanged FINAL)
     Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
     Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
+    Q_PROPERTY(QVector4D iSurfaceScreenPos READ iSurfaceScreenPos WRITE setISurfaceScreenPos NOTIFY
+                   iSurfaceScreenPosChanged FINAL)
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
@@ -198,6 +200,17 @@ public:
     /// for hide). Symmetric shaders ignore the value; asymmetric shaders
     /// branch on it (see canonical animation_uniforms.glsl docs).
     void setIsReversed(bool reverse);
+
+    QVector4D iSurfaceScreenPos() const
+    {
+        return m_iSurfaceScreenPos;
+    }
+    /// Surface-in-screen rect for spatial vert / frag effects.
+    /// `.xy` = surface origin in logical-screen pixels, `.zw` = host
+    /// screen dimensions in the same units. Forwarded to ShaderNodeRhi
+    /// → BaseUniforms::iSurfaceScreenPos at offset 672. SurfaceAnimator
+    /// pushes this at attach time and on every anchor geometry change.
+    void setISurfaceScreenPos(const QVector4D& pos);
 
     QSizeF iResolution() const
     {
@@ -595,6 +608,7 @@ Q_SIGNALS:
     void iResolutionChanged();
     void iMouseChanged();
     void isReversedChanged();
+    void iSurfaceScreenPosChanged();
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
@@ -673,6 +687,7 @@ private:
     QPointF m_iMouse;
     int m_iFrame = 0;
     bool m_isReversed = false;
+    QVector4D m_iSurfaceScreenPos;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;

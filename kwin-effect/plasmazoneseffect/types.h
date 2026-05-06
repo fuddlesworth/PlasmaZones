@@ -71,6 +71,7 @@ struct CachedShader
     int iDateLoc = -1;
     int iMouseLoc = -1;
     int iIsReversedLoc = -1;
+    int iSurfaceScreenPosLoc = -1;
     // Slot counts sourced from AnimationShaderContract so a future change to
     // the contract (e.g. growing the customParams budget) can't silently
     // desync this cache from the translation + upload sites in

@@ -27,6 +27,8 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QScreen>
+#include <QVector4D>
 #include <private/qquickhoverhandler_p.h>
 #include <private/qquickshadereffectsource_p.h>
 #include <private/qquicksinglepointhandler_p.h>
@@ -161,6 +163,31 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
     if (shaderSource) {
         shaderSource->setWidth(w);
         shaderSource->setHeight(h);
+    }
+
+    // Push iSurfaceScreenPos = (surfaceX, surfaceY, screenW, screenH)
+    // alongside iResolution so vert / frag effects that reach for spatial
+    // context (fly-in from closest edge, screen-relative noise) see fresh
+    // values on every anchor geometry signal — same lifecycle the rest of
+    // this helper drives. Window position is the wl_surface origin the
+    // compositor assigned via layer-shell margins; on Wayland LayerShell
+    // it's only valid once the compositor has acked the configure, which
+    // for a freshly shown OSD / popup may happen one or two frames after
+    // attach. Until then `window->position()` reads (0, 0) — vert shaders
+    // see a brief "starting from screen origin" wrongness for the first
+    // frames; subsequent geometry-signal-driven re-syncs settle it. Add a
+    // window-level position-change connect later if a leg's run length is
+    // ever shorter than the configure latency.
+    if (QQuickWindow* window = anchor->window()) {
+        const QPointF anchorScene = anchor->mapToScene(QPointF(0.0, 0.0));
+        const QPoint windowPos = window->position();
+        QSize screenSize;
+        if (QScreen* screen = window->screen()) {
+            screenSize = screen->geometry().size();
+        }
+        shaderItem->setISurfaceScreenPos(QVector4D(
+            static_cast<float>(windowPos.x() + anchorScene.x()), static_cast<float>(windowPos.y() + anchorScene.y()),
+            static_cast<float>(screenSize.width()), static_cast<float>(screenSize.height())));
     }
 }
 } // namespace

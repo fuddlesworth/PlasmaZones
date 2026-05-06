@@ -44,6 +44,11 @@ Window {
     // LayoutOsdContent never sees `success`/`action`, NavigationOsdContent
     // never sees `layoutId`/`layoutName`. C++ writeQmlProperty calls flow
     // root → binding → loader.item.
+    // Per-side padding (fraction of container size) reserved for shader
+    // transition silhouettes that extend outside the inner card (morph
+    // etc.). Forwarded into the loaded content so the inner card's
+    // shader-anchor metadata stays consistent with the active SurfaceAnimator
+    // shader leg. Daemon writes this property each show; QML defaults to 0.
 
     id: root
 
@@ -94,25 +99,11 @@ Window {
     property string sourceZoneId: ""
     property int windowCount: 1
     property color errorColor: Kirigami.Theme.negativeTextColor
-    // Per-side padding (fraction of container size) reserved by the daemon
-    // for shader transition silhouettes that extend outside the inner card
-    // (morph, etc.). Daemon writes this property before reading
-    // contentDesiredWidth/Height so the surface is sized large enough; the
-    // value is forwarded into the loaded content type so its inflated
-    // contentDesired* drives this re-export.
+    // The wl_surface itself is screen-sized regardless of this value (see
+    // `OverlayService::createWarmedOsdSurface`). The earlier "inflate the
+    // surface so silhouettes don't clip" path is gone — fullscreen surfaces
+    // give every shader effect the entire screen as headroom.
     property real shaderBoundsPadding: 0
-    // Re-export the loaded content's contentDesiredWidth/Height — the C++
-    // OSD show paths read these via window->property("contentDesiredWidth")
-    // to size the layer surface (and to compute matching layer-shell margins).
-    // Fallback values cover the warm-up window where mode="" → no content
-    // loaded; the surface is invisible at that point so the exact value
-    // doesn't matter, but they MUST match osd.cpp's readOsdContentSize
-    // fallbacks (kFallbackWidth / kFallbackHeight) so a missed property
-    // read doesn't size the surface to one value while QML measures another.
-    readonly property int kFallbackContentWidth: Kirigami.Units.gridUnit * 15
-    readonly property int kFallbackContentHeight: Kirigami.Units.gridUnit * 4
-    readonly property int contentDesiredWidth: loader.item ? loader.item.contentDesiredWidth : kFallbackContentWidth
-    readonly property int contentDesiredHeight: loader.item ? loader.item.contentDesiredHeight : kFallbackContentHeight
 
     /// Auto-dismiss request forwarded from the loaded content. C++ side
     /// connects this to Surface::hide() in OverlayService::createWarmedOsdSurface
@@ -144,13 +135,14 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Initial warm-up size only. C++ owns sizing imperatively post-warm-up:
-    // every show path measures contentDesiredWidth/Height after writing
-    // mode + per-mode properties, then calls QQuickWindow::setWidth/Height
-    // before Surface::show(). A QML binding to contentDesiredWidth here
-    // would be broken on the first imperative setWidth, leaving an
-    // ambiguous "binding sometimes drives size, sometimes doesn't" model.
-    // Keep these as plain literal initializers; surface is visible=false
-    // during warm-up so the value is cosmetic.
+    // every show path resolves the active screen rect and writes the
+    // window's width / height to it via `sizeOsdToScreen` before
+    // Surface::show(). The OSD wl_surface is screen-sized so vertex-shader
+    // transitions have geometry runway equal to the screen; the visible
+    // card centres itself within via `anchors.centerIn: parent` on the
+    // loaded content. Keep these literals as a small placeholder for the
+    // pre-show warm-up frame (surface is visible=false then so the value
+    // is cosmetic).
     width: Kirigami.Units.gridUnit * 15
     height: Kirigami.Units.gridUnit * 4
     // Start hidden; first Surface::show() flips visible=true. Subsequent

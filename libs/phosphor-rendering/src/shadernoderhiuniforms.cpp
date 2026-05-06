@@ -34,6 +34,10 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
     m_baseUniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
     m_baseUniforms.iIsReversed = m_isReversed ? 1 : 0;
+    m_baseUniforms.iSurfaceScreenPos[0] = m_surfaceScreenPos.x();
+    m_baseUniforms.iSurfaceScreenPos[1] = m_surfaceScreenPos.y();
+    m_baseUniforms.iSurfaceScreenPos[2] = m_surfaceScreenPos.z();
+    m_baseUniforms.iSurfaceScreenPos[3] = m_surfaceScreenPos.w();
     // iDate only advances once per second. m_sceneDataDirty is set by every
     // mouse-move/resize event, so naïvely recomputing iDate whenever it's
     // true would hit QDateTime::currentDateTime() at 60+ Hz during
@@ -163,7 +167,7 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
 //                        setCustomColor, setAudioSpectrum, setUserTexture,
-//                        setIsReversed
+//                        setIsReversed, setSurfaceScreenPos
 //   m_appFieldsDirty  ← setAppField0, setAppField1
 //   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
@@ -206,8 +210,9 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 }
                 if (m_sceneDataDirty) {
                     // Scene header: iResolution through end of BaseUniforms
-                    // (subsumes the appFields, iTimeHi, and iIsReversed
-                    // regions — no need for separate uploads when this fires).
+                    // (subsumes the appFields, iTimeHi, iIsReversed, and
+                    // iSurfaceScreenPos regions — no need for separate uploads
+                    // when this fires).
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_SCENE_HEADER_OFFSET);

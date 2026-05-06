@@ -109,6 +109,16 @@ void ShaderNodeRhi::setIsReversed(bool reverse)
     m_sceneDataDirty = true;
 }
 
+void ShaderNodeRhi::setSurfaceScreenPos(const QVector4D& pos)
+{
+    if (m_surfaceScreenPos == pos) {
+        return;
+    }
+    m_surfaceScreenPos = pos;
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
+}
+
 // ============================================================================
 // Custom Params (indexed API)
 // ============================================================================

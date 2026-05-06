@@ -96,6 +96,12 @@ uniform float iTimeHi;
 // Asymmetric shaders (matrix's directional rain + open-vs-close window
 // reveal) branch on it. See UBO branch below for the full contract.
 uniform int iIsReversed;
+// .xy = surface origin in logical-screen pixels; .zw = (screenW, screenH).
+// Vertex / fragment shaders that need to know where the surface sits on
+// its host screen (fly-in from closest edge, screen-relative noise) read
+// this. Both runtimes populate it once per leg attach + on every anchor
+// or window geometry signal.
+uniform vec4 iSurfaceScreenPos;
 
 // uTexture0 — redirected window content (the surface the shader is
 // transitioning). Auto-bound by the runtime: KWin's OffscreenEffect
@@ -171,11 +177,20 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              flip alone can't express the open-vs-
                                  //              close difference (e.g. matrix's rain
                                  //              direction + windowAlpha reveal).
-                                 //              Carved out of the trailing std140
-                                 //              pad so total UBO size stays 672 bytes.
-    // implicit 8-byte trailing pad — std140 rounds the struct end up
-    // to a 16-byte boundary, total 672 bytes, mirroring C's
-    // `_pad_after_iIsReversed[2]`.
+    // implicit 8-byte std140 pad here — `vec4 iSurfaceScreenPos` below
+    // has 16-byte alignment, so std140 forces the next field to offset
+    // 672. The C struct mirrors this with `_pad_before_iSurfaceScreenPos[2]`.
+    vec4 iSurfaceScreenPos;      // offset 672 (16 bytes) — .xy = surface origin
+                                 //              in logical-screen pixels;
+                                 //              .zw = (screenWidth, screenHeight).
+                                 //              Populated by SurfaceAnimator (daemon)
+                                 //              and paint_pipeline (kwin-effect) once
+                                 //              per leg attach + on every anchor /
+                                 //              window geometry change. Vertex and
+                                 //              fragment shaders that need spatial
+                                 //              awareness (fly-in from closest edge,
+                                 //              screen-relative noise) read this.
+                                 //              Total UBO size: 688 bytes.
 };
 
 layout(binding = 7) uniform sampler2D uTexture0;

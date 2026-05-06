@@ -346,6 +346,16 @@ void ShaderEffect::setIsReversed(bool reverse)
     update();
 }
 
+void ShaderEffect::setISurfaceScreenPos(const QVector4D& pos)
+{
+    if (m_iSurfaceScreenPos == pos) {
+        return;
+    }
+    m_iSurfaceScreenPos = pos;
+    Q_EMIT iSurfaceScreenPosChanged();
+    update();
+}
+
 void ShaderEffect::setIResolution(const QSizeF& resolution)
 {
     if (m_iResolution == resolution) {
@@ -1182,6 +1192,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setTimeDelta(static_cast<float>(m_iTimeDelta));
     node->setFrame(m_iFrame);
     node->setIsReversed(m_isReversed);
+    node->setSurfaceScreenPos(m_iSurfaceScreenPos);
     // Use logical pixels for iResolution (shader params depend on consistent
     // resolution; DPR mismatch handled by bilinear upscaling in the image
     // pass). Read from `m_iResolution` so the public Q_PROPERTY setter

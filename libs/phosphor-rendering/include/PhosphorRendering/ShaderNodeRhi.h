@@ -153,6 +153,14 @@ public:
     /// on the kwin path.
     void setIsReversed(bool reverse);
 
+    /// Surface-in-screen rect for spatial vert / frag effects. Forwards
+    /// to BaseUniforms::iSurfaceScreenPos at offset 672. `.xy` = surface
+    /// origin in logical-screen pixels, `.zw` = host screen dimensions
+    /// in the same units. SurfaceAnimator pushes this on every leg
+    /// attach + on each anchor geometry signal. kwin-effect handles its
+    /// parity directly via setUniform on its path.
+    void setSurfaceScreenPos(const QVector4D& pos);
+
     // ── Custom Parameters (indexed API) ────────────────────────────────
     void setCustomParams(int index, const QVector4D& params);
     void setCustomColor(int index, const QColor& color);
@@ -413,6 +421,7 @@ private:
     float m_timeDelta = 0.0f;
     int m_frame = 0;
     bool m_isReversed = false;
+    QVector4D m_surfaceScreenPos;
     float m_timeHi = 0.0f; // Cached iTimeHi for wrap-offset change detection
     float m_width = 0.0f;
     float m_height = 0.0f;

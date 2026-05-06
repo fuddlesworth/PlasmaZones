@@ -873,9 +873,16 @@ private:
      * @param qmlUrl         QML file to load.
      * @param physScreen     Target physical screen.
      * @param windowType     Debug/telemetry label.
+     * @param screenId       Effective screen id (physical or virtual). Used
+     *                       to size the warm-up surface to the right screen
+     *                       rect and to pick virtual-screen-aware anchors +
+     *                       margins. Optional for callers that don't have
+     *                       an id yet — they fall back to physScreen's full
+     *                       geometry with AnchorAll.
      */
     PhosphorLayer::Surface* createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
-                                                   QScreen* physScreen, const char* windowType);
+                                                   QScreen* physScreen, const char* windowType,
+                                                   const QString& screenId = QString());
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);

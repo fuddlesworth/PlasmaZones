@@ -683,6 +683,8 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iMouseLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMouse);
         cached.iIsReversedLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIIsReversed);
+        cached.iSurfaceScreenPosLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kISurfaceScreenPos);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color

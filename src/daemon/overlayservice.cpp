@@ -601,25 +601,58 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
 }
 
 PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLayer::Role& role, const QUrl& qmlUrl,
-                                                               QScreen* physScreen, const char* windowType)
+                                                               QScreen* physScreen, const char* windowType,
+                                                               const QString& screenId)
 {
-    // Warm-up size matches NotificationOverlay.qml's QML literal (240x70).
-    // This only governs the size of the warm-up commit — every per-show
-    // path in osd.cpp goes through assertWindowOnScreen + sizeAndCenterOsd,
-    // both of which still call setGeometry / setWidth / setHeight against
-    // the live window, so per-show swapchain resizes still happen on every
-    // show as before. What changes here is that the daemon stops paying for
-    // a full-screen swapchain for an OSD whose visible content is a tiny
-    // toast: holding ~17 fullscreen swapchains (one per warmed overlay
-    // across virtual screens) cost ~25 MB each at 4K on NVIDIA's proprietary
-    // stack, and a content-sized warm-up brings that down to the toast's
-    // own footprint.
+    // OSD surfaces are screen-sized (mirrors snap-assist / zone-selector).
+    // Phase prior to this change kept OSD wl_surfaces content-sized (240×70
+    // toast) and the layer-shell margins did the on-screen centering, but
+    // that left vertex-shader transitions like fly-in clipped at the
+    // surface edge — geometry shifted past the surface bounds is dropped
+    // by the compositor. A screen-sized OSD surface gives shader effects
+    // headroom equal to the screen, and keeps the wiring path identical
+    // to popups (which were already screen-sized) so a single
+    // `boundsExtent` mechanism works uniformly across every overlay role.
+    //
+    // Cost is real but bearable: a fullscreen swapchain runs ~25 MB at 4K
+    // on the NVIDIA proprietary stack, vs ~tens of KB for the content-
+    // sized warm-up. With one notification surface per effective screen
+    // (~1–6 in typical setups), that's ~25–150 MB. Damage tracking keeps
+    // the per-frame cost negligible while idle: a fullscreen surface with
+    // a small centred card only repaints the card region.
+    QRect screenGeom;
+    if (!screenId.isEmpty() && m_screenManager) {
+        screenGeom = m_screenManager->screenGeometry(screenId);
+    }
+    if (!screenGeom.isValid() && physScreen) {
+        screenGeom = physScreen->geometry();
+    }
+    QSize initialSize = screenGeom.isValid() ? screenGeom.size() : QSize(240, 70);
+
+    // Virtual-screen-aware anchors / margins, same vocabulary popups use
+    // (see selector.cpp::createZoneSelectorWindow). Physical screen →
+    // AnchorAll + zero margins so the compositor sizes the surface to the
+    // full output. Virtual screen → Top|Left + offset margins pinning the
+    // surface to the VS sub-rect's top-left within its physical screen.
+    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    std::optional<QMargins> marginsOverride;
+    if (physScreen && screenGeom.isValid()) {
+        const bool isVS = !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
+        const auto placement = layerPlacementForVs(isVS ? screenGeom : QRect(), physScreen->geometry());
+        anchorsOverride = placement.anchors;
+        if (!placement.margins.isNull()) {
+            marginsOverride = placement.margins;
+        }
+    }
+
     auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
                                         .screen = physScreen,
                                         .role = role,
                                         .windowType = windowType,
+                                        .anchorsOverride = anchorsOverride,
+                                        .marginsOverride = marginsOverride,
                                         .keepMappedOnHide = true,
-                                        .initialSize = QSize(240, 70)});
+                                        .initialSize = initialSize});
     if (!surface) {
         return nullptr;
     }

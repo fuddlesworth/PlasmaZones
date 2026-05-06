@@ -29,15 +29,17 @@ using PhosphorShaders::kShaderTimeWrap;
 /**
  * @brief GPU uniform buffer layout — BaseUniforms + zone extension.
  *
- * The first 672 bytes are PhosphorShaders::BaseUniforms (Shadertoy-compatible).
+ * The leading PhosphorShaders::BaseUniforms region is Shadertoy-compatible.
  * The remaining bytes are the zone extension arrays.
  *
  * This matches the GLSL UBO declaration in common.glsl exactly:
- *   BaseUniforms fields (672 bytes) → zone arrays (4096 bytes) → total 4768 bytes.
+ *   BaseUniforms fields → zone arrays → total layout. The exact base size
+ *   is `sizeof(PhosphorShaders::BaseUniforms)` (currently 688 bytes; pinned
+ *   by the static_asserts in BaseUniforms.h — common.glsl tracks this).
  */
 struct alignas(16) ZoneShaderUniforms
 {
-    // ── Base region (PhosphorShaders::BaseUniforms, 672 bytes) ─────────
+    // ── Base region (PhosphorShaders::BaseUniforms) ────────────────────
     PhosphorShaders::BaseUniforms base;
 
     // ── Zone extension region ────────────────────────────────────────

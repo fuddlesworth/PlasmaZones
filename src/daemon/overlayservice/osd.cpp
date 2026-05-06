@@ -31,76 +31,12 @@ namespace PlasmaZones {
 
 namespace {
 
-// Center an OSD/layer window within a screen geometry using layer surface margins.
-// physScreenGeom is the full physical screen; targetGeom is the area to center within
-// (same as physScreenGeom for physical screens, or a sub-region for virtual screens).
-// Writes through the PhosphorLayer transport handle — keeps the daemon off the
-// PhosphorWayland API so OSDs can migrate to XdgToplevelTransport (or any future
-// transport) without edits here.
-void centerLayerWindowOnScreen(PhosphorLayer::ITransportHandle* handle, const QRect& physScreenGeom,
-                               const QRect& targetGeom, int osdWidth, int osdHeight)
-{
-    if (!handle) {
-        qCWarning(lcOverlay) << "centerLayerWindowOnScreen: no transport handle — surface was not warmed";
-        return;
-    }
-    // Position OSD within the VS sub-region AND clamp it to never bleed past
-    // the VS's edges. Naive centering computes `(vsOffset + (vsW - osd) / 2)`
-    // but, for an OSD wider than the VS (e.g. a long navigation label on a
-    // narrow half-screen VS), that value can push the right edge of the OSD
-    // into the neighbouring VS. The qMin clamps cap the centre position at
-    // "rightmost column where the OSD still fits entirely inside the VS";
-    // the qMax floors cover the pathological case where the OSD is wider
-    // than the VS itself (fall back to VS-aligned left edge).
-    const int vsOffsetX = targetGeom.x() - physScreenGeom.x();
-    const int vsOffsetY = targetGeom.y() - physScreenGeom.y();
-    const int idealCenterX = vsOffsetX + qMax(0, (targetGeom.width() - osdWidth) / 2);
-    const int idealCenterY = vsOffsetY + qMax(0, (targetGeom.height() - osdHeight) / 2);
-    const int maxCenterX = qMax(vsOffsetX, vsOffsetX + targetGeom.width() - osdWidth);
-    const int maxCenterY = qMax(vsOffsetY, vsOffsetY + targetGeom.height() - osdHeight);
-    const int targetCenterX = qMin(idealCenterX, maxCenterX);
-    const int targetCenterY = qMin(idealCenterY, maxCenterY);
-    const int rightMargin = qMax(0, physScreenGeom.width() - targetCenterX - osdWidth);
-    const int bottomMargin = qMax(0, physScreenGeom.height() - targetCenterY - osdHeight);
-
-    handle->setAnchors(PhosphorLayer::AnchorAll);
-    handle->setMargins(QMargins(targetCenterX, targetCenterY, rightMargin, bottomMargin));
-}
-
-// Read the QML-computed desired size from the host Window. Both OSD content
-// types (LayoutOsdContent, NavigationOsdContent) expose contentDesiredWidth /
-// contentDesiredHeight readonly properties measured from their own container
-// items; NotificationOverlay.qml re-exports those via the loader item.
-//
-// Fallbacks are belt-and-suspenders for the unlikely case that the property
-// can't be read (no loader.item, or QML metaobject lookup fails) — matching
-// the warm-up defaults baked into NotificationOverlay.qml.
-struct OsdContentSize
-{
-    int width;
-    int height;
-};
-
-OsdContentSize readOsdContentSize(QQuickWindow* window)
-{
-    constexpr int kFallbackWidth = 240;
-    constexpr int kFallbackHeight = 70;
-    if (!window) {
-        return {kFallbackWidth, kFallbackHeight};
-    }
-    const QVariant widthVar = window->property("contentDesiredWidth");
-    const QVariant heightVar = window->property("contentDesiredHeight");
-    const int width = (widthVar.isValid() && widthVar.toInt() > 0) ? widthVar.toInt() : kFallbackWidth;
-    const int height = (heightVar.isValid() && heightVar.toInt() > 0) ? heightVar.toInt() : kFallbackHeight;
-    return {width, height};
-}
-
 // Resolve the per-side padding (fraction of container size) the active
-// SurfaceAnimator shader leg needs reserved around the OSD's inner card,
-// so the wayland surface accommodates shader silhouettes (morph etc.) that
-// extend outside the card's rectangle. Returns max(show.boundsPadding,
-// hide.boundsPadding) — the surface size is fixed for the surface's
-// lifetime, so it must satisfy whichever leg is currently animating.
+// SurfaceAnimator shader leg needs reserved around the OSD's inner card.
+// The wl_surface itself is now screen-sized (see `createWarmedOsdSurface`)
+// and no longer needs to grow per-effect, but the QML side still consumes
+// this fraction to set `shaderBoundsPadding` so the inner card's
+// shader-anchor metadata stays consistent across legs.
 //
 // Returns 0.0 when no shader is selected for either leg, when the shader
 // id doesn't resolve in the registry, or when settings/registry are not
@@ -126,29 +62,23 @@ qreal resolveOsdShaderPadding(ISettings* settings, PhosphorAnimationShaders::Ani
     return pad;
 }
 
-// Size the OSD window to its content-driven desired size and pin it via the
-// layer-shell transport. `surface` resolves the transport handle; callers
-// pass the state's notificationSurface (post-Phase-2 unification of the
-// layout-OSD and navigation-OSD surfaces onto NotificationOverlay.qml).
-//
-// Caller contract: every property the QML content type uses to compute its
-// own size MUST be written before this function runs (including
-// `shaderBoundsPadding` — see the writeQmlProperty calls preceding each
-// invocation). QQuickText measures synchronously when its text property
-// changes, and Item width / height bindings re-evaluate eagerly on
-// dependency change, so by the time we read contentDesiredWidth / Height
-// the QML side has settled.
-void sizeAndCenterOsd(QQuickWindow* window, PhosphorLayer::Surface* surface, QScreen* physScreen,
-                      const QRect& targetGeom)
+// Size the OSD window to its target screen rect. The wl_surface is now
+// screen-sized (mirrors zone-selector / snap-assist) — anchors and
+// margins were set once at warm-up time by `createWarmedOsdSurface` from
+// the same VS-aware placement vocabulary popups use, so this per-show
+// path only ever has to update the window dimensions when the active
+// screen rect changes (e.g. monitor hot-plug between shows). The QML
+// inside positions the visible card centred via `anchors.centerIn:
+// parent`, so the OSD looks identical on screen — the surface is just
+// bigger underneath, giving vertex-shader transitions the geometry
+// runway they need to translate past the card's bounds.
+void sizeOsdToScreen(QQuickWindow* window, const QRect& targetGeom)
 {
-    if (!window) {
+    if (!window || !targetGeom.isValid()) {
         return;
     }
-    const auto [osdWidth, osdHeight] = readOsdContentSize(window);
-    window->setWidth(osdWidth);
-    window->setHeight(osdHeight);
-    const QRect physGeom = physScreen ? physScreen->geometry() : targetGeom;
-    centerLayerWindowOnScreen(surface ? surface->transport() : nullptr, physGeom, targetGeom, osdWidth, osdHeight);
+    window->setWidth(targetGeom.width());
+    window->setHeight(targetGeom.height());
 }
 
 } // namespace
@@ -248,14 +178,13 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
     pushLayoutOsdContent(window, p);
-    // shaderBoundsPadding MUST be written BEFORE the mode flip — the
-    // Loader instantiates LayoutOsdContent on `mode = "layout-osd"`,
-    // and contentDesiredWidth/Height are computed from
-    // shaderBoundsPadding at instantiation time. Writing the property
-    // after mode means the first contentDesired* read (the
-    // sizeAndCenterOsd that follows immediately) sees the default
-    // 0.0, sizing the wayland surface too small, before the binding
-    // re-evaluates.
+    // shaderBoundsPadding written BEFORE the mode flip so that when the
+    // Loader instantiates LayoutOsdContent the inner card observes the
+    // already-correct padding fraction. The wl_surface itself is screen-
+    // sized regardless (see `createWarmedOsdSurface`) so this no longer
+    // gates the wayland surface dimensions, but the QML side still
+    // forwards the value into the loaded content for shader-anchor
+    // bookkeeping.
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         writeQmlProperty(window, QStringLiteral("shaderBoundsPadding"),
@@ -263,7 +192,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     }
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
+    sizeOsdToScreen(window, screenGeom);
     // Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits
     // dismissRequested → surface->hide() (wired in createWarmedOsdSurface).
@@ -351,7 +280,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
+    sizeOsdToScreen(window, screenGeom);
     cancelSurfacePrime(surface);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
@@ -436,7 +365,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     }
     writeQmlProperty(window, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
-    sizeAndCenterOsd(window, surface, physScreen, screenGeom);
+    sizeOsdToScreen(window, screenGeom);
     cancelSurfacePrime(surface);
     surface->show();
     QMetaObject::invokeMethod(window, "restartDismissTimer");
@@ -530,7 +459,7 @@ void OverlayService::createNotificationWindow(const QString& screenId, QScreen* 
     const auto role =
         PzRoles::makePerInstanceRole(PzRoles::Notification, screenId, m_surfaceManager->nextScopeGeneration());
     auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/NotificationOverlay.qml")), physScreen,
-                                           "notification");
+                                           "notification", screenId);
     if (!surface) {
         qCWarning(lcOverlay) << "Failed to create notification window for screen=" << screenId
                              << "— suppressing further attempts until screen is replugged";
@@ -695,10 +624,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // shaderBoundsPadding before mode — the Loader instantiates
-    // NavigationOsdContent on the mode flip, and contentDesiredWidth/
-    // Height read shaderBoundsPadding at instantiation time. Writing
-    // after mode means sizeAndCenterOsd's first contentDesired* read
-    // sees the default 0.0 before the binding re-evaluates.
+    // NavigationOsdContent on the mode flip and the inner card's
+    // shader-anchor bookkeeping reads this fraction at instantiation.
+    // Surface dimensions are screen-sized regardless (see
+    // `createWarmedOsdSurface`).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         writeQmlProperty(window, QStringLiteral("shaderBoundsPadding"),
@@ -712,14 +641,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight).
     assertWindowOnScreen(window, physScreen, navScreenGeom);
 
-    // Size + center via the shared helper, which reads the QML-computed
-    // contentDesiredWidth / contentDesiredHeight from NotificationOverlay's
-    // loaded NavigationOsdContent body. The binding has settled by now —
-    // QQuickText measures synchronously when text changes, so the binding
-    // chain message → messageLabel.implicitWidth → container.width →
-    // contentDesiredWidth is up-to-date as soon as the writeQmlProperty
-    // calls above return.
-    sizeAndCenterOsd(window, navSurface, physScreen, navScreenGeom);
+    // Window dimensions match the active screen rect; layer-shell anchors +
+    // margins were set once at warm-up time (createWarmedOsdSurface).
+    sizeOsdToScreen(window, navScreenGeom);
 
     // Phase 5: Surface::show() drives the SurfaceAnimator (osd.show + osd.pop);
     // restartDismissTimer kicks the QML auto-dismiss Timer that emits

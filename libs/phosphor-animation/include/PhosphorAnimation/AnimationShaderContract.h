@@ -57,8 +57,9 @@ namespace PhosphorAnimationShaders {
 ///
 ///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
 ///     AnimationUniforms { ... };` — std140-aligned with
-///     `PhosphorShaders::BaseUniforms` covering the full 672-byte
-///     footprint, populated by Qt-RHI's binding=0 upload.
+///     `PhosphorShaders::BaseUniforms` covering its full footprint
+///     (currently 688 bytes; pinned by BaseUniforms.h's static_asserts),
+///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
 ///     default-block `uniform float iTime;`-style declarations. The
@@ -212,6 +213,20 @@ inline constexpr const char* kIDate = "iDate";
 /// runtime that elects to extend the encoding (e.g. negative for
 /// "unknown direction"). The matrix shader follows this convention.
 inline constexpr const char* kIIsReversed = "iIsReversed";
+
+/// `vec4 iSurfaceScreenPos` — the shader surface's position in screen
+/// coords plus the host screen dimensions, both in logical pixels.
+///   .xy = (surfaceX, surfaceY) — top-left of the shader surface
+///         relative to the screen origin
+///   .zw = (screenWidth, screenHeight) of the host screen
+///
+/// Both runtimes populate this once per leg attach and re-push on every
+/// anchor / window geometry signal so vertex shaders can compute spatial
+/// effects (fly-in from closest edge, edge-relative noise) without
+/// needing per-effect customParam wiring. Symmetric across kwin and
+/// daemon — the values are the same logical-pixel rect either side
+/// would observe for the same on-screen surface.
+inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
 /// Maximum number of user-declared textures per animation effect.
 ///

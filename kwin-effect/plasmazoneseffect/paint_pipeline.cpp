@@ -350,6 +350,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iIsReversedLoc >= 0) {
                     shader->setUniform(cached->iIsReversedLoc, transition.reverse ? 1 : 0);
                 }
+                if (cached->iSurfaceScreenPosLoc >= 0) {
+                    // (surfaceX, surfaceY, screenW, screenH) in logical pixels.
+                    // Window position is the redirected surface origin on screen;
+                    // screen size is the logical output's geometry (matches
+                    // daemon parity through QScreen::geometry()). geo is already
+                    // captured as `frameGeometry()` above. Read screen
+                    // dimensions from `w->screen()->geometry()` — KWin's
+                    // LogicalOutput exposes the same logical-pixel geometry
+                    // QScreen does on the daemon side, so a fly-in shader sees
+                    // the same numerical values either runtime delivers.
+                    QVector4D surfaceScreenPos(static_cast<float>(geo.x()), static_cast<float>(geo.y()), 0.0f, 0.0f);
+                    if (const auto* output = w->screen()) {
+                        const QRect screenGeo = output->geometry();
+                        surfaceScreenPos.setZ(static_cast<float>(screenGeo.width()));
+                        surfaceScreenPos.setW(static_cast<float>(screenGeo.height()));
+                    }
+                    shader->setUniform(cached->iSurfaceScreenPosLoc, surfaceScreenPos);
+                }
                 for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
                     const int loc = cached->customParamsLoc[slot];
                     if (loc < 0)
