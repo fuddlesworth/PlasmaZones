@@ -69,6 +69,10 @@ Window {
     /// matching show/dismiss signals — the shell is kbd-None so QML
     /// Shortcuts can't fire here.
     readonly property alias layoutPickerSlotItem: layoutPickerSlot
+    /// Zone-selector slot Item — SurfaceAnimator target for selector
+    /// show/hide. Per-VS positioning via the slot's anchors.fill: parent
+    /// + the shell being sized to the VS rect.
+    readonly property alias zoneSelectorSlotItem: zoneSelectorSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — the shell
@@ -84,6 +88,9 @@ Window {
     /// Forwarded from picker's `dismissRequested` (backdrop click /
     /// supplemental dismiss path; primary Escape goes via global accel).
     signal layoutPickerDismissRequested()
+    /// Forwarded from zone-selector's `zoneSelected` — host wires to
+    /// onZoneSelected.
+    signal zoneSelectorZoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
@@ -405,6 +412,186 @@ Window {
                 fontUnderline: layoutPickerSlot.fontUnderline
                 fontStrikeout: layoutPickerSlot.fontStrikeout
                 locked: layoutPickerSlot.locked
+            }
+
+        }
+
+    }
+
+    Item {
+        id: zoneSelectorSlot
+
+        // Selector data properties — C++ writes these per-show. The
+        // ZoneSelectorContent inside the Loader picks them up via QML
+        // lexical scope.
+        property var layouts: []
+        property string activeLayoutId: ""
+        property string hoveredLayoutId: ""
+        property bool globalAutoAssign: false
+        property string selectedLayoutId: ""
+        property int selectedZoneIndex: -1
+        property int minZoneSize: 8
+        property int cursorX: -1
+        property int cursorY: -1
+        property real screenAspectRatio: 16 / 9
+        property int screenWidth: 1920
+        property int selectorPosition: 0
+        property int selectorLayoutMode: 1
+        property int selectorGridColumns: 5
+        property int previewWidth: 180
+        property int previewHeight: 101
+        property bool previewLockAspect: true
+        property bool positionIsVertical: false
+        property bool loaded: false
+        property int indicatorWidth: 180
+        property int indicatorHeight: 101
+        property int indicatorSpacing: 18
+        property int layoutColumns: 1
+        property int layoutRows: 1
+        property int contentWidth: 180
+        property int contentHeight: 129
+        property int containerPadding: 36
+        property int containerPaddingSide: 18
+        property int containerTopMargin: 10
+        property int containerSideMargin: 10
+        property int containerRadius: 12
+        property int labelTopMargin: 8
+        property int labelHeight: 20
+        property int labelSpace: 28
+        property int cardPadding: 26
+        property int cardSidePadding: 18
+        property int containerWidth: 216
+        property int containerHeight: 165
+        property int barHeight: 175
+        property int barWidth: 216
+        property int totalRows: 1
+        property int scrollContentHeight: 129
+        property int scrollContentWidth: 180
+        property bool needsScrolling: false
+        property bool needsHorizontalScrolling: false
+        property real previewScale: 0.09375
+        property int zonePadding: 0
+        property int zoneBorderWidth: 2
+        property int zoneBorderRadius: 8
+        property int scaledPadding: 1
+        property int scaledBorderWidth: 1
+        property int scaledBorderRadius: 2
+        property bool locked: false
+        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        property int fontWeight: Font.Bold
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
+        property color backgroundColor: Kirigami.Theme.backgroundColor
+        property color textColor: Kirigami.Theme.textColor
+        property real activeOpacity: 0.5
+        property real inactiveOpacity: 0.3
+
+        function applyScrollDelta(angleDeltaY) {
+            if (zoneSelectorLoader.item)
+                zoneSelectorLoader.item.applyScrollDelta(angleDeltaY);
+
+        }
+
+        function resetCursorState() {
+            if (zoneSelectorLoader.item)
+                zoneSelectorLoader.item.resetCursorState();
+
+            zoneSelectorSlot.cursorX = -1;
+            zoneSelectorSlot.cursorY = -1;
+        }
+
+        anchors.fill: parent
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: zoneSelectorLoader
+
+            anchors.fill: parent
+            active: zoneSelectorSlot.loaded
+            asynchronous: true
+            sourceComponent: zoneSelectorContentComp
+            onLoaded: {
+                if (zoneSelectorLoader.item)
+                    zoneSelectorLoader.item.zoneSelected.connect(root.zoneSelectorZoneSelected);
+
+            }
+        }
+
+        Component {
+            id: zoneSelectorContentComp
+
+            ZoneSelectorContent {
+                layouts: zoneSelectorSlot.layouts
+                activeLayoutId: zoneSelectorSlot.activeLayoutId
+                hoveredLayoutId: zoneSelectorSlot.hoveredLayoutId
+                globalAutoAssign: zoneSelectorSlot.globalAutoAssign
+                selectedLayoutId: zoneSelectorSlot.selectedLayoutId
+                selectedZoneIndex: zoneSelectorSlot.selectedZoneIndex
+                minZoneSize: zoneSelectorSlot.minZoneSize
+                cursorX: zoneSelectorSlot.cursorX
+                cursorY: zoneSelectorSlot.cursorY
+                screenAspectRatio: zoneSelectorSlot.screenAspectRatio
+                screenWidth: zoneSelectorSlot.screenWidth
+                selectorPosition: zoneSelectorSlot.selectorPosition
+                selectorLayoutMode: zoneSelectorSlot.selectorLayoutMode
+                selectorGridColumns: zoneSelectorSlot.selectorGridColumns
+                previewWidth: zoneSelectorSlot.previewWidth
+                previewHeight: zoneSelectorSlot.previewHeight
+                previewLockAspect: zoneSelectorSlot.previewLockAspect
+                positionIsVertical: zoneSelectorSlot.positionIsVertical
+                indicatorWidth: zoneSelectorSlot.indicatorWidth
+                indicatorHeight: zoneSelectorSlot.indicatorHeight
+                indicatorSpacing: zoneSelectorSlot.indicatorSpacing
+                layoutColumns: zoneSelectorSlot.layoutColumns
+                layoutRows: zoneSelectorSlot.layoutRows
+                contentWidth: zoneSelectorSlot.contentWidth
+                contentHeight: zoneSelectorSlot.contentHeight
+                containerPadding: zoneSelectorSlot.containerPadding
+                containerPaddingSide: zoneSelectorSlot.containerPaddingSide
+                containerTopMargin: zoneSelectorSlot.containerTopMargin
+                containerSideMargin: zoneSelectorSlot.containerSideMargin
+                containerRadius: zoneSelectorSlot.containerRadius
+                labelTopMargin: zoneSelectorSlot.labelTopMargin
+                labelHeight: zoneSelectorSlot.labelHeight
+                labelSpace: zoneSelectorSlot.labelSpace
+                cardPadding: zoneSelectorSlot.cardPadding
+                cardSidePadding: zoneSelectorSlot.cardSidePadding
+                containerWidth: zoneSelectorSlot.containerWidth
+                containerHeight: zoneSelectorSlot.containerHeight
+                barHeight: zoneSelectorSlot.barHeight
+                barWidth: zoneSelectorSlot.barWidth
+                totalRows: zoneSelectorSlot.totalRows
+                scrollContentHeight: zoneSelectorSlot.scrollContentHeight
+                scrollContentWidth: zoneSelectorSlot.scrollContentWidth
+                needsScrolling: zoneSelectorSlot.needsScrolling
+                needsHorizontalScrolling: zoneSelectorSlot.needsHorizontalScrolling
+                previewScale: zoneSelectorSlot.previewScale
+                zonePadding: zoneSelectorSlot.zonePadding
+                zoneBorderWidth: zoneSelectorSlot.zoneBorderWidth
+                zoneBorderRadius: zoneSelectorSlot.zoneBorderRadius
+                scaledPadding: zoneSelectorSlot.scaledPadding
+                scaledBorderWidth: zoneSelectorSlot.scaledBorderWidth
+                scaledBorderRadius: zoneSelectorSlot.scaledBorderRadius
+                locked: zoneSelectorSlot.locked
+                highlightColor: zoneSelectorSlot.highlightColor
+                inactiveColor: zoneSelectorSlot.inactiveColor
+                borderColor: zoneSelectorSlot.borderColor
+                fontFamily: zoneSelectorSlot.fontFamily
+                fontSizeScale: zoneSelectorSlot.fontSizeScale
+                fontWeight: zoneSelectorSlot.fontWeight
+                fontItalic: zoneSelectorSlot.fontItalic
+                fontUnderline: zoneSelectorSlot.fontUnderline
+                fontStrikeout: zoneSelectorSlot.fontStrikeout
+                backgroundColor: zoneSelectorSlot.backgroundColor
+                textColor: zoneSelectorSlot.textColor
+                activeOpacity: zoneSelectorSlot.activeOpacity
+                inactiveOpacity: zoneSelectorSlot.inactiveOpacity
             }
 
         }

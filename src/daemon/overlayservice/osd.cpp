@@ -483,6 +483,11 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
             qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
                                  << "did not expose `layoutPickerSlotItem` — picker on this screen will fail.";
         }
+        state.passiveShellZoneSelectorSlot = qvariant_cast<QQuickItem*>(window->property("zoneSelectorSlotItem"));
+        if (!state.passiveShellZoneSelectorSlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+                                 << "did not expose `zoneSelectorSlotItem` — selector on this screen will fail.";
+        }
 
         // Wire QML signals → animator-driven slot hide / forward.
         QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
@@ -491,6 +496,8 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
                          SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
         QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
         QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
+        QObject::connect(window, SIGNAL(zoneSelectorZoneSelected(QString, int, QVariant)), this,
+                         SLOT(onZoneSelected(QString, int, QVariant)));
     }
 
     // Prime the wl_surface map + Vulkan swapchain init + first-frame

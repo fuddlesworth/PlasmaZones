@@ -116,6 +116,7 @@ public:
         QQuickItem* passiveShellOsdSlot = nullptr;
         QQuickItem* passiveShellSnapAssistSlot = nullptr;
         QQuickItem* passiveShellLayoutPickerSlot = nullptr;
+        QQuickItem* passiveShellZoneSelectorSlot = nullptr;
 
         QQuickWindow* overlayWindow = nullptr;
         QScreen* overlayPhysScreen = nullptr;
@@ -765,6 +766,9 @@ private:
     /// Animator-driven slot-hide completion for layout-picker. Mirrors
     /// onSnapAssistSlotHideCompleted pattern.
     void onLayoutPickerSlotHideCompleted(const QString& effectiveId);
+
+    /// Animator-driven slot-hide completion for zone-selector.
+    void onZoneSelectorSlotHideCompleted(const QString& effectiveId);
 
     /**
      * @brief Construct the SurfaceAnimator and register per-Role configs.
