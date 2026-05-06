@@ -59,7 +59,7 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
     // pattern in src/daemon/overlayservice.cpp's buildXxxConfig() helpers.
     const PAL::SurfaceAnimator::Config osdConfig{.showProfile = QStringLiteral("osd.show"),
                                                  .hideProfile = QStringLiteral("osd.hide"),
-                                                 .showScaleProfile = QStringLiteral("osd.pop"),
+                                                 .showScaleProfile = QStringLiteral("osd.show"),
                                                  .hideScaleProfile = QStringLiteral("osd.hide"),
                                                  .showScaleFrom = 0.8,
                                                  .hideScaleTo = 0.9,
@@ -78,8 +78,7 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
     // would surface as a config-mismatch in this test fixture.
     const PAL::SurfaceAnimator::Config layoutPickerConfig{.showProfile = QStringLiteral("popup.layoutPicker.show"),
                                                           .hideProfile = QStringLiteral("popup.layoutPicker.hide"),
-                                                          .showScaleProfile =
-                                                              QStringLiteral("popup.layoutPicker.popIn"),
+                                                          .showScaleProfile = QStringLiteral("popup.layoutPicker.show"),
                                                           .hideScaleProfile = QStringLiteral("popup.layoutPicker.hide"),
                                                           .showScaleFrom = 0.9,
                                                           .hideScaleTo = 0.95,
@@ -173,7 +172,7 @@ private Q_SLOTS:
         const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("DP-1"), 7);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
-        QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
+        QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
         QCOMPARE(cfg.showScaleFrom, 0.8);
     }
 
@@ -186,7 +185,7 @@ private Q_SLOTS:
         const auto role = perInstanceRole(PzRoles::Notification, QStringLiteral("HDMI-A-1/vs:0"), 3);
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("osd.show"));
-        QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.pop"));
+        QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
     }
 
     /// Regression: ZoneSelector. The Q_ASSERT_X in createZoneSelectorWindow
@@ -235,7 +234,7 @@ private Q_SLOTS:
         const auto cfg = anim->configForRole(role);
         QCOMPARE(cfg.showProfile, QStringLiteral("popup.layoutPicker.show"));
         QCOMPARE(cfg.hideProfile, QStringLiteral("popup.layoutPicker.hide"));
-        QCOMPARE(cfg.showScaleProfile, QStringLiteral("popup.layoutPicker.popIn"));
+        QCOMPARE(cfg.showScaleProfile, QStringLiteral("popup.layoutPicker.show"));
         // LayoutPicker uses 0.9 (softer than OSD's 0.8) intentionally.
         QCOMPARE(cfg.showScaleFrom, 0.9);
         QCOMPARE(cfg.hideScaleTo, 0.95);

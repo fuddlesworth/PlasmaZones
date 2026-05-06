@@ -176,7 +176,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 33> seeds{{
+    constexpr std::array<FamilySeed, 32> seeds{{
         // ── Popups ────────────────────────────────────────────────
         // Family parent — leaves (popup.layoutPicker.*,
         // popup.zoneSelector.*, popup.snapAssist.*) inherit from this.
@@ -242,7 +242,6 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // Snap in/out/resize, layout switch, and highlight all
         // hover around 200 ms ease-out.
         {QLatin1StringView{"zone"}, QLatin1StringView{"widget-out"}, 200.0},
-        {QLatin1StringView{"zone.layoutSwitchOut"}, QLatin1StringView{"cubic-in"}, 180.0},
 
         // ── Workspaces ────────────────────────────────────────────
         // Asymmetric switch in / out — ease-out then ease-in.

@@ -62,12 +62,11 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-    // DEPRECATED — vestigial Kirigami-duration passthroughs. Pre-PR-344
-    // QML animations referenced these to override Behavior durations
-    // per-instance; post-migration, durations come from the profile
-    // registry (see `PhosphorAnimation::ProfilePaths::Widget*`). Kept as
-    // no-op accepts so existing consumer QML (`AlgorithmPreview.qml`,
-    // `GeneralPage.qml`) does not fail to parse.
+    // Kirigami-duration passthroughs bound to `durationOverride` on this
+    // file's Behavior animations (see usages below). The profile registry
+    // supplies the curve shape; these supply the theme-scaled timing so
+    // Plasma's system animation-speed preference still applies. Consumers
+    // (`AlgorithmPreview.qml`, `GeneralPage.qml`) override per-instance.
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
     // Label
@@ -379,7 +378,11 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
+                    // Direction is taken from the same predicate driving
+                    // the label's `opacity` binding above so the leg is
+                    // decided when the highlight state flips, rather than
+                    // re-evaluating on every interpolated `opacity` tick.
+                    profile: (root.isSelected || root.isHovered || root.isActive) ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: root.animationDuration
                 }
 

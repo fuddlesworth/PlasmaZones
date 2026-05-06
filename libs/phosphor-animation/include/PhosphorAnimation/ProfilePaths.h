@@ -46,7 +46,10 @@ PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlight;
 PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlightPop;
 PHOSPHORANIMATION_EXPORT extern const QString ZoneHighlightBorder;
 PHOSPHORANIMATION_EXPORT extern const QString ZoneLayoutSwitchIn;
-PHOSPHORANIMATION_EXPORT extern const QString ZoneLayoutSwitchOut;
+// `zone.layoutSwitchOut` is intentionally absent — the layout-switch
+// flash (`ZoneOverlay.qml`) is a one-shot fade that has no out-leg
+// surface. If a future consumer needs an out-leg shape, add the
+// constant in lockstep with the consumer.
 
 // workspace.*
 PHOSPHORANIMATION_EXPORT extern const QString Workspace;
@@ -72,7 +75,12 @@ PHOSPHORANIMATION_EXPORT extern const QString PopupLayoutPickerShow;
 PHOSPHORANIMATION_EXPORT extern const QString PopupLayoutPickerHide;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistShow;
-PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistHide;
+// `popup.snapAssist.hide` is intentionally absent — the surface uses
+// destroy-on-hide (keepMappedOnHide=false), so no hide frame paints
+// and any profile assignment would be runtime-dead. If the surface
+// model ever changes to keep mapped on hide, add the constant in
+// lockstep with the daemon's `OverlayService::buildSnapAssistConfig`
+// resolveShaderEffect line.
 
 // panel.* — persistent in-app side surfaces (settings nav rail, editor
 // property panel). Absorbs the former sidebar.* root — sidebars are panels.

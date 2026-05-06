@@ -58,12 +58,12 @@ Item {
     /// raw geometry is rendered as-is. Set from algorithm metadata
     /// (@producesOverlappingZones) rather than auto-detected at runtime.
     property bool producesOverlappingZones: false
-    /// DEPRECATED — vestigial post-PR-344. Was Animation duration in ms
-    /// per Behavior; durations now come from the profile registry (see
-    /// `PhosphorAnimation::ProfilePaths::Widget*` and `zone.highlight`).
-    /// Kept as a no-op accept so `LayoutCard.qml` and `AlgorithmPreview.qml`
-    /// binding sites don't break.
-    property int animationDuration: 150
+    /// Animation duration in ms — bound to `durationOverride` on this
+    /// file's Behavior animations (see usages below). The profile registry
+    /// supplies the curve shape; this supplies the theme-scaled timing so
+    /// Plasma's system animation-speed preference still applies. Consumers
+    /// (`LayoutCard.qml`, `AlgorithmPreview.qml`) override per-instance.
+    property int animationDuration: Kirigami.Units.shortDuration
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
     property bool interactive: false
     /// Whether all zones highlight together when any is selected
@@ -220,7 +220,12 @@ Item {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
+                        // Direction is taken from the same predicate driving
+                        // the label's `opacity` binding above (active/hover/
+                        // select state). Reading `opacity` itself would never
+                        // pick the fadeOut leg — the binding only moves
+                        // between 0.6 and 0.9, both of which are > 0.5.
+                        profile: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? "widget.fadeIn" : "widget.fadeOut"
                         durationOverride: root.animationDuration
                     }
 
@@ -274,7 +279,7 @@ Item {
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "zone.highlight.border"
-                    durationOverride: root.animationDuration / 2
+                    durationOverride: Math.round(root.animationDuration / 2)
                 }
 
             }
@@ -282,7 +287,7 @@ Item {
             Behavior on border.width {
                 PhosphorMotionAnimation {
                     profile: "zone.highlight.border"
-                    durationOverride: root.animationDuration / 2
+                    durationOverride: Math.round(root.animationDuration / 2)
                 }
 
             }

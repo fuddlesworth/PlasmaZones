@@ -1006,16 +1006,22 @@ ApplicationWindow {
 
             Behavior on Layout.preferredWidth {
                 PhosphorMotionAnimation {
-                    // Settings nav rail expanding/collapsing: choose direction
-                    // by whether the new width is at the expanded threshold.
-                    profile: Layout.preferredWidth > Layout.minimumWidth ? "panel.slideIn" : "panel.slideOut"
+                    // Direction is taken from the same `sidebarCompact` flag
+                    // that drives `Layout.preferredWidth` above, so the leg
+                    // is decided synchronously when the nav rail is toggled.
+                    // Reading `Layout.preferredWidth` directly would re-
+                    // evaluate during the Behavior and converge to the wrong
+                    // leg as the value approaches its target.
+                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
                 PhosphorMotionAnimation {
-                    profile: Layout.minimumWidth > 0 ? "panel.slideIn" : "panel.slideOut"
+                    // Same `sidebarCompact` driver as above — the rail's
+                    // minimumWidth tracks preferredWidth in lockstep.
+                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                 }
 
             }
@@ -1711,9 +1717,13 @@ ApplicationWindow {
 
                 Behavior on implicitHeight {
                     PhosphorMotionAnimation {
-                        // Unsaved-changes bar grows/shrinks; pick direction by
-                        // whether the new height is non-zero.
-                        profile: implicitHeight > 0 ? "widget.accordionExpand" : "widget.accordionCollapse"
+                        // Direction is taken from `needsSave` (the same flag
+                        // that drives `implicitHeight` for this bar) so the
+                        // leg is decided when needsSave flips. Reading the
+                        // animated `implicitHeight` would re-evaluate during
+                        // the Behavior and converge to the wrong leg as the
+                        // value approaches its target.
+                        profile: settingsController.needsSave ? "widget.accordionExpand" : "widget.accordionCollapse"
                     }
 
                 }
@@ -1918,7 +1928,10 @@ ApplicationWindow {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
+                // Direction is taken from `_showShortcuts` (the same flag
+                // driving `opacity` above) so the leg is decided when the
+                // overlay is toggled.
+                profile: window._showShortcuts ? "widget.fadeIn" : "widget.fadeOut"
                 durationOverride: 200
             }
 

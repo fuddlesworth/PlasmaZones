@@ -950,8 +950,8 @@ namespace {
 /// (i.e. starting with `<path>.`). Centralises the prefix-match math
 /// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
 /// share one definition of "descendant" — the trailing `.` boundary
-/// is what excludes both the path itself ("popup") and sibling
-/// names with shared prefix ("popup-something").
+/// is what excludes both the path itself ("popup") and unrelated
+/// names with shared character-prefix ("popups").
 QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                              const QString& path)
 {

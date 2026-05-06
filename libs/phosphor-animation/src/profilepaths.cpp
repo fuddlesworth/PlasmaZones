@@ -28,7 +28,7 @@ const QString ZoneHighlight = QStringLiteral("zone.highlight");
 const QString ZoneHighlightPop = QStringLiteral("zone.highlight.pop");
 const QString ZoneHighlightBorder = QStringLiteral("zone.highlight.border");
 const QString ZoneLayoutSwitchIn = QStringLiteral("zone.layoutSwitchIn");
-const QString ZoneLayoutSwitchOut = QStringLiteral("zone.layoutSwitchOut");
+// `zone.layoutSwitchOut` intentionally undeclared — see ProfilePaths.h.
 
 // workspace.*
 const QString Workspace = QStringLiteral("workspace");
@@ -53,7 +53,7 @@ const QString PopupLayoutPickerShow = QStringLiteral("popup.layoutPicker.show");
 const QString PopupLayoutPickerHide = QStringLiteral("popup.layoutPicker.hide");
 const QString PopupSnapAssist = QStringLiteral("popup.snapAssist");
 const QString PopupSnapAssistShow = QStringLiteral("popup.snapAssist.show");
-const QString PopupSnapAssistHide = QStringLiteral("popup.snapAssist.hide");
+// `popup.snapAssist.hide` intentionally undeclared — see ProfilePaths.h.
 
 // panel.*
 const QString Panel = QStringLiteral("panel");
@@ -117,7 +117,6 @@ QStringList allBuiltInPaths()
         ZoneHighlightPop,
         ZoneHighlightBorder,
         ZoneLayoutSwitchIn,
-        ZoneLayoutSwitchOut,
         Workspace,
         WorkspaceSwitchIn,
         WorkspaceSwitchOut,
@@ -136,7 +135,6 @@ QStringList allBuiltInPaths()
         PopupLayoutPickerHide,
         PopupSnapAssist,
         PopupSnapAssistShow,
-        PopupSnapAssistHide,
         Panel,
         PanelSlideIn,
         PanelSlideOut,

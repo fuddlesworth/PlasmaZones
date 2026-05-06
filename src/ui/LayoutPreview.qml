@@ -84,7 +84,7 @@ Rectangle {
 
         readonly property int standardBorderWidth: Kirigami.Units.smallSpacing / 2 // 2px
         readonly property int thinBorderWidth: 1
-        readonly property int animationDuration: 150 // ms
+        readonly property int animationDuration: Kirigami.Units.shortDuration
     }
 
     // Use shared ZonePreview component for consistent zone rendering
@@ -268,7 +268,7 @@ Rectangle {
     Behavior on border.width {
         PhosphorMotionAnimation {
             profile: "zone.highlight.border"
-            durationOverride: constants.animationDuration / 2
+            durationOverride: Math.round(constants.animationDuration / 2)
         }
 
     }

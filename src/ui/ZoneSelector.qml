@@ -192,8 +192,8 @@ Rectangle {
         readonly property int standardBorderWidth: Kirigami.Units.smallSpacing / 2 // 2px
         readonly property int thickBorderWidth: Kirigami.Units.smallSpacing // 4px
         readonly property int thinBorderWidth: 1
-        readonly property int animationDuration: 150 // ms - consistent timing
-        readonly property int expandedAnimationDuration: 200 // ms - slightly longer for expand
+        readonly property int animationDuration: Kirigami.Units.shortDuration
+        readonly property int expandedAnimationDuration: Kirigami.Units.longDuration
     }
 
     // Subtle glow/shadow effect

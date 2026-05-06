@@ -933,7 +933,10 @@ Rectangle {
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            profile: opacity > 0.5 ? "panel.fadeIn" : "panel.fadeOut"
+            // Direction is taken from the same `visible` predicate that drives
+            // `opacity` above. Reading the animated `opacity` instead would
+            // re-evaluate during the Behavior and flip the leg mid-animation.
+            profile: visible ? "panel.fadeIn" : "panel.fadeOut"
             durationOverride: Theme.animDuration
         }
 
@@ -941,8 +944,10 @@ Rectangle {
 
     Behavior on Layout.preferredWidth {
         PhosphorMotionAnimation {
-            // Direction-bound: use slideIn when growing, slideOut when shrinking.
-            profile: Layout.preferredWidth > 0 ? "panel.slideIn" : "panel.slideOut"
+            // Direction is taken from `visible` (the same predicate driving
+            // `Layout.preferredWidth: visible ? 280 : 0`). slideIn when
+            // growing into view, slideOut when collapsing out.
+            profile: visible ? "panel.slideIn" : "panel.slideOut"
             durationOverride: Theme.animDuration
         }
 

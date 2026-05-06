@@ -191,6 +191,21 @@ add_executable(test_settings_core config/test_settings_core.cpp)
 target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_core COMMAND test_settings_core)
 
+# Companion test executable: animation Profile JSON-blob storage,
+# per-field signal discrimination, aggregate-setter merge semantics.
+# Split from test_settings_core to keep each test file under the
+# project's <800-line guideline.
+add_executable(test_settings_animation_profile config/test_settings_animation_profile.cpp)
+target_link_libraries(test_settings_animation_profile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settings_animation_profile COMMAND test_settings_animation_profile)
+
+# Companion test executable: ShaderProfileTree persistence + prune,
+# autoAssignAllLayouts master toggle. Split from test_settings_core to
+# keep each test file under the project's <800-line guideline.
+add_executable(test_settings_shader_tree config/test_settings_shader_tree.cpp)
+target_link_libraries(test_settings_shader_tree PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settings_shader_tree COMMAND test_settings_shader_tree)
+
 add_executable(test_settings_validation config/test_settings_validation.cpp)
 target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_validation COMMAND test_settings_validation)
@@ -494,6 +509,44 @@ target_link_libraries(test_animations_page_controller
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
+
+# Companion test executable: motion-set + user-preset + pending-changes
+# coverage. Split from test_animations_page_controller to keep each test
+# file under the project's <800-line guideline.
+add_executable(test_animations_motion_sets
+    settings/test_animations_motion_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+)
+target_link_libraries(test_animations_motion_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorAnimation::PhosphorAnimation
+        plasmazones_core
+)
+add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
+
+# Companion test executable: shader-override end-to-end coverage. Split
+# from test_animations_page_controller to keep each test file under the
+# project's <800-line guideline.
+add_executable(test_animations_shader_overrides
+    settings/test_animations_shader_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+)
+target_link_libraries(test_animations_shader_overrides
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorAnimation::PhosphorAnimation
+        plasmazones_core
+)
+add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
 # Validation methods on D-Bus struct types — pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

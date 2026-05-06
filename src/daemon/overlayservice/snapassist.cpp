@@ -227,8 +227,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         m_snapAssistWindow->setHeight(screenGeom.height());
     }
     // Skip surface->show() when reusing an already-Shown surface. Surface
-    // treats Shown→Shown as a re-trigger and replays the popup
-    // fade-in (cancel + fresh beginShow with fromOpacity=0). For the
+    // treats Shown→Shown as a re-trigger and replays the
+    // popup.snapAssist.show fade-in (cancel + fresh beginShow with
+    // fromOpacity=0). For the
     // continuation pattern — user finishes one snap, the next snap-assist
     // reuses the warmed window — that flash is a regression of the
     // warm-surface optimisation. Property writes already updated the

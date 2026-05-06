@@ -355,9 +355,9 @@ bool PhosphorMotionAnimation::isAncestorOrSelf(const QString& candidate, const Q
         return !descendant.isEmpty();
     }
     // Strict-ancestor check: `candidate` must be a dot-bounded prefix
-    // of `descendant`. Without the dot terminator, `panel.pop` would
-    // be flagged an ancestor of `popup` (substring rather than
-    // path-segment match), which is wrong.
+    // of `descendant`. Without the dot terminator, `pop` would be
+    // flagged an ancestor of `popup` (substring rather than path-
+    // segment match), which is wrong.
     if (descendant.size() <= candidate.size() + 1) {
         return false;
     }

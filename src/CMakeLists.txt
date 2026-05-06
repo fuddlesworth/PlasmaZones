@@ -378,6 +378,8 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/helpers.h
     daemon/daemon/macros.h
     daemon/overlayservice.cpp
+    daemon/overlayservice/animation_config.cpp
+    daemon/overlayservice/lifecycle.cpp
     daemon/overlayservice/settings.cpp
     daemon/overlayservice/overlay.cpp
     daemon/overlayservice/overlay_data.cpp

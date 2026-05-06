@@ -535,7 +535,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // literal as "plasmazones-selector-..." which did NOT start with the
     // base scope, and configFor silently fell back to the empty default
     // config — every show/hide ran on the library's 150 ms OutCubic
-    // instead of popup / widget.fadeOut.
+    // instead of the configured popup.zoneSelector.show / .hide profiles.
     const auto role =
         PzRoles::makePerInstanceRole(PzRoles::ZoneSelector, screenId, m_surfaceManager->nextScopeGeneration());
 
