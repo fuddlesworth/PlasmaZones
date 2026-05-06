@@ -1429,44 +1429,33 @@ public:
                     // any leg-specific state so the SG sync that
                     // follows runLeg picks them up live.
                     if (reusedShaderSource) {
-                        // Wake the source FBO. Order matches
-                        // attachShaderToAnchor's fresh-attach setup:
-                        // setLive(true) before setHideSource(true).
+                        // Wake the source FBO + re-hide the anchor from
+                        // direct scene render. The park step in
+                        // `teardownShaderLeg` calls
+                        // `setHideSource(false)` to restore the anchor's
+                        // normal rendering during the idle phase, and
+                        // that toggle tears down the source item's
+                        // internal `QQuickItemLayer`. A bare
+                        // `setHideSource(true)` here doesn't reliably
+                        // rebuild that layer — the FBO comes back live
+                        // but empty, so the shader samples a
+                        // transparent uTexture0 throughout the leg and
+                        // the user sees a "pop in" at completion when
+                        // the post-leg `setOpacity(1.0)` restores the
+                        // anchor's direct render.
                         //
-                        // CRITICAL: also call scheduleUpdate() to force
-                        // an FBO re-grab on the next paint.
-                        //
-                        // Qt's QQuickShaderEffectSource only re-renders
-                        // its internal FBO when the private `m_grab`
-                        // flag is set. setLive(true) and
-                        // setHideSource(true) BOTH call `update()`
-                        // (schedule a paint) but NEITHER call
-                        // `scheduleUpdate()` — which is the API that
-                        // flips `m_grab`. Without an explicit
-                        // scheduleUpdate, the next paint reads the
-                        // STALE FBO content from the end of the
-                        // previous leg. For a hide leg that's the
-                        // fully-transitioned-out frame (transparent
-                        // for fly-in, fully-pixelated for pixelate,
-                        // etc.), so the shader samples that stale
-                        // content for the entire show leg and the
-                        // surface appears to "pop in" without
-                        // animation when the post-leg setOpacity(1.0)
-                        // restores the anchor's direct render.
-                        //
-                        // boundsExtent=Anchor effects accidentally
-                        // dodged this because their shader-item
-                        // geometry tracks the anchor's x/y/w/h via
-                        // `syncShaderGeometryNow`'s anchor-change
-                        // signal hookups, and any geometry change
-                        // incidentally forces an FBO refresh. Parent-
-                        // extent's screen-sized item never changes
-                        // geometry between legs, so the staleness
-                        // surfaces dramatically as a non-animating
-                        // "pop in" on every subsequent show.
+                        // Force a clean layer reattach by clearing the
+                        // source item first, then re-pointing it at
+                        // the anchor. Qt rebuilds the layer + FBO from
+                        // scratch, mirroring the fresh-attach setup at
+                        // `attachShaderToAnchor`. The matching order
+                        // (setLive, setHideSource, setSourceItem) keeps
+                        // a single code-path's worth of state machine
+                        // for the source.
+                        reusedShaderSource->setSourceItem(nullptr);
                         reusedShaderSource->setLive(true);
                         reusedShaderSource->setHideSource(true);
-                        reusedShaderSource->scheduleUpdate();
+                        reusedShaderSource->setSourceItem(reusedShaderAnchor.data());
                     }
                     reusedShaderItem->setVisible(true);
                     // Re-apply per-effect static config so a metadata.json
