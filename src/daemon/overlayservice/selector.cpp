@@ -103,6 +103,19 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             qCDebug(lcOverlay) << "showZoneSelector: screen=" << screenId << "targetGeom=" << targetGeom
                                << "physScreenGeom=" << physScreen->geometry()
                                << "windowSizeAfterSet=" << window->width() << "x" << window->height();
+            // OSD-style content lifecycle: toggle `loaded` false→true so
+            // the Loader-driven contentWrapper is re-instantiated for
+            // every show. Each show gets a brand-new shaderAnchor
+            // QQuickItem, so the SurfaceAnimator's anchor-match check
+            // fails (different pointer than any parked entry) and we
+            // always go down the fresh-attach path — same lifecycle
+            // NotificationOverlay's mode-driven Loader gives the OSD
+            // inner card. Without this toggle the persistent PopupFrame
+            // anchor's QQuickItemLayer state survives across shows and
+            // subsequent vertex-shader transitions sample stale FBO
+            // content (the bug that motivated this refactor).
+            writeQmlProperty(window, QStringLiteral("loaded"), false);
+            writeQmlProperty(window, QStringLiteral("loaded"), true);
             // Phase 5: Surface::show() drives SurfaceAnimator (popup)
             // and clears Qt.WindowTransparentForInput so input routes again.
             cancelSurfacePrime(surface);
@@ -139,6 +152,12 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             updateZoneSelectorWindow(screenId);
             window->setWidth(geom.width());
             window->setHeight(geom.height());
+            // OSD-style content lifecycle — see the matching block above
+            // for the rationale. Toggle `loaded` false→true so the
+            // contentWrapper Loader re-instantiates the popup body and
+            // produces a fresh shaderAnchor QQuickItem on every show.
+            writeQmlProperty(window, QStringLiteral("loaded"), false);
+            writeQmlProperty(window, QStringLiteral("loaded"), true);
             // Phase 5: Surface::show() drives SurfaceAnimator (popup).
             cancelSurfacePrime(surface);
             surface->show();

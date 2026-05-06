@@ -237,6 +237,15 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // First-show on a freshly-created surface (reuseWindow=false) and
     // re-show on a previously-hidden surface both still dispatch normally.
     if (m_snapAssistSurface && (!reuseWindow || !m_snapAssistSurface->isLogicallyShown())) {
+        // OSD-style content lifecycle: toggle `loaded` false→true so
+        // the SnapAssistOverlay Loader re-instantiates the popup body
+        // and produces a fresh shaderAnchor QQuickItem on every show.
+        // See ZoneSelectorWindow's `loaded` property docstring for the
+        // full rationale (avoids stale FBO content on subsequent
+        // vertex-shader transitions when the persistent anchor's
+        // QQuickItemLayer state survives across shows).
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("loaded"), false);
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("loaded"), true);
         cancelSurfacePrime(m_snapAssistSurface);
         m_snapAssistSurface->show();
     }
@@ -668,6 +677,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // QWindow, which together with the layer-shell focus grant lands
     // input on the QQuickWindow so QML Shortcuts (Escape, arrows,
     // Enter) fire.
+    // OSD-style content lifecycle — see ZoneSelectorWindow's `loaded`
+    // property docstring. Toggle false→true so the LayoutPickerOverlay
+    // Loader re-instantiates the popup body on every show.
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("loaded"), false);
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("loaded"), true);
     cancelSurfacePrime(m_layoutPickerSurface);
     m_layoutPickerSurface->show();
     m_layoutPickerWindow->requestActivate();
