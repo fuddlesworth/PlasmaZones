@@ -14,7 +14,6 @@
         <file alias="NotificationOverlay.qml">../ui/NotificationOverlay.qml</file>
         <file alias="PassiveOverlayShell.qml">../ui/PassiveOverlayShell.qml</file>
         <file alias="SnapAssistContent.qml">../ui/SnapAssistContent.qml</file>
-        <file alias="LayoutPickerOverlay.qml">../ui/LayoutPickerOverlay.qml</file>
         <file alias="LayoutPickerContent.qml">../ui/LayoutPickerContent.qml</file>
     </qresource>
 </RCC>

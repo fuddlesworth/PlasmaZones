@@ -333,6 +333,56 @@ void WindowDragAdaptor::unregisterCancelOverlayShortcut()
     m_shortcutRegistrar->unregisterAdhocShortcut(kCancelOverlayId);
 }
 
+namespace {
+constexpr auto kLayoutPickerLeftId = QLatin1String("layout_picker_nav_left");
+constexpr auto kLayoutPickerRightId = QLatin1String("layout_picker_nav_right");
+constexpr auto kLayoutPickerUpId = QLatin1String("layout_picker_nav_up");
+constexpr auto kLayoutPickerDownId = QLatin1String("layout_picker_nav_down");
+constexpr auto kLayoutPickerReturnId = QLatin1String("layout_picker_confirm_return");
+constexpr auto kLayoutPickerEnterId = QLatin1String("layout_picker_confirm_enter");
+} // namespace
+
+void WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered(std::function<void(int, int)> moveCb,
+                                                                 std::function<void()> confirmCb)
+{
+    if (!m_shortcutRegistrar || !moveCb || !confirmCb) {
+        return;
+    }
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerLeftId, QKeySequence(Qt::Key_Left),
+                                               PzI18n::tr("Layout Picker: Move Left"), [moveCb] {
+                                                   moveCb(-1, 0);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerRightId, QKeySequence(Qt::Key_Right),
+                                               PzI18n::tr("Layout Picker: Move Right"), [moveCb] {
+                                                   moveCb(1, 0);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerUpId, QKeySequence(Qt::Key_Up),
+                                               PzI18n::tr("Layout Picker: Move Up"), [moveCb] {
+                                                   moveCb(0, -1);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerDownId, QKeySequence(Qt::Key_Down),
+                                               PzI18n::tr("Layout Picker: Move Down"), [moveCb] {
+                                                   moveCb(0, 1);
+                                               });
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerReturnId, QKeySequence(Qt::Key_Return),
+                                               PzI18n::tr("Layout Picker: Confirm"), confirmCb);
+    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerEnterId, QKeySequence(Qt::Key_Enter),
+                                               PzI18n::tr("Layout Picker: Confirm"), confirmCb);
+}
+
+void WindowDragAdaptor::releaseLayoutPickerNavShortcuts()
+{
+    if (!m_shortcutRegistrar) {
+        return;
+    }
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerLeftId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerRightId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerUpId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerDownId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerReturnId);
+    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerEnterId);
+}
+
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
 {
     // Check if zone selector feature is enabled

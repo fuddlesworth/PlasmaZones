@@ -115,6 +115,7 @@ public:
         QQuickWindow* passiveShellWindow = nullptr;
         QQuickItem* passiveShellOsdSlot = nullptr;
         QQuickItem* passiveShellSnapAssistSlot = nullptr;
+        QQuickItem* passiveShellLayoutPickerSlot = nullptr;
 
         QQuickWindow* overlayWindow = nullptr;
         QScreen* overlayPhysScreen = nullptr;
@@ -357,18 +358,13 @@ public:
     void showLayoutPicker(const QString& screenId = QString());
     bool isLayoutPickerVisible() const override;
 
-    /**
-     * @brief Pre-create the Layout Picker QML window on the primary screen.
-     *
-     * The picker's first show otherwise pays ~50-100 ms for Wayland layer-
-     * shell surface creation + Vulkan swapchain init + QML compilation.
-     * Pre-warming on daemon start moves that cost off the user's hot path
-     * so the very first picker invocation is instant. Subsequent shows on
-     * the same screen reuse the warmed surface; cross-screen shows fall
-     * back to destroy+recreate (wlr-layer-shell v3 anchors are immutable
-     * post-attach).
-     */
-    void warmUpLayoutPicker();
+    /// Forwarders to the active picker slot's QML moveSelection /
+    /// confirmSelection functions. Used by global-accel callbacks
+    /// (registered by WindowDragAdaptor on picker show) since the
+    /// shell is kbd-None and the picker content's QML Shortcuts can't
+    /// fire. No-op when no picker is visible.
+    void pickerMoveSelection(int dx, int dy);
+    void pickerConfirmSelection();
 
 public Q_SLOTS:
     // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
@@ -402,6 +398,10 @@ private Q_SLOTS:
     /// `hideSnapAssist` directly). Same animator-driven slot-hide
     /// pattern as onOsdDismissRequested.
     void onSnapAssistDismissRequested();
+
+    /// Receiver for the shell's `layoutPickerDismissRequested` QML
+    /// signal (backdrop click). Routes to hideLayoutPicker.
+    void onLayoutPickerDismissRequested();
 
 private:
     // Sync CAVA service state (start/stop/reconfigure) with current settings.
@@ -631,23 +631,12 @@ private:
     // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
-    // PhosphorZones::Layout Picker overlay (interactive layout browser)
-    PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
-    QQuickWindow* m_layoutPickerWindow = nullptr;
-    QPointer<QScreen> m_layoutPickerScreen;
+    // Layout Picker (interactive layout browser). Post-shell-migration
+    // the picker is an Item slot inside the per-screen passive shell;
+    // these track which screen's shell currently shows it (singleton
+    // across all screens) and whether it's logically visible.
     QString m_layoutPickerScreenId;
-    /// Guards hideLayoutPicker against re-entrant calls during the
-    /// SurfaceAnimator's hide leg. The picker is destroy-on-hide
-    /// (KWin re-evaluates keyboard_interactivity at initial-map only),
-    /// so hideLayoutPicker drives Surface::hide() — runs the shader/
-    /// motion hide animation — then destroys the wl_surface in the
-    /// stateChanged → Hidden handler. A second hideLayoutPicker call
-    /// before that handler fires would otherwise double-arm the
-    /// listener and double-emit layoutPickerDismissed. Reset by the
-    /// handler on Hidden, by a Shown transition (show cancelled the
-    /// hide), and by destroyLayoutPickerWindow (external destruction
-    /// path — screen lost, etc.).
-    bool m_layoutPickerHiding = false;
+    bool m_layoutPickerVisible = false;
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
     /// Surfaces currently in the prime cycle (between primeSurfaceRender-
@@ -773,9 +762,9 @@ private:
     /// `loaded` so a subsequent show toggles it false→true freshly.
     void onSnapAssistSlotHideCompleted(const QString& effectiveId);
 
-    void createLayoutPickerWindow(QScreen* physScreen);
-    void createLayoutPickerWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
-    void destroyLayoutPickerWindow();
+    /// Animator-driven slot-hide completion for layout-picker. Mirrors
+    /// onSnapAssistSlotHideCompleted pattern.
+    void onLayoutPickerSlotHideCompleted(const QString& effectiveId);
 
     /**
      * @brief Construct the SurfaceAnimator and register per-Role configs.

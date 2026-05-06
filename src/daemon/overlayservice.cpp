@@ -542,10 +542,8 @@ OverlayService::~OverlayService()
     // destroyed. Snap-assist post-shell-migration is an Item slot
     // inside the per-screen passive shell — its lifetime is the
     // shell's, no separate cleanup here.
-    if (m_layoutPickerSurface) {
-        m_layoutPickerSurface->deleteLater();
-        m_layoutPickerSurface = nullptr;
-    }
+    // Picker post-shell-migration is also a slot in the per-screen
+    // passive shell — no separate surface cleanup.
     if (m_shaderPreviewSurface) {
         m_shaderPreviewSurface->deleteLater();
         m_shaderPreviewSurface = nullptr;
@@ -899,13 +897,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         }
     }
 
-    // Clean up layout picker if on this physical screen. Snap-assist is
-    // post-shell-migration an Item slot inside the per-screen passive
-    // shell — destroying the shell (above, via destroyNotificationWindow)
-    // tears the slot down with it.
-    if (m_layoutPickerScreen == screen) {
-        destroyLayoutPickerWindow();
-    }
+    // Snap-assist + layout picker post-shell-migration are Item slots
+    // inside the per-screen passive shell — destroying the shell
+    // (above, via destroyNotificationWindow) tears the slots down with
+    // it. No separate cleanup needed.
 
     // Drop notification-window "creation failed" sentinels for screen ids
     // rooted on this physical screen. Without this, if the same physical

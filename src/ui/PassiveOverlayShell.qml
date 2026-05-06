@@ -63,6 +63,12 @@ Window {
     /// (the shell is kbd-None); Escape routes via the daemon's
     /// KGlobalAccel cancel-overlay shortcut.
     readonly property alias snapAssistSlotItem: snapAssistSlot
+    /// Layout-picker slot Item — SurfaceAnimator target for picker
+    /// show/hide. Modal kbd (Return/Enter/arrows/Escape) routes via
+    /// KGlobalAccel ad-hoc registrations made by start.cpp on the
+    /// matching show/dismiss signals — the shell is kbd-None so QML
+    /// Shortcuts can't fire here.
+    readonly property alias layoutPickerSlotItem: layoutPickerSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — the shell
@@ -73,6 +79,11 @@ Window {
     signal snapAssistWindowSelected(string windowId, string zoneId, string geometryJson)
     /// Forwarded from snap-assist's backdrop click / dismiss request.
     signal snapAssistDismissRequested()
+    /// Forwarded from picker's `layoutSelected`.
+    signal layoutPickerSelected(string layoutId)
+    /// Forwarded from picker's `dismissRequested` (backdrop click /
+    /// supplemental dismiss path; primary Escape goes via global accel).
+    signal layoutPickerDismissRequested()
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
@@ -296,6 +307,104 @@ Window {
                 inactiveOpacity: snapAssistSlot.inactiveOpacity
                 borderWidth: snapAssistSlot.borderWidth
                 borderRadius: snapAssistSlot.borderRadius
+            }
+
+        }
+
+    }
+
+    Item {
+        id: layoutPickerSlot
+
+        // Picker data properties — C++ writes these before each show.
+        property var layouts: []
+        property string activeLayoutId: ""
+        property real screenAspectRatio: 16 / 9
+        property bool globalAutoAssign: false
+        property bool locked: false
+        property color backgroundColor: Kirigami.Theme.backgroundColor
+        property color textColor: Kirigami.Theme.textColor
+        property color highlightColor: Kirigami.Theme.highlightColor
+        property color inactiveColor: Kirigami.Theme.disabledTextColor
+        property color borderColor: Kirigami.Theme.textColor
+        property real activeOpacity: 0.5
+        property real inactiveOpacity: 0.3
+        property int borderWidth: Kirigami.Units.smallSpacing
+        property int borderRadius: Kirigami.Units.gridUnit
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        property int fontWeight: Font.Bold
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
+        property color labelFontColor: Kirigami.Theme.textColor
+        // OSD-style content lifecycle gate. C++ toggles false→true around
+        // each show so LayoutPickerContent is re-instantiated.
+        property bool loaded: false
+
+        // Forwards to LayoutPickerContent.moveSelection / confirmSelection
+        // — invoked by C++ on global-accel callbacks since the shell is
+        // kbd-None and the picker content's QML Shortcuts can't fire.
+        function moveSelection(dx, dy) {
+            if (layoutPickerLoader.item)
+                layoutPickerLoader.item.moveSelection(dx, dy);
+
+        }
+
+        function confirmSelection() {
+            if (layoutPickerLoader.item)
+                layoutPickerLoader.item.confirmSelection();
+
+        }
+
+        anchors.fill: parent
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: layoutPickerLoader
+
+            anchors.fill: parent
+            active: layoutPickerSlot.loaded
+            asynchronous: true
+            sourceComponent: layoutPickerContentComp
+            onLoaded: {
+                if (layoutPickerLoader.item) {
+                    layoutPickerLoader.item.layoutSelected.connect(root.layoutPickerSelected);
+                    layoutPickerLoader.item.dismissRequested.connect(root.layoutPickerDismissRequested);
+                    // Seed _shortcutsActive so the LayoutPickerContent's
+                    // backdrop dismiss + selection bindings are live (the
+                    // content uses this to gate side-effects). The QML
+                    // Shortcuts inside LayoutPickerContent stay defined
+                    // but never fire (shell is kbd-None) — global accels
+                    // drive the picker instead.
+                    layoutPickerLoader.item._shortcutsActive = true;
+                }
+            }
+        }
+
+        Component {
+            id: layoutPickerContentComp
+
+            LayoutPickerContent {
+                layouts: layoutPickerSlot.layouts
+                activeLayoutId: layoutPickerSlot.activeLayoutId
+                globalAutoAssign: layoutPickerSlot.globalAutoAssign
+                screenAspectRatio: layoutPickerSlot.screenAspectRatio
+                backgroundColor: layoutPickerSlot.backgroundColor
+                textColor: layoutPickerSlot.textColor
+                highlightColor: layoutPickerSlot.highlightColor
+                inactiveColor: layoutPickerSlot.inactiveColor
+                borderColor: layoutPickerSlot.borderColor
+                activeOpacity: layoutPickerSlot.activeOpacity
+                inactiveOpacity: layoutPickerSlot.inactiveOpacity
+                fontFamily: layoutPickerSlot.fontFamily
+                fontSizeScale: layoutPickerSlot.fontSizeScale
+                fontWeight: layoutPickerSlot.fontWeight
+                fontItalic: layoutPickerSlot.fontItalic
+                fontUnderline: layoutPickerSlot.fontUnderline
+                fontStrikeout: layoutPickerSlot.fontStrikeout
+                locked: layoutPickerSlot.locked
             }
 
         }
