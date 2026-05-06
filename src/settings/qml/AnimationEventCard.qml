@@ -585,7 +585,6 @@ Item {
                         // any future code formatter / linter from flagging the
                         // bare expression as a dead statement.
                         void (root._shaderRegistryRev);
-                        // dependency on _shaderRegistryRev for re-evaluation; void() prevents linter from flagging unused
                         return settingsController.animationsPage.availableShaderEffects();
                     }
 

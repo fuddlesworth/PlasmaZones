@@ -148,7 +148,7 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     rainAlpha *= edgeMask(EDGE_FADE);
 
     float shorten =
-        fract(sin(column + 42.0) * 33.423) * mix(0.0, overshoot * 0.25, r);
+        fract(sin(column + 42.0) * 33.423) * (r * overshoot * 0.25);
     if (shorten > 0.0) {
         rainAlpha *= smoothstep(0.0, 1.0, clamp(fragCoord.y / shorten, 0.0, 1.0));
         rainAlpha *= smoothstep(0.0, 1.0, clamp((1.0 - fragCoord.y) / shorten, 0.0, 1.0));

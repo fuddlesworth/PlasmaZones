@@ -5727,9 +5727,51 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     auto emplaceResult = m_shaderTransitions.emplace(window, std::move(transition));
     bool emplaceCommitted = false;
     auto emplaceGuard = qScopeGuard([&]() {
-        if (!emplaceCommitted) {
-            m_shaderTransitions.erase(emplaceResult.first);
+        if (emplaceCommitted) {
+            return;
         }
+        // The supersession path at line ~5509 erased the prior
+        // transition entry directly (no endShaderTransition call →
+        // no grab release), and the new transition inherited that
+        // grab via `transition.closeGrabHeld = holdCloseGrab ||
+        // existingHeldGrab`. If redirect()/setShader() throws after
+        // the emplace, simply erasing the new entry would leak the
+        // inherited (or freshly-acquired) close grab and strand the
+        // window in closing state with no release path. Mirror
+        // endShaderTransition's grab-release sequence here so the
+        // ref + role clear stay balanced on the rollback path.
+        //
+        // Read the held flag from the emplaced entry — the local
+        // `transition` was moved-from into the map and is no longer
+        // safe to inspect. The entry is guaranteed to be present
+        // (emplaceResult.second is true on the new-key path; the
+        // map contains no prior entry for this window because the
+        // supersession branch above erased it).
+        const bool releaseCloseGrab = emplaceResult.first->second.closeGrabHeld;
+        if (releaseCloseGrab && window) {
+            // Clear WindowClosedGrabRole synchronously while the
+            // ref we hold guarantees `window` is still alive. The
+            // role clear is a courtesy for other effects.
+            window->setData(KWin::WindowClosedGrabRole, QVariant());
+            // Defer unrefWindow to the next event-loop iteration —
+            // matches endShaderTransition's reasoning at line ~5806.
+            // beginShaderTransition is reachable from paintWindow
+            // via tryBeginShaderForEvent → animator callbacks, and
+            // a synchronous unref here could destroy the
+            // EffectWindow while a paint cycle still holds it.
+            QPointer<PlasmaZonesEffect> selfGuard(this);
+            KWin::EffectWindow* heldWindow = window;
+            QMetaObject::invokeMethod(
+                this,
+                [selfGuard, heldWindow]() {
+                    if (!selfGuard) {
+                        return;
+                    }
+                    heldWindow->unrefWindow();
+                },
+                Qt::QueuedConnection);
+        }
+        m_shaderTransitions.erase(emplaceResult.first);
     });
 
     if (!isSameWindowSupersession) {
