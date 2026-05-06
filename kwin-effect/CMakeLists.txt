@@ -49,6 +49,9 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/drag_snap.cpp
+    plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/shader_internal.h
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp
