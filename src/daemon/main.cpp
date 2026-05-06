@@ -60,6 +60,25 @@ int main(int argc, char* argv[])
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 
+    // Use the simple animation driver (Qt 6.5+). With the threaded scene-
+    // graph render loop and TWO OR MORE QQuickWindows, Qt 6's default
+    // animation driver explicitly "falls back to the system timer based
+    // approach" — and crucially, every render-thread sync phase blocks the
+    // GUI thread for the duration of that window's polishAndSync. Animation
+    // ticks driven by GUI-thread QTimers (which is how SurfaceAnimator's
+    // m_driverTimer works) miss frames whenever the GUI thread is parked
+    // in a sibling window's sync — the visible symptom is one popup's
+    // shader fly-in pausing partway through while another popup mounts and
+    // animates, then jumping forward when the GUI thread resumes.
+    //
+    // QSG_USE_SIMPLE_ANIMATION_DRIVER=1 swaps the multi-window-fallback
+    // timer driver for QElapsedTimer-based timing, decoupling the
+    // animation tick cadence from the per-window vsync / sync handshake.
+    // Documented in the Qt Quick Scene Graph manual page as the supported
+    // way to address exactly this multi-window stutter pattern. Must be
+    // set before QGuiApplication is constructed.
+    qputenv("QSG_USE_SIMPLE_ANIMATION_DRIVER", "1");
+
     // Register our layer-shell QPA plugin before QGuiApplication
     PhosphorWayland::registerLayerShellPlugin();
 
