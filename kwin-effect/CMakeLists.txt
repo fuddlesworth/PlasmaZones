@@ -39,9 +39,24 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
+    plasmazoneseffect/lifecycle.cpp
+    plasmazoneseffect/borders.cpp
+    plasmazoneseffect/window_identity.cpp
+    plasmazoneseffect/mouse_drag.cpp
+    plasmazoneseffect/window_filtering.cpp
+    plasmazoneseffect/screens.cpp
+    plasmazoneseffect/window_lifecycle.cpp
+    plasmazoneseffect/daemon_bringup.cpp
+    plasmazoneseffect/daemon_apply.cpp
+    plasmazoneseffect/drag_snap.cpp
+    plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/shader_internal.h
+    plasmazoneseffect/types.h
     autotilehandler.cpp
     autotilehandler.h
     autotilehandler/signals.cpp
+    autotilehandler/state.cpp
     autotilehandler/tiling.cpp
     navigationhandler.cpp
     navigationhandler.h
