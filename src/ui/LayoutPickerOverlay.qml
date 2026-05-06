@@ -93,9 +93,16 @@ Window {
     // warmed Vulkan swapchain survives across show cycles.
     visible: false
 
+    // `asynchronous: true` keeps the GUI thread responsive while the
+    // LayoutPickerContent body (grid of layout cards + previews +
+    // metrics bindings) is instantiated. See ZoneSelectorWindow's
+    // matching Loader block for the full rationale (avoids stalling a
+    // sibling surface's animation when both shows are dispatched in
+    // the same C++ event handler).
     Loader {
         anchors.fill: parent
         active: root.loaded
+        asynchronous: true
         sourceComponent: contentComp
     }
 

@@ -16,6 +16,8 @@ import org.phosphor.animation
  */
 Window {
     // Single visible-content wrapper for surfaceanimator's shader leg.
+    // OSD-style Loader: fresh content (and a fresh shaderAnchor) on every
+    // show. C++ toggles root.loaded false→true around each show.
 
     id: root
 
@@ -60,11 +62,16 @@ Window {
         onActivated: root.close()
     }
 
-    // OSD-style Loader: fresh content (and a fresh shaderAnchor) on every
-    // show. C++ toggles root.loaded false→true around each show.
+    // `asynchronous: true` keeps GUI-thread responsive while the snap-
+    // assist body (Repeater of zones × Repeater of candidate cards) is
+    // instantiated. Without async loading a sibling surface's animation
+    // (e.g. layout-OSD's fly-in fired in the same shortcut handler)
+    // stalls mid-flight while this content mounts. See
+    // ZoneSelectorWindow's matching block for the full rationale.
     Loader {
         anchors.fill: parent
         active: root.loaded
+        asynchronous: true
         sourceComponent: contentComp
     }
 

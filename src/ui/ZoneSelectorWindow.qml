@@ -26,6 +26,11 @@ Window {
     // on the underlying QWindow during the hide cycle. The previous
     // `_selectorDismissed` flag + `showAnimation` / `hideAnimation` blocks are gone.
     // (Phase 5: showAnimation / hideAnimation removed — library drives.)
+    // OSD-style Loader: fresh content (and a fresh shaderAnchor) on every
+    // show. C++ toggles root.loaded = false then true around each show, so
+    // the previous show's contentWrapper QQuickItem is destroyed and a
+    // fresh one is instantiated — same lifecycle NotificationOverlay's
+    // mode-driven Loader gives the OSD inner card.
 
     id: root
 
@@ -235,15 +240,22 @@ Window {
         }
     }
 
-    // OSD-style Loader: fresh content (and a fresh shaderAnchor) on every
-    // show. C++ toggles root.loaded = false then true around each show, so
-    // the previous show's contentWrapper QQuickItem is destroyed and a
-    // fresh one is instantiated — same lifecycle NotificationOverlay's
-    // mode-driven Loader gives the OSD inner card. See
-    // `OverlayService::showZoneSelector` for the C++ side of the toggle.
+    // `asynchronous: true` spreads QML Component instantiation across
+    // multiple event-loop iterations instead of blocking the GUI thread
+    // for the full instantiation cost in one go. SurfaceAnimator's
+    // 60Hz tick timer runs on the same thread; without async loading,
+    // a complex popup body (Repeater + cards + Behaviors + scrollbars)
+    // can stall a sibling surface's animation mid-flight when both
+    // shows are triggered in the same C++ event handler — e.g. a
+    // shortcut-driven layout switch that fires both the layout-OSD and
+    // snap-assist shows back-to-back. The OSD's iTime stops updating
+    // until snap-assist's instantiation finishes, producing a visible
+    // pause in the OSD's fly-in. Async loading interleaves both
+    // surfaces' work so neither blocks the other.
     Loader {
         anchors.fill: parent
         active: root.loaded
+        asynchronous: true
         sourceComponent: contentComp
     }
 
