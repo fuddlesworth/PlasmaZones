@@ -115,12 +115,16 @@ void main() {
     // above for why iResolution is unsafe for "size of the card."
     vec2 fboSizePx = vec2(max(iResolution.x, 1.0), max(iResolution.y, 1.0));
 
-    // Card centre in clip space. GL clip-space Y is up, screen Y is
-    // down — flip on the way in.
+    // Card centre in clip space. Qt's QSGRenderNode convention matches
+    // the screen: clip-space Y = -1 is the top of the FBO and Y = +1
+    // is the bottom (same Y-down as the captured texture's UV). No flip
+    // here — a card at screen Y near 0 should land at clip-Y near -1
+    // and a card near the bottom of the screen should land at clip-Y
+    // near +1.
     vec2 cardCenterPx = iSurfaceScreenPos.xy + cardSize * 0.5;
     vec2 cardCenterClip;
     cardCenterClip.x = (cardCenterPx.x / fboSizePx.x) * 2.0 - 1.0;
-    cardCenterClip.y = -((cardCenterPx.y / fboSizePx.y) * 2.0 - 1.0);
+    cardCenterClip.y = (cardCenterPx.y / fboSizePx.y) * 2.0 - 1.0;
 
     // Card half-size relative to FBO, also in clip-space units.
     vec2 cardHalfClip = cardSize / fboSizePx;
