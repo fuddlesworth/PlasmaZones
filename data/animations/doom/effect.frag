@@ -5,7 +5,7 @@
 // downward at a noise-randomized speed; cell size grows with
 // progress; columns separate into chaotic streaks before sliding
 // off the bottom. Native port of the BMW close-direction
-// behaviour against our `iTime`/`iChannel0` contract.
+// behaviour against our `iTime`/`uTexture0` contract.
 //
 // ## iTime convention
 //
@@ -42,51 +42,19 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 #define maxPixelSize    customParams[0].x
 #define horizontalScale customParams[0].y
 #define verticalScale   customParams[0].z
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// 2D simplex noise — MIT-licensed (Inigo Quilez).
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-float simplex2D(vec2 p) {
-    const float K1 = 0.366025404;
-    const float K2 = 0.211324865;
-    vec2 i  = floor(p + (p.x + p.y) * K1);
-    vec2 a  = p - i + (i.x + i.y) * K2;
-    float m = step(a.y, a.x);
-    vec2 o  = vec2(m, 1.0 - m);
-    vec2 b  = a - o + K2;
-    vec2 c  = a - 1.0 + 2.0 * K2;
-    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    vec3 n  = h * h * h * h *
-            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
-                 dot(b, -1.0 + 2.0 * hash22(i + o)),
-                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
-    return 0.5 + 0.5 * dot(n, vec3(70.0));
-}
-
-// 4-octave fractal simplex. The fractal layering is what gives
-// adjacent columns differentiated fall speeds — single-octave
-// noise has too much spatial coherence and the columns end up
-// moving together. Same formulation BMW uses.
-float simplex2DFractal(vec2 p) {
-    mat2 m  = mat2(1.6, 1.2, -1.2, 1.6);
-    float f = 0.5000 * simplex2D(p);  p = m * p;
-    f      += 0.2500 * simplex2D(p);  p = m * p;
-    f      += 0.1250 * simplex2D(p);  p = m * p;
-    f      += 0.0625 * simplex2D(p);
-    return f;
-}
+// 4-octave fractal simplex (`simplex2DFractal`) hosted in noise.glsl —
+// the fractal layering is what gives adjacent columns differentiated
+// fall speeds; single-octave noise has too much spatial coherence and
+// the columns end up moving together. Same formulation BMW uses.
 
 void main()
 {
@@ -99,7 +67,14 @@ void main()
     // no-op — sampleUV sits at the per-pixel grid centre and the
     // sampler returns the exact source texel.
     float pixelSize = max(1.0, ceil(maxPixelSize * progress + 1.0));
-    vec2 pixelGrid  = vec2(pixelSize) / iResolution;
+    // Floor iResolution so an early-frame surface that hasn't reported
+    // its size (iResolution.x or .y == 0) doesn't divide-by-zero into
+    // an infinite pixelGrid OR collapse hScale below into a constant
+    // (every column getting the same noise → uniform shift for one
+    // frame instead of staggered melt). The first paintable frame
+    // replaces this with the real surface dimensions.
+    vec2 flooredResolution = max(iResolution, vec2(1.0));
+    vec2 pixelGrid  = vec2(pixelSize) / flooredResolution;
 
     // Snap to cell centre.
     vec2 cellUV = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
@@ -107,7 +82,7 @@ void main()
     // Per-column noise via 4-octave fractal. `cellUV.x * hScale`
     // fed as `vec2(x, 0)` collapses to 1D variation along x —
     // same column gets the same noise regardless of y.
-    float hScale = horizontalScale * iResolution.x * 0.001;
+    float hScale = horizontalScale * flooredResolution.x * 0.001;
     float noise  = simplex2DFractal(vec2(cellUV.x * hScale, 0.0)) * 2.0 - 0.5;
 
     // Vertical shift. The `0.00004` constant folds in BMW's
@@ -117,7 +92,7 @@ void main()
     // shift while a few high-noise columns get a small head start.
     // That's the spread that makes adjacent columns separate
     // visibly during the melt.
-    float vScale        = verticalScale * iResolution.y * 0.00004;
+    float vScale        = verticalScale * flooredResolution.y * 0.00004;
     float shiftProgress = mix(-vScale, 1.0 + vScale, progress);
     float shift         = noise * vScale + shiftProgress;
 
@@ -133,7 +108,7 @@ void main()
     // the bottom rather than smearing edge texels via clamp-to-edge.
     vec2 inside    = step(vec2(0.0), sampleUV) * step(sampleUV, vec2(1.0));
     float onScreen = inside.x * inside.y;
-    vec4 sampled   = texture(iChannel0, sampleUV) * onScreen;
+    vec4 sampled   = texture(uTexture0, sampleUV) * onScreen;
 
     // Top/bottom soft edge so the column tops fade rather than pop.
     float edgeFade = smoothstep(0.0, 0.1, uv.y) * smoothstep(0.0, 0.1, 1.0 - uv.y);

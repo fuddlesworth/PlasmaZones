@@ -23,6 +23,7 @@
 #include <atomic>
 
 #include <PhosphorWayland/LayerSurface.h>
+#include "qml_property_names.h"
 #include "../../core/logging.h"
 #include "../../core/enums.h"
 
@@ -55,8 +56,8 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWin
     if (!window) {
         return zones;
     }
-    const QString hid = window->property("highlightedZoneId").toString();
-    const QVariantList hids = window->property("highlightedZoneIds").toList();
+    const QString hid = window->property(OverlayQmlPropertyNames::HighlightedZoneId.data()).toString();
+    const QVariantList hids = window->property(OverlayQmlPropertyNames::HighlightedZoneIds.data()).toList();
 
     QVariantList out;
     for (const QVariant& z : zones) {

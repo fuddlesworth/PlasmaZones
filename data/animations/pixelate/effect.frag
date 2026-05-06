@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Pixelate transition — operates on the rendered surface (sampled
-// through iChannel0 at user-texture binding 7). Block size is driven
+// through uTexture0 at user-texture binding 7). Block size is driven
 // by `iTime` (per-leg progress driven by SurfaceAnimator's shaderTime
 // AnimatedValue): SurfaceAnimator runs iTime 0→1 on show and 1→0 on
 // hide. With `blockPx = (1 - iTime) * maxBlockSize` the surface
@@ -16,7 +16,7 @@
 // property-tagged item) as a live texture provider via
 // `ShaderEffect::setSourceItem` — the anchor's `layer.enabled` is
 // flipped to true so `QQuickItem::textureProvider()` returns a
-// per-frame FBO that the shader samples through `iChannel0` (SRB
+// per-frame FBO that the shader samples through `uTexture0` (SRB
 // binding 7). Re-rendered every frame the consumer dirties, so the
 // shader always sees the current rendered pixels rather than a
 // frozen snapshot. When no explicit `shaderAnchor` is found the leg
@@ -31,14 +31,6 @@
 // `maxBlockSize` is interpreted in NORMALISED UV units (0..1 across
 // the surface). 0.1 ≈ a 10×10 block grid at peak pixelation.
 #define maxBlockSize customParams[0].x
-
-// User texture slot 0 → SRB binding 7. SurfaceAnimator binds the
-// shaderAnchor's live `QSGTextureProvider` here (FBO from the layer-
-// enabled anchor). The sampler defaults to `clampToEdge / linear`
-// per ShaderNodeRhi::ensureUserTextureSampler; nearest-neighbour
-// would give crisper blocks but linear smooths over the layer-FBO
-// boundary on sub-pixel block sizes.
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -69,7 +61,7 @@ void main()
     // same texel — this is what produces the pixelation visual.
     vec2 cell = (floor(uv / blockPx) + 0.5) * blockPx;
 
-    vec4 sampled = texture(iChannel0, cell);
+    vec4 sampled = texture(uTexture0, cell);
 
     // The captured surface already encodes its own alpha; the parent-
     // chain scene-graph opacity is applied at blend time, so the

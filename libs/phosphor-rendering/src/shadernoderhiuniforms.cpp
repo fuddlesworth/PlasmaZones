@@ -33,6 +33,7 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
     m_baseUniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
     m_baseUniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
+    m_baseUniforms.iIsReversed = m_isReversed ? 1 : 0;
     // iDate only advances once per second. m_sceneDataDirty is set by every
     // mouse-move/resize event, so naïvely recomputing iDate whenever it's
     // true would hit QDateTime::currentDateTime() at 60+ Hz during
@@ -122,7 +123,8 @@ void ShaderNodeRhi::syncBaseUniforms()
 //   - Caller checked m_uniformExtension && extensionSize() > 0.
 //   - m_extensionStaging is sized to extensionSize(); we don't re-allocate
 //     when called repeatedly for the same extension.
-//   - Clears the extension's dirty bit and our m_extensionDirty mirror.
+//   - Clears the extension's dirty bit (the extension's own isDirty() is
+//     the authoritative upload gate — there is no node-side mirror).
 void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 {
     const int extSize = m_uniformExtension->extensionSize();
@@ -133,7 +135,6 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
     const int extOffset = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms));
     batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
     m_uniformExtension->clearDirty();
-    m_extensionDirty = false;
 }
 
 // ============================================================================
@@ -161,9 +162,10 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //                        (toggle), prepare() on feedback-buffer clear
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
-//                        setCustomColor, setAudioSpectrum, setUserTexture
+//                        setCustomColor, setAudioSpectrum, setUserTexture,
+//                        setIsReversed
 //   m_appFieldsDirty  ← setAppField0, setAppField1
-//   m_extensionDirty  ← tracked via m_uniformExtension->isDirty() (set by the
+//   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
 //   m_uniformsDirty   ← mirror: true if any of the five above are true
 // A setter that forgets to update m_uniformsDirty will correctly dirty its
@@ -193,14 +195,19 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_TIME_BLOCK_OFFSET);
                 }
-                if (m_timeHiDirty) {
+                // K_TIME_HI is subsumed by K_SCENE_HEADER. When both flags
+                // fire on the same frame, only the broader upload runs;
+                // the granular K_TIME_HI write only fires when scene-data
+                // is otherwise clean (the time-wrap-only path).
+                if (m_timeHiDirty && !m_sceneDataDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), K_TIME_HI_OFFSET, K_TIME_HI_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_TIME_HI_OFFSET);
                 }
                 if (m_sceneDataDirty) {
                     // Scene header: iResolution through end of BaseUniforms
-                    // (subsumes the appFields region — no need for a separate upload).
+                    // (subsumes the appFields, iTimeHi, and iIsReversed
+                    // regions — no need for separate uploads when this fires).
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_SCENE_HEADER_OFFSET);
@@ -211,13 +218,33 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_APP_FIELDS_OFFSET);
                 }
-                // Extension region: uploaded separately when dirty
+                // Extension region: uploaded separately when dirty.
+                // Track whether we've already uploaded the extension
+                // this frame so the defensive full-base fallback below
+                // doesn't re-upload it redundantly.
+                bool extensionUploaded = false;
                 if (extensionHasData && m_uniformExtension->isDirty()) {
                     uploadExtensionToUbo(batch);
+                    extensionUploaded = true;
                 }
-                // Defensive: if no granular flags set, do full base upload
+                // Defensive: if no granular flags set, do full base upload.
+                // Per the dirty-flag invariants documented above, this
+                // branch is normally unreachable when m_uniformsDirty=true
+                // (every setter that dirties m_uniformsDirty also dirties
+                // at least one granular flag), but a future setter that
+                // forgets the granular flag would silently skip the GPU
+                // write entirely without this safety net. Symmetric with
+                // the !m_didFullUploadOnce path above: if we fall back
+                // to a full base upload we must ALSO refresh the
+                // extension region (when present and not already
+                // uploaded above), otherwise an extension-only dirty
+                // in a future revision would land here and silently
+                // miss the upload.
                 if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
+                    if (extensionHasData && !extensionUploaded) {
+                        uploadExtensionToUbo(batch);
+                    }
                 }
             }
             if (!m_vboUploaded) {
@@ -227,7 +254,6 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             cb->resourceUpdate(batch);
             m_timeDirty = false;
             m_timeHiDirty = false;
-            m_extensionDirty = false;
             m_sceneDataDirty = false;
             m_appFieldsDirty = false;
             m_uniformsDirty = false;
@@ -298,8 +324,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     // User texture upload (bindings 7-10)
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureSamplers[i]) {
-            const QRhiSampler::AddressMode addr =
-                (m_userTextureWraps[i] == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            const QRhiSampler::AddressMode addr = wrapModeToRhiAddress(m_userTextureWraps[i]);
             m_userTextureSamplers[i].reset(
                 rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_userTextureSamplers[i]->create()) {
@@ -307,15 +332,48 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             }
             resetAllBindingsAndPipelines();
         }
-        if (!m_userTextureDirty[i] || !m_userTextures[i] || !m_userTextureSamplers[i]) {
+        // Sampler is the only hard prerequisite — m_userTextures[i] may be
+        // null after a previous failed create() on this slot, in which case
+        // the size-mismatch branch below allocates fresh. Without that gate
+        // relaxation the failed-create retry promised by the qCWarning text
+        // is structurally unreachable: the loop short-circuits on
+        // !m_userTextures[i] before line 354 ever runs again.
+        if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
-        m_userTextureDirty[i] = false;
         const QImage& img = m_userTextureImages[i];
-        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
-        if (m_userTextures[i]->pixelSize() != targetSize) {
+        QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
+        // Clamp against the device's hard texture-size limit. A user-supplied
+        // PNG larger than the device max (commonly 16384 on desktop GPUs but
+        // as low as 4096 on some mobile/Vulkan drivers) would otherwise hit
+        // newTexture()->create() == false below. Clamping to the device limit
+        // is a graceful degradation — the texture upload below will scale-fit
+        // the image into the clamped bounds via QRhi's blit semantics.
+        const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+        if (textureSizeMax > 0 && (targetSize.width() > textureSizeMax || targetSize.height() > textureSizeMax)) {
+            qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
+                                    << "exceeds device TextureSizeMax" << textureSizeMax << ", clamping";
+            targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
+        }
+        // Branch covers two cases uniformly:
+        //   (a) initial allocation when m_userTextures[i] is null (after a
+        //       prior failed create reset us to nullptr).
+        //   (b) resize when the existing texture's pixel size doesn't match
+        //       the new target.
+        if (!m_userTextures[i] || m_userTextures[i]->pixelSize() != targetSize) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!m_userTextures[i]->create()) {
+                qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
+                                        << ", slot will retry next frame";
+                // Reset to nullptr so appendUserTextureBindings() skips the
+                // slot via its truthiness gate (the SRB must NOT bind a
+                // failed texture; it would wire a non-functional GPU resource
+                // into the pipeline). Keep dirty=true so the next prepare()
+                // pass retries — the relaxed gate above lets a null pointer
+                // re-enter this branch on the next frame, so a transient
+                // RHI-side condition (OOM, device loss, post-clamp size
+                // acceptance) can clear and the slot self-heals.
+                m_userTextures[i].reset();
                 continue;
             }
             resetAllBindingsAndPipelines();
@@ -323,6 +381,9 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
         }
+        // Clear dirty AFTER successful create so a transient failure above
+        // keeps the slot scheduled for retry.
+        m_userTextureDirty[i] = false;
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
@@ -518,7 +579,6 @@ void ShaderNodeRhi::releaseRhiResources()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_timeHiDirty = true;
-    m_extensionDirty = true;
     m_sceneDataDirty = true;
     m_appFieldsDirty = true;
     m_audioSpectrumDirty = true;
@@ -543,11 +603,6 @@ void ShaderNodeRhi::bakeBufferShaders()
         bool allOk = true;
         for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses; ++i) {
             const QString& path = m_bufferPaths.at(i);
-            // Capture mtime BEFORE the read so the cache key reflects the
-            // version of the file we actually loaded. Reading mtime after
-            // loadAndExpand opens a TOCTOU window where a concurrent edit
-            // would associate new mtime with old content in the bake cache.
-            const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
             QString err;
             QString src = loadAndExpandShader(path, &err);
             if (src.isEmpty()) {
@@ -558,7 +613,11 @@ void ShaderNodeRhi::bakeBufferShaders()
                 break;
             }
             m_multiBufferFragmentShaderSources[i] = src;
-            m_multiBufferMtimes[i] = mtime;
+            // Buffer-pass shaders are compiled directly via ShaderCompiler::compile
+            // and do NOT participate in the filename bake cache (which is keyed
+            // off the main vertex+fragment pair). Tracking per-pass mtimes
+            // bought nothing; the value was written and never read. Removed
+            // rather than left as dead state.
             auto result = ShaderCompiler::compile(src.toUtf8(), QShader::FragmentStage);
             m_multiBufferFragmentShaders[i] = result.shader;
             if (!m_multiBufferFragmentShaders[i].isValid()) {
@@ -590,15 +649,13 @@ void ShaderNodeRhi::bakeBufferShaders()
         m_bufferShaderDirty = false;
         m_bufferShaderReady = false;
         if (m_bufferFragmentShaderSource.isEmpty()) {
-            // Capture mtime BEFORE the read (TOCTOU-safe cache key) and skip
-            // the redundant exists() check — loadAndExpandShader returns an
-            // empty string on missing/unreadable, which is the gate we need.
-            const qint64 mtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
+            // Skip the redundant exists() check — loadAndExpandShader returns
+            // an empty string on missing/unreadable, which is the gate we
+            // need. Buffer-pass shaders bypass the filename bake cache (see
+            // multi-buffer branch above), so no mtime tracking is needed.
             QString err;
             m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
-            if (!m_bufferFragmentShaderSource.isEmpty()) {
-                m_bufferMtime = mtime;
-            } else {
+            if (m_bufferFragmentShaderSource.isEmpty()) {
                 // The eager load in setBufferShaderPaths used to surface
                 // load errors at setter time; deferring the load to here
                 // means a silent empty-source loop unless we log + retry.

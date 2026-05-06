@@ -170,12 +170,11 @@ set(phosphoranimation_SRCS
     src/animationshaderregistry.cpp
     src/shaderprofile.cpp
     src/shaderprofiletree.cpp
+    src/contract_pins.cpp
 
     # Layer animator (ex phosphor-animation-layer)
     src/surfaceanimator.cpp
 )
-
-set(phosphoranimation_detail_HDRS)
 
 # ===============================================================================
 # QML module sources (shared between STATIC and SHARED modules)
@@ -200,7 +199,6 @@ set(_phosphor_animation_qml_sources
 
 add_library(PhosphorAnimation SHARED
     ${phosphoranimation_public_HDRS}
-    ${phosphoranimation_detail_HDRS}
     ${phosphoranimation_SRCS}
 )
 

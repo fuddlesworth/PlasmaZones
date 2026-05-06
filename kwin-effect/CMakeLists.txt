@@ -16,7 +16,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui DBus Widgets Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui DBus Widgets Qml Quick Svg)
 set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
@@ -83,6 +83,7 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # setProperty) and Quick (QQuickItem* root) are needed.
     Qt6::Qml
     Qt6::Quick
+    Qt6::Svg
     plasmazones_compositor_common
     PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly
@@ -94,10 +95,9 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
     # ShaderIncludeResolver: kwin-effect resolves `#include` directives
-    # in animation shader source before running the UBO→default-block
-    # rewriter (KWin::GLShader's classic-GL pipeline doesn't bind UBOs;
-    # see `AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock`
-    # in libs/phosphor-animation).
+    # in animation shader source so the canonical header inlines before
+    # the `#define PLASMAZONES_KWIN` injection selects its default-block
+    # branch (KWin::GLShader's classic-GL pipeline doesn't bind UBOs).
     PhosphorShaders::PhosphorShaders
 )
 

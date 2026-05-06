@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Dissolve transition — operates on the rendered surface sampled via
-// iChannel0 (SRB binding 7). SurfaceAnimator binds the shaderAnchor's
+// uTexture0 (SRB binding 7). SurfaceAnimator binds the shaderAnchor's
 // live `QSGTextureProvider` through `ShaderEffect::setSourceItem`,
 // so the shader sees the current rendered pixels rather than a
 // pre-leg snapshot. Per-cell noise gates the surface's alpha against
@@ -19,12 +19,6 @@
 // metadata.json declaration order → customParams[0] sub-slots
 #define grain    customParams[0].x  // noise cell size in normalised UV units
 #define softness customParams[0].y  // edge softness
-
-// Surface texture slot — SurfaceAnimator binds the shaderAnchor's
-// `QSGTextureProvider` here (live FBO from layer.enabled=true on
-// the anchor). See pixelate/effect.frag for the full binding-7
-// rationale.
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -52,10 +46,13 @@ void main()
     float gate = smoothstep(visibility - soft, visibility + soft, noise);
 
     // Sample the captured surface and gate it on the per-cell noise.
-    // gate==0 → cell hidden (alpha 0); gate==1 → cell at full
+    // `gate` from the smoothstep above runs from 1 (cell still hidden,
+    // visibility hasn't reached this cell's noise threshold) down to 0
+    // (cell fully revealed). The output uses `(1 - gate)` so the cell
+    // alpha runs the visible direction: 0 → hidden, 1 → at full
     // surface alpha. Multiplying both colour and alpha keeps the
     // pre-multiplied-alpha invariant the daemon's blend pipeline
     // expects.
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     fragColor = sampled * (1.0 - gate);
 }

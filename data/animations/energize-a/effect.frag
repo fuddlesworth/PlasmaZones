@@ -6,7 +6,7 @@
 // concentrated central heart-glow that flares as the window
 // disappears. Visually inspired by the equivalent effect in
 // Burn-My-Windows (energize-a.frag, Simon Schneegans), but written
-// natively against our `iTime`/`iChannel0` contract rather than
+// natively against our `iTime`/`uTexture0` contract rather than
 // translating their `uProgress`/`uForOpening` model.
 //
 // ## iTime convention
@@ -30,7 +30,7 @@
 //
 // ## Compositing
 //
-// `iChannel0` carries premultiplied alpha (Qt RHI / KWin
+// `uTexture0` carries premultiplied alpha (Qt RHI / KWin
 // convention). We tint the premultiplied window toward the effect
 // colour as it fades, scale by the window-alpha envelope, and add
 // particle emission additively — particles emit their own light
@@ -39,6 +39,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define colorR        customParams[0].x
@@ -46,36 +47,14 @@
 #define colorB        customParams[0].z
 #define particleScale customParams[0].w
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 // 2D simplex noise — MIT-licensed (Inigo Quilez,
 // https://www.shadertoy.com/view/Msf3WH). Used for the per-pixel
 // sparkle field; cheaper than 3D and the time animation is folded
-// into the input UV instead of a third axis.
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-float simplex2D(vec2 p) {
-    const float K1 = 0.366025404;
-    const float K2 = 0.211324865;
-    vec2 i  = floor(p + (p.x + p.y) * K1);
-    vec2 a  = p - i + (i.x + i.y) * K2;
-    float m = step(a.y, a.x);
-    vec2 o  = vec2(m, 1.0 - m);
-    vec2 b  = a - o + K2;
-    vec2 c  = a - 1.0 + 2.0 * K2;
-    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    vec3 n  = h * h * h * h *
-            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
-                 dot(b, -1.0 + 2.0 * hash22(i + o)),
-                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
-    return 0.5 + 0.5 * dot(n, vec3(70.0));
-}
+// into the input UV instead of a third axis. Definitions in
+// shared/noise.glsl.
 
 void main()
 {
@@ -151,7 +130,11 @@ void main()
     const float CELL_FINE = 6.0;
     const float CELL_MED  = 18.0;
 
-    vec2 pixelUV = (uv - 0.5) * iResolution / max(pScale, 0.05);
+    // Floor iResolution so a first-frame zero-sized surface doesn't
+    // collapse pixelUV to (0,0) and flatten the entire sparkle field
+    // for one paint. Matches the early-frame defence used by
+    // pixelate/doom/honeycomb at the same divide site.
+    vec2 pixelUV = (uv - 0.5) * max(iResolution, vec2(1.0)) / max(pScale, 0.05);
 
     // Layer A: dense fine sparkles — small cells, fast-evolving offset.
     // The 2D-offset trick (animating the lookup position via a slowly
@@ -187,7 +170,7 @@ void main()
     // pre-multiplied space, so we scale the effect colour by the
     // sampled alpha to avoid the "halo of effect colour around
     // transparent regions" artefact that plain mix would produce.
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     float tint = 0.25 * (1.0 - windowAlpha);
     sampled.rgb = mix(sampled.rgb, effectColor * sampled.a, tint);
     sampled *= windowAlpha;

@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "zoneshadercommon.h"
-
+#include <PhosphorRendering/ZoneShaderCommon.h>
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 
 #include <plasmazones_rendering_export.h>
@@ -14,18 +13,14 @@
 
 namespace PlasmaZones {
 
-/// PlasmaZones-flavoured ZoneShaderNodeRhi. The class itself is shared with
-/// PhosphorRendering; this typedef + the include-path discovery below
-/// (warmShaderBakeCacheForPaths) is what's PlasmaZones-specific — the daemon
-/// installs its bundled shaders under "plasmazones/shaders".
-using ZoneShaderNodeRhi = PhosphorRendering::ZoneShaderNodeRhi;
-
-/** Alias for PhosphorRendering::WarmShaderBakeResult — avoids type duplication. */
-using WarmShaderBakeResult = PhosphorRendering::WarmShaderBakeResult;
-
 /**
  * Pre-load cache warming: load, bake, and insert shaders for the given paths into the
  * shared bake cache. Safe to call from any thread (e.g. after ShaderRegistry::refresh()).
+ *
+ * The PlasmaZones-specific bit is the include-path discovery — the daemon installs
+ * its bundled shaders under "plasmazones/shaders". The render-node class itself
+ * (`PhosphorRendering::ZoneShaderNodeRhi`) is shared with the broader rendering
+ * library; callers reference it via its full qualified name.
  *
  * @param vertexPath    absolute path to the vertex shader on disk
  * @param fragmentPath  absolute path to the fragment shader on disk
@@ -35,8 +30,8 @@ using WarmShaderBakeResult = PhosphorRendering::WarmShaderBakeResult;
  *                      includes will only resolve relative to the shader file itself.
  * @return success and error message (e.g. from QShaderBaker) for UI reporting
  */
-PLASMAZONES_RENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath,
-                                                                              const QString& fragmentPath,
-                                                                              const QStringList& includePaths = {});
+PLASMAZONES_RENDERING_EXPORT PhosphorRendering::WarmShaderBakeResult
+warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath,
+                            const QStringList& includePaths = {});
 
 } // namespace PlasmaZones

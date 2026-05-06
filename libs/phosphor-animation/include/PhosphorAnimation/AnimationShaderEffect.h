@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QJsonObject>
+#include <QList>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
@@ -140,6 +141,34 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// (see data/animations/morph/effect.frag for the canonical pattern).
     qreal boundsPadding = 0.0;
 
+    /// Hard ceiling on `boundsPadding`. SHARED source-of-truth between
+    /// the metadata clamp in `AnimationShaderEffect::fromJson` /
+    /// `toJson` and the runtime clamp in
+    /// `surfaceanimator.cpp::kMaxBoundsPaddingFraction`. Drift between
+    /// the two would silently allow a programmatic in-memory effect to
+    /// exceed the FBO-size budget that the metadata clamp enforces.
+    /// At pad=2.0 the shader effect is 5x the anchor on each axis
+    /// (k=1+2*pad=5) -> 25x area; a 1080p RGBA8 FBO at that scale
+    /// is already ~200 MB, the edge of what Vulkan validation passes
+    /// on integrated GPUs. No shipping shader needs >1.0 (morph uses
+    /// 0.5); 2.0 accommodates plugin authors with extreme silhouette
+    /// warps without permitting prior 4.0-cap excess (9x axis = 81x
+    /// area).
+    static constexpr qreal kMaxBoundsPadding = 2.0;
+
+    /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
+    /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —
+    /// the lowest cost-floor that still gives Shadertoy-style buffer
+    /// effects something to work with). 1.0 means full-resolution
+    /// FBOs (no downscale). Hosted here as the source-of-truth that
+    /// `fromJson`'s clamp + the round-trip stability comment in
+    /// `toJson` reference; a future runtime that consumes bufferScale
+    /// from a non-JSON source can read these constants directly.
+    static constexpr qreal kMinBufferScale = 0.125;
+    static constexpr qreal kMaxBufferScale = 1.0;
+    static_assert(kMinBufferScale > 0.0 && kMinBufferScale < kMaxBufferScale,
+                  "kMinBufferScale must be positive and strictly less than kMaxBufferScale");
+
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.
     /// Field names mirror the regular shader pack format
@@ -166,6 +195,43 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     };
     QList<ParameterInfo> parameters;
 
+    /// User texture slot. Each entry binds an asset file to one of the
+    /// canonical samplers `iChannel1` / `iChannel2` / `iChannel3` (slots
+    /// 0 / 1 / 2 here, which the runtimes map to texture-unit
+    /// allocations 1 / 2 / 3 — slot 0 of the binding-7+ region is the
+    /// surface itself / `iChannel0`, never user-declared).
+    ///
+    /// `path` is resolved relative to the effect's `sourceDir`. Loading
+    /// failures are non-fatal — the effect still installs and the
+    /// affected sampler reads transparent black; a `qCWarning` logs the
+    /// missing file. `wrap` mirrors the daemon-side overlay shader
+    /// vocabulary; the only accepted values are `"clamp"`, `"repeat"`,
+    /// `"mirror"`, and the empty string (which selects the runtime
+    /// default of clamp). Any other value is rejected by `fromJson` with
+    /// a `qCWarning` and stored as empty, so the runtime falls back to
+    /// the default rather than silently re-persisting the typo. Filter
+    /// mode is not exposed here — both runtimes use linear filtering
+    /// for user textures today. The slot index is the 0-based position
+    /// in this list: the first entry binds to `iChannel1`, the second
+    /// to `iChannel2`, etc. Up to three textures per effect; surplus
+    /// entries are silently dropped at parse time.
+    struct TextureSlot
+    {
+        QString path; ///< Filename relative to the effect's sourceDir.
+        QString
+            wrap; ///< "clamp" / "repeat" / "mirror"; empty = runtime default. Other values are rejected by fromJson.
+
+        bool operator==(const TextureSlot& other) const
+        {
+            return path == other.path && wrap == other.wrap;
+        }
+        bool operator!=(const TextureSlot& other) const
+        {
+            return !(*this == other);
+        }
+    };
+    QList<TextureSlot> textures;
+
     bool isValid() const
     {
         return !id.isEmpty() && !fragmentShaderPath.isEmpty();
@@ -182,3 +248,10 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 };
 
 } // namespace PhosphorAnimationShaders
+
+// Mark TextureSlot as relocatable so QList can move-construct entries
+// in-place during reallocation rather than running the copy/move ctor
+// per element. The struct is two QStrings; QString itself is already
+// Q_RELOCATABLE_TYPE, so the aggregate is safely bitwise-relocatable.
+// Must sit at file scope outside the namespace per Qt convention.
+Q_DECLARE_TYPEINFO(PhosphorAnimationShaders::AnimationShaderEffect::TextureSlot, Q_RELOCATABLE_TYPE);

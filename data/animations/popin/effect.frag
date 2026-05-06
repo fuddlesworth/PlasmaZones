@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Pop-in transition — center-anchored zoom of the rendered surface
-// (sampled through iChannel0) with optional overshoot. Previously a
+// (sampled through uTexture0) with optional overshoot. Previously a
 // stub that emitted a flat white mask; now scales the actual surface
 // from `scaleFrom` up through `1 + overshoot` and settles at 1.0.
 
@@ -13,8 +13,6 @@
 // metadata.json declaration order → customParams[0] sub-slots
 #define scaleFrom customParams[0].x
 #define overshoot customParams[0].y
-
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -51,12 +49,14 @@ void main()
     // zoomed-out, but with overshoot bouncing past 1 and back).
     vec2 sampleUv = (uv - center) / max(scale, 0.001) + center;
 
-    // Outside the texture's [0,1] range = beyond the surface; output
-    // transparent so the pop-in reads as a focused zoom rather than
-    // a stretched edge bleed.
-    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-    fragColor = texture(iChannel0, sampleUv);
+    // Outside the texture's [0,1] range = beyond the surface; fade to
+    // transparent so the pop-in reads as a focused zoom rather than a
+    // stretched edge bleed. A soft 0.005-wide smoothstep band replaces
+    // the prior hard `if (outside) return vec4(0)` — the hard cutoff
+    // produced a visible 1-texel discontinuity during the overshoot
+    // phase when inverse-scaled UV briefly leaves [0,1].
+    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sampleUv);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sampleUv);
+    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+    fragColor = texture(uTexture0, sampleUv) * mask;
 }

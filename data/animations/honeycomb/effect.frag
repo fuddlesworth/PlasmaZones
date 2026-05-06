@@ -10,16 +10,19 @@
 // screenshot 1:1 instead of approximating it with a different
 // rectangular-Voronoi formulation.
 //
-// Niri host bindings → PlasmaZones equivalents:
+// Niri-port note: this shader does NOT translate niri's random_seed to
+// a hexSize uniform (PlasmaZones uses hexSize as a hex-cell-size param
+// distinct from any random seed concept). Where niri parameters have no
+// PlasmaZones counterpart, the relevant niri features (e.g. random
+// column phase) are removed in this port.
+//
+// Niri host bindings → PlasmaZones equivalents (mappings only, not
+// renames):
 //   niri_clamped_progress  →  iTime          (per-leg [0,1] from
 //                                             SurfaceAnimator's
 //                                             shaderTime AV)
-//   niri_random_seed       →  hexSize param  (metadata.json exposes
-//                                             cell radius directly
-//                                             instead of a per-window
-//                                             random)
 //   soft_edge_width = 0.15 →  softEdge param (also exposed)
-//   niri_tex               →  iChannel0      (live FBO of the
+//   niri_tex               →  uTexture0      (live FBO of the
 //                                             shaderAnchor item, SRB
 //                                             binding 7)
 //   niri_geo_to_tex        →  identity       (vTexCoord is already in
@@ -50,8 +53,6 @@
 //                   reveal cadence reads identically.
 #define hexSize  customParams[0].x
 #define softEdge customParams[0].y
-
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -118,10 +119,15 @@ void main()
 
     // Aspect-correct so cells stay regular on non-square surfaces.
     // iResolution is in LOGICAL units per
-    // shared/animation_uniforms.glsl; the 0.001 floor guards against
-    // zero-height anchors without distorting aspect on sub-1-logical-
-    // pixel cases the way a 1.0 floor would.
-    float aspectRatio = iResolution.x / max(iResolution.y, 0.001);
+    // shared/animation_uniforms.glsl; the 1.0 floor guards against
+    // first-frame `iResolution = (0, 0)` and matches the rest of the
+    // suite's defensive pattern (matrix/hexagon/pixelate). A
+    // sub-pixel y of 0.001 would explode the aspectRatio to ~1000
+    // and warp the hex cells into thin slivers. Floor the numerator
+    // too so a first-frame iResolution.x of 0 doesn't collapse the
+    // ratio to 0 and warp the hex grid for one paint.
+    vec2 flooredResolution = max(iResolution, vec2(1.0));
+    float aspectRatio = flooredResolution.x / flooredResolution.y;
 
     vec2 normalizedCoords = vec2(vTexCoord.x * aspectRatio, vTexCoord.y);
     vec2 normalizedCenter = vec2(0.5 * aspectRatio, 0.5);
@@ -167,17 +173,18 @@ void main()
     // transparent → partial → more-partial → solid as the wave
     // sweeps across them, instead of melting smoothly.
     //
-    // 5 steps (0, 0.25, 0.5, 0.75, 1.0) is enough to read as discrete
-    // increments at popup scale without making the transition feel
-    // jerky on a 2 s show animation. `floor(x * N + 0.5) / N` is the
-    // canonical "round to nearest of N+1 levels" snap.
-    const float kOpacitySteps = 4.0;
-    float steppedMask = floor(mask * kOpacitySteps + 0.5) / kOpacitySteps;
+    // 4 divisions producing 5 distinct levels (0, 0.25, 0.5, 0.75, 1.0)
+    // is enough to read as discrete increments at popup scale without
+    // making the transition feel jerky on a 2 s show animation.
+    // `floor(x * N + 0.5) / N` is the canonical "round to nearest of
+    // N+1 levels" snap.
+    const float kOpacityDivisions = 4.0;
+    float steppedMask = floor(mask * kOpacityDivisions + 0.5) / kOpacityDivisions;
 
     // Sample the live anchor FBO and gate it on the radial mask.
     // Premult-alpha invariant: multiplying both colour and alpha by
     // the same scalar keeps the daemon's blend pipeline composing
     // correctly with the parent chain's opacity.
-    vec4 sampled = texture(iChannel0, vTexCoord);
+    vec4 sampled = texture(uTexture0, vTexCoord);
     fragColor = sampled * (1.0 - steppedMask);
 }

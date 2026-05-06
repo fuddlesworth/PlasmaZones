@@ -33,13 +33,6 @@ import org.plasmazones.common as PZCommon
  *   - collapsible: bool — header click collapses the body
  */
 Item {
-    // Apply a single shader-param edit through the standard pipeline:
-    // replace the whole map (QML reactivity needs a new identity, not an
-    // in-place mutation), update the local cache so the editor doesn't
-    // wait for the round-trip, and persist via the controller. Used by
-    // both the inline param editor and the color dialog so the two
-    // paths can't drift.
-
     id: root
 
     required property string eventPath
@@ -90,7 +83,12 @@ Item {
     property int _inheritRev: 0
     readonly property var _inheritResolved: {
         _inheritRev;
-        return settingsController.animationsPage.resolvedProfile(root.eventPath);
+        // Coerce to {} when the Q_INVOKABLE returns undefined / null
+        // (mid-warmup, malformed path) so downstream `r.curve` /
+        // `r.duration` reads don't throw and the bindings fall back
+        // cleanly to the curve / duration defaults below.
+        return settingsController.animationsPage.resolvedProfile(root.eventPath) || ({
+        });
     }
     // True only for event paths the daemon's overlay service actually
     // consumes as a shader-leg surface. Gates the shader picker, the
@@ -209,7 +207,35 @@ Item {
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
         var resolved = settingsController.animationsPage.resolvedProfile(root.eventPath);
         var hasRaw = raw && Object.keys(raw).length > 0;
-        root.overrideEnabled = hasRaw;
+        // The card's "Override" toggle reflects ANY direct override at
+        // this path — timing curve OR shader assignment. Without the
+        // shader half, a user could see an event toggle "off" while a
+        // matrix shader was actively firing on every fire of that event
+        // (timing override clear, shader override still set), which
+        // exactly matches the user-reported "I turned this off but
+        // shaders still animate" bug. Reading rawShaderProfile here
+        // makes the toggle's checked state honest about both axes.
+        // rawShaderProfile returns {} when there's no direct override at
+        // this path; any non-empty map (effectId set, parameters set, etc.)
+        // indicates a direct override. Mirrors the rawProfile check above.
+        // Engaged-empty effectId is the "explicitly disabled" sentinel
+        // (writes an inheritance-blocking override at this path; see
+        // AnimationsPageController::setShaderOverride). The toggle should
+        // read OFF for that state — the user has explicitly turned this
+        // event off, not configured it. Only an engaged-NON-empty
+        // effectId, or any other shader-profile content (parameters
+        // map), counts as "configured ON".
+        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
+        // Boolean-coerce every short-circuit result. The `&&` chain
+        // returns the first falsy operand (which can be `null` or
+        // `undefined`, NOT `false`), and QML's typed `bool` property
+        // setter rejects `undefined` with "Cannot assign [undefined] to
+        // bool". Wrap each predicate in Boolean() so the assignment
+        // always lands a real true/false.
+        var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
+        var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
+        var hasShader = hasShaderEffect || hasShaderParams;
+        root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // Effective values feed the controls. When override is off the
         // controls preview "what would happen if you turned it on" =
         // the resolved profile from the parent chain. When on, the
@@ -245,6 +271,19 @@ Item {
         settingsController.animationsPage.setOverride(root.eventPath, profile);
     }
 
+    // Current emitters that pass empty-path: `shaderProfileChanged`
+    // ONLY (fires with `QString()` on full-tree reload). Every other
+    // emitter (e.g. `overrideChanged`) always passes a real path.
+    // The empty-path carve-out is forward-defense for any future
+    // global-broadcast emitter so signal handlers don't silently miss
+    // a tree-wide reload.
+    function _pathAffectsThisCard(path) {
+        if (path === "")
+            return true;
+
+        return path === root.eventPath || root.eventPath.startsWith(path + ".");
+    }
+
     implicitHeight: card.implicitHeight
     Layout.fillWidth: true
     Component.onCompleted: {
@@ -252,22 +291,45 @@ Item {
         refreshShaderFromTree();
     }
 
-    // Pick up changes from any path in the tree — could be this event
-    // (user toggled override) or an ancestor (we're inheriting from it
-    // and the inherited value just changed). The signal is per-path
-    // but it's cheap to just refresh.
     Connections {
         function onOverrideChanged(path) {
+            // _pathAffectsThisCard treats path === "" as "tree fully
+            // reloaded" broadcast and returns true unconditionally, so
+            // a single check covers both per-path filtering and the
+            // global-broadcast carve-out.
+            if (!root._pathAffectsThisCard(path))
+                return ;
+
             root.refreshFromTree();
             // The signal is per-path but the resolved profile depends on
-            // the entire ancestor chain, so any change anywhere can shift
-            // the inheritance banner. Bump the revision tick to invalidate
-            // _inheritResolved.
+            // the entire ancestor chain, so any change at-or-above this
+            // path can shift the inheritance banner. Bump the revision
+            // tick to invalidate _inheritResolved.
             root._inheritRev++;
         }
 
         function onShaderProfileChanged(path) {
+            // Empty-string path is the controller's "tree fully reloaded"
+            // broadcast — set/clear/clearDescendants all route through
+            // `Settings::setShaderProfileTree` which the controller
+            // relays as a single path-agnostic emit (see
+            // `animationspagecontroller.cpp` — `Q_EMIT
+            // shaderProfileChanged(QString())`). _pathAffectsThisCard
+            // treats "" as the broadcast sentinel and returns true so
+            // every card refreshes for it; per-path emits still get
+            // the prefix filter.
+            if (!root._pathAffectsThisCard(path))
+                return ;
+
             root.refreshShaderFromTree();
+            // The card's "Override" toggle now reflects whether either
+            // a timing OR a shader override exists at this path, so a
+            // shader-only change has to re-flip refreshFromTree's
+            // overrideEnabled binding too. Without this, clearing the
+            // shader on a path with no timing override would leave the
+            // toggle visually "on" until something else triggered a
+            // refreshFromTree call.
+            root.refreshFromTree();
         }
 
         function onShaderEffectsChanged() {
@@ -289,6 +351,20 @@ Item {
         // `root.<id>` references would silently resolve to undefined
         // (defaulting `visible:` to true and showing the picker on
         // every event regardless of daemon support).
+        // Toggle OFF semantic: clear timing override AND write
+        // an inheritance-blocking shader override. Plain
+        // `clearShaderOverride` only removes the entry at this
+        // path, leaving inheritance from an ancestor (e.g.
+        // `panel` -> "dissolve") to cascade down — exactly the
+        // user-reported "I disabled all popups but dissolve
+        // still plays" bug. `setShaderOverride(path, "", {})`
+        // writes an engaged-empty effectId that
+        // `ShaderProfile::overlay` treats as "explicitly no
+        // shader", winning over the parent's effectId and
+        // blocking the cascade. Same call works for parent
+        // cards (popup, window, osd, etc.) so a single
+        // OFF toggle on the parent disables every descendant
+        // that doesn't have its own override.
 
         id: card
 
@@ -298,10 +374,24 @@ Item {
         toggleChecked: root.alwaysEnabled || root.overrideEnabled
         collapsible: root.collapsible
         onToggleClicked: function(checked) {
-            if (checked)
+            if (checked) {
                 root.commitOverride();
-            else
+            } else {
+                // Ordering: write the inheritance-blocking shader
+                // sentinel FIRST, then clear the timing override. If
+                // the timing clear ever fails mid-flight (e.g. QFile
+                // out-of-disk error inside `clearOverride`'s on-disk
+                // write), the shader sentinel is already persisted —
+                // the user's "disable" intent is recorded in the
+                // shader tree even if the timing-side write rolls back.
+                // The reverse order would record neither on a partial
+                // failure, dropping the disable intent entirely.
+                if (root._shaderLegSupported)
+                    settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
+                }));
+
                 settingsController.animationsPage.clearOverride(root.eventPath);
+            }
         }
 
         contentItem: ColumnLayout {
@@ -339,7 +429,7 @@ Item {
                 Layout.fillWidth: true
                 type: Kirigami.MessageType.Warning
                 visible: root.isParentNode && root._shadowingChildrenCount > 0
-                text: i18np("%n child event has a shader override that overrides this parent.", "%n child events have shader overrides that override this parent.", root._shadowingChildrenCount)
+                text: i18np("%n descendant event has a shader override that shadows this parent.", "%n descendant events have shader overrides that shadow this parent.", root._shadowingChildrenCount)
                 actions: [
                     Kirigami.Action {
                         text: i18n("Clear shadowing children")
@@ -467,6 +557,20 @@ Item {
                 description: i18n("Apply a shader transition to this event")
 
                 PZCommon.ShaderPickerButton {
+                    // "None" semantically means "no shader runs
+                    // at this event" — write the engaged-empty
+                    // sentinel (`setShaderOverride(path, "")`)
+                    // so it BLOCKS inheritance from an ancestor.
+                    // Without this, picking None on a child
+                    // event whose parent ("All Window Events"
+                    // etc.) has a shader assigned was a no-op:
+                    // clearShaderOverride would just remove a
+                    // direct override that doesn't exist, and
+                    // the parent's shader would keep cascading
+                    // down — directly contradicting the user's
+                    // pick.
+                    // refresh handled by onShaderProfileChanged broadcast handler
+
                     // `availableShaderEffects()` is a Q_INVOKABLE — QML's
                     // binding engine can't observe internal state of an
                     // opaque function call. The card's root-level
@@ -477,7 +581,12 @@ Item {
                     id: shaderPicker
 
                     readonly property var _effects: {
-                        root._shaderRegistryRev; // re-evaluate when the registry signals
+                        // Tracked dependency: re-evaluate when the registry
+                        // signals shaderEffectsChanged (ticks _shaderRegistryRev).
+                        // `void()` makes the discard intent explicit and stops
+                        // any future code formatter / linter from flagging the
+                        // bare expression as a dead statement.
+                        void (root._shaderRegistryRev);
                         return settingsController.animationsPage.availableShaderEffects();
                     }
 
@@ -497,21 +606,49 @@ Item {
                     includeNoneEntry: true
                     placeholderText: i18nc("@action:button", "Select shader…")
                     onShaderSelected: function(id) {
-                        if (id.length === 0) {
-                            settingsController.animationsPage.clearShaderOverride(root.eventPath);
+                        // Coerce undefined / null to "" so the empty-id
+                        // check below doesn't throw on a model that
+                        // emits a non-string sentinel for a cleared
+                        // selection.
+                        var sid = id || "";
+                        var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
+                        var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
+                        if (sid.length === 0) {
+                            // Skip the write when the path already holds
+                            // the engaged-empty sentinel (directEffectId
+                            // === "" AND there's a direct override).
+                            // Engaged-empty serialises with effectId
+                            // present-but-empty, so rawShader will be
+                            // truthy with effectId = "".
+                            var alreadyDisabled = rawShader && typeof rawShader.effectId === "string" && rawShader.effectId === "";
+                            if (alreadyDisabled)
+                                return ;
+
+                            settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
+                            }));
+                            // refresh handled by onShaderProfileChanged broadcast handler
                             return ;
                         }
-                        // Re-pick of the same shader is a no-op: skip the
-                        // D-Bus round-trip to avoid bumping dirty-tracking
-                        // for a non-change.
-                        if (id === root.currentShaderEffectId)
+                        // No-op when the user re-picks the value already
+                        // sitting at this path's DIRECT override. Compare
+                        // against the raw direct override (NOT the
+                        // resolved/inherited value): if the parent has
+                        // shader X and the child is currently inheriting
+                        // it, picking X explicitly on the child is the
+                        // user "promoting" the inherited value to a
+                        // direct override at this path — that intent must
+                        // produce a real write so a future parent change
+                        // doesn't silently move the child off X.
+                        if (sid === directEffectId)
                             return ;
 
-                        // Switching to a DIFFERENT effect: drop the previous
-                        // effect's parameter map — the new effect's schema is
-                        // unrelated, so carrying old keys persists dead values
-                        // on disk that the daemon can't validate.
-                        settingsController.animationsPage.setShaderOverride(root.eventPath, id, ({
+                        // Switching to a DIFFERENT effect (or promoting an
+                        // inherited value to a direct override): drop the
+                        // previous effect's parameter map — the new
+                        // effect's schema is unrelated, so carrying old
+                        // keys persists dead values on disk that the
+                        // daemon can't validate.
+                        settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
                         }));
                     }
                 }
@@ -565,7 +702,19 @@ Item {
     }
 
     // Pop the editor as a window-level dialog so it doesn't get clipped
-    // by the scrolling Flickable that hosts the card.
+    // by the scrolling Flickable that hosts the card. Fall back to
+    // `root` (the card itself) when the Window context is unavailable
+    // — `null` was attempted first but Popup with `parent: null` emits
+    // "Popup must be attached to a window" warnings on `open()` and
+    // refuses to render. The `root` fallback path is reachable only
+    // during teardown / early init, before the QML Window context is
+    // established. The Flickable clip bug returns IF a user opens the
+    // dialog before the window context resolves, which in practice
+    // never happens because the dialog is opened from a button click
+    // (Customize…) well after Component.onCompleted. This is a
+    // documented "fail visible" trade-off: the visible-but-clipped
+    // failure mode is easier to diagnose than the silent no-render
+    // `null` failure if the path is ever taken.
     CurveEditorDialog {
         id: curveDialog
 

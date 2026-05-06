@@ -3,7 +3,7 @@
 //
 // Slide transition — directional reveal of the rendered surface.
 // `direction` selects the axis: 0=left, 1=right, 2=up, 3=down. The
-// surface is sampled through iChannel0; we mask it with a moving
+// surface is sampled through uTexture0; we mask it with a moving
 // edge so it slides into / out of view from the chosen direction.
 
 #version 450
@@ -16,8 +16,6 @@
 // the use site.
 #define direction customParams[0].x
 #define parallax  customParams[0].y
-
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -61,5 +59,14 @@ void main()
         else if (dir == 2) sampleUv.y += offset;
         else               sampleUv.y -= offset;
     }
-    fragColor = texture(iChannel0, clamp(sampleUv, 0.0, 1.0));
+    // Inside-mask: if the parallax offset pushes the sample UV outside
+    // [0,1], emit transparent rather than letting the clampToEdge sampler
+    // smear the edge texels along the lead axis. Matches doom's and
+    // matrix's off-window guard, so all sliding shaders have a clean
+    // silhouette boundary instead of a 1-pixel edge-bleed band.
+    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    fragColor = texture(uTexture0, sampleUv);
 }

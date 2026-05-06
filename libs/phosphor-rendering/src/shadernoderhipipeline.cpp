@@ -249,8 +249,7 @@ bool ShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
     if (m_bufferSamplers[index]) {
         return true;
     }
-    const QRhiSampler::AddressMode addr =
-        (m_bufferWraps[index] == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+    const QRhiSampler::AddressMode addr = wrapModeToRhiAddress(m_bufferWraps[index]);
     QRhiSampler::Filter minF = QRhiSampler::Linear;
     QRhiSampler::Filter magF = QRhiSampler::Linear;
     QRhiSampler::Filter mipF = QRhiSampler::None;

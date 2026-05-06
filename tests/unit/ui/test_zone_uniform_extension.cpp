@@ -10,10 +10,13 @@
 #include <cstring>
 #include <vector>
 
-#include "daemon/rendering/zoneuniformextension.h"
-#include "daemon/rendering/zoneshadercommon.h"
+#include <PhosphorRendering/ZoneShaderCommon.h>
+#include <PhosphorRendering/ZoneUniformExtension.h>
 
-using namespace PlasmaZones;
+using PhosphorRendering::MaxZones;
+using PhosphorRendering::ZoneData;
+using PhosphorRendering::ZoneShaderUniforms;
+using PhosphorRendering::ZoneUniformExtension;
 
 /**
  * @brief Unit tests for ZoneUniformExtension

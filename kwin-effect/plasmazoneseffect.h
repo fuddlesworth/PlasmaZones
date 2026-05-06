@@ -9,6 +9,7 @@
 #include <PhosphorProtocol/WireTypes.h>
 #include <trigger_parser.h>
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
@@ -21,12 +22,15 @@
 #include <effect/offscreeneffect.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
+#include <opengl/gltexture.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
 #include <QJsonArray>
 #include <QObject>
 #include <QVector>
 #include <QSet>
+#include <QSize>
+#include <QThreadPool>
 #include <QTimer>
 #include <QDBusPendingCall>
 #include <QHash>
@@ -505,6 +509,28 @@ private:
     // invalid and shader transitions gracefully no-op.
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+
+    /// User-texture cache entry. Owns the uploaded `GLTexture` and
+    /// tracks the wrap mode last applied to its GL state — so two
+    /// shader transitions sharing the same on-disk path can run with
+    /// different wrap modes without invalidating each other's cache
+    /// entry, and paintWindow can skip redundant `setWrapMode` calls
+    /// (each is two `glTexParameteri`s; on a high-Hz display with
+    /// multiple slots in flight the redundant traffic is non-trivial).
+    /// Forward-declared above `ShaderTransition` so the per-leg slot
+    /// pointers can hold `CachedTexture*`.
+    struct CachedTexture
+    {
+        std::unique_ptr<KWin::GLTexture> texture;
+        GLenum lastAppliedWrap = GL_CLAMP_TO_EDGE;
+        /// Monotonic access counter (NOT a wall-clock frame number).
+        /// Updated by `touchTextureCacheEntry` on every successful
+        /// lookup or fresh insert. The LRU eviction sweep evicts the
+        /// entry with the smallest value (least recently used) that
+        /// is NOT currently referenced by any in-flight transition.
+        quint64 lastAccessTick = 0;
+    };
+
     struct CachedShader
     {
         std::unique_ptr<KWin::GLShader> shader;
@@ -518,6 +544,11 @@ private:
         ///
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
+        int iTimeDeltaLoc = -1;
+        int iFrameLoc = -1;
+        int iDateLoc = -1;
+        int iMouseLoc = -1;
+        int iIsReversedLoc = -1;
         // Slot counts sourced from AnimationShaderContract so a future
         // change to the contract (e.g. growing the customParams budget)
         // can't silently desync this cache from the translation +
@@ -534,6 +565,25 @@ private:
             a.fill(-1);
             return a;
         }();
+        /// Sampler uniform locations for `uTexture1..3`. -1 means the GLSL
+        /// linker dropped the sampler (the shader source never read it),
+        /// in which case paintWindow skips both the bind and the
+        /// setUniform — saves a glActiveTexture call per unused slot.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
+            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
+            a.fill(-1);
+            return a;
+        }();
+        /// Element locations for `iTextureResolution[0..N-1]`. Symmetric
+        /// with `customParamsLoc` / `customColorsLoc` — the element-name
+        /// lookup happens at compile time so paintWindow does not
+        /// re-resolve "iTextureResolution[0]" string lookups per frame.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc =
+            []() {
+                std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
+                a.fill(-1);
+                return a;
+            }();
     };
     struct ShaderTransition
     {
@@ -568,6 +618,76 @@ private:
         /// superseded — without this, a stale timer would tear down a fresh
         /// transition that replaced it before it had a chance to play out.
         quint64 generation = 0;
+        /// When true, paintWindow flips progress to 1 - progress before the
+        /// uniform write, so the shader runs from `iTime = 1.0` down to
+        /// `iTime = 0.0` over the transition's lifetime. Used by lifecycle
+        /// events whose semantic is "going away" — window.close, going-to-
+        /// minimized, going-to-unmaximized — so a single shader effect
+        /// doubles as both directions: an `appear` shader (e.g. fade-in
+        /// from glitch) reads progress=0 as "fully obscured" and progress=1
+        /// as "fully revealed", which is exactly the semantic users expect
+        /// for the corresponding `disappear` event.
+        bool reverse = false;
+        /// Per-leg frame counter. Bumped each paintWindow tick where this
+        /// transition feeds the shader; reset to 0 on every fresh
+        /// beginShaderTransition install (or supersession). Mirrors the
+        /// daemon's `SurfaceAnimator` `iFrame` semantic: starts at 0 on
+        /// each fresh attach so shaders that read it (e.g. for staggered
+        /// per-frame randomness) see the same trajectory on both runtimes.
+        ///
+        /// Type pinned to `int` to match GLSL `uniform int iFrame;` in
+        /// `data/animations/shared/animation_uniforms.glsl`. The shared
+        /// header's UBO offset (76) is also `int`-sized so the kwin
+        /// `setUniform(iFrameLoc, iFrameValue)` push and the daemon
+        /// std140 layout agree. A static_assert at the push site below
+        /// pins this contract.
+        int frameCount = 0;
+        /// Per-leg user-texture pointers. Resolved at
+        /// `beginShaderTransition` time from the translated params'
+        /// `uTexture<N>` keys (pack defaults merged with any per-leg
+        /// runtime override). Raw non-owning pointers into
+        /// `m_textureCache`, which owns the underlying `GLTexture` and
+        /// outlives every transition that references it. nullptr means
+        /// "no texture for this slot" — paintWindow skips the bind and
+        /// the sampler reads transparent black. Pointing at the cache
+        /// entry rather than the bare `GLTexture` lets paintWindow
+        /// skip redundant `setWrapMode` calls by comparing against
+        /// `CachedTexture::lastAppliedWrap`.
+        std::array<CachedTexture*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
+            userTextures = {};
+        /// Wrap-mode GL enum applied at bind time (GL_CLAMP_TO_EDGE /
+        /// GL_REPEAT / GL_MIRRORED_REPEAT). Stored per-leg rather than
+        /// on the cached `GLTexture` so two transitions sharing the
+        /// same on-disk path can run with different wrap modes without
+        /// invalidating each other's cache entry.
+        std::array<GLenum, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> userTextureWrap =
+            []() {
+                std::array<GLenum, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
+                a.fill(GL_CLAMP_TO_EDGE);
+                return a;
+            }();
+        /// Wall-clock timestamp of the previous paintWindow tick that fed
+        /// this transition. -1 means "no prior paint yet" — first paint
+        /// produces `iTimeDelta = 0` rather than a spurious huge delta
+        /// from the install timestamp. `shaderClockNowMs()` based, so
+        /// monotonic and immune to NTP jumps mid-transition.
+        qint64 lastPaintTimeMs = -1;
+        /// True when this transition holds @c KWin::WindowClosedGrabRole on
+        /// the window. The grab keeps a closing window alive past KWin's
+        /// normal unmap-and-delete sequence so paintWindow has frames to
+        /// run the close shader on. OffscreenEffect's @c redirect alone
+        /// is insufficient — the OffscreenEffect docstring explicitly
+        /// states "The window will be automatically unredirected if it's
+        /// deleted", meaning a closing window is auto-released without
+        /// the grab and the close shader never gets a paint cycle.
+        ///
+        /// Set true only by the @c slotWindowClosed → @c
+        /// tryBeginShaderForEvent path (via the @c holdCloseGrab parameter
+        /// threaded through @c beginShaderTransition). Released in @c
+        /// endShaderTransition unconditionally — clearing the role on a
+        /// non-closing window is a no-op, and clearing it on a deleted
+        /// window lets KWin proceed with final destruction.
+        bool closeGrabHeld = false;
     };
     /// **Last-event-wins on overlap.** This map keys on @c EffectWindow*, not
     /// (window, event) tuple — @ref beginShaderTransition unconditionally calls
@@ -590,10 +710,152 @@ private:
     /// @c std::unordered_map&lt;EffectWindow*, std::vector&lt;ShaderTransition&gt;&gt; with
     /// each transition holding its own AnimatedValue&lt;qreal&gt;, plus a
     /// composition rule per shader. Significantly more complex; not done here.
-    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    /// User-texture cache, keyed by absolute path. Multiple shader effects
+    /// (and multiple legs of the same effect) that reference the same
+    /// texture file share one upload — saves both GPU memory and the
+    /// per-leg `KWin::GLTexture::upload` cost. Cleared on
+    /// `effectsChanged` alongside `m_shaderCache` so a hot-reload that
+    /// drops a texture file frees the GPU memory rather than holding it
+    /// for the rest of the session. The registry's per-effect watch
+    /// list (see `effectWatchPaths` in animationshaderregistry.cpp)
+    /// includes declared texture file paths, so a bitmap content
+    /// change with no metadata change still re-fires `effectsChanged`
+    /// and invalidates this cache uniformly — no separate watcher
+    /// needed here.
+    ///
+    /// **Growth policy.** Between consecutive `effectsChanged` events
+    /// the cache grows monotonically with the count of UNIQUE texture
+    /// paths surfaced over the session. Bounded in practice by the
+    /// total number of distinct textures across all installed packs
+    /// (kMaxUserTextureSlots × pack count), which is small. No LRU /
+    /// reference-count eviction is implemented because (a) every
+    /// metadata edit / live-reload triggers a full clear, and (b) the
+    /// per-texture footprint is tens of MiB at most for atlas-style
+    /// uploads. Revisit if a third-party pack channel pushes the
+    /// long-tail bitmap count higher.
+    ///
+    /// **Declaration ORDER MATTERS.** C++ destroys members in reverse
+    /// declaration order, so `m_textureCache` declared FIRST means it
+    /// destructs LAST — outlives `m_shaderCache` and `m_shaderTransitions`.
+    /// `ShaderTransition::userTextures[]` holds raw non-owning pointers
+    /// into this cache; a reverse declaration would let the cache
+    /// destruct first and leave the transitions with dangling pointers.
+    /// `m_shaderCache` similarly needs to outlive its dependents (the
+    /// shader-program pointers in transitions) — declared second so it
+    /// destructs after `m_shaderTransitions`.
+    std::map<QString, CachedTexture> m_textureCache;
+    /// Async texture pre-warm pipeline.
+    ///
+    /// Texture loading (PNG decode + format conversion + GLTexture upload —
+    /// or, worse, SVG rasterise via QSvgRenderer at 1024px max-axis +
+    /// upload) takes multiple milliseconds per file on a cold cache, all
+    /// of which would otherwise run synchronously on the compositor
+    /// thread inside `beginShaderTransition`'s per-leg load loop. At
+    /// 144 Hz the per-frame budget is ~6.9 ms, so a single uncached
+    /// SVG slot can blow the budget on its own and produce a visible
+    /// stutter on the very first frame of a freshly-assigned shader.
+    ///
+    /// Pattern: kick `warmUserTextureAsync` to off-load `loadUserTextureImage`
+    /// (CPU-only — QImage decode and QSvgRenderer rasterise) onto a worker
+    /// thread, then dispatch the resulting `QImage` back to the compositor
+    /// thread via `QMetaObject::invokeMethod(...,
+    /// Qt::QueuedConnection)` to perform `KWin::GLTexture::upload`
+    /// (which MUST run on the GL-context thread). Subsequent
+    /// transitions hit the warm cache and pay zero load cost.
+    ///
+    /// Pool size is fixed at 1 to keep semantics simple — multi-threaded
+    /// loads of the same file would race on `m_textureLoadsInFlight`
+    /// dedupe and produce duplicate GPU uploads. A serialised single-
+    /// worker pool delivers near-all of the latency win (the bottleneck
+    /// is the rasterise/decode cost, not parallelism) without that
+    /// complexity.
+    QThreadPool m_textureLoaderPool;
+    /// Set of absolute texture paths currently in-flight on
+    /// `m_textureLoaderPool`. Prevents `warmUserTextureAsync` from
+    /// queuing duplicate loads when several shader transitions
+    /// reference the same file in quick succession (e.g. multiple
+    /// windows opening at once with the same effect assigned).
+    /// Entries are removed when the GL-thread upload completes (or
+    /// the worker observes a load failure).
+    /// All access happens on the compositor thread; the worker reads only
+    /// the captured path string and never touches m_textureLoadsInFlight.
+    /// The queued upload lambda removes the entry on the compositor thread
+    /// before any cache mutation.
+    QSet<QString> m_textureLoadsInFlight;
+    /// Generation counter for the texture cache. Bumped on every
+    /// `effectsChanged` hot-reload so workers in flight (which captured
+    /// the generation at submission time) can discard their queued GL
+    /// upload if the cache has been cleared underneath them. Cheaper than
+    /// draining the loader pool synchronously on the GL thread, which
+    /// could block the compositor for tens of ms on a worker mid-rasterise
+    /// of a 1024x1024 SVG. Distinct from the destructor's
+    /// `m_textureLoaderPool.waitForDone()` — full teardown still waits to
+    /// flush pending invokeMethod posts against `this` while members are
+    /// still intact.
+    quint64 m_textureCacheGeneration = 0;
+    /// Monotonic counter bumped on every cache lookup / insert. Stamped
+    /// onto `CachedTexture::lastAccessTick` so the LRU sweep below has
+    /// a stable order. Distinct from `m_textureCacheGeneration` (which
+    /// flips on hot-reload to invalidate in-flight workers).
+    quint64 m_textureCacheAccessTick = 0;
+    /// Soft upper bound on `m_textureCache` size. The cache is path-keyed
+    /// and entries can be referenced by raw pointers held in
+    /// `ShaderTransition::userTextures[]`, so eviction MUST skip any
+    /// entry currently in-flight. With kMaxUserTextureSlots * (typical
+    /// pack count of 5..20) the cache normally settles at <50 entries
+    /// even on third-party-pack-heavy installations; the cap is a
+    /// long-soak / hot-reload-without-effects-changed safety net rather
+    /// than a routine pressure relief.
+    static constexpr std::size_t kTextureCacheSoftBound = 32;
+    /// LRU sweep: when `m_textureCache.size() > kTextureCacheSoftBound`,
+    /// evict the entry with the smallest `lastAccessTick` that is NOT
+    /// referenced by any `m_shaderTransitions[*].userTextures[*]`. If
+    /// every entry is in flight (pathological), no-op — the cache
+    /// transiently exceeds the bound rather than tearing a live
+    /// transition's pointer. Called from the two cache-insert sites
+    /// (sync fallback in `beginShaderTransition` and async upload in
+    /// `warmUserTextureAsync`).
+    void evictLruTextureIfOverBound();
+    /// Off-load a texture load onto the loader pool, then upload to
+    /// the GL cache on the compositor thread when the worker
+    /// finishes. Returns immediately if the path is already cached
+    /// or already in-flight. SVGs are rasterised at the same
+    /// 1024-px max-axis as `loadUserTextureImage`'s default — the
+    /// path-keyed cache assumes a single canonical size per asset,
+    /// so per-call size overrides would silently collide on the
+    /// cache key with the first-loader-wins.
+    void warmUserTextureAsync(const QString& absolutePath);
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
+    std::unordered_map<KWin::EffectWindow*, ShaderTransition> m_shaderTransitions;
+    /// Windows for which a paintWindow expiry-fall-through has already
+    /// queued a deferred @ref endShaderTransition via
+    /// @c QMetaObject::invokeMethod. Guards against the next paint
+    /// frame (before the queued end has actually run) re-queuing a
+    /// duplicate end and double-tearing-down the same transition.
+    /// Cleared when the queued end actually runs (success path) or
+    /// when the transition is otherwise erased / superseded.
+    QSet<KWin::EffectWindow*> m_pendingShaderExpiryEnd;
+    /// 1Hz cache for the `iDate` uniform. Recomputing iDate from
+    /// `QDateTime::currentDateTime()` on every paintWindow tick adds
+    /// microseconds per call, multiplied by every active transition,
+    /// for every output, every frame. The daemon's
+    /// `shadernoderhiuniforms.cpp` already caches at 1Hz for the same
+    /// reason — sub-second iDate variation is invisible (the .w
+    /// channel carries floating-point seconds anyway, but seeded once
+    /// per second is plenty of precision for the typical iDate-driven
+    /// shader effect). Mirror that policy here so kwin-side parity
+    /// matches the daemon side and the cost stays bounded.
+    qint64 m_lastIDateRefreshMs = 0;
+    QVector4D m_cachedIDate{};
+    /// Cursor position cached once per `prePaintScreen` rather than
+    /// re-read in paintWindow per active transition. `KWin::effects->cursorPos()`
+    /// is itself cheap, but multiple transitions paying the call per
+    /// frame multiplies up unnecessarily — and a cache also guarantees
+    /// every transition this frame sees an identical iMouse, eliminating
+    /// any sub-frame jitter from the cursor moving between paint calls.
+    QPointF m_cachedCursorGlobal;
     /// Monotonic counter feeding @ref ShaderTransition::generation. Bumped
     /// inside @ref beginShaderTransition every time a transition installs;
     /// the timer-driven teardown in @ref tryBeginShaderForEvent compares the
@@ -625,8 +887,13 @@ private:
     ///     for zone.* events that already have an animator-tracked motion.
     /// `tryBeginShaderForEvent` rejects the negative case before calling here;
     /// internal callers (`applySnapGeometry`) pass the default 0.
+    ///
+    /// @p reverse flips paintWindow's progress to `1 - progress`, so the
+    /// shader plays its timeline backwards — used by "going away" events
+    /// (window.close, going-to-minimized, going-to-unmaximized) to share a
+    /// single user-assigned shader with the matching forward event.
     void beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
-                               int durationMs = 0);
+                               int durationMs = 0, bool reverse = false, bool holdCloseGrab = false);
     void endShaderTransition(KWin::EffectWindow* window);
     void loadShaderProfileFromDbus();
     void loadShaderRegistryFromDbus();
@@ -647,7 +914,24 @@ private:
     /// a shader to this path), the registry doesn't have the effect yet, or
     /// the window pointer is null. Same null-tolerance contract as
     /// @ref beginShaderTransition.
-    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs);
+    ///
+    /// @p reverse forwards to @ref beginShaderTransition's reverse flag — see
+    /// that doc for semantics. Defaults to false (forward 0→1 timeline).
+    ///
+    /// @p holdCloseGrab is true only for the @c slotWindowClosed call site;
+    /// it claims the window via @c KWin::WindowClosedGrabRole so KWin's
+    /// teardown blocks final deletion until our close shader has had its
+    /// frames. The grab is set BEFORE @ref beginShaderTransition's redirect
+    /// (so it lands while the window is still in the closing-but-not-yet-
+    /// deleted window of validity) and stored on the resulting transition's
+    /// @c closeGrabHeld field so @ref endShaderTransition can release it
+    /// when the timer-driven teardown runs. Pre-resolved here (rather than
+    /// inside the lambda) because we need to skip the grab when no shader
+    /// will install — otherwise a holdCloseGrab=true caller with no user-
+    /// assigned close shader would strand the window in closing state
+    /// forever.
+    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
+                                bool reverse = false, bool holdCloseGrab = false);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
@@ -754,7 +1038,13 @@ private:
     EffectAutotileDragBehavior m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
     int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
-    int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon
+    // Pinned to the canonical Limits constant rather than an inline magic
+    // number so a future bump in the suite-wide default propagates here
+    // automatically and a malformed daemon reply (zero/negative) clamped
+    // through Limits at the assignment site stays structurally safe even
+    // before the first reply arrives.
+    int m_cachedAnimationDuration =
+        PhosphorAnimation::Limits::DefaultAnimationDurationMs; // ms, fallback until loaded from daemon
     int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
 
     // Per-drag activation tracking: set once any activation trigger is detected
@@ -789,6 +1079,15 @@ private:
     // synchronous isServiceRegistered() calls that block the compositor thread.
     // --- Daemon readiness / virtual screen fetch gate state ---
     bool m_daemonServiceRegistered = false;
+    /// True between sending registerBridge and receiving its reply. Prevents
+    /// the Introspect probe + daemonReady signal racing into two concurrent
+    /// registrations before the first reply sets m_daemonServiceRegistered.
+    /// Reset on every reply path (success / error / rejection / version-
+    /// mismatch) so a future retry can re-arm. ALSO reset in the
+    /// serviceUnregistered handler so a daemon restart with an in-flight
+    /// stale call doesn't leave the gate stuck and silently swallow the
+    /// new daemon's daemonReady signal.
+    bool m_bridgeRegistrationInFlight = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
     /// Pre-computed snap restore target for a pending app (appId → geometry + saved screen).

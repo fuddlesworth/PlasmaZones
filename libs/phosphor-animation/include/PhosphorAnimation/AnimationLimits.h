@@ -34,6 +34,19 @@ constexpr int MinAnimationDurationMs = 50;
 /// freeze a popup for an unreasonable interval.
 constexpr int MaxAnimationDurationMs = 2000;
 
+/// Default animation duration in milliseconds, used as the fallback
+/// at startup before settings are loaded from the daemon. 150 ms is
+/// short enough to feel snappy on legitimate rapid window churn but
+/// long enough that a user with a fresh install sees the transition
+/// rather than what looks like a hard cut. MUST sit within
+/// [MinAnimationDurationMs, MaxAnimationDurationMs] so an unconditional
+/// init through this constant is structurally safe — settings reload
+/// further refines it.
+constexpr int DefaultAnimationDurationMs = 150;
+static_assert(DefaultAnimationDurationMs >= MinAnimationDurationMs
+                  && DefaultAnimationDurationMs <= MaxAnimationDurationMs,
+              "DefaultAnimationDurationMs must lie within [Min, Max] so callers get a structurally-safe init");
+
 /// Minimum stagger interval between sequenced animations in
 /// milliseconds. Below 10 ms the staggering blurs into a single
 /// simultaneous burst.
@@ -43,6 +56,19 @@ constexpr int MinAnimationStaggerIntervalMs = 10;
 /// milliseconds. 200 ms × N items is enough to feel deliberate
 /// without making large lists glacial.
 constexpr int MaxAnimationStaggerIntervalMs = 200;
+
+/// Hard ceiling on the per-frame `iTimeDelta` pushed into shaders, in
+/// seconds. Both runtimes (the daemon's overlay shader update path and
+/// the surface-animator's compositor-side push) clamp the steady-clock
+/// frame delta against this so a sleep/resume hiccup, GC stall, or
+/// scheduler glitch does not blast a multi-second jump into shaders
+/// that integrate `iTimeDelta` (sparkle drift, particle motion, noise
+/// advance). 100 ms is generous: at the worst-cap a single tick
+/// represents 6 frames worth of motion at 60 Hz, beyond which the
+/// effect "skips" rather than blurring through unrealistic motion.
+/// Pinned in this header so a future bump propagates to BOTH runtimes
+/// without one falling out of sync.
+constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
 
 } // namespace Limits
 } // namespace PhosphorAnimation

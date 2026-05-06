@@ -507,19 +507,20 @@ bool Daemon::init()
                 return;
             }
             const QString shaderId = info.id;
-            auto* watcher = new QFutureWatcher<WarmShaderBakeResult>(this);
-            connect(watcher, &QFutureWatcher<WarmShaderBakeResult>::finished, this, [registryPtr, watcher, shaderId]() {
-                if (!registryPtr) {
-                    watcher->deleteLater();
-                    return;
-                }
-                const WarmShaderBakeResult r = watcher->result();
-                if (!r.success) {
-                    qCWarning(lcDaemon) << "Shader bake: failed for" << shaderId << r.errorMessage;
-                }
-                registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
-                watcher->deleteLater();
-            });
+            auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
+            connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
+                    [registryPtr, watcher, shaderId]() {
+                        if (!registryPtr) {
+                            watcher->deleteLater();
+                            return;
+                        }
+                        const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
+                        if (!r.success) {
+                            qCWarning(lcDaemon) << "Shader bake: failed for" << shaderId << r.errorMessage;
+                        }
+                        registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
+                        watcher->deleteLater();
+                    });
             reg->reportShaderBakeStarted(shaderId);
             // Pass the registry's authoritative search paths to the bake worker
             // so include resolution matches the on-screen render path exactly.

@@ -26,7 +26,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Svg)
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()
@@ -110,6 +110,7 @@ target_link_libraries(PhosphorRendering
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
+        Qt6::Svg
 )
 
 set_target_properties(PhosphorRendering PROPERTIES

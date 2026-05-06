@@ -52,13 +52,26 @@ namespace PhosphorAnimationShaders {
 /// // ...read from iTime, iResolution, customParams[N].xyz...
 /// @endcode
 ///
-/// The UBO layout (`data/animations/shared/animation_uniforms.glsl`)
-/// is std140-aligned with `PhosphorShaders::BaseUniforms` and covers
-/// its full 672-byte footprint, so the daemon's binding=0 upload
-/// populates it directly. The kwin-effect can't bind UBOs through
-/// `KWin::GLShader`, so it runs a small in-memory source rewriter that
-/// converts the UBO declaration to default-block uniforms before
-/// handing the source to `KWin::ShaderManager::generateCustomShader`.
+/// The canonical header (`data/animations/shared/animation_uniforms.glsl`)
+/// has two `#ifdef`-selected branches:
+///
+///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
+///     AnimationUniforms { ... };` — std140-aligned with
+///     `PhosphorShaders::BaseUniforms` covering the full 672-byte
+///     footprint, populated by Qt-RHI's binding=0 upload.
+///
+///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
+///     default-block `uniform float iTime;`-style declarations. The
+///     kwin-effect prepends `#define PLASMAZONES_KWIN` after the
+///     shader's `#version` line before passing the source to
+///     `KWin::ShaderManager::generateCustomShader`, which selects this
+///     branch. KWin's `KWin::GLShader::setUniform(loc, val)` API
+///     addresses default-block uniforms only and never binds UBOs.
+///
+/// Shader authors do NOT need their own `#ifdef PLASMAZONES_KWIN` blocks
+/// — both branches expose the same identifiers (`iTime`, `iResolution`,
+/// `customParams[N]`, `iChannel0`, etc.). The macro switch describes the
+/// uniform-binding ABI, not the runtime feature set.
 ///
 /// @par Per-effect declared parameters
 /// Every parameter declared in `metadata.json` lands in either a
@@ -86,43 +99,49 @@ namespace PhosphorAnimationShaders {
 /// `iTime`, `iResolution`, `customParams[8]`, and `customColors[16]`
 /// are the active contract fields populated by both runtimes.
 ///
-/// @par Extended fields (daemon-populated, zero on compositor)
-/// On the daemon's `SurfaceAnimator` path these fields match the
-/// overlay-shader runtime exactly:
+/// @par Cross-runtime field coverage
+/// Both runtimes populate the same core animation contract:
 ///
 ///   • `iTime` — per-leg progress in [0,1]
 ///   • `iResolution` — surface size
-///   • `iTimeDelta` / `iFrame` — auto-driven by `SurfaceAnimator`'s
-///     driver tick (real-time delta in seconds; per-leg frame counter
-///     starting at 0 on each fresh attach)
-///   • `iMouse` — driven by a `QQuickHoverHandler` installed on each
-///     attached shader item by `SurfaceAnimator::attachShaderToAnchor`,
-///     mirroring the overlay path's `MouseArea { hoverEnabled }` and
-///     editor preview's `HoverHandler` pattern. Reports cursor position
-///     in shader-item-local pixels (matches `iResolution`); when the
-///     cursor leaves the shader's bounding box, `iMouse` is set to
-///     `(-1, -1)` — same off-region sentinel the overlay path uses.
+///   • `iTimeDelta` — wall-clock seconds since the previous paint tick
+///     for this leg (0 on the first tick). Daemon: `SurfaceAnimator`'s
+///     driver delta. Kwin: `paintWindow`'s steady-clock delta.
+///   • `iFrame` — per-leg frame counter starting at 0 on each fresh
+///     attach. Daemon: `SurfaceAnimator`'s per-leg counter. Kwin:
+///     `ShaderTransition::frameCount`.
+///   • `iDate` — local-time `(year, month, day, seconds-since-midnight)`.
+///     Daemon: `ShaderNodeRhi` scene-data sync (throttled to 1 Hz).
+///     Kwin: `QDateTime::currentDateTime()` per paint.
+///   • `iMouse` — cursor position in shader-local logical pixels;
+///     `(-1, -1)` when off-surface. Daemon: `QQuickHoverHandler` on
+///     the attached shader item. Kwin: `effects->cursorPos()` minus
+///     the window's frame-geometry origin, gated on `frameGeometry()`
+///     containment.
+///   • `customParams[N]` / `customColors[N]` — per-effect declared
+///     parameters resolved at transition begin time.
+///   • `iChannel0` — redirected surface texture. Daemon: live FBO
+///     from the layer-enabled shader anchor. Kwin: KWin's
+///     `OffscreenEffect`-managed window snapshot.
+///
+/// @par Daemon-only extensions
+/// These fields receive zero values on the compositor path; shaders
+/// that need them must run on the daemon overlay path until the
+/// compositor wires the matching producers:
+///
 ///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
 ///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
 ///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
 ///     here)
-///   • `iDate` — auto-populated by `ShaderNodeRhi`'s scene-data sync
-///     (throttled to 1 Hz)
-///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///   • `iChannelResolution[]` — auto-populated when multipass buffer
 ///     shaders are bound
 ///   • `iTextureResolution[]` — auto-populated when user textures are
 ///     bound (bindings 7-10)
+///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///
-/// On the compositor (kwin-effect) path these fields receive zero
-/// values: KWin's classic-GL pipeline has no central audio / cursor /
-/// time-delta producer, no auxiliary FBOs, and no wallpaper plumbing.
-/// Animation shaders that read them on the compositor get the GLSL-
-/// default zero. `iFlipBufferY` is stripped by the kwin rewriter
-/// entirely (daemon-only Y-flip signal). Shaders that need any of
-/// these should run on the daemon overlay path; the compositor path
-/// is suitable for transitions that depend only on `iTime`,
-/// `iResolution`, `customParams`, and `customColors`.
+/// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
+/// `_appField1` are daemon-only and absent from the canonical header's
+/// `#ifdef PLASMAZONES_KWIN` branch entirely.
 namespace AnimationShaderContract {
 
 /// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
@@ -158,13 +177,72 @@ inline constexpr const char* kITime = "iTime";
 /// daemon execution site.
 inline constexpr const char* kIResolution = "iResolution";
 
+/// `float iTimeDelta` — wall-clock seconds between consecutive paint
+/// ticks that fed this transition. First tick of a fresh transition
+/// reports `0.0`; subsequent ticks report `(now - lastPaint) / 1000`.
+/// Daemon equivalent: `SurfaceAnimator`'s driver-tick delta, fed by
+/// the same monotonic clock semantics.
+inline constexpr const char* kITimeDelta = "iTimeDelta";
+
+/// `int iFrame` — per-leg frame counter. Reset to 0 on every fresh
+/// `beginShaderTransition` install (or supersession), increments by 1
+/// on every paintWindow tick that feeds the transition. Daemon
+/// equivalent: `SurfaceAnimator`'s per-leg frame counter — same 0-based
+/// reset-on-attach semantic so shaders that key staggered effects off
+/// `iFrame` see identical sequences on both runtimes.
+inline constexpr const char* kIFrame = "iFrame";
+
+/// `vec4 iDate` — local-time `(year, month, day, seconds-since-midnight)`.
+/// Year and month are integers stored as floats (Year=2026.0, January=1.0);
+/// day-of-month likewise; the .w component carries fractional seconds for
+/// shaders that key on time-of-day. Read once per paint on the kwin path;
+/// daemon throttles its sync to 1 Hz.
+inline constexpr const char* kIDate = "iDate";
+
+/// `int iIsReversed` — direction signal for asymmetric leg rendering.
+/// Value is exactly `1` on reverse legs (window.close / going-to-
+/// minimized / unmaximize on the kwin path; hide leg on the daemon
+/// path) and exactly `0` on forward legs. The runtime also flips
+/// iTime for reverse legs so symmetric shaders auto-mirror —
+/// asymmetric shaders branch on this when the iTime flip alone can't
+/// express the open-vs-close difference.
+///
+/// Authoring rule: branch with `iIsReversed == 1` (NOT `iIsReversed != 0`
+/// or implicit-truthy). This pins the behaviour against any future
+/// runtime that elects to extend the encoding (e.g. negative for
+/// "unknown direction"). The matrix shader follows this convention.
+inline constexpr const char* kIIsReversed = "iIsReversed";
+
+/// Maximum number of user-declared textures per animation effect.
+///
+/// Each declared texture binds to one of the canonical samplers
+/// `iChannel1` / `iChannel2` / `iChannel3`. The redirected surface
+/// itself (`iChannel0`, binding 7 on the daemon, TEXTURE0 on KWin) is
+/// not counted here — that's a separate runtime-managed slot. The
+/// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
+/// hence the off-by-one in the budget. Pinned to the daemon constant
+/// by the `static_assert` in `libs/phosphor-animation/src/contract_pins.cpp`.
+///
+/// The compile-time pin against PhosphorRendering::kMaxUserTextures
+/// lives in src/contract_pins.cpp — see the comment there explaining
+/// why the assert can't sit in this header (epoxy/Qt typedef collision
+/// in the kwin-effect TU).
+inline constexpr int kMaxUserTextureSlots = 3;
+
+/// `vec4 iMouse` — cursor position in shader-local pixels.
+/// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
+/// (window frame origin on the kwin path; overlay surface origin on
+/// the daemon path); `(-1, -1)` when the cursor is outside the shader's
+/// surface. `.zw` are reserved for click state in the daemon overlay
+/// contract; the kwin path leaves them at 0.
+inline constexpr const char* kIMouse = "iMouse";
+
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
 /// Cross-runtime element-name lookup constant: used by the kwin-effect's
-/// `glGetUniformLocation("customParams[N]")` calls (after the source
-/// rewriter at `AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock`
-/// turns the std140 UBO array into default-block uniforms
-/// `customParams[0]..customParams[7]`) and as a documentation anchor
-/// for shader authors. Symmetric with `kCustomColorsArray` below.
+/// `glGetUniformLocation("customParams[N]")` calls (the canonical header's
+/// `#ifdef PLASMAZONES_KWIN` branch declares them as default-block uniforms
+/// `customParams[0]..customParams[7]`) and as a documentation anchor for
+/// shader authors. Symmetric with `kCustomColorsArray` below.
 inline constexpr const char* kCustomParamsArray = "customParams";
 
 /// Number of `vec4` slots in the `customParams` array (8). Forwards to
@@ -208,10 +286,10 @@ inline QString slotKey(int slot)
 /// `vec4 customColors[N]` — per-effect declared color parameter slots.
 /// Cross-runtime element-name lookup constant, symmetric with
 /// `kCustomParamsArray` above: used by the kwin-effect's
-/// `glGetUniformLocation("customColors[N]")` calls (after the source
-/// rewriter converts the std140 UBO array into default-block uniforms
-/// `customColors[0]..customColors[15]`) and as a documentation anchor
-/// for shader authors.
+/// `glGetUniformLocation("customColors[N]")` calls (the canonical
+/// header's `#ifdef PLASMAZONES_KWIN` branch declares them as
+/// default-block uniforms `customColors[0]..customColors[15]`) and as
+/// a documentation anchor for shader authors.
 ///
 /// Carries straight (non-premultiplied) RGBA: the encoder writes
 /// `QColor::redF/greenF/blueF/alphaF` verbatim, so a 50%-alpha red
@@ -272,3 +350,12 @@ inline QString colorKey(int slot)
 } // namespace AnimationShaderContract
 
 } // namespace PhosphorAnimationShaders
+
+// The compile-time link between AnimationShaderContract::kMaxUserTextureSlots
+// and PhosphorRendering::kMaxUserTextures lives in
+// libs/phosphor-animation/src/contract_pins.cpp. It cannot live in this header
+// because translation units that only need contract definitions (notably the
+// kwin-effect, which already pulls in epoxy/gl.h via KWin) must not be forced
+// to also pull in <QtQuick/QSGTextureProvider> via ShaderNodeRhi.h — epoxy and
+// Qt's qopenglext.h declare overlapping GL function-pointer typedefs that
+// conflict when both end up in the same TU.

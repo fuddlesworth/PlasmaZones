@@ -12,6 +12,23 @@
  *   - per-Role config lookup falls back to defaultConfig
  *   - profile resolution: profile path resolves through registry
  *   - ctor/dtor lifecycle is clean (no leaked Tracks)
+ *
+ * Coverage gaps (intentional, NOT bugs):
+ *   - `setIsReversed(!isShowLeg)` runtime push at surfaceanimator.cpp:566
+ *     and :1344 is not behaviourally tested here. Exercising it would
+ *     require: (a) a real shader pack on disk that
+ *     `AnimationShaderRegistry` can discover, (b) a `ShaderEffect`
+ *     instantiated through `attachShaderToAnchor`'s scene-graph path,
+ *     and (c) reading the `isReversed` Q_PROPERTY off the dynamically-
+ *     constructed item — substantial infrastructure that exceeds this
+ *     unit-test layer's mock surface. The contract IS verified at the
+ *     compile / bake layer: `test_animation_shader_bake` runs every
+ *     shipped shader through SPIR-V with the canonical UBO including
+ *     `iIsReversed`. The runtime push is mechanical (`shaderItem->
+ *     setIsReversed(!isShowLeg)`) — when extending behavioural coverage
+ *     here, mock the ShaderEffect output via a `QQuickItem` subclass
+ *     exposing the `isReversed` Q_PROPERTY and have the test's content
+ *     item host one tagged `shaderAnchor: true`.
  */
 #include <PhosphorAnimation/SurfaceAnimator.h>
 

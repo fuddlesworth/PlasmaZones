@@ -293,7 +293,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // and thread it through every consumer — fail loud if the wiring is
     // wrong rather than silently falling back to library defaults.
     Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
-               "profileRegistry must not be null — composition root must own and inject the registry");
+               "profileRegistry must not be null: composition root must own and inject the registry");
 
     // Phase-5 SurfaceAnimator. One instance drives every overlay's
     // show/hide via Profile-resolved curves; per-Role configs install
@@ -486,7 +486,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
         QStringLiteral("org.freedesktop.login1.Manager"), QStringLiteral("PrepareForSleep"), this,
         SLOT(onPrepareForSleep(bool)));
     if (!m_prepareForSleepConnected) {
-        qCDebug(lcOverlay) << "PrepareForSleep D-Bus signal subscription failed (logind not available?) —"
+        qCDebug(lcOverlay) << "PrepareForSleep D-Bus signal subscription failed (logind not available?):"
                            << "shader-timer restart on resume will not run";
     }
 
@@ -770,7 +770,7 @@ void OverlayService::setupForScreen(QScreen* screen)
                 QRect vsGeom = mgr->screenGeometry(vsId);
                 if (!vsGeom.isValid()) {
                     qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
-                                         << "— skipping overlay creation";
+                                         << ", skipping overlay creation";
                     continue;
                 }
                 createOverlayWindow(vsId, screen, vsGeom);

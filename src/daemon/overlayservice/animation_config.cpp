@@ -258,6 +258,13 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
     }
+    // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
+    // before `setSettings` is ever called, so `m_settings` is null here
+    // and the animator stays at its default-enabled state until
+    // `setSettings` wires the live `animationsEnabled` value. If a
+    // future caller re-runs `setupSurfaceAnimator` after settings have
+    // been wired, route the gate through `setSettings` rather than
+    // re-introducing a defensive branch here.
 
     // Profile names are the same paths PhosphorMotionAnimation in QML
     // uses today, so the live-reload path (drop a JSON, see it apply on
@@ -296,7 +303,7 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     // this is wasted work the explicit gate eliminates.
     if (lcOverlay().isDebugEnabled()) {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        qCDebug(lcOverlay).nospace() << "applyShaderProfilesToAnimator — overrides=" << tree.overriddenPaths().size()
+        qCDebug(lcOverlay).nospace() << "applyShaderProfilesToAnimator: overrides=" << tree.overriddenPaths().size()
                                      << " resolved: osd.show=" << resolveShaderEffect(tree, PP::OsdShow)
                                      << " osd.hide=" << resolveShaderEffect(tree, PP::OsdHide)
                                      << " zoneSelector.show=" << resolveShaderEffect(tree, PP::PopupZoneSelectorShow)

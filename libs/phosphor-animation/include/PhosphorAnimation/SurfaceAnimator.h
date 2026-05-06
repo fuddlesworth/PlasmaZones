@@ -293,6 +293,15 @@ public:
     void cancel(PhosphorLayer::Surface* surface) override;
     /// @}
 
+    /// Global animation enable/disable. When disabled, `beginShow` and
+    /// `beginHide` snap the rootItem to the target opacity (1.0 / 0.0)
+    /// and fire the completion callback synchronously — no opacity
+    /// tween, no shader leg, no scale leg. Mirrors the kwin-effect's
+    /// global gate: a single `animationsEnabled` setting kills every
+    /// animation on both runtimes when toggled off.
+    void setEnabled(bool enabled);
+    bool isEnabled() const;
+
 private:
     class Private;
     std::unique_ptr<Private> d;

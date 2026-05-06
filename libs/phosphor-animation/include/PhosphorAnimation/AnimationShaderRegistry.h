@@ -132,29 +132,6 @@ public:
     /// overload.
     static QVariantMap translateAnimationParams(const AnimationShaderEffect& effect, const QVariantMap& friendlyParams);
 
-    /// Rewrite the canonical `layout(std140, binding = 0) uniform
-    /// AnimationUniforms { ... };` block (from
-    /// `data/animations/shared/animation_uniforms.glsl`) into default-block
-    /// uniform declarations a classic-GL pipeline can bind. Used by
-    /// runtimes that cannot bind UBOs through their shader-program API
-    /// (notably `KWin::GLShader`, which addresses default-block uniforms
-    /// only).
-    ///
-    /// Input must already have `#include` directives expanded so the
-    /// canonical UBO block is in the source as a literal (the rewriter is
-    /// line-based; it does not run the GLSL preprocessor itself). Fields
-    /// that have no meaning on the classic-GL path are dropped during
-    /// rewrite: `qt_Matrix` / `qt_Opacity` (KWin manages its own
-    /// scene-graph transform/opacity), the `_appField0` / `_appField1`
-    /// std140 alignment slots, and `iFlipBufferY` (daemon-only Y-flip
-    /// signal — always 1 on the daemon, no equivalent on the kwin path).
-    ///
-    /// Idempotent on input that has no canonical UBO block (returns the
-    /// source unchanged). Returns the rewritten source as UTF-8 bytes
-    /// since classic-GL shader compilers accept `const char*` /
-    /// `QByteArray` directly without an extra UTF-16 round trip.
-    static QByteArray rewriteCanonicalUboToDefaultBlock(const QString& expandedShaderSource);
-
 Q_SIGNALS:
     void effectsChanged();
 
@@ -167,13 +144,25 @@ private:
     /// Build + configure the scan strategy. Returns the base type so
     /// the helper can be invoked from the ctor's member-init list while
     /// staying agnostic of the subclass-private `ScanStrategy` typedef.
+    ///
+    /// `self` is captured for later signal emission via the strategy's
+    /// rescan callback lambda. The static helper itself only stores
+    /// `self` in lambda captures and MUST NOT dereference it before
+    /// the constructor returns — the strategy is built from the base
+    /// class's member-init list, so member fields of the derived
+    /// `AnimationShaderRegistry` are still uninitialised at the call
+    /// site. The first deref happens later, on a watcher-triggered
+    /// rescan, by which time the constructor has fully run.
     static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(AnimationShaderRegistry* self);
 
     // Non-owning typed alias for the strategy the base owns. Populated
-    // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`.
-    // Named distinctly from the base's private `m_strategy` to make the
+    // in the ctor body via dynamic_cast (asserted non-null) so the
+    // invariant fires BEFORE the typed pointer is committed — keeps the
+    // narrow UB window between a hypothetical subclass-mismatch
+    // static_cast and its diagnostic out of the field's lifetime. Named
+    // distinctly from the base's private `m_strategy` to make the
     // shadowing explicit at the field declaration.
-    ScanStrategy* m_typedStrategy;
+    ScanStrategy* m_typedStrategy = nullptr;
 };
 
 } // namespace PhosphorAnimationShaders

@@ -5,7 +5,7 @@
 // wavefront emanates from a configurable origin point, with the
 // transition zone showing chunky pixels noise-keyed for randomness.
 // Visually inspired by Burn-My-Windows (pixel-wipe.frag, Simon
-// Schneegans), written natively against our `iTime`/`iChannel0`.
+// Schneegans), written natively against our `iTime`/`uTexture0`.
 //
 // ## iTime convention
 //
@@ -26,12 +26,11 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 #define maxPixelSize customParams[0].x
 #define originX      customParams[0].y
 #define originY      customParams[0].z
-
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -40,39 +39,9 @@ const float FADE_WIDTH = 1.0;
 
 float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
 
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-float simplex2D(vec2 p) {
-    const float K1 = 0.366025404;
-    const float K2 = 0.211324865;
-    vec2 i  = floor(p + (p.x + p.y) * K1);
-    vec2 a  = p - i + (i.x + i.y) * K2;
-    float m = step(a.y, a.x);
-    vec2 o  = vec2(m, 1.0 - m);
-    vec2 b  = a - o + K2;
-    vec2 c  = a - 1.0 + 2.0 * K2;
-    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    vec3 n  = h * h * h * h *
-            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
-                 dot(b, -1.0 + 2.0 * hash22(i + o)),
-                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
-    return 0.5 + 0.5 * dot(n, vec3(70.0));
-}
-
-// 4-octave fractal simplex for the dissolve threshold randomness.
-// Heavier than single-octave but gives the chunky "burn pattern"
-// rather than a smooth gradient.
-float simplex2DFractal(vec2 p) {
-    mat2 m  = mat2(1.6, 1.2, -1.2, 1.6);
-    float f = 0.5000 * simplex2D(p);  p = m * p;
-    f      += 0.2500 * simplex2D(p);  p = m * p;
-    f      += 0.1250 * simplex2D(p);  p = m * p;
-    f      += 0.0625 * simplex2D(p);
-    return f;
-}
+// hash22 + simplex2D + simplex2DFractal hosted in shared/noise.glsl.
+// 4-octave fractal simplex gives the chunky "burn pattern" for the
+// dissolve threshold randomness rather than a smooth gradient.
 
 void main()
 {
@@ -92,12 +61,16 @@ void main()
 
     // Pixelation grows with the per-pixel dissolve amount, so cells
     // currently in the transition wave are chunkily pixelated while
-    // already-solid (dissolve→0) and already-gone (dissolve→1)
-    // regions stay at their natural pixel size.
-    float pixelSize = ceil(maxPixelSize * dissolve + 1.0);
-    vec2 pixelGrid  = vec2(pixelSize) / iResolution;
+    // already-solid (dissolve->0) and already-gone (dissolve->1)
+    // regions stay at their natural pixel size. The max(.., 1.0)
+    // defends against a metadata-bypass that pushes maxPixelSize
+    // negative; matches sibling pixelate's defence at line 50.
+    float pixelSize = max(ceil(maxPixelSize * dissolve + 1.0), 1.0);
+    // Floor iResolution so an early-frame zero-sized surface doesn't
+    // divide-by-zero into an infinite pixelGrid.
+    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
-    vec4 sampled    = texture(iChannel0, cellUV);
+    vec4 sampled    = texture(uTexture0, cellUV);
 
     // Per-cell noise threshold gates the dissolve so the wavefront
     // is a chunky speckled pattern rather than a smooth ring. A cell

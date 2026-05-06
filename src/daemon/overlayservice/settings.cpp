@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
+#include "qml_property_names.h"
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
@@ -20,20 +21,16 @@ namespace PlasmaZones {
 void OverlayService::setSettings(ISettings* settings)
 {
     if (m_settings != settings) {
-        // Disconnect from old settings signals
+        // Single-sweep disconnect of every (m_settings → this) connection,
+        // fail-safe vs. future connects that forget a paired disconnect.
         if (m_settings) {
-            disconnect(m_settings, &ISettings::settingsChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::overlayDisplayModeChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
-            disconnect(m_settings, &ISettings::shaderProfileTreeChanged, this, nullptr);
+            disconnect(m_settings, nullptr, this, nullptr);
         }
-        // Disconnect the specific shadersChanged lambda we stashed below.
-        // disconnect(src, sig, this, nullptr) would sever ALL slots on this
-        // receiver — fine today, but a trap if another shadersChanged
-        // handler is ever added.
+        // The shader-registry connection (different sender, see
+        // m_shaderRegistry below) is NOT covered by the sweep above and
+        // is tracked separately via m_shadersChangedConnection so a
+        // future second shadersChanged slot on this receiver can't be
+        // accidentally severed by a (src, sig, this, nullptr) call.
         if (m_shadersChangedConnection) {
             QObject::disconnect(m_shadersChangedConnection);
             m_shadersChangedConnection = {};
@@ -48,6 +45,18 @@ void OverlayService::setSettings(ISettings* settings)
                     updateZoneSelectorWindow(it.key());
                 }
             };
+            // updateZoneSelectorWindow reads ~20 settings (zone padding, border
+            // width / radius, font, color, plus per-screen resolved
+            // ZoneSelectorConfig fields) and pushes them as QML properties.
+            // Connecting to ~20 specific *Changed signals would track the
+            // dependency graph manually with no functional difference: QML
+            // property writes short-circuit on equal value, so the worst case
+            // for the catch-all is N redundant property lookups across the
+            // selector windows — measured in microseconds. The catch-all is
+            // the maintenance-cheap choice; specific connections below cover
+            // the cases where the response is structurally different
+            // (overlay-window recreation, audio-spectrum start/stop, shader
+            // tree apply).
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
 
             // Recreate overlay windows when the overlay display mode changes
@@ -80,6 +89,22 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
+            // Global animations toggle: when off, SurfaceAnimator snaps
+            // beginShow / beginHide to the target opacity and fires
+            // completion synchronously, skipping motion + shader legs.
+            // Mirrors the kwin-effect's `m_windowAnimator->isEnabled()`
+            // gate on `tryBeginShaderForEvent` — single
+            // `Settings::animationsEnabled` flag stops every animation
+            // on both runtimes.
+            if (m_surfaceAnimator) {
+                m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
+            }
+            connect(m_settings, &ISettings::animationsEnabledChanged, this, [this]() {
+                if (m_settings && m_surfaceAnimator) {
+                    m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
+                }
+            });
+
             // Hot-reload shaders when files change on disk.
             // ShaderRegistry detects file changes via QFileSystemWatcher and emits
             // shadersChanged(). We tell each overlay window's ZoneShaderItem to
@@ -97,11 +122,12 @@ void OverlayService::setSettings(ISettings* settings)
                     PhosphorRendering::ShaderCompiler::clearCache();
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                         auto* window = it_.value().overlayWindow;
-                        if (window && window->property("isShaderOverlay").toBool()) {
+                        if (window && window->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
                             QMetaObject::invokeMethod(window, "reloadShader");
                         }
                     }
-                    if (m_shaderPreviewWindow && m_shaderPreviewWindow->property("isShaderOverlay").toBool()) {
+                    if (m_shaderPreviewWindow
+                        && m_shaderPreviewWindow->property(OverlayQmlPropertyNames::IsShaderOverlay.data()).toBool()) {
                         QMetaObject::invokeMethod(m_shaderPreviewWindow, "reloadShader");
                     }
                 });
@@ -284,11 +310,12 @@ void OverlayService::syncCavaState()
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                 auto* window = it_.value().overlayWindow;
                 if (window) {
-                    writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+                    writeQmlProperty(window, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }
             }
             if (m_shaderPreviewWindow) {
-                writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+                writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::AudioSpectrum),
+                                 QVariantList());
             }
         }
     }

@@ -71,6 +71,15 @@ struct alignas(16) BaseUniforms
     // Audio spectrum
     int iAudioSpectrumSize; // offset 576
     int iFlipBufferY; // offset 580 — always 1 for Y-flip
+    // The two pad ints at offsets 584 and 588 are explicitly written as zero
+    // by the C-side upload path (see shadernoderhiuniforms.cpp's syncBaseUniforms)
+    // — readers should not assume the bytes are skipped on the wire. On the
+    // GLSL side they are absorbed by std140's vec4 alignment of the following
+    // `iTextureResolution` (vec4[4]) member, which forces the next field onto
+    // a 16-byte boundary at offset 592. Removing the pad would shift the
+    // GLSL view of `iTextureResolution` and break the
+    // `data/animations/shared/animation_uniforms.glsl` byte-for-byte
+    // contract pinned by the static_asserts below.
     int _pad_after_audioSpectrum[2]; // offset 584
 
     // User texture resolutions (bindings 7-10)
@@ -78,22 +87,36 @@ struct alignas(16) BaseUniforms
 
     // Wrap-offset counterpart of iTime
     float iTimeHi; // offset 656
-    float _pad_after_iTimeHi[3]; // std140 struct alignment → total 672 bytes
+
+    // Direction signal for asymmetric leg rendering. 1 when the runtime
+    // is driving this leg in the "reverse" direction (window.close /
+    // going-to-minimized / unmaximize on the kwin path; hide leg on
+    // the daemon path), 0 otherwise. Symmetric shaders ignore this and
+    // rely on the runtime's iTime flip to auto-mirror; asymmetric
+    // shaders (matrix's directional rain, rain windowAlpha trajectory,
+    // anything where open and close differ in more than time direction)
+    // branch on it. Carved out of the trailing std140 pad so total
+    // struct size stays 672 bytes.
+    int iIsReversed; // offset 660
+    // Ditto: trailing pad zeroed by value-init (`m_baseUniforms = {}`) and
+    // covered by K_SCENE_HEADER. See the expanded `_pad_after_audioSpectrum`
+    // comment above for the full std140 / upload-region rationale.
+    int _pad_after_iIsReversed[2]; // std140 struct alignment, total 672 bytes
 };
 
 static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 bytes");
 
 // Per-field std140 offset asserts. These pin the layout the
-// `data/animations/shared/animation_uniforms.glsl` canonical UBO depends
-// on — that GLSL declaration is a byte-for-byte std140 prefix of
+// `data/animations/shared/animation_uniforms.glsl` canonical UBO branch
+// depends on — that GLSL declaration is a byte-for-byte std140 prefix of
 // `BaseUniforms`, which is what lets a single animation `effect.frag`
 // source produce identical visuals on both runtimes (compositor classic
-// GL via the kwin-effect's source rewriter, daemon Qt RHI via the
-// `binding=0` UBO upload). If anyone reorders or inserts a field above
-// any of these, the corresponding assert fails at compile time and the
-// canonical GLSL header MUST be updated to match (and all in-tree
-// `effect.frag` files re-baked, since their `customParams[N]` `#define`
-// macros encode the slot positions).
+// GL via the canonical header's `#ifdef PLASMAZONES_KWIN` default-block
+// branch, daemon Qt RHI via the `binding=0` UBO upload). If anyone
+// reorders or inserts a field above any of these, the corresponding
+// assert fails at compile time and the canonical GLSL header MUST be
+// updated to match (and all in-tree `effect.frag` files re-baked, since
+// their `customParams[N]` `#define` macros encode the slot positions).
 //
 // Every field declared in `animation_uniforms.glsl` is pinned here. A
 // previous revision asserted only iTime / iResolution / customParams /
@@ -136,6 +159,8 @@ static_assert(offsetof(BaseUniforms, iTextureResolution) == 592,
               "BaseUniforms::iTextureResolution must remain at std140 offset 592 (animation UBO contract)");
 static_assert(offsetof(BaseUniforms, iTimeHi) == 656,
               "BaseUniforms::iTimeHi must remain at std140 offset 656 (animation UBO contract)");
+static_assert(offsetof(BaseUniforms, iIsReversed) == 660,
+              "BaseUniforms::iIsReversed must remain at std140 offset 660 (animation UBO contract)");
 
 /// UBO region offsets and sizes for partial updates (reduces GPU bandwidth).
 namespace UboRegions {
@@ -155,22 +180,71 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
 constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 
-// Scene header: iResolution through end of iTextureResolution.
-// Excludes iTimeHi (has its own region below) and extension zone arrays.
-// WARNING: if a new field is added between iTextureResolution and iTimeHi,
-// it must be explicitly included in either this region or K_TIME_HI — a
-// field that lands in the gap between K_SCENE_HEADER end and K_TIME_HI
-// start will never be uploaded. Add a static_assert for any new field.
+// Scene header: iResolution through end of struct.
+// Covers iResolution, appFields, iMouse, iDate, customParams, customColors,
+// iChannelResolution, iAudioSpectrumSize, iFlipBufferY, iTextureResolution,
+// iTimeHi, iIsReversed, and the trailing std140 pad. Sized to the
+// remainder of BaseUniforms so any field added at or after offset 80
+// (iResolution) is automatically covered by m_sceneDataDirty's upload
+// path without needing a per-field dirty flag.
+//
+// History: an earlier revision capped K_SCENE_HEADER_SIZE at offsetof(iTimeHi),
+// leaving the gap from offsetof(iTimeHi) + sizeof(iTimeHi) (660) to
+// sizeof(BaseUniforms) (672) un-uploaded by partial-update paths. The
+// new iIsReversed field at offset 660 landed exactly in that gap and
+// silently failed to propagate to the GPU after the first full upload —
+// asymmetric direction-aware shaders read stale values forever.
+//
+// WARNING: a new field added BEFORE iResolution (offset < 80) must
+// extend K_MATRIX_OPACITY or land in its own region; this scene-header
+// range only covers offsets [80, sizeof(BaseUniforms)).
 constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(BaseUniforms, iResolution);
-constexpr size_t K_SCENE_HEADER_SIZE = offsetof(BaseUniforms, iTimeHi) - K_SCENE_HEADER_OFFSET;
+constexpr size_t K_SCENE_HEADER_SIZE = sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET;
 
-// iTimeHi block: uploaded when the wrap offset advances (rare)
+// iTimeHi block: a granular 4-byte upload region for the time-wrap-only
+// path (m_timeHiDirty fires every ~30 s when iTime crosses the wrap
+// boundary). Subsumed by K_SCENE_HEADER, so when m_sceneDataDirty also
+// fires for the same frame the upload site below skips this granular
+// write to avoid the duplicate 4-byte transfer.
 constexpr size_t K_TIME_HI_OFFSET = offsetof(BaseUniforms, iTimeHi);
 constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 
-// Verify the scene-header and iTimeHi regions are contiguous (no gap).
-static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == K_TIME_HI_OFFSET,
-              "Scene-header and iTimeHi regions must be contiguous — no un-uploaded gap");
+// Verify K_SCENE_HEADER reaches end of BaseUniforms — a new field added
+// at or after offset 80 must land inside this range. Without this assert,
+// adding a field beyond the previous K_SCENE_HEADER end (the iTimeHi-
+// based cap) would silently regress the gap-bug fixed by extending the
+// region. Pin via the actual LAST field's offset+size so a developer
+// who manually narrows K_SCENE_HEADER_SIZE (e.g. `= offsetof(iTimeHi) -
+// K_SCENE_HEADER_OFFSET`, which is exactly the original regression)
+// fails to build. The earlier formulation
+// `K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms)`
+// was tautological because K_SCENE_HEADER_SIZE is itself defined as
+// `sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET` — the assert reduced
+// to `sizeof == sizeof` and could not catch the regression it claimed
+// to defend.
+static_assert(offsetof(BaseUniforms, _pad_after_iIsReversed) + sizeof(BaseUniforms::_pad_after_iIsReversed)
+                  <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
+              "K_SCENE_HEADER must cover the trailing _pad_after_iIsReversed bytes — "
+              "narrowing K_SCENE_HEADER_SIZE leaves the iIsReversed gap unmapped");
+static_assert(K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms),
+              "K_SCENE_HEADER must reach end-of-BaseUniforms — defensive companion to "
+              "the trailing-field assert above");
+// Verify K_TIME_HI is fully nested inside K_SCENE_HEADER so the upload
+// site can skip the granular write when both dirty flags fire.
+static_assert(K_TIME_HI_OFFSET >= K_SCENE_HEADER_OFFSET
+                  && K_TIME_HI_OFFSET + K_TIME_HI_SIZE <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
+              "K_TIME_HI must be subsumed by K_SCENE_HEADER so a scene-data upload "
+              "covers iTimeHi too without needing the m_timeHiDirty granular path");
+// Verify K_APP_FIELDS is fully nested inside K_SCENE_HEADER for the
+// same reason: the upload site uses an `else if` to skip the granular
+// app-fields write when scene-data is also dirty (the broader upload
+// already covers it). Pinning the nesting at compile time makes a
+// future field-shuffle that breaks containment a build failure rather
+// than a silent missed-upload regression.
+static_assert(K_APP_FIELDS_OFFSET >= K_SCENE_HEADER_OFFSET
+                  && K_APP_FIELDS_OFFSET + K_APP_FIELDS_SIZE <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
+              "K_APP_FIELDS must be subsumed by K_SCENE_HEADER so the scene-data upload "
+              "covers appField0/appField1 too without needing the m_appFieldsDirty granular path");
 
 // Total base size (for extension offset calculation)
 constexpr size_t K_BASE_SIZE = sizeof(BaseUniforms);

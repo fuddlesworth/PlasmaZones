@@ -3,10 +3,17 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 
+#include <PhosphorAnimation/AnimationShaderContract.h>
+
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PhosphorAnimationShaders {
+
+namespace {
+Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
+} // namespace
 
 QJsonObject AnimationShaderEffect::toJson() const
 {
@@ -39,7 +46,7 @@ QJsonObject AnimationShaderEffect::toJson() const
     // and is omitted from the JSON to keep authored metadata.json files
     // terse.
     {
-        const qreal clampedPadding = qBound(0.0, boundsPadding, 2.0);
+        const qreal clampedPadding = qBound(0.0, boundsPadding, kMaxBoundsPadding);
         if (clampedPadding > 0.0)
             obj.insert(QLatin1String("boundsPadding"), clampedPadding);
     }
@@ -110,6 +117,32 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("parameters"), params);
     }
 
+    if (!textures.isEmpty()) {
+        QJsonArray texArr;
+        for (const auto& t : textures) {
+            // Skip empty-path entries to preserve fromJson(toJson(x))
+            // round-trip stability — fromJson drops them on read, so
+            // emitting them on write would cause the round-trip to
+            // shrink the list silently. An entry with empty path but
+            // non-empty wrap is also dropped: the wrap is meaningless
+            // without a sampler bound to it, and `parseEffect` (see
+            // AnimationShaderRegistry::parseEffect) can produce
+            // exactly this shape via its path-traversal guard, which
+            // clears path while leaving wrap intact (defence in
+            // depth). Letting it round-trip would silently smuggle a
+            // dead wrap value through future scans.
+            if (t.path.isEmpty())
+                continue;
+            QJsonObject tObj;
+            tObj.insert(QLatin1String("path"), t.path);
+            if (!t.wrap.isEmpty())
+                tObj.insert(QLatin1String("wrap"), t.wrap);
+            texArr.append(tObj);
+        }
+        if (!texArr.isEmpty())
+            obj.insert(QLatin1String("textures"), texArr);
+    }
+
     return obj;
 }
 
@@ -134,7 +167,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
     e.useWallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
-    e.bufferScale = qBound(0.125, obj.value(QLatin1String("bufferScale")).toDouble(1.0), 1.0);
+    e.bufferScale = qBound(kMinBufferScale, obj.value(QLatin1String("bufferScale")).toDouble(1.0), kMaxBufferScale);
     e.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString();
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
     for (const QJsonValue& v : wrapsArr) {
@@ -153,17 +186,11 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
 
     // Clamp negatives at the input boundary — a negative boundsPadding
     // would silently propagate into surfaceanimator.cpp's geometry math
-    // (negative-area shader bounds) and into the shader's uv→anchorUv
+    // (negative-area shader bounds) and into the shader's uv->anchorUv
     // remap (sample outside [0,1] always → fully transparent leg).
-    //
-    // Upper cap of 2.0 keeps the FBO area sane: at pad=2.0 the shader
-    // effect is 5× the anchor on each axis (k=1+2*pad=5) → 25× area.
-    // A 1080p anchor at RGBA8 then needs ~200 MB of FBO, already at the
-    // edge of what Vulkan validation will pass on integrated GPUs.
-    // No shipping shader needs >1.0 padding (morph uses 0.5); 2.0
-    // accommodates plugin authors with extreme silhouette warps without
-    // permitting the prior 4.0-cap excess (9× axis = 81× area).
-    e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), 2.0);
+    // Upper cap shared with surfaceanimator's runtime clamp via the
+    // `kMaxBoundsPadding` constant — see its rationale on the struct.
+    e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), kMaxBoundsPadding);
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
@@ -184,6 +211,61 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         if (pObj.contains(QLatin1String("step")))
             p.stepValue = pObj.value(QLatin1String("step")).toVariant();
         e.parameters.append(std::move(p));
+    }
+
+    // Cap the texture list at the contract budget. Surplus entries are
+    // silently dropped — the canonical UBO only declares iChannel1..3
+    // and exposing more would require both runtimes to grow more
+    // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
+    // would loosen this cap automatically.
+    const QJsonArray texArr = obj.value(QLatin1String("textures")).toArray();
+    e.textures.reserve(qMin<qsizetype>(texArr.size(), AnimationShaderContract::kMaxUserTextureSlots));
+    qsizetype slotIndex = 0;
+    int droppedEmpty = 0;
+    for (const QJsonValue& v : texArr) {
+        if (e.textures.size() >= AnimationShaderContract::kMaxUserTextureSlots)
+            break;
+        const QJsonObject tObj = v.toObject();
+        TextureSlot t;
+        t.path = tObj.value(QLatin1String("path")).toString();
+        t.wrap = tObj.value(QLatin1String("wrap")).toString();
+        // Validate wrap against the documented vocabulary. An empty
+        // string is allowed and means "use the runtime default"
+        // (clamp on both runtimes). Any other value is a typo or a
+        // deprecated/foreign vocabulary import — log a warning and
+        // reset to empty so the runtime applies its default rather
+        // than carrying a string the runtime will silently coerce
+        // to clamp anyway. Keeping unknown values in the in-memory
+        // struct would also round-trip them back through toJson,
+        // re-persisting the typo to disk on the next save.
+        if (!t.wrap.isEmpty() && t.wrap != QLatin1String("clamp") && t.wrap != QLatin1String("repeat")
+            && t.wrap != QLatin1String("mirror")) {
+            qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unknown wrap value" << t.wrap
+                                         << "for slot" << slotIndex << ", reset to runtime default";
+            t.wrap.clear();
+        }
+        // Drop entries with no path — they would map to a sampler with
+        // nothing bound. The runtimes would fall back to transparent
+        // black, but persisting the empty slot in JSON is just noise.
+        // The visible warning here matters: TextureSlot has no explicit
+        // slot-index field; an empty entry preceding a populated one
+        // SHIFTS the populated entry's runtime slot. e.g. authoring
+        // [{path:""}, {path:"foo.png"}, {path:"bar.png"}] yields
+        // textures bound at iChannel1+iChannel2 instead of iChannel2+
+        // iChannel3 as the metadata reads. Loud so authors notice the
+        // implicit re-mapping.
+        if (t.path.isEmpty()) {
+            ++droppedEmpty;
+        } else {
+            if (droppedEmpty > 0) {
+                qCWarning(lcAnimationShader)
+                    << "AnimationShaderEffect::fromJson: textures[" << slotIndex << "] populated after" << droppedEmpty
+                    << "empty entries; runtime slot will be shifted by that count "
+                       "(empty entries are dropped, not preserved as gaps).";
+            }
+            e.textures.append(std::move(t));
+        }
+        ++slotIndex;
     }
 
     return e;
@@ -235,6 +317,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
             || a.stepValue != b.stepValue)
             return false;
     }
+    if (textures != other.textures)
+        return false;
     return true;
 }
 
