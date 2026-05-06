@@ -67,7 +67,7 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
 
             // Shader profile tree drives the per-overlay shader effect (osd.show,
-            // panel.popup.zoneSelector, etc.). Push it into the SurfaceAnimator
+            // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
             // now that settings are available, and re-push on every edit so
             // users editing the tree at runtime see the new effects on the next
             // show — no daemon restart needed. registerConfigForRole only

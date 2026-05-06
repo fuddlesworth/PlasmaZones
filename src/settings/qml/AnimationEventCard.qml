@@ -103,7 +103,7 @@ Item {
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
     // Number of shader overrides on paths strictly DEEPER than this card's
     // eventPath. Only meaningful for parent-node cards: a stale leaf
-    // override (e.g. `panel.popup.layoutPicker.show = "dissolve"` set in
+    // override (e.g. `popup.layoutPicker.show = "dissolve"` set in
     // a previous session) silently wins the deeper-leaf-overlay merge in
     // `ShaderProfileTree::resolve` and shadows the parent's value at
     // runtime. Surfaced via the warning banner below with a one-click

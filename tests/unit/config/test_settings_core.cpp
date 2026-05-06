@@ -1244,12 +1244,12 @@ private Q_SLOTS:
     }
 
     /// Persistence prune drops only paths that are NOT ancestors of a
-    /// consumed leaf. Parents like `panel` and `panel.popup` ARE valid
-    /// — the resolver walks them on the way to consumed leaves, so a
-    /// shader override at a parent cascades to its descendants. Paths
-    /// like `widget.fade` / `osd.pop` / `panel.slideIn` are dead at
-    /// runtime (the daemon never resolves through them) and must be
-    /// pruned so they can't shadow user-intended siblings.
+    /// consumed leaf. Parents like `popup` ARE valid — the resolver
+    /// walks them on the way to consumed leaves, so a shader override
+    /// at a parent cascades to its descendants. Paths like
+    /// `widget.fadeIn` / `panel.slideIn` are dead at runtime (the daemon
+    /// never resolves through them) and must be pruned so they can't
+    /// shadow user-intended siblings.
     void testShaderProfileTree_prunesUnsupportedPathsOnPersistence()
     {
         IsolatedConfigGuard guard;
@@ -1264,7 +1264,7 @@ private Q_SLOTS:
         // (cascading inheritance is the whole point of a tree).
         PhosphorAnimationShaders::ShaderProfile dissolve;
         dissolve.effectId = QStringLiteral("dissolve");
-        dirty.setOverride(QStringLiteral("panel"), dissolve);
+        dirty.setOverride(QStringLiteral("popup"), dissolve);
         // Sibling under `panel` that is NOT an ancestor of any consumed
         // leaf — must be pruned (the daemon's resolver never walks
         // through `panel.slideIn`, so an entry here is runtime-dead).
@@ -1272,7 +1272,7 @@ private Q_SLOTS:
         pixelate.effectId = QStringLiteral("pixelate");
         dirty.setOverride(QStringLiteral("panel.slideIn"), pixelate);
         // Unsupported subtree (no consumed leaf below).
-        dirty.setOverride(QStringLiteral("widget.fade"), pixelate);
+        dirty.setOverride(QStringLiteral("widget.fadeIn"), pixelate);
 
         // Write through Settings (write-side prune).
         {
@@ -1286,13 +1286,13 @@ private Q_SLOTS:
         Settings b;
         const auto loaded = b.shaderProfileTree();
         QVERIFY2(loaded.hasOverride(QStringLiteral("osd.show")), "consumed leaf must survive the prune");
-        QVERIFY2(loaded.hasOverride(QStringLiteral("panel")),
+        QVERIFY2(loaded.hasOverride(QStringLiteral("popup")),
                  "ancestor of consumed leaves must survive (cascading inheritance is by design)");
         QVERIFY2(!loaded.hasOverride(QStringLiteral("panel.slideIn")),
                  "sibling that is not an ancestor of any consumed leaf must be pruned");
-        QVERIFY2(!loaded.hasOverride(QStringLiteral("widget.fade")), "unsupported subtree path must be pruned");
+        QVERIFY2(!loaded.hasOverride(QStringLiteral("widget.fadeIn")), "unsupported subtree path must be pruned");
         QCOMPARE(loaded.directOverride(QStringLiteral("osd.show")).effectId.value(), QStringLiteral("slide"));
-        QCOMPARE(loaded.directOverride(QStringLiteral("panel")).effectId.value(), QStringLiteral("dissolve"));
+        QCOMPARE(loaded.directOverride(QStringLiteral("popup")).effectId.value(), QStringLiteral("dissolve"));
     }
 
     /// Self-healing read prune: a config written by an earlier app

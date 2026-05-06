@@ -208,7 +208,7 @@ Rectangle {
 
         Behavior on border.color {
             PhosphorMotionAnimation {
-                profile: "panel.popup"
+                profile: "popup"
                 durationOverride: constants.animationDuration
             }
 
@@ -232,7 +232,7 @@ Rectangle {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "panel.popup"
+                profile: "popup"
                 durationOverride: constants.animationDuration
             }
 
@@ -362,7 +362,7 @@ Rectangle {
     // dynamic-duration logic — expanded mode slides slightly slower.
     Behavior on y {
         PhosphorMotionAnimation {
-            profile: "panel.popup"
+            profile: "popup"
             durationOverride: root.selectorState === "expanded" ? constants.expandedAnimationDuration : constants.animationDuration
         }
 
@@ -370,7 +370,7 @@ Rectangle {
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            profile: "panel.popup"
+            profile: "popup"
             durationOverride: constants.animationDuration
         }
 

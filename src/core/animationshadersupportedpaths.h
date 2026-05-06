@@ -28,11 +28,11 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::OsdShow,
         PP::OsdHide,
         // Popup family — leg-leaf paths for each popup surface that runs a shader.
-        PP::PanelPopupLayoutPickerShow,
-        PP::PanelPopupLayoutPickerHide,
-        PP::PanelPopupZoneSelectorShow,
-        PP::PanelPopupZoneSelectorHide,
-        PP::PanelPopupSnapAssistShow,
+        PP::PopupLayoutPickerShow,
+        PP::PopupLayoutPickerHide,
+        PP::PopupZoneSelectorShow,
+        PP::PopupZoneSelectorHide,
+        PP::PopupSnapAssistShow,
         // SnapAssist's hide leg is intentionally absent — the surface
         // is destroy-on-hide and never paints a hide frame, so a shader
         // assignment there would be runtime no-op.
@@ -59,13 +59,12 @@ inline QStringList shaderConsumedLeafEventPaths()
 /// of a consumed leaf — setting the shader on an ancestor cascades to
 /// its descendants via @c ShaderProfileTree::resolve's chain walk
 /// (deeper-leaf-wins overlay merge), so users get the cascading
-/// inheritance the tree is designed for: e.g. `panel = slide` applies
-/// to every popup show/hide, `panel.popup = slide` is identical, and
-/// `panel.popup.layoutPicker.show = pixelate` overrides only that one
-/// leg.
+/// inheritance the tree is designed for: e.g. `popup = slide` applies
+/// to every popup show/hide, and
+/// `popup.layoutPicker.show = pixelate` overrides only that one leg.
 ///
 /// Paths that are NOT ancestors of any consumed leaf (e.g.
-/// `panel.slideIn`, `osd.pop`, `widget.fade`, `zone.snapIn`) are
+/// `panel.slideIn`, `osd.pop`, `widget.fadeIn`, `zone.snapIn`) are
 /// excluded — there is no resolver path that walks through them, so
 /// any assignment would be runtime-dead and silently shadow what the
 /// user thought they set on a sibling. The settings UI hides the
@@ -110,7 +109,7 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 /// picker on every event row and persisted overrides for paths the
 /// daemon never consumed. Those entries now SHADOW user-intended parent
 /// overrides at runtime (e.g. user sets `panel = slide` but a stale
-/// `panel.popup.zoneSelector.show = pixelate` leaf wins via the deeper-
+/// `popup.zoneSelector.show = pixelate` leaf wins via the deeper-
 /// path-wins overlay merge), and the new UI hides the picker that would
 /// let the user clear them — making the bug sticky.
 ///

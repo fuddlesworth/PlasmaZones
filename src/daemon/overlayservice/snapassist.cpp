@@ -227,7 +227,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         m_snapAssistWindow->setHeight(screenGeom.height());
     }
     // Skip surface->show() when reusing an already-Shown surface. Surface
-    // treats Shown→Shown as a re-trigger and replays the panel.popup
+    // treats Shown→Shown as a re-trigger and replays the popup
     // fade-in (cancel + fresh beginShow with fromOpacity=0). For the
     // continuation pattern — user finishes one snap, the next snap-assist
     // reuses the warmed window — that flash is a regression of the
@@ -704,7 +704,7 @@ void OverlayService::hideLayoutPicker()
 
     // Drive the hide leg through SurfaceAnimator (configured at
     // applyShaderProfilesToAnimator → buildLayoutPickerConfig with
-    // panel.popup.layoutPicker.hide as the shader+motion paths).
+    // popup.layoutPicker.hide as the shader+motion paths).
     // Surface::hide() with keepMappedOnHide=true sets the window
     // transparent-for-input AND dispatches animator.beginHide() — the
     // animation runs on the still-mapped wl_surface so the user sees
@@ -720,7 +720,7 @@ void OverlayService::hideLayoutPicker()
     //
     // Pragmatic fix: schedule the wl_surface teardown via QTimer at
     // the configured hide duration. 600ms is comfortably above the
-    // default panel.popup.layoutPicker.hide profile (200ms). If a
+    // default popup.layoutPicker.hide profile (200ms). If a
     // user customises the profile beyond that, increase here too.
     constexpr int kDestroyDelayMs = 600;
     surface->hide();

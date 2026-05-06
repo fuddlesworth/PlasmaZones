@@ -130,22 +130,22 @@ namespace {
 //   - **OSD family (`osd.*`)** — genuine OSDs only. Used by the
 //     Notification surface (LayoutOsd / NavigationOsd). A JSON edit to
 //     `osd.hide` affects OSDs and ONLY OSDs.
-//   - **Popup family (`panel.popup.<surface>.*`)** — non-OSD overlay
+//   - **Popup family (`popup.<surface>.*`)** — non-OSD overlay
 //     surfaces. Each gets its own leaf paths under
-//     `panel.popup.<surface>` per surface's needs:
-//       • `panel.popup.layoutPicker.{show, hide, popIn}` (opacity legs +
+//     `popup.<surface>` per surface's needs:
+//       • `popup.layoutPicker.{show, hide, popIn}` (opacity legs +
 //         scale show; hide-scale couples to `.hide`)
-//       • `panel.popup.zoneSelector.{show, hide}` (opacity-only)
-//       • `panel.popup.snapAssist.show` (destroy-on-hide; no `.hide`
+//       • `popup.zoneSelector.{show, hide}` (opacity-only)
+//       • `popup.snapAssist.show` (destroy-on-hide; no `.hide`
 //         leaf because no frame ever paints)
-//     A JSON edit to `panel.popup.layoutPicker.hide` affects ONLY the
+//     A JSON edit to `popup.layoutPicker.hide` affects ONLY the
 //     layout picker; siblings are unaffected.
 //
 // The shipped tree carries zero bundled per-leaf profile JSONs — every
 // profile is sourced from the Settings UI's per-node overrides via
 // `PhosphorProfileRegistry::registerProfile`, with
 // `resolveWithInheritance()` walking the parent chain so a parent-node
-// edit (e.g. "All Popups → 2000 ms" written to `panel.popup`)
+// edit (e.g. "All Popups → 2000 ms" written to `popup`)
 // propagates to every leaf under it. Unset paths fall through to
 // library defaults (150 ms OutCubic). User-authored JSONs at
 // `~/.local/share/plasmazones/profiles/<path>.json` are still loaded
@@ -159,7 +159,7 @@ namespace {
 // LayoutPicker shared — kept INSIDE each surface family but not BETWEEN
 // them, which is the change here. If a future surface needs decoupled
 // opacity/scale tuning, introduce a sibling path
-// (e.g. `panel.popup.layoutPicker.popOut`) and register it on
+// (e.g. `popup.layoutPicker.popOut`) and register it on
 // `hideScaleProfile`.
 
 namespace PAL = PhosphorAnimationLayer;
@@ -207,7 +207,7 @@ PAL::SurfaceAnimator::Config buildDefaultConfig()
 /// **Genuine-OSD surface family.** All four leg paths live under
 /// `osd.*`. A JSON edit to `osd.hide` affects OSDs and ONLY OSDs —
 /// LayoutPicker / ZoneSelector / SnapAssist live in the
-/// `panel.popup.*` family.
+/// `popup.*` family.
 PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -230,98 +230,97 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 /// surface.
 ///
 /// **Popup surface family — dedicated path partition.** Every leg
-/// resolves under `panel.popup.layoutPicker.*`, NOT under `osd.*`. A
-/// Settings-UI edit at `panel.popup.layoutPicker.hide` affects ONLY
+/// resolves under `popup.layoutPicker.*`, NOT under `osd.*`. A
+/// Settings-UI edit at `popup.layoutPicker.hide` affects ONLY
 /// the layout picker; OSD timings stay independent. With no override
-/// set, `resolveWithInheritance` walks up to `panel.popup` and finally
+/// set, `resolveWithInheritance` walks up to `popup` and finally
 /// to library defaults (150 ms OutCubic).
 ///
 /// Shader legs key on the same `.show` / `.hide` leaves so a user can
 /// dissolve in and slide out (or any asymmetric pair). Both leaves walk
-/// up to `panel.popup.layoutPicker` and on to `panel.popup`, so a user
+/// up to `popup.layoutPicker` and on to `popup`, so a user
 /// who wants symmetric treatment overrides the surface path once and
 /// skips the leaves.
 PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     return PAL::SurfaceAnimator::Config{
-        .showProfile = PP::PanelPopupLayoutPickerShow,
-        .hideProfile = PP::PanelPopupLayoutPickerHide,
-        .showScaleProfile = PP::PanelPopupLayoutPickerShow,
-        .hideScaleProfile = PP::PanelPopupLayoutPickerHide,
+        .showProfile = PP::PopupLayoutPickerShow,
+        .hideProfile = PP::PopupLayoutPickerHide,
+        .showScaleProfile = PP::PopupLayoutPickerShow,
+        .hideScaleProfile = PP::PopupLayoutPickerHide,
         .showScaleFrom = 0.9,
         .hideScaleTo = 0.95,
-        .showShaderEffectId = resolveShaderEffect(tree, PP::PanelPopupLayoutPickerShow),
-        .hideShaderEffectId = resolveShaderEffect(tree, PP::PanelPopupLayoutPickerHide),
-        .showShaderProfile = PP::PanelPopupLayoutPickerShow,
-        .hideShaderProfile = PP::PanelPopupLayoutPickerHide,
-        .showShaderParameters = resolveShaderParameters(tree, PP::PanelPopupLayoutPickerShow),
-        .hideShaderParameters = resolveShaderParameters(tree, PP::PanelPopupLayoutPickerHide)};
+        .showShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerHide),
+        .showShaderProfile = PP::PopupLayoutPickerShow,
+        .hideShaderProfile = PP::PopupLayoutPickerHide,
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerShow),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerHide)};
 }
 
 /// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
 /// hide animation actually paints.
 ///
 /// **Popup surface family — dedicated path partition.** Every leg
-/// resolves under `panel.popup.zoneSelector.*`, NOT under the shared
-/// `panel.popup` baseline or the generic `widget.fadeOut` it previously
-/// borrowed. A Settings-UI edit at `panel.popup.zoneSelector.hide`
+/// resolves under `popup.zoneSelector.*`, NOT under the shared
+/// `popup` baseline or the generic `widget.fadeOut` it previously
+/// borrowed. A Settings-UI edit at `popup.zoneSelector.hide`
 /// affects ONLY the zone selector. With no override set,
-/// `resolveWithInheritance` walks up to `panel.popup` then library
+/// `resolveWithInheritance` walks up to `popup` then library
 /// defaults.
 PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     return PAL::SurfaceAnimator::Config{
-        .showProfile = PP::PanelPopupZoneSelectorShow,
-        .hideProfile = PP::PanelPopupZoneSelectorHide,
+        .showProfile = PP::PopupZoneSelectorShow,
+        .hideProfile = PP::PopupZoneSelectorHide,
         .showScaleProfile = {},
         .hideScaleProfile = {},
-        .showShaderEffectId = resolveShaderEffect(tree, PP::PanelPopupZoneSelectorShow),
-        .hideShaderEffectId = resolveShaderEffect(tree, PP::PanelPopupZoneSelectorHide),
-        .showShaderProfile = PP::PanelPopupZoneSelectorShow,
-        .hideShaderProfile = PP::PanelPopupZoneSelectorHide,
-        .showShaderParameters = resolveShaderParameters(tree, PP::PanelPopupZoneSelectorShow),
-        .hideShaderParameters = resolveShaderParameters(tree, PP::PanelPopupZoneSelectorHide)};
+        .showShaderEffectId = resolveShaderEffect(tree, PP::PopupZoneSelectorShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupZoneSelectorHide),
+        .showShaderProfile = PP::PopupZoneSelectorShow,
+        .hideShaderProfile = PP::PopupZoneSelectorHide,
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorShow),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorHide)};
 }
 
 /// SnapAssist: pop-in show only. The overlay uses destroy-on-hide
 /// (keepMappedOnHide=false), so ~Surface synchronously cancels any
 /// in-flight beginHide before the hide animation can paint a frame.
-/// Only `panel.popup.snapAssist.show` is meaningful — `.hide` is
+/// Only `popup.snapAssist.show` is meaningful — `.hide` is
 /// intentionally absent from the taxonomy because no frame ever paints.
 ///
 /// **Inheritance caveat (popup-family-only).** ShaderProfileTree::resolve
 /// walks parent paths, so within the popup family a user setting
-/// `panel.popup` to dissolve cascades to LayoutPicker and ZoneSelector
+/// `popup` to dissolve cascades to LayoutPicker and ZoneSelector
 /// (both legs) and to SnapAssist's show leg via the chain
-/// `panel.popup.<surface>.<leg>` → `panel.popup.<surface>` →
-/// `panel.popup` → `global`. SnapAssist's HIDE leg deliberately drops
+/// `popup.<surface>.<leg>` → `popup.<surface>` →
+/// `popup` → `global`. SnapAssist's HIDE leg deliberately drops
 /// that walk-up — the surface destroys before paint, so the resolve
 /// would be contract-pure-and-runtime-no-op. The genuine OSD
 /// (`osd.show`/`osd.hide`) is in a separate subtree and is NOT touched
-/// by `panel.popup` overrides regardless. If someone ever flips
+/// by `popup` overrides regardless. If someone ever flips
 /// `keepMappedOnHide` to true on snap-assist, restore the
-/// `resolveShaderEffect(tree, PanelPopupSnapAssistHide)` line below in
+/// `resolveShaderEffect(tree, PopupSnapAssistHide)` line below in
 /// lockstep with adding the new path constant.
 PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     return PAL::SurfaceAnimator::Config{// Popup surface family — dedicated path. A user editing
-                                        // `panel.popup.snapAssist.show.json` affects ONLY the snap
+                                        // `popup.snapAssist.show.json` affects ONLY the snap
                                         // assist; siblings are unaffected. Built-in default mirrors the
-                                        // prior `panel.popup` (150 ms widget-out) so behaviour is
+                                        // prior `popup` (150 ms widget-out) so behaviour is
                                         // preserved.
-                                        .showProfile = PP::PanelPopupSnapAssistShow,
+                                        .showProfile = PP::PopupSnapAssistShow,
                                         .hideProfile = {},
                                         .showScaleProfile = {},
                                         .hideScaleProfile = {},
-                                        .showShaderEffectId = resolveShaderEffect(tree, PP::PanelPopupSnapAssistShow),
+                                        .showShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistShow),
                                         .hideShaderEffectId = {},
-                                        .showShaderProfile = PP::PanelPopupSnapAssistShow,
+                                        .showShaderProfile = PP::PopupSnapAssistShow,
                                         .hideShaderProfile = {},
-                                        .showShaderParameters =
-                                            resolveShaderParameters(tree, PP::PanelPopupSnapAssistShow),
+                                        .showShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistShow),
                                         .hideShaderParameters = {}};
 }
 
@@ -382,15 +381,14 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     // this is wasted work the explicit gate eliminates.
     if (lcOverlay().isDebugEnabled()) {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        qCDebug(lcOverlay).nospace()
-            << "applyShaderProfilesToAnimator — overrides=" << tree.overriddenPaths().size()
-            << " resolved: osd.show=" << resolveShaderEffect(tree, PP::OsdShow)
-            << " osd.hide=" << resolveShaderEffect(tree, PP::OsdHide)
-            << " zoneSelector.show=" << resolveShaderEffect(tree, PP::PanelPopupZoneSelectorShow)
-            << " zoneSelector.hide=" << resolveShaderEffect(tree, PP::PanelPopupZoneSelectorHide)
-            << " layoutPicker.show=" << resolveShaderEffect(tree, PP::PanelPopupLayoutPickerShow)
-            << " layoutPicker.hide=" << resolveShaderEffect(tree, PP::PanelPopupLayoutPickerHide)
-            << " snapAssist.show=" << resolveShaderEffect(tree, PP::PanelPopupSnapAssistShow);
+        qCDebug(lcOverlay).nospace() << "applyShaderProfilesToAnimator — overrides=" << tree.overriddenPaths().size()
+                                     << " resolved: osd.show=" << resolveShaderEffect(tree, PP::OsdShow)
+                                     << " osd.hide=" << resolveShaderEffect(tree, PP::OsdHide)
+                                     << " zoneSelector.show=" << resolveShaderEffect(tree, PP::PopupZoneSelectorShow)
+                                     << " zoneSelector.hide=" << resolveShaderEffect(tree, PP::PopupZoneSelectorHide)
+                                     << " layoutPicker.show=" << resolveShaderEffect(tree, PP::PopupLayoutPickerShow)
+                                     << " layoutPicker.hide=" << resolveShaderEffect(tree, PP::PopupLayoutPickerHide)
+                                     << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow);
     }
     m_surfaceAnimator->registerConfigForRole(PzRoles::Notification, buildOsdConfig(tree));
     m_surfaceAnimator->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));

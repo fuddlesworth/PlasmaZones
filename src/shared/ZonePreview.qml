@@ -220,7 +220,7 @@ Item {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
                         durationOverride: root.animationDuration
                     }
 
@@ -260,20 +260,20 @@ Item {
 
             Behavior on scale {
                 // OutBack overshoot=1.20 feel — restored faithfully via the
-                // osd-pop curve referenced through zone.highlight-pop.
+                // osd-pop curve referenced through zone.highlight.pop.
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight-pop"
+                    profile: "zone.highlight.pop"
                     durationOverride: root.animationDuration
                 }
 
             }
 
-            // Border feedback uses the half-duration zone.highlight-border
+            // Border feedback uses the half-duration zone.highlight.border
             // profile so the border snaps in twice as fast as the fill —
             // matches the pre-PR-344 `duration: animationDuration / 2` shape.
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight-border"
+                    profile: "zone.highlight.border"
                     durationOverride: root.animationDuration / 2
                 }
 
@@ -281,7 +281,7 @@ Item {
 
             Behavior on border.width {
                 PhosphorMotionAnimation {
-                    profile: "zone.highlight-border"
+                    profile: "zone.highlight.border"
                     durationOverride: root.animationDuration / 2
                 }
 

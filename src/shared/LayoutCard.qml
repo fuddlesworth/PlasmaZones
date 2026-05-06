@@ -262,7 +262,7 @@ Item {
 
             Behavior on width {
                 PhosphorMotionAnimation {
-                    profile: "widget.badge"
+                    profile: root.isActive ? "widget.badgeShow" : "widget.badgeHide"
                     durationOverride: root.animationDuration
                 }
 
@@ -270,17 +270,17 @@ Item {
 
             Behavior on height {
                 PhosphorMotionAnimation {
-                    profile: "widget.badge"
+                    profile: root.isActive ? "widget.badgeShow" : "widget.badgeHide"
                     durationOverride: root.animationDuration
                 }
 
             }
 
-            // Opacity must not overshoot — widget.badge's curve has overshoot
+            // Opacity must not overshoot — badgeShow's curve has overshoot
             // for the size pop, but for opacity that produces a clamped peak.
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "widget.fade"
+                    profile: root.isActive ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: root.shortAnimationDuration
                 }
 
@@ -371,7 +371,7 @@ Item {
 
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "widget.fade"
+                    profile: "widget.tint"
                     durationOverride: root.animationDuration
                 }
 
@@ -379,7 +379,7 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "widget.fade"
+                    profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: root.animationDuration
                 }
 

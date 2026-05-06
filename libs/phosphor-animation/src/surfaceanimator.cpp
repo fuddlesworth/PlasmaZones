@@ -249,8 +249,8 @@ PhosphorAnimation::Profile resolveProfile(PhosphorAnimation::PhosphorProfileRegi
         return PhosphorAnimation::Profile{}.withDefaults();
     }
     // Inheritance-aware resolve so a parent-node card edit at e.g.
-    // `panel.popup` propagates to every `panel.popup.*.*` leg even
-    // when the bundled per-leaf JSONs (panel.popup.layoutPicker.show
+    // `popup` propagates to every `popup.*.*` leg even
+    // when the bundled per-leaf JSONs (popup.layoutPicker.show
     // .json etc.) hardcode their own duration. The previous direct
     // `registry.resolve(path)` call only matched the exact leaf —
     // bundled leaf entries silently shadowed the user's parent

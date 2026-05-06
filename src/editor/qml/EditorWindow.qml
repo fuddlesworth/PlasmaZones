@@ -349,7 +349,7 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "widget.fade"
+                profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
                 durationOverride: 200
             }
 
@@ -611,7 +611,9 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        // Inset margin tween — not a fade, use the widget
+                        // family root for the generic 150 ms ease-out shape.
+                        profile: "widget"
                     }
 
                 }
@@ -620,7 +622,7 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget"
                     }
 
                 }
@@ -629,7 +631,7 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget"
                     }
 
                 }
@@ -638,7 +640,7 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget"
                     }
 
                 }
@@ -733,7 +735,7 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "widget.fade"
+                profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
                 durationOverride: 200
             }
 

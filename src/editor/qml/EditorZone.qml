@@ -495,7 +495,7 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "widget.fade"
+                    profile: opacity > 0.5 ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: 100
                 }
 

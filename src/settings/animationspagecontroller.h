@@ -200,7 +200,7 @@ public:
 
     /// True when @p path is one of the event paths the daemon's overlay
     /// service actually consumes as a shader-leg surface (osd.show /
-    /// .hide and the `panel.popup.<surface>.<show|hide>` family). Other
+    /// .hide and the `popup.<surface>.<show|hide>` family). Other
     /// paths persist a shader assignment but never produce a visible
     /// shader leg — the QML picker hides itself on those rows so the
     /// user gets clear "this control does nothing here" feedback rather

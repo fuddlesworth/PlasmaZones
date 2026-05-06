@@ -21,7 +21,7 @@ Window {
     // Phase 5: surface lifecycle + show/hide animations are entirely library-
     // driven. PhosphorAnimationLayer::SurfaceAnimator (registered for
     // PzRoles::ZoneSelector) drives this Window's content opacity via its
-    // `panel.popup` / `widget.fadeOut` profiles; the PhosphorLayer::Surface
+    // `popup` / `widget.fadeOut` profiles; the PhosphorLayer::Surface
     // state machine handles `Qt.WindowTransparentForInput` on the underlying
     // QWindow during the hide cycle. The previous `_selectorDismissed` flag
     // + `showAnimation` / `hideAnimation` blocks are gone.

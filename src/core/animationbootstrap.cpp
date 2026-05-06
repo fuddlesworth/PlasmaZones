@@ -176,24 +176,32 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         QLatin1StringView curveSpec;
         qreal durationMs;
     };
-    constexpr std::array<FamilySeed, 23> seeds{{
+    constexpr std::array<FamilySeed, 33> seeds{{
         // ── Popups ────────────────────────────────────────────────
-        // Family parent — leaves (panel.popup.layoutPicker.*,
-        // panel.popup.zoneSelector.*, panel.popup.snapAssist.*)
-        // inherit from this.
-        {QLatin1StringView{"panel.popup"}, QLatin1StringView{"widget-out"}, 150.0},
-        // Single-leaf path — no real "panel" family above it.
+        // Family parent — leaves (popup.layoutPicker.*,
+        // popup.zoneSelector.*, popup.snapAssist.*) inherit from this.
+        {QLatin1StringView{"popup"}, QLatin1StringView{"widget-out"}, 150.0},
+
+        // ── Panels ────────────────────────────────────────────────
+        // In-app side surfaces (settings nav rail, editor property panel).
+        // Slide is size/translate motion; fade is opacity. Asymmetric
+        // pairs with separate seeds since family parent carries one curve.
         {QLatin1StringView{"panel.slideIn"}, QLatin1StringView{"widget-out"}, 200.0},
+        {QLatin1StringView{"panel.slideOut"}, QLatin1StringView{"cubic-in"}, 180.0},
+        // Bespoke bezier curves — formerly the sidebar.* root.
+        {QLatin1StringView{"panel.fadeIn"}, QLatin1StringView{"cubic-bezier:0.25,0.46,0.45,0.94"}, 120.0},
+        {QLatin1StringView{"panel.fadeOut"}, QLatin1StringView{"cubic-bezier:0.55,0.085,0.68,0.53"}, 80.0},
 
         // ── OSDs ──────────────────────────────────────────────────
-        // Asymmetric show / hide curves — seeded individually
+        // Asymmetric show / pop / hide curves — seeded individually
         // because the family parent can carry only one curve.
         {QLatin1StringView{"osd.show"}, QLatin1StringView{"cubic-out"}, 150.0},
+        {QLatin1StringView{"osd.pop"}, QLatin1StringView{"widget-pop"}, 250.0},
         {QLatin1StringView{"osd.hide"}, QLatin1StringView{"cubic-in"}, 200.0},
 
         // ── Widgets ───────────────────────────────────────────────
-        // Family parent — covers fade, hover, reorder, progress,
-        // toggle-color etc. that share the 150 ms ease-out shape.
+        // Family parent — covers hover, reorder, progress and the rest
+        // of the 150 ms ease-out shape.
         {QLatin1StringView{"widget"}, QLatin1StringView{"widget-out"}, 150.0},
         // Distinctive leaves whose prior tuning materially differed
         // from the family default. Two-layer resolveWithInheritance
@@ -201,22 +209,28 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // leaves — the seeds form the lowest precedence layer.
         {QLatin1StringView{"widget.press"}, QLatin1StringView{"widget-out"}, 100.0},
         {QLatin1StringView{"widget.dim"}, QLatin1StringView{"widget-out"}, 200.0},
+        // Tint family — root + fast variant inherits from root.
         {QLatin1StringView{"widget.tint"}, QLatin1StringView{"widget-out"}, 300.0},
-        {QLatin1StringView{"widget.tint-fast"}, QLatin1StringView{"widget-out"}, 120.0},
-        {QLatin1StringView{"widget.toggle"}, QLatin1StringView{"widget-pop"}, 250.0},
-        {QLatin1StringView{"widget.badge"}, QLatin1StringView{"widget-pop"}, 200.0},
-        {QLatin1StringView{"widget.accordion"}, QLatin1StringView{"widget-out"}, 250.0},
-        // Pulse cluster — sinusoidal ease for the looped pulse feel.
-        {QLatin1StringView{"widget.pulse"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1000.0},
-        {QLatin1StringView{"widget.pulse-fast"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 500.0},
-        {QLatin1StringView{"widget.pulse-slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
-        // Asymmetric fade-out — ease-in over a longer envelope.
+        {QLatin1StringView{"widget.tint.fast"}, QLatin1StringView{"widget-out"}, 120.0},
+        // Toggle — bistable spring-pop both directions; symmetric defaults.
+        {QLatin1StringView{"widget.toggleOn"}, QLatin1StringView{"widget-pop"}, 250.0},
+        {QLatin1StringView{"widget.toggleOff"}, QLatin1StringView{"widget-pop"}, 250.0},
+        // Badge — show is overshoot, hide is fast ease-in, pulse is count-change attention.
+        {QLatin1StringView{"widget.badgeShow"}, QLatin1StringView{"widget-pop"}, 200.0},
+        {QLatin1StringView{"widget.badgeHide"}, QLatin1StringView{"cubic-in"}, 150.0},
+        {QLatin1StringView{"widget.badgePulse"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 400.0},
+        // Accordion — collapse snaps faster than expand.
+        {QLatin1StringView{"widget.accordionExpand"}, QLatin1StringView{"widget-out"}, 250.0},
+        {QLatin1StringView{"widget.accordionCollapse"}, QLatin1StringView{"cubic-in"}, 180.0},
+        // Asymmetric fade pair.
+        {QLatin1StringView{"widget.fadeIn"}, QLatin1StringView{"widget-out"}, 200.0},
         {QLatin1StringView{"widget.fadeOut"}, QLatin1StringView{"cubic-in"}, 400.0},
-
-        // ── Sidebars ──────────────────────────────────────────────
-        // Bespoke bezier curves — neither maps cleanly to a family.
-        {QLatin1StringView{"sidebar.fadeIn"}, QLatin1StringView{"cubic-bezier:0.25,0.46,0.45,0.94"}, 120.0},
-        {QLatin1StringView{"sidebar.fadeOut"}, QLatin1StringView{"cubic-bezier:0.55,0.085,0.68,0.53"}, 80.0},
+        // Pulse cluster — sinusoidal ease for the looped pulse feel.
+        // Family root + .fast / .slow leaves; user override at `widget.pulse`
+        // cascades to both variants via two-layer resolveWithInheritance.
+        {QLatin1StringView{"widget.pulse"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1000.0},
+        {QLatin1StringView{"widget.pulse.fast"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 500.0},
+        {QLatin1StringView{"widget.pulse.slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
 
         // ── Windows ───────────────────────────────────────────────
         // Family ease-out for open/move/resize/focus/maximize;
@@ -228,11 +242,15 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // Snap in/out/resize, layout switch, and highlight all
         // hover around 200 ms ease-out.
         {QLatin1StringView{"zone"}, QLatin1StringView{"widget-out"}, 200.0},
+        {QLatin1StringView{"zone.layoutSwitchOut"}, QLatin1StringView{"cubic-in"}, 180.0},
 
         // ── Workspaces ────────────────────────────────────────────
         // Asymmetric switch in / out — ease-out then ease-in.
+        // Overview open/close mirror the same asymmetry.
         {QLatin1StringView{"workspace.switchIn"}, QLatin1StringView{"cubic-out"}, 250.0},
         {QLatin1StringView{"workspace.switchOut"}, QLatin1StringView{"cubic-in"}, 250.0},
+        {QLatin1StringView{"workspace.overviewOpen"}, QLatin1StringView{"cubic-out"}, 250.0},
+        {QLatin1StringView{"workspace.overviewClose"}, QLatin1StringView{"cubic-in"}, 250.0},
     }};
 
     for (const auto& seed : seeds) {

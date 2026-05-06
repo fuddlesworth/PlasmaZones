@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 // Notifications" parent is a parent-node card whose override cascades
 // to `osd.show` and `osd.hide` via ShaderProfileTree::resolve's
 // walk-up. Popup-family events (zone selector, layout picker, snap
-// assist) live under `panel.popup.*` and have their own dedicated page.
+// assist) live under `popup.*` and have their own dedicated page.
 Flickable {
     contentHeight: col.implicitHeight
     clip: true

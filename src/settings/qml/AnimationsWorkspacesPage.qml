@@ -8,30 +8,44 @@ Flickable {
     contentHeight: col.implicitHeight
     clip: true
     Accessible.name: i18n("Workspace animation events")
+
     ColumnLayout {
         id: col
+
         width: parent.width
         spacing: Kirigami.Units.smallSpacing
+
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "workspace"
             eventLabel: i18n("All Workspace Events")
             isParentNode: true
         }
+
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "workspace.switchIn"
             eventLabel: i18n("Switch In")
         }
+
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "workspace.switchOut"
             eventLabel: i18n("Switch Out")
         }
+
         AnimationEventCard {
             Layout.fillWidth: true
-            eventPath: "workspace.overview"
-            eventLabel: i18n("Overview")
+            eventPath: "workspace.overviewOpen"
+            eventLabel: i18n("Overview — Open")
         }
+
+        AnimationEventCard {
+            Layout.fillWidth: true
+            eventPath: "workspace.overviewClose"
+            eventLabel: i18n("Overview — Close")
+        }
+
     }
+
 }

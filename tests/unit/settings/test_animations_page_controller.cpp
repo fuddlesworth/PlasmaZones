@@ -77,7 +77,7 @@ private Q_SLOTS:
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
         QCOMPARE(c.sectionForPath(QStringLiteral("zone")), QStringLiteral("zone"));
         QCOMPARE(c.sectionForPath(QStringLiteral("zone.snapIn")), QStringLiteral("zone"));
-        QCOMPARE(c.sectionForPath(QStringLiteral("panel.popup.layoutPicker.show")), QStringLiteral("overlays"));
+        QCOMPARE(c.sectionForPath(QStringLiteral("popup.layoutPicker.show")), QStringLiteral("overlays"));
         QCOMPARE(c.sectionForPath(QString()), QString());
     }
 
@@ -86,8 +86,8 @@ private Q_SLOTS:
         AnimationsPageController c;
         QCOMPARE(c.eventLabel(QStringLiteral("global")), QStringLiteral("Global"));
         QCOMPARE(c.eventLabel(QStringLiteral("zone.snapIn")), QStringLiteral("Snap In"));
-        QCOMPARE(c.eventLabel(QStringLiteral("panel.popup.layoutPicker")), QStringLiteral("Layout Picker"));
-        QCOMPARE(c.eventLabel(QStringLiteral("panel.popup.layoutPicker.popIn")), QStringLiteral("Pop In"));
+        QCOMPARE(c.eventLabel(QStringLiteral("popup.layoutPicker")), QStringLiteral("Layout Picker"));
+        QCOMPARE(c.eventLabel(QStringLiteral("popup.layoutPicker.popIn")), QStringLiteral("Pop In"));
     }
 
     void parentChain_walksToGlobal()
@@ -880,11 +880,11 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("osd.hide")));
 
         // Popup family — leg-leaf paths (consumed leaves).
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.hide")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.show")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector.hide")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.hide")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.show")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector.hide")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
 
         // Window family — consumed leaves driven by the KWin effect's
         // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
@@ -907,11 +907,14 @@ private Q_SLOTS:
         // popup leaf individually instead of once at the parent.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("global")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("osd")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.zoneSelector")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.layoutPicker")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.zoneSelector")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist")));
+        // `panel` is no longer a popup ancestor — popups moved to their
+        // own root, leaving `panel` with only slideIn/slideOut/fadeIn/
+        // fadeOut which the daemon's overlay service never consumes.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel")));
         // `window` itself is now a consumable ancestor — setting a
         // shader at the family root cascades to every leaf above.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
@@ -922,7 +925,7 @@ private Q_SLOTS:
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("zone.snapIn")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fade")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("widget.fadeIn")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("workspace.switchIn")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("cursor")));
@@ -932,12 +935,12 @@ private Q_SLOTS:
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.slideOut")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.pop")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("osd.dim")));
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup.layoutPicker.popIn")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("popup.layoutPicker.popIn")));
         // SnapAssist hide is intentionally absent — surface destroys
         // before any hide frame paints. (Note: it would still be a
         // "consumable ancestor" if added, so this asserts it's NOT a
         // consumed leaf.)
-        QVERIFY(!c.supportsShaderLeg(QStringLiteral("panel.popup.snapAssist.hide")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
         // Empty path / nonsense path.
         QVERIFY(!c.supportsShaderLeg(QString()));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("../etc/passwd")));

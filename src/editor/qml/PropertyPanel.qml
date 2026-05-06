@@ -364,7 +364,7 @@ Rectangle {
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
-                                profile: "panel.slideIn"
+                                profile: "widget.tint.fast"
                                 durationOverride: 100
                             }
 
@@ -372,7 +372,7 @@ Rectangle {
 
                         Behavior on border.width {
                             PhosphorMotionAnimation {
-                                profile: "panel.slideIn"
+                                profile: "widget.tint.fast"
                                 durationOverride: 100
                             }
 
@@ -933,7 +933,7 @@ Rectangle {
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            profile: "panel.slideIn"
+            profile: opacity > 0.5 ? "panel.fadeIn" : "panel.fadeOut"
             durationOverride: Theme.animDuration
         }
 
@@ -941,7 +941,8 @@ Rectangle {
 
     Behavior on Layout.preferredWidth {
         PhosphorMotionAnimation {
-            profile: "panel.slideIn"
+            // Direction-bound: use slideIn when growing, slideOut when shrinking.
+            profile: Layout.preferredWidth > 0 ? "panel.slideIn" : "panel.slideOut"
             durationOverride: Theme.animDuration
         }
 

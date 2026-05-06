@@ -271,8 +271,8 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
     }
 
     // Inheritance-aware resolution: a parent-node override at e.g.
-    // `panel.popup` MUST flow down to every leaf under it
-    // (`panel.popup.layoutPicker.show`, etc.). Exact-match `resolve()`
+    // `popup` MUST flow down to every leaf under it
+    // (`popup.layoutPicker.show`, etc.). Exact-match `resolve()`
     // would silently drop the parent edit on the floor, which is the
     // bug the registry's `resolveWithInheritance` walk fixes —
     // unconfigured leaves now read their family parent (or the
@@ -311,7 +311,7 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
             // `m_boundPath` itself) must flow down — the bound path's
             // resolved Profile is the inheritance-walked overlay of
             // every registered ancestor, so a Settings edit at
-            // `panel.popup` MUST refresh every leaf bound under it.
+            // `popup` MUST refresh every leaf bound under it.
             // Exact-match check would lose the parent-overlay rebind,
             // reproducing the silent-drop bug `resolveWithInheritance`
             // exists to fix.
@@ -356,7 +356,7 @@ bool PhosphorMotionAnimation::isAncestorOrSelf(const QString& candidate, const Q
     }
     // Strict-ancestor check: `candidate` must be a dot-bounded prefix
     // of `descendant`. Without the dot terminator, `panel.pop` would
-    // be flagged an ancestor of `panel.popup` (substring rather than
+    // be flagged an ancestor of `popup` (substring rather than
     // path-segment match), which is wrong.
     if (descendant.size() <= candidate.size() + 1) {
         return false;

@@ -103,7 +103,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             qCDebug(lcOverlay) << "showZoneSelector: screen=" << screenId << "targetGeom=" << targetGeom
                                << "physScreenGeom=" << physScreen->geometry()
                                << "windowSizeAfterSet=" << window->width() << "x" << window->height();
-            // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup)
+            // Phase 5: Surface::show() drives SurfaceAnimator (popup)
             // and clears Qt.WindowTransparentForInput so input routes again.
             cancelSurfacePrime(surface);
             surface->show();
@@ -139,7 +139,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             updateZoneSelectorWindow(screenId);
             window->setWidth(geom.width());
             window->setHeight(geom.height());
-            // Phase 5: Surface::show() drives SurfaceAnimator (panel.popup).
+            // Phase 5: Surface::show() drives SurfaceAnimator (popup).
             cancelSurfacePrime(surface);
             surface->show();
         }
@@ -535,7 +535,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // literal as "plasmazones-selector-..." which did NOT start with the
     // base scope, and configFor silently fell back to the empty default
     // config — every show/hide ran on the library's 150 ms OutCubic
-    // instead of panel.popup / widget.fadeOut.
+    // instead of popup / widget.fadeOut.
     const auto role =
         PzRoles::makePerInstanceRole(PzRoles::ZoneSelector, screenId, m_surfaceManager->nextScopeGeneration());
 
