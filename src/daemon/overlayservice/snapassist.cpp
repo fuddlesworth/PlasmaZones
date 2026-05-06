@@ -144,12 +144,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // assist is showing — selectors on adjacent VS of the same physical
     // monitor stay visible. Reset cursor state first so a re-show after
     // dismiss doesn't tick edge-scroll on stale drag-time cursor coords.
-    if (state->zoneSelectorSurface) {
-        if (state->zoneSelectorWindow) {
-            QMetaObject::invokeMethod(state->zoneSelectorWindow, "resetCursorState");
-        }
-        state->zoneSelectorSurface->hide();
-    }
+    hideZoneSelectorSlotOnScreen(screenId);
 
     // Attach cached thumbnails — kwin-effect posts updates via
     // setSnapAssistThumbnail asynchronously after this returns.
@@ -319,14 +314,13 @@ void OverlayService::hideSnapAssist()
     // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
     Q_EMIT snapAssistDismissed();
 
-    // Re-show the zone selector for the VS that was hidden in
-    // showSnapAssist (symmetric).
+    // Re-show the zone selector slot for the VS that was hidden in
+    // showSnapAssist (symmetric — drag is still active so the selector
+    // is logically visible).
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            if (!selectorSurface->isLogicallyShown()) {
-                cancelSurfacePrime(selectorSurface);
-                selectorSurface->show();
-            }
+        const auto& state = m_screenStates.value(screenId);
+        if (state.zoneSelectorPhysScreen && state.zoneSelectorGeometry.isValid()) {
+            showZoneSelectorSlotOnScreen(screenId, state.zoneSelectorPhysScreen, state.zoneSelectorGeometry);
         }
     }
 }
@@ -391,12 +385,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     // Hide the zone selector on this VS to avoid overlap.
-    if (state->zoneSelectorSurface) {
-        if (state->zoneSelectorWindow) {
-            QMetaObject::invokeMethod(state->zoneSelectorWindow, "resetCursorState");
-        }
-        state->zoneSelectorSurface->hide();
-    }
+    hideZoneSelectorSlotOnScreen(resolvedId);
 
     QSize autotileCanvas;
     if (m_screenManager) {
@@ -489,13 +478,12 @@ void OverlayService::hideLayoutPicker()
                                      });
     }
 
-    // Re-show the zone selector for the VS that was hidden in show.
+    // Re-show the zone selector slot for the VS that was hidden in
+    // show (symmetric — drag is still active).
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorSurface = m_screenStates.value(screenId).zoneSelectorSurface) {
-            if (!selectorSurface->isLogicallyShown()) {
-                cancelSurfacePrime(selectorSurface);
-                selectorSurface->show();
-            }
+        const auto& state = m_screenStates.value(screenId);
+        if (state.zoneSelectorPhysScreen && state.zoneSelectorGeometry.isValid()) {
+            showZoneSelectorSlotOnScreen(screenId, state.zoneSelectorPhysScreen, state.zoneSelectorGeometry);
         }
     }
 

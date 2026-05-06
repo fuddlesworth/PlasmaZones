@@ -101,7 +101,6 @@ public:
         // hundreds of `window->setProperty(...)` call sites in overlayservice/*.cpp
         // don't each need to reach through a surface pointer.
         PhosphorLayer::Surface* overlaySurface = nullptr;
-        PhosphorLayer::Surface* zoneSelectorSurface = nullptr;
         // Unified per-screen passive overlay shell — single wl_surface
         // hosting kbd-None overlay slots (currently OSD; subsequent
         // migration steps fold zone-selector / main overlay /
@@ -129,11 +128,12 @@ public:
         // QImage rebuild AND Qt's QVariant(QImage) property-write equality compare
         // are skipped. 0 = never computed / cache invalid.
         quint64 labelsTextureHash = 0;
-        QQuickWindow* zoneSelectorWindow = nullptr;
         QScreen* zoneSelectorPhysScreen = nullptr;
-        /// Intended geometry of the zone selector window. On Wayland LayerShell, QWindow::geometry()
-        /// is unreliable until the compositor acknowledges the surface position. This field stores
-        /// the geometry we requested so hit-testing in updateSelectorPosition() can use it immediately.
+        /// Intended geometry of the zone selector inside its shell. On
+        /// Wayland LayerShell, QWindow::geometry() is unreliable until
+        /// the compositor acknowledges surface position; this field
+        /// stores the geometry we requested so hit-testing in
+        /// updateSelectorPosition() has a stable reference.
         QRect zoneSelectorGeometry;
         QScreen* notificationPhysScreen = nullptr;
     };
@@ -700,7 +700,7 @@ private:
     /// name so the existing hot-plug
     /// `destroyAllWindowsForPhysicalScreen` callers don't churn — a
     /// future cleanup can rename to `destroyPassiveShell`.
-    void destroyNotificationWindow(const QString& screenId);
+    void destroyPassiveShell(const QString& screenId);
 
     /// Lazily create the per-screen NotificationOverlay window if missing,
     /// then return a pointer to its PerScreenOverlayState (or nullptr if
@@ -770,6 +770,22 @@ private:
 
     /// Animator-driven slot-hide completion for zone-selector.
     void onZoneSelectorSlotHideCompleted(const QString& effectiveId);
+
+    /// Hide the zone-selector slot on a single screen via the animator,
+    /// so a fading-out selector doesn't stack behind an incoming
+    /// OSD/popup. Mirrors hideZoneSelector but scoped to one screen and
+    /// does NOT flip the global m_zoneSelectorVisible flag — the
+    /// selector stays "logically visible" from the daemon's POV (the
+    /// drag is still active), it's just hidden ON THIS SCREEN to make
+    /// room for a sibling overlay.
+    void hideZoneSelectorSlotOnScreen(const QString& effectiveId);
+
+    /// Re-show the zone-selector slot on a single screen via the
+    /// animator. Inverse of hideZoneSelectorSlotOnScreen — used by the
+    /// snap-assist / picker dismiss paths to restore the selector
+    /// after a temporary slot-hide. Idempotent: bails when the slot is
+    /// already visible.
+    void showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, const QRect& targetGeom);
 
     /// Drive the per-screen shell wl_surface map state from slot
     /// visibility. Shell uses keepMappedOnHide=true; Surface::show()

@@ -83,25 +83,21 @@ Item {
     anchors.fill: parent
 
     Item {
+        // Pre-shell, a MouseArea here wrote `mousePosition` from Qt
+        // hover events. Post-shell the slot lives inside the unified
+        // PassiveOverlayShell which is kbd-None and (when no modal is
+        // up) input-region-empty — Qt hover events don't reach this
+        // slot. C++ OverlayService::updateMousePosition is now the
+        // sole writer, fed from KWin's drag-cursor D-Bus updates.
+        // Keeping the MouseArea would race the C++ writes (when input
+        // region is non-empty during modal popups) and clobber them
+        // with stale Qt-local coordinates.
+
         id: content
 
         anchors.fill: parent
         visible: !root._idled
         Accessible.name: i18n("Zone overlay")
-
-        MouseArea {
-            id: mouseTracker
-
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-            onPositionChanged: function(mouse) {
-                root.mousePosition = Qt.point(mouse.x, mouse.y);
-            }
-            onExited: {
-                root.mousePosition = Qt.point(-1, -1);
-            }
-        }
 
         QtObject {
             id: shaderConfig

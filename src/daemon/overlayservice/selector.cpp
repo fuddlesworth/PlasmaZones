@@ -58,10 +58,6 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         if (!state || !state->passiveShellSurface || !state->passiveShellZoneSelectorSlot) {
             return;
         }
-        // Mirror legacy zoneSelector* fields onto the shell so existing
-        // hit-test / config code that reads these continues to work.
-        state->zoneSelectorSurface = state->passiveShellSurface;
-        state->zoneSelectorWindow = state->passiveShellWindow;
         state->zoneSelectorPhysScreen = physScreen;
         state->zoneSelectorGeometry = targetGeom;
         if (state->passiveShellWindow) {
@@ -448,8 +444,6 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     if (!state || !state->passiveShellZoneSelectorSlot) {
         return;
     }
-    state->zoneSelectorSurface = state->passiveShellSurface;
-    state->zoneSelectorWindow = state->passiveShellWindow;
     state->zoneSelectorPhysScreen = physScreen;
 
     const QRect screenGeom = geom.isValid() ? geom : physScreen->geometry();
@@ -482,14 +476,81 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
-        // Slot lifetime is the shell's; clearing the legacy alias fields
-        // is enough — destroying the shell (via destroyNotificationWindow)
-        // tears the slot down with it.
-        it->zoneSelectorSurface = nullptr;
-        it->zoneSelectorWindow = nullptr;
+        // Slot lifetime is the shell's — destroying the shell (via
+        // destroyPassiveShell) tears the slot down with it. Clear
+        // the per-screen-id residual fields so a re-show after screen
+        // hot-plug starts from a clean slate.
         it->zoneSelectorPhysScreen = nullptr;
         it->zoneSelectorGeometry = QRect();
+        // If this screen was the active zone-selector source, clear the
+        // global visible flag so a fresh show after hot-plug isn't
+        // gated out by the early-return at showZoneSelector's top.
+        if (m_zoneSelectorVisible) {
+            bool anyOtherVisible = false;
+            for (auto sit = m_screenStates.constBegin(); sit != m_screenStates.constEnd(); ++sit) {
+                if (sit.key() == screenId) {
+                    continue;
+                }
+                if (sit.value().passiveShellZoneSelectorSlot && sit.value().passiveShellZoneSelectorSlot->isVisible()) {
+                    anyOtherVisible = true;
+                    break;
+                }
+            }
+            if (!anyOtherVisible) {
+                m_zoneSelectorVisible = false;
+                Q_EMIT zoneSelectorVisibilityChanged(false);
+            }
+        }
     }
+}
+
+void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
+{
+    auto it = m_screenStates.find(effectiveId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    auto* slot = it->passiveShellZoneSelectorSlot;
+    if (!slot || !slot->isVisible()) {
+        return;
+    }
+    QMetaObject::invokeMethod(slot, "resetCursorState");
+    m_surfaceAnimator->beginHide(it->passiveShellSurface, slot, PzRoles::ZoneSelector, [this, effectiveId]() {
+        onZoneSelectorSlotHideCompleted(effectiveId);
+    });
+}
+
+void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen,
+                                                  const QRect& targetGeom)
+{
+    if (!physScreen) {
+        return;
+    }
+    auto* state = ensurePassiveShellFor(effectiveId, physScreen);
+    if (!state || !state->passiveShellSurface || !state->passiveShellZoneSelectorSlot) {
+        return;
+    }
+    auto* slot = state->passiveShellZoneSelectorSlot;
+    if (slot->isVisible()) {
+        return;
+    }
+    state->zoneSelectorPhysScreen = physScreen;
+    state->zoneSelectorGeometry = targetGeom;
+    if (state->passiveShellWindow) {
+        assertWindowOnScreen(state->passiveShellWindow, physScreen, targetGeom);
+        state->passiveShellWindow->setWidth(targetGeom.width());
+        state->passiveShellWindow->setHeight(targetGeom.height());
+    }
+    updateZoneSelectorWindow(effectiveId);
+    writeQmlProperty(slot, QStringLiteral("loaded"), false);
+    writeQmlProperty(slot, QStringLiteral("loaded"), true);
+    cancelSurfacePrime(state->passiveShellSurface);
+    if (!state->passiveShellSurface->isLogicallyShown()) {
+        state->passiveShellSurface->show();
+    }
+    slot->setVisible(true);
+    m_surfaceAnimator->beginShow(state->passiveShellSurface, slot, PzRoles::ZoneSelector, []() { });
+    syncPassiveShellSurfaceState(effectiveId);
 }
 
 void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)

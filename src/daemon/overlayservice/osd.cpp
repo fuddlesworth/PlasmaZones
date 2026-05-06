@@ -111,11 +111,11 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
         return false;
     }
 
-    // Force-hide any zone selector on this screen so a fading-out selector
-    // doesn't stack translucently behind the incoming OSD.
-    if (state->zoneSelectorSurface && state->zoneSelectorSurface->isLogicallyShown()) {
-        state->zoneSelectorSurface->hide();
-    }
+    // Force-hide any zone selector on this screen so a fading-out
+    // selector doesn't stack translucently behind the incoming OSD.
+    // Slot-level animator hide; the shell surface stays Shown for the
+    // OSD that follows.
+    hideZoneSelectorSlotOnScreen(effectiveId);
 
     window = state->passiveShellWindow;
     outSurface = state->passiveShellSurface;
@@ -398,7 +398,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 // No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
 // across the keepMappedOnHide=true lifecycle so the warmed Vulkan
 // swapchain survives. Pre-warmed by warmUpNotifications and reused for
-// the daemon's lifetime; destroyNotificationWindow only fires on
+// the daemon's lifetime; destroyPassiveShell only fires on
 // screen-removal / shutdown.
 
 // Hot-plug hook installed by warmUpNotifications. The single
@@ -536,7 +536,7 @@ void OverlayService::warmUpNotifications()
     ensureOsdScreenAddedConnected();
 }
 
-void OverlayService::destroyNotificationWindow(const QString& screenId)
+void OverlayService::destroyPassiveShell(const QString& screenId)
 {
     // Tear down the per-screen passive shell (formerly the per-screen
     // NotificationOverlay surface). Kept under the legacy name so the
@@ -706,9 +706,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    if (navState->zoneSelectorSurface && navState->zoneSelectorSurface->isLogicallyShown()) {
-        navState->zoneSelectorSurface->hide();
-    }
+    hideZoneSelectorSlotOnScreen(effectiveId);
 
     auto* window = navState->passiveShellWindow;
     auto* navSurface = navState->passiveShellSurface;

@@ -66,19 +66,22 @@ void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
     if (state.overlaySurface) {
         state.overlaySurface->deleteLater();
     }
-    if (state.zoneSelectorSurface) {
-        state.zoneSelectorSurface->deleteLater();
-    }
     if (state.passiveShellSurface) {
         state.passiveShellSurface->deleteLater();
     }
     state.overlaySurface = nullptr;
-    state.zoneSelectorSurface = nullptr;
+    state.overlayWindow = nullptr;
     state.passiveShellSurface = nullptr;
     state.passiveShellWindow = nullptr;
+    // Slot Items are children of the shell QQuickWindow; deleting the
+    // shell destroys them. Null all five slot pointers so a stale
+    // signal handler that runs before the screen-state entry is purged
+    // doesn't dereference a dangling QQuickItem*.
     state.passiveShellOsdSlot = nullptr;
-    state.overlayWindow = nullptr;
-    state.zoneSelectorWindow = nullptr;
+    state.passiveShellSnapAssistSlot = nullptr;
+    state.passiveShellLayoutPickerSlot = nullptr;
+    state.passiveShellZoneSelectorSlot = nullptr;
+    state.passiveShellMainOverlaySlot = nullptr;
     state.overlayPhysScreen = nullptr;
     state.zoneSelectorPhysScreen = nullptr;
     state.notificationPhysScreen = nullptr;
@@ -398,7 +401,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 // not the bare "physId" key itself.
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyNotificationWindow(physicalScreenId);
+                destroyPassiveShell(physicalScreenId);
                 m_screenStates.remove(physicalScreenId);
                 return;
             }
@@ -411,7 +414,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
-                destroyNotificationWindow(physicalScreenId);
+                destroyPassiveShell(physicalScreenId);
             }
 
             // Clear selected zone before destroying windows — the selection references
@@ -655,18 +658,14 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         return nullptr;
     }
 
-    // Wire the QML-side auto-dismiss signal to Surface::hide(). The OSD
-    // content components (LayoutOsdContent, NavigationOsdContent) both
-    // expose `signal dismissRequested()` driven by their shared
-    // OsdDismissable timer; the unified NotificationOverlay host
-    // re-emits each loaded content's signal as its own dismissRequested.
-    // LayoutPickerOverlay uses the same name (post-#9 rename) for
-    // backdrop-click dismissal. String-based connect is the only path
-    // because QML-defined signals aren't addressable via Qt5
-    // `&Class::signal` pointers.
-    if (auto* window = surface->window()) {
-        QObject::connect(window, SIGNAL(dismissRequested()), surface, SLOT(hide()));
-    }
+    // Post-shell-migration: per-content auto-dismiss is wired through
+    // the shell window's per-slot signals (`osdDismissRequested`,
+    // `snapAssistDismissRequested`, `layoutPickerDismissRequested`),
+    // each routed by ensurePassiveShellFor to a slot-specific
+    // animator-driven hide rather than a whole-surface hide. There's
+    // no generic `dismissRequested` signal on PassiveOverlayShell.qml
+    // anymore — wiring one would unmap the shell on any per-slot
+    // auto-dismiss timer.
     return surface;
 }
 
@@ -763,7 +762,7 @@ void OverlayService::hideDisabledAndRefresh()
                               m_currentActivity)) {
             continue;
         }
-        if (it.value().zoneSelectorWindow) {
+        if (it.value().passiveShellZoneSelectorSlot) {
             updateZoneSelectorWindow(screenId);
         }
         if (m_visible && it.value().overlayWindow && it.value().overlayPhysScreen) {
@@ -883,7 +882,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             || state.notificationPhysScreen == screen) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
-            destroyNotificationWindow(id);
+            destroyPassiveShell(id);
             // If every window for this screen-id was already released (or
             // this state entry never actually held any — e.g. an OSD
             // creation failed earlier), drop the empty shell so screen
@@ -891,7 +890,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // cleanupVirtualScreenStates semantics: the state entry is
             // meaningless without at least one live window.
             auto& s = m_screenStates[id];
-            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.passiveShellSurface) {
+            if (!s.overlaySurface && !s.passiveShellSurface) {
                 m_screenStates.remove(id);
             }
         }
@@ -899,7 +898,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
 
     // Snap-assist + layout picker post-shell-migration are Item slots
     // inside the per-screen passive shell — destroying the shell
-    // (above, via destroyNotificationWindow) tears the slots down with
+    // (above, via destroyPassiveShell) tears the slots down with
     // it. No separate cleanup needed.
 
     // Drop notification-window "creation failed" sentinels for screen ids

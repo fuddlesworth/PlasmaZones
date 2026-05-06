@@ -509,12 +509,15 @@ void Daemon::connectLayoutSignals()
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
             [this](PhosphorZones::Layout* layout) {
+                if (!layout) {
+                    return;
+                }
                 // Dismiss snap assist — it's stale once the layout changes
-                if (m_overlayService->isSnapAssistVisible()) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
                 // Defer OSD display (same rationale as autotileApplied — first-time
-                // QML compilation of NotificationOverlay.qml blocks the event loop
+                // QML compilation of the passive shell blocks the event loop
                 // ~100-300ms). Capture layout ID (not raw pointer) to avoid
                 // use-after-free if the layout is ever replaced between now and
                 // next event loop pass.

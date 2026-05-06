@@ -21,10 +21,12 @@ import org.plasmazones.common as QFZCommon
 Item {
     id: root
 
-    // Shader-anchor for SurfaceAnimator's per-leg layer hookup. The
-    // `objectName` mirror is preserved for selector_update.cpp's
-    // independent findQmlItemByName polish() pass.
-    property bool shaderAnchor: true
+    // shaderAnchor lives on the inner `container` PopupFrame Item below
+    // (post-shell migration restores the legacy ZoneSelectorWindow.qml
+    // placement). Putting it on this fullscreen root would key the
+    // SurfaceAnimator vertex shader to the entire shell rect rather
+    // than the visible selector card, producing a glitch-effect that
+    // smears across the whole screen on every show/hide.
     // Layout data
     property var layouts: []
     property string activeLayoutId: ""
@@ -114,7 +116,6 @@ Item {
         root.cursorY = -1;
     }
 
-    objectName: "shaderAnchor"
     anchors.fill: parent
 
     QtObject {
@@ -172,6 +173,14 @@ Item {
     QFZCommon.PopupFrame {
         id: container
 
+        // SurfaceAnimator walks for `shaderAnchor: true` to scope the
+        // per-leg vertex shader to the popup card rather than the
+        // fullscreen shell area. selector_update.cpp's independent
+        // findQmlItemByName polish() pass also looks up this same
+        // Item by objectName.
+        property bool shaderAnchor: true
+
+        objectName: "shaderAnchor"
         width: root.containerWidth
         height: root.containerHeight
         backgroundColor: root.backgroundColor

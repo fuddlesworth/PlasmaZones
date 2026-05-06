@@ -502,13 +502,30 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         return;
     }
     // Post-shell-migration: there's no separate wl_surface to destroy.
-    // The slot's visibility + `loaded` state drop here; the shell-level
-    // sync downstream flips Qt::WindowTransparentForInput on the shell
-    // wl_surface when the last visible slot is gone so the daemon
-    // stops eating clicks while idle.
-    writeQmlProperty(slot, QStringLiteral("loaded"), false);
-    slot->setVisible(false);
-    syncPassiveShellSurfaceState(screenId);
+    // Cancel any in-flight (surface, slot) animator op and run the
+    // configured hide leg cleanly via beginHide rather than yanking
+    // setVisible(false) out from under a possibly-still-running
+    // beginShow — that would leave the Track in m_pendingDestroy with
+    // a stale onComplete callback racing the next show.
+    auto* shellSurface = it->passiveShellSurface;
+    if (shellSurface) {
+        m_surfaceAnimator->beginHide(shellSurface, slot, PzRoles::Overlay, [this, screenIdCopy = screenId]() {
+            auto sit = m_screenStates.find(screenIdCopy);
+            if (sit == m_screenStates.end() || !sit->passiveShellMainOverlaySlot) {
+                return;
+            }
+            writeQmlProperty(sit->passiveShellMainOverlaySlot, QStringLiteral("loaded"), false);
+            sit->passiveShellMainOverlaySlot->setVisible(false);
+            syncPassiveShellSurfaceState(screenIdCopy);
+        });
+    } else {
+        // No shell surface — fall back to the immediate-toggle path so
+        // the slot at least lands in the right state. Should not
+        // normally happen post-ensurePassiveShellFor.
+        writeQmlProperty(slot, QStringLiteral("loaded"), false);
+        slot->setVisible(false);
+        syncPassiveShellSurfaceState(screenId);
+    }
 }
 
 bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
@@ -695,7 +712,7 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayGeomConnection = {};
     it->labelsTextureHash = 0;
 
-    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->passiveShellSurface) {
+    if (!it->overlaySurface && !it->passiveShellSurface) {
         m_screenStates.erase(it);
     }
 }

@@ -75,25 +75,6 @@ Window {
     readonly property alias zoneSelectorSlotItem: zoneSelectorSlot
     /// Main zone overlay slot Item — displays zones during window drag.
     readonly property alias mainOverlaySlotItem: mainOverlaySlot
-    /// Modal-slot visibility gate for the shell's input region.
-    ///
-    /// The shell wl_surface stays mapped permanently (keepMappedOnHide=true)
-    /// so the OSD/overlay/selector slots can animate without paying a
-    /// remap cost. By default that means EVERY click on the shell's
-    /// area is captured by Qt and eaten — the user can't click through
-    /// to windows underneath even when no slot is showing.
-    ///
-    /// Toggle Qt::WindowTransparentForInput dynamically: when neither
-    /// modal popup is logically shown, route input through to the
-    /// compositor; when snap-assist or layout-picker is showing, clear
-    /// the flag so their backdrop MouseAreas receive clicks.
-    ///
-    /// OSDs / zone selector / main overlay are display-only (zone
-    /// selector is hover-driven via D-Bus cursor positions, not Qt
-    /// mouse events; OSDs auto-dismiss on a timer; main overlay shows
-    /// zones during drag and the kwin-effect handles input). They do
-    /// NOT need shell input enabled.
-    readonly property bool _shellModalVisible: snapAssistSlot.visible || layoutPickerSlot.visible
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — the shell
@@ -113,7 +94,15 @@ Window {
     /// onZoneSelected.
     signal zoneSelectorZoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
 
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (_shellModalVisible ? 0 : Qt.WindowTransparentForInput)
+    // Qt::WindowTransparentForInput is driven imperatively by C++ from
+    // syncPassiveShellSurfaceState (via Surface::show()/hide() with
+    // keepMappedOnHide=true) — when no slot is visible, the shell's
+    // wl_surface input region is set empty so clicks pass through.
+    // Driving it from a QML flags binding here would race the C++
+    // path: a slot visibility change triggers BOTH a binding
+    // re-evaluation that calls QQuickWindow::setFlags AND the C++
+    // syncPassiveShellSurfaceState, and the order is undefined.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Initial size — the C++ side resizes to per-screen geometry on
     // creation. The shell wl_surface is screen-sized so vertex-shader
