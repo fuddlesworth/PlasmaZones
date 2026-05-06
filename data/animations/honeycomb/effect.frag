@@ -10,14 +10,17 @@
 // screenshot 1:1 instead of approximating it with a different
 // rectangular-Voronoi formulation.
 //
-// Niri host bindings → PlasmaZones equivalents:
+// Niri-port note: this shader does NOT translate niri's random_seed to
+// a hexSize uniform (PlasmaZones uses hexSize as a hex-cell-size param
+// distinct from any random seed concept). Where niri parameters have no
+// PlasmaZones counterpart, the relevant niri features (e.g. random
+// column phase) are removed in this port.
+//
+// Niri host bindings → PlasmaZones equivalents (mappings only, not
+// renames):
 //   niri_clamped_progress  →  iTime          (per-leg [0,1] from
 //                                             SurfaceAnimator's
 //                                             shaderTime AV)
-//   niri_random_seed       →  hexSize param  (metadata.json exposes
-//                                             cell radius directly
-//                                             instead of a per-window
-//                                             random)
 //   soft_edge_width = 0.15 →  softEdge param (also exposed)
 //   niri_tex               →  uTexture0      (live FBO of the
 //                                             shaderAnchor item, SRB

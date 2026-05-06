@@ -764,7 +764,22 @@ private:
     /// windows opening at once with the same effect assigned).
     /// Entries are removed when the GL-thread upload completes (or
     /// the worker observes a load failure).
+    /// All access happens on the compositor thread; the worker reads only
+    /// the captured path string and never touches m_textureLoadsInFlight.
+    /// The queued upload lambda removes the entry on the compositor thread
+    /// before any cache mutation.
     QSet<QString> m_textureLoadsInFlight;
+    /// Generation counter for the texture cache. Bumped on every
+    /// `effectsChanged` hot-reload so workers in flight (which captured
+    /// the generation at submission time) can discard their queued GL
+    /// upload if the cache has been cleared underneath them. Cheaper than
+    /// draining the loader pool synchronously on the GL thread, which
+    /// could block the compositor for tens of ms on a worker mid-rasterise
+    /// of a 1024x1024 SVG. Distinct from the destructor's
+    /// `m_textureLoaderPool.waitForDone()` — full teardown still waits to
+    /// flush pending invokeMethod posts against `this` while members are
+    /// still intact.
+    quint64 m_textureCacheGeneration = 0;
     /// Off-load a texture load onto the loader pool, then upload to
     /// the GL cache on the compositor thread when the worker
     /// finishes. Returns immediately if the path is already cached

@@ -48,6 +48,7 @@
 #include <QJsonParseError>
 #include <QKeyEvent>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QTimer>
 #include <QtMath>
@@ -512,11 +513,22 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // a fresh upload to pick up the new contents. The cache
                 // is keyed by absolute path; without this clear a
                 // file-content change with no path change would never
-                // refresh. Drain in-flight async loads first so a
-                // worker that's mid-rasterise can't post a queued
-                // upload AFTER the cache clear and silently re-populate
-                // the cache with stale (pre-reload) bytes.
-                m_textureLoaderPool.waitForDone();
+                // refresh.
+                //
+                // Bump the cache generation rather than draining the
+                // loader pool synchronously. `waitForDone()` on the GL
+                // thread would block the compositor for tens of ms when
+                // a worker is mid-rasterise of a 1024x1024 SVG (the
+                // worst case for `loadUserTextureImage`). Workers
+                // already in flight will complete their CPU rasterise,
+                // but their queued GL upload checks the generation
+                // captured at submission time against
+                // `m_textureCacheGeneration` and discards if mismatched
+                // — so no stale (pre-reload) bytes can re-populate the
+                // cleared cache. Clear immediately so the next
+                // `beginShaderTransition` hits the synchronous fallback
+                // path and uploads fresh content.
+                ++m_textureCacheGeneration;
                 m_textureLoadsInFlight.clear();
                 m_textureCache.clear();
             });
@@ -985,6 +997,13 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // member's destructor run (which itself blocks on waitForDone)
     // so the pending invokeMethod posts are flushed against a still-
     // intact `this`.
+    //
+    // Distinct from the hot-reload path in the `effectsChanged`
+    // lambda above: hot-reload bumps `m_textureCacheGeneration` (no
+    // wait) so workers in flight can discard their queued upload
+    // without blocking the compositor. Shutdown REQUIRES the wait —
+    // the queued uploads need to be flushed against a live `this`,
+    // not raced against member destruction.
     m_textureLoaderPool.waitForDone();
     m_textureLoadsInFlight.clear();
 
@@ -4663,7 +4682,16 @@ void PlasmaZonesEffect::postPaintScreen()
         for (const auto& [w, transition] : m_shaderTransitions) {
             if (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs) {
                 if (w && !w->isDeleted()) {
-                    w->addLayerRepaint(w->expandedGeometry().toAlignedRect());
+                    // Fall back to frameGeometry when expanded is empty
+                    // — a window with no shadow / decoration extents
+                    // reports an empty expanded rect, and `addLayerRepaint`
+                    // on an empty rect is a silent no-op that would stall
+                    // the time-based shader's iTime advance.
+                    QRect repaintRect = w->expandedGeometry().toAlignedRect();
+                    if (repaintRect.isEmpty()) {
+                        repaintRect = w->frameGeometry().toAlignedRect();
+                    }
+                    w->addLayerRepaint(repaintRect);
                 }
             }
         }
@@ -4862,12 +4890,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // pipeline. Hoisted behind the loc>=0 guard for
                     // the same reason as iDate above.
                     //
-                    // Edge inclusivity: `QQuickHoverHandler` treats the
-                    // right/bottom edge as INSIDE the item (its hover
-                    // region is `[x, x+w]` × `[y, y+h]`). `QRectF::contains`
-                    // would treat the same edge as OUTSIDE, so we'd
-                    // synthesise the sentinel one pixel earlier than
-                    // the daemon does. Spell out the inclusive check.
+                    // Edge inclusivity: exclusive on right/bottom edges
+                    // — matches `QRectF::contains` parity with the
+                    // daemon's `ShaderNodeRhi::setMousePosition`. With
+                    // inclusive edges, a cursor parked exactly on the
+                    // boundary between two abutting outputs would
+                    // register as inside both windows simultaneously,
+                    // and the resulting iMouse uniform would diverge
+                    // from the daemon's. Spell out the exclusive check
+                    // so the sentinel synthesis matches QRectF.
                     // Cursor pos cached once per prePaintScreen — paintWindow
                     // is called per active transition (and per output), so
                     // re-reading KWin::effects->cursorPos() per call would
@@ -4875,10 +4906,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     const QPointF cursorGlobal = m_cachedCursorGlobal;
                     float localX = -1.0f;
                     float localY = -1.0f;
-                    const bool insideInclusive = cursorGlobal.x() >= geo.x()
-                        && cursorGlobal.x() <= geo.x() + geo.width() && cursorGlobal.y() >= geo.y()
-                        && cursorGlobal.y() <= geo.y() + geo.height();
-                    if (insideInclusive) {
+                    const bool inside = cursorGlobal.x() >= geo.x() && cursorGlobal.x() < geo.x() + geo.width()
+                        && cursorGlobal.y() >= geo.y() && cursorGlobal.y() < geo.y() + geo.height();
+                    if (inside) {
                         localX = static_cast<float>(cursorGlobal.x() - geo.x());
                         localY = static_cast<float>(cursorGlobal.y() - geo.y());
                     }
@@ -5060,6 +5090,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 // `m_textureCache` or `m_textureLoadsInFlight`.
 //
 // Thread-safety notes:
+//   • The worker only reads the captured path string (`m_path`) and
+//     `m_svgMaxDim` — both POD captured-by-value at submission time.
+//     It NEVER touches `m_textureCache` or `m_textureLoadsInFlight`;
+//     all access to those members happens on the compositor thread,
+//     either at submission time or inside the queued upload lambda.
+//     The submission-time generation captured into the worker lets
+//     the queued lambda detect a hot-reload that cleared the cache
+//     and discard the upload before touching `m_textureLoadsInFlight`.
 //   • `QSvgRenderer` is NOT thread-safe across instances (it owns
 //     mutable rasteriser state during `render()` per Qt docs).
 //     `loadUserTextureImage` constructs a fresh `QSvgRenderer` per
@@ -5091,13 +5129,22 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::o
     // when no override is provided. Captured by value into the worker.
     const int svgMaxDim = svgSize.has_value() ? std::max(svgSize->width(), svgSize->height()) : 1024;
 
+    // Capture the cache generation at submission time. The queued
+    // upload lambda compares this against the live
+    // `m_textureCacheGeneration` and discards if mismatched — i.e. a
+    // hot-reload (`effectsChanged`) bumped the generation between
+    // submission and upload, so this worker's bytes are stale and
+    // must not re-populate the cleared cache.
+    const quint64 submissionGeneration = m_textureCacheGeneration;
+
     class Loader : public QRunnable
     {
     public:
-        Loader(PlasmaZonesEffect* effect, QString path, int svgMaxDim)
-            : m_effect(effect)
+        Loader(QPointer<PlasmaZonesEffect> effect, QString path, int svgMaxDim, quint64 submissionGeneration)
+            : m_effect(std::move(effect))
             , m_path(std::move(path))
             , m_svgMaxDim(svgMaxDim)
+            , m_submissionGeneration(submissionGeneration)
         {
         }
         void run() override
@@ -5105,6 +5152,7 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::o
             QImage img = loadUserTextureImage(m_path, m_svgMaxDim);
             QPointer<PlasmaZonesEffect> effect = m_effect;
             QString path = m_path;
+            const quint64 submissionGeneration = m_submissionGeneration;
             // Bounce back to the compositor thread for the GL upload.
             // The QPointer guards against the effect being destroyed
             // while the worker was running — destructor's
@@ -5114,8 +5162,20 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::o
             // schedules this without owning the pool's lifetime.
             QMetaObject::invokeMethod(
                 effect.data(),
-                [effect, path, img = std::move(img)]() mutable {
+                [effect, path, img = std::move(img), submissionGeneration]() mutable {
                     if (!effect) {
+                        return;
+                    }
+                    // Generation check FIRST — before touching
+                    // `m_textureCache` or `m_textureLoadsInFlight`. If
+                    // the cache was cleared underneath us by a hot-
+                    // reload (`effectsChanged`) the in-flight set was
+                    // already cleared too; touching it now would mean
+                    // racing with state the lambda has no business
+                    // mutating. Discard cleanly.
+                    if (submissionGeneration != effect->m_textureCacheGeneration) {
+                        qCDebug(lcEffect) << "warmUserTextureAsync: discarding stale upload for" << path
+                                          << "(generation mismatch — cache cleared during load)";
                         return;
                     }
                     effect->m_textureLoadsInFlight.remove(path);
@@ -5150,9 +5210,14 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::o
         QPointer<PlasmaZonesEffect> m_effect;
         QString m_path;
         int m_svgMaxDim;
+        quint64 m_submissionGeneration;
     };
 
-    auto* loader = new Loader(this, absolutePath, svgMaxDim);
+    // Pass `this` as a QPointer so the conversion happens at the call
+    // site (where `this` is known live), not inside the ctor body where
+    // a freed `effect` mid-construction would silently degrade to a raw
+    // pointer that never registers with QPointer's tracker.
+    auto* loader = new Loader(QPointer<PlasmaZonesEffect>(this), absolutePath, svgMaxDim, submissionGeneration);
     loader->setAutoDelete(true);
     m_textureLoaderPool.start(loader);
 }
@@ -5653,6 +5718,20 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         window->setData(KWin::WindowClosedGrabRole, QVariant::fromValue(static_cast<void*>(this)));
     }
 
+    // Emplace the transition entry FIRST, before redirect/setShader. If
+    // either of those throws — or if we hit a later failure path — we
+    // need a transition entry to tear down so the window doesn't end up
+    // redirected with a shader installed but no bookkeeping. RAII guard
+    // erases the entry if we don't successfully reach the bottom of the
+    // function (either of the two op paths below threw).
+    auto emplaceResult = m_shaderTransitions.emplace(window, std::move(transition));
+    bool emplaceCommitted = false;
+    auto emplaceGuard = qScopeGuard([&]() {
+        if (!emplaceCommitted) {
+            m_shaderTransitions.erase(emplaceResult.first);
+        }
+    });
+
     if (!isSameWindowSupersession) {
         redirect(window);
     }
@@ -5660,7 +5739,7 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // (idempotent for the same shader, so even a same-effect
     // supersession is correct here).
     setShader(window, cachedEntry.shader.get());
-    m_shaderTransitions.emplace(window, std::move(transition));
+    emplaceCommitted = true;
 
     // Kick the compositor into painting now so paintWindow fires and
     // the transition's iTime starts advancing. Without this, a shader
@@ -5670,7 +5749,16 @@ void PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // events (window.move) don't need this because the drag is its own
     // continuous repaint source. postPaintScreen drives subsequent
     // frames via per-window expanded-geometry layer repaints.
-    window->addLayerRepaint(window->expandedGeometry().toAlignedRect());
+    //
+    // Fall back to frameGeometry when expanded is empty — a window
+    // with no shadow / decoration extents reports an empty expanded
+    // rect, and `addLayerRepaint` on an empty rect is a silent no-op
+    // that would deny the transition its first paint.
+    QRect repaintRect = window->expandedGeometry().toAlignedRect();
+    if (repaintRect.isEmpty()) {
+        repaintRect = window->frameGeometry().toAlignedRect();
+    }
+    window->addLayerRepaint(repaintRect);
     if (KWin::effects) {
         // Match the null-guard the constructor and destructor use for
         // KWin::effects access — this method is callable from public

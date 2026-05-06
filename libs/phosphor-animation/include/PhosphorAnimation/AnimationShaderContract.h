@@ -222,6 +222,11 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
 /// by the `static_assert` in `libs/phosphor-animation/src/contract_pins.cpp`.
+///
+/// The compile-time pin against PhosphorRendering::kMaxUserTextures
+/// lives in src/contract_pins.cpp — see the comment there explaining
+/// why the assert can't sit in this header (epoxy/Qt typedef collision
+/// in the kwin-effect TU).
 inline constexpr int kMaxUserTextureSlots = 3;
 
 /// `vec4 iMouse` — cursor position in shader-local pixels.

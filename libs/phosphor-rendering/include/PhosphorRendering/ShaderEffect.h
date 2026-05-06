@@ -64,6 +64,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(int iFrame READ iFrame WRITE setIFrame NOTIFY iFrameChanged FINAL)
     Q_PROPERTY(QSizeF iResolution READ iResolution WRITE setIResolution NOTIFY iResolutionChanged FINAL)
     Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
+    Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
@@ -579,6 +580,7 @@ Q_SIGNALS:
     void iFrameChanged();
     void iResolutionChanged();
     void iMouseChanged();
+    void isReversedChanged();
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
@@ -669,6 +671,10 @@ private:
     // leave a dangling pointer that the per-frame textureProvider()
     // lookup would dereference.
     QPointer<QQuickItem> m_sourceItem;
+    /// Single-shot warning latch for `setSourceItem(this)` rejection. A QML
+    /// binding mistakenly wired to `this` would otherwise spam the journal at
+    /// 60 Hz; mirrors the pattern used by `m_warnedForeignRhi` on the node.
+    bool m_warnedSelfSourceItem = false;
 
     // ── Multipass ────────────────────────────────────────────────────
     QString m_bufferShaderPath;

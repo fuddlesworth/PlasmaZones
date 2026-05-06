@@ -288,13 +288,11 @@ void ShaderEffect::setIsReversed(bool reverse)
         return;
     }
     m_isReversed = reverse;
-    // Intentionally no `Q_PROPERTY` / `isReversedChanged` signal —
-    // SurfaceAnimator pushes this value imperatively at each leg
-    // attach, never bound declaratively from QML, and a missing-signal
-    // bug wouldn't surface in normal use. If this ever grows a
-    // QML-binding consumer, add the Q_PROPERTY + signal in the same
-    // patch; don't let the asymmetry with the rest of the
-    // animation-state setters fester silently.
+    // Exposed as a Q_PROPERTY (isReversed) for QML-binding parity with the
+    // rest of the animation-state setters. SurfaceAnimator still pushes this
+    // imperatively at each leg attach; the property + signal close the
+    // asymmetry without changing the imperative call site.
+    Q_EMIT isReversedChanged();
     update();
 }
 
@@ -397,7 +395,10 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
     // ancestor reads last-frame's content — no infinite recursion. An
     // earlier ancestor-walk guard here silently broke every shader leg.
     if (item == this) {
-        qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this`; cannot sample own output.";
+        if (!m_warnedSelfSourceItem) {
+            qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this`; cannot sample own output.";
+            m_warnedSelfSourceItem = true;
+        }
         return;
     }
     m_sourceItem = item;
@@ -1045,7 +1046,15 @@ void ShaderEffect::setUserTextureWrap(int slot, const QString& wrap)
                                 << "]";
         return;
     }
-    m_userTextureWraps[slot] = wrap;
+    // Mirror ShaderNodeRhi::setUserTextureWrap's normalize-then-guard order so
+    // a capitalised "Repeat" stored here matches the lower-cased "repeat" the
+    // node holds; otherwise syncBasePropertiesToNode re-pushes every paint and
+    // ShaderNodeRhi's value-changed guard fails on the lexical mismatch.
+    const QString normalized = ShaderNodeRhi::normalizeWrapMode(wrap);
+    if (m_userTextureWraps[slot] == normalized) {
+        return;
+    }
+    m_userTextureWraps[slot] = normalized;
     update();
 }
 

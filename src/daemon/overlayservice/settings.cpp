@@ -22,14 +22,14 @@ void OverlayService::setSettings(ISettings* settings)
     if (m_settings != settings) {
         // Single-sweep disconnect of every (m_settings → this) connection,
         // fail-safe vs. future connects that forget a paired disconnect.
-        // The shader-registry handle below stays separate (different sender).
         if (m_settings) {
             disconnect(m_settings, nullptr, this, nullptr);
         }
-        // Disconnect the specific shadersChanged lambda we stashed below.
-        // disconnect(src, sig, this, nullptr) would sever ALL slots on this
-        // receiver — fine today, but a trap if another shadersChanged
-        // handler is ever added.
+        // The shader-registry connection (different sender, see
+        // m_shaderRegistry below) is NOT covered by the sweep above and
+        // is tracked separately via m_shadersChangedConnection so a
+        // future second shadersChanged slot on this receiver can't be
+        // accidentally severed by a (src, sig, this, nullptr) call.
         if (m_shadersChangedConnection) {
             QObject::disconnect(m_shadersChangedConnection);
             m_shadersChangedConnection = {};

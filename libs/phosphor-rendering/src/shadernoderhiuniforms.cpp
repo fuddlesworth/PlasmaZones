@@ -569,11 +569,6 @@ void ShaderNodeRhi::bakeBufferShaders()
         bool allOk = true;
         for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses; ++i) {
             const QString& path = m_bufferPaths.at(i);
-            // Capture mtime BEFORE the read so the cache key reflects the
-            // version of the file we actually loaded. Reading mtime after
-            // loadAndExpand opens a TOCTOU window where a concurrent edit
-            // would associate new mtime with old content in the bake cache.
-            const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
             QString err;
             QString src = loadAndExpandShader(path, &err);
             if (src.isEmpty()) {
@@ -584,7 +579,11 @@ void ShaderNodeRhi::bakeBufferShaders()
                 break;
             }
             m_multiBufferFragmentShaderSources[i] = src;
-            m_multiBufferMtimes[i] = mtime;
+            // Buffer-pass shaders are compiled directly via ShaderCompiler::compile
+            // and do NOT participate in the filename bake cache (which is keyed
+            // off the main vertex+fragment pair). Tracking per-pass mtimes
+            // bought nothing; the value was written and never read. Removed
+            // rather than left as dead state.
             auto result = ShaderCompiler::compile(src.toUtf8(), QShader::FragmentStage);
             m_multiBufferFragmentShaders[i] = result.shader;
             if (!m_multiBufferFragmentShaders[i].isValid()) {
@@ -616,15 +615,13 @@ void ShaderNodeRhi::bakeBufferShaders()
         m_bufferShaderDirty = false;
         m_bufferShaderReady = false;
         if (m_bufferFragmentShaderSource.isEmpty()) {
-            // Capture mtime BEFORE the read (TOCTOU-safe cache key) and skip
-            // the redundant exists() check — loadAndExpandShader returns an
-            // empty string on missing/unreadable, which is the gate we need.
-            const qint64 mtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
+            // Skip the redundant exists() check — loadAndExpandShader returns
+            // an empty string on missing/unreadable, which is the gate we
+            // need. Buffer-pass shaders bypass the filename bake cache (see
+            // multi-buffer branch above), so no mtime tracking is needed.
             QString err;
             m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
-            if (!m_bufferFragmentShaderSource.isEmpty()) {
-                m_bufferMtime = mtime;
-            } else {
+            if (m_bufferFragmentShaderSource.isEmpty()) {
                 // The eager load in setBufferShaderPaths used to surface
                 // load errors at setter time; deferring the load to here
                 // means a silent empty-source loop unless we log + retry.

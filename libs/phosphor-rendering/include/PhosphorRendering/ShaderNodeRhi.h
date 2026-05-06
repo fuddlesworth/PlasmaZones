@@ -31,11 +31,14 @@
 
 namespace PhosphorRendering {
 
-// Forward declare constants used in member declarations
-static constexpr int kMaxBufferPasses = 4;
-static constexpr int kMaxUserTextures = 4;
-static constexpr int kMaxCustomParams = 8;
-static constexpr int kMaxCustomColors = 16;
+// Forward declare constants used in member declarations.
+// `constexpr int` at namespace scope in a header is implicitly `inline` since
+// C++17 — no `static` needed (and matches the existing `constexpr int` style
+// used by kFirstFreeConsumerBinding / kMaxConsumerBinding below).
+constexpr int kMaxBufferPasses = 4;
+constexpr int kMaxUserTextures = 4;
+constexpr int kMaxCustomParams = 8;
+constexpr int kMaxCustomColors = 16;
 
 // ── Consumer binding range (for setExtraBinding) ────────────────────────
 // Library-managed bindings: 0 (UBO), 2-5 (multipass buffers), 6 (audio),
@@ -59,7 +62,7 @@ constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
 /// First SRB binding for the user-texture slots (slot 0 → binding 7).
 /// Both `setSourceTextureProvider`'s slot-0 override and the
 /// QImage-uploaded user textures key off this base.
-static constexpr int kUserTextureBaseBinding = 7;
+constexpr int kUserTextureBaseBinding = 7;
 
 /// @return true if @p binding is usable by consumers via setExtraBinding().
 constexpr bool isConsumerBinding(int binding) noexcept
@@ -339,7 +342,6 @@ private:
     QString m_bufferFilterDefault = QStringLiteral("linear");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
-    qint64 m_bufferMtime = 0;
     bool m_bufferShaderReady = false;
     bool m_bufferShaderDirty = true;
     int m_bufferShaderRetries = 0;
@@ -366,7 +368,6 @@ private:
     std::array<std::unique_ptr<QRhiShaderResourceBindings>, kMaxBufferPasses> m_multiBufferSrbs = {};
     std::array<QShader, kMaxBufferPasses> m_multiBufferFragmentShaders = {};
     std::array<QString, kMaxBufferPasses> m_multiBufferFragmentShaderSources = {};
-    std::array<qint64, kMaxBufferPasses> m_multiBufferMtimes = {};
     bool m_multiBufferShadersReady = false;
     bool m_multiBufferShaderDirty = true;
     int m_multiBufferShaderRetries = 0;

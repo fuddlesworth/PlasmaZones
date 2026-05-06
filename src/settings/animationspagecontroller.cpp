@@ -913,8 +913,12 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         // which treats `nullopt` and `optional(empty)` as DISTINCT).
         // `disabledProfile` round-trips through toJson/fromJson without
         // changing engaged-state, so a disk-loaded disable sentinel for an
-        // unchanged path short-circuits here. If a future caller hands us
-        // engaged-but-empty parameters, normalize to nullopt before compare.
+        // unchanged path short-circuits here. Normalize an engaged-but-empty
+        // parameters optional to nullopt so a future caller passing literal
+        // engaged-empty (rather than the current `{}` disengaged) can't
+        // silently desync this comparison from the on-disk round-trip form.
+        if (disabledProfile.parameters && disabledProfile.parameters->isEmpty())
+            disabledProfile.parameters.reset();
         if (tree.directOverride(path) == disabledProfile)
             return true;
         tree.setOverride(path, disabledProfile);

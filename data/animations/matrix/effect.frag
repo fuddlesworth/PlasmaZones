@@ -131,8 +131,8 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     // zero delay, breaking the per-column staggered look. `cos(column)`
     // doesn't need the same fix because `cos(0) == 1` already produces
     // a non-zero seed.
-    float delay = fract(sin(column + 17.0) * 78.233) * mix(0.0, 1.0, r);
-    float speed = fract(cos(column) * 12.989) * mix(0.0, 0.3, r) + 1.5;
+    float delay = fract(sin(column + 17.0) * 78.233) * r;
+    float speed = fract(cos(column) * 12.989) * (r * 0.3) + 1.5;
 
     // BMW's `uProgress` matches our `legProgress` exactly: 0 at start,
     // 1 at end, in BOTH directions.

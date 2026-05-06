@@ -219,3 +219,10 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 };
 
 } // namespace PhosphorAnimationShaders
+
+// Mark TextureSlot as relocatable so QList can move-construct entries
+// in-place during reallocation rather than running the copy/move ctor
+// per element. The struct is two QStrings; QString itself is already
+// Q_RELOCATABLE_TYPE, so the aggregate is safely bitwise-relocatable.
+// Must sit at file scope outside the namespace per Qt convention.
+Q_DECLARE_TYPEINFO(PhosphorAnimationShaders::AnimationShaderEffect::TextureSlot, Q_RELOCATABLE_TYPE);

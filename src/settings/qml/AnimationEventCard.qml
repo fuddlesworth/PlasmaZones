@@ -585,6 +585,7 @@ Item {
                         // any future code formatter / linter from flagging the
                         // bare expression as a dead statement.
                         void (root._shaderRegistryRev);
+                        // dependency on _shaderRegistryRev for re-evaluation; void() prevents linter from flagging unused
                         return settingsController.animationsPage.availableShaderEffects();
                     }
 
@@ -704,12 +705,15 @@ Item {
     // `root` (the card itself) when the Window context is unavailable
     // — `null` was attempted first but Popup with `parent: null` emits
     // "Popup must be attached to a window" warnings on `open()` and
-    // refuses to render. The `root` fallback only fires during
-    // teardown / early initialisation when nothing should be opening
-    // the dialog anyway; if a code path does open it pre-realisation,
-    // the Flickable clip bug returns BUT the dialog is at least
-    // visible, and the visible-but-clipped failure mode is easier to
-    // diagnose than the silent no-render `null` failure.
+    // refuses to render. The `root` fallback path is reachable only
+    // during teardown / early init, before the QML Window context is
+    // established. The Flickable clip bug returns IF a user opens the
+    // dialog before the window context resolves, which in practice
+    // never happens because the dialog is opened from a button click
+    // (Customize…) well after Component.onCompleted. This is a
+    // documented "fail visible" trade-off: the visible-but-clipped
+    // failure mode is easier to diagnose than the silent no-render
+    // `null` failure if the path is ever taken.
     CurveEditorDialog {
         id: curveDialog
 

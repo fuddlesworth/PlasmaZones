@@ -9,12 +9,22 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
+#include <PhosphorRendering/ShaderEffect.h>
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
 #include <QStandardPaths>
 #include <QVariantMap>
+
+// Lock the assumption made in updatePaintNode() that the base
+// ShaderEffect's syncBasePropertiesToNode covers all 4 user-texture
+// slots. If the base library ever grows or shrinks its slot count
+// without us updating the override's local sync logic, this trips
+// the build instead of silently dropping (or double-pushing) slots.
+static_assert(PhosphorRendering::kMaxUserTextureSlots == 4,
+              "ZoneShaderItem assumes ShaderEffect base sync covers 4 user-texture slots");
 
 namespace PlasmaZones {
 

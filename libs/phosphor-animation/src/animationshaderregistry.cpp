@@ -8,8 +8,8 @@
 
 #include <QColor>
 #include <QDir>
-#include <QFileInfo>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -37,7 +37,16 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// sensitive which matches Linux filesystem semantics. Splits on
 /// BOTH `/` and `\` as defence-in-depth against Windows-style
 /// traversal strings (`..\evil`) that QDir::cleanPath leaves untouched
-/// on POSIX hosts — cheap belt-and-braces for a security boundary.
+/// on POSIX hosts, cheap belt-and-braces for a security boundary.
+///
+/// After QDir::cleanPath, intermediate `..` segments are collapsed
+/// (e.g. `/foo/../etc` becomes `/etc`); only LEADING `..` segments
+/// (which would escape an unanchored relative path) are preserved
+/// and rejected. This is intentional, the in-memory override branch
+/// already trusts absolute paths to the caller's discretion (see
+/// validateTexturePathWithinEffectDir docstring), and a path that
+/// cleanPath has reduced to absolute is no different from one the
+/// caller supplied as absolute directly.
 bool pathHasNoTraversalSegments(const QString& rawPath)
 {
     if (rawPath.isEmpty())

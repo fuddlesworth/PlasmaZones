@@ -335,18 +335,12 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     m_bufferShaderReady = false;
     m_bufferShaderRetries = 0;
     m_bufferFragmentShaderSource.clear();
-    m_bufferMtime = 0;
-    // (m_bufferMtime is reset both here and in the multi-buffer branch
-    // below — keeping the single-buffer state consistent with the
-    // multi-buffer counterpart at lines below; cache-key TOCTOU is
-    // closed by capture-before-read in bakeBufferShaders.)
     m_multiBufferShadersReady = false;
     m_multiBufferShaderDirty = true;
     m_multiBufferShaderRetries = 0;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferFragmentShaderSources[i].clear();
         m_multiBufferFragmentShaders[i] = QShader();
-        m_multiBufferMtimes[i] = 0;
     }
     // Single-buffer mode is loaded lazily inside bakeBufferShaders() during
     // prepare(); the multi-buffer branch already does so. Loading shader
