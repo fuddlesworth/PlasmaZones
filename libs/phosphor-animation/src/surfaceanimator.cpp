@@ -1497,11 +1497,28 @@ public:
                                                  if (sit == m_tracks.end() || !sit->second.shaderItem) {
                                                      return;
                                                  }
+                                                 // Clamp iTime to the [0, 1] contract before
+                                                 // forwarding. Underdamped curves (Spring with
+                                                 // zeta < 1, e.g. `bouncy`) overshoot the
+                                                 // target — show legs push the lerp above 1.0
+                                                 // and hide legs push it below 0.0 at each
+                                                 // oscillation peak. Shaders treat iTime
+                                                 // outside [0, 1] as undefined per
+                                                 // AnimationShaderContract; without clamping,
+                                                 // a hide leg flicks iTime negative which most
+                                                 // shaders render as "more than fully gone"
+                                                 // (transparent/invisible) before the spring
+                                                 // oscillates back to a slightly positive
+                                                 // value, producing a visible disappear→re-
+                                                 // render→disappear flicker. Mirror what the
+                                                 // kwin-effect path already does for window
+                                                 // shader transitions (paint_pipeline.cpp's
+                                                 // `qBound(0.0, anim->state().value, 1.0)`).
                                                  // Geometry sync runs off the anchor's
                                                  // widthChanged/heightChanged signals (see
                                                  // syncGeometry); the per-tick callback only
                                                  // threads the time value through.
-                                                 sit->second.shaderItem->setITime(v);
+                                                 sit->second.shaderItem->setITime(qBound(qreal(0.0), v, qreal(1.0)));
                                              },
                                              /*onComplete=*/
                                              [this, surface]() {
