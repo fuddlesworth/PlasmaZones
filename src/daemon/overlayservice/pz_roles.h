@@ -42,31 +42,14 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD base shape used by the unified notification surface (and any
-/// future fullscreen-overlay-style surface). FullscreenOverlay primitive:
-/// AnchorAll so the compositor ignores x/y hints and honours the margins
-/// we write dynamically via the transport handle (see
-/// `centerLayerWindowOnScreen` in osd.cpp) to centre the OSD on-screen.
-/// No keyboard, click-through. Pre-warmed per screen at daemon start.
-///
-/// Currently only consumed to derive @ref Notification (post-Phase-2
-/// LayoutOsd + NavigationOsd unification — both ride the Notification
-/// surface now). Preserved as a named OSD-shape primitive so future
-/// click-through fullscreen overlays (e.g. a separate alerts surface)
-/// can branch off the same protocol shape without re-typing the
-/// FullscreenOverlay reference and the "no keyboard, click-through"
-/// invariant inline.
-inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverlay;
-
-/// Unified notification surface — single per-screen wl_surface that hosts
-/// both layout-OSD and navigation-OSD content via NotificationOverlay.qml's
-/// mode-driven Loader. The two OSD modes share OsdBase (FullscreenOverlay,
-/// AnchorAll, no keyboard, click-through) and are never simultaneously
-/// visible, so a single Surface backs both. createNotificationWindow
-/// extends this prefix per-screen-and-generation; the SurfaceAnimator
-/// uses longest-prefix matching to apply the OSD config across all
-/// derived prefixes.
-inline const PhosphorLayer::Role Notification = OsdBase.withScopePrefix(QStringLiteral("plasmazones-notification"));
+/// OSD config-only role. The wl_surface lifetime moved to the unified
+/// PassiveShell post-shell-migration; this role is preserved purely for
+/// SurfaceAnimator config-lookup (registerConfigForRole keys on the
+/// scope prefix, and the role-override beginShow/beginHide overloads
+/// resolve per-content motion + shader profiles via this role's prefix
+/// even though the shell's actual surface uses PassiveShell).
+inline const PhosphorLayer::Role Notification =
+    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-notification"));
 
 /// Passive overlay shell — single per-screen wlr-layer-shell host that
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
