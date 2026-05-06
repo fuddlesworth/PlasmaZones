@@ -1066,36 +1066,8 @@ public:
             pending.shaderItem = nullptr;
         }
         if (pending.shaderSource) {
-            // Explicitly drop the source's binding to the anchor BEFORE
-            // deleteLater so the anchor's QQuickItemLayer ref count
-            // drops synchronously. Without this the deleteLater'd
-            // source still holds a layer ref until the next event-loop
-            // tick — and any fresh-attach that runs synchronously after
-            // this teardown observes layer.enabled=true on the
-            // (persistent) anchor, inherits the stale FBO from the
-            // previous leg's last "live" capture, and the next show
-            // samples that content for the entire vert animation.
-            //
-            // Belt-and-suspenders: also reset the anchor's
-            // `layer.enabled` to false so the layer object itself is
-            // torn down. The next fresh attach will re-enable it and
-            // get a clean QSGLayer + freshly-allocated FBO.
-            //
-            // OSDs avoided this entirely because their inner-card
-            // anchor is destroyed by NotificationOverlay's Loader on
-            // every show — the layer goes with the QQuickItem.
-            // Popups have a persistent PopupFrame anchor that
-            // survives across shows, so we have to reset its layer
-            // state explicitly to mimic the OSD lifecycle.
-            pending.shaderSource->setSourceItem(nullptr);
             pending.shaderSource->deleteLater();
             pending.shaderSource = nullptr;
-        }
-        if (pending.shaderAnchor) {
-            QObject* layer = pending.shaderAnchor->property("layer").value<QObject*>();
-            if (layer) {
-                layer->setProperty("enabled", false);
-            }
         }
         pending.shaderAnchor.clear();
         pending.foundExplicitAnchor = false;
