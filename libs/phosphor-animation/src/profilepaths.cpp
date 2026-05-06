@@ -25,31 +25,42 @@ const QString ZoneSnapIn = QStringLiteral("zone.snapIn");
 const QString ZoneSnapOut = QStringLiteral("zone.snapOut");
 const QString ZoneSnapResize = QStringLiteral("zone.snapResize");
 const QString ZoneHighlight = QStringLiteral("zone.highlight");
+const QString ZoneHighlightPop = QStringLiteral("zone.highlight.pop");
+const QString ZoneHighlightBorder = QStringLiteral("zone.highlight.border");
 const QString ZoneLayoutSwitchIn = QStringLiteral("zone.layoutSwitchIn");
+// `zone.layoutSwitchOut` intentionally undeclared — see ProfilePaths.h.
 
 // workspace.*
 const QString Workspace = QStringLiteral("workspace");
 const QString WorkspaceSwitchIn = QStringLiteral("workspace.switchIn");
 const QString WorkspaceSwitchOut = QStringLiteral("workspace.switchOut");
-const QString WorkspaceOverview = QStringLiteral("workspace.overview");
+const QString WorkspaceOverviewOpen = QStringLiteral("workspace.overviewOpen");
+const QString WorkspaceOverviewClose = QStringLiteral("workspace.overviewClose");
 
 // osd.*
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
+const QString OsdPop = QStringLiteral("osd.pop");
 const QString OsdHide = QStringLiteral("osd.hide");
+
+// popup.*
+const QString Popup = QStringLiteral("popup");
+const QString PopupZoneSelector = QStringLiteral("popup.zoneSelector");
+const QString PopupZoneSelectorShow = QStringLiteral("popup.zoneSelector.show");
+const QString PopupZoneSelectorHide = QStringLiteral("popup.zoneSelector.hide");
+const QString PopupLayoutPicker = QStringLiteral("popup.layoutPicker");
+const QString PopupLayoutPickerShow = QStringLiteral("popup.layoutPicker.show");
+const QString PopupLayoutPickerHide = QStringLiteral("popup.layoutPicker.hide");
+const QString PopupSnapAssist = QStringLiteral("popup.snapAssist");
+const QString PopupSnapAssistShow = QStringLiteral("popup.snapAssist.show");
+// `popup.snapAssist.hide` intentionally undeclared — see ProfilePaths.h.
 
 // panel.*
 const QString Panel = QStringLiteral("panel");
 const QString PanelSlideIn = QStringLiteral("panel.slideIn");
-const QString PanelPopup = QStringLiteral("panel.popup");
-const QString PanelPopupZoneSelector = QStringLiteral("panel.popup.zoneSelector");
-const QString PanelPopupZoneSelectorShow = QStringLiteral("panel.popup.zoneSelector.show");
-const QString PanelPopupZoneSelectorHide = QStringLiteral("panel.popup.zoneSelector.hide");
-const QString PanelPopupLayoutPicker = QStringLiteral("panel.popup.layoutPicker");
-const QString PanelPopupLayoutPickerShow = QStringLiteral("panel.popup.layoutPicker.show");
-const QString PanelPopupLayoutPickerHide = QStringLiteral("panel.popup.layoutPicker.hide");
-const QString PanelPopupSnapAssist = QStringLiteral("panel.popup.snapAssist");
-const QString PanelPopupSnapAssistShow = QStringLiteral("panel.popup.snapAssist.show");
+const QString PanelSlideOut = QStringLiteral("panel.slideOut");
+const QString PanelFadeIn = QStringLiteral("panel.fadeIn");
+const QString PanelFadeOut = QStringLiteral("panel.fadeOut");
 
 // cursor.*
 const QString Cursor = QStringLiteral("cursor");
@@ -66,14 +77,23 @@ const QString ShaderSwitch = QStringLiteral("shader.switch");
 const QString Widget = QStringLiteral("widget");
 const QString WidgetHover = QStringLiteral("widget.hover");
 const QString WidgetPress = QStringLiteral("widget.press");
-const QString WidgetToggle = QStringLiteral("widget.toggle");
-const QString WidgetBadge = QStringLiteral("widget.badge");
-const QString WidgetTint = QStringLiteral("widget.tint");
 const QString WidgetDim = QStringLiteral("widget.dim");
-const QString WidgetFade = QStringLiteral("widget.fade");
+const QString WidgetTint = QStringLiteral("widget.tint");
+const QString WidgetTintFast = QStringLiteral("widget.tint.fast");
+const QString WidgetToggleOn = QStringLiteral("widget.toggleOn");
+const QString WidgetToggleOff = QStringLiteral("widget.toggleOff");
+const QString WidgetBadgeShow = QStringLiteral("widget.badgeShow");
+const QString WidgetBadgeHide = QStringLiteral("widget.badgeHide");
+const QString WidgetBadgePulse = QStringLiteral("widget.badgePulse");
+const QString WidgetAccordionExpand = QStringLiteral("widget.accordionExpand");
+const QString WidgetAccordionCollapse = QStringLiteral("widget.accordionCollapse");
+const QString WidgetFadeIn = QStringLiteral("widget.fadeIn");
+const QString WidgetFadeOut = QStringLiteral("widget.fadeOut");
 const QString WidgetReorder = QStringLiteral("widget.reorder");
-const QString WidgetAccordion = QStringLiteral("widget.accordion");
 const QString WidgetProgress = QStringLiteral("widget.progress");
+const QString WidgetPulse = QStringLiteral("widget.pulse");
+const QString WidgetPulseFast = QStringLiteral("widget.pulse.fast");
+const QString WidgetPulseSlow = QStringLiteral("widget.pulse.slow");
 
 QStringList allBuiltInPaths()
 {
@@ -94,25 +114,32 @@ QStringList allBuiltInPaths()
         ZoneSnapOut,
         ZoneSnapResize,
         ZoneHighlight,
+        ZoneHighlightPop,
+        ZoneHighlightBorder,
         ZoneLayoutSwitchIn,
         Workspace,
         WorkspaceSwitchIn,
         WorkspaceSwitchOut,
-        WorkspaceOverview,
+        WorkspaceOverviewOpen,
+        WorkspaceOverviewClose,
         Osd,
         OsdShow,
+        OsdPop,
         OsdHide,
+        Popup,
+        PopupZoneSelector,
+        PopupZoneSelectorShow,
+        PopupZoneSelectorHide,
+        PopupLayoutPicker,
+        PopupLayoutPickerShow,
+        PopupLayoutPickerHide,
+        PopupSnapAssist,
+        PopupSnapAssistShow,
         Panel,
         PanelSlideIn,
-        PanelPopup,
-        PanelPopupZoneSelector,
-        PanelPopupZoneSelectorShow,
-        PanelPopupZoneSelectorHide,
-        PanelPopupLayoutPicker,
-        PanelPopupLayoutPickerShow,
-        PanelPopupLayoutPickerHide,
-        PanelPopupSnapAssist,
-        PanelPopupSnapAssistShow,
+        PanelSlideOut,
+        PanelFadeIn,
+        PanelFadeOut,
         Cursor,
         CursorHover,
         CursorClick,
@@ -123,14 +150,23 @@ QStringList allBuiltInPaths()
         Widget,
         WidgetHover,
         WidgetPress,
-        WidgetToggle,
-        WidgetBadge,
-        WidgetTint,
         WidgetDim,
-        WidgetFade,
+        WidgetTint,
+        WidgetTintFast,
+        WidgetToggleOn,
+        WidgetToggleOff,
+        WidgetBadgeShow,
+        WidgetBadgeHide,
+        WidgetBadgePulse,
+        WidgetAccordionExpand,
+        WidgetAccordionCollapse,
+        WidgetFadeIn,
+        WidgetFadeOut,
         WidgetReorder,
-        WidgetAccordion,
         WidgetProgress,
+        WidgetPulse,
+        WidgetPulseFast,
+        WidgetPulseSlow,
     };
 }
 

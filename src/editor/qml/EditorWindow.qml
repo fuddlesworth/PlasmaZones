@@ -349,7 +349,11 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "widget.fade"
+                // Direction is taken from the visibility condition so the leg
+                // is decided synchronously when fullscreen toggles. Reading
+                // the animated `opacity` would re-evaluate during the
+                // Behavior and flip the leg mid-animation.
+                profile: !editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
                 durationOverride: 200
             }
 
@@ -611,7 +615,9 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        // Inset margin tween — not a fade, use the widget
+                        // family root for the generic 150 ms ease-out shape.
+                        profile: "widget"
                     }
 
                 }
@@ -620,7 +626,7 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget"
                     }
 
                 }
@@ -629,7 +635,7 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget"
                     }
 
                 }
@@ -638,7 +644,7 @@ Window {
                     enabled: drawingArea._insetsReady
 
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget"
                     }
 
                 }
@@ -733,7 +739,10 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "widget.fade"
+                // Direction is taken from the same condition driving the
+                // `opacity` binding above (`fullscreenMode ? 1 : 0`) so the
+                // leg is decided synchronously when fullscreen toggles.
+                profile: editorWindow.fullscreenMode ? "widget.fadeIn" : "widget.fadeOut"
                 durationOverride: 200
             }
 

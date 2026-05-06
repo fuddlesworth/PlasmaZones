@@ -62,13 +62,14 @@ Item {
         }
         width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
 
-        // Smooth transition when success banner fades and error slides up.
-        // widget.fade has the right semantics for an editor banner (osd.show
-        // is for the in-shell OSD); durationOverride preserves the original
-        // 200 ms timing.
+        // Position transition when success banner fades and error slides up.
+        // Banners are editor-shell surfaces (osd.show is for the in-shell OSD);
+        // a y-slide isn't really a fade, so route through the widget family
+        // root for the generic ease-out shape. durationOverride preserves
+        // the original 200 ms timing.
         Behavior on y {
             PhosphorMotionAnimation {
-                profile: "widget.fade"
+                profile: "widget"
                 durationOverride: 200
             }
 

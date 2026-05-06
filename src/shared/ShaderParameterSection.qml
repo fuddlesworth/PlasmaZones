@@ -85,7 +85,9 @@ ColumnLayout {
 
                 Behavior on rotation {
                     PhosphorMotionAnimation {
-                        profile: "widget.accordion"
+                        // Direction-bound: profile reads root.expanded after the
+                        // flip — true is the expand direction, false is collapse.
+                        profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
                         durationOverride: Kirigami.Units.longDuration
                     }
 
@@ -193,7 +195,7 @@ ColumnLayout {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "widget.accordion"
+                    profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
                     durationOverride: Kirigami.Units.longDuration
                 }
 
@@ -203,7 +205,7 @@ ColumnLayout {
 
         Behavior on implicitHeight {
             PhosphorMotionAnimation {
-                profile: "widget.accordion"
+                profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
                 durationOverride: Kirigami.Units.longDuration
             }
 

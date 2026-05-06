@@ -139,7 +139,7 @@ Kirigami.Dialog {
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "widget.fade"
+                    profile: "widget.tint"
                     durationOverride: Kirigami.Units.shortDuration
                 }
 
@@ -150,7 +150,7 @@ Kirigami.Dialog {
 
                 Behavior on y {
                     PhosphorMotionAnimation {
-                        profile: "widget.fade"
+                        profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
 

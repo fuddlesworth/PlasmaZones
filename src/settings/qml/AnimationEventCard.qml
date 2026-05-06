@@ -101,7 +101,7 @@ Item {
     readonly property bool _shaderLegSupported: settingsController.animationsPage.supportsShaderLeg(root.eventPath)
     // Number of shader overrides on paths strictly DEEPER than this card's
     // eventPath. Only meaningful for parent-node cards: a stale leaf
-    // override (e.g. `panel.popup.layoutPicker.show = "dissolve"` set in
+    // override (e.g. `popup.layoutPicker.show = "dissolve"` set in
     // a previous session) silently wins the deeper-leaf-overlay merge in
     // `ShaderProfileTree::resolve` and shadows the parent's value at
     // runtime. Surfaced via the warning banner below with a one-click
@@ -351,6 +351,20 @@ Item {
         // `root.<id>` references would silently resolve to undefined
         // (defaulting `visible:` to true and showing the picker on
         // every event regardless of daemon support).
+        // Toggle OFF semantic: clear timing override AND write
+        // an inheritance-blocking shader override. Plain
+        // `clearShaderOverride` only removes the entry at this
+        // path, leaving inheritance from an ancestor (e.g.
+        // `panel` -> "dissolve") to cascade down — exactly the
+        // user-reported "I disabled all popups but dissolve
+        // still plays" bug. `setShaderOverride(path, "", {})`
+        // writes an engaged-empty effectId that
+        // `ShaderProfile::overlay` treats as "explicitly no
+        // shader", winning over the parent's effectId and
+        // blocking the cascade. Same call works for parent
+        // cards (popup, window, osd, etc.) so a single
+        // OFF toggle on the parent disables every descendant
+        // that doesn't have its own override.
 
         id: card
 
@@ -360,21 +374,6 @@ Item {
         toggleChecked: root.alwaysEnabled || root.overrideEnabled
         collapsible: root.collapsible
         onToggleClicked: function(checked) {
-            // Toggle OFF semantic: clear timing override AND write
-            // an inheritance-blocking shader override. Plain
-            // `clearShaderOverride` only removes the entry at this
-            // path, leaving inheritance from an ancestor (e.g.
-            // `panel` -> "dissolve") to cascade down — exactly the
-            // user-reported "I disabled all popups but dissolve
-            // still plays" bug. `setShaderOverride(path, "", {})`
-            // writes an engaged-empty effectId that
-            // `ShaderProfile::overlay` treats as "explicitly no
-            // shader", winning over the parent's effectId and
-            // blocking the cascade. Same call works for parent
-            // cards (panel.popup, window, osd, etc.) so a single
-            // OFF toggle on the parent disables every descendant
-            // that doesn't have its own override.
-
             if (checked) {
                 root.commitOverride();
             } else {

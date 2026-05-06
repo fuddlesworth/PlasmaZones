@@ -41,19 +41,21 @@ Item {
 
             Behavior on x {
                 PhosphorMotionAnimation {
-                    profile: "widget.toggle"
+                    // Direction-bound: profile is read at animation start, after
+                    // root.checked has already flipped to the destination state.
+                    profile: root.checked ? "widget.toggleOn" : "widget.toggleOff"
                 }
 
             }
 
         }
 
-        // Color uses widget.toggle-color (no overshoot) — overshooting a
-        // colour interpolation produces clamped out-of-gamut intermediates.
-        // Position (Behavior on x above) keeps widget.toggle's overshoot.
+        // Color uses widget.tint (no overshoot) — overshooting a colour
+        // interpolation produces clamped out-of-gamut intermediates.
+        // Position (Behavior on x above) keeps the toggle's overshoot.
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "widget.toggle-color"
+                profile: "widget.tint"
             }
 
         }

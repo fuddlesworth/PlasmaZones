@@ -603,6 +603,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-zones"),
         QStringLiteral("animations-notifications"),
         QStringLiteral("animations-popups"),
+        QStringLiteral("animations-panels"),
         QStringLiteral("animations-workspaces"),
         QStringLiteral("animations-widgets"),
         QStringLiteral("animations-presets"),

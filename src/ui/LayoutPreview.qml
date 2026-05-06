@@ -84,7 +84,7 @@ Rectangle {
 
         readonly property int standardBorderWidth: Kirigami.Units.smallSpacing / 2 // 2px
         readonly property int thinBorderWidth: 1
-        readonly property int animationDuration: 150 // ms
+        readonly property int animationDuration: Kirigami.Units.shortDuration
     }
 
     // Use shared ZonePreview component for consistent zone rendering
@@ -267,16 +267,16 @@ Rectangle {
     // (matches the original `duration: animationDuration / 2` pattern).
     Behavior on border.width {
         PhosphorMotionAnimation {
-            profile: "zone.highlight-border"
-            durationOverride: constants.animationDuration / 2
+            profile: "zone.highlight.border"
+            durationOverride: Math.round(constants.animationDuration / 2)
         }
 
     }
 
-    // Scale uses zone.highlight-pop for the OutBack overshoot=1.20 feel.
+    // Scale uses zone.highlight.pop for the OutBack overshoot=1.20 feel.
     Behavior on scale {
         PhosphorMotionAnimation {
-            profile: "zone.highlight-pop"
+            profile: "zone.highlight.pop"
             durationOverride: constants.animationDuration
         }
 

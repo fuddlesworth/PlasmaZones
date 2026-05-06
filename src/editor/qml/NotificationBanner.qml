@@ -110,7 +110,7 @@ Rectangle {
             target: banner
             properties: "opacity"
             to: 1
-            profile: "panel.popup"
+            profile: "popup"
             durationOverride: Theme.animDuration
         }
 
@@ -118,7 +118,7 @@ Rectangle {
             target: bannerTranslate
             properties: "y"
             to: 0
-            profile: "panel.popup"
+            profile: "popup"
             durationOverride: Theme.animDuration
         }
 
@@ -131,7 +131,7 @@ Rectangle {
             target: banner
             properties: "opacity"
             to: 0
-            profile: "widget.fade"
+            profile: "widget.fadeOut"
             durationOverride: Theme.animDuration
         }
 
@@ -139,7 +139,7 @@ Rectangle {
             target: bannerTranslate
             properties: "y"
             to: Kirigami.Units.smallSpacing
-            profile: "widget.fade"
+            profile: "widget.fadeOut"
             durationOverride: Theme.animDuration
         }
 

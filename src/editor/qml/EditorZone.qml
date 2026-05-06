@@ -495,7 +495,11 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "widget.fade"
+                    // Direction is taken from the badge's visibility condition
+                    // so the leg is decided synchronously when the multi-
+                    // selection state flips, not from the animated `opacity`
+                    // (which interpolates during the Behavior).
+                    profile: root.isPartOfMultiSelection ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: 100
                 }
 

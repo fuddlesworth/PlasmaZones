@@ -174,6 +174,10 @@ ApplicationWindow {
             "label": i18n("Popups"),
             "iconName": "view-presentation"
         }, {
+            "name": "animations-panels",
+            "label": i18n("Panels"),
+            "iconName": "sidebar-collapse-symbolic"
+        }, {
             "name": "animations-workspaces",
             "label": i18n("Workspaces"),
             "iconName": "virtual-desktops"
@@ -225,6 +229,7 @@ ApplicationWindow {
         "animations-zones": "AnimationsZonesPage.qml",
         "animations-notifications": "AnimationsNotificationsPage.qml",
         "animations-popups": "AnimationsPopupsPage.qml",
+        "animations-panels": "AnimationsPanelsPage.qml",
         "animations-workspaces": "AnimationsWorkspacesPage.qml",
         "animations-widgets": "AnimationsWidgetsPage.qml",
         "animations-presets": "AnimationsPresetsPage.qml",
@@ -504,7 +509,7 @@ ApplicationWindow {
             target: sidebar
             properties: "opacity"
             to: 0
-            profile: "sidebar.fadeOut"
+            profile: "panel.fadeOut"
         }
 
         ScriptAction {
@@ -521,7 +526,7 @@ ApplicationWindow {
             target: sidebar
             properties: "opacity"
             to: 1
-            profile: "sidebar.fadeIn"
+            profile: "panel.fadeIn"
         }
 
     }
@@ -748,7 +753,7 @@ ApplicationWindow {
 
                             Behavior on color {
                                 PhosphorMotionAnimation {
-                                    profile: "widget.tint-fast"
+                                    profile: "widget.tint.fast"
                                 }
 
                             }
@@ -948,7 +953,7 @@ ApplicationWindow {
                                     properties: "opacity"
                                     from: 1
                                     to: 0.4
-                                    profile: "widget.pulse-slow"
+                                    profile: "widget.pulse.slow"
                                 }
 
                                 PhosphorMotionAnimation {
@@ -956,7 +961,7 @@ ApplicationWindow {
                                     properties: "opacity"
                                     from: 0.4
                                     to: 1
-                                    profile: "widget.pulse-slow"
+                                    profile: "widget.pulse.slow"
                                 }
 
                             }
@@ -1001,14 +1006,22 @@ ApplicationWindow {
 
             Behavior on Layout.preferredWidth {
                 PhosphorMotionAnimation {
-                    profile: "panel.slideIn"
+                    // Direction is taken from the same `sidebarCompact` flag
+                    // that drives `Layout.preferredWidth` above, so the leg
+                    // is decided synchronously when the nav rail is toggled.
+                    // Reading `Layout.preferredWidth` directly would re-
+                    // evaluate during the Behavior and converge to the wrong
+                    // leg as the value approaches its target.
+                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
                 PhosphorMotionAnimation {
-                    profile: "panel.slideIn"
+                    // Same `sidebarCompact` driver as above — the rail's
+                    // minimumWidth tracks preferredWidth in lockstep.
+                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                 }
 
             }
@@ -1252,7 +1265,7 @@ ApplicationWindow {
                         properties: "opacity"
                         from: 0
                         to: 1
-                        profile: "widget.fade"
+                        profile: "widget.fadeIn"
                         durationOverride: 180
                     }
 
@@ -1297,7 +1310,7 @@ ApplicationWindow {
                         properties: "opacity"
                         from: 0
                         to: 1
-                        profile: "panel.popup"
+                        profile: "popup"
                         durationOverride: 200
                     }
 
@@ -1704,7 +1717,13 @@ ApplicationWindow {
 
                 Behavior on implicitHeight {
                     PhosphorMotionAnimation {
-                        profile: "widget.accordion"
+                        // Direction is taken from `needsSave` (the same flag
+                        // that drives `implicitHeight` for this bar) so the
+                        // leg is decided when needsSave flips. Reading the
+                        // animated `implicitHeight` would re-evaluate during
+                        // the Behavior and converge to the wrong leg as the
+                        // value approaches its target.
+                        profile: settingsController.needsSave ? "widget.accordionExpand" : "widget.accordionCollapse"
                     }
 
                 }
@@ -1909,7 +1928,10 @@ ApplicationWindow {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "widget.fade"
+                // Direction is taken from `_showShortcuts` (the same flag
+                // driving `opacity` above) so the leg is decided when the
+                // overlay is toggled.
+                profile: window._showShortcuts ? "widget.fadeIn" : "widget.fadeOut"
                 durationOverride: 200
             }
 

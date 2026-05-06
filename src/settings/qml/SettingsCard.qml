@@ -222,9 +222,6 @@ Item {
             SequentialAnimation {
                 id: collapseAnim
 
-                // Fade-out wants an InCubic-style accel curve, not the
-                // widget.fade decel — restore via widget.fadeOut at the
-                // original 150 ms duration.
                 PhosphorMotionAnimation {
                     target: contentClip
                     properties: "opacity"
@@ -237,7 +234,7 @@ Item {
                     target: contentClip
                     properties: "height"
                     to: 0
-                    profile: "widget.accordion"
+                    profile: "widget.accordionCollapse"
                     durationOverride: 200
                 }
 
@@ -250,7 +247,7 @@ Item {
                     target: contentClip
                     properties: "height"
                     to: contentColumn.implicitHeight
-                    profile: "widget.accordion"
+                    profile: "widget.accordionExpand"
                     durationOverride: 200
                 }
 
@@ -258,7 +255,7 @@ Item {
                     target: contentClip
                     properties: "opacity"
                     to: root.showToggle && !root.toggleChecked ? 0.5 : 1
-                    profile: "widget.fade"
+                    profile: "widget.fadeIn"
                 }
 
                 ScriptAction {

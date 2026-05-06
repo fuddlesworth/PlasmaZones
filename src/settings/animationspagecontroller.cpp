@@ -338,8 +338,8 @@ QString AnimationsPageController::sectionForPath(const QString& path) const
     const int dot = path.indexOf(QLatin1Char('.'));
     const QString topLevel = dot < 0 ? path : path.left(dot);
 
-    // Merge osd.* and panel.* into the "overlays" UI section.
-    if (topLevel == QLatin1String("osd") || topLevel == QLatin1String("panel"))
+    // Merge osd.*, popup.*, and panel.* into the "overlays" UI section.
+    if (topLevel == QLatin1String("osd") || topLevel == QLatin1String("popup") || topLevel == QLatin1String("panel"))
         return QStringLiteral("overlays");
 
     // Merge cursor.* into the "widget" UI section.
@@ -407,7 +407,7 @@ QVariantList AnimationsPageController::eventSections() const
         entry.insert(QStringLiteral("label"), eventLabel(path));
         entry.insert(QStringLiteral("parent"), ProfilePaths::parentPath(path));
         // A "category" path is one whose label sits at a section/sub-
-        // section root (e.g. "window", "panel.popup") rather than a leaf
+        // section root (e.g. "window", "popup") rather than a leaf
         // event — i.e. another built-in path uses it as parent.
         entry.insert(QStringLiteral("isCategory"), parentPaths.contains(path));
         sectionPaths[section].append(entry);
@@ -896,7 +896,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // This is intentionally distinct from `clearShaderOverride`, which
     // removes the override entry entirely so resolution falls through
     // to the parent. Without this distinction, an
-    // AnimationEventCard's "Override OFF" toggle on `panel.popup`
+    // AnimationEventCard's "Override OFF" toggle on `popup`
     // (cleared override) cannot stop the parent's dissolve from
     // cascading down to every popup event — exactly the user-reported
     // "I disabled all popups but dissolve still plays" bug. The
@@ -985,8 +985,8 @@ namespace {
 /// (i.e. starting with `<path>.`). Centralises the prefix-match math
 /// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
 /// share one definition of "descendant" — the trailing `.` boundary
-/// is what excludes both the path itself ("panel.popup") and sibling
-/// names with shared prefix ("panel.popup-something").
+/// is what excludes both the path itself ("popup") and unrelated
+/// names with shared character-prefix ("popups").
 QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                              const QString& path)
 {
