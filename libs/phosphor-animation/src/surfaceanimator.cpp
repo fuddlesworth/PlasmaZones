@@ -1295,8 +1295,26 @@ public:
                 const bool anchorMatches = pending.foundExplicitAnchor
                     ? (currentAnchor != nullptr && currentAnchor == pending.shaderAnchor.data())
                     : (currentAnchor == nullptr && pending.shaderAnchor.data() == target);
-                if (pending.shaderItem && pending.shaderAnchor && pending.shaderEffectId == shaderEffectId
-                    && pending.target.data() == target && anchorMatches) {
+                // boundsExtent=Parent shaders sit on a screen-sized
+                // shader item with a per-leg Qt scene-graph layer set up
+                // around the anchor source. Reusing those pieces between
+                // legs leaves the layer in a state that doesn't reliably
+                // capture the anchor on the second wake-up — the shader
+                // ends up sampling transparent through uTexture0 and the
+                // surface "pops in" without animation.
+                //
+                // Force a fresh attach each leg for Parent-extent
+                // shaders. The reuse path's purpose is rapid show/hide
+                // toggling (zone-selector during a drag) where create-
+                // then-destroy outpaces deleteLater + render-thread
+                // cleanup; for typical popup show/hide cadence the
+                // fresh-attach cost is invisible. Only Parent shaders
+                // hit this — Anchor-extent shaders keep the existing
+                // reuse semantics intact.
+                const bool parentExtent = resolvedShaderEff.boundsExtent
+                    == PhosphorAnimationShaders::AnimationShaderEffect::BoundsExtent::Parent;
+                if (!parentExtent && pending.shaderItem && pending.shaderAnchor
+                    && pending.shaderEffectId == shaderEffectId && pending.target.data() == target && anchorMatches) {
                     reusedShaderItem = std::move(pending.shaderItem);
                     reusedShaderSource = std::move(pending.shaderSource);
                     reusedShaderAnchor = pending.shaderAnchor;
@@ -1429,33 +1447,13 @@ public:
                     // any leg-specific state so the SG sync that
                     // follows runLeg picks them up live.
                     if (reusedShaderSource) {
-                        // Wake the source FBO + re-hide the anchor from
-                        // direct scene render. The park step in
-                        // `teardownShaderLeg` calls
-                        // `setHideSource(false)` to restore the anchor's
-                        // normal rendering during the idle phase, and
-                        // that toggle tears down the source item's
-                        // internal `QQuickItemLayer`. A bare
-                        // `setHideSource(true)` here doesn't reliably
-                        // rebuild that layer — the FBO comes back live
-                        // but empty, so the shader samples a
-                        // transparent uTexture0 throughout the leg and
-                        // the user sees a "pop in" at completion when
-                        // the post-leg `setOpacity(1.0)` restores the
-                        // anchor's direct render.
-                        //
-                        // Force a clean layer reattach by clearing the
-                        // source item first, then re-pointing it at
-                        // the anchor. Qt rebuilds the layer + FBO from
-                        // scratch, mirroring the fresh-attach setup at
-                        // `attachShaderToAnchor`. The matching order
-                        // (setLive, setHideSource, setSourceItem) keeps
-                        // a single code-path's worth of state machine
-                        // for the source.
-                        reusedShaderSource->setSourceItem(nullptr);
-                        reusedShaderSource->setLive(true);
+                        // setHideSource(true) re-installs the anchor's
+                        // QQuickItemLayer so the FBO captures the anchor
+                        // content (and the anchor is suppressed from
+                        // direct scene render — the shader effect is
+                        // the sole renderer for the leg's duration).
                         reusedShaderSource->setHideSource(true);
-                        reusedShaderSource->setSourceItem(reusedShaderAnchor.data());
+                        reusedShaderSource->setLive(true);
                     }
                     reusedShaderItem->setVisible(true);
                     // Re-apply per-effect static config so a metadata.json
