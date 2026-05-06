@@ -455,6 +455,33 @@ void Daemon::connectLayoutSignals()
             // Single warm-up covers both layout-OSD and navigation-OSD —
             // they share one per-screen surface (NotificationOverlay.qml).
             m_overlayService->warmUpNotifications();
+            // Snap assist warm-up: pre-pays QML compile + first-paint
+            // pipeline build at daemon init, so the first user-triggered
+            // show is just a setVisible toggle. Without this, when a
+            // layout-switch shortcut handler fires both the layout-OSD
+            // (synchronous) and a snap-assist (deferred via
+            // OverlayAdaptor::showSnapAssist's QTimer::singleShot), the
+            // OSD's vertex-shader fly-in starts ticking on
+            // SurfaceAnimator's GUI-thread QTimer, and then the GUI
+            // thread blocks for the duration of snap-assist's first
+            // QQuickWindow::polishAndSync (QML compile + render-thread
+            // sync waiting on FBO alloc + QRhiGraphicsPipeline::create
+            // + QShaderBaker::bake). The OSD's iTime stops advancing
+            // for that block, then jumps forward to its scheduled value
+            // when the GUI thread resumes — the visible "halfway pause
+            // then jump" symptom. Pre-warming moves all of that work
+            // to daemon init time, where no other animation is in
+            // flight to be stalled.
+            //
+            // Snap-assist's role uses keyboard_interactivity=Exclusive,
+            // and the prime cycle inside createSnapAssistWindowFor maps
+            // the wl_surface for ~one frame to capture the first
+            // frameSwapped before unmapping. That's a brief
+            // (~16 ms) keyboard grab during daemon startup. Acceptable
+            // tradeoff vs the visible OSD-pause symptom on every
+            // subsequent layout switch. Layout-picker stays unwarmed
+            // for the reasons documented below.
+            m_overlayService->warmUpSnapAssist();
             // Layout Picker is intentionally NOT pre-warmed: the
             // pre-warmed wl_surface gets initially mapped with
             // keyboard_interactivity=None (so the warm hidden surface

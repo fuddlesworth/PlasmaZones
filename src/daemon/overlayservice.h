@@ -281,6 +281,25 @@ public:
      */
     void warmUpNotifications();
 
+    /**
+     * @brief Pre-create the snap-assist surface for the primary screen so
+     * the FIRST user-triggered show is just a setVisible toggle rather
+     * than a full QML compile + scene-graph build + Wayland configure
+     * round-trip + first-paint pipeline create. SnapAssistOverlay.qml's
+     * Repeater-of-zones × Repeater-of-candidate-cards body costs ~100-300 ms
+     * to instantiate on the GUI thread plus ~tens of ms of render-thread
+     * polishAndSync that the GUI thread blocks on; without pre-warming
+     * that cost falls on a user-triggered show (e.g. layout-switch
+     * shortcut), and any sibling surface mid-animation (the layout-OSD's
+     * fly-in fired in the same shortcut handler) sees its
+     * SurfaceAnimator GUI-thread tick miss frames for the duration —
+     * the visible OSD pause-mid-fly-in symptom this method addresses.
+     *
+     * Idempotent — guarded by `m_snapAssistWindow != nullptr` inside
+     * `createSnapAssistWindowFor`. Rerunning is harmless.
+     */
+    void warmUpSnapAssist();
+
 private:
     /**
      * @brief Install the QGuiApplication::screenAdded hook for the

@@ -11,6 +11,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../snapassistthumbnailprovider.h"
+#include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
 #include <QScreen>
@@ -118,12 +119,22 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         screenGeom = screen->geometry();
     }
 
-    // Reuse existing visible window when on the same screen (avoids QML compilation +
-    // Wayland surface create/destroy churn during snap assist continuation).
-    // Recreate when the target screen changes, window was closed, or doesn't exist.
-    // Visibility check avoids re-showing a window whose Vulkan swapchain was torn
-    // down by close() — only reuse windows that are still on-screen.
-    const bool reuseWindow = m_snapAssistWindow && m_snapAssistWindow->isVisible() && m_snapAssistScreenId == screenId;
+    // Reuse the warmed / previous QQuickWindow when on the same screen
+    // (avoids QML compilation + Wayland surface create/destroy churn).
+    // Recreate when the target screen changes or the window was destroyed
+    // outright (m_snapAssistWindow auto-nulls via the QObject::destroyed
+    // hook installed at createSnapAssistWindowFor).
+    //
+    // Note: NOT gated on `isVisible()` any more. Pre-warming the surface
+    // (via warmUpSnapAssist) leaves it Qt-visible=false after the prime
+    // cycle's hide; user-triggered hides also drop into hide() (rather
+    // than destroying outright), which unmaps the wl_surface but keeps
+    // the QQuickWindow alive. In both cases the window object is reusable
+    // — show() re-maps the wl_surface and the existing scene graph is
+    // good to render. The earlier "isVisible() == swapchain is alive"
+    // heuristic was over-cautious; QQuickWindow's swapchain handling
+    // tolerates remap on a visible-cycled window without explicit teardown.
+    const bool reuseWindow = m_snapAssistWindow && m_snapAssistScreenId == screenId;
     if (!reuseWindow) {
         destroySnapAssistWindow();
         createSnapAssistWindowFor(screen, screenGeom, screenId);
@@ -366,7 +377,17 @@ void OverlayService::hideSnapAssist()
     // show should land in the cache only — never mutate this list, since
     // it'd be replaced wholesale on the next showSnapAssist anyway.
     m_snapAssistCandidates.clear();
-    destroySnapAssistWindow();
+    // Hide rather than destroy. The QQuickWindow + QML scene survive
+    // across user dismiss/re-show cycles so the next snap-assist trigger
+    // reuses the warmed surface instead of paying QML compile + first-
+    // paint pipeline build again. With keepMappedOnHide=false (default
+    // for the snap-assist Surface), Surface::hide() unmaps the
+    // wl_surface, which releases the layer-shell exclusive keyboard
+    // grant while idle — no keyboard-grab footgun while the daemon is
+    // sitting between snaps.
+    if (m_snapAssistSurface) {
+        m_snapAssistSurface->hide();
+    }
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();
     }
@@ -488,6 +509,38 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
     // Install event filter for reliable Escape key handling on Wayland.
     m_snapAssistWindow->installEventFilter(this);
     // Surface is in Hidden state (warmed) — caller calls show() after setting properties.
+}
+
+void OverlayService::warmUpSnapAssist()
+{
+    // Already warmed (or already-warm-from-a-real-user-show survived).
+    if (m_snapAssistWindow) {
+        return;
+    }
+    // Pick the primary screen at warm-up — snap-assist is single-instance
+    // (one surface, recreated/relocated when a snap actually happens on a
+    // different screen). The screen+rect on first user show takes
+    // precedence over the warm screen via the existing reuseWindow path
+    // in showSnapAssist (which destroys + recreates if the target screen
+    // changed). For the typical single-monitor case the warm screen is
+    // the eventual target screen and the user's first show is just a
+    // setVisible toggle.
+    QScreen* primary = QGuiApplication::primaryScreen();
+    if (!primary) {
+        qCWarning(lcOverlay) << "warmUpSnapAssist: no primary QScreen — skipping warm-up";
+        return;
+    }
+    QRect screenGeom;
+    if (m_screenManager) {
+        const QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
+        screenGeom = m_screenManager->screenGeometry(primaryId);
+    }
+    if (!screenGeom.isValid()) {
+        screenGeom = primary->geometry();
+    }
+    createSnapAssistWindowFor(primary, screenGeom, QString());
+    qCInfo(lcOverlay) << "Pre-warmed SnapAssistOverlay for primary screen — first user-show will skip "
+                         "QML compile + first-paint pipeline build";
 }
 
 void OverlayService::destroySnapAssistWindow()
