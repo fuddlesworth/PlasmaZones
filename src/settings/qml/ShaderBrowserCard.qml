@@ -64,7 +64,7 @@ ItemDelegate {
     background: Rectangle {
         radius: Kirigami.Units.smallSpacing
         color: root.hovered ? Kirigami.Theme.hoverColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-        border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+        border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
         border.color: root.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
     }
 
@@ -81,13 +81,13 @@ ItemDelegate {
             visible: _hasPreview
             radius: Kirigami.Units.smallSpacing
             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-            border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+            border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
             clip: true
 
             Image {
                 anchors.fill: parent
-                anchors.margins: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                anchors.margins: Math.max(1, Math.round(Screen.devicePixelRatio))
                 // `encodeURI` percent-encodes spaces and unicode while
                 // preserving path separators, which a raw `"file://" + path`
                 // concat would silently break on (e.g. user-installed packs
