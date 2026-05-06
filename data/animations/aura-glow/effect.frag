@@ -7,7 +7,7 @@
 // crop to a circular crop; a hue-cycling rim sits on top, with a
 // subtle radial blur on the window content. Visually inspired by
 // Burn-My-Windows (aura-glow.frag, Justin Garza + Simon
-// Schneegans), written natively against our `iTime`/`iChannel0`.
+// Schneegans), written natively against our `iTime`/`uTexture0`.
 //
 // ## iTime convention
 //
@@ -29,6 +29,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 #define glowSpeed       customParams[0].x
 #define randomColorFlag customParams[0].y
@@ -40,33 +41,12 @@
 #define edgeSize        customParams[1].w
 #define edgeHardness    customParams[2].x
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// 2D simplex noise — MIT-licensed (Inigo Quilez).
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-float simplex2D(vec2 p) {
-    const float K1 = 0.366025404;
-    const float K2 = 0.211324865;
-    vec2 i  = floor(p + (p.x + p.y) * K1);
-    vec2 a  = p - i + (i.x + i.y) * K2;
-    float m = step(a.y, a.x);
-    vec2 o  = vec2(m, 1.0 - m);
-    vec2 b  = a - o + K2;
-    vec2 c  = a - 1.0 + 2.0 * K2;
-    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    vec3 n  = h * h * h * h *
-            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
-                 dot(b, -1.0 + 2.0 * hash22(i + o)),
-                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
-    return 0.5 + 0.5 * dot(n, vec3(70.0));
-}
+// 2D simplex noise — MIT-licensed (Inigo Quilez). Definitions hosted
+// in shared/noise.glsl so the seven shaders that need it pull from one
+// source-of-truth rather than carrying a verbatim copy each.
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * .1031);
@@ -135,13 +115,26 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     vec4 acc = vec4(0.0);
     const float tau = 6.28318530718;
     const float dirs = 15.0;
+    // int loop bound so iteration count exactly matches the divisor —
+    // the float `s += 1.0 / samples` form can step `samples` or
+    // `samples+1` times depending on float precision (s=0.999...
+    // vs 1.000...), and the per-iteration `s` would no longer be
+    // in bijection with the divisor. Floored to >=1 so a hostile
+    // or buggy host that pushes samples to 0 or negative produces
+    // one sample, not a divide-by-zero.
+    int sampleCount = max(int(samples), 1);
+    float sampleCountF = float(sampleCount);
+    // Hoist iResolution floor out of the 45-tap inner loop —
+    // invariant across all samples.
+    vec2 flooredResolution = max(iResolution, vec2(1.0));
     for (float d = 0.0; d < tau; d += tau / dirs) {
-        for (float s = 0.0; s < 1.0; s += 1.0 / samples) {
-            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / iResolution;
-            acc += texture(iChannel0, uv + off);
+        for (int i = 0; i < sampleCount; ++i) {
+            float s = float(i) / sampleCountF;
+            vec2 off = vec2(cos(d), sin(d)) * radius * (1.0 - s) / flooredResolution;
+            acc += texture(uTexture0, uv + off);
         }
     }
-    return acc / samples / dirs;
+    return acc / sampleCountF / dirs;
 }
 
 void main()
@@ -155,10 +148,16 @@ void main()
     // on non-square windows.
     vec2 uv         = vTexCoord;
     vec2 oneToOneUV = uv - 0.5;
-    if (iResolution.x > iResolution.y) {
-        oneToOneUV.y *= iResolution.y / iResolution.x;
+    // Defensive floor against first-frame `iResolution = (0, 0)` —
+    // matches the `blurredInputColor` divide above and the rest of
+    // the suite's pattern (matrix/hexagon/honeycomb/pixelate). The
+    // else branch would otherwise compute `0.0 / 0.0 = NaN` and
+    // poison the entire composite.
+    vec2 res = max(iResolution, vec2(1.0));
+    if (res.x > res.y) {
+        oneToOneUV.y *= res.y / res.x;
     } else {
-        oneToOneUV.x *= iResolution.x / iResolution.y;
+        oneToOneUV.x *= res.x / res.y;
     }
     oneToOneUV += 0.5;
     uv = mix(oneToOneUV, uv, progress);
@@ -191,7 +190,7 @@ void main()
     vec2 windowUV  = (vTexCoord - 0.5) * mix(1.1, 1.0, easeOutCubic(progress)) + 0.5;
     vec4 windowCol = (blurAmount > 0.0)
         ? blurredInputColor(windowUV, (1.0 - progress) * blurAmount, 3.0)
-        : texture(iChannel0, windowUV);
+        : texture(uTexture0, windowUV);
 
     // Don't draw glow where the window itself is transparent
     // (window-content shaped, not square mask).

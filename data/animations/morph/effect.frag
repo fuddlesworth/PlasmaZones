@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Morph transition — sine-based UV displacement field warps the
-// rendered surface (sampled through iChannel0). The previous stub
+// rendered surface (sampled through uTexture0). The previous stub
 // emitted `vec4(warpedUv.x, warpedUv.y, warpMask, alpha)` — a
 // rainbow-like gradient of the UV coords — instead of sampling
 // anything, which is the "weird gradient that shows then QML
-// renders" report. Now: sample iChannel0 at the warped UV so the
+// renders" report. Now: sample uTexture0 at the warped UV so the
 // surface ITSELF deforms during the transition, then settles back
 // to its un-warped self as `iTime` reaches the leg endpoints
 // (sin envelope peaks at iTime==0.5).
@@ -27,9 +27,14 @@
 // structural data (see ShaderEffect.h customParams8 Q_PROPERTY); no
 // user-declared parameter in any shipping shader reaches this slot
 // (translateAnimationParams fills from customParams[0] up).
+//
+// Kwin-effect path: plasmazoneseffect.cpp doesn't expand the redirected
+// window's geometry by `boundsPadding`, so the slot reads 0 and the UV
+// remap below collapses to identity (k=1, anchorUv=vTexCoord). That's
+// the correct behaviour on kwin — without geometry expansion there's
+// no padding region to remap into, so the warp simply samples the
+// un-padded surface directly.
 #define boundsPadding customParams[7].x
-
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -63,9 +68,13 @@ void main()
     // the rippled silhouette room to extend OUTSIDE the original
     // anchor rectangle without clipping.
     vec2 sampleUv = anchorUv - warp;
-    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-    fragColor = texture(iChannel0, sampleUv);
+    // Soft inside-mask. A hard `if (outside) return vec4(0)` produces a
+    // 1-texel discontinuity at the warp silhouette boundary, visibly
+    // aliased on smooth warps. A 0.005-wide smoothstep band fades to
+    // transparent across the [0,1] edge — narrow enough to be invisible
+    // on small windows (~1 texel at 200 px), still smooth at 4K.
+    vec2 insideLo = smoothstep(vec2(0.0), vec2(0.005), sampleUv);
+    vec2 insideHi = vec2(1.0) - smoothstep(vec2(0.995), vec2(1.0), sampleUv);
+    float mask = insideLo.x * insideLo.y * insideHi.x * insideHi.y;
+    fragColor = texture(uTexture0, sampleUv) * mask;
 }

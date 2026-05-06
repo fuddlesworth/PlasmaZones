@@ -11,7 +11,7 @@
 #include <QUrl>
 
 #include "daemon/rendering/zoneshaderitem.h"
-#include "daemon/rendering/zoneshadercommon.h"
+#include <PhosphorRendering/ZoneShaderCommon.h>
 #include "config/configdefaults.h"
 #include "core/constants.h"
 #include "../helpers/TestHelpers.h"
@@ -71,7 +71,7 @@ private Q_SLOTS:
         QVariantList zones = makeFourZoneLayout();
         item.setZones(zones);
 
-        ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
 
         // PhosphorZones::Zone count must match input
         QCOMPARE(snapshot.zoneCount, 4);
@@ -91,7 +91,7 @@ private Q_SLOTS:
         QVariantList zones = makeFourZoneLayout();
         item.setZones(zones);
 
-        ZoneDataSnapshot before = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot before = item.getZoneDataSnapshot();
         const int versionBefore = before.version;
 
         // Changing hoveredZoneIndex should update highlight flags but NOT reparse
@@ -99,7 +99,7 @@ private Q_SLOTS:
         // is identical and version incremented only by 1 (lightweight update).
         item.setHoveredZoneIndex(2);
 
-        ZoneDataSnapshot after = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot after = item.getZoneDataSnapshot();
 
         // Geometry must be unchanged (no reparse)
         for (int i = 0; i < 4; ++i) {
@@ -126,7 +126,7 @@ private Q_SLOTS:
         zones.append(makeZone(400, 0, 400, 600, 2, true));
         item.setZones(zones);
 
-        ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
 
         // All arrays must have the same count as zoneCount
         QCOMPARE(snapshot.rects.size(), snapshot.zoneCount);
@@ -163,10 +163,10 @@ private Q_SLOTS:
         zones.append(makeZone(960, 540, 480, 270, 1));
         item.setZones(zones);
 
-        ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
         QCOMPARE(snapshot.rects.size(), 1);
 
-        const ZoneRect& rect = snapshot.rects[0];
+        const PhosphorRendering::ZoneRect& rect = snapshot.rects[0];
 
         // 960/1920 = 0.5, 540/1080 = 0.5, 480/1920 = 0.25, 270/1080 = 0.25
         QVERIFY(qFuzzyCompare(rect.x, 0.5f));
@@ -189,7 +189,7 @@ private Q_SLOTS:
 
         QCOMPARE(item.highlightedCount(), 2);
 
-        ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
         QCOMPARE(snapshot.highlightedCount, 2);
     }
 
@@ -280,7 +280,7 @@ private Q_SLOTS:
         QCOMPARE(item.zoneCount(), 0);
         QCOMPARE(item.highlightedCount(), 0);
 
-        ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
         QCOMPARE(snapshot.zoneCount, 0);
         QVERIFY(snapshot.rects.isEmpty());
         QVERIFY(snapshot.fillColors.isEmpty());
@@ -297,7 +297,7 @@ private Q_SLOTS:
         item.setZones(zones);
 
         // Must not crash - fallback divisor is 1.0
-        ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
         QCOMPARE(snapshot.zoneCount, 1);
 
         // With fallback divisor of 1.0, pixel coords pass through as-is

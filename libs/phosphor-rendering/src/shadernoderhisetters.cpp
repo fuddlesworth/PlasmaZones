@@ -45,6 +45,9 @@ void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifor
 
 void ShaderNodeRhi::setTime(double time)
 {
+    if (m_time == time) {
+        return;
+    }
     m_time = time;
     m_uniformsDirty = true;
     m_timeDirty = true;
@@ -58,6 +61,9 @@ void ShaderNodeRhi::setTime(double time)
 
 void ShaderNodeRhi::setTimeDelta(float delta)
 {
+    if (m_timeDelta == delta) {
+        return;
+    }
     m_timeDelta = delta;
     m_uniformsDirty = true;
     m_timeDirty = true;
@@ -65,6 +71,9 @@ void ShaderNodeRhi::setTimeDelta(float delta)
 
 void ShaderNodeRhi::setFrame(int frame)
 {
+    if (m_frame == frame) {
+        return;
+    }
     m_frame = frame;
     m_uniformsDirty = true;
     m_timeDirty = true;
@@ -82,7 +91,20 @@ void ShaderNodeRhi::setResolution(float width, float height)
 
 void ShaderNodeRhi::setMousePosition(const QPointF& pos)
 {
+    if (m_mousePosition == pos) {
+        return;
+    }
     m_mousePosition = pos;
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
+}
+
+void ShaderNodeRhi::setIsReversed(bool reverse)
+{
+    if (m_isReversed == reverse) {
+        return;
+    }
+    m_isReversed = reverse;
     m_uniformsDirty = true;
     m_sceneDataDirty = true;
 }
@@ -313,18 +335,12 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     m_bufferShaderReady = false;
     m_bufferShaderRetries = 0;
     m_bufferFragmentShaderSource.clear();
-    m_bufferMtime = 0;
-    // (m_bufferMtime is reset both here and in the multi-buffer branch
-    // below — keeping the single-buffer state consistent with the
-    // multi-buffer counterpart at lines below; cache-key TOCTOU is
-    // closed by capture-before-read in bakeBufferShaders.)
     m_multiBufferShadersReady = false;
     m_multiBufferShaderDirty = true;
     m_multiBufferShaderRetries = 0;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferFragmentShaderSources[i].clear();
         m_multiBufferFragmentShaders[i] = QShader();
-        m_multiBufferMtimes[i] = 0;
     }
     // Single-buffer mode is loaded lazily inside bakeBufferShaders() during
     // prepare(); the multi-buffer branch already does so. Loading shader
@@ -553,7 +569,6 @@ void ShaderNodeRhi::invalidateUniforms()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_timeHiDirty = true;
-    m_extensionDirty = true;
     m_sceneDataDirty = true;
     m_appFieldsDirty = true;
 }
@@ -573,7 +588,13 @@ void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
 
 QString ShaderNodeRhi::normalizeWrapMode(const QString& wrap)
 {
-    return (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    if (wrap == QLatin1String("repeat")) {
+        return QStringLiteral("repeat");
+    }
+    if (wrap == QLatin1String("mirror")) {
+        return QStringLiteral("mirror");
+    }
+    return QStringLiteral("clamp");
 }
 
 QString ShaderNodeRhi::normalizeFilterMode(const QString& filter)
@@ -583,6 +604,17 @@ QString ShaderNodeRhi::normalizeFilterMode(const QString& filter)
     if (filter == QLatin1String("mipmap"))
         return QStringLiteral("mipmap");
     return QStringLiteral("linear");
+}
+
+QRhiSampler::AddressMode ShaderNodeRhi::wrapModeToRhiAddress(const QString& wrap)
+{
+    if (wrap == QLatin1String("repeat")) {
+        return QRhiSampler::Repeat;
+    }
+    if (wrap == QLatin1String("mirror")) {
+        return QRhiSampler::Mirror;
+    }
+    return QRhiSampler::ClampToEdge;
 }
 
 } // namespace PhosphorRendering

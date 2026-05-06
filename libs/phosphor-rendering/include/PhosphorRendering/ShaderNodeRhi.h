@@ -31,11 +31,14 @@
 
 namespace PhosphorRendering {
 
-// Forward declare constants used in member declarations
-static constexpr int kMaxBufferPasses = 4;
-static constexpr int kMaxUserTextures = 4;
-static constexpr int kMaxCustomParams = 8;
-static constexpr int kMaxCustomColors = 16;
+// Forward declare constants used in member declarations.
+// `constexpr int` at namespace scope in a header is implicitly `inline` since
+// C++17 — no `static` needed (and matches the existing `constexpr int` style
+// used by kFirstFreeConsumerBinding / kMaxConsumerBinding below).
+constexpr int kMaxBufferPasses = 4;
+constexpr int kMaxUserTextures = 4;
+constexpr int kMaxCustomParams = 8;
+constexpr int kMaxCustomColors = 16;
 
 // ── Consumer binding range (for setExtraBinding) ────────────────────────
 // Library-managed bindings: 0 (UBO), 2-5 (multipass buffers), 6 (audio),
@@ -59,7 +62,7 @@ constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
 /// First SRB binding for the user-texture slots (slot 0 → binding 7).
 /// Both `setSourceTextureProvider`'s slot-0 override and the
 /// QImage-uploaded user textures key off this base.
-static constexpr int kUserTextureBaseBinding = 7;
+constexpr int kUserTextureBaseBinding = 7;
 
 /// @return true if @p binding is usable by consumers via setExtraBinding().
 constexpr bool isConsumerBinding(int binding) noexcept
@@ -143,6 +146,12 @@ public:
     void setFrame(int frame);
     void setResolution(float width, float height);
     void setMousePosition(const QPointF& pos);
+    /// Direction signal for asymmetric leg rendering. Forward through
+    /// to BaseUniforms::iIsReversed at offset 660. SurfaceAnimator
+    /// pushes this from the leg's `isShowLeg` flag (false = reverse =
+    /// hide leg); kwin-effect parity is handled directly via setUniform
+    /// on the kwin path.
+    void setIsReversed(bool reverse);
 
     // ── Custom Parameters (indexed API) ────────────────────────────────
     void setCustomParams(int index, const QVector4D& params);
@@ -181,13 +190,16 @@ public:
     // ── Textures ───────────────────────────────────────────────────────
     void setAudioSpectrum(const QVector<float>& spectrum);
     void setUserTexture(int slot, const QImage& image);
+    /// Set per-slot sampler address mode. Accepts "clamp", "repeat", or
+    /// "mirror" (case-sensitive); other values fall back to "clamp" via
+    /// `normalizeWrapMode`.
     void setUserTextureWrap(int slot, const QString& wrap);
     void setWallpaperTexture(const QImage& image);
     void setUseWallpaper(bool use);
     void setUseDepthBuffer(bool use);
 
     /// @brief Live texture-provider override for user-texture slot 0
-    ///        (SRB binding 7 / `iChannel0`).
+    ///        (SRB binding 7 / `uTexture0`).
     ///
     /// When set, every SRB rebuild reads
     /// `provider->texture()->rhiTexture()` and binds that — superseding
@@ -229,11 +241,19 @@ public:
     // ── Include Paths ──────────────────────────────────────────────────
     void setShaderIncludePaths(const QStringList& paths);
 
-    /// Normalize wrap mode string to "clamp" or "repeat" (static helper,
-    /// safe to call from any thread — operates on its arguments only).
+    /// Normalize wrap mode string to "clamp", "repeat", or "mirror" (static
+    /// helper, safe to call from any thread — operates on its arguments only).
+    /// Unknown / empty inputs fall back to "clamp" — that fallback is
+    /// load-bearing for legacy callers that pass an empty string when no
+    /// wrap is configured.
     static QString normalizeWrapMode(const QString& wrap);
     /// Normalize filter mode string to "nearest", "linear", or "mipmap".
     static QString normalizeFilterMode(const QString& filter);
+
+    /// Map a normalized wrap-mode string to QRhiSampler::AddressMode. Single
+    /// source of truth for sampler address-mode selection so callers can't
+    /// drift on the "mirror" / "repeat" / "clamp" mapping.
+    static QRhiSampler::AddressMode wrapModeToRhiAddress(const QString& wrap);
 
 protected:
     /**
@@ -322,7 +342,6 @@ private:
     QString m_bufferFilterDefault = QStringLiteral("linear");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
-    qint64 m_bufferMtime = 0;
     bool m_bufferShaderReady = false;
     bool m_bufferShaderDirty = true;
     int m_bufferShaderRetries = 0;
@@ -349,11 +368,15 @@ private:
     std::array<std::unique_ptr<QRhiShaderResourceBindings>, kMaxBufferPasses> m_multiBufferSrbs = {};
     std::array<QShader, kMaxBufferPasses> m_multiBufferFragmentShaders = {};
     std::array<QString, kMaxBufferPasses> m_multiBufferFragmentShaderSources = {};
-    std::array<qint64, kMaxBufferPasses> m_multiBufferMtimes = {};
     bool m_multiBufferShadersReady = false;
     bool m_multiBufferShaderDirty = true;
     int m_multiBufferShaderRetries = 0;
-    // Dummy 1x1 texture for iChannel0 when multipass is set but buffer not yet created
+    // Dummy 1x1 texture for the multipass channel-0 buffer slot (SRB
+    // binding 2, GLSL `iChannel0`) when multipass is configured but the
+    // backing buffer hasn't been created yet. Distinct from the user-
+    // texture slot 0 (SRB binding 7, GLSL `uTexture0`) — the iChannel0
+    // name here refers to the buffer-channel binding, not the renamed
+    // user-texture.
     std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
     std::unique_ptr<QRhiSampler> m_dummyChannelSampler;
     bool m_dummyChannelTextureNeedsUpload = false;
@@ -373,7 +396,6 @@ private:
     bool m_uniformsDirty = true;
     bool m_timeDirty = true;
     bool m_timeHiDirty = true; ///< iTimeHi wrap offset changed (rare)
-    bool m_extensionDirty = true; ///< Extension UBO data changed (checked via IUniformExtension::isDirty())
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
     bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
@@ -390,6 +412,7 @@ private:
     double m_time = 0.0;
     float m_timeDelta = 0.0f;
     int m_frame = 0;
+    bool m_isReversed = false;
     float m_timeHi = 0.0f; // Cached iTimeHi for wrap-offset change detection
     float m_width = 0.0f;
     float m_height = 0.0f;
@@ -439,7 +462,7 @@ private:
     // ── Source texture override (slot 0 / binding 7) ───────────────────
     // Texture-provider source — typically a `QQuickItem::textureProvider()`
     // for a layer-enabled item. When non-null this supersedes
-    // m_userTextures[0] in the SRB build, so the shader's iChannel0
+    // m_userTextures[0] in the SRB build, so the shader's uTexture0
     // samples a live QML render instead of a static QImage upload.
     // m_sourceSampler is owned here (not a user-texture sampler) so we
     // can keep slot 0's user-texture sampler available for callers that

@@ -159,8 +159,8 @@ private Q_SLOTS:
         }
         QVERIFY(foundZoneCategory);
         QVERIFY(foundZoneSnapIn);
-        QVERIFY2(zoneCategoryFlag, "'zone' should be flagged as a category — it has children");
-        QVERIFY2(!zoneSnapInCategoryFlag, "'zone.snapIn' is a leaf — not a category");
+        QVERIFY2(zoneCategoryFlag, "'zone' should be flagged as a category: it has children");
+        QVERIFY2(!zoneSnapInCategoryFlag, "'zone.snapIn' is a leaf, not a category");
     }
 
     // ─── Override CRUD ────────────────────────────────────────────────────
@@ -653,6 +653,49 @@ private Q_SLOTS:
         QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(), QStringLiteral("glitch"));
     }
 
+    /// User-reported scenario: parent ("All Window Events" / "All
+    /// Popups" / etc.) has an explicit shader. The user wants to override
+    /// a CHILD event with a different shader. Each step's resolution
+    /// must reflect the latest write — otherwise the picker appears to
+    /// "reject" the user's selection because the resolved value the QML
+    /// reads back is still the inherited parent shader.
+    void setShaderOverride_childOverridesParentInheritance()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Parent ("All Window Events") set to matrix
+        QVERIFY(c.setShaderOverride(QStringLiteral("window"), QStringLiteral("matrix"), {}));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("matrix"));
+        // Child inherits matrix.
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("matrix"));
+        // Child has NO direct override yet.
+        QVERIFY(c.rawShaderProfile(QStringLiteral("window.open")).isEmpty());
+
+        // Child overrides to a DIFFERENT shader.
+        QVERIFY(c.setShaderOverride(QStringLiteral("window.open"), QStringLiteral("dissolve"), {}));
+
+        // Child must resolve to dissolve (direct override wins over
+        // parent's matrix). Parent's window resolution is unchanged.
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("matrix"));
+        // Direct override is now visible at the child path.
+        QCOMPARE(c.rawShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+
+        // Switch the child to a third shader — must take effect with no
+        // residual influence from the prior child override.
+        QVERIFY(c.setShaderOverride(QStringLiteral("window.open"), QStringLiteral("glitch"), {}));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("glitch"));
+    }
+
     void resolvedProfile_partialLeafFillsFromParentAndDefaults()
     {
         QTemporaryDir tmp;
@@ -750,7 +793,7 @@ private Q_SLOTS:
         // The override file MUST still exist — this is the load-bearing
         // assertion: removeUserPreset cannot collateral-damage overrides.
         QVERIFY2(QFileInfo::exists(overrideFilePath),
-                 "override file was deleted by removeUserPreset(\"zone.snapIn\") — preset CRUD MUST NOT touch override "
+                 "override file was deleted by removeUserPreset(\"zone.snapIn\"): preset CRUD MUST NOT touch override "
                  "slots");
         QCOMPARE(c.rawProfile(QStringLiteral("zone.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
     }
@@ -807,7 +850,7 @@ private Q_SLOTS:
         // Critical: the valid entry MUST NOT have been written. Atomic
         // semantics — all-or-nothing. Pre-fix this would be true.
         QVERIFY2(!c.hasOverride(QStringLiteral("zone.snapIn")),
-                 "applyMotionSet wrote partial state from a malformed set — should have rejected atomically");
+                 "applyMotionSet wrote partial state from a malformed set: should have rejected atomically");
     }
 
     // ─── Shader override pendingChangesChanged emission ───────────────────
@@ -827,23 +870,168 @@ private Q_SLOTS:
         QVERIFY2(spy.count() >= 1, "setShaderOverride MUST emit pendingChangesChanged");
     }
 
-    /// `setShaderOverride(path, "")` — the empty-effectId clear shorthand
-    /// — MUST also emit pendingChangesChanged. Pre-fix it routed to
-    /// clearShaderOverride which silently mutated.
-    void setShaderOverride_emptyEffectClearsAndEmits()
+    /// `setShaderOverride(path, "")` writes an ENGAGED-EMPTY override —
+    /// the inheritance-blocking sentinel. `ShaderProfile::overlay`
+    /// treats it as a real value that wins over an ancestor's
+    /// effectId, so the OFF toggle on a card like `panel.popup` stops
+    /// a parent's `panel = "pixelate"` from cascading down to popup
+    /// events. The override is materially present in `rawShaderProfile`'s
+    /// view (an `effectId: ""` JSON entry) which is how the UI's
+    /// `refreshFromTree` distinguishes "explicitly disabled" (toggle
+    /// shows OFF, inheritance blocked) from "no override / inheriting"
+    /// (toggle shows OFF, inheritance flows). pendingChangesChanged
+    /// fires because the tree mutated.
+    void setShaderOverride_emptyEffectWritesDisableMarkerAndBlocksInheritance()
     {
         IsolatedConfigGuard guard;
         Settings settings;
         PhosphorAnimationShaders::AnimationShaderRegistry registry;
         AnimationsPageController c(&registry, &settings);
 
-        // First write something so there's state to clear.
-        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
+        // Set a parent override so the engaged-empty descendant has
+        // something to block.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel"), QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("panel.popup.layoutPicker.show"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
+                 QStringLiteral("pixelate"));
 
         QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
-        QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QString(), {}));
-        QVERIFY2(spy.count() >= 1, "setShaderOverride('','') MUST emit pendingChangesChanged on clear");
-        QVERIFY(c.rawShaderProfile(QStringLiteral("osd.show")).isEmpty());
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup"), QString(), {}));
+        QVERIFY2(spy.count() >= 1, "setShaderOverride(path, '') MUST emit pendingChangesChanged on disable");
+        // Direct override exists with engaged-empty effectId — the
+        // disable sentinel.
+        const QVariantMap raw = c.rawShaderProfile(QStringLiteral("panel.popup"));
+        QVERIFY(!raw.isEmpty());
+        QVERIFY(raw.contains(QStringLiteral("effectId")));
+        QCOMPARE(raw.value(QStringLiteral("effectId")).toString(), QString());
+        // Inheritance from `panel = "pixelate"` is blocked at `panel.popup`,
+        // so every descendant that doesn't override resolves to empty.
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("panel.popup.layoutPicker.show"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
+                 QString());
+    }
+
+    /// Repeated identical OFF toggles MUST short-circuit after the first
+    /// write — the engaged-empty disable sentinel is materially the same
+    /// state on disk, so a no-op second call should not light the Save
+    /// button. Pins the comparison contract documented next to the
+    /// engaged-empty branch in `setShaderOverride`: `ShaderProfile::operator==`
+    /// is engaged-state-sensitive, and the constructed `disabledProfile`
+    /// matches the disk-loaded round-trip shape (parameters = nullopt).
+    void setShaderOverride_repeatedDisableIsNoOp()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        const QString path = QStringLiteral("panel.popup");
+
+        // First disable write — fires pendingChangesChanged once.
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QCOMPARE(spy.count(), 1);
+
+        // Second identical disable write — must short-circuit, no extra
+        // signal. If this fires a second time, the compare-and-skip path
+        // diverged from the engaged-state-sensitive equality contract.
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QCOMPARE(spy.count(), 1);
+        // Pin tree state too — a future regression that returns true while
+        // quietly mutating the tree (e.g. clearing the engaged-empty
+        // sentinel, or engaging the parameters optional) wouldn't trip
+        // the spy-count check, but would flip `effectId` from engaged-
+        // empty back to nullopt-on-read OR add a `parameters` key here.
+        QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
+        QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
+
+        // Third identical disable write — same invariant.
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
+        QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
+    }
+
+    // The descendant-coverage tests below each construct a fresh
+    // `Settings` under an `IsolatedConfigGuard`, so the guard redirects
+    // `QStandardPaths` away from the user's real `~/.config` for the
+    // lifetime of the test. Each case is therefore hermetic — no state
+    // leaks between tests, no dependency on Qt Test's invocation order,
+    // and no risk of clobbering the developer's actual config.
+
+    /// `shaderOverrideDescendantCount` must count strict descendants only —
+    /// not the path itself, not siblings with shared prefix. Pin both the
+    /// non-zero and zero branches plus a deeply-nested chain.
+    void shaderOverrideDescendantCount_strictDescendantsOnly()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Empty tree → count is zero for any path.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel")), 0);
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 0);
+
+        // Self-only override at panel.popup — descendants of it: 0.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup"), QStringLiteral("dissolve"), {}));
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 0);
+        // Descendants of `panel` includes `panel.popup`: 1.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel")), 1);
+
+        // Add a deeply-nested descendant.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        // panel sees both descendants now.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel")), 2);
+        // panel.popup sees the leaf only (itself excluded by strict prefix).
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 1);
+        // panel.popup.layoutPicker sees the leaf below it.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup.layoutPicker")), 1);
+        // The leaf itself has no descendants.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup.layoutPicker.show")), 0);
+
+        // Empty path → zero (defensive: collectShaderOverrideDescendants
+        // bails on empty path so the prefix isn't a bare ".").
+        QCOMPARE(c.shaderOverrideDescendantCount(QString()), 0);
+    }
+
+    /// `clearShaderOverrideDescendants` removes every strict descendant,
+    /// preserves the path-itself override (parent-card "Clear shadowing
+    /// children" semantics), and is a no-op when count is zero.
+    void clearShaderOverrideDescendants_clearsStrictDescendantsOnly()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Build: parent override + two descendants at different depths.
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup"), QStringLiteral("dissolve"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("panel.popup.zoneSelector.show"), QStringLiteral("matrix"), {}));
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 2);
+
+        // Clear from panel.popup — both leaves go, panel.popup itself
+        // remains (it's the parent the user is keeping intact).
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("panel.popup")), 2);
+        QVERIFY2(spy.count() >= 1,
+                 "clearShaderOverrideDescendants MUST emit pendingChangesChanged when it cleared anything");
+        // Verify count is now zero.
+        QCOMPARE(c.shaderOverrideDescendantCount(QStringLiteral("panel.popup")), 0);
+        // Parent override survived.
+        QCOMPARE(c.rawShaderProfile(QStringLiteral("panel.popup")).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+        // Leaf overrides really gone.
+        QVERIFY(c.rawShaderProfile(QStringLiteral("panel.popup.layoutPicker.show")).isEmpty());
+        QVERIFY(c.rawShaderProfile(QStringLiteral("panel.popup.zoneSelector.show")).isEmpty());
+
+        // No-op call — count already zero.
+        QSignalSpy spy2(&c, &AnimationsPageController::pendingChangesChanged);
+        QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("panel.popup")), 0);
+        QCOMPARE(spy2.count(), 0);
     }
 
     /// Set then explicit clear → both calls fire pendingChangesChanged.
@@ -858,7 +1046,7 @@ private Q_SLOTS:
         QVERIFY(c.setShaderOverride(QStringLiteral("osd.show"), QStringLiteral("pixelate"), {}));
         QVERIFY(c.clearShaderOverride(QStringLiteral("osd.show")));
         QVERIFY2(spy.count() >= 2,
-                 qPrintable(QStringLiteral("expected ≥2 emissions, got ") + QString::number(spy.count())));
+                 qPrintable(QStringLiteral("expected >=2 emissions, got ") + QString::number(spy.count())));
     }
 
     // ─── Shader-leg support gate ──────────────────────────────────────────

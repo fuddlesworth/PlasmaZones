@@ -6,7 +6,7 @@
 // channel travelling at a slightly different speed so a rainbow
 // trail follows the lift. Visually inspired by Burn-My-Windows
 // (rgbwarp.frag, Justin Garza + Simon Schneegans), written
-// natively against our `iTime`/`iChannel0` contract.
+// natively against our `iTime`/`uTexture0` contract.
 //
 // ## iTime convention
 //
@@ -42,15 +42,18 @@
 #define speedG     customParams[0].z
 #define speedB     customParams[0].w
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 // Bell curve in [0, 1], peaks at t=0.5. `power` controls steepness.
+// `pow(x, y)` is undefined per GLSL 4.50 spec when x < 0; the input
+// `(t - 0.5) / 0.5` is negative for the first half of every leg, so
+// strict drivers (NVIDIA) return NaN and corrupt fragColor for half
+// the animation. `abs()` makes the base non-negative — safe for any
+// power, even or odd, on every conformant driver.
 float fadeInOut(float t, float power)
 {
-    float s = -1.0 * pow((t - 0.5) / 0.5, power) + 1.0;
+    float s = -1.0 * pow(abs((t - 0.5) / 0.5), power) + 1.0;
     return clamp(s, 0.0, 1.0);
 }
 
@@ -61,9 +64,24 @@ void main()
     float progress   = 1.0 - visibility;
 
     // The wave sweeps faster when minSpeed is small (wave finishes
-    // earlier in the timeline). minSpeed clamped above 0 to avoid
-    // divide-by-zero in the offset normalisation.
-    float minSpeed = max(min(speedR, min(speedG, speedB)), 0.05);
+    // earlier in the timeline). minSpeed clamped above 0 AND below the
+    // value that drives waveTime ≥ 1.0, so the offset normalisation
+    // below has a structurally safe denominator without depending on
+    // its own per-divide floor to cancel out a brittle (1/wt - 1) ≈ 0
+    // edge case. With minSpeed ≤ 1.0, `mix(0.1, 0.9, minSpeed)` ≤ 0.9,
+    // leaving `(1/0.9) - 1 ≈ 0.111` as the smallest reachable
+    // denominator — safe by construction.
+    // Clamp each channel speed individually FIRST so a host that bypasses
+    // metadata pushes ALL three below 0.05 doesn't produce negative
+    // multipliers below. Without this individual clamp, e.g. speedR=0.01
+    // with floored minSpeed=0.05 yields mulR = max(0.01 - 0.05 + 1, 0) =
+    // 0.96 — a downward multiplier (channel trails DOWN, not up) that
+    // violates the "slowest channel gets ×1, faster channels higher"
+    // contract.
+    float speedRClamped = clamp(speedR, 0.05, 1.0);
+    float speedGClamped = clamp(speedG, 0.05, 1.0);
+    float speedBClamped = clamp(speedB, 0.05, 1.0);
+    float minSpeed = min(speedRClamped, min(speedGClamped, speedBClamped));
     float waveTime = mix(0.1, 0.9, minSpeed);
 
     float waveProgress = progress / max(waveTime, 0.001);
@@ -75,18 +93,25 @@ void main()
     // ~(1-waveTime), enough to lift content off the top edge by
     // about one window-minus-waveTime height.
     float offset = max(waveProgress - uv.y, 0.0);
-    offset /= (1.0 / max(waveTime, 0.001)) - 1.0;
+    // Floor the denominator so an out-of-range minSpeed that drives
+    // waveTime to >=1.0 (e.g. a future UI that lets speedR/G/B exceed 1)
+    // does not divide by zero. At waveTime=1.0 exactly, `(1/1)-1=0` —
+    // without the floor `offset/0` produces Inf and the texture sample
+    // walks off the surface with NaN UVs.
+    offset /= max((1.0 / max(waveTime, 0.001)) - 1.0, 0.001);
     offset *= (1.0 - waveTime);
 
-    // Per-channel offset multipliers. Slowest channel gets ×1, faster
-    // channels get higher multipliers so they trail upward.
-    float mulR = speedR - minSpeed + 1.0;
-    float mulG = speedG - minSpeed + 1.0;
-    float mulB = speedB - minSpeed + 1.0;
+    // Per-channel offset multipliers using the per-channel CLAMPED
+    // speeds. Slowest channel gets x1, faster channels get higher
+    // multipliers so they trail upward. The clamps above guarantee
+    // mulR/G/B are non-negative without further defence in depth.
+    float mulR = speedRClamped - minSpeed + 1.0;
+    float mulG = speedGClamped - minSpeed + 1.0;
+    float mulB = speedBClamped - minSpeed + 1.0;
 
-    vec4 colorR = texture(iChannel0, uv + vec2(0.0, offset * mulR));
-    vec4 colorG = texture(iChannel0, uv + vec2(0.0, offset * mulG));
-    vec4 colorB = texture(iChannel0, uv + vec2(0.0, offset * mulB));
+    vec4 colorR = texture(uTexture0, uv + vec2(0.0, offset * mulR));
+    vec4 colorG = texture(uTexture0, uv + vec2(0.0, offset * mulG));
+    vec4 colorB = texture(uTexture0, uv + vec2(0.0, offset * mulB));
 
     // Recombine. The texture is pre-multiplied; we extract the
     // per-channel pre-multiplied values and re-emit with the average

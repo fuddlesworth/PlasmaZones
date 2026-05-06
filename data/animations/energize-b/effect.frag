@@ -6,7 +6,7 @@
 // trail of vertical beam-streaks and glimmering atom sparkles
 // behind it. Visually inspired by the equivalent effect in
 // Burn-My-Windows (energize-b.frag, Simon Schneegans), but written
-// natively against our `iTime`/`iChannel0` contract: no
+// natively against our `iTime`/`uTexture0` contract: no
 // `uForOpening` collapse, no compat layer.
 //
 // ## iTime convention
@@ -29,7 +29,7 @@
 //
 // ## Compositing
 //
-// `iChannel0` carries premultiplied alpha. We tint the window
+// `uTexture0` carries premultiplied alpha. We tint the window
 // toward the beam colour as it fades (stronger than Energize A —
 // 0.5 base mix vs A's 0.25 — to read as "matter is becoming
 // energy"), then add three additive emission layers: shower band,
@@ -38,6 +38,7 @@
 #version 450
 
 #include <animation_uniforms.glsl>
+#include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots
 #define colorR        customParams[0].x
@@ -45,34 +46,12 @@
 #define colorB        customParams[0].z
 #define particleScale customParams[0].w
 
-layout(binding = 7) uniform sampler2D iChannel0;
-
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 // 2D simplex noise — MIT-licensed (Inigo Quilez,
-// https://www.shadertoy.com/view/Msf3WH).
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-float simplex2D(vec2 p) {
-    const float K1 = 0.366025404;
-    const float K2 = 0.211324865;
-    vec2 i  = floor(p + (p.x + p.y) * K1);
-    vec2 a  = p - i + (i.x + i.y) * K2;
-    float m = step(a.y, a.x);
-    vec2 o  = vec2(m, 1.0 - m);
-    vec2 b  = a - o + K2;
-    vec2 c  = a - 1.0 + 2.0 * K2;
-    vec3 h  = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
-    vec3 n  = h * h * h * h *
-            vec3(dot(a, -1.0 + 2.0 * hash22(i + 0.0)),
-                 dot(b, -1.0 + 2.0 * hash22(i + o)),
-                 dot(c, -1.0 + 2.0 * hash22(i + 1.0)));
-    return 0.5 + 0.5 * dot(n, vec3(70.0));
-}
+// https://www.shadertoy.com/view/Msf3WH). Definitions in
+// shared/noise.glsl.
 
 void main()
 {
@@ -138,7 +117,16 @@ void main()
 
     // ----- Particle field -------------------------------------------------
 
-    vec2 pixelUV = (uv - 0.5) * iResolution / pScale;
+    // Match the defence-in-depth pattern in energize-a/effect.frag: even
+    // though `pScale` is already clamped above (line 78), the
+    // redundant max here makes a future refactor that drops the
+    // source-side clamp safe. Without it, energize-a and energize-b
+    // would diverge — energize-a still floors at the divide site,
+    // energize-b would silently divide by zero.
+    // Floor iResolution so a first-frame zero-sized surface doesn't
+    // collapse pixelUV to (0,0) and flatten the entire particle field
+    // for one paint. Matches the energize-a defence at the same site.
+    vec2 pixelUV = (uv - 0.5) * max(iResolution, vec2(1.0)) / max(pScale, 0.05);
 
     // Shower band sparkles — added on top of the band itself for a
     // glittery beam edge. Fine cells, twinkle via animated offset.
@@ -186,7 +174,7 @@ void main()
     // tint is 0.5 (matter "becomes energy"). Tint is computed on
     // pre-multiplied colour so transparent regions don't acquire a
     // colour halo.
-    vec4 sampled = texture(iChannel0, uv);
+    vec4 sampled = texture(uTexture0, uv);
     float tint = 0.5 * (1.0 - windowAlpha);
     sampled.rgb = mix(sampled.rgb, effectColor * sampled.a, tint);
     sampled *= windowAlpha;

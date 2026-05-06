@@ -3,6 +3,7 @@
 
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
+#include "overlayservice/qml_property_names.h"
 #include "snapassistthumbnailprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
@@ -344,6 +345,13 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
     }
+    // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
+    // before `setSettings` is ever called, so `m_settings` is null here
+    // and the animator stays at its default-enabled state until
+    // `setSettings` wires the live `animationsEnabled` value. If a
+    // future caller re-runs `setupSurfaceAnimator` after settings have
+    // been wired, route the gate through `setSettings` rather than
+    // re-introducing a defensive branch here.
 
     // Profile names are the same paths PhosphorMotionAnimation in QML
     // uses today, so the live-reload path (drop a JSON, see it apply on
@@ -383,7 +391,7 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     if (lcOverlay().isDebugEnabled()) {
         namespace PP = PhosphorAnimation::ProfilePaths;
         qCDebug(lcOverlay).nospace()
-            << "applyShaderProfilesToAnimator — overrides=" << tree.overriddenPaths().size()
+            << "applyShaderProfilesToAnimator: overrides=" << tree.overriddenPaths().size()
             << " resolved: osd.show=" << resolveShaderEffect(tree, PP::OsdShow)
             << " osd.hide=" << resolveShaderEffect(tree, PP::OsdHide)
             << " zoneSelector.show=" << resolveShaderEffect(tree, PP::PanelPopupZoneSelectorShow)
@@ -571,7 +579,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // and thread it through every consumer — fail loud if the wiring is
     // wrong rather than silently falling back to library defaults.
     Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
-               "profileRegistry must not be null — composition root must own and inject the registry");
+               "profileRegistry must not be null: composition root must own and inject the registry");
 
     // Phase-5 SurfaceAnimator. One instance drives every overlay's
     // show/hide via Profile-resolved curves; per-Role configs install
@@ -764,7 +772,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
         QStringLiteral("org.freedesktop.login1.Manager"), QStringLiteral("PrepareForSleep"), this,
         SLOT(onPrepareForSleep(bool)));
     if (!m_prepareForSleepConnected) {
-        qCDebug(lcOverlay) << "PrepareForSleep D-Bus signal subscription failed (logind not available?) —"
+        qCDebug(lcOverlay) << "PrepareForSleep D-Bus signal subscription failed (logind not available?):"
                            << "shader-timer restart on resume will not run";
     }
 
@@ -1087,12 +1095,12 @@ void OverlayService::setIdleForDragPause()
         // zones properties below is not sufficient — on some shaders the
         // base pass still renders visible output when zoneCount==0, and the
         // input region stays active until the flag change lands.
-        writeQmlProperty(window, QStringLiteral("_idled"), true);
-        writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
-        writeQmlProperty(window, QStringLiteral("zoneCount"), 0);
-        writeQmlProperty(window, QStringLiteral("highlightedCount"), 0);
-        writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
-        writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), true);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Zones), QVariantList());
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::ZoneCount), 0);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
         // side's labelsTexture property still holds the previously-built image
         // (setProperty was never called with a new one); it just isn't sampled
@@ -1159,7 +1167,7 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
         }
         const bool shouldBeActive =
             showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
-        writeQmlProperty(window, QStringLiteral("_idled"), !shouldBeActive);
+        writeQmlProperty(window, QString(OverlayQmlPropertyNames::Idled), !shouldBeActive);
     }
 }
 
@@ -1290,7 +1298,7 @@ void OverlayService::setupForScreen(QScreen* screen)
                 QRect vsGeom = mgr->screenGeometry(vsId);
                 if (!vsGeom.isValid()) {
                     qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
-                                         << "— skipping overlay creation";
+                                         << ", skipping overlay creation";
                     continue;
                 }
                 createOverlayWindow(vsId, screen, vsGeom);

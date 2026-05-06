@@ -882,16 +882,51 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // resolver's deeper-leaf-wins overlay merge.
     if (!eventPathSupportsShaderLeg(path)) {
         qCWarning(lcConfig) << "setShaderOverride: path" << path
-                            << "is not in shaderSupportedEventPaths() — ignoring (no daemon-side surface consumes it)";
+                            << "is not in shaderSupportedEventPaths(), ignoring (no daemon-side surface consumes it)";
         return false;
     }
 
-    // Empty effectId == clear assignment at this exact path. Mirrors
-    // ShaderProfile's "engaged-empty means no effect" semantics.
-    // clearShaderOverride emits pendingChangesChanged itself when the
-    // call actually changed state.
-    if (effectId.isEmpty())
-        return clearShaderOverride(path);
+    // Empty effectId writes an ENGAGED-EMPTY override at this path:
+    // `ShaderProfile::effectId = std::optional<QString>("")`. This is
+    // the "explicit no effect" sentinel — `ShaderProfile::overlay`
+    // treats it as a real value that wins over a parent's effectId,
+    // so inheritance from an ancestor (e.g. `panel` → "dissolve") is
+    // BLOCKED at this path and every descendant resolves to no shader.
+    //
+    // This is intentionally distinct from `clearShaderOverride`, which
+    // removes the override entry entirely so resolution falls through
+    // to the parent. Without this distinction, an
+    // AnimationEventCard's "Override OFF" toggle on `panel.popup`
+    // (cleared override) cannot stop the parent's dissolve from
+    // cascading down to every popup event — exactly the user-reported
+    // "I disabled all popups but dissolve still plays" bug. The
+    // engaged-empty profile gives the UI a way to express "disable
+    // shader at this path AND every descendant that doesn't override".
+    if (effectId.isEmpty()) {
+        ShaderProfile disabledProfile;
+        disabledProfile.effectId = QString();
+        if (!parameters.isEmpty())
+            disabledProfile.parameters = parameters;
+        ShaderProfileTree tree = m_settings->shaderProfileTree();
+        // Compare-and-skip relies on `ShaderProfile::operator==` being
+        // engaged-state-sensitive (forwards to `std::optional::operator==`,
+        // which treats `nullopt` and `optional(empty)` as DISTINCT).
+        // `disabledProfile` round-trips through toJson/fromJson without
+        // changing engaged-state, so a disk-loaded disable sentinel for an
+        // unchanged path short-circuits here. Normalize an engaged-but-empty
+        // parameters optional to nullopt so a future caller passing literal
+        // engaged-empty (rather than the current `{}` disengaged) can't
+        // silently desync this comparison from the on-disk round-trip form.
+        if (disabledProfile.parameters && disabledProfile.parameters->isEmpty())
+            disabledProfile.parameters.reset();
+        if (tree.directOverride(path) == disabledProfile)
+            return true;
+        tree.setOverride(path, disabledProfile);
+        m_settings->setShaderProfileTree(tree);
+        m_shaderTreeDirty = true;
+        Q_EMIT pendingChangesChanged();
+        return true;
+    }
 
     // Reject unknown effect ids at the boundary — without this, a typo
     // from QML silently writes garbage into the shader-profile tree, and
@@ -904,7 +939,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // distinguish "id is unknown" from "registry not yet populated"
     // without a separate readiness signal.
     if (m_shaderRegistry && !m_shaderRegistry->effectIds().isEmpty() && !m_shaderRegistry->hasEffect(effectId)) {
-        qCWarning(lcConfig) << "setShaderOverride: unknown effectId" << effectId << "— ignoring assignment for" << path;
+        qCWarning(lcConfig) << "setShaderOverride: unknown effectId" << effectId << ", ignoring assignment for" << path;
         return false;
     }
 

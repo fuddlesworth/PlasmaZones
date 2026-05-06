@@ -33,6 +33,13 @@ namespace PhosphorRendering {
 
 class ShaderNodeRhi;
 
+/// Public mirror of `ShaderNodeRhi::kMaxUserTextures` (4 user-texture slots
+/// at SRB bindings 7..10). Re-declared here so member-array sizes can use
+/// the named constant without pulling in the heavy rhi/qrhi.h transitive
+/// chain that ShaderNodeRhi.h carries. Kept in sync via a `static_assert`
+/// in shadereffect.cpp.
+inline constexpr int kMaxUserTextureSlots = 4;
+
 /**
  * @brief QQuickItem that renders a fullscreen fragment shader via Qt RHI.
  *
@@ -57,6 +64,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(int iFrame READ iFrame WRITE setIFrame NOTIFY iFrameChanged FINAL)
     Q_PROPERTY(QSizeF iResolution READ iResolution WRITE setIResolution NOTIFY iResolutionChanged FINAL)
     Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
+    Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
@@ -128,6 +136,22 @@ public:
     };
     Q_ENUM(Status)
 
+    /// Hard ceiling on the per-axis SVG rasterisation dimension applied by
+    /// `setShaderParams` to the `uTexture<N>_svgSize` parameter. Exposed so
+    /// consumers (UI sliders, validators, tests) can mirror the clamp range
+    /// without hardcoding the value. The setter performs
+    /// `qBound(64, requested, kMaxSvgDimension)`; values outside the range
+    /// are silently clamped, not rejected.
+    static constexpr int kMaxSvgDimension = 2048;
+
+    /// Hard cap on the byte budget for a single rasterised SVG (16 MiB —
+    /// matches RGBA8 at `kMaxSvgDimension` × `kMaxSvgDimension`). When a
+    /// near-square doc would exceed this even after the per-axis clamp,
+    /// the rasterisation is downscaled proportionally and a warning is
+    /// logged. Exposed for the same mirror-the-cap reason as
+    /// `kMaxSvgDimension`.
+    static constexpr qint64 kMaxSvgPixelBytes = 16LL * 1024 * 1024;
+
     explicit ShaderEffect(QQuickItem* parent = nullptr);
     ~ShaderEffect() override;
 
@@ -165,6 +189,16 @@ public:
     }
     void setIFrame(int frame);
 
+    bool isReversed() const
+    {
+        return m_isReversed;
+    }
+    /// Direction signal forwarded to ShaderNodeRhi → BaseUniforms::iIsReversed.
+    /// SurfaceAnimator pushes this on every leg attach (false for show, true
+    /// for hide). Symmetric shaders ignore the value; asymmetric shaders
+    /// branch on it (see canonical animation_uniforms.glsl docs).
+    void setIsReversed(bool reverse);
+
     QSizeF iResolution() const
     {
         return m_iResolution;
@@ -195,10 +229,70 @@ public:
     {
         return m_shaderParams;
     }
+    /// Push a parameter map onto the shader. Recognised keys:
+    ///   • `customParams<N>_<x|y|z|w>` (1-based) — float vec4 sub-slots
+    ///   • `customColor<N>` (1-based) — color vec4 slots
+    ///   • `uTexture<N>` (0-based, 0..3) — file path for the user-texture
+    ///     sampler at SRB binding 7..10 / GLSL `uTexture<N>`
+    ///   • `uTexture<N>_wrap` — wrap mode string ("clamp" / "repeat" /
+    ///     "mirror"); ignored if no companion `uTexture<N>` resolves
+    ///   • `uTexture<N>_svgSize` — SVG rasterise max-axis dimension
+    ///     (clamped 64..2048; ignored for bitmap formats). The cap is
+    ///     exposed as `ShaderEffect::kMaxSvgDimension` for callers that
+    ///     want to mirror the clamp without hardcoding the value, and
+    ///     the per-rasterisation byte budget is exposed as
+    ///     `ShaderEffect::kMaxSvgPixelBytes` (a near-square doc whose
+    ///     RGBA8 size would exceed the budget is downscaled
+    ///     proportionally with a warning).
+    ///
+    /// **Trust boundary.** `uTexture<N>` paths are passed verbatim to
+    /// `QImage::load` / `QSvgRenderer::load`. This class does NOT
+    /// sanitise traversal segments or enforce absolute-path-only — the
+    /// caller is the trust boundary.
+    /// `AnimationShaderRegistry::translateAnimationParams` already
+    /// resolves and traversal-checks pack-default paths at scan time;
+    /// the kwin-effect's `m_textureCache` lookup keys absolute paths.
+    /// A direct caller (e.g. tests, custom QML embedding) that
+    /// forwards untrusted strings into `params["uTexture<N>"]` MUST
+    /// pre-resolve and traversal-check before calling.
+    ///
+    /// **SVG rasterisation cost.** When the params map contains a
+    /// `uTexture<N>` whose path resolves to an `.svg` / `.svgz` file
+    /// (and the path or `uTexture<N>_svgSize` differs from the cached
+    /// state for that slot), this method calls `QSvgRenderer` and
+    /// `QPainter` synchronously on the calling thread to rasterise the
+    /// document up to the clamped dimension. The cost scales with
+    /// `kMaxSvgPixelBytes` in the worst case. Hot-path callers (e.g.
+    /// per-frame parameter pushes) should pre-warm via
+    /// `loadUserTextureFile(path, svgMaxDim)` from a worker thread (it's
+    /// thread-safe per Qt docs: each call constructs its own
+    /// QSvgRenderer / QImage instance with no shared mutable state)
+    /// and call `setUserTexture(slot, image)` on the GUI thread to
+    /// install the result. Bitmap formats are loaded via `QImage` and
+    /// carry the same synchronous-IO caveat but no rasterisation cost.
+    ///
+    /// **Subclass contract.** Overrides MUST chain to
+    /// `ShaderEffect::setShaderParams(params)` (or replicate the full
+    /// trust-boundary parse, including uTexture* / *_wrap /
+    /// *_svgSize). Skipping the base call leaves user-texture paths
+    /// uninterpreted and pinned to whatever the previous parse set —
+    /// silent stale samplers across reloads.
     virtual void setShaderParams(const QVariantMap& params);
 
+    /// Static helper that loads a user-texture file (PNG/JPG/etc. via
+    /// QImage; SVG/SVGZ via QSvgRenderer rasterised at @p svgMaxDim
+    /// max-axis with the same byte-budget guard as `setShaderParams`).
+    /// Thread-safe: each invocation constructs its own QSvgRenderer /
+    /// QImage instance — callers may invoke from a worker thread (e.g.
+    /// `QtConcurrent::run`) to off-load the cost from the GUI thread.
+    /// Returns a null QImage on load failure (file missing, parse
+    /// error, OOM); callers should keep their prior image in that case.
+    /// The result is in `QImage::Format_RGBA8888`, ready for
+    /// `setUserTexture(slot, image)` upload on the GUI thread.
+    static QImage loadUserTextureFile(const QString& path, int svgMaxDim);
+
     /// @brief Live texture-provider source bound to SRB binding 7
-    ///        (`iChannel0`).
+    ///        (`uTexture0`).
     ///
     /// When set to a non-null QQuickItem, the shader samples that item's
     /// rendered visual every frame instead of whatever QImage was uploaded
@@ -434,9 +528,24 @@ public:
     /** Direct setter from C++ avoiding QVariantList round-trip. */
     void setAudioSpectrum(const QVector<float>& spectrum);
 
-    /** Set a user texture (slots 0-3, bindings 7-10). */
+    /**
+     * Set a user texture (slots 0-3, bindings 7-10) directly from a QImage,
+     * bypassing the path-driven loader.
+     *
+     * Clears the per-slot cached path and resets the companion svgSize / wrap
+     * settings so a subsequent params-driven load starts from a clean slot.
+     *
+     * Mixing-with-`setShaderParams` contract: a subsequent
+     * `setShaderParams(p)` will reload the texture from `p["uTextureN"]`
+     * even when `p` is byte-equal to the cached params map. The
+     * intervening direct-push sets a private dirty flag that suppresses
+     * the equality short-circuit on the very next call, so the cleared
+     * path is honoured and the on-disk image replaces the directly-set
+     * QImage. After that one re-parse, the flag is cleared and the
+     * usual fast-path resumes.
+     */
     void setUserTexture(int slot, const QImage& image);
-    /** Set user texture wrap mode (slots 0-3). "clamp" or "repeat". */
+    /** Set user texture wrap mode (slots 0-3). "clamp", "repeat", or "mirror". */
     void setUserTextureWrap(int slot, const QString& wrap);
 
     QImage wallpaperTexture() const;
@@ -485,6 +594,7 @@ Q_SIGNALS:
     void iFrameChanged();
     void iResolutionChanged();
     void iMouseChanged();
+    void isReversedChanged();
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
@@ -554,11 +664,15 @@ protected:
 
 private:
     // ── Animation state ──────────────────────────────────────────────
+    // Field order minimises padding: 8-byte (qreal/QSizeF/QPointF) members
+    // grouped together, followed by 4-byte (int), trailing 1-byte bool.
+    // qreal-bool-int interleaving wastes 7 bytes via alignment padding.
     qreal m_iTime = 0.0;
     qreal m_iTimeDelta = 0.0;
-    int m_iFrame = 0;
     QSizeF m_iResolution;
     QPointF m_iMouse;
+    int m_iFrame = 0;
+    bool m_isReversed = false;
 
     // ── Shader source ────────────────────────────────────────────────
     QUrl m_shaderSource;
@@ -571,6 +685,10 @@ private:
     // leave a dangling pointer that the per-frame textureProvider()
     // lookup would dereference.
     QPointer<QQuickItem> m_sourceItem;
+    /// Single-shot warning latch for `setSourceItem(this)` rejection. A QML
+    /// binding mistakenly wired to `this` would otherwise spam the journal at
+    /// 60 Hz; mirrors the pattern used by `m_warnedForeignRhi` on the node.
+    bool m_warnedSelfSourceItem = false;
 
     // ── Multipass ────────────────────────────────────────────────────
     QString m_bufferShaderPath;
@@ -616,8 +734,31 @@ private:
 
     // ── Textures ─────────────────────────────────────────────────────
     QVector<float> m_audioSpectrum;
-    std::array<QImage, 4> m_userTextureImages;
-    std::array<QString, 4> m_userTextureWraps;
+    std::array<QImage, kMaxUserTextureSlots> m_userTextureImages;
+    std::array<QString, kMaxUserTextureSlots> m_userTextureWraps;
+    /// Last-resolved file path per user-texture slot. Tracked here so
+    /// `setShaderParams` can detect path changes (load on transition,
+    /// not re-load on every params write) and so the SVG rasterise size
+    /// can re-render the same SVG path when only the size changes.
+    /// Empty when the slot has never been assigned a path.
+    std::array<QString, kMaxUserTextureSlots> m_userTexturePaths;
+    /// Per-slot SVG rasterise dimension (logical pixels, max-axis). Only
+    /// consulted on `.svg` / `.svgz` paths; bitmap formats ignore this.
+    /// Default 1024 carries forward the pre-unification ZoneShaderItem
+    /// behaviour — sized to be sharp at the typical zone-icon scale
+    /// without the 4× cost a 4096 default would impose on the common
+    /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
+    std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
+    /// Set by `setUserTexture` to flag that a directly-pushed QImage now
+    /// occupies one of the user-texture slots (path cache cleared). Honoured
+    /// by `setShaderParams`: when the incoming params map is byte-equal to
+    /// `m_shaderParams`, the early-return is normally fine, but if a direct
+    /// push intervened the cleared path needs to be reloaded from the
+    /// unchanged-on-the-wire `uTextureN` entry. Bypassing the early-return
+    /// in that one case lets the texture pipeline re-parse and reload.
+    /// Reset at the end of the parse branch so the cost is paid exactly
+    /// once per intervening direct push.
+    bool m_userTexturesDirectlyOverridden = false;
     QImage m_wallpaperTexture;
     mutable QMutex m_wallpaperTextureMutex;
     bool m_useWallpaper = false;

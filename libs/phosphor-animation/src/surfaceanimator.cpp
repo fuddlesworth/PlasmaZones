@@ -4,11 +4,13 @@
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
 #include <PhosphorAnimation/AnimatedValue.h>
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/IMotionClock.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 
+#include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorShaders/ShaderRegistry.h>
@@ -52,10 +54,10 @@ constexpr qreal kRefreshRateHz = 1000.0 / kTickIntervalMs;
 /// 50 for a tiny anchor in a 4K parent), which inflates the shader
 /// item to (1+2*pad)² × anchor area — gigabytes of FBO at extreme
 /// values. The metadata-side clamp at AnimationShaderEffect::fromJson
-/// caps at 2.0; this is a runtime backstop against any path that
-/// bypasses that clamp (test fixtures, future scripted-shader hooks).
-// Must match the metadata clamp in AnimationShaderEffect::fromJson()
-constexpr qreal kMaxBoundsPaddingFraction = 2.0;
+/// caps at the shared constant; this is a runtime backstop against any
+/// path that bypasses that clamp (test fixtures, future scripted-shader
+/// hooks).
+constexpr qreal kMaxBoundsPaddingFraction = PhosphorAnimationShaders::AnimationShaderEffect::kMaxBoundsPadding;
 
 /// Compute the effective boundsPadding fraction for a shader item
 /// parented to @p anchor's parent. Result is clamped to:
@@ -384,6 +386,17 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
         shaderItem->setUseWallpaper(false);
     }
     shaderItem->setUseDepthBuffer(effect.useDepthBuffer);
+
+    // User textures are NOT pushed here — they flow through the per-leg
+    // setShaderParams call alongside customParams/customColors. The
+    // registry's `translateAnimationParams` enriches the params map with
+    // pack-default `uTexture<N>` paths (resolved against
+    // `effect.sourceDir`) and any per-leg overrides from
+    // `friendlyParams`; ShaderEffect::setShaderParams handles the actual
+    // file load + node push. Centralising loading there means SVG
+    // rasterising, path-change detection, and slot-zero (surface)
+    // protection all live in one place — same code path overlay zones
+    // already use.
 }
 
 /// Pieces produced by `attachShaderToAnchor`. The caller stashes
@@ -547,6 +560,10 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // fully dissolved) on top of an already-visible surface, producing a
     // visible flash before the hide animation reverses out.
     shaderItem->setITime(isShowLeg ? qreal(0.0) : qreal(1.0));
+    // Direction signal for asymmetric shaders. Symmetric shaders ignore
+    // it and rely on the iTime flip alone to auto-mirror; matrix and
+    // future asymmetric shaders branch on this.
+    shaderItem->setIsReversed(!isShowLeg);
 
     const QVariantMap translated =
         PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(effect, shaderParameters);
@@ -1320,6 +1337,11 @@ public:
                     // value of the previous leg) leaks into the first
                     // frame of the new leg.
                     reusedShaderItem->setITime(isShowLeg ? qreal(0.0) : qreal(1.0));
+                    // Direction signal for asymmetric shaders. The reuse
+                    // path may swap a show leg into a hide leg (or vice
+                    // versa) on the same shader item, so re-push every
+                    // leg start.
+                    reusedShaderItem->setIsReversed(!isShowLeg);
                     // Re-translate parameter overrides — shaderParameters
                     // can differ between legs (per-event customisation).
                     const QVariantMap translated =
@@ -1575,10 +1597,12 @@ public:
         // while any track is in flight). First tick after a quiescent
         // period reports 0 instead of a stale wall-clock gap, matching
         // OverlayService::updateShaderUniforms's clamp-on-resume idiom
-        // for the overlay path. Capped at 100 ms (same value as
-        // overlay's `maxDelta`) so a sleep/resume hiccup doesn't push
-        // a multi-second jump into the shader.
-        constexpr qreal kMaxShaderDeltaSecs = 0.1;
+        // for the overlay path. Capped at the shared
+        // PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds (100 ms)
+        // so a sleep/resume hiccup doesn't push a multi-second jump
+        // into the shader. Both runtimes reference the same constant —
+        // bumping one without the other was the prior drift risk.
+        const qreal kMaxShaderDeltaSecs = static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
         const qint64 nowNs = m_clock.now().count();
         qreal shaderDeltaSecs = 0.0;
         if (m_lastShaderTickNs > 0) {
@@ -1713,6 +1737,13 @@ public:
     PhosphorAnimation::PhosphorProfileRegistry& m_registry;
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     Config m_defaultConfig;
+    /// Global animation enable. Mirrors `Settings::animationsEnabled`
+    /// — flipped via `SurfaceAnimator::setEnabled`. When false,
+    /// `beginShow`/`beginHide` snap to the target opacity and fire
+    /// completion synchronously, skipping the opacity / scale / shader
+    /// legs entirely. Default true so an animator built without
+    /// explicit setEnabled honors the historic always-on behaviour.
+    bool m_enabled = true;
     /// Latest CAVA / audio-spectrum sample fed by the consumer via
     /// `SurfaceAnimator::setAudioSpectrum`. Pushed verbatim to every
     /// active animation shader item per-tick (see
@@ -1903,6 +1934,57 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
         }
         return;
     }
+    // Global animations toggle off — snap directly to the visible end
+    // state and fire completion synchronously. Same contract as the
+    // kwin-effect's `m_windowAnimator->isEnabled()` gate; both runtimes
+    // honour `Settings::animationsEnabled` identically. Cancel any
+    // in-flight track first so a rapid toggle mid-animation can't leave
+    // the surface stuck at intermediate opacity.
+    if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginShow on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        // Salvage any in-flight previous-track onComplete BEFORE
+        // cancelTracking drops it. The bare cancellation contract
+        // (legCompleted-only firing) is correct for `cancel()` calls,
+        // but the gate-off short-circuit here also fires the NEW
+        // caller's onComplete synchronously below — leaving the
+        // previous caller's callback unfired strands them while a
+        // sibling caller gets serviced.
+        //
+        // Dispatch order: the salvaged previous-track onComplete fires
+        // SYNCHRONOUSLY before cancelTracking, then cancelTracking
+        // erases the track, then the new caller's onComplete runs
+        // synchronously below. Natural completion order (oldest-first);
+        // consumers can safely call back into SurfaceAnimator from
+        // either callback since neither runs from a dtor — re-entry
+        // touches a fully-constructed `*d`. cancelTracking itself is
+        // synchronous and does not re-touch `m_tracks` after erasing
+        // the entry, so the salvaged callback's potential re-entry
+        // (which may mutate `m_tracks`) is bounded: the callback runs
+        // AFTER cancelTracking has already erased our `surface` entry,
+        // so any new entry the callback inserts is its own to manage.
+        if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                auto cb = std::move(prevOnComplete);
+                d->cancelTracking(surface);
+                cb();
+            } else {
+                d->cancelTracking(surface);
+            }
+        } else {
+            d->cancelTracking(surface);
+        }
+        if (rootItem) {
+            rootItem->setOpacity(1.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
     const Config cfg = d->configFor(surface->config().role);
 
     // Always start from fully transparent. Picking up from a mid-hide
@@ -1933,6 +2015,49 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
         }
         return;
     }
+    if (!d->m_enabled) {
+        if (!rootItem) {
+            qCWarning(lcSurfaceAnimator)
+                << "beginHide on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
+        }
+        // Salvage previous-track onComplete before cancelTracking drops it.
+        // See beginShow's matching block for the rationale (gate-off path
+        // fires the new caller's onComplete synchronously below — silently
+        // dropping the in-flight caller's callback is the bug, not the
+        // cancellation contract).
+        //
+        // Dispatch order: the salvaged previous-track onComplete fires
+        // SYNCHRONOUSLY before cancelTracking, then cancelTracking
+        // erases the track, then the new caller's onComplete runs
+        // synchronously below. Natural completion order (oldest-first);
+        // consumers can safely call back into SurfaceAnimator from
+        // either callback since neither runs from a dtor — re-entry
+        // touches a fully-constructed `*d`. cancelTracking is fully
+        // synchronous and does not re-touch `m_tracks` after erasing
+        // the entry, so the salvaged callback's potential re-entry
+        // (which may mutate `m_tracks`) is bounded: the callback runs
+        // AFTER cancelTracking has already erased our `surface` entry,
+        // so any new entry the callback inserts is its own to manage.
+        if (const auto it = d->m_tracks.find(surface); it != d->m_tracks.end()) {
+            if (auto prevOnComplete = std::move(it->second.onComplete)) {
+                auto cb = std::move(prevOnComplete);
+                d->cancelTracking(surface);
+                cb();
+            } else {
+                d->cancelTracking(surface);
+            }
+        } else {
+            d->cancelTracking(surface);
+        }
+        if (rootItem) {
+            rootItem->setOpacity(0.0);
+            rootItem->setScale(1.0);
+        }
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
     const Config cfg = d->configFor(surface->config().role);
     // Read live opacity so hide-while-showing supersession picks up
     // from the current visible state, not from a hardcoded 1.0.
@@ -1950,6 +2075,44 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
         return;
     }
     d->cancelTracking(surface);
+}
+
+void SurfaceAnimator::setEnabled(bool enabled)
+{
+    // Skip the assignment when the gate value hasn't changed — settings
+    // sweeps re-push every gate on every save, and there's no point
+    // touching the member for a no-op write.
+    if (d->m_enabled == enabled) {
+        return;
+    }
+    d->m_enabled = enabled;
+    // Gate semantics are "next dispatch", not "kill in progress" — the
+    // toggle itself does not touch any tracks. A track that is currently
+    // mid-leg will continue to its natural `legCompleted` (firing its
+    // stored onComplete normally) ONLY if no subsequent
+    // `beginShow` / `beginHide` arrives in the meantime. If a new
+    // dispatch does arrive while the gate is off, that dispatch
+    // short-circuits via the gate-off branch in beginShow/beginHide,
+    // which calls `cancelTracking` on the in-flight track. Per the
+    // cancellation contract documented on `cancelTracking`,
+    // legCompleted does not fire on cancellation, so the in-flight
+    // track's onComplete would be dropped — the gate-off branch
+    // therefore salvages that callback and dispatches it synchronously
+    // (after cancelTracking has already erased the entry) before
+    // running the new caller's onComplete, so callers are not stranded
+    // when their in-flight animation is preempted by a gate-off
+    // dispatch.
+    //
+    // Parity with kwin-effect: `WindowAnimator::setEnabled` (see
+    // kwin-effect/windowanimator.cpp) is also a pure flag flip; it does
+    // not actively cancel in-flight window animations on the compositor
+    // path. Both runtimes therefore share "next dispatch" semantics for
+    // the global animation gate.
+}
+
+bool SurfaceAnimator::isEnabled() const
+{
+    return d->m_enabled;
 }
 
 } // namespace PhosphorAnimationLayer

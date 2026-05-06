@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Glitch transition — operates on the rendered surface (iChannel0,
+// Glitch transition — operates on the rendered surface (uTexture0,
 // binding 7) by sampling the captured surface with per-block UV
 // displacement and per-channel RGB offset. The previous stub built
 // `r/g/b` from `smoothstep(0, 1, uv)` (a centred radial mask) —
@@ -20,8 +20,6 @@
 #define intensity customParams[0].x
 #define blockSize customParams[0].y
 #define rgbSplit  customParams[0].z
-
-layout(binding = 7) uniform sampler2D iChannel0;
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -48,12 +46,15 @@ void main()
 
     float bs = max(blockSize, 0.01);
     vec2 block = floor(uv / bs);
-    // floor(iTime * 10.0) quantises the jitter to ~10 buckets across the
-    // [0,1] leg — at 60Hz playback that's a fresh displacement every ~6
-    // frames, giving a step-frame "glitch" feel rather than continuous
-    // smooth noise. Replace `floor(iTime * 10.0)` with `iTime * 10.0` for
-    // continuous noise if a smoother variant is wanted.
-    float blockNoise = hash(block + floor(iTime * 10.0));
+    // Quantise the jitter to per-leg-frame buckets that bump every ~10
+    // frames (at 60 Hz, ~6 buckets per second of leg time). Drive off
+    // `iFrame` rather than `iTime` because iFrame is monotonically
+    // increasing in BOTH leg directions — SurfaceAnimator runs iTime
+    // 1→0 on the reverse leg, which would make `floor(iTime * 10.0)`
+    // tick BACKWARDS through the same bucket sequence on hide and
+    // produce a visible reverse-replay rather than a fresh jitter
+    // pattern.
+    float blockNoise = hash(block + floor(float(iFrame) * 0.1));
 
     float displacement = 0.0;
     if (blockNoise > (1.0 - strength * 0.5)) {
@@ -70,10 +71,16 @@ void main()
     // Qt Quick uses premultiplied-alpha blending, so un-premultiply
     // each sample before extracting the single channel, then
     // re-premultiply against the chosen alpha.
-    vec4 sR = texture(iChannel0, uvR);
-    vec4 sG = texture(iChannel0, uvG);
-    vec4 sB = texture(iChannel0, uvB);
-    float a = sG.a;
+    vec4 sR = texture(uTexture0, uvR);
+    vec4 sG = texture(uTexture0, uvG);
+    vec4 sB = texture(uTexture0, uvB);
+    // Output alpha is the MAX of the three sample alphas, not just sG.a.
+    // When chromatic offset lands R or B on opaque pixels but G on a
+    // transparent edge, using sG.a alone would zero the entire pixel and
+    // erase the valid R+B chromatic split (visible "missing pixels" at
+    // window edges during glitch). max() preserves any sample's contribution
+    // and keeps the chromatic-aberration intent intact at silhouette edges.
+    float a = max(max(sR.a, sG.a), sB.a);
     float r = (sR.a > 0.001) ? sR.r / sR.a : 0.0;
     float g = (sG.a > 0.001) ? sG.g / sG.a : 0.0;
     float b = (sB.a > 0.001) ? sB.b / sB.a : 0.0;

@@ -3,11 +3,16 @@
 
 #include "zoneshaderitem.h"
 #include "zoneshadernoderhi.h"
-#include "zoneuniformextension.h"
+
+#include <PhosphorRendering/ZoneShaderCommon.h>
+#include <PhosphorRendering/ZoneShaderNodeRhi.h>
+#include <PhosphorRendering/ZoneUniformExtension.h>
 
 #include "../../config/configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
+
+#include <PhosphorRendering/ShaderEffect.h>
 
 #include <QDir>
 #include <QFile>
@@ -16,7 +21,36 @@
 #include <QStandardPaths>
 #include <QVariantMap>
 
+// Lock the assumption made in updatePaintNode() that the base
+// ShaderEffect's syncBasePropertiesToNode covers all 4 user-texture
+// slots. If the base library ever grows or shrinks its slot count
+// without us updating the override's local sync logic, this trips
+// the build instead of silently dropping (or double-pushing) slots.
+static_assert(PhosphorRendering::kMaxUserTextureSlots == 4,
+              "ZoneShaderItem assumes ShaderEffect base sync covers 4 user-texture slots");
+
 namespace PlasmaZones {
+
+// QVariantMap payload keys for zone snapshots passed from QML / overlay
+// glue down to parseZoneData. Distinct from PhosphorZones::ZoneJsonKeys
+// (which owns the ON-DISK wire-format keys) — these are runtime-only,
+// PlasmaZones-internal payload keys, not part of the zone/layout file
+// format. Centralising them here keeps the writer (overlay QML setting
+// these via writeQmlProperty) and the reader (parseZoneData below) in
+// lockstep — a typo on either side previously failed silently with the
+// default-value fallback.
+namespace ZoneSnapshotKeys {
+inline constexpr QLatin1String FillR{"fillR"};
+inline constexpr QLatin1String FillG{"fillG"};
+inline constexpr QLatin1String FillB{"fillB"};
+inline constexpr QLatin1String FillA{"fillA"};
+inline constexpr QLatin1String BorderR{"borderR"};
+inline constexpr QLatin1String BorderG{"borderG"};
+inline constexpr QLatin1String BorderB{"borderB"};
+inline constexpr QLatin1String BorderA{"borderA"};
+inline constexpr QLatin1String ShaderBorderRadius{"shaderBorderRadius"};
+inline constexpr QLatin1String ShaderBorderWidth{"shaderBorderWidth"};
+} // namespace ZoneSnapshotKeys
 
 // ============================================================================
 // Construction / Destruction
@@ -24,7 +58,7 @@ namespace PlasmaZones {
 
 ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     : PhosphorRendering::ShaderEffect(parent)
-    , m_zoneExtension(std::make_shared<ZoneUniformExtension>())
+    , m_zoneExtension(std::make_shared<PhosphorRendering::ZoneUniformExtension>())
 {
     // Install our ZoneUniformExtension on the base class. We call the
     // qualified base setter to bypass our own setUniformExtension() override
@@ -70,7 +104,7 @@ ZoneShaderItem::~ZoneShaderItem()
 
 PhosphorRendering::ShaderNodeRhi* ZoneShaderItem::createShaderNode()
 {
-    return new ZoneShaderNodeRhi(this);
+    return new PhosphorRendering::ZoneShaderNodeRhi(this);
 }
 
 // ============================================================================
@@ -86,7 +120,7 @@ void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifo
     // Log loudly at the point of misuse instead of inheriting the base
     // class's silent-store behaviour.
     Q_UNUSED(extension);
-    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored — zone rendering owns its own "
+    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored: zone rendering owns its own "
                                       << "IUniformExtension (ZoneUniformExtension) and cannot accept a replacement.";
 }
 
@@ -101,9 +135,9 @@ void ZoneShaderItem::parseZoneData()
     const float resH = iResolution().height() > 0 ? static_cast<float>(iResolution().height()) : 1.0f;
 
     // Prepare new zone data structures
-    QVector<ZoneRect> newRects;
-    QVector<ZoneColor> newFillColors;
-    QVector<ZoneColor> newBorderColors;
+    QVector<PhosphorRendering::ZoneRect> newRects;
+    QVector<PhosphorRendering::ZoneColor> newFillColors;
+    QVector<PhosphorRendering::ZoneColor> newBorderColors;
     newRects.reserve(m_zones.size());
     newFillColors.reserve(m_zones.size());
     newBorderColors.reserve(m_zones.size());
@@ -115,7 +149,7 @@ void ZoneShaderItem::parseZoneData()
         const QVariantMap z = zoneVar.toMap();
 
         // Extract zone rectangle
-        ZoneRect rect;
+        PhosphorRendering::ZoneRect rect;
 
         // Extract pixel coordinates and normalize to 0-1 using iResolution
         const float px = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X), 0).toFloat();
@@ -137,9 +171,9 @@ void ZoneShaderItem::parseZoneData()
         // Defaults mirror ConfigDefaults so the shader path picks up the same
         // fallback values as the non-shader path when a zone doesn't override them.
         rect.borderRadius =
-            z.value(QLatin1String("shaderBorderRadius"), static_cast<float>(ConfigDefaults::borderRadius())).toFloat();
+            z.value(ZoneSnapshotKeys::ShaderBorderRadius, static_cast<float>(ConfigDefaults::borderRadius())).toFloat();
         rect.borderWidth =
-            z.value(QLatin1String("shaderBorderWidth"), static_cast<float>(ConfigDefaults::borderWidth())).toFloat();
+            z.value(ZoneSnapshotKeys::ShaderBorderWidth, static_cast<float>(ConfigDefaults::borderWidth())).toFloat();
 
         if (rect.highlighted) {
             ++highlightedCount;
@@ -148,19 +182,19 @@ void ZoneShaderItem::parseZoneData()
         newRects.append(rect);
 
         // Extract fill color (premultiplied RGBA, 0-1 range)
-        ZoneColor fillColor;
-        fillColor.r = z.value(QLatin1String("fillR"), 0.0f).toFloat();
-        fillColor.g = z.value(QLatin1String("fillG"), 0.0f).toFloat();
-        fillColor.b = z.value(QLatin1String("fillB"), 0.0f).toFloat();
-        fillColor.a = z.value(QLatin1String("fillA"), 0.0f).toFloat();
+        PhosphorRendering::ZoneColor fillColor;
+        fillColor.r = z.value(ZoneSnapshotKeys::FillR, 0.0f).toFloat();
+        fillColor.g = z.value(ZoneSnapshotKeys::FillG, 0.0f).toFloat();
+        fillColor.b = z.value(ZoneSnapshotKeys::FillB, 0.0f).toFloat();
+        fillColor.a = z.value(ZoneSnapshotKeys::FillA, 0.0f).toFloat();
         newFillColors.append(fillColor);
 
         // Extract border color (RGBA, 0-1 range)
-        ZoneColor borderColor;
-        borderColor.r = z.value(QLatin1String("borderR"), 1.0f).toFloat();
-        borderColor.g = z.value(QLatin1String("borderG"), 1.0f).toFloat();
-        borderColor.b = z.value(QLatin1String("borderB"), 1.0f).toFloat();
-        borderColor.a = z.value(QLatin1String("borderA"), 1.0f).toFloat();
+        PhosphorRendering::ZoneColor borderColor;
+        borderColor.r = z.value(ZoneSnapshotKeys::BorderR, 1.0f).toFloat();
+        borderColor.g = z.value(ZoneSnapshotKeys::BorderG, 1.0f).toFloat();
+        borderColor.b = z.value(ZoneSnapshotKeys::BorderB, 1.0f).toFloat();
+        borderColor.a = z.value(ZoneSnapshotKeys::BorderA, 1.0f).toFloat();
         newBorderColors.append(borderColor);
         ++index;
     }
@@ -187,8 +221,8 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
 {
     // Precondition: m_zoneData must be populated by a prior setZones/parseZoneData call.
     if (m_zoneData.rects.size() != static_cast<qsizetype>(m_zones.size())) {
-        qWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
-                            << "zones=" << m_zones.size() << ") - setZones must be called first";
+        qCWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
+                             << "zones=" << m_zones.size() << ") - setZones must be called first";
         return;
     }
     // Pre-compute highlight flags outside the mutex to avoid blocking the render
@@ -226,25 +260,25 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
 // Thread-Safe Zone Data Accessors
 // ============================================================================
 
-ZoneDataSnapshot ZoneShaderItem::getZoneDataSnapshot() const
+PhosphorRendering::ZoneDataSnapshot ZoneShaderItem::getZoneDataSnapshot() const
 {
     QMutexLocker lock(&m_zoneDataMutex);
     return m_zoneData;
 }
 
-QVector<ZoneRect> ZoneShaderItem::zoneRects() const
+QVector<PhosphorRendering::ZoneRect> ZoneShaderItem::zoneRects() const
 {
     QMutexLocker lock(&m_zoneDataMutex);
     return m_zoneData.rects;
 }
 
-QVector<ZoneColor> ZoneShaderItem::zoneFillColors() const
+QVector<PhosphorRendering::ZoneColor> ZoneShaderItem::zoneFillColors() const
 {
     QMutexLocker lock(&m_zoneDataMutex);
     return m_zoneData.fillColors;
 }
 
-QVector<ZoneColor> ZoneShaderItem::zoneBorderColors() const
+QVector<PhosphorRendering::ZoneColor> ZoneShaderItem::zoneBorderColors() const
 {
     QMutexLocker lock(&m_zoneDataMutex);
     return m_zoneData.borderColors;
@@ -265,7 +299,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             // deleting. Without the parent's nullification, a subsequent
             // syncBasePropertiesToNode would walk a dangling pointer.
             m_zoneRenderNode = nullptr;
-            if (auto* rhiNode = static_cast<ZoneShaderNodeRhi*>(oldNode)) {
+            if (auto* rhiNode = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode)) {
                 rhiNode->invalidateItem();
             }
             delete oldNode;
@@ -273,7 +307,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         return nullptr;
     }
 
-    auto* node = static_cast<ZoneShaderNodeRhi*>(oldNode);
+    auto* node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode);
     if (!node) {
         // Scene graph deleted the previous node, or first call. Route node
         // creation through the parent's createShaderNode() factory hook so
@@ -282,7 +316,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // refactor to delegate updatePaintNode to the parent picks up the
         // right node type for free.
         m_zoneRenderNode = nullptr;
-        node = static_cast<ZoneShaderNodeRhi*>(createShaderNode());
+        node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
         m_zoneRenderNode = node;
         qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     } else {
@@ -296,13 +330,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // our own override) with our internal ZoneUniformExtension, so the zone
     // UBO region stays populated across scene-graph node recreations without
     // any extra plumbing here.
+    // syncBasePropertiesToNode pushes user textures (slots 0..3) already.
     syncBasePropertiesToNode(node);
-
-    // ── Sync user textures from ZoneShaderItem's parsed images (bindings 7-10) ──
-    for (int i = 0; i < 4; ++i) {
-        node->setUserTexture(i, m_userTextureImages[i]);
-        node->setUserTextureWrap(i, m_userTextureWraps[i]);
-    }
 
     // ── Sync labels texture (zone-specific, not in parent) ───────────
     {
@@ -360,7 +389,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 }
             } else {
                 qCWarning(PlasmaZones::lcOverlay)
-                    << "No vertex shader found for" << fragPath << "— expected zone.vert in shader dir or search paths";
+                    << "No vertex shader found for" << fragPath << "(expected zone.vert in shader dir or search paths)";
                 loaded = false;
             }
 
@@ -407,16 +436,16 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     if (m_zoneDataDirty.load()) {
         if (node->isShaderReady()) {
             m_zoneDataDirty.exchange(false);
-            ZoneDataSnapshot snapshot = getZoneDataSnapshot();
+            PhosphorRendering::ZoneDataSnapshot snapshot = getZoneDataSnapshot();
 
-            QVector<ZoneData> zoneDataVec;
+            QVector<PhosphorRendering::ZoneData> zoneDataVec;
             zoneDataVec.reserve(snapshot.zoneCount);
 
             for (int i = 0; i < snapshot.zoneCount; ++i) {
-                ZoneData zd;
+                PhosphorRendering::ZoneData zd;
 
                 // Rectangle (already normalized 0-1)
-                const ZoneRect& rect = snapshot.rects[i];
+                const PhosphorRendering::ZoneRect& rect = snapshot.rects[i];
                 zd.rect = QRectF(static_cast<qreal>(rect.x), static_cast<qreal>(rect.y), static_cast<qreal>(rect.width),
                                  static_cast<qreal>(rect.height));
                 zd.zoneNumber = rect.zoneNumber;
@@ -425,12 +454,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 zd.borderWidth = rect.borderWidth;
 
                 // Fill color
-                const ZoneColor& fill = snapshot.fillColors[i];
+                const PhosphorRendering::ZoneColor& fill = snapshot.fillColors[i];
                 zd.fillColor = QColor::fromRgbF(static_cast<float>(fill.r), static_cast<float>(fill.g),
                                                 static_cast<float>(fill.b), static_cast<float>(fill.a));
 
                 // Border color
-                const ZoneColor& border = snapshot.borderColors[i];
+                const PhosphorRendering::ZoneColor& border = snapshot.borderColors[i];
                 zd.borderColor = QColor::fromRgbF(static_cast<float>(border.r), static_cast<float>(border.g),
                                                   static_cast<float>(border.b), static_cast<float>(border.a));
 

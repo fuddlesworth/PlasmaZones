@@ -9,7 +9,10 @@
 #include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QStringList>
@@ -20,6 +23,110 @@ namespace PhosphorAnimationShaders {
 
 namespace {
 Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
+
+/// Reject a path string that contains any `..` segment after lexical
+/// cleaning. Used as a sourceDir-independent traversal guard for
+/// in-memory effects where there is no on-disk anchor to bound an
+/// absolute path against.
+///
+/// Returns true when the path is safe (no `..` segments) and false
+/// when it contains traversal segments. Empty input returns true (the
+/// caller decides whether to skip empty paths separately).
+///
+/// PlasmaZones is Linux/Wayland only; lexical comparison is case-
+/// sensitive which matches Linux filesystem semantics. Splits on
+/// BOTH `/` and `\` as defence-in-depth against Windows-style
+/// traversal strings (`..\evil`) that QDir::cleanPath leaves untouched
+/// on POSIX hosts, cheap belt-and-braces for a security boundary.
+///
+/// After QDir::cleanPath, intermediate `..` segments are collapsed
+/// (e.g. `/foo/../etc` becomes `/etc`); only LEADING `..` segments
+/// (which would escape an unanchored relative path) are preserved
+/// and rejected. This is intentional, the in-memory override branch
+/// already trusts absolute paths to the caller's discretion (see
+/// validateTexturePathWithinEffectDir docstring), and a path that
+/// cleanPath has reduced to absolute is no different from one the
+/// caller supplied as absolute directly.
+bool pathHasNoTraversalSegments(const QString& rawPath)
+{
+    if (rawPath.isEmpty())
+        return true;
+    const QString cleaned = QDir::cleanPath(rawPath);
+    const QStringList segments = cleaned.split(QRegularExpression(QStringLiteral("[/\\\\]")), Qt::SkipEmptyParts);
+    for (const QString& seg : segments) {
+        if (seg == QLatin1String("..")) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Validate a (possibly relative) texture path against an effect dir.
+/// Returns the validated absolute path on success, or std::nullopt
+/// when the path resolves outside the effect dir under canonical-vs-
+/// canonical or lexical-vs-lexical comparison (i.e. `..`-traversal or
+/// symlink-escape from a relative path).
+///
+/// Confinement only applies to relative paths: absolute paths are
+/// trusted to the caller's discretion (settings UI / D-Bus pickers
+/// can legitimately point at user-chosen files outside the effect
+/// dir). Missing target files are NOT rejected here — parseEffect
+/// tolerates missing texture files for the same reason it tolerates
+/// missing frag/vert (live-reload during development; QImage-load
+/// gracefully reports failure at use-time). The runtime override
+/// path applies an additional `pathHasNoTraversalSegments` check at
+/// the in-memory-effect call site for defence-in-depth.
+///
+/// Shared between the scan-time texture-list resolver in `parseEffect`
+/// and the runtime override resolver in `translateAnimationParams` so
+/// both paths apply the same defence against `..`-traversal and
+/// symlink-escape. Callers handle the nullopt case to either skip the
+/// slot (overrides) or clear the slot in lockstep with its wrap field
+/// (parseEffect).
+///
+/// Trust model: the caller-provided `effect` (used to derive
+/// `effectDir`) is internally trusted because it was either parsed
+/// from a controlled-source metadata.json or constructed in-process.
+/// The runtime `friendlyParams` map at the call site, however, is
+/// treated as untrusted input — it can carry user-supplied strings
+/// from settings UI, D-Bus, or shader-profile JSON, so the same
+/// confinement check applies uniformly.
+///
+/// `effectId` is for the warning message only — diagnostic hygiene so
+/// pack authors see which effect's metadata or runtime override was
+/// rejected. Pass an empty string for runtime overrides where the
+/// effect id is implicit in the call context.
+std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath, const QString& effectDir,
+                                                          const QString& effectId)
+{
+    if (rawPath.isEmpty() || effectDir.isEmpty())
+        return std::nullopt;
+    const QDir dir(effectDir);
+    const QFileInfo origInfo(rawPath);
+    const bool wasRelative = !origInfo.isAbsolute();
+    QString resolved = rawPath;
+    if (wasRelative) {
+        resolved = dir.filePath(resolved);
+    }
+    const QString lexicalRoot = QDir::cleanPath(dir.absolutePath()) + QLatin1Char('/');
+    const QString canonicalRootResolved = QFileInfo(dir.absolutePath()).canonicalFilePath();
+    const QString canonicalRoot =
+        canonicalRootResolved.isEmpty() ? QString() : canonicalRootResolved + QLatin1Char('/');
+    const QString canonicalSymResolved = QFileInfo(resolved).canonicalFilePath();
+    // Pick comparison domain: prefer canonical (catches symlink
+    // escapes) when BOTH sides resolved, otherwise fall back to
+    // lexical for both. Never mix the two.
+    const bool useCanonical = !canonicalSymResolved.isEmpty() && !canonicalRootResolved.isEmpty();
+    const QString canonical = useCanonical ? canonicalSymResolved : QDir::cleanPath(resolved);
+    const QString comparisonRoot = useCanonical ? canonicalRoot : lexicalRoot;
+    if (wasRelative && !canonical.startsWith(comparisonRoot)) {
+        qCWarning(lcRegistry).noquote() << "Animation effect" << effectId << "texture path" << rawPath << "resolves to"
+                                        << canonical << "outside source dir" << comparisonRoot
+                                        << "— rejected (path traversal guard)";
+        return std::nullopt;
+    }
+    return canonical;
+}
 
 /// Parse one already-validated metadata.json root into an
 /// AnimationShaderEffect. The strategy already ran the file-existence,
@@ -56,6 +163,32 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     e.sourceDir = effectDir;
     e.isUserEffect = isUserDir;
 
+    // Surface texture-list drops (cap-overflow + empty-path) at scan
+    // time. fromJson silently drops these to keep the in-memory struct
+    // clean, but pack authors writing a 4-texture metadata.json or
+    // accidentally leaving a `"path": ""` deserve a journal entry —
+    // mirrors the existing buffer-shader missing-file warning further
+    // below.
+    {
+        const QJsonArray declared = root.value(QLatin1String("textures")).toArray();
+        if (declared.size() > AnimationShaderContract::kMaxUserTextureSlots) {
+            qCWarning(lcRegistry).noquote()
+                << "Animation effect" << e.id << "declares" << declared.size() << "textures; cap is"
+                << AnimationShaderContract::kMaxUserTextureSlots
+                << "(canonical UBO budget) — surplus entries silently dropped at parse time";
+        }
+        int emptyPathDrops = 0;
+        for (const QJsonValue& v : declared) {
+            if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+                ++emptyPathDrops;
+            }
+        }
+        if (emptyPathDrops > 0) {
+            qCWarning(lcRegistry).noquote() << "Animation effect" << e.id << "has" << emptyPathDrops
+                                            << "texture entry/entries with empty `path` — dropped at parse time";
+        }
+    }
+
     // Resolve directory-relative paths via QDir::filePath, which returns
     // absolute inputs unchanged — keeps schema tolerance symmetric with
     // PhosphorShaders::ShaderRegistry's parser. Naive string concat
@@ -70,6 +203,52 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     }
     if (!e.previewPath.isEmpty()) {
         e.previewPath = dir.filePath(e.previewPath);
+    }
+
+    // Resolve user-texture paths to absolute form once at scan time —
+    // mirrors fragmentShaderPath handling. This avoids per-leg
+    // QFileInfo + QDir::filePath calls in `translateAnimationParams`
+    // (which fires on every transition install + can be hot during
+    // back-to-back lifecycle events). Sanitise against `..`-segment
+    // traversal: any TextureSlot whose canonical resolved path falls
+    // outside the effect's sourceDir is rejected with a warning. Pack
+    // metadata is shipped trusted but `untrusted-input` discipline is
+    // cheap here and matches CLAUDE.md's "Sanitize file paths to
+    // prevent directory traversal" rule.
+    {
+        // Use canonicalFilePath() to follow symlinks — `QDir::cleanPath`
+        // is purely lexical and does NOT resolve symbolic links, so a
+        // pack author could ship `effectDir/innocent.png` as a symlink
+        // pointing to `/etc/passwd` and the lexical-only check would
+        // pass it (target lives under canonicalRoot lexically). The
+        // QImage load downstream then follows the symlink and reads
+        // the linked file. Defence-in-depth even though packs are
+        // nominally trusted: matches CLAUDE.md's "Sanitize file paths
+        // to prevent directory traversal" rule and protects against a
+        // future pack-distribution channel that accepts third-party
+        // uploads.
+        //
+        // Validation lives in `validateTexturePathWithinEffectDir` so
+        // the runtime override path in `translateAnimationParams`
+        // applies the IDENTICAL canonical / lexical traversal checks
+        // — symmetric defence whether the texture path arrived via
+        // metadata.json or via a friendlyParams override at use time.
+        for (auto& tex : e.textures) {
+            if (tex.path.isEmpty())
+                continue;
+            const auto validated = validateTexturePathWithinEffectDir(tex.path, effectDir, e.id);
+            if (!validated) {
+                // Clear BOTH path and wrap so the slot is internally
+                // coherent — `translateAnimationParams` skips empty-path
+                // slots, and a future `toJson` round-trip would drop
+                // the empty entry rather than smuggling a dead wrap
+                // through.
+                tex.path.clear();
+                tex.wrap.clear();
+                continue;
+            }
+            tex.path = *validated;
+        }
     }
 
     // Resolve buffer shader paths (relative to effect dir, like
@@ -124,10 +303,19 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     return e;
 }
 
-/// Per-payload watch list — frag + vert shader file paths. The strategy
-/// already adds the metadata.json itself; this callback is for everything
-/// else. Preview is informational only (no live-reload need on a static
-/// thumbnail) and is excluded.
+/// Per-payload watch list — frag + vert + buffer shader files AND
+/// declared user-texture paths. The strategy already adds the
+/// metadata.json itself; this callback covers everything else. Preview
+/// is informational only (no live-reload need on a static thumbnail)
+/// and is excluded.
+///
+/// Why textures are watched: `m_textureCache` (kwin-effect side) and
+/// `m_userTextureImages` (daemon ShaderEffect side) both key on
+/// absolute path. A bitmap content change with no path change would
+/// otherwise serve the stale GPU upload for the rest of the session
+/// — the registry's `effectsChanged` is the canonical invalidation
+/// signal both consumers consume, so feeding texture mtimes into the
+/// strategy's fingerprint propagates the reload uniformly.
 QStringList effectWatchPaths(const AnimationShaderEffect& e)
 {
     QStringList paths;
@@ -142,17 +330,22 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
             paths.append(bufPath);
         }
     }
+    for (const auto& tex : e.textures) {
+        if (!tex.path.isEmpty()) {
+            paths.append(tex.path);
+        }
+    }
     return paths;
 }
 
-// No `setSignatureContrib` is wired below — the strategy auto-fingerprints
-// every distinct file `effectWatchPaths` returns (path|size|mtime|), which
-// covers the resolved frag and vertex shader paths in both the
-// "search-path reorder swaps the winning copy" and "in-place content edit"
-// scenarios. A bespoke `SignatureContrib` would be redundant.
-
 } // namespace
 
+// No `setSignatureContrib` is wired in `buildScanStrategy` below — the
+// strategy auto-fingerprints every distinct file `effectWatchPaths`
+// returns (path|size|mtime|), which covers the resolved frag and vertex
+// shader paths in both the "search-path reorder swaps the winning copy"
+// and "in-place content edit" scenarios. A bespoke `SignatureContrib`
+// would be redundant.
 std::unique_ptr<PhosphorFsLoader::IScanStrategy>
 AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
 {
@@ -166,15 +359,22 @@ AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
 
 AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
     : MetadataPackRegistryBase(lcRegistry(), buildScanStrategy(this), parent)
-    , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
 {
-    // The static_cast above is safe by construction (`buildScanStrategy`
-    // is the only path that populates the base's strategy slot, and it
-    // always produces a `ScanStrategy`). Pin that invariant in debug
-    // builds via dynamic_cast so a future refactor that diverts the
-    // strategy slot fails loudly instead of silently UB-ing on lookup.
-    Q_ASSERT_X(dynamic_cast<ScanStrategy*>(strategy()) != nullptr, "AnimationShaderRegistry",
-               "buildScanStrategy must return a MetadataPackScanStrategy<AnimationShaderEffect>");
+    // `buildScanStrategy` is the only path that populates the base's
+    // strategy slot, and it always produces a `ScanStrategy`. Pin that
+    // invariant via dynamic_cast BEFORE storing the typed pointer so a
+    // future refactor that diverts the slot fails loudly instead of
+    // silently UB-ing on lookup. Use `qFatal` rather than `Q_ASSERT_X`
+    // — the assert path compiles to a no-op in release builds, which
+    // would leave `m_typedStrategy` null and crash on the first
+    // `m_typedStrategy->packs()` deref. Failing loudly here is correct
+    // for a contract-violation invariant.
+    auto* typed = dynamic_cast<ScanStrategy*>(strategy());
+    if (!typed) {
+        qFatal(
+            "AnimationShaderRegistry: ScanStrategy contract violation — buildScanStrategy returned non-ScanStrategy*");
+    }
+    m_typedStrategy = typed;
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;
@@ -226,7 +426,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                                                               const QVariantMap& friendlyParams)
 {
     QVariantMap result;
-    if (!effect.isValid() || effect.parameters.isEmpty()) {
+    if (!effect.isValid()) {
         return result;
     }
 
@@ -236,9 +436,9 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         const QString& type = param.type;
         if (type == QLatin1String("color")) {
             if (colorSlot >= AnimationShaderContract::kMaxCustomColors) {
-                qCWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
-                                      << AnimationShaderContract::kMaxCustomColors
-                                      << "-slot customColors budget; dropping color param" << param.id;
+                qCWarning(lcRegistry).noquote() << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                                << AnimationShaderContract::kMaxCustomColors
+                                                << "-slot customColors budget; dropping color param" << param.id;
                 continue;
             }
             const QString uniformKey = AnimationShaderContract::colorKey(colorSlot);
@@ -259,7 +459,13 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
             // corrupt configs that already use Qt's order. Settings UI
             // / config writers emit Qt-form (alpha first) explicitly.
             const auto coerce = [](const QVariant& v) -> QColor {
-                if (v.canConvert<QColor>()) {
+                // Type-id (NOT canConvert<QColor>) so a QString variant
+                // takes the QString branch below. QString DOES
+                // canConvert<QColor> — it returns an INVALID QColor for
+                // any string, swallowing the variant before the proper
+                // QColor(QString) constructor branch runs. The metatype
+                // check pins this branch to actual QColor variants.
+                if (v.metaType().id() == QMetaType::QColor) {
                     const QColor c = v.value<QColor>();
                     if (c.isValid())
                         return c;
@@ -285,9 +491,9 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         }
 
         if (floatSlot >= AnimationShaderContract::kMaxParameterSlots) {
-            qCWarning(lcRegistry) << "translateAnimationParams: effect" << effect.id << "exceeds"
-                                  << AnimationShaderContract::kMaxParameterSlots
-                                  << "-slot customParams budget; dropping param" << param.id;
+            qCWarning(lcRegistry).noquote() << "translateAnimationParams: effect" << effect.id << "exceeds"
+                                            << AnimationShaderContract::kMaxParameterSlots
+                                            << "-slot customParams budget; dropping param" << param.id;
             continue;
         }
 
@@ -315,6 +521,122 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         ++floatSlot;
     }
 
+    // ── User textures (uTexture1..3, uTexture1_wrap, ...) ──────────────
+    //
+    // Pack defaults come from `effect.textures` (the metadata schema);
+    // runtime overrides come from `friendlyParams[uTextureN]` /
+    // `friendlyParams[uTextureN_wrap]` so callers (settings UI, daemon
+    // overlay-service shader-profile resolution) can swap a packaged
+    // texture without touching the pack on disk.
+    //
+    // Slot offset: the canonical animation contract reserves
+    // `uTexture0` for the redirected window/surface. `effect.textures[0]`
+    // therefore maps to `uTexture1` (runtime slot 1 / SRB binding 8) and
+    // so on. friendlyParams may use the GLSL slot name (`uTexture1` ..
+    // `uTexture3`) verbatim — that's the same convention overlay zones
+    // use, which keeps the override format identical across categories.
+    //
+    // Pack-default paths in `effect.textures` are already absolute
+    // (resolved + traversal-checked at parseEffect scan time). Runtime
+    // overrides from `friendlyParams` may arrive relative — settings UI
+    // / D-Bus callers don't all know the effect's sourceDir. Resolve
+    // and traversal-check relative override paths against
+    // `effect.sourceDir` via the SAME helper parseEffect uses, so the
+    // downstream cache (`m_textureCache` on kwin / `m_userTextureImages`
+    // on daemon) keys on a stable absolute path regardless of which
+    // input shape the caller used AND a malicious caller can't bypass
+    // the scan-time guard by passing `../../../etc/passwd` through a
+    // friendlyParams override. Empty / null paths skip the emit so a
+    // setShaderParams consumer's "missing key = no change" semantic
+    // doesn't accidentally clear a slot the caller intended to leave
+    // alone. Wrap-only entries are gated on a non-empty companion
+    // path so a consumer can't end up with a wrap mode applied to an
+    // unbound sampler.
+    for (int slot = 0; slot < AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
+        const int glslSlot = slot + 1; // uTexture0 is reserved for the surface
+        const QString pathKey = QStringLiteral("uTexture%1").arg(glslSlot);
+        const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(glslSlot);
+
+        QString path;
+        QString wrap;
+        if (slot < effect.textures.size()) {
+            path = effect.textures[slot].path;
+            wrap = effect.textures[slot].wrap;
+        }
+        const auto pathOverride = friendlyParams.constFind(pathKey);
+        if (pathOverride != friendlyParams.constEnd()) {
+            const QString candidate = pathOverride->toString();
+            if (candidate.isEmpty()) {
+                // Empty-string override = explicit clear of the slot.
+                // The pack-default wrap (if any) is intentionally
+                // dropped because wrap is meaningless without a bound
+                // texture — emitting a wrap-only key would attach a
+                // wrap mode to an unbound sampler and violate the
+                // downstream contract. wrap emit is suppressed via the
+                // path-empty skip below; explicit clear here would be
+                // redundant and silently overwritten by a later
+                // uTextureN_wrap override in the same params map.
+                path = candidate;
+            } else if (effect.sourceDir.isEmpty()) {
+                // Degenerate case — pack came from an in-memory
+                // factory with no on-disk anchor. There is no
+                // sourceDir to bound the path against, but the
+                // override map is still untrusted input — reject any
+                // candidate containing `..` segments so a malicious
+                // caller can't smuggle a traversal path through the
+                // in-memory branch.
+                if (!pathHasNoTraversalSegments(candidate)) {
+                    qCWarning(lcRegistry).noquote()
+                        << "Animation effect" << effect.id << "runtime override texture path" << candidate
+                        << "rejected (path traversal guard)";
+                    path.clear();
+                    wrap.clear();
+                } else if (QFileInfo(candidate).isRelative()) {
+                    // Relative paths in the in-memory branch are caller-
+                    // resolved (no sourceDir means no anchor for us to
+                    // resolve against). Accept the candidate verbatim
+                    // and emit a debug log so a settings-UI tester
+                    // notices when an in-memory effect's relative
+                    // override flows through unchanged. Production
+                    // packs should always have a sourceDir — this branch
+                    // is exercised by test fixtures and future scripted-
+                    // shader hooks.
+                    qCDebug(lcRegistry).noquote()
+                        << "Animation effect" << effect.id
+                        << "in-memory override texture path is relative:" << candidate
+                        << "— passed through caller-resolved (no sourceDir to anchor against)";
+                    path = candidate;
+                } else {
+                    path = candidate;
+                }
+            } else {
+                const auto validated = validateTexturePathWithinEffectDir(candidate, effect.sourceDir, effect.id);
+                if (!validated) {
+                    // Rejected override clears BOTH path and wrap for
+                    // this slot — same coherence rule parseEffect
+                    // applies. Skip the slot entirely so the unbound
+                    // sampler doesn't end up with a wrap-only emit.
+                    path.clear();
+                    wrap.clear();
+                } else {
+                    path = *validated;
+                }
+            }
+        }
+        const auto wrapOverride = friendlyParams.constFind(wrapKey);
+        if (wrapOverride != friendlyParams.constEnd()) {
+            wrap = wrapOverride->toString();
+        }
+
+        if (path.isEmpty()) {
+            continue; // no texture for this slot — skip both keys
+        }
+        result[pathKey] = path;
+        if (!wrap.isEmpty()) {
+            result[wrapKey] = wrap;
+        }
+    }
+
     return result;
 }
 
@@ -322,132 +644,6 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const QString& eff
                                                               const QVariantMap& friendlyParams) const
 {
     return translateAnimationParams(effect(effectId), friendlyParams);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Canonical UBO → default-block uniform rewrite
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// Animation shaders ship as `#version 450` GLSL with a canonical
-// `layout(std140, binding = 0) uniform AnimationUniforms { ... };` block
-// (see `data/animations/shared/animation_uniforms.glsl`). Runtimes
-// without UBO-binding support — `KWin::GLShader`'s `setUniform(loc, val)`
-// API addresses default-block uniforms only — need the source rewritten
-// before compile. Daemon Qt-RHI / SPIR-V keeps the canonical form and
-// uploads the UBO directly, so it doesn't call this helper.
-//
-// The rewriter is deliberately line-based and pinned to the canonical
-// layout (open-brace on the same line as `uniform NAME`, close-brace
-// `};` on its own line). This is exactly what
-// `animation_uniforms.glsl` produces; an author writing a divergent
-// declaration would slip past it. The bake test
-// (`tests/unit/ui/test_animation_shader_bake.cpp`) catches GLSL
-// regressions on the daemon side; the registry test suite
-// (`tests/test_animationshaderregistry.cpp`) pins the rewriter
-// behaviour for the kwin side.
-
-QByteArray AnimationShaderRegistry::rewriteCanonicalUboToDefaultBlock(const QString& expandedShaderSource)
-{
-    QStringList output;
-    const QStringList lines = expandedShaderSource.split(QLatin1Char('\n'));
-    bool inUboBlock = false;
-    for (const QString& line : lines) {
-        const QString trimmed = line.trimmed();
-        if (!inUboBlock) {
-            // Detect `layout(std140, binding = N) uniform NAME {` (any
-            // whitespace tolerated). We only handle the same-line open
-            // brace; the canonical animation_uniforms.glsl writes it
-            // that way, and an author deviating would be caught by the
-            // bake test on the daemon side anyway.
-            const bool isUboOpen = trimmed.startsWith(QLatin1String("layout(std140"))
-                && trimmed.contains(QLatin1String("uniform")) && trimmed.endsWith(QLatin1Char('{'));
-            if (isUboOpen) {
-                inUboBlock = true;
-                continue; // drop the opening line
-            }
-            output.append(line);
-            continue;
-        }
-        // Inside the UBO block. Strip a trailing `// comment` from the
-        // closing brace as well as field declarations so authors can
-        // annotate the canonical header without breaking the rewriter.
-        QString workingLine = line;
-        const int commentIdx = workingLine.indexOf(QLatin1String("//"));
-        if (commentIdx >= 0) {
-            workingLine = workingLine.left(commentIdx);
-        }
-        const QString workingTrimmed = workingLine.trimmed();
-        if (workingTrimmed == QLatin1String("};")) {
-            inUboBlock = false;
-            continue; // drop the closing line
-        }
-        // Skip lines that are pure-comment / blank — they have no field
-        // declaration to translate.
-        if (workingTrimmed.isEmpty() || !workingTrimmed.endsWith(QLatin1Char(';'))) {
-            continue;
-        }
-        QString decl = workingTrimmed;
-        decl.chop(1); // remove trailing ';'
-
-        // Extract the field name (the last whitespace-separated token,
-        // stripped of any `[N]` array suffix). A canonical declaration
-        // like `vec4 customParams[8]` yields `customParams`; `mat4
-        // qt_Matrix` yields `qt_Matrix`. Token-level matching is
-        // future-proof against a contract that adds e.g. `iFlipBufferYAdjusted`
-        // — substring matching would silently nuke that too. The
-        // `lastIndexOf(' ')` split also tolerates `highp vec4 ...`-style
-        // declarations: only the final token (the identifier) is matched.
-        const int lastSpace = decl.lastIndexOf(QLatin1Char(' '));
-        QString fieldName = (lastSpace >= 0) ? decl.mid(lastSpace + 1) : decl;
-        const int bracketIdx = fieldName.indexOf(QLatin1Char('['));
-        if (bracketIdx >= 0) {
-            fieldName = fieldName.left(bracketIdx);
-        }
-
-        // Drop fields that are not part of the animation contract on the
-        // classic-GL path. KWin manages its own scene-graph transform /
-        // opacity; `_appField0/1` are daemon-side escape-hatch padding;
-        // `iFlipBufferY` (daemon-only, always 1) is stripped. All other
-        // fields emit as default-block uniforms. The canonical
-        // animation_uniforms.glsl deliberately carries no explicit
-        // `_pad*` declarations — std140's natural vec4-alignment of the
-        // next array fills the gaps (see the layout comment in that
-        // file) — so no `_pad*` strip entry is needed here.
-        if (fieldName == QLatin1String("qt_Matrix") || fieldName == QLatin1String("qt_Opacity")
-            || fieldName == QLatin1String("_appField0") || fieldName == QLatin1String("_appField1")
-            || fieldName == QLatin1String("iFlipBufferY")) {
-            continue;
-        }
-
-        output.append(QStringLiteral("uniform %1;").arg(decl));
-    }
-    if (inUboBlock) {
-        qCWarning(lcRegistry) << "rewriteCanonicalUboToDefaultBlock: UBO block was never closed with '};'"
-                                 " — returning original source unchanged";
-        return expandedShaderSource.toUtf8();
-    }
-
-    // Strip `layout(binding = N)` decorations from sampler uniform
-    // declarations on the classic-GL path. The daemon-side RHI pipeline
-    // uses explicit binding-points (`iChannel0` lives at SRB binding 7
-    // in the canonical contract) but KWin's `OffscreenData::paint`
-    // binds the redirected window texture to the default active unit
-    // (`m_texture->bind()` with no `glActiveTexture` call → TEXTURE0).
-    // With `#version 450`, `layout(binding = 7)` pins the sampler to
-    // unit 7 at link time and KWin's bind to unit 0 is invisible to
-    // the shader — the texture sample returns transparent and the
-    // transition is a see-through no-op.
-    //
-    // Dropping the decoration alone leaves the sampler at GL's default
-    // (unit 0), which matches KWin's bind. The daemon-side RHI path
-    // never sees this rewrite (only the kwin-effect calls this helper),
-    // so the canonical binding-point contract on `iChannel0` /
-    // BaseUniforms is preserved on that runtime.
-    QString result = output.join(QLatin1Char('\n'));
-    static const QRegularExpression kSamplerBindingDecoration(
-        QStringLiteral(R"(layout\s*\(\s*binding\s*=\s*\d+\s*\)\s*(uniform\s+sampler))"));
-    result.replace(kSamplerBindingDecoration, QStringLiteral("\\1"));
-    return result.toUtf8();
 }
 
 } // namespace PhosphorAnimationShaders

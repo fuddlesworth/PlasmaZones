@@ -9,11 +9,11 @@
 
 namespace PlasmaZones {
 
-WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath,
-                                                 const QStringList& includePaths)
+PhosphorRendering::WarmShaderBakeResult
+warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath, const QStringList& includePaths)
 {
     if (vertexPath.isEmpty() || fragmentPath.isEmpty()) {
-        WarmShaderBakeResult result;
+        PhosphorRendering::WarmShaderBakeResult result;
         result.errorMessage = QStringLiteral("Vertex or fragment path is empty");
         return result;
     }
