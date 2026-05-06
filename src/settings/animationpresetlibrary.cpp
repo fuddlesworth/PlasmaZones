@@ -67,6 +67,20 @@ QVariantList AnimationPresetLibrary::userPresets() const
         const QString name = obj.value(presetlib_detail::JsonNameKey).toString();
         if (name.isEmpty() || knownPathSet.contains(name))
             continue;
+        // Orphan override-file filter. `setOverride` writes to a file
+        // whose basename equals the event path verbatim (e.g.
+        // `panel.popup.json` for the path `panel.popup`); `addUserPreset`
+        // routes through `slugify`, which replaces every non-alnum
+        // (including '.') with '-', so a legitimate preset basename
+        // never contains a dot. Any file whose basename has a dot is
+        // therefore an override file — valid ones are already skipped
+        // by the `knownPathSet.contains(name)` check above, leaving
+        // only orphans (paths from a previous taxonomy that this build
+        // no longer recognises). Without this check, an orphan override
+        // file would leak into the preset list as a fake preset named
+        // after the obsolete event path.
+        if (info.completeBaseName().contains(QLatin1Char('.')))
+            continue;
         obj.remove(presetlib_detail::JsonNameKey);
         if (obj.isEmpty())
             continue;

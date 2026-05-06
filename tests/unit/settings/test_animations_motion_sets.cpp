@@ -78,6 +78,48 @@ private Q_SLOTS:
         QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("My Curve"));
     }
 
+    /// An orphan override file at a path that this build no longer
+    /// recognises (e.g. left over after a taxonomy rename like PR #400's
+    /// `panel.popup.*` → `popup.*`) MUST NOT leak into the preset list.
+    /// `userPresets` previously filtered only on the current
+    /// `allBuiltInPaths()`; an orphan file at the obsolete path would
+    /// pass that gate and surface as a fake preset named after the
+    /// obsolete event path. The guard is the basename-contains-dot
+    /// check: `setOverride` writes verbatim path filenames (always
+    /// dotted for non-root paths), `addUserPreset` slugifies (strips
+    /// dots), so a dotted basename is the override-file fingerprint.
+    void userPresets_excludesOrphanOverrideFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        // Plant an orphan override file directly: the on-disk shape
+        // setOverride would have written for the obsolete path
+        // `panel.popup` (which existed pre-PR-400 but isn't in
+        // `allBuiltInPaths()` post-rename). `setOverride` itself rejects
+        // unknown paths now, so we hand-craft the file the way an older
+        // build would have.
+        QFile f(tmp.path() + QStringLiteral("/panel.popup.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        QJsonObject obj;
+        obj.insert(QStringLiteral("name"), QStringLiteral("panel.popup"));
+        obj.insert(QStringLiteral("duration"), 1000);
+        obj.insert(QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1"));
+        f.write(QJsonDocument(obj).toJson());
+        f.close();
+
+        // Add a real preset alongside.
+        QVERIFY(c.addUserPreset(QStringLiteral("My Curve"), {{QStringLiteral("duration"), 200}}));
+
+        // userPresets must see ONLY the real preset; the orphan file
+        // is a stale override, not a preset.
+        const QVariantList presets = c.userPresets();
+        QCOMPARE(presets.size(), 1);
+        QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("My Curve"));
+    }
+
     void addUserPreset_rejectsKnownPathNames()
     {
         QTemporaryDir tmp;
