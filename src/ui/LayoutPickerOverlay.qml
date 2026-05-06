@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Window
+import org.kde.kirigami as Kirigami
 
 /**
  * Layout Picker Overlay Window — Wayland layer-shell host for LayoutPickerContent.
@@ -23,6 +24,12 @@ import QtQuick.Window
  * state would fight the library's setFlag.
  */
 Window {
+    // Data properties live on root (not aliased to the inner content)
+    // because the Loader-driven LayoutPickerContent is destroyed +
+    // recreated on every show — aliases would break each time the
+    // content is unloaded. The inner content's bindings reach for
+    // root.* via QML lexical scope inside the Component below.
+
     id: root
 
     // OSD-style content lifecycle gate — see ZoneSelectorWindow's
@@ -33,25 +40,24 @@ Window {
     // QQuickItemLayer state survives across shows and subsequent
     // vertex-shader transitions sample stale FBO content.
     property bool loaded: false
-    // Data properties live on root (not aliased to the inner content)
-    // because the Loader-driven LayoutPickerContent is destroyed +
-    // recreated on every show — aliases would break each time the
-    // content is unloaded. The inner content's bindings reach for
-    // root.* via QML lexical scope inside the Component below.
+    // Defaults mirror LayoutPickerContent.qml so the visible state
+    // between an early Loader instantiation and the first C++
+    // property push lands on Kirigami theme colours and the right
+    // font weight/scale — not literal "white"/"black" sentinels.
     property var layouts: []
     property string activeLayoutId: ""
     property bool globalAutoAssign: false
     property real screenAspectRatio: 16 / 9
-    property color backgroundColor: "white"
-    property color textColor: "black"
-    property color highlightColor: "blue"
-    property color inactiveColor: "gray"
-    property color borderColor: "black"
-    property real activeOpacity: 0.7
+    property color backgroundColor: Kirigami.Theme.backgroundColor
+    property color textColor: Kirigami.Theme.textColor
+    property color highlightColor: Kirigami.Theme.highlightColor
+    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property string fontFamily: ""
     property real fontSizeScale: 1
-    property int fontWeight: Font.Normal
+    property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
