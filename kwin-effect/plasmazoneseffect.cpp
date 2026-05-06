@@ -25,8 +25,8 @@
 #include <QDBusArgument>
 #include <QDate>
 #include <QDateTime>
-#include <QEvent>
 #include <QDir>
+#include <QEvent>
 #include <QFileInfo>
 #include <QTime>
 #include <QVector4D>
