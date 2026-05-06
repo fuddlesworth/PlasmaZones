@@ -941,14 +941,17 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         // Pin tree state too — a future regression that returns true while
         // quietly mutating the tree (e.g. clearing the engaged-empty
-        // sentinel) wouldn't trip the spy-count check, but would flip
-        // `effectId` from engaged-empty back to nullopt-on-read here.
+        // sentinel, or engaging the parameters optional) wouldn't trip
+        // the spy-count check, but would flip `effectId` from engaged-
+        // empty back to nullopt-on-read OR add a `parameters` key here.
         QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
+        QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
 
         // Third identical disable write — same invariant.
         QVERIFY(c.setShaderOverride(path, QString(), {}));
         QCOMPARE(spy.count(), 1);
         QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
+        QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
     }
 
     // The descendant-coverage tests below each construct a fresh

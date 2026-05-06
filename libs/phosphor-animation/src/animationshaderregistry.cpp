@@ -563,8 +563,8 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
                 // dropped because wrap is meaningless without a bound
                 // texture — emitting a wrap-only key would attach a
                 // wrap mode to an unbound sampler and violate the
-                // downstream contract. wrap is cleared via the path-
-                // empty skip below; explicit clear here would be
+                // downstream contract. wrap emit is suppressed via the
+                // path-empty skip below; explicit clear here would be
                 // redundant and silently overwritten by a later
                 // uTextureN_wrap override in the same params map.
                 path = candidate;

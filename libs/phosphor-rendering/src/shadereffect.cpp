@@ -648,9 +648,10 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // two calls), so it cannot serve as a true gate. The
             // QImage / QSvgRenderer constructors already produce a null
             // result on missing-file, and the keep-prior-image branch
-            // at line ~510 handles that case correctly. The exists()
-            // call only added a redundant stat() per setShaderParams
-            // call.
+            // below (where `loaded.isNull()` falls through to the
+            // existing `m_userTextureImages[i]`) handles that case
+            // correctly. The exists() call only added a redundant
+            // stat() per setShaderParams call.
             if (!path.isEmpty()) {
                 const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
                     || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);

@@ -33,13 +33,6 @@ import org.plasmazones.common as PZCommon
  *   - collapsible: bool — header click collapses the body
  */
 Item {
-    // Empty-string `path` is the controller's "tree fully reloaded"
-    // broadcast (discardChanges, full settings reload). Callers used
-    // to special-case it externally with `path === "" ||
-    // _pathAffectsThisCard(path)`; carving it out INSIDE the helper
-    // means future signal handlers get the right behaviour for free
-    // and can't silently miss the broadcast.
-
     id: root
 
     required property string eventPath

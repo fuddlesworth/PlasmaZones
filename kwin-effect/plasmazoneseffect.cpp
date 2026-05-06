@@ -4824,8 +4824,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // and the cache would never refresh again until the
                     // wall clock caught back up. steady_clock guarantees
                     // monotonic increase, matching the rest of the
-                    // shader-timing path.
-                    const qint64 nowMs = shaderClockNowMs();
+                    // shader-timing path. Reuses the outer-scope `nowMs`
+                    // captured for iTimeDelta / iFrame above so all of
+                    // this paint tick's monotonic readings come from the
+                    // same clock sample.
                     if (nowMs - m_lastIDateRefreshMs >= 1000) {
                         const QDateTime nowDateTime = QDateTime::currentDateTime();
                         const QDate date = nowDateTime.date();
@@ -5010,6 +5012,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent` (~line 5744).
+            // Iterator `sit` was obtained earlier in this function and no
+            // intervening code mutates m_shaderTransitions, so the read is
+            // safe. The assertion documents that contract for future edits.
+            Q_ASSERT(sit != m_shaderTransitions.end());
             const quint64 expiringGeneration = sit->second.generation;
             QMetaObject::invokeMethod(
                 this,
