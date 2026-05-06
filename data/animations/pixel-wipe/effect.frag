@@ -90,9 +90,11 @@ void main()
 
     // Pixelation grows with the per-pixel dissolve amount, so cells
     // currently in the transition wave are chunkily pixelated while
-    // already-solid (dissolve→0) and already-gone (dissolve→1)
-    // regions stay at their natural pixel size.
-    float pixelSize = ceil(maxPixelSize * dissolve + 1.0);
+    // already-solid (dissolve->0) and already-gone (dissolve->1)
+    // regions stay at their natural pixel size. The max(.., 1.0)
+    // defends against a metadata-bypass that pushes maxPixelSize
+    // negative; matches sibling pixelate's defence at line 50.
+    float pixelSize = max(ceil(maxPixelSize * dissolve + 1.0), 1.0);
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid.
     vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));

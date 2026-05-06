@@ -9,6 +9,7 @@
 #include <PhosphorProtocol/WireTypes.h>
 #include <trigger_parser.h>
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
@@ -40,7 +41,6 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <optional>
 #include <unordered_map>
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -783,10 +783,12 @@ private:
     /// Off-load a texture load onto the loader pool, then upload to
     /// the GL cache on the compositor thread when the worker
     /// finishes. Returns immediately if the path is already cached
-    /// or already in-flight. Pass an explicit @p svgSize override
-    /// to match a previously-rasterised size (otherwise defaults to
-    /// the same 1024-px max-axis as `loadUserTextureImage`'s default).
-    void warmUserTextureAsync(const QString& absolutePath, std::optional<QSize> svgSize = std::nullopt);
+    /// or already in-flight. SVGs are rasterised at the same
+    /// 1024-px max-axis as `loadUserTextureImage`'s default — the
+    /// path-keyed cache assumes a single canonical size per asset,
+    /// so per-call size overrides would silently collide on the
+    /// cache key with the first-loader-wins.
+    void warmUserTextureAsync(const QString& absolutePath);
     // Invariant: all ShaderTransition.cached pointers must be ended
     // (via endShaderTransition) before any cache erasure.
     std::map<QString, CachedShader> m_shaderCache;
@@ -1000,7 +1002,13 @@ private:
     EffectAutotileDragBehavior m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
     int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
-    int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon
+    // Pinned to the canonical Limits constant rather than an inline magic
+    // number so a future bump in the suite-wide default propagates here
+    // automatically and a malformed daemon reply (zero/negative) clamped
+    // through Limits at the assignment site stays structurally safe even
+    // before the first reply arrives.
+    int m_cachedAnimationDuration =
+        PhosphorAnimation::Limits::DefaultAnimationDurationMs; // ms, fallback until loaded from daemon
     int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
 
     // Per-drag activation tracking: set once any activation trigger is detected

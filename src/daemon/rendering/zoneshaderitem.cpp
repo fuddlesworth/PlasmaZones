@@ -96,7 +96,7 @@ void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifo
     // Log loudly at the point of misuse instead of inheriting the base
     // class's silent-store behaviour.
     Q_UNUSED(extension);
-    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored — zone rendering owns its own "
+    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored: zone rendering owns its own "
                                       << "IUniformExtension (ZoneUniformExtension) and cannot accept a replacement.";
 }
 
@@ -365,7 +365,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 }
             } else {
                 qCWarning(PlasmaZones::lcOverlay)
-                    << "No vertex shader found for" << fragPath << "— expected zone.vert in shader dir or search paths";
+                    << "No vertex shader found for" << fragPath << "(expected zone.vert in shader dir or search paths)";
                 loaded = false;
             }
 

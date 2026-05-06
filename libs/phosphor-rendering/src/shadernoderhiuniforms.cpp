@@ -123,7 +123,8 @@ void ShaderNodeRhi::syncBaseUniforms()
 //   - Caller checked m_uniformExtension && extensionSize() > 0.
 //   - m_extensionStaging is sized to extensionSize(); we don't re-allocate
 //     when called repeatedly for the same extension.
-//   - Clears the extension's dirty bit and our m_extensionDirty mirror.
+//   - Clears the extension's dirty bit (the extension's own isDirty() is
+//     the authoritative upload gate — there is no node-side mirror).
 void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 {
     const int extSize = m_uniformExtension->extensionSize();
@@ -134,7 +135,6 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
     const int extOffset = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms));
     batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
     m_uniformExtension->clearDirty();
-    m_extensionDirty = false;
 }
 
 // ============================================================================
@@ -165,7 +165,7 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //                        setCustomColor, setAudioSpectrum, setUserTexture,
 //                        setIsReversed
 //   m_appFieldsDirty  ← setAppField0, setAppField1
-//   m_extensionDirty  ← tracked via m_uniformExtension->isDirty() (set by the
+//   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
 //   m_uniformsDirty   ← mirror: true if any of the five above are true
 // A setter that forgets to update m_uniformsDirty will correctly dirty its
@@ -254,7 +254,6 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             cb->resourceUpdate(batch);
             m_timeDirty = false;
             m_timeHiDirty = false;
-            m_extensionDirty = false;
             m_sceneDataDirty = false;
             m_appFieldsDirty = false;
             m_uniformsDirty = false;
@@ -336,12 +335,33 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         if (!m_userTextureDirty[i] || !m_userTextures[i] || !m_userTextureSamplers[i]) {
             continue;
         }
-        m_userTextureDirty[i] = false;
         const QImage& img = m_userTextureImages[i];
-        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
+        QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
+        // Clamp against the device's hard texture-size limit. A user-supplied
+        // PNG larger than the device max (commonly 16384 on desktop GPUs but
+        // as low as 4096 on some mobile/Vulkan drivers) would otherwise hit
+        // newTexture()->create() == false below. Clamping to the device limit
+        // is a graceful degradation — the texture upload below will scale-fit
+        // the image into the clamped bounds via QRhi's blit semantics.
+        const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+        if (textureSizeMax > 0 && (targetSize.width() > textureSizeMax || targetSize.height() > textureSizeMax)) {
+            qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
+                                    << "exceeds device TextureSizeMax" << textureSizeMax << "— clamping";
+            targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
+        }
         if (m_userTextures[i]->pixelSize() != targetSize) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!m_userTextures[i]->create()) {
+                qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
+                                        << "— slot will retry next frame";
+                // Reset to nullptr so appendUserTextureBindings() skips the
+                // slot via its truthiness gate (the SRB must NOT bind a
+                // failed texture; it would wire a non-functional GPU resource
+                // into the pipeline). Keep dirty=true so the next prepare()
+                // pass retries — a transient RHI-side condition (OOM, device
+                // loss, post-clamp size acceptance) can clear and the slot
+                // self-heals.
+                m_userTextures[i].reset();
                 continue;
             }
             resetAllBindingsAndPipelines();
@@ -349,6 +369,9 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
         }
+        // Clear dirty AFTER successful create so a transient failure above
+        // keeps the slot scheduled for retry.
+        m_userTextureDirty[i] = false;
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
@@ -544,7 +567,6 @@ void ShaderNodeRhi::releaseRhiResources()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_timeHiDirty = true;
-    m_extensionDirty = true;
     m_sceneDataDirty = true;
     m_appFieldsDirty = true;
     m_audioSpectrumDirty = true;

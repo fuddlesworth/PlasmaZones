@@ -5124,7 +5124,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 //     why the upload is dispatched back via QueuedConnection rather
 //     than completed inline on the worker.
 // ─────────────────────────────────────────────────────────────────────────────
-void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::optional<QSize> svgSize)
+void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 {
     if (absolutePath.isEmpty()) {
         return;
@@ -5141,9 +5141,12 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath, std::o
     }
     m_textureLoadsInFlight.insert(absolutePath);
 
-    // SVG default size matches `loadUserTextureImage`'s 1024 max-axis
-    // when no override is provided. Captured by value into the worker.
-    const int svgMaxDim = svgSize.has_value() ? std::max(svgSize->width(), svgSize->height()) : 1024;
+    // SVG default size matches `loadUserTextureImage`'s 1024 max-axis.
+    // Captured by value into the worker. The cache is path-keyed; if
+    // we ever need per-asset size variants the cache key must include
+    // the rasterised dimension, otherwise two callers requesting the
+    // same SVG at different sizes would race on whichever one wins.
+    constexpr int svgMaxDim = 1024;
 
     // Capture the cache generation at submission time. The queued
     // upload lambda compares this against the live

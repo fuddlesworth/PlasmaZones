@@ -123,8 +123,11 @@ void main()
     // first-frame `iResolution = (0, 0)` and matches the rest of the
     // suite's defensive pattern (matrix/hexagon/pixelate). A
     // sub-pixel y of 0.001 would explode the aspectRatio to ~1000
-    // and warp the hex cells into thin slivers.
-    float aspectRatio = iResolution.x / max(iResolution.y, 1.0);
+    // and warp the hex cells into thin slivers. Floor the numerator
+    // too so a first-frame iResolution.x of 0 doesn't collapse the
+    // ratio to 0 and warp the hex grid for one paint.
+    vec2 flooredResolution = max(iResolution, vec2(1.0));
+    float aspectRatio = flooredResolution.x / flooredResolution.y;
 
     vec2 normalizedCoords = vec2(vTexCoord.x * aspectRatio, vTexCoord.y);
     vec2 normalizedCenter = vec2(0.5 * aspectRatio, 0.5);

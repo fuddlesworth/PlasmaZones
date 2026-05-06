@@ -199,7 +199,7 @@ public:
     void setUseDepthBuffer(bool use);
 
     /// @brief Live texture-provider override for user-texture slot 0
-    ///        (SRB binding 7 / `iChannel0`).
+    ///        (SRB binding 7 / `uTexture0`).
     ///
     /// When set, every SRB rebuild reads
     /// `provider->texture()->rhiTexture()` and binds that — superseding
@@ -391,7 +391,6 @@ private:
     bool m_uniformsDirty = true;
     bool m_timeDirty = true;
     bool m_timeHiDirty = true; ///< iTimeHi wrap offset changed (rare)
-    bool m_extensionDirty = true; ///< Extension UBO data changed (checked via IUniformExtension::isDirty())
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
     bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
@@ -458,7 +457,7 @@ private:
     // ── Source texture override (slot 0 / binding 7) ───────────────────
     // Texture-provider source — typically a `QQuickItem::textureProvider()`
     // for a layer-enabled item. When non-null this supersedes
-    // m_userTextures[0] in the SRB build, so the shader's iChannel0
+    // m_userTextures[0] in the SRB build, so the shader's uTexture0
     // samples a live QML render instead of a static QImage upload.
     // m_sourceSampler is owned here (not a user-texture sampler) so we
     // can keep slot 0's user-texture sampler available for callers that

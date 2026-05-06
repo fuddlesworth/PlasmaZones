@@ -53,10 +53,10 @@ constexpr qreal kRefreshRateHz = 1000.0 / kTickIntervalMs;
 /// 50 for a tiny anchor in a 4K parent), which inflates the shader
 /// item to (1+2*pad)² × anchor area — gigabytes of FBO at extreme
 /// values. The metadata-side clamp at AnimationShaderEffect::fromJson
-/// caps at 2.0; this is a runtime backstop against any path that
-/// bypasses that clamp (test fixtures, future scripted-shader hooks).
-// Must match the metadata clamp in AnimationShaderEffect::fromJson()
-constexpr qreal kMaxBoundsPaddingFraction = 2.0;
+/// caps at the shared constant; this is a runtime backstop against any
+/// path that bypasses that clamp (test fixtures, future scripted-shader
+/// hooks).
+constexpr qreal kMaxBoundsPaddingFraction = PhosphorAnimationShaders::AnimationShaderEffect::kMaxBoundsPadding;
 
 /// Compute the effective boundsPadding fraction for a shader item
 /// parented to @p anchor's parent. Result is clamped to:

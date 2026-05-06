@@ -9,8 +9,6 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
-#include <QFile>
-#include <QFileInfo>
 #include <QMutexLocker>
 #include <QPainter>
 #include <QQuickWindow>
@@ -391,7 +389,7 @@ void ShaderEffect::setSourceItem(QQuickItem* item)
     // sampling is supported and load-bearing (SurfaceAnimator parents
     // shaderItem under shaderAnchor for coord-system mapping, then calls
     // setSourceItem(shaderAnchor) so the anchor's layer texture binds to
-    // iChannel0). Qt's layer system uses a back-buffer so sampling an
+    // uTexture0). Qt's layer system uses a back-buffer so sampling an
     // ancestor reads last-frame's content — no infinite recursion. An
     // earlier ancestor-walk guard here silently broke every shader leg.
     if (item == this) {
@@ -973,14 +971,18 @@ void ShaderEffect::setAudioSpectrumVariant(const QVariant& spectrum)
 
 void ShaderEffect::setAudioSpectrum(const QVector<float>& spectrum)
 {
-    if (m_audioSpectrum == spectrum) {
-        return;
-    }
-    // Clamp values to [0,1] to match QML path behavior
+    // Build the clamped vector first so the value-changed guard reflects
+    // the post-clamp state actually pushed to the GPU. Comparing the raw
+    // input against the cached (always-clamped) member would falsely
+    // diff for two unclamped inputs that clamp to the same result and
+    // emit + repaint redundantly.
     QVector<float> clamped;
     clamped.reserve(spectrum.size());
     for (const float v : spectrum) {
         clamped.append(qBound(0.0f, v, 1.0f));
+    }
+    if (m_audioSpectrum == clamped) {
+        return;
     }
     m_audioSpectrum = std::move(clamped);
     Q_EMIT audioSpectrumChanged();

@@ -569,7 +569,6 @@ void ShaderNodeRhi::invalidateUniforms()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_timeHiDirty = true;
-    m_extensionDirty = true;
     m_sceneDataDirty = true;
     m_appFieldsDirty = true;
 }

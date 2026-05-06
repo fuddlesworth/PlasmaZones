@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QJsonObject>
+#include <QList>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
@@ -139,6 +140,21 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// vTexCoord through this padding to recover the anchor-space UV
     /// (see data/animations/morph/effect.frag for the canonical pattern).
     qreal boundsPadding = 0.0;
+
+    /// Hard ceiling on `boundsPadding`. SHARED source-of-truth between
+    /// the metadata clamp in `AnimationShaderEffect::fromJson` /
+    /// `toJson` and the runtime clamp in
+    /// `surfaceanimator.cpp::kMaxBoundsPaddingFraction`. Drift between
+    /// the two would silently allow a programmatic in-memory effect to
+    /// exceed the FBO-size budget that the metadata clamp enforces.
+    /// At pad=2.0 the shader effect is 5x the anchor on each axis
+    /// (k=1+2*pad=5) -> 25x area; a 1080p RGBA8 FBO at that scale
+    /// is already ~200 MB, the edge of what Vulkan validation passes
+    /// on integrated GPUs. No shipping shader needs >1.0 (morph uses
+    /// 0.5); 2.0 accommodates plugin authors with extreme silhouette
+    /// warps without permitting prior 4.0-cap excess (9x axis = 81x
+    /// area).
+    static constexpr qreal kMaxBoundsPadding = 2.0;
 
     /// Declared shader inputs beyond the standard set (iTime, iFrame, etc.).
     /// Each entry maps `parameterId → { type, default, min, max, ... }`.

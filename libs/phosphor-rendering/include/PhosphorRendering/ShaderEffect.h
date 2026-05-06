@@ -278,7 +278,7 @@ public:
     virtual void setShaderParams(const QVariantMap& params);
 
     /// @brief Live texture-provider source bound to SRB binding 7
-    ///        (`iChannel0`).
+    ///        (`uTexture0`).
     ///
     /// When set to a non-null QQuickItem, the shader samples that item's
     /// rendered visual every frame instead of whatever QImage was uploaded

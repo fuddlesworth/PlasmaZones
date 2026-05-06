@@ -46,9 +46,14 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 // Bell curve in [0, 1], peaks at t=0.5. `power` controls steepness.
+// `pow(x, y)` is undefined per GLSL 4.50 spec when x < 0; the input
+// `(t - 0.5) / 0.5` is negative for the first half of every leg, so
+// strict drivers (NVIDIA) return NaN and corrupt fragColor for half
+// the animation. `abs()` makes the base non-negative — safe for any
+// power, even or odd, on every conformant driver.
 float fadeInOut(float t, float power)
 {
-    float s = -1.0 * pow((t - 0.5) / 0.5, power) + 1.0;
+    float s = -1.0 * pow(abs((t - 0.5) / 0.5), power) + 1.0;
     return clamp(s, 0.0, 1.0);
 }
 

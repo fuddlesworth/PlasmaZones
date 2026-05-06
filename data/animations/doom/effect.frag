@@ -99,9 +99,12 @@ void main()
     float pixelSize = max(1.0, ceil(maxPixelSize * progress + 1.0));
     // Floor iResolution so an early-frame surface that hasn't reported
     // its size (iResolution.x or .y == 0) doesn't divide-by-zero into
-    // an infinite pixelGrid. The first paintable frame replaces this
-    // with the real surface dimensions.
-    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
+    // an infinite pixelGrid OR collapse hScale below into a constant
+    // (every column getting the same noise → uniform shift for one
+    // frame instead of staggered melt). The first paintable frame
+    // replaces this with the real surface dimensions.
+    vec2 flooredResolution = max(iResolution, vec2(1.0));
+    vec2 pixelGrid  = vec2(pixelSize) / flooredResolution;
 
     // Snap to cell centre.
     vec2 cellUV = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
@@ -109,7 +112,7 @@ void main()
     // Per-column noise via 4-octave fractal. `cellUV.x * hScale`
     // fed as `vec2(x, 0)` collapses to 1D variation along x —
     // same column gets the same noise regardless of y.
-    float hScale = horizontalScale * iResolution.x * 0.001;
+    float hScale = horizontalScale * flooredResolution.x * 0.001;
     float noise  = simplex2DFractal(vec2(cellUV.x * hScale, 0.0)) * 2.0 - 0.5;
 
     // Vertical shift. The `0.00004` constant folds in BMW's

@@ -46,7 +46,7 @@ QJsonObject AnimationShaderEffect::toJson() const
     // and is omitted from the JSON to keep authored metadata.json files
     // terse.
     {
-        const qreal clampedPadding = qBound(0.0, boundsPadding, 2.0);
+        const qreal clampedPadding = qBound(0.0, boundsPadding, kMaxBoundsPadding);
         if (clampedPadding > 0.0)
             obj.insert(QLatin1String("boundsPadding"), clampedPadding);
     }
@@ -186,17 +186,11 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
 
     // Clamp negatives at the input boundary — a negative boundsPadding
     // would silently propagate into surfaceanimator.cpp's geometry math
-    // (negative-area shader bounds) and into the shader's uv→anchorUv
+    // (negative-area shader bounds) and into the shader's uv->anchorUv
     // remap (sample outside [0,1] always → fully transparent leg).
-    //
-    // Upper cap of 2.0 keeps the FBO area sane: at pad=2.0 the shader
-    // effect is 5× the anchor on each axis (k=1+2*pad=5) → 25× area.
-    // A 1080p anchor at RGBA8 then needs ~200 MB of FBO, already at the
-    // edge of what Vulkan validation will pass on integrated GPUs.
-    // No shipping shader needs >1.0 padding (morph uses 0.5); 2.0
-    // accommodates plugin authors with extreme silhouette warps without
-    // permitting the prior 4.0-cap excess (9× axis = 81× area).
-    e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), 2.0);
+    // Upper cap shared with surfaceanimator's runtime clamp via the
+    // `kMaxBoundsPadding` constant — see its rationale on the struct.
+    e.boundsPadding = qBound(0.0, obj.value(QLatin1String("boundsPadding")).toDouble(0.0), kMaxBoundsPadding);
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());

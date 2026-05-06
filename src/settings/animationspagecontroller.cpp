@@ -882,7 +882,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // resolver's deeper-leaf-wins overlay merge.
     if (!eventPathSupportsShaderLeg(path)) {
         qCWarning(lcConfig) << "setShaderOverride: path" << path
-                            << "is not in shaderSupportedEventPaths() — ignoring (no daemon-side surface consumes it)";
+                            << "is not in shaderSupportedEventPaths(), ignoring (no daemon-side surface consumes it)";
         return false;
     }
 
@@ -939,7 +939,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // distinguish "id is unknown" from "registry not yet populated"
     // without a separate readiness signal.
     if (m_shaderRegistry && !m_shaderRegistry->effectIds().isEmpty() && !m_shaderRegistry->hasEffect(effectId)) {
-        qCWarning(lcConfig) << "setShaderOverride: unknown effectId" << effectId << "— ignoring assignment for" << path;
+        qCWarning(lcConfig) << "setShaderOverride: unknown effectId" << effectId << ", ignoring assignment for" << path;
         return false;
     }
 
