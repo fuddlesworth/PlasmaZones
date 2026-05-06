@@ -117,6 +117,7 @@ public:
         QQuickItem* passiveShellSnapAssistSlot = nullptr;
         QQuickItem* passiveShellLayoutPickerSlot = nullptr;
         QQuickItem* passiveShellZoneSelectorSlot = nullptr;
+        QQuickItem* passiveShellMainOverlaySlot = nullptr;
 
         QQuickWindow* overlayWindow = nullptr;
         QScreen* overlayPhysScreen = nullptr;
@@ -474,7 +475,7 @@ private:
     // setIdleForDragPause when no VS should be active).
     void applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors);
 
-    void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
+    void updateLabelsTextureForWindow(QQuickItem* slot, const QVariantList& patched, QScreen* screen,
                                       PhosphorZones::Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;

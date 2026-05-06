@@ -73,6 +73,8 @@ Window {
     /// show/hide. Per-VS positioning via the slot's anchors.fill: parent
     /// + the shell being sized to the VS rect.
     readonly property alias zoneSelectorSlotItem: zoneSelectorSlot
+    /// Main zone overlay slot Item — displays zones during window drag.
+    readonly property alias mainOverlaySlotItem: mainOverlaySlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — the shell
@@ -592,6 +594,182 @@ Window {
                 textColor: zoneSelectorSlot.textColor
                 activeOpacity: zoneSelectorSlot.activeOpacity
                 inactiveOpacity: zoneSelectorSlot.inactiveOpacity
+            }
+
+        }
+
+    }
+
+    Item {
+        id: mainOverlaySlot
+
+        // Mode flag: false → ZoneOverlayContent (rectangles); true →
+        // RenderNodeOverlayContent (shader). C++ side flips on
+        // per-screen layout's shader settings before each show.
+        property bool useShader: false
+        // Common properties — both modes consume these.
+        property var zones: []
+        property string highlightedZoneId: ""
+        property var highlightedZoneIds: []
+        property bool showNumbers: true
+        property var previewZones: []
+        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color labelFontColor: Kirigami.Theme.textColor
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        property int fontWeight: Font.Bold
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
+        property real activeOpacity: 0.5
+        property real inactiveOpacity: 0.3
+        property int borderWidth: Kirigami.Units.smallSpacing
+        property int borderRadius: Kirigami.Units.gridUnit
+        property bool _idled: false
+        property bool loaded: false
+        // Shader-mode properties.
+        property url shaderSource
+        property string bufferShaderPath: ""
+        property var bufferShaderPaths: []
+        property bool bufferFeedback: false
+        property real bufferScale: 1
+        property string bufferWrap: "clamp"
+        property int zoneCount: 0
+        property int highlightedCount: 0
+        property var shaderParams: ({
+        })
+        property int zoneDataVersion: 0
+        property real iTime: 0
+        property real iTimeDelta: 0
+        property int iFrame: 0
+        property point mousePosition: Qt.point(0, 0)
+        property var labelsTexture
+        property var audioSpectrum: []
+        property var wallpaperTexture: null
+        property bool useWallpaper: false
+        property bool useDepthBuffer: false
+        property var bufferWraps: []
+        property string bufferFilter: "linear"
+        property var bufferFilters: []
+
+        function flash() {
+            if (mainOverlayLoader.item && mainOverlayLoader.item.flash)
+                mainOverlayLoader.item.flash();
+
+        }
+
+        function highlightZone(zoneId) {
+            if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZone)
+                mainOverlayLoader.item.highlightZone(zoneId);
+
+        }
+
+        function highlightZones(zoneIds) {
+            if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZones)
+                mainOverlayLoader.item.highlightZones(zoneIds);
+
+        }
+
+        function clearHighlight() {
+            if (mainOverlayLoader.item && mainOverlayLoader.item.clearHighlight)
+                mainOverlayLoader.item.clearHighlight();
+
+        }
+
+        function reloadShader() {
+            if (mainOverlayLoader.item && mainOverlayLoader.item.reloadShader)
+                mainOverlayLoader.item.reloadShader();
+
+        }
+
+        anchors.fill: parent
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: mainOverlayLoader
+
+            anchors.fill: parent
+            active: mainOverlaySlot.loaded
+            asynchronous: true
+            sourceComponent: mainOverlaySlot.useShader ? renderNodeContentComp : zoneOverlayContentComp
+        }
+
+        Component {
+            id: zoneOverlayContentComp
+
+            ZoneOverlayContent {
+                zones: mainOverlaySlot.zones
+                highlightedZoneId: mainOverlaySlot.highlightedZoneId
+                highlightedZoneIds: mainOverlaySlot.highlightedZoneIds
+                showNumbers: mainOverlaySlot.showNumbers
+                previewZones: mainOverlaySlot.previewZones
+                highlightColor: mainOverlaySlot.highlightColor
+                inactiveColor: mainOverlaySlot.inactiveColor
+                borderColor: mainOverlaySlot.borderColor
+                labelFontColor: mainOverlaySlot.labelFontColor
+                fontFamily: mainOverlaySlot.fontFamily
+                fontSizeScale: mainOverlaySlot.fontSizeScale
+                fontWeight: mainOverlaySlot.fontWeight
+                fontItalic: mainOverlaySlot.fontItalic
+                fontUnderline: mainOverlaySlot.fontUnderline
+                fontStrikeout: mainOverlaySlot.fontStrikeout
+                activeOpacity: mainOverlaySlot.activeOpacity
+                inactiveOpacity: mainOverlaySlot.inactiveOpacity
+                borderWidth: mainOverlaySlot.borderWidth
+                borderRadius: mainOverlaySlot.borderRadius
+                _idled: mainOverlaySlot._idled
+            }
+
+        }
+
+        Component {
+            id: renderNodeContentComp
+
+            RenderNodeOverlayContent {
+                shaderSource: mainOverlaySlot.shaderSource
+                bufferShaderPath: mainOverlaySlot.bufferShaderPath
+                bufferShaderPaths: mainOverlaySlot.bufferShaderPaths
+                bufferFeedback: mainOverlaySlot.bufferFeedback
+                bufferScale: mainOverlaySlot.bufferScale
+                bufferWrap: mainOverlaySlot.bufferWrap
+                zones: mainOverlaySlot.zones
+                zoneCount: mainOverlaySlot.zoneCount
+                highlightedCount: mainOverlaySlot.highlightedCount
+                highlightedZoneId: mainOverlaySlot.highlightedZoneId
+                highlightedZoneIds: mainOverlaySlot.highlightedZoneIds
+                shaderParams: mainOverlaySlot.shaderParams
+                zoneDataVersion: mainOverlaySlot.zoneDataVersion
+                iTime: mainOverlaySlot.iTime
+                iTimeDelta: mainOverlaySlot.iTimeDelta
+                iFrame: mainOverlaySlot.iFrame
+                mousePosition: mainOverlaySlot.mousePosition
+                showNumbers: mainOverlaySlot.showNumbers
+                labelFontColor: mainOverlaySlot.labelFontColor
+                fontFamily: mainOverlaySlot.fontFamily
+                fontSizeScale: mainOverlaySlot.fontSizeScale
+                fontWeight: mainOverlaySlot.fontWeight
+                fontItalic: mainOverlaySlot.fontItalic
+                fontUnderline: mainOverlaySlot.fontUnderline
+                fontStrikeout: mainOverlaySlot.fontStrikeout
+                labelsTexture: mainOverlaySlot.labelsTexture
+                audioSpectrum: mainOverlaySlot.audioSpectrum
+                wallpaperTexture: mainOverlaySlot.wallpaperTexture
+                useWallpaper: mainOverlaySlot.useWallpaper
+                useDepthBuffer: mainOverlaySlot.useDepthBuffer
+                bufferWraps: mainOverlaySlot.bufferWraps
+                bufferFilter: mainOverlaySlot.bufferFilter
+                bufferFilters: mainOverlaySlot.bufferFilters
+                highlightColor: mainOverlaySlot.highlightColor
+                inactiveColor: mainOverlaySlot.inactiveColor
+                borderColor: mainOverlaySlot.borderColor
+                activeOpacity: mainOverlaySlot.activeOpacity
+                inactiveOpacity: mainOverlaySlot.inactiveOpacity
+                borderWidth: mainOverlaySlot.borderWidth
+                borderRadius: mainOverlaySlot.borderRadius
+                _idled: mainOverlaySlot._idled
             }
 
         }

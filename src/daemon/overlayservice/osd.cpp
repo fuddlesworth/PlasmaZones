@@ -488,6 +488,11 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
             qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
                                  << "did not expose `zoneSelectorSlotItem` — selector on this screen will fail.";
         }
+        state.passiveShellMainOverlaySlot = qvariant_cast<QQuickItem*>(window->property("mainOverlaySlotItem"));
+        if (!state.passiveShellMainOverlaySlot) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << effectiveId
+                                 << "did not expose `mainOverlaySlotItem` — main overlay on this screen will fail.";
+        }
 
         // Wire QML signals → animator-driven slot hide / forward.
         QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
